@@ -11,12 +11,14 @@
 /// after being disposed* over the whole route.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting_currency.dart';
 import 'package:flutter_application_1/shift/shift.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/banner.dart';
 import 'package:flutter_application_1/ui/routes.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
@@ -111,9 +113,7 @@ void main() {
 
     // Out through the exit dialog's *End shift*, which is what pushes the
     // manager, then straight back out of it without closing anything.
-    await _leaveTill(tester);
-    await _tap(tester, const ValueKey('shift-exit-end'));
-    expect(find.byKey(const ValueKey('close-shift')), findsOneWidget);
+    await _openShiftManager(tester);
     await _pop(tester);
 
     // Back at the till, and out to the home.
@@ -203,7 +203,64 @@ void main() {
     expect(find.byKey(_till), findsOneWidget);
   });
 
-  testWidgets('leaving the shift manager while an operation is in flight', (
+  testWidgets('a cancelled cash count leaves the shift open', (tester) async {
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
+    await state.save(shiftRecord());
+
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    await _openShiftManager(tester);
+
+    // Opening the sheet is what starts the count, so cancelling is the only
+    // way back out of one without closing the shift.
+    await _tap(tester, const ValueKey('close-shift'));
+    expect(find.byKey(const ValueKey('counted-cash')), findsOneWidget);
+    await _tap(tester, const ValueKey('cancel-cash-count'));
+
+    final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+    expect(record, isNotNull);
+    expect(record!.closeInProgress, isFalse);
+    expect(server.updated, isEmpty);
+
+    // And the till is still in service on the way out.
+    await _pop(tester);
+    expect(find.byKey(_till), findsOneWidget);
+  });
+
+  testWidgets('a close refused for want of a connection keeps the shift', (
+    tester,
+  ) async {
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
+    await state.save(shiftRecord());
+
+    // Online to read the shift, offline by the time the close is attempted -
+    // which is the shape of the failure, since closing is the one shift action
+    // that cannot be done from a remembered record.
+    var online = true;
+    await _pumpHome(tester, state, server, isOnline: () async => online);
+    await _enterTill(tester);
+    await _openShiftManager(tester);
+    await _tap(tester, const ValueKey('close-shift'));
+    await tester.enterText(find.byKey(const ValueKey('counted-cash')), '0');
+    await _settle(tester);
+
+    online = false;
+    await _tap(tester, const ValueKey('close-shift-confirm'));
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.widget<ShiftBanner>(find.byType(ShiftBanner)).detail,
+      shiftErrorMessage('close_needs_connection'),
+    );
+    expect(server.updated, isEmpty);
+    expect(
+      await state.read(uid: 'user-a', tenantId: 'tenant-a'),
+      isNotNull,
+      reason: 'A close that never reached the server has closed nothing.',
+    );
+  });
+
+  testWidgets('popping the shift manager while the close is in flight', (
     tester,
   ) async {
     server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
@@ -211,18 +268,67 @@ void main() {
 
     await _pumpHome(tester, state, server);
     await _enterTill(tester);
-    await _leaveTill(tester);
-    await _tap(tester, const ValueKey('shift-exit-end'));
+    await _openShiftManager(tester);
+    await _tap(tester, const ValueKey('close-shift'));
+    await tester.enterText(find.byKey(const ValueKey('counted-cash')), '0');
+    await _settle(tester);
 
-    // Start the count, then tear the route down mid-operation. The controller
-    // outlives the screen, so its publish has somewhere to land.
-    await tester.tap(find.byKey(const ValueKey('close-shift')));
+    // The write is held open, so the route can be torn down underneath it.
+    server.updateGate = Completer<void>();
+    await tester.tap(find.byKey(const ValueKey('close-shift-confirm')));
     await tester.pump();
     await _pop(tester);
+    server.updateGate!.complete();
+    await _settle(tester);
+
+    // The controller outlives the screen that started the close, so the answer
+    // has somewhere to land rather than throwing into a disposed notifier.
+    expect(tester.takeException(), isNull);
+    expect(server.updated, hasLength(1));
+    expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
+  });
+
+  testWidgets('switching business while a shift is being opened draws no till', (
+    tester,
+  ) async {
+    final sessions = await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+
+    server.createGate = Completer<void>();
+    await tester.tap(find.byKey(const ValueKey('shift-gate-open')));
+    // **Settled, not pumped once.** An open reads local state, checks the
+    // network and looks for a shift to adopt before it writes anything; a
+    // single frame switches business during that preamble, which the controller
+    // rejects long before the interesting check. This runs it up to the held
+    // write, so the switch lands where it has to.
+    await _settle(tester);
+
+    // The business changes underneath the open. Every publish in the
+    // controller re-checks uid, tenant and epoch before it lands.
+    sessions.open(uid: 'user-a', membership: shiftMembership('tenant-b'));
+    server.createGate!.complete();
     await _settle(tester);
 
     expect(tester.takeException(), isNull);
+    // **The write did land**, which is what stops this being a test that could
+    // not fail: without the ownership re-check in `_publish` the controller
+    // would report that shift as open and the gate would draw a till for a
+    // business that has none.
+    expect(server.created, hasLength(1));
+    expect(server.created.single.$1, contains('tenant-a'));
+    expect(
+      find.byKey(_till),
+      findsNothing,
+      reason: 'A shift opened for one business may not draw another a till.',
+    );
   });
+}
+
+/// *End shift* out of the till, which is what pushes the close panel.
+Future<void> _openShiftManager(WidgetTester tester) async {
+  await _leaveTill(tester);
+  await _tap(tester, const ValueKey('shift-exit-end'));
+  expect(find.byKey(const ValueKey('close-shift')), findsOneWidget);
 }
 
 const Key _home = ValueKey('gate-test-home');
@@ -234,15 +340,20 @@ const Key _till = ValueKey('gate-test-till');
 /// **A fresh gate per entry is the point**, not incidental. The gate takes its
 /// controller in `didChangeDependencies`, so a second entry is the first place
 /// a controller disposed during the first one is touched.
-Future<void> _pumpHome(
+Future<TenantSessionController> _pumpHome(
   WidgetTester tester,
   HiveTenantShiftState state,
-  ShiftServer server,
-) async {
+  ShiftServer server, {
+  TenantShiftOnlineCheck? isOnline,
+}) async {
   final sessions = TenantSessionController()
     ..open(uid: 'user-a', membership: shiftMembership('tenant-a'));
   addTearDown(sessions.dispose);
-  final controllerFactory = sharedShiftControllerFactory(state, server);
+  final controllerFactory = sharedShiftControllerFactory(
+    state,
+    server,
+    isOnline: isOnline,
+  );
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(
@@ -284,6 +395,7 @@ Future<void> _pumpHome(
     ),
   );
   await _settle(tester);
+  return sessions;
 }
 
 Future<void> _enterTill(WidgetTester tester) =>

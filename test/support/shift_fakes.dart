@@ -11,6 +11,7 @@
 /// the ownership this app had before 2026-08-26.
 library;
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -37,10 +38,16 @@ TenantShiftControllerFactory sharedShiftControllerFactory(
   HiveTenantShiftState state,
   ShiftServer server, {
   ShiftSalesSummary sales = ShiftSalesSummary.empty,
+  TenantShiftOnlineCheck? isOnline,
 }) {
   final built = Expando<TenantShiftController>();
-  return (sessions) =>
-      built[sessions] ??= shiftControllerFor(sessions, state, server, sales: sales);
+  return (sessions) => built[sessions] ??= shiftControllerFor(
+    sessions,
+    state,
+    server,
+    sales: sales,
+    isOnline: isOnline,
+  );
 }
 
 TenantShiftController shiftControllerFor(
@@ -48,6 +55,11 @@ TenantShiftController shiftControllerFor(
   HiveTenantShiftState state,
   ShiftServer server, {
   ShiftSalesSummary sales = ShiftSalesSummary.empty,
+
+  /// Online unless a test says otherwise. Closing is the one shift action that
+  /// genuinely needs the server, so a test about that refusal has to be able to
+  /// take the network away partway through a journey rather than at the start.
+  TenantShiftOnlineCheck? isOnline,
 }) {
   var nextShift = 0;
   return TenantShiftController(
@@ -56,12 +68,12 @@ TenantShiftController shiftControllerFor(
     salesLedger: ShiftLedger(sales),
     reader: ShiftReader(server),
     writer: FirebaseTenantShiftWriter.forTesting(
-      isOnline: () async => true,
+      isOnline: isOnline ?? () async => true,
       create: server.create,
       update: server.update,
     ),
     deviceId: shiftDeviceId,
-    isOnline: () async => true,
+    isOnline: isOnline ?? () async => true,
     shiftIdFactory: () => 'shift-${++nextShift}',
     clock: () => DateTime.utc(2026, 7, 31, 9),
   );
@@ -126,6 +138,12 @@ TenantShiftLocalRecord shiftRecord({
 );
 
 final class ShiftServer {
+  /// Held by a test that needs a write to still be in flight while it does
+  /// something else - popping the route that started it, or switching business
+  /// underneath it. Completing the gate lets the write finish.
+  Completer<void>? createGate;
+  Completer<void>? updateGate;
+
   final Map<String, Map<String, Object?>> shifts =
       <String, Map<String, Object?>>{};
   final List<String> reads = <String>[];
@@ -135,6 +153,7 @@ final class ShiftServer {
       <(String, Map<String, Object?>)>[];
 
   Future<void> create(String path, Map<String, Object?> data) async {
+    await createGate?.future;
     created.add((path, data));
     shifts[path] = <String, Object?>{
       ...data,
@@ -143,6 +162,7 @@ final class ShiftServer {
   }
 
   Future<void> update(String path, Map<String, Object?> data) async {
+    await updateGate?.future;
     updated.add((path, data));
     final current = shifts[path];
     if (current == null) throw StateError('No shift at $path.');
