@@ -29,7 +29,6 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/scaffold.dart';
-import '../ui/states.dart';
 import '../ui/tokens.dart';
 import 'profit_report.dart';
 import 'reporting_currency.dart';
@@ -146,10 +145,28 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
           child: Text('Reports are available to managers and owners.'),
         ),
       ),
-      loading: const _ReportsFrame(
-        body: Center(
-          key: ValueKey('weekly-report-loading'),
-          child: LoadingState(message: 'Reading this week.'),
+      // **The page, with placeholders where the reads will land.** It took a
+      // centred spinner until 2026-08-27, which replaced the week picker, the
+      // member and category filters and the headings along with the figures -
+      // so somebody who came to look at last week had to wait for this one
+      // first. Decision 35 again: the furniture is drawn, and only the figures
+      // are outstanding.
+      loading: _ReportsFrame(
+        body: WeeklyReportContents(
+          key: const ValueKey('weekly-report-loading'),
+          week: TenantReportWeek.at(_now(), offset: _weekOffset),
+          report: null,
+          reading: true,
+          sessionContext:
+              _sessionContext.cached ?? SalesTotalsSessionContext.empty,
+          soldById: _soldById,
+          selfUid: TenantSessionScope.of(context).session?.uid,
+          categoryId: _categoryId,
+          showProfit: false,
+          onChooseWeek: _chooseWeek,
+          onChooseMember: _chooseMember,
+          onChooseCategory: _chooseCategory,
+          onRetry: _retry,
         ),
       ),
       // The filters survive a failure, exactly as they do on the totals page: a

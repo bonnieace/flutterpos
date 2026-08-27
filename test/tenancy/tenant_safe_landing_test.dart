@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/home_navigation.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
@@ -399,6 +402,46 @@ void main() {
       expect(prompt, lessThan(greeting));
     });
 
+    // **The report of 2026-08-27, on the home**: *if in a page we have some
+    // data from offline and some from online, the online data makes the offline
+    // data come late*. The trend line is two callable round trips and the only
+    // read on this page that needs a network; the business name, the day's
+    // reconciled figures and the currency are Firestore and serve from its
+    // cache. `_readOverview` awaited all four together, so the page waited for
+    // the slowest and least important of them.
+    testWidgets('the home draws while the trend line is still reading', (
+      tester,
+    ) async {
+      final held = Completer<Object?>();
+      addTearDown(() {
+        if (!held.isCompleted) held.complete(<String, Object?>{});
+      });
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        memberName: 'Amina',
+        role: TenantRole.owner,
+        salesTotalsCallable: _HeldTotalsCallable(held),
+        reader: const _BrandedReader('Dev Corner Shop'),
+        // Settling would wait for the very read this case holds open.
+        settle: false,
+      );
+
+      // The branding read is Firestore and has answered. Under the old
+      // ordering `_readOverview` had not returned at all yet, so the title was
+      // still the membership's name and this said `Chilltent Lounge`.
+      expect(
+        find.text('Dev Corner Shop'),
+        findsOne,
+        reason:
+            'A Firestore read that has landed must not wait for a callable '
+            'that has not.',
+      );
+
+      held.complete(<String, Object?>{});
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('the prompt is one row too', (tester) async {
       await _pumpLanding(
         tester,
@@ -493,6 +536,9 @@ Future<void> _pumpLanding(
   List<TenantRole> catalogManagementRoles = const <TenantRole>[],
   Widget Function(TenantDataReader reader)? returnFeedRoute,
   List<TenantRole> returnFeedRoles = const <TenantRole>[],
+  SalesTotalsCallable? salesTotalsCallable,
+  TenantDataReader? reader,
+  bool settle = true,
   Size size = _phone,
 }) async {
   tester.view.physicalSize = size;
@@ -512,7 +558,7 @@ Future<void> _pumpLanding(
         child: TenantSafeLandingScreen(
           membership: membership,
           memberName: memberName,
-          reader: _EmptyReader(),
+          reader: reader ?? _EmptyReader(),
           onSignOut: () async {},
           catalogManagementRoute: catalogManagementRoute,
           catalogManagementRoles: catalogManagementRoles,
@@ -520,6 +566,7 @@ Future<void> _pumpLanding(
           returnFeedRoles: returnFeedRoles,
           // The slot the shift panel occupies on a real device. What the fold
           // depends on is the height of what is in it.
+          salesTotalsCallable: salesTotalsCallable,
           shiftPanel: (_) => SizedBox(
             key: const ValueKey('landing-test-panel'),
             height: panelHeight,
@@ -533,6 +580,57 @@ Future<void> _pumpLanding(
   // answer, because the observation is deferred out of layout.
   await tester.pump();
   await tester.pump();
+  // A case watching a held read wants the frames without the settle, because
+  // settling would wait for the very thing it is holding open.
+  if (settle) await tester.pumpAndSettle();
+}
+
+/// A totals callable that answers only when the test says so.
+///
+/// The home's trend line is the one read on that page that needs a network.
+/// Holding it open is how a test watches the rest of the page arrive without
+/// it - which before 2026-08-27 it could not, because everything waited.
+final class _HeldTotalsCallable implements SalesTotalsCallable {
+  _HeldTotalsCallable(this._gate);
+
+  final Completer<Object?> _gate;
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    await _gate.future;
+    return <String, Object?>{
+      'sales': 0,
+      'profit': 0,
+      'transactions': 0,
+      'incompleteCostLineCount': 0,
+    };
+  }
+}
+
+/// A reader that publishes this business's own name and nothing else.
+///
+/// **The one Firestore read on the home whose arrival is visible.** The figure
+/// grid draws em dashes whether its read has landed or not, so branding is what
+/// a test can watch: the title says `membership.tenantName` until the read
+/// answers and the published name after it.
+final class _BrandedReader implements TenantDataReader {
+  const _BrandedReader(this.companyName);
+
+  final String companyName;
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async =>
+      path.endsWith('/configuration/branding')
+      ? TenantDocumentSnapshot(
+          path: path,
+          data: <String, Object?>{'companyName': companyName},
+        )
+      : null;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async => const <TenantQueryDocumentSnapshot>[];
 }
 
 final class _EmptyReader implements TenantDataReader {

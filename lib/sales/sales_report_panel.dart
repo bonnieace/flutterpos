@@ -100,6 +100,21 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   TenantGuardedLoader<TenantReceiptEndingLookupResult>? _receiptLoader;
   final Map<String, Future<_SalesTotalsOutcome>> _totals =
       <String, Future<_SalesTotalsOutcome>>{};
+
+  /// The session context, memoised as a **future** rather than as a value.
+  ///
+  /// `SalesTotalsSessionContextLoader` caches its result, which dedupes a
+  /// second read only once the first has finished. Two readers starting in the
+  /// same frame - which is exactly what the split below creates - would both
+  /// miss that cache and read the categories, the staff and the currency
+  /// twice. Memoising the future is what makes the day's sales and the day's
+  /// takings fork from one read rather than from two.
+  final Map<String, Future<SalesTotalsSessionContext>> _contexts =
+      <String, Future<SalesTotalsSessionContext>>{};
+
+  /// What the totals band is waiting on, per guard key.
+  final Map<String, Future<_TotalsBandData>> _bands =
+      <String, Future<_TotalsBandData>>{};
   late final SalesTotalsSessionContextLoader _sessionContext =
       SalesTotalsSessionContextLoader(
         reader: widget.reader,
@@ -213,24 +228,12 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
       final management = session.canAccess(
         allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
       );
-      final context = management
-          ? await _sessionContext.load(session)
-          : await _cashierContext(session);
+      final context = await _contextFor(session, management: management);
       final appliedStaffId =
           management &&
               chosenStaffId != null &&
               context.staff.contains(chosenStaffId)
           ? chosenStaffId
-          : null;
-      final query = management && widget.totalsCallable != null
-          ? TenantSalesTotalsGateway(
-              session: session,
-              callable: widget.totalsCallable!,
-              clock: widget.clock,
-            ).createBusinessDateQuery(
-              businessDate: businessDate,
-              soldById: appliedStaffId,
-            )
           : null;
       final page =
           await TenantSaleHistoryRepository(
@@ -248,9 +251,6 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
         session: session,
         reader: widget.reader,
       ).resolve(page.items.map((sale) => sale.soldById));
-      final totals = query == null
-          ? const _SalesTotalsOutcome()
-          : await _totalsFor(session, query);
       return _SalesReportView(
         page: page,
         businessDate: businessDate,
@@ -258,9 +258,69 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
         management: management,
         context: context,
         names: <String, String>{...context.staff.names, ...resolved},
-        totals: totals,
       );
     };
+  }
+
+  /// What the totals band reads, on its own and in parallel with the day.
+  ///
+  /// **This used to be the last `await` in the loader above, and that was the
+  /// defect the product owner reported on 2026-08-27**: *the online data makes
+  /// the offline data come late*. The day's sales are a Firestore read and
+  /// serve from its cache; the takings are a callable and cannot be served
+  /// offline at all. Chained, the whole page moved at the speed of the one
+  /// region that needs a network - so a cashier with no signal watched a
+  /// skeleton over sales this device was holding the whole time.
+  ///
+  /// It forks after the context because it has to: a stale staff selection is
+  /// dropped rather than sent, and only the context can say whether the chosen
+  /// colleague still exists. That read is shared, not repeated - see
+  /// [_contextFor].
+  ///
+  /// Null where there is nothing to read: a cashier does not see the band, and
+  /// no callable means the figures were never on offer.
+  Future<_TotalsBandData>? _totalsBandFor(String key, TenantSession session) {
+    final management = session.canAccess(
+      allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
+    );
+    if (!management || widget.totalsCallable == null) return null;
+    final businessDate = _businessDate;
+    final chosenStaffId = _staffId;
+    return _bands.putIfAbsent(key, () async {
+      final context = await _contextFor(session, management: true);
+      final appliedStaffId =
+          chosenStaffId != null && context.staff.contains(chosenStaffId)
+          ? chosenStaffId
+          : null;
+      final gateway = TenantSalesTotalsGateway(
+        session: session,
+        callable: widget.totalsCallable!,
+        clock: widget.clock,
+      );
+      return _TotalsBandData(
+        outcome: await _totalsFor(
+          session,
+          gateway.createBusinessDateQuery(
+            businessDate: businessDate,
+            soldById: appliedStaffId,
+          ),
+        ),
+        currency: context.currency,
+      );
+    });
+  }
+
+  /// The context for [session], read at most once however many regions ask.
+  Future<SalesTotalsSessionContext> _contextFor(
+    TenantSession session, {
+    required bool management,
+  }) {
+    final key =
+        '${session.uid}:${session.tenantId}:${session.epoch}:$management';
+    return _contexts.putIfAbsent(
+      key,
+      () => management ? _sessionContext.load(session) : _cashierContext(session),
+    );
   }
 
   Future<SalesTotalsSessionContext> _cashierContext(
@@ -346,6 +406,12 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   Widget build(BuildContext context) {
     final key =
         'sales:$_generation:$_pageIndex:$_businessDate:${_staffId ?? '-'}';
+    // **Started here rather than inside either branch, and handed to both.**
+    // The band outlives the guard's loading state: it is the same widget and
+    // the same future before and after the day's sales land, so it neither
+    // restarts nor blinks when they do.
+    final scoped = TenantSessionScope.of(context).session;
+    final band = scoped == null ? null : _totalsBandFor(key, scoped);
     return TenantRouteGuard<_SalesReportView>(
       key: ValueKey(key),
       allowedRoles: TenantSaleHistoryRepository.reportRoles,
@@ -361,10 +427,11 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
       // The session is read from the scope rather than the guard, because the
       // guard has not admitted one yet at this point; `requireSession` is what
       // decides that, and a denied session never reaches here.
-      loading: switch (TenantSessionScope.of(context).session) {
+      loading: switch (scoped) {
         final session? => _SalesReportContents(
           session: session,
           view: null,
+          totalsBand: band,
           businessDate: _businessDate,
           management: session.canAccess(
             allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
@@ -425,6 +492,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
         return _SalesReportContents(
           session: session,
           view: view,
+          totalsBand: band,
           businessDate: view.businessDate,
           management: view.management,
           receipt: _receipt,
@@ -460,7 +528,6 @@ final class _SalesReportView {
     required this.management,
     required this.context,
     required this.names,
-    required this.totals,
   });
 
   final TenantSalePage page;
@@ -469,7 +536,17 @@ final class _SalesReportView {
   final bool management;
   final SalesTotalsSessionContext context;
   final Map<String, String> names;
-  final _SalesTotalsOutcome totals;
+}
+
+/// What the totals band draws once its own read lands.
+final class _TotalsBandData {
+  const _TotalsBandData({required this.outcome, required this.currency});
+
+  final _SalesTotalsOutcome outcome;
+
+  /// Read with the band rather than taken from the day, because the band is
+  /// the only region on this page that states money.
+  final TenantReportingCurrency currency;
 }
 
 /// The report, whether or not the day's sales have arrived yet.
@@ -492,6 +569,7 @@ final class _SalesReportContents extends StatelessWidget {
   const _SalesReportContents({
     required this.session,
     required this.view,
+    required this.totalsBand,
     required this.businessDate,
     required this.management,
     required this.receipt,
@@ -514,6 +592,10 @@ final class _SalesReportContents extends StatelessWidget {
   /// no sales has answered, and `_SalesPresentation` has its own empty state
   /// for exactly that.
   final _SalesReportView? view;
+
+  /// The day's takings, on their own clock. Null where this member is not
+  /// offered them at all, in which case no band is drawn.
+  final Future<_TotalsBandData>? totalsBand;
 
   /// The day being asked about, which the panel knows before anything answers.
   final String businessDate;
@@ -562,20 +644,14 @@ final class _SalesReportContents extends StatelessWidget {
         if (submittedEnding != null && receiptResult != null)
           receiptResult!
         else ...<Widget>[
-          // **The one region on this page that genuinely needs a server.** The
-          // day's sales come from Firestore and serve from its cache offline;
-          // the totals are a callable and do not. So this is the band that is
-          // actually being waited on, and while a read is in flight it is the
-          // band that says so.
-          if (management) ...<Widget>[
-            if (view case final loaded?)
-              _ManagementSalesSummary(view: loaded)
-            else
-              const SkeletonGroup(
-                key: ValueKey('sales-report-totals-skeleton'),
-                semanticLabel: 'Reading the totals for this day.',
-                child: SkeletonBlock(height: _totalsBandHeight),
-              ),
+          // **The one region on this page that genuinely needs a server**, and
+          // since 2026-08-27 the only one that waits for it. The day's sales
+          // come from Firestore and serve from its cache offline; the totals
+          // are a callable and do not. Both used to hang off one read, so the
+          // sales waited for the takings - which offline meant waiting for
+          // something that was never going to arrive.
+          if (management && totalsBand != null) ...<Widget>[
+            _TotalsBand(band: totalsBand!, businessDate: businessDate),
             SizedBox(height: tokens.spacing.s20),
           ],
           if (view case final loaded?)
@@ -964,22 +1040,64 @@ final class _SaleMetaSkeleton extends StatelessWidget {
   }
 }
 
-final class _ManagementSalesSummary extends StatelessWidget {
-  const _ManagementSalesSummary({required this.view});
+/// The day's takings, and the placeholder that stands in while they are read.
+///
+/// **A region with its own clock.** It is the page's only callable, so it is
+/// the page's only genuinely online region, and it reveals when its own answer
+/// arrives rather than when the day's sales do. A refusal - which offline is
+/// every time - states itself here and leaves the rest of the page alone.
+final class _TotalsBand extends StatelessWidget {
+  const _TotalsBand({required this.band, required this.businessDate});
 
-  final _SalesReportView view;
+  final Future<_TotalsBandData> band;
+  final String businessDate;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<_TotalsBandData>(
+    future: band,
+    builder: (context, snapshot) {
+      final data = snapshot.data;
+      if (data == null) {
+        // `_totalsBandFor` catches its own refusals into an outcome, so
+        // nothing that reaches this branch is something the band can word. It
+        // draws the placeholder rather than claim a figure it does not have.
+        return const SkeletonGroup(
+          key: ValueKey('sales-report-totals-skeleton'),
+          semanticLabel: 'Reading the totals for this day.',
+          child: SkeletonBlock(height: _totalsBandHeight),
+        );
+      }
+      return _ManagementSalesSummary(
+        outcome: data.outcome,
+        currency: data.currency,
+        businessDate: businessDate,
+      );
+    },
+  );
+}
+
+final class _ManagementSalesSummary extends StatelessWidget {
+  const _ManagementSalesSummary({
+    required this.outcome,
+    required this.currency,
+    required this.businessDate,
+  });
+
+  final _SalesTotalsOutcome outcome;
+  final TenantReportingCurrency currency;
+  final String businessDate;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final totals = view.totals.value;
+    final totals = outcome.value;
     if (totals == null) {
-      if (view.totals.error == null) return const SizedBox.shrink();
+      if (outcome.error == null) return const SizedBox.shrink();
       return Callout(
         key: const ValueKey('sales-report-totals-failure'),
         status: AppStatus.attention,
         title: 'Totals unavailable',
-        message: _totalsFailureMessage(view.totals.error!),
+        message: _totalsFailureMessage(outcome.error!),
       );
     }
     final breakdown = totals.tenderBreakdown;
@@ -1050,11 +1168,11 @@ final class _ManagementSalesSummary extends StatelessWidget {
                       fit: BoxFit.scaleDown,
                       alignment: AlignmentDirectional.centerStart,
                       child: Text(
-                        view.context.currency.format(totals.sales),
+                        currency.format(totals.sales),
                         key: const ValueKey('sales-report-revenue'),
                         maxLines: 1,
                         style: tokens.typography.numericHero.copyWith(
-                          color: view.context.currency.isKnown
+                          color: currency.isKnown
                               ? tokens.colors.text.money
                               : tokens.colors.text.primary,
                         ),
@@ -1062,7 +1180,7 @@ final class _ManagementSalesSummary extends StatelessWidget {
                     ),
                     SizedBox(height: tokens.spacing.s4),
                     Text(
-                      view.businessDate,
+                      businessDate,
                       key: const ValueKey('sales-report-summary-range'),
                       style: tokens.typography.caption.copyWith(
                         color: tokens.colors.text.tertiary,
@@ -1114,7 +1232,7 @@ final class _ManagementSalesSummary extends StatelessWidget {
               _PaymentSummaryLine(
                 entry: paymentRows[index],
                 periodSales: totals.sales,
-                currency: view.context.currency,
+                currency: currency,
               ),
             ],
           ],

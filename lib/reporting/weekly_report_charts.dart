@@ -11,6 +11,7 @@ import '../checkout/checkout_tender.dart';
 import '../sales/sale_history.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
+import '../ui/skeleton.dart';
 import '../ui/tokens.dart';
 import 'reporting_currency.dart';
 import 'weekly_report.dart';
@@ -24,11 +25,19 @@ final class WeeklyRevenueChart extends StatelessWidget {
     required this.week,
     required this.report,
     required this.currency,
+    this.reading = false,
   });
 
   final TenantReportWeek week;
   final TenantWeeklyReport? report;
   final TenantReportingCurrency? currency;
+
+  /// Whether the week is still being read. See `WeeklyReportContents.reading`.
+  ///
+  /// Without it a chart with nothing to draw yet renders `Total: 0` over a flat
+  /// axis, which is what an empty week looks like - so the page states a week
+  /// took nothing while it is still finding out.
+  final bool reading;
 
   static const List<String> days = <String>[
     'Mon',
@@ -74,13 +83,23 @@ final class WeeklyRevenueChart extends StatelessWidget {
             ),
           ),
           SizedBox(height: tokens.spacing.s4),
-          Text(
-            'Total: ${weeklyReportMoney(currency, total)}',
-            style: tokens.typography.caption.copyWith(
-              color: tokens.colors.text.tertiary,
+          if (reading)
+            SkeletonLine(
+              widthFactor: WeeklyReportMetrics.readingWidthFactor,
+              style: tokens.typography.caption,
+              tone: SkeletonTone.onRaised,
+            )
+          else
+            Text(
+              'Total: ${weeklyReportMoney(currency, total)}',
+              style: tokens.typography.caption.copyWith(
+                color: tokens.colors.text.tertiary,
+              ),
             ),
-          ),
           SizedBox(height: tokens.spacing.s24),
+          if (reading)
+            _ReadingBars(key: const ValueKey('weekly-report-chart-reading'))
+          else
           SizedBox(
             height: WeeklyReportMetrics.chartHeight,
             child: BarChart(
@@ -169,15 +188,52 @@ final class WeeklyRevenueChart extends StatelessWidget {
 }
 
 /// The week's best sellers by revenue.
+/// Seven bars where a week's revenue will be, at the shape of a week rather
+/// than at one flat height. The axis and the plot's height are real.
+final class _ReadingBars extends StatelessWidget {
+  const _ReadingBars({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return SkeletonGroup(
+      semanticLabel: 'Reading this week revenue.',
+      child: SizedBox(
+        height: WeeklyReportMetrics.chartHeight,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: <Widget>[
+            for (final fraction in WeeklyReportMetrics.readingBarHeights)
+              SkeletonBlock(
+                width: WeeklyReportMetrics.barWidth,
+                height: WeeklyReportMetrics.chartHeight * fraction,
+                radius: tokens.radius.sm,
+                tone: SkeletonTone.onRaised,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 final class WeeklyTopItems extends StatelessWidget {
   const WeeklyTopItems({
     super.key,
     required this.report,
     required this.currency,
+    this.reading = false,
   });
 
   final TenantWeeklyReport? report;
   final TenantReportingCurrency? currency;
+
+  /// Whether the week is still being read. See `WeeklyReportContents.reading`.
+  ///
+  /// Without it a list with nothing in it yet draws *No sales this week*, which
+  /// is an answer this section does not have.
+  final bool reading;
 
   @override
   Widget build(BuildContext context) {
@@ -196,7 +252,22 @@ final class WeeklyTopItems extends StatelessWidget {
             ),
           ),
           SizedBox(height: tokens.spacing.s20),
-          if (items.isEmpty)
+          if (reading)
+            SkeletonGroup(
+              key: const ValueKey('weekly-report-top-items-reading'),
+              semanticLabel: 'Reading the top selling items.',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  for (var row = 0; row < _readingRows; row++) ...<Widget>[
+                    if (row > 0) SizedBox(height: tokens.spacing.s16),
+                    const _ReadingItemRow(),
+                  ],
+                ],
+              ),
+            )
+          else if (items.isEmpty)
             const EmptyState(
               key: ValueKey('weekly-report-top-items-empty'),
               title: 'No sales this week',
@@ -219,6 +290,62 @@ final class WeeklyTopItems extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// How many placeholder rows stand in for the top items.
+///
+/// Three rather than the ten this list can hold: a placeholder should not
+/// promise a length it has no way to know, and three is enough to read as a
+/// ranked list rather than as one more line.
+const int _readingRows = 3;
+
+/// One placeholder item row, shaped like [_TopItemRow]: a glyph square, a name
+/// over its units, and the money against the trailing edge.
+final class _ReadingItemRow extends StatelessWidget {
+  const _ReadingItemRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Row(
+      children: <Widget>[
+        SkeletonBlock(
+          width: WeeklyReportMetrics.itemGlyph,
+          height: WeeklyReportMetrics.itemGlyph,
+          radius: tokens.radius.md,
+          tone: SkeletonTone.onRaised,
+        ),
+        SizedBox(width: tokens.spacing.s12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              SkeletonLine(
+                widthFactor: 0.62,
+                style: tokens.typography.labelMedium,
+                tone: SkeletonTone.onRaised,
+              ),
+              SizedBox(height: tokens.spacing.s4),
+              SkeletonLine(
+                widthFactor: 0.34,
+                style: tokens.typography.caption,
+                tone: SkeletonTone.onRaised,
+              ),
+            ],
+          ),
+        ),
+        SizedBox(width: tokens.spacing.s12),
+        SizedBox(
+          width: tokens.spacing.s64,
+          child: SkeletonLine(
+            style: tokens.typography.numericBody,
+            tone: SkeletonTone.onRaised,
+          ),
+        ),
+      ],
     );
   }
 }

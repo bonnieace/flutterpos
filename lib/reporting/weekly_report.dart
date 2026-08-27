@@ -219,26 +219,52 @@ final class TenantWeeklyReportLoader {
     String? categoryId,
   }) async {
     final now = _clock().toUtc();
-    final elapsed = week.elapsedBusinessDates(now);
-    final byDate = <String, TenantSalesTotals>{};
-    for (final date in elapsed) {
-      byDate[date] = await _gateway.load(
-        _gateway.createBusinessDateQuery(
-          businessDate: date,
-          soldById: soldById,
-          categoryId: categoryId,
+    final elapsed = week.elapsedBusinessDates(now).toList(growable: false);
+    // **Started together rather than one after another, since 2026-08-27.**
+    // This was a `for` loop that awaited the callable once per elapsed day,
+    // then the previous week, then the sale scan - up to nine round trips end
+    // to end, with the page showing nothing until the last of them landed. A
+    // week opened on a Sunday paid for all nine before it drew a figure. They
+    // do not depend on each other and never did.
+    //
+    // **One `Future.wait` over the lot, and that is deliberate.** Awaiting
+    // them one at a time after starting them all is what strands a rejection:
+    // if an early day fails, the ones still outstanding have nobody left to
+    // catch them and Dart reports them as unhandled. `Future.wait` attaches to
+    // every future before any of them can complete.
+    //
+    // The failure it reports is the first by *completion* rather than the
+    // first by date, where the loop reported the earliest day. Both take the
+    // page, so what a person sees is unchanged; a log naming a different day
+    // of the same broken week is the whole of the difference.
+    final pending = <Future<Object?>>[
+      for (final date in elapsed)
+        _gateway.load(
+          _gateway.createBusinessDateQuery(
+            businessDate: date,
+            soldById: soldById,
+            categoryId: categoryId,
+          ),
         ),
-      );
-    }
-    final previous = await _previousWeekTotals(
-      week,
-      now: now,
-      soldById: soldById,
-      categoryId: categoryId,
-    );
+      // Its own failure is already swallowed into a null - a missing
+      // comparison, not a missing page - so it can share this list safely.
+      _previousWeekTotals(
+        week,
+        now: now,
+        soldById: soldById,
+        categoryId: categoryId,
+      ),
+      if (elapsed.isNotEmpty) _rollUpItems(week, now: now, soldById: soldById),
+    ];
+    final settled = await Future.wait(pending);
+    final byDate = <String, TenantSalesTotals>{
+      for (var index = 0; index < elapsed.length; index++)
+        elapsed[index]: settled[index]! as TenantSalesTotals,
+    };
+    final previous = settled[elapsed.length] as TenantSalesTotals?;
     final roll = elapsed.isEmpty
         ? const _ItemRoll.empty()
-        : await _rollUpItems(week, now: now, soldById: soldById);
+        : settled[elapsed.length + 1]! as _ItemRoll;
     return TenantWeeklyReport(
       week: week,
       totals: byDate.isEmpty ? null : _sum(byDate.values),

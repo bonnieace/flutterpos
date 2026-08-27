@@ -506,7 +506,15 @@ void main() {
     testWidgets('the sales and the totals are the placeholders', (
       tester,
     ) async {
-      await _pumpUnsettled(tester, role: TenantRole.owner);
+      // **The callable is supplied, and that is not incidental.** Without one
+      // there are no takings to read, and this used to draw a placeholder for
+      // them anyway - promising a band that then rendered as nothing and
+      // vanished. See the case below.
+      await _pumpUnsettled(
+        tester,
+        role: TenantRole.owner,
+        totalsCallable: _TotalsCallable(),
+      );
 
       expect(find.byKey(const ValueKey('sales-report-skeleton')), findsOne);
       expect(
@@ -514,6 +522,64 @@ void main() {
         findsOne,
       );
 
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('no totals callable means no placeholder for them', (
+      tester,
+    ) async {
+      // A placeholder is a promise that something is coming. Nothing is: this
+      // panel was given no way to read takings, so the band never appears and
+      // the loading state must not pretend otherwise.
+      await _pumpUnsettled(tester, role: TenantRole.owner);
+
+      expect(find.byKey(const ValueKey('sales-report-skeleton')), findsOne);
+      expect(
+        find.byKey(const ValueKey('sales-report-totals-skeleton')),
+        findsNothing,
+      );
+
+      await tester.pumpAndSettle();
+    });
+
+    // **The report of 2026-08-27, in one assertion**: *if in a page we have
+    // some data from offline and some from online, the online data makes the
+    // offline data come late*. The day's sales are a Firestore read and serve
+    // from its cache; the takings are a callable and cannot be served offline
+    // at all. They used to be one chained read, so the sales waited for the
+    // takings - which offline is a wait for something that never arrives.
+    testWidgets('the day\'s sales draw while the takings are still reading', (
+      tester,
+    ) async {
+      final held = Completer<Object?>();
+      addTearDown(() {
+        if (!held.isCompleted) held.complete(<String, Object?>{});
+      });
+      await _pumpUnsettled(
+        tester,
+        role: TenantRole.owner,
+        totalsCallable: _HeldTotalsCallable(held),
+        reader: _SalesReader(<TenantQueryDocumentSnapshot>[
+          _sale('co-1', tender: 'cash'),
+        ]),
+      );
+      // Enough frames for Firestore to answer. The callable is still held.
+      for (var frame = 0; frame < 8; frame++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(
+        find.byKey(const ValueKey('sales-report-skeleton')),
+        findsNothing,
+        reason: 'The day answered, so its sales are drawn, not placeheld.',
+      );
+      expect(
+        find.byKey(const ValueKey('sales-report-totals-skeleton')),
+        findsOne,
+        reason: 'The takings have not answered, so only they are placeheld.',
+      );
+
+      held.complete(<String, Object?>{});
       await tester.pumpAndSettle();
     });
 
@@ -542,6 +608,8 @@ void main() {
 Future<void> _pumpUnsettled(
   WidgetTester tester, {
   required TenantRole role,
+  SalesTotalsCallable? totalsCallable,
+  _SalesReader? reader,
 }) async {
   tester.view.physicalSize = const Size(1200, 2400);
   tester.view.devicePixelRatio = 1;
@@ -555,8 +623,11 @@ Future<void> _pumpUnsettled(
         controller: controller,
         child: Scaffold(
           body: TenantSalesReportPanel(
-            reader: _SalesReader(const <TenantQueryDocumentSnapshot>[]),
-            reportReader: _SalesReader(const <TenantQueryDocumentSnapshot>[]),
+            reader:
+                reader ?? _SalesReader(const <TenantQueryDocumentSnapshot>[]),
+            reportReader:
+                reader ?? _SalesReader(const <TenantQueryDocumentSnapshot>[]),
+            totalsCallable: totalsCallable,
             clock: () => DateTime.utc(2026, 8, 24, 12),
           ),
         ),
@@ -596,6 +667,23 @@ Future<void> _pump(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// A totals callable that answers only when the test says so.
+///
+/// The point of the split it proves: a callable is the one source on this page
+/// that cannot be served from a cache, so a test that wants to watch the rest
+/// of the page arrive without it has to be able to stop it arriving.
+final class _HeldTotalsCallable implements SalesTotalsCallable {
+  _HeldTotalsCallable(this._gate);
+
+  final Completer<Object?> _gate;
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    await _gate.future;
+    return _TotalsCallable().call(payload);
+  }
 }
 
 final class _TotalsCallable implements SalesTotalsCallable {

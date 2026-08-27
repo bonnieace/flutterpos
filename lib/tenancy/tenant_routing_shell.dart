@@ -1492,18 +1492,26 @@ final class _HomeOverview {
   const _HomeOverview({
     this.branding,
     this.today,
-    this.todaySales,
-    this.previousDaySales,
+    this.trend,
     this.currency,
     this.showProfit = false,
   });
 
   /// Today's takings and the day before's, as the server currently adds them
-  /// up. Both null where no totals callable was supplied, where the session
-  /// may not read revenue, or where the read failed - and the greeting then
-  /// states no comparison.
-  final double? todaySales;
-  final double? previousDaySales;
+  /// up - **still in flight, not resolved.**
+  ///
+  /// **The one read on this page that is not awaited before it renders.** Every
+  /// other figure here is a Firestore read and serves from its cache; this is
+  /// two callable round trips and cannot be served offline at all. Awaiting it
+  /// with the rest held the business name, the day's reconciled figures and the
+  /// currency behind the slowest and least important line on the screen - which
+  /// is the defect the product owner reported on 2026-08-27: *the online data
+  /// makes the offline data come late*.
+  ///
+  /// Null where no totals callable was supplied or where the session may not
+  /// read revenue. It resolves to null where the read failed, and the greeting
+  /// then states no comparison - the same as before.
+  final Future<({double today, double previous})?>? trend;
 
   final TenantBranding? branding;
 
@@ -1552,18 +1560,23 @@ final class _LandingGreeting extends StatelessWidget {
   const _LandingGreeting({
     required this.memberName,
     required this.businessName,
-    this.todaySales,
-    this.previousDaySales,
+    this.trend,
     this.isOwnFigures = false,
   });
 
   final String? memberName;
   final String businessName;
 
-  /// Today's takings and the day before's. Either being absent means there is
-  /// no comparison to state.
-  final double? todaySales;
-  final double? previousDaySales;
+  /// Today's takings and the day before's, on their own clock. Absent, or
+  /// resolving to null, means there is no comparison to state - and the line is
+  /// simply not drawn, which is what this greeting has always done when it had
+  /// nothing to compare.
+  ///
+  /// **No placeholder while it is in flight, deliberately.** The line is one
+  /// sentence that either exists or does not; a shimmer where it will maybe go
+  /// would reserve space for something that frequently never comes, and make
+  /// the greeting jump when it does not.
+  final Future<({double today, double previous})?>? trend;
 
   /// Whether the figures being compared are this member's own rather than the
   /// whole business's. The old screen said *Shift performance* to a cashier
@@ -1715,21 +1728,29 @@ final class _LandingGreeting extends StatelessWidget {
               ),
             ),
             SizedBox(height: tokens.spacing.s8),
-            if (_TrendReading.from(
-              today: todaySales,
-              previous: previousDaySales,
-            )
-                case final reading?) ...<Widget>[
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: trendWidth),
-                child: _LandingTrendLine(
-                  reading: reading,
-                  isOwnFigures: isOwnFigures,
-                  maxWidth: trendWidth,
-                ),
+            if (trend case final pending?)
+              FutureBuilder<({double today, double previous})?>(
+                future: pending,
+                builder: (context, snapshot) {
+                  final comparison = snapshot.data;
+                  final reading = _TrendReading.from(
+                    today: comparison?.today,
+                    previous: comparison?.previous,
+                  );
+                  if (reading == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: tokens.spacing.s4),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: trendWidth),
+                      child: _LandingTrendLine(
+                        reading: reading,
+                        isOwnFigures: isOwnFigures,
+                        maxWidth: trendWidth,
+                      ),
+                    ),
+                  );
+                },
               ),
-              SizedBox(height: tokens.spacing.s4),
-            ],
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: promptWidth),
               // The narrowest of the three, so it is the likeliest to have to
@@ -2222,12 +2243,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           )
         : Future<TenantReportingCurrency?>.value();
     final days = await recentDays ?? const <TenantDailyMetricsDay>[];
-    final comparison = await trend;
+    // **The trend is handed on rather than awaited**, for the reason
+    // `_HomeOverview.trend` gives. It is already in flight; what changes is
+    // that the rest of the home no longer waits on it.
     return _HomeOverview(
       branding: await branding,
       today: days.isEmpty ? null : days.first,
-      todaySales: comparison?.today,
-      previousDaySales: comparison?.previous,
+      trend: trend,
       currency: await currency,
       showProfit: TenantProfitReport.canSeeInSession(session),
     );
@@ -2321,8 +2343,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               _LandingGreeting(
                 memberName: memberName,
                 businessName: branding?.companyName ?? membership.tenantName,
-                todaySales: overview.todaySales,
-                previousDaySales: overview.previousDaySales,
+                trend: overview.trend,
                 // The figures come from `TenantDailyMetricsRepository`, whose
                 // allowed roles are the business-wide ones - so whenever there
                 // is a comparison to state at all, it is the store's. A

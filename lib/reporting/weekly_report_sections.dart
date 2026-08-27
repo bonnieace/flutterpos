@@ -16,6 +16,7 @@ import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/status.dart';
+import '../ui/skeleton.dart';
 import '../ui/tokens.dart';
 import 'reporting_currency.dart';
 import 'sales_totals_session_context.dart';
@@ -41,6 +42,31 @@ abstract final class WeeklyReportMetrics {
 
   /// How many gridlines sit behind the bars.
   static const int gridDivisions = 4;
+
+  /// The heights a reading chart draws its seven bars at, as fractions of the
+  /// plot.
+  ///
+  /// **Uneven on purpose.** Seven bars of one height is a placeholder that
+  /// reads as a table; a week's takings are never level, and the shape of the
+  /// thing being waited for is the only reason to draw bars rather than one
+  /// grey slab.
+  static const List<double> readingBarHeights = <double>[
+    0.45,
+    0.7,
+    0.35,
+    0.85,
+    0.6,
+    0.5,
+    0.25,
+  ];
+
+  /// How wide a figure reads while it is still being read.
+  ///
+  /// A fraction rather than a width, so the placeholder scales with the
+  /// card it sits in. Short of the full line because a money figure never
+  /// fills one, and a placeholder that did would settle noticeably narrower
+  /// than it started.
+  static const double readingWidthFactor = 0.55;
 
   /// The floor the chart scales to, so an empty week still draws an axis
   /// rather than collapsing to a flat line at zero.
@@ -72,6 +98,7 @@ final class WeeklyReportContents extends StatelessWidget {
     required this.selfUid,
     required this.categoryId,
     required this.showProfit,
+    this.reading = false,
     required this.onChooseWeek,
     required this.onChooseMember,
     required this.onChooseCategory,
@@ -85,6 +112,17 @@ final class WeeklyReportContents extends StatelessWidget {
   /// Null while the week could not be read. The filters still draw, which is
   /// the point of keeping them out of the failure state.
   final TenantWeeklyReport? report;
+
+  /// Whether [report] is null because the read is still running.
+  ///
+  /// **An em dash is a claim and a placeholder is not**, which is the whole
+  /// reason this flag exists rather than the sections reading `report == null`
+  /// and drawing the same thing either way. `—` in a figure card says *this
+  /// week has no such figure* - the right thing to say about a week that could
+  /// not be read, and a lie about one that has not answered yet. Before
+  /// 2026-08-27 this page showed a centred spinner instead, which said nothing
+  /// untrue but also replaced the week picker and the filters while it did it.
+  final bool reading;
 
   final SalesTotalsSessionContext sessionContext;
   final String? soldById;
@@ -129,6 +167,7 @@ final class WeeklyReportContents extends StatelessWidget {
         ],
         _MetricGrid(
           report: report,
+          reading: reading,
           currency: currency,
           showProfit: showProfit,
           week: week,
@@ -158,20 +197,30 @@ final class WeeklyReportContents extends StatelessWidget {
                   child: WeeklyRevenueChart(
                     week: week,
                     report: report,
+                    reading: reading,
                     currency: currency,
                   ),
                 ),
                 SizedBox(width: tokens.spacing.s24),
                 Expanded(
-                  child: WeeklyTopItems(report: report, currency: currency),
+                  child: WeeklyTopItems(
+                    report: report,
+                    reading: reading,
+                    currency: currency,
+                  ),
                 ),
               ],
             ),
           )
         else ...<Widget>[
-          WeeklyRevenueChart(week: week, report: report, currency: currency),
+          WeeklyRevenueChart(
+            week: week,
+            report: report,
+            reading: reading,
+            currency: currency,
+          ),
           SizedBox(height: tokens.spacing.s24),
-          WeeklyTopItems(report: report, currency: currency),
+          WeeklyTopItems(report: report, reading: reading, currency: currency),
         ],
         SizedBox(height: tokens.spacing.s32),
         WeeklyRecentTransactions(
@@ -216,6 +265,7 @@ final class WeeklyReportCard extends StatelessWidget {
 final class _MetricGrid extends StatelessWidget {
   const _MetricGrid({
     required this.report,
+    required this.reading,
     required this.currency,
     required this.showProfit,
     required this.week,
@@ -224,6 +274,11 @@ final class _MetricGrid extends StatelessWidget {
   });
 
   final TenantWeeklyReport? report;
+
+  /// See `WeeklyReportContents.reading`. A card that is reading draws a
+  /// placeholder where its figure will be, rather than an em dash saying the
+  /// figure does not exist.
+  final bool reading;
   final TenantReportingCurrency? currency;
   final bool showProfit;
   final TenantReportWeek week;
@@ -244,6 +299,7 @@ final class _MetricGrid extends StatelessWidget {
       _MetricCard(
         cardKey: const ValueKey('weekly-report-sales'),
         title: 'TOTAL SALES',
+        reading: reading,
         value: data == null ? '—' : weeklyReportMoney(currency, data.sales),
         change: TenantWeeklyReport.change(data?.sales ?? 0, previous?.sales),
         comparisonLabel: _comparisonLabel,
@@ -257,6 +313,7 @@ final class _MetricGrid extends StatelessWidget {
         _MetricCard(
           cardKey: const ValueKey('weekly-report-profit'),
           title: 'GROSS PROFIT',
+          reading: reading,
           // An unshowable basis says so rather than printing a figure the
           // server computed out of lines that carried no cost.
           value: profit == null || !profit.isShowable
@@ -275,6 +332,7 @@ final class _MetricGrid extends StatelessWidget {
       _MetricCard(
         cardKey: const ValueKey('weekly-report-transactions'),
         title: 'TRANSACTIONS',
+        reading: reading,
         value: data == null ? '—' : '${data.transactions}',
         change: TenantWeeklyReport.change(
           (data?.transactions ?? 0).toDouble(),
@@ -290,6 +348,7 @@ final class _MetricGrid extends StatelessWidget {
       _MetricCard(
         cardKey: const ValueKey('weekly-report-average'),
         title: 'AVERAGE SALE',
+        reading: reading,
         value: data == null || data.transactions == 0
             ? '—'
             : weeklyReportMoney(currency, data.averageSale),
@@ -366,6 +425,7 @@ final class _MetricCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.emphasis,
+    this.reading = false,
     this.change,
     this.comparisonLabel,
     this.subtitle,
@@ -374,6 +434,9 @@ final class _MetricCard extends StatelessWidget {
   final Key cardKey;
   final String title;
   final String value;
+
+  /// Whether the figure is still being read. See `WeeklyReportContents`.
+  final bool reading;
   final IconData icon;
 
   /// Whether the glyph is drawn in the accent or in the problem colour. The old
@@ -423,13 +486,26 @@ final class _MetricCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: tokens.spacing.s12),
-          Text(
-            value,
-            style: tokens.typography.numericCompact.copyWith(
-              color: tokens.colors.text.primary,
+          // The title and the glyph above are the same whether or not the
+          // figure has arrived, so they are drawn for real and only the figure
+          // is a placeholder - decision 35, on one card.
+          if (reading)
+            SkeletonGroup(
+              semanticLabel: 'Reading $title.',
+              child: SkeletonLine(
+                widthFactor: WeeklyReportMetrics.readingWidthFactor,
+                style: tokens.typography.numericCompact,
+                tone: SkeletonTone.onRaised,
+              ),
+            )
+          else
+            Text(
+              value,
+              style: tokens.typography.numericCompact.copyWith(
+                color: tokens.colors.text.primary,
+              ),
             ),
-          ),
-          if (delta != null) ...<Widget>[
+          if (delta != null && !reading) ...<Widget>[
             SizedBox(height: tokens.spacing.s8),
             Row(
               children: <Widget>[
