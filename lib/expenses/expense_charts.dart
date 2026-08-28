@@ -48,6 +48,10 @@ final class ExpenseChartMetrics {
   /// How tall the per-day chart is drawn.
   static const double dailyHeight = 160;
 
+  /// How far past the first and last day the plot extends, so their labels
+  /// have somewhere to sit. Half a day either side.
+  static const double axisMargin = 0.5;
+
   /// How much of the hole's diameter the total may use.
   ///
   /// The hole is a circle and the figure is a straight line across it, so the
@@ -295,8 +299,16 @@ final class ExpenseDailyChart extends StatelessWidget {
                 totalsMinor.length <= ExpenseChartMetrics.maximumDottedDays;
             return LineChart(
               LineChartData(
-                minX: 0,
-                maxX: (totalsMinor.length - 1).toDouble().clamp(0, 3650),
+                // **Half a slot of margin at each end**, which is what
+                // `BarChartAlignment.spaceAround` used to give the bars for
+                // free. Without it the first and last points sit exactly on
+                // the plot's edges and their date labels - centred under them -
+                // hang off the screen, which is what the first capture of this
+                // line showed on the right.
+                minX: -ExpenseChartMetrics.axisMargin,
+                maxX:
+                    (totalsMinor.length - 1).toDouble().clamp(0, 3650) +
+                    ExpenseChartMetrics.axisMargin,
                 minY: 0,
                 maxY: ceiling,
                 lineTouchData: LineTouchData(
@@ -368,6 +380,12 @@ final class ExpenseDailyChart extends StatelessWidget {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      // **One tick per day, pinned to whole days.** Extending
+                      // the plot half a slot past each end let fl_chart pick
+                      // its own interval, and a tick at 3.5 truncated to the
+                      // same index as one at 3 - so a month drew the same date
+                      // twelve times over.
+                      interval: 1,
                       reservedSize: tokens.spacing.s20,
                       getTitlesWidget: (value, meta) => Padding(
                         padding: EdgeInsets.only(top: tokens.spacing.s4),
@@ -375,7 +393,7 @@ final class ExpenseDailyChart extends StatelessWidget {
                           // **Only the ends and the middle are labelled.** A month
                           // is thirty-one bars and a label under every one is a
                           // grey smear; the tooltip names the exact day on a tap.
-                          _axisLabel(value.toInt()),
+                          _axisLabel(value),
                           style: tokens.typography.caption.copyWith(
                             color: chart.axisLabel,
                           ),
@@ -402,7 +420,11 @@ final class ExpenseDailyChart extends StatelessWidget {
   String _dayLabel(int index) =>
       index >= 0 && index < dates.length ? dates[index] : '';
 
-  String _axisLabel(int index) {
+  String _axisLabel(num position) {
+    // A tick that is not on a day names no day. Cheap insurance against the
+    // interval above ever being relaxed again.
+    if ((position - position.round()).abs() > 0.001) return '';
+    final index = position.round();
     final middle = dates.length ~/ 2;
     if (dates.length > 1 &&
         index != 0 &&

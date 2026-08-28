@@ -148,6 +148,9 @@ void main() {
             unreadable: listing.unreadable,
           );
         },
+        // The same listing as a figure, so the launcher tile's badge and its
+        // problem colour are in the captures rather than left to be imagined.
+        printQueueCount: () => printJobs.pending().jobs.length,
         catalogManagementRoute: (reader) =>
             TenantCatalogManagementScreen(reader: reader),
         catalogManagementRoles: TenantCatalogManagementRepository.allowedRoles,
