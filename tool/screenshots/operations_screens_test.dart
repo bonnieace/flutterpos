@@ -1144,6 +1144,22 @@ void main() {
     viewports: responsiveViewports,
   );
 
+  // **The returns feed had no capture at all until 2026-08-28**, which is how
+  // its cards went a whole redesign without anybody being able to look at them.
+  // Manager, because verifying a return is what this route is for and a role
+  // that cannot verify photographs a page with its actions missing.
+  screenshotCase(
+    '35-returns-feed',
+    build: () => inSession(
+      TenantReturnFeedScreen(
+        reader: FakeTenantReader.business(),
+        actions: fakeReturnActions(),
+      ),
+      controller: seedSession(),
+    ),
+    viewports: responsiveViewports,
+  );
+
   // **The route that makes profit whole.** Owner, because reading spending is
   // owner and administrator only - the same tier a margin sits behind - so a
   // capture under any other role would photograph the refusal.
