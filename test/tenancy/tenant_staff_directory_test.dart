@@ -238,7 +238,13 @@ void main() {
       );
       expect(find.text('Owner'), findsWidgets);
       expect(find.text('Active'), findsWidgets);
-      expect(find.text('Invite staff'), findsOneWidget);
+      // **The key rather than the words, since 2026-08-28.** Inviting moved to
+      // the toolbar as a glyph, so its label is a semantic one now; what is
+      // being asserted here is unchanged - that an owner is offered it.
+      expect(
+        find.byKey(const ValueKey('invite-staff-open')),
+        findsOneWidget,
+      );
       // Role is a labelled key-value line rather than a badge, because it is
       // not one of §2.1's five statuses and a list where two things wear a
       // badge has neither of them meaning anything.

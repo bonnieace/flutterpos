@@ -377,22 +377,44 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
   final TenantStaffRequestIdFactory? requestIdFactory;
   final TenantStaffDirectoryQueryReader? queryReader;
 
+  /// **The scaffold is built below the guard, not above it.** *Invite staff* is
+  /// a page action and belongs at the trailing edge of the toolbar, and whether
+  /// this session may invite at all is decided from the guarded session - which
+  /// only exists inside the guard. Keeping the bar up here meant the control
+  /// could never reach it. Same move the expenses route made for the same
+  /// reason.
+  @override
+  Widget build(BuildContext context) => TenantStaffDirectoryPanel(
+    reader: reader,
+    cancelInvitationCallable: cancelInvitationCallable,
+    inviteCallable: inviteCallable,
+    replaceEmailCallable: replaceEmailCallable,
+    resendCallable: resendCallable,
+    statusCallable: statusCallable,
+    updateCallable: updateCallable,
+    requestIdFactory: requestIdFactory,
+    queryReader: queryReader,
+  );
+}
+
+/// The staff page's chrome, drawn in every phase of the read.
+///
+/// The toolbar and its action are the same whether the directory has arrived
+/// or not, so they are drawn for real and only the body changes - the rule the
+/// skeleton work settled on for every other route here.
+final class _StaffFrame extends StatelessWidget {
+  const _StaffFrame({required this.child, this.action});
+
+  final Widget child;
+  final Widget? action;
+
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'User Management',
     subtitle: 'Manage user accounts and permissions.',
     contentWidth: AppContentWidth.records,
-    body: TenantStaffDirectoryPanel(
-      reader: reader,
-      cancelInvitationCallable: cancelInvitationCallable,
-      inviteCallable: inviteCallable,
-      replaceEmailCallable: replaceEmailCallable,
-      resendCallable: resendCallable,
-      statusCallable: statusCallable,
-      updateCallable: updateCallable,
-      requestIdFactory: requestIdFactory,
-      queryReader: queryReader,
-    ),
+    primaryAction: action,
+    body: child,
   );
 }
 
@@ -773,33 +795,53 @@ final class _TenantStaffManagementPanelState
       allowedRoles: TenantStaffDirectoryScreen.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
-      failure: (context, error) => const Center(
-        key: ValueKey('staff-directory-failure'),
-        child: Text('The staff directory could not be read.'),
+      failure: (context, error) => const _StaffFrame(
+        child: Center(
+          key: ValueKey('staff-directory-failure'),
+          child: Text('The staff directory could not be read.'),
+        ),
       ),
-      builder: (context, session, page) => _StaffManagementContents(
-        session: session,
-        page: page,
-        search: _search,
-        searchTerm: _searchTerm,
-        role: _role,
-        status: _status,
-        pageIndex: _pageIndex,
-        onSearchChanged: _onSearchChanged,
-        onRoleChanged: _setRole,
-        onStatusChanged: _setStatus,
-        onInvite:
-            session.canAccess(
-              allowedRoles: TenantStaffInvitationGateway.allowedRoles,
-            )
-            ? () => _openForm(session, _StaffActionKind.invite)
+      builder: (context, session, page) => _StaffFrame(
+        action: _canInvite(session)
+            ? AppIconButton(
+                key: const ValueKey('invite-staff-open'),
+                icon: Icons.person_add_alt_1_outlined,
+                iconSize: AppButton.prominentIconSize,
+                semanticLabel: 'Invite staff',
+                // Tertiary and unbordered: the primary tier's label is the
+                // near-black ink meant for a mint container, and an unbordered
+                // icon button paints no container - so a primary glyph here
+                // would be black on the bar's own dark surface.
+                tier: AppButtonTier.tertiary,
+                bordered: false,
+                onPressed: () => _openForm(session, _StaffActionKind.invite),
+              )
             : null,
-        actionsFor: (staff) => _actionsFor(session, staff),
-        onPrevious: _pageIndex == 0 ? null : _previous,
-        onNext: page.hasMore ? () => _next(page.nextCursor) : null,
+        child: _StaffManagementContents(
+          session: session,
+          page: page,
+          search: _search,
+          searchTerm: _searchTerm,
+          role: _role,
+          status: _status,
+          pageIndex: _pageIndex,
+          onSearchChanged: _onSearchChanged,
+          onRoleChanged: _setRole,
+          onStatusChanged: _setStatus,
+          canInvite: _canInvite(session),
+          actionsFor: (staff) => _actionsFor(session, staff),
+          onPrevious: _pageIndex == 0 ? null : _previous,
+          onNext: page.hasMore ? () => _next(page.nextCursor) : null,
+        ),
       ),
     );
   }
+
+  /// Whether this session may invite at all, which is what puts the control in
+  /// the toolbar or leaves it out.
+  static bool _canInvite(TenantSession session) => session.canAccess(
+    allowedRoles: TenantStaffInvitationGateway.allowedRoles,
+  );
 }
 
 enum _StaffActionKind {
@@ -840,7 +882,7 @@ final class _StaffManagementContents extends StatelessWidget {
     required this.onSearchChanged,
     required this.onRoleChanged,
     required this.onStatusChanged,
-    required this.onInvite,
+    required this.canInvite,
     required this.actionsFor,
     required this.onPrevious,
     required this.onNext,
@@ -856,7 +898,9 @@ final class _StaffManagementContents extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<TenantRole?> onRoleChanged;
   final ValueChanged<MembershipStatus?> onStatusChanged;
-  final VoidCallback? onInvite;
+  /// Whether this session may invite. It decides only whether the read-only
+  /// notice is drawn - the control itself is in the toolbar now.
+  final bool canInvite;
   final List<_StaffMenuAction> Function(TenantStaffSummary) actionsFor;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
@@ -883,19 +927,11 @@ final class _StaffManagementContents extends StatelessWidget {
       key: const ValueKey('staff-management'),
       padding: EdgeInsets.all(inset),
       children: <Widget>[
-        if (onInvite case final invite?) ...<Widget>[
-          Align(
-            alignment: Alignment.centerRight,
-            child: AppButton(
-              key: const ValueKey('invite-staff-open'),
-              label: 'Invite staff',
-              icon: Icons.person_add_alt_1_outlined,
-              expand: compact,
-              onPressed: invite,
-            ),
-          ),
-          SizedBox(height: tokens.spacing.s16),
-        ],
+        // **The page opens on the search field, at the developer's direction on
+        // 2026-08-28.** *Invite staff* used to be the first thing in this list,
+        // full width on a phone; it is a page action and now sits at the
+        // trailing edge of the toolbar, which is where every other route in
+        // this app puts the one thing its page is for.
         if (_readOnly) ...<Widget>[
           const Callout(
             key: ValueKey('staff-directory-read-only'),
@@ -907,8 +943,12 @@ final class _StaffManagementContents extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.s16),
         ],
-        _staffSummary(context),
-        SizedBox(height: tokens.spacing.s20),
+        // **The four counters are gone, at the developer's direction on
+        // 2026-08-28.** They were `Staff`, `Active`, `Invited` and
+        // `Owners & admins`, every one of them counted from the page currently
+        // on screen rather than from the business - so *Staff 20* on a shop
+        // with sixty staff, and four different figures on page two. A block of
+        // cards above a list, saying less than the list does.
         _filters(context, compact: compact),
         SizedBox(height: tokens.spacing.s16),
         _StaffDirectoryList(
@@ -938,58 +978,6 @@ final class _StaffManagementContents extends StatelessWidget {
       ],
     );
   }
-
-  Widget _staffSummary(BuildContext context) {
-    final items = page.items;
-    final active = items
-        .where((staff) => staff.status == MembershipStatus.active)
-        .length;
-    final invited = items
-        .where((staff) => staff.status == MembershipStatus.pending)
-        .length;
-    final privileged = items
-        .where(
-          (staff) =>
-              staff.isOwner ||
-              staff.role == TenantRole.owner ||
-              staff.role == TenantRole.admin,
-        )
-        .length;
-    final scope = page.hasMore ? 'this page, more available' : 'this page only';
-    return StatRow(
-      tiles: <StatTile>[
-        StatTile(
-          key: const ValueKey('staff-stat-total'),
-          label: 'Staff',
-          value: '${items.length}',
-          icon: Icons.people_outline,
-          detail: scope,
-        ),
-        StatTile(
-          key: const ValueKey('staff-stat-active'),
-          label: 'Active',
-          value: '$active',
-          icon: Icons.check_circle_outline,
-          detail: 'on this page',
-        ),
-        StatTile(
-          key: const ValueKey('staff-stat-pending'),
-          label: 'Invited',
-          value: '$invited',
-          icon: Icons.mark_email_unread_outlined,
-          detail: 'on this page',
-        ),
-        StatTile(
-          key: const ValueKey('staff-stat-privileged'),
-          label: 'Owners & admins',
-          value: '$privileged',
-          icon: Icons.workspace_premium_outlined,
-          detail: 'on this page',
-        ),
-      ],
-    );
-  }
-
   Widget _filters(BuildContext context, {required bool compact}) {
     final tokens = AppTokens.componentOf(context);
     final searchField = AppTextField(
