@@ -41,7 +41,7 @@ final class AppCard extends StatelessWidget {
         color: tokens.colors.surface.raised,
         borderRadius: BorderRadius.circular(tokens.radius.md),
         border: bordered
-            ? Border.all(color: tokens.colors.surface.borderSubtle)
+            ? Border.all(color: tokens.colors.surface.cardEdge)
             : null,
       ),
       child: Padding(

@@ -227,6 +227,7 @@ final class AppSurfaceRoles {
     required this.overlay,
     required this.scrim,
     required this.borderSubtle,
+    required this.cardEdge,
     required this.borderStrong,
   });
 
@@ -261,6 +262,21 @@ final class AppSurfaceRoles {
   /// Hairlines and card edges.
   final Color borderSubtle;
 
+  /// The edge of a card.
+  ///
+  /// **Split off [borderSubtle] on 2026-08-28, at the developer's direction.**
+  /// That role was doing two jobs the export happens to give the same value:
+  /// the edge around a card, and the horizontal rule inside one. They want
+  /// different things. A rule divides content that is already known to belong
+  /// together, so it should barely be there; a card edge is what tells a person
+  /// the thing is a card at all, and at `surface-elevated` over
+  /// `surface-card` - one small step - a column of them read as slabs merging
+  /// into the page rather than as cards.
+  ///
+  /// Raising the shared value would have made every hairline in the app louder
+  /// to fix the edges, so the edges got their own.
+  final Color cardEdge;
+
   /// Inputs, secondary buttons, focus targets.
   final Color borderStrong;
 
@@ -272,6 +288,7 @@ final class AppSurfaceRoles {
     overlay: _Primitive.green800,
     scrim: Color.fromRGBO(0, 0, 0, 0.6),
     borderSubtle: _Primitive.green700,
+    cardEdge: _Primitive.green600,
     borderStrong: _Primitive.green600,
   );
 
@@ -308,6 +325,7 @@ final class AppSurfaceRoles {
     // job. `outline` (`#869585`) is left to [AppTextRoles.tertiary], where the
     // design uses it: muted text and muted glyphs, not edges.
     borderSubtle: _ProfoundVerdant.surfaceElevated,
+    cardEdge: _ProfoundVerdant.surfaceContainerHighest,
     borderStrong: _ProfoundVerdant.outlineVariant,
   );
 
@@ -320,6 +338,7 @@ final class AppSurfaceRoles {
         overlay: Color.lerp(a.overlay, b.overlay, t)!,
         scrim: Color.lerp(a.scrim, b.scrim, t)!,
         borderSubtle: Color.lerp(a.borderSubtle, b.borderSubtle, t)!,
+        cardEdge: Color.lerp(a.cardEdge, b.cardEdge, t)!,
         borderStrong: Color.lerp(a.borderStrong, b.borderStrong, t)!,
       );
 }
@@ -336,6 +355,7 @@ final class AppTextRoles {
     required this.secondary,
     required this.tertiary,
     required this.disabled,
+    required this.onAccent,
     required this.money,
   });
 
@@ -353,6 +373,15 @@ final class AppTextRoles {
   /// [AppSurfaceRoles.raised], which is below AA on purpose: WCAG exempts a
   /// disabled control, and §2.1 permits this colour nowhere else.
   final Color disabled;
+
+  /// Ink on one of [AppAccentRoles.identity].
+  ///
+  /// **Its own role because those blocks are not a surface in this palette's
+  /// ramp.** Every other text role is chosen against the near-black grounds; an
+  /// identity block is a filled mid-tone, and [primary] - a pale sage meant for
+  /// a dark ground - is the wrong ink on it. The old app put white on all six,
+  /// which is what those 400 tones were picked to carry.
+  final Color onAccent;
 
   /// An amount of money, on a surface that has decided to set money apart.
   ///
@@ -382,6 +411,7 @@ final class AppTextRoles {
     secondary: _Primitive.sage050,
     tertiary: _Primitive.sage200,
     disabled: _Primitive.sageDisabled,
+    onAccent: Color(0xFFFFFFFF),
     // The same hex the Profound Verdant instance carries, which is the one
     // place the two palettes agree without being repointed: `currency-kes` is
     // `_Primitive.mint400`, and the previous system's accent was too.
@@ -408,6 +438,7 @@ final class AppTextRoles {
     secondary: _ProfoundVerdant.onSurfaceVariant,
     tertiary: _ProfoundVerdant.outline,
     disabled: _ProfoundVerdant.sageDisabled,
+    onAccent: Color(0xFFFFFFFF),
     money: _ProfoundVerdant.currencyKes,
   );
 
@@ -417,6 +448,7 @@ final class AppTextRoles {
         secondary: Color.lerp(a.secondary, b.secondary, t)!,
         tertiary: Color.lerp(a.tertiary, b.tertiary, t)!,
         disabled: Color.lerp(a.disabled, b.disabled, t)!,
+        onAccent: Color.lerp(a.onAccent, b.onAccent, t)!,
         money: Color.lerp(a.money, b.money, t)!,
       );
 }
@@ -1014,6 +1046,90 @@ final class AppChartRoles {
       );
 }
 
+/// Decorative identity colour, carried across from the app this one replaced.
+///
+/// **Distinct, never ranked, and never a status.** These say *this is a
+/// different one* - one person from the next in a staff list, one module from
+/// the next on the home. They say nothing about whether anything is good, bad,
+/// urgent or late; [AppStatusRoles] is the only scale allowed to mean that. A
+/// surface drawing from here always prints the name beside the colour, which is
+/// hard rule 4's floor.
+///
+/// **Why it exists rather than the chart series being reused.** `chart.series`
+/// is ordered for *separation between adjacent slices of one picture* and is
+/// deliberately all brand-family greens plus one blue, because a red slice on a
+/// spending ring would read as a warning. An avatar block is not a slice: it
+/// wants to be told apart from five others at a glance across a scrolling list,
+/// which wants a wider spread of hue than a ring does.
+final class AppAccentRoles {
+  const AppAccentRoles({required this.identity, required this.privileged});
+
+  /// One colour per thing, picked by the thing's own identity rather than by
+  /// its position in a list.
+  ///
+  /// **The old hub's six, which is where they came from and why there are six.**
+  /// `MainHub` distinguished its modules with blue, teal, orange, purple, pink
+  /// and green; these are the accessible 400 tones of that same set. They lived
+  /// as a private list inside `home_navigation.dart` until the staff cards
+  /// wanted the same six for their avatars.
+  final List<Color> identity;
+
+  /// What a privileged role wears - owner, administrator.
+  ///
+  /// **The one identity colour that does carry meaning**, and it is a rank
+  /// rather than a state: the old app printed `Admin` in violet and every other
+  /// role in the brand green, which is a distinction a person reads once and
+  /// then recognises. It is deliberately not a status hue, because holding
+  /// administrator rights is not a problem to be fixed.
+  final Color privileged;
+
+  /// The colour [seed] wears, chosen so the same person is the same colour on
+  /// every screen and after every reload.
+  ///
+  /// **A hash of the identity, not an index into the list.** Colouring by
+  /// position means a member's avatar changes the moment somebody above them is
+  /// deactivated, or when a filter reorders the page - which is precisely when a
+  /// person is scanning for a face they recognise.
+  Color identityFor(String seed) {
+    if (identity.isEmpty) return privileged;
+    // **FNV-1a with a final avalanche, not `hash * 31`.** The seeds here are
+    // ids from one business, so they share prefixes and differ late - and a
+    // weak mix over six buckets put four of five test members on the same
+    // colour, which is the one thing this is for.
+    var hash = 0x811c9dc5;
+    for (final unit in seed.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+    }
+    hash ^= hash >> 16;
+    hash = (hash * 0x7feb352d) & 0xffffffff;
+    hash ^= hash >> 15;
+    return identity[hash % identity.length];
+  }
+
+  static const AppAccentRoles dark = AppAccentRoles(
+    identity: <Color>[
+      Color(0xFF42A5F5),
+      Color(0xFF26A69A),
+      Color(0xFFFFA726),
+      Color(0xFFAB47BC),
+      Color(0xFFEC407A),
+      Color(0xFF66BB6A),
+    ],
+    privileged: Color(0xFFA78BFA),
+  );
+
+  static const AppAccentRoles profoundVerdant = dark;
+
+  static AppAccentRoles lerp(AppAccentRoles a, AppAccentRoles b, double t) =>
+      AppAccentRoles(
+        identity: <Color>[
+          for (var index = 0; index < a.identity.length; index++)
+            Color.lerp(a.identity[index], b.identity[index], t)!,
+        ],
+        privileged: Color.lerp(a.privileged, b.privileged, t)!,
+      );
+}
+
 /// Every colour role in one place. `design.md` §2.1.
 @immutable
 final class AppColorRoles {
@@ -1023,6 +1139,7 @@ final class AppColorRoles {
     required this.action,
     required this.status,
     required this.chart,
+    required this.accent,
   });
 
   final AppSurfaceRoles surface;
@@ -1030,6 +1147,7 @@ final class AppColorRoles {
   final AppActionRoles action;
   final AppStatusRoles status;
   final AppChartRoles chart;
+  final AppAccentRoles accent;
 
   /// The only palette `design.md` defines.
   ///
@@ -1044,6 +1162,7 @@ final class AppColorRoles {
     action: AppActionRoles.dark,
     status: AppStatusRoles.dark,
     chart: AppChartRoles.dark,
+    accent: AppAccentRoles.dark,
   );
 
   /// The Profound Verdant palette - the second instance this class's doc above
@@ -1067,6 +1186,7 @@ final class AppColorRoles {
     action: AppActionRoles.profoundVerdant,
     status: AppStatusRoles.profoundVerdant,
     chart: AppChartRoles.profoundVerdant,
+    accent: AppAccentRoles.profoundVerdant,
   );
 
   static AppColorRoles lerp(AppColorRoles a, AppColorRoles b, double t) =>
@@ -1076,6 +1196,7 @@ final class AppColorRoles {
         action: AppActionRoles.lerp(a.action, b.action, t),
         status: AppStatusRoles.lerp(a.status, b.status, t),
         chart: AppChartRoles.lerp(a.chart, b.chart, t),
+        accent: AppAccentRoles.lerp(a.accent, b.accent, t),
       );
 }
 

@@ -1088,16 +1088,26 @@ final class _StaffDirectoryList extends StatelessWidget {
               ],
             ),
           );
+    // **The frame is the table's, not the cards'.** A table is one object with
+    // rows in it and wants an edge around the whole; cards each carry their own
+    // now, and a box around a column of boxes is a second frame saying nothing
+    // the first did not - which is what the old app's list did *not* do.
+    if (!table) {
+      return KeyedSubtree(
+        key: const ValueKey('staff-directory-cards'),
+        child: contents,
+      );
+    }
     return Container(
-      key: ValueKey(table ? 'staff-directory-table' : 'staff-directory-cards'),
+      key: const ValueKey('staff-directory-table'),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: tokens.colors.surface.raised,
-        // See [_StaffCard]: the three surfaces of this directory take
-        // `radius.lg` together since 2026-08-26, so the container, the cards
-        // inside it and the avatars on them stay one shape.
+        // See [_StaffCard]: the surfaces of this directory take `radius.lg`
+        // together since 2026-08-26, so the container, the cards inside it and
+        // the avatars on them stay one shape.
         borderRadius: BorderRadius.circular(tokens.radius.lg),
-        border: Border.all(color: tokens.colors.surface.borderSubtle),
+        border: Border.all(color: tokens.colors.surface.cardEdge),
       ),
       child: contents,
     );
@@ -1122,13 +1132,21 @@ final class _StaffCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    // **The old app's card, rebuilt on this app's tokens.** `screens/users.dart`
+    // drew a bordered `bgMid` block: a 48 avatar in the person's own colour, the
+    // name and address beside it, the overflow menu on the same line, then one
+    // metadata row carrying a tinted role pill, a status dot and its word. What
+    // this had instead was an unbordered block painted `surface.base` - the page
+    // colour - so a column of them read as one slab, and a pair of labelled
+    // key-value lines where the old card had the pill and the dot.
     return Container(
       key: ValueKey('staff-record-${staff.uid}'),
-      margin: EdgeInsets.symmetric(vertical: tokens.spacing.s4),
-      padding: EdgeInsets.all(tokens.spacing.s12),
+      margin: EdgeInsets.only(bottom: tokens.spacing.s12),
+      padding: EdgeInsets.all(tokens.spacing.s16),
       decoration: BoxDecoration(
-        color: tokens.colors.surface.base,
+        color: tokens.colors.surface.raised,
         borderRadius: BorderRadius.circular(tokens.radius.lg),
+        border: Border.all(color: tokens.colors.surface.cardEdge),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1136,34 +1154,104 @@ final class _StaffCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              _StaffAvatar(staff: staff, size: 48),
+              _StaffAvatar(staff: staff, size: _StaffAvatar.cardSize),
               SizedBox(width: tokens.spacing.s12),
               Expanded(child: _StaffIdentity(staff: staff, showPhone: true)),
               if (actions.isNotEmpty)
                 _StaffActionMenu(staff: staff, actions: actions),
             ],
           ),
-          SizedBox(height: tokens.spacing.s12),
-          Divider(height: 1, color: tokens.colors.surface.borderSubtle),
-          SizedBox(height: tokens.spacing.s12),
-          Wrap(
-            spacing: tokens.spacing.s16,
-            runSpacing: tokens.spacing.s8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          SizedBox(height: tokens.spacing.s16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              _StaffFact(
+              _StaffRolePill(
                 key: ValueKey('staff-role-${staff.uid}'),
-                label: 'Role',
-                value: tenantRoleLabel(staff.role),
+                staff: staff,
               ),
-              _membershipBadge(staff),
-              if (staff.status == MembershipStatus.pending)
-                _StaffFact(
-                  key: ValueKey('staff-invitation-${staff.uid}'),
-                  label: 'Invitation',
-                  value: staffInvitationStatusLabel(staff.invitationStatus),
+              SizedBox(width: tokens.spacing.s12),
+              Flexible(child: _membershipBadge(staff)),
+              if (staff.status == MembershipStatus.pending) ...<Widget>[
+                const Spacer(),
+                Flexible(
+                  child: Text(
+                    key: ValueKey('staff-invitation-${staff.uid}'),
+                    staffInvitationStatusLabel(staff.invitationStatus),
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    // The old card's right-aligned last line, which is where a
+                    // person's eye goes for "and what about it lately".
+                    style: tokens.typography.caption.copyWith(
+                      color: tokens.colors.text.tertiary,
+                    ),
+                  ),
                 ),
+              ],
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A member's role, as the tinted pill the old card wore.
+///
+/// **A pill again, at the developer's direction on 2026-08-28.** It had been
+/// demoted to a labelled key-value line under a rule about badges - that a list
+/// where two things wear a badge has neither of them meaning anything. The rule
+/// holds for *statuses*; a role is not one. It is who somebody is, it does not
+/// change while anyone is looking at it, and the old app's readers recognised
+/// their administrators by the violet before they read the word.
+final class _StaffRolePill extends StatelessWidget {
+  const _StaffRolePill({super.key, required this.staff});
+
+  final TenantStaffSummary staff;
+
+  /// The glyph beside the word, per role. The old card's own three.
+  static IconData iconFor(TenantRole role) => switch (role) {
+    TenantRole.owner => Icons.workspace_premium_outlined,
+    TenantRole.admin => Icons.admin_panel_settings_outlined,
+    TenantRole.manager => Icons.people_outline,
+    TenantRole.cashier => Icons.receipt_long_outlined,
+  };
+
+  /// How far the pill's fill is tinted from its own ink.
+  static const double fill = 0.16;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    // Owners and administrators wear the privileged colour; everybody else
+    // wears the brand's own, exactly as the old card split them.
+    final privileged =
+        staff.isOwner ||
+        staff.role == TenantRole.owner ||
+        staff.role == TenantRole.admin;
+    final ink = privileged
+        ? tokens.colors.accent.privileged
+        : tokens.colors.action.primary.container;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.s8,
+        vertical: tokens.spacing.s4,
+      ),
+      decoration: BoxDecoration(
+        color: ink.withValues(alpha: fill),
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(iconFor(staff.role), size: StatusBadge.iconSize, color: ink),
+          SizedBox(width: tokens.spacing.s4),
+          Text(
+            tenantRoleLabel(staff.role),
+            style: tokens.typography.labelMedium.copyWith(
+              color: ink,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -1369,15 +1457,31 @@ final class _StaffIdentity extends StatelessWidget {
   }
 }
 
+/// A member's initials in a block of their own colour.
+///
+/// **The colour is the person's, not the row's.** The old card gave every
+/// member a filled block from a fixed set, and that is what makes a scrolling
+/// list scannable - a face you recognise before you have read anything. It is
+/// keyed off the member's uid rather than their position, so deactivating
+/// somebody above them does not repaint everybody below.
+///
+/// **Decoration only, and it is never alone**: the name is beside it, the
+/// initials are inside it, and the semantic label names the member. Hard rule 4
+/// is about facts, and which of six hues a person drew is not one.
 final class _StaffAvatar extends StatelessWidget {
   const _StaffAvatar({required this.staff, required this.size});
 
   final TenantStaffSummary staff;
   final double size;
 
+  /// The old card's 48, which is also §9's minimum target - so the block is
+  /// never smaller than a thing a finger could be asked to hit.
+  static const double cardSize = 48;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final accent = tokens.colors.accent.identityFor(staff.uid);
     return Semantics(
       label: '${staff.displayName} initials',
       child: Container(
@@ -1385,14 +1489,15 @@ final class _StaffAvatar extends StatelessWidget {
         height: size,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: tokens.colors.surface.overlay,
+          color: accent,
           borderRadius: BorderRadius.circular(tokens.radius.lg),
-          border: Border.all(color: tokens.colors.surface.borderSubtle),
         ),
         child: Text(
           _initials(staff.displayName),
           style: tokens.typography.labelLarge.copyWith(
-            color: tokens.colors.status.ok.fg,
+            // The old card put white on every one of these six, and they are
+            // the 400 tones chosen so it passes on all of them.
+            color: tokens.colors.text.onAccent,
             fontWeight: FontWeight.w800,
           ),
         ),

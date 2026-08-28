@@ -479,9 +479,14 @@ final class HomeModuleGrid extends StatelessWidget {
                       destination: destination,
                       tokens: tokens,
                       compact: compact,
-                      accent:
-                          _moduleAccents[(index * columns + column) %
-                              _moduleAccents.length],
+                      // **The six moved into `AppTokens` on 2026-08-28.**
+                      // They were a private list here until the staff cards
+                      // wanted the same six for their avatars, and a palette
+                      // living inside one widget is a palette the next surface
+                      // has to copy.
+                      accent: tokens.colors.accent.identity[(index * columns +
+                              column) %
+                          tokens.colors.accent.identity.length],
                     ),
                   ),
                 ],
@@ -572,18 +577,6 @@ final class _ModuleBadge extends StatelessWidget {
     );
   }
 }
-
-/// The old hub distinguished its modules with blue, teal, orange, purple,
-/// pink, and green glyphs. These are the accessible 400 tones of that same
-/// palette, used decoratively and never as a status signal.
-const List<Color> _moduleAccents = <Color>[
-  Color(0xFF42A5F5),
-  Color(0xFF26A69A),
-  Color(0xFFFFA726),
-  Color(0xFFAB47BC),
-  Color(0xFFEC407A),
-  Color(0xFF66BB6A),
-];
 
 /// One destination as a card.
 final class _HomeModuleCard extends StatelessWidget {
