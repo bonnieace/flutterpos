@@ -17,6 +17,7 @@ import '../ui/pagination.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/sheet.dart';
+import '../ui/skeleton.dart';
 import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -1069,6 +1070,13 @@ final class _TenantCatalogManagementPanelState
       allowedRoles: null,
       load: _loader!,
       loadCached: _loaderCached,
+      // **A shimmer of the catalog rather than a spinner, at the developer's
+      // direction on 2026-08-28.** This route was on the guard's default
+      // `LoadingState`, which is one indicator and one sentence in the middle
+      // of an empty page - it says something is happening and nothing about
+      // what, on the screen a shopkeeper opens most often and knows the shape
+      // of best.
+      loading: _InventoryReading(hasBulk: widget.bulkRoute != null),
       denied: const Center(
         key: ValueKey('catalog-management-denied'),
         child: Text(
@@ -1208,6 +1216,25 @@ final class _UnifiedInventoryContents extends StatelessWidget {
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
   final TenantProductVisualBuilder? productVisualBuilder;
+
+  /// How wide each filter is once there is room to put both beside the search
+  /// field.
+  ///
+  /// **Named so the placeholder can read them**, and neither is on §2.3's scale
+  /// because neither is a spacing: they are how much room *All categories* and
+  /// *At/below zero* need beside their labels. A skeleton that guessed would
+  /// draw the filter row at one width and shuffle it sideways when the catalog
+  /// landed.
+  static const double categoryFilterWidth = 220;
+  static const double stockFilterWidth = 188;
+
+  /// The sentence under the search field.
+  ///
+  /// Named for the same reason the widths are: it is a line of the field's own
+  /// height, so a placeholder that left it out would draw the whole filter row
+  /// one line short and move everything under it when the catalog landed.
+  static const String searchHelper =
+      'Type at least 2 characters from a name word or product code.';
 
   bool get _hasActiveQuery =>
       searchPrefix.isNotEmpty ||
@@ -1426,7 +1453,7 @@ final class _UnifiedInventoryContents extends StatelessWidget {
       controller: search,
       label: 'Search products',
       leading: Icons.qr_code_scanner_outlined,
-      helper: 'Type at least 2 characters from a name word or product code.',
+      helper: searchHelper,
       onChanged: onSearchChanged,
     );
     final categoryControl = AppSelect<String>(
@@ -1471,9 +1498,9 @@ final class _UnifiedInventoryContents extends StatelessWidget {
       children: <Widget>[
         Expanded(child: searchControl),
         SizedBox(width: tokens.spacing.s12),
-        SizedBox(width: 220, child: categoryControl),
+        SizedBox(width: categoryFilterWidth, child: categoryControl),
         SizedBox(width: tokens.spacing.s12),
-        SizedBox(width: 188, child: stockControl),
+        SizedBox(width: stockFilterWidth, child: stockControl),
       ],
     );
   }
@@ -1549,6 +1576,381 @@ final class _UnifiedInventoryContents extends StatelessWidget {
   }
 }
 
+/// The catalog while it is still being read.
+///
+/// **Shaped like the page that replaces it**, down to the filter row's own two
+/// heights and the product card's own three columns: the actions, the search
+/// and the filters at the top, then a bordered list of placeholder products.
+/// Decision 35's rule, and the labels inside each card - *Category*, *In
+/// stock*, *Price* - are drawn for real, because they are the same three words
+/// whatever the read returns.
+///
+/// **The action row is drawn without knowing whether the session may write.**
+/// That is decided from the guarded session and so does not exist yet; the
+/// space is reserved because the roles this route admits are mostly roles that
+/// can add a product, and content that settles into reserved space is a better
+/// failure than content that jumps up when a row it was never getting
+/// collapses. The read-only case loses one row's height when the page lands.
+final class _InventoryReading extends StatelessWidget {
+  const _InventoryReading({required this.hasBulk});
+
+  /// Whether this build wires the bulk route at all, which decides whether the
+  /// action header is one control over two or one row of two. It is a property
+  /// of the composition root rather than of the session, so unlike *may write*
+  /// it is known before the read.
+  final bool hasBulk;
+
+  /// Four placeholder products, which fills a phone without pretending to know
+  /// how large the catalog is.
+  static const int _cards = 4;
+
+  /// Placeholder table rows for the wide form. Six, because a table row is
+  /// `space.48` and a desk screen shows appreciably more of them than a phone
+  /// shows cards.
+  static const int _rows = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final width = MediaQuery.sizeOf(context).width;
+    // The same three decisions `_UnifiedInventoryContents.build` makes, read
+    // the same way, so nothing moves sideways when the read lands.
+    final wide = AppLayout.contract.isAtLeast(width, AppBreakpoint.medium);
+    final expanded = AppLayout.contract.isAtLeast(
+      width,
+      AppBreakpoint.expanded,
+    );
+    final horizontalPadding = !wide
+        ? tokens.spacing.s16
+        : expanded
+        ? tokens.spacing.s32
+        : tokens.spacing.s24;
+    return SkeletonGroup(
+      semanticLabel: 'Reading the products in this catalog.',
+      child: ListView(
+        key: const ValueKey('inventory-reading'),
+        padding: EdgeInsets.fromLTRB(
+          horizontalPadding,
+          tokens.spacing.s8,
+          horizontalPadding,
+          tokens.spacing.s20,
+        ),
+        children: <Widget>[
+          _actionHeader(context, compact: !wide),
+          SizedBox(height: tokens.spacing.s20),
+          _filters(context, compact: !wide),
+          SizedBox(height: tokens.spacing.s16),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: tokens.colors.surface.raised,
+              borderRadius: BorderRadius.circular(tokens.radius.md),
+              border: Border.all(color: tokens.colors.surface.borderSubtle),
+            ),
+            child: wide
+                ? _table(context)
+                : Padding(
+                    padding: EdgeInsets.symmetric(
+                      vertical: tokens.spacing.s4,
+                    ),
+                    child: Column(
+                      children: <Widget>[
+                        for (var card = 0; card < _cards; card++)
+                          const _InventoryProductCardSkeleton(),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One button-height block per control, in the arrangement the real header
+  /// takes at this width.
+  Widget _actionHeader(BuildContext context, {required bool compact}) {
+    final tokens = AppTokens.componentOf(context);
+    final control = SkeletonBlock(
+      height: AppButtonSize.lg.height,
+      radius: tokens.radius.md,
+    );
+    if (compact && hasBulk) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          control,
+          SizedBox(height: tokens.spacing.s12),
+          Row(
+            children: <Widget>[
+              Expanded(child: control),
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(child: control),
+            ],
+          ),
+        ],
+      );
+    }
+    if (compact) {
+      return Row(
+        children: <Widget>[
+          Expanded(child: control),
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(child: control),
+        ],
+      );
+    }
+    // Wide: the real row is right-aligned and each control is its own width,
+    // which a placeholder cannot know - so it draws them at the one width the
+    // scale does give it and keeps the alignment.
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: <Widget>[
+        for (var button = 0; button < (hasBulk ? 3 : 2); button++) ...<Widget>[
+          if (button > 0) SizedBox(width: tokens.spacing.s12),
+          SizedBox(width: tokens.spacing.s64 * 2, child: control),
+        ],
+      ],
+    );
+  }
+
+  Widget _filters(BuildContext context, {required bool compact}) {
+    final tokens = AppTokens.componentOf(context);
+    if (compact) {
+      // The compact search is a bare `TextField` with no label over it, so the
+      // placeholder is a block rather than a `SkeletonField`. Its height is
+      // §9's minimum target, which is what the field's own padding and prefix
+      // glyph resolve to within a pixel or two - the filter row beneath it is
+      // the one that carries a height worth being exact about, and that one is
+      // read from the control itself.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          SkeletonBlock(
+            height: tokens.density.minimumTapTarget.height,
+            radius: tokens.radius.lg,
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          Row(
+            children: <Widget>[
+              for (var filter = 0; filter < 2; filter++) ...<Widget>[
+                if (filter > 0) SizedBox(width: tokens.spacing.s8),
+                Expanded(
+                  child: SkeletonBlock(
+                    height: _LegacyInventorySelect.height,
+                    radius: tokens.radius.lg,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        // The three controls exactly as they will be: an empty search well
+        // under its own helper line, and the two filters holding the
+        // everything-selected option they open on.
+        const Expanded(
+          child: SkeletonField(
+            label: 'Search products',
+            leading: Icons.qr_code_scanner_outlined,
+            helper: _UnifiedInventoryContents.searchHelper,
+          ),
+        ),
+        SizedBox(width: tokens.spacing.s12),
+        const SizedBox(
+          width: _UnifiedInventoryContents.categoryFilterWidth,
+          child: SkeletonField(
+            label: 'Category',
+            leading: Icons.category_outlined,
+            value: 'All categories',
+            trailing: Icons.arrow_drop_down,
+          ),
+        ),
+        SizedBox(width: tokens.spacing.s12),
+        const SizedBox(
+          width: _UnifiedInventoryContents.stockFilterWidth,
+          child: SkeletonField(
+            label: 'Stock',
+            leading: Icons.filter_alt_outlined,
+            value: 'All',
+            trailing: Icons.arrow_drop_down,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The wide form's placeholder: the header rule the table draws, then its
+  /// rows at §9's tap target - the same shape `RecordListSkeleton` gives a
+  /// table, which this cannot call because that component picks its form from
+  /// `RecordList`'s breakpoints and this table picks its own.
+  Widget _table(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Padding(
+      padding: EdgeInsets.all(tokens.spacing.s12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          SkeletonBlock(
+            height: tokens.spacing.s32,
+            radius: tokens.radius.sm,
+            tone: SkeletonTone.onRaised,
+          ),
+          for (var row = 0; row < _rows; row++) ...<Widget>[
+            SizedBox(height: tokens.spacing.s8),
+            SkeletonBlock(
+              height: tokens.spacing.s48,
+              tone: SkeletonTone.onRaised,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One placeholder product, arranged like [_InventoryProductCard].
+///
+/// **The card's frame and its three column labels are real; only the values
+/// shimmer.** *Category*, *In stock* and *Price* are the same three words
+/// whatever the catalog holds, so under decision 35 they are not the read's to
+/// withhold - and they are what tells a person, before anything lands, that
+/// this is the screen where a price is checked.
+final class _InventoryProductCardSkeleton extends StatelessWidget {
+  const _InventoryProductCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    // The card is painted `surface.base` - the page tier - inside a `raised`
+    // list, so its blocks step up from the page rather than from the list.
+    const tone = SkeletonTone.onPage;
+    return Container(
+      margin: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.s8,
+        vertical: tokens.spacing.s4,
+      ),
+      padding: EdgeInsets.all(tokens.spacing.s12),
+      decoration: BoxDecoration(
+        color: tokens.colors.surface.base,
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              // The product's picture, at the square the real card gives it.
+              SkeletonBlock(
+                width: tokens.spacing.s64,
+                height: tokens.spacing.s64,
+                radius: tokens.radius.md,
+                tone: tone,
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    SkeletonLine(
+                      widthFactor: 0.66,
+                      style: tokens.typography.bodyLarge,
+                      tone: tone,
+                    ),
+                    SizedBox(height: tokens.spacing.s4),
+                    SkeletonLine(
+                      widthFactor: 0.42,
+                      style: tokens.typography.mono,
+                      tone: tone,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              const Expanded(
+                child: _InventoryMetricSkeleton(
+                  label: 'Category',
+                  widthFactor: 0.7,
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s8),
+              const SizedBox(
+                width: _InventoryProductCard.stockColumnWidth,
+                child: _InventoryMetricSkeleton(
+                  label: 'In stock',
+                  widthFactor: 0.6,
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s8),
+              const SizedBox(
+                width: _InventoryProductCard.priceColumnWidth,
+                child: _InventoryMetricSkeleton(
+                  label: 'Price',
+                  widthFactor: 0.85,
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s8),
+              SkeletonBlock(
+                width: tokens.spacing.s24,
+                height: tokens.spacing.s24,
+                radius: tokens.radius.sm,
+                tone: tone,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A real column label over a value that has not arrived, matching
+/// [_InventoryProductMetric] line for line.
+final class _InventoryMetricSkeleton extends StatelessWidget {
+  const _InventoryMetricSkeleton({
+    required this.label,
+    required this.widthFactor,
+  });
+
+  final String label;
+  final double widthFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s4),
+        SkeletonLine(
+          widthFactor: widthFactor,
+          style: tokens.typography.mono,
+        ),
+      ],
+    );
+  }
+}
+
 final class _LegacyInventorySelect<T> extends StatelessWidget {
   const _LegacyInventorySelect({
     super.key,
@@ -1565,6 +1967,13 @@ final class _LegacyInventorySelect<T> extends StatelessWidget {
   final List<DropdownMenuItem<T>> items;
   final ValueChanged<T?> onChanged;
 
+  /// The well's painted height, which the placeholder for it also reads.
+  ///
+  /// Above §9's 48 minimum rather than on it: this is the height the legacy
+  /// catalog drew its two filters at, and it is carried rather than rounded so
+  /// the filter row is the height it has always been on this screen.
+  static const double height = 52;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -1572,7 +1981,7 @@ final class _LegacyInventorySelect<T> extends StatelessWidget {
       label: semanticLabel,
       button: true,
       child: Container(
-        height: 52,
+        height: height,
         padding: EdgeInsets.only(
           left: tokens.spacing.s12,
           right: tokens.spacing.s8,
@@ -1713,6 +2122,16 @@ final class _InventoryProductCard extends StatelessWidget {
   final List<_InventoryProductAction> actions;
   final Widget visual;
 
+  /// The stock column's width, and the price column's beside it.
+  ///
+  /// **Named rather than inlined so the placeholder can read them.** They are
+  /// content measurements rather than spacings - what three digits and a
+  /// two-decimal figure need - which is why they are not on §2.3's scale; and a
+  /// skeleton that guessed them would put the price column in one place and
+  /// then move it when the read landed.
+  static const double stockColumnWidth = 44;
+  static const double priceColumnWidth = 56;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -1790,7 +2209,7 @@ final class _InventoryProductCard extends StatelessWidget {
               ),
               SizedBox(width: tokens.spacing.s8),
               SizedBox(
-                width: 44,
+                width: stockColumnWidth,
                 child: _InventoryProductMetric(
                   label: 'In stock',
                   value: '${product.quantity}',
@@ -1802,7 +2221,7 @@ final class _InventoryProductCard extends StatelessWidget {
               ),
               SizedBox(width: tokens.spacing.s8),
               SizedBox(
-                width: 56,
+                width: priceColumnWidth,
                 child: _InventoryProductMetric(
                   label: 'Price',
                   value: product.price.toStringAsFixed(2),

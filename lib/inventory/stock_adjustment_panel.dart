@@ -15,6 +15,7 @@ import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/sheet.dart';
+import '../ui/skeleton.dart';
 import '../ui/snackbar.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
@@ -107,6 +108,36 @@ Future<void> openTenantProductStockAdjustmentSheet(
   // it is up. Announcing a stock change over a torn-down page would throw.
   if (answer != null && context.mounted) showAppSnackBar(context, answer);
 }
+
+/// Why a stock figure is allowed to be below zero.
+///
+/// **Hoisted out of the page body so the placeholder can draw the same one.**
+/// It is a fixed paragraph that does not change when the read lands, which
+/// under decision 35 makes it the page's rather than the read's - and a second
+/// copy inside the loading state is a paragraph that would drift from this one.
+const Disclosure _stockQuantityDisclosure = Disclosure(
+  key: ValueKey('product-stock-quantity-disclosure'),
+  summary: 'Why stock can be negative',
+  child: Text(
+    key: ValueKey('product-stock-quantity-scope'),
+    'This is the quantity the server holds, not a figure derived on this '
+    'device. Stock may legitimately be negative: a sale is never blocked '
+    'by a stock count, so a product can be sold past zero and corrected '
+    'here afterwards.',
+  ),
+);
+
+/// What the ledger below it lists. Hoisted for the same reason.
+const Disclosure _stockLedgerDisclosure = Disclosure(
+  key: ValueKey('product-stock-ledger-disclosure'),
+  summary: 'What the ledger holds',
+  child: Text(
+    key: ValueKey('product-stock-ledger-scope'),
+    'Every sale, verified return, and manual adjustment the server '
+    'recorded for this product. It is listed by record ID, which is not '
+    'time order; each entry states when it was recorded.',
+  ),
+);
 
 /// How many of a product's recorded differences this route reads.
 ///
@@ -304,6 +335,12 @@ final class _TenantProductStockPanelState
       allowedRoles: TenantProductStockRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      // **A shimmer of this product's page rather than a spinner, at the
+      // developer's direction on 2026-08-28.** Everything above the ledger is
+      // page rather than read - the two headings, both explanations, the three
+      // labels - so all of it is drawn immediately and only the figures and
+      // the movements are blocks.
+      loading: const _ProductStockReading(),
       denied: const Center(
         key: ValueKey('product-stock-denied'),
         child: Text('Stock is unavailable for this business.'),
@@ -621,6 +658,85 @@ AppNotice _adjustmentNotice(TenantStockAdjustmentFailure failure) =>
       ),
     };
 
+/// One product's stock page while it is still being read.
+///
+/// **Almost all of this screen is chrome, and that is why it is worth drawing.**
+/// The SKU line, the two figure tiles, *Why stock can be negative*, *Stock
+/// ledger*, *What the ledger holds* - only the two numbers and the ledger rows
+/// change when the read returns. A person waiting on this page can read both
+/// explanations while they wait, which is the whole of decision 35's argument
+/// in one screen.
+///
+/// **No figure is claimed.** The tiles are blocks rather than zeroes: a stock
+/// count of nothing and a stock count not yet read are very different facts,
+/// and this page exists to be the authority on the first.
+final class _ProductStockReading extends StatelessWidget {
+  const _ProductStockReading();
+
+  /// A figure tile's height, which no source in this app states - the same
+  /// composition `_ExpensesReading` measured for the same pair of tiles.
+  static double _tileHeight(AppSpacing spacing) => spacing.s64 + spacing.s24;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return SkeletonGroup(
+      semanticLabel: 'Reading this product\'s stock.',
+      child: ListView(
+        key: const ValueKey('product-stock-reading'),
+        padding: EdgeInsets.all(tokens.spacing.s20),
+        children: <Widget>[
+          SizedBox(height: tokens.spacing.s4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              // The product's picture, at the square the real header gives it.
+              SkeletonBlock(
+                width: tokens.spacing.s64,
+                height: tokens.spacing.s64,
+                radius: tokens.radius.md,
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(
+                child: SkeletonLine(
+                  widthFactor: 0.42,
+                  style: tokens.typography.mono,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s16),
+          Row(
+            children: <Widget>[
+              // Two tiles at `StatRow`'s own gap: *Recorded stock* and *Ledger
+              // entries*, which is the pair this screen always draws.
+              for (var tile = 0; tile < 2; tile++) ...<Widget>[
+                if (tile > 0) SizedBox(width: tokens.spacing.s12),
+                Expanded(
+                  child: SkeletonBlock(
+                    height: _tileHeight(tokens.spacing),
+                    radius: tokens.radius.lg,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          _stockQuantityDisclosure,
+          SizedBox(height: tokens.spacing.s24),
+          SectionHeading('Stock ledger'),
+          SizedBox(height: tokens.spacing.s4),
+          _stockLedgerDisclosure,
+          SizedBox(height: tokens.spacing.s12),
+          // The real ledger is a `RecordList`, so its placeholder is the one
+          // that asks `RecordList` which form it will take.
+          const RecordListSkeleton(),
+        ],
+      ),
+    );
+  }
+}
+
 final class _ProductStockContents extends StatelessWidget {
   const _ProductStockContents({
     required this.view,
@@ -712,17 +828,7 @@ final class _ProductStockContents extends StatelessWidget {
         // screen has been carrying one folded explanation and two unfolded ones
         // ever since. It also carried the only raw `colorScheme` read left on this
         // route; `Disclosure` reads §2.2's own body role from the token layer.
-        const Disclosure(
-          key: ValueKey('product-stock-quantity-disclosure'),
-          summary: 'Why stock can be negative',
-          child: Text(
-            key: ValueKey('product-stock-quantity-scope'),
-            'This is the quantity the server holds, not a figure derived on this '
-            'device. Stock may legitimately be negative: a sale is never blocked '
-            'by a stock count, so a product can be sold past zero and corrected '
-            'here afterwards.',
-          ),
-        ),
+        _stockQuantityDisclosure,
         // **No notice block here any more.** This route writes nothing, so
         // there is never an answer to report on it; the one place a stock
         // sentence appears is over the surface the correction sheet closed on
@@ -731,16 +837,7 @@ final class _ProductStockContents extends StatelessWidget {
         SizedBox(height: tokens.spacing.s24),
         SectionHeading('Stock ledger'),
         SizedBox(height: tokens.spacing.s4),
-        const Disclosure(
-          key: ValueKey('product-stock-ledger-disclosure'),
-          summary: 'What the ledger holds',
-          child: Text(
-            key: ValueKey('product-stock-ledger-scope'),
-            'Every sale, verified return, and manual adjustment the server '
-            'recorded for this product. It is listed by record ID, which is not '
-            'time order; each entry states when it was recorded.',
-          ),
-        ),
+        _stockLedgerDisclosure,
         SizedBox(height: tokens.spacing.s12),
         // §4.3's responsive contract, in the same record vocabulary the two feeds
         // beside it use. This screen used to describe the same document three

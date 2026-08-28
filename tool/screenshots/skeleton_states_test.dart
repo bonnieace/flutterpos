@@ -31,6 +31,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
+import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/skeleton.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
@@ -71,6 +72,84 @@ void main() {
     viewports: <ScreenshotViewport>[webViewport],
     fullPage: false,
   );
+
+  // The three routes that were still on the guard's spinner until 2026-08-28,
+  // at the developer's report. Each is captured in every band, because each
+  // changes shape across §4.1: the catalog draws cards on a phone and a table
+  // on a desk, the ledger's placeholder asks `RecordList` the same question its
+  // content will, and both filter rows fold from a row into a column.
+  screenshotCase(
+    '97-inventory-reading-its-catalog',
+    build: () => _still(
+      inSession(
+        TenantCatalogManagementScreen(
+          reader: const _NeverReads(),
+          // Wired because `main.dart` wires it, and it decides the shape of the
+          // action header a phone draws: one full-width control over a pair,
+          // rather than a pair on its own.
+          bulkRoute: (_) => const SizedBox.shrink(),
+        ),
+      ),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    '97-product-stock-reading',
+    // Almost all of this screen is page rather than read, which is the point of
+    // the picture: both explanations, the heading and the SKU row are drawn for
+    // real while the two figures and the ledger are still outstanding.
+    build: () => _still(
+      inSession(
+        TenantProductStockScreen(
+          reader: const _NeverReads(),
+          product: seedProduct('pd-bar-soap-blue'),
+        ),
+      ),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    '97-staff-reading-its-directory',
+    // **The one that was reported as a jitter rather than as a spinner.** This
+    // route builds its `AppScaffold` below the guard, so the loading phase used
+    // to have no toolbar, no title and no way back; what this frame proves is
+    // that the chrome is now there before the directory is.
+    build: () => _still(
+      inSession(
+        const TenantStaffDirectoryScreen(reader: _NeverReads()),
+        controller: seedSession(role: TenantRole.admin, uid: adminUid),
+      ),
+    ),
+    viewports: responsiveViewports,
+  );
+}
+
+/// A tenant read that never answers, so a guarded route holds its loading state
+/// for the camera.
+///
+/// **The same trick [_NeverAnswers] plays on the till, at the boundary the rest
+/// of the app reads through.** `FakeTenantReader` resolves in a microtask, which
+/// is the right behaviour for every other capture and makes this frame
+/// impossible to photograph.
+final class _NeverReads
+    implements TenantDataReader, TenantStaffDirectoryQueryReader {
+  const _NeverReads();
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) =>
+      Completer<TenantDocumentSnapshot?>().future;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) => Completer<List<TenantQueryDocumentSnapshot>>().future;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantStaff(
+    TenantStaffDirectoryQuery query,
+  ) => Completer<List<TenantQueryDocumentSnapshot>>().future;
 }
 
 /// Renders [child] with animation switched off.

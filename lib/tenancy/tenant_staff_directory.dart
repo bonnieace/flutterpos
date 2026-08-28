@@ -9,8 +9,8 @@ import '../ui/fields.dart';
 import '../ui/pagination.dart';
 import '../ui/scaffold.dart';
 import '../ui/sheet.dart';
+import '../ui/skeleton.dart';
 import '../ui/states.dart';
-import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 
@@ -795,6 +795,18 @@ final class _TenantStaffManagementPanelState
       allowedRoles: TenantStaffDirectoryScreen.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      // **The loading phase wears the page's own chrome, and that is the
+      // jitter of 2026-08-28.** The guard's default is a bare centred spinner
+      // which is not inside an `AppScaffold` - and on this route the scaffold
+      // is built *below* the guard, so opening staff drew a spinner on a blank
+      // screen with no toolbar, no title and no way back, and then snapped the
+      // whole page in underneath a route transition that was still running.
+      // Nothing was being "checked": the chrome simply did not exist yet.
+      //
+      // `denied` is deliberately still the guard's own, unframed: this route's
+      // home tile is already role-gated, so that phase is a defence-in-depth
+      // path a person does not navigate to and does not see jump.
+      loading: const _StaffFrame(child: _StaffDirectoryReading()),
       failure: (context, error) => const _StaffFrame(
         child: Center(
           key: ValueKey('staff-directory-failure'),
@@ -904,6 +916,15 @@ final class _StaffManagementContents extends StatelessWidget {
   final List<_StaffMenuAction> Function(TenantStaffSummary) actionsFor;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
+
+  /// How wide the two filters are once there is room to put them beside the
+  /// search field.
+  ///
+  /// **Named so the placeholder can read it**, and not on §2.3's scale because
+  /// it is not a spacing: it is how much room *All statuses* needs beside a
+  /// label. A skeleton that guessed it would draw the filter row at one width
+  /// and then shuffle it sideways the moment the directory landed.
+  static const double filterWidth = 190;
 
   bool get _hasQuery => searchTerm.isNotEmpty || role != null || status != null;
 
@@ -1047,10 +1068,193 @@ final class _StaffManagementContents extends StatelessWidget {
       children: <Widget>[
         Expanded(child: searchField),
         SizedBox(width: tokens.spacing.s12),
-        SizedBox(width: 190, child: roleFilter),
+        SizedBox(width: filterWidth, child: roleFilter),
         SizedBox(width: tokens.spacing.s12),
-        SizedBox(width: 190, child: statusFilter),
+        SizedBox(width: filterWidth, child: statusFilter),
       ],
+    );
+  }
+}
+
+/// The staff page while its directory is still being read.
+///
+/// **Shaped like the page that replaces it**: the filter row is drawn in its
+/// real wells with its real labels, and only the records shimmer. Decision 35's
+/// argument, and on this route it is the one that matters - a person who opens
+/// staff is almost always going there to find one person, and *Search staff*
+/// under a real well tells them they have arrived at the right screen a beat
+/// before the list can.
+///
+/// **It claims nothing about what is coming.** No count, no "no staff yet" -
+/// both are answers this state does not have, and the second is the one a
+/// shopkeeper would act on.
+final class _StaffDirectoryReading extends StatelessWidget {
+  const _StaffDirectoryReading();
+
+  /// Four cards, which fills a phone without pretending to know how many people
+  /// work here. The same figure `RecordListSkeleton` defends for the same
+  /// reason.
+  static const int _cards = 4;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < AppLayout.contract.mediumFloor;
+    // The same three-way inset `_StaffManagementContents` takes, because a
+    // placeholder indented differently from its content moves the whole page
+    // sideways the moment the read lands.
+    final inset = width < AppLayout.contract.mediumFloor
+        ? tokens.spacing.s16
+        : width < AppLayout.contract.expandedFloor
+        ? tokens.spacing.s20
+        : tokens.spacing.s24;
+    // The three controls exactly as they will be: an empty search well, and
+    // the two filters holding the everything-selected option they open on.
+    const search = SkeletonField(label: 'Search staff', leading: Icons.search);
+    const role = SkeletonField(
+      label: 'Role',
+      value: 'All roles',
+      trailing: Icons.arrow_drop_down,
+    );
+    const status = SkeletonField(
+      label: 'Status',
+      value: 'All statuses',
+      trailing: Icons.arrow_drop_down,
+    );
+    return SkeletonGroup(
+      semanticLabel: 'Reading the staff directory.',
+      child: ListView(
+        key: const ValueKey('staff-directory-reading'),
+        padding: EdgeInsets.all(inset),
+        children: <Widget>[
+          if (compact) ...<Widget>[
+            search,
+            SizedBox(height: tokens.spacing.s12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Expanded(child: role),
+                SizedBox(width: tokens.spacing.s8),
+                const Expanded(child: status),
+              ],
+            ),
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Expanded(child: search),
+                SizedBox(width: tokens.spacing.s12),
+                const SizedBox(
+                  width: _StaffManagementContents.filterWidth,
+                  child: role,
+                ),
+                SizedBox(width: tokens.spacing.s12),
+                const SizedBox(
+                  width: _StaffManagementContents.filterWidth,
+                  child: status,
+                ),
+              ],
+            ),
+          SizedBox(height: tokens.spacing.s16),
+          for (var card = 0; card < _cards; card++)
+            const _StaffCardSkeleton(),
+        ],
+      ),
+    );
+  }
+}
+
+/// One placeholder staff card, arranged like the card it stands in for.
+///
+/// **The card's own frame is real and only its facts are blocks.** A featureless
+/// slab reserves the right space and says nothing; this says, before the read
+/// lands, that a staff record is a person's block, their name and address, a
+/// menu, and a role beside a status - which is the whole argument for a
+/// skeleton over a spinner.
+final class _StaffCardSkeleton extends StatelessWidget {
+  const _StaffCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    // Everything sits inside a `surface.raised` card, so every block steps up
+    // from that rather than matching it.
+    const tone = SkeletonTone.onRaised;
+    return Container(
+      margin: EdgeInsets.only(bottom: tokens.spacing.s12),
+      padding: EdgeInsets.all(tokens.spacing.s16),
+      decoration: BoxDecoration(
+        color: tokens.colors.surface.raised,
+        borderRadius: BorderRadius.circular(tokens.radius.lg),
+        border: Border.all(color: tokens.colors.surface.cardEdge),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              SkeletonBlock(
+                width: _StaffAvatar.cardSize,
+                height: _StaffAvatar.cardSize,
+                radius: tokens.radius.lg,
+                tone: tone,
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    // The name, then the address, at the two roles
+                    // `_StaffIdentity` gives them.
+                    SkeletonLine(
+                      widthFactor: 0.52,
+                      style: tokens.typography.bodyLarge,
+                      tone: tone,
+                    ),
+                    SizedBox(height: tokens.spacing.s4),
+                    SkeletonLine(
+                      widthFactor: 0.78,
+                      style: tokens.typography.bodyMedium,
+                      tone: tone,
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s8),
+              SkeletonBlock(
+                width: tokens.spacing.s24,
+                height: tokens.spacing.s24,
+                radius: tokens.radius.sm,
+                tone: tone,
+              ),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s16),
+          Row(
+            children: <Widget>[
+              // The role pill and the membership badge, which are both rounded
+              // containers rather than lines - so they are blocks at the pill's
+              // own corner rather than text placeholders.
+              SkeletonBlock(
+                width: tokens.spacing.s64,
+                height: tokens.spacing.s24,
+                radius: tokens.radius.md,
+                tone: tone,
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              SkeletonBlock(
+                width: tokens.spacing.s48,
+                height: tokens.spacing.s24,
+                radius: tokens.radius.md,
+                tone: tone,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1502,37 +1706,6 @@ final class _StaffAvatar extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-final class _StaffFact extends StatelessWidget {
-  const _StaffFact({super.key, required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Text(
-          label.toUpperCase(),
-          style: tokens.typography.labelEyebrow.copyWith(
-            color: tokens.colors.text.tertiary,
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s4),
-        Text(
-          value,
-          style: tokens.typography.bodyMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
-      ],
     );
   }
 }

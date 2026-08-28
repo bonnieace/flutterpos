@@ -37,6 +37,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'fields.dart';
 import 'record_list.dart';
 import 'tokens.dart';
 
@@ -424,6 +425,105 @@ final class SkeletonLine extends StatelessWidget {
         height: size * (role.height ?? 1.4),
         radius: tokens.radius.sm,
         tone: tone,
+      ),
+    );
+  }
+}
+
+/// A form control on a page whose read has not landed, drawn as itself.
+///
+/// **Nothing here shimmers, and that is the finding rather than an omission.**
+/// Decision 35 asks which parts of a screen change when the read returns, and
+/// on these routes the filter row is not one of them: the labels are fixed
+/// words, the wells are fixed frames, and *All roles* / *All statuses* /
+/// *All categories* are the values the controls already hold - they are page
+/// state, decided before the read started and untouched by it. So the whole
+/// control is drawn for real, and what shimmers is the records below it, which
+/// is the only thing anybody is actually waiting for.
+///
+/// **A block inside the well would also have been invisible.** Both palettes
+/// set `surface.field` and `surface.borderSubtle` to the same value
+/// (`#132A1F` under Profound Verdant, `green700` under dark), so
+/// [SkeletonTone.onRaised] - the tone for a block inside a raised thing -
+/// paints a placeholder exactly the colour of the well it sits in. That is the
+/// failure [SkeletonTone] warns about in its own doc, found here by a capture
+/// showing three empty wells.
+///
+/// **It draws [AppFieldWell] rather than measuring one.** A well's height is
+/// `density.minimumTapTarget` plus the focus ring's reserved gutter plus its
+/// label line - three figures a placeholder must not carry a second copy of,
+/// because a copy drifts and the drift is the layout jump this exists to
+/// prevent. A filter row under a skeleton is the same height, to the pixel, as
+/// the filter row that replaces it.
+///
+/// **It is not a disabled field.** `AppFieldWell(enabled: false)` greys the
+/// label and the border, and what that says is *you may not use this* - where
+/// what is true is that the page is a moment from being usable.
+final class SkeletonField extends StatelessWidget {
+  const SkeletonField({
+    super.key,
+    required this.label,
+    this.value,
+    this.leading,
+    this.trailing,
+    this.helper,
+  });
+
+  /// The control's own label. Empty draws no label row, exactly as
+  /// [AppFieldWell] does for the same string.
+  final String label;
+
+  /// What the control already reads, where it reads anything.
+  ///
+  /// Null leaves the well empty, which is what an untyped search field looks
+  /// like once the page has landed - so leaving it out is the accurate
+  /// rendering rather than a missing one.
+  final String? value;
+
+  /// The glyph at the well's leading edge, where the real control has one.
+  final IconData? leading;
+
+  /// The glyph at the well's trailing edge - a select's chevron.
+  ///
+  /// [AppSelect] draws a `DropdownButton`, whose arrow is part of what makes a
+  /// select look like one; a well holding a word and no chevron reads as a
+  /// disabled field rather than as a filter.
+  final IconData? trailing;
+
+  /// The sentence under the well, for a field whose real counterpart carries
+  /// one - without it the row is a line shorter than the row it stands in for.
+  final String? helper;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    return AppFieldWell(
+      label: label,
+      leading: leading,
+      helper: helper,
+      // A `Row` rather than a bare `Text`, because [AppFieldWell] centres a
+      // child that does not fill and both real controls do fill: a `TextField`
+      // and a `DropdownButton(isExpanded: true)` are each the width of the
+      // well, and their content starts at its leading edge.
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              value ?? '',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // The density's body role, which is the style `AppSelect` hands
+              // its own button - read from the same place rather than guessed
+              // at from the nearest-looking typography role.
+              style: tokens.density
+                  .body(tokens.typography)
+                  .copyWith(color: colors.text.primary),
+            ),
+          ),
+          if (trailing case final glyph?)
+            Icon(glyph, color: colors.text.secondary),
+        ],
       ),
     );
   }
