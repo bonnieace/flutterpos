@@ -102,6 +102,26 @@ abstract interface class TenantCacheReadable implements TenantDataReader {
   TenantDataReader get cacheOnly;
 }
 
+/// Asking a sales-history reader for the copy this device holds.
+///
+/// **A second extension because the boundary is a second interface.** The sales
+/// report reads through [TenantSalesHistoryQueryReader], which is deliberately
+/// not part of [TenantDataReader] - so `cached` cannot answer for it, and this
+/// asks the same question of the same object without an unchecked cast.
+extension TenantCachedSalesHistoryRead on TenantSalesHistoryQueryReader {
+  /// A sales-history reader over local storage only, or null where there is
+  /// no local copy - or where the copy cannot answer this particular boundary.
+  TenantSalesHistoryQueryReader? get cachedSalesHistory {
+    // Typed as Object so the check below can promote: TenantCacheReadable is
+    // a TenantDataReader, which is not a supertype of this boundary, and Dart
+    // will not promote across two unrelated interfaces.
+    final Object self = this;
+    if (self is! TenantCacheReadable) return null;
+    final Object cached = self.cacheOnly;
+    return cached is TenantSalesHistoryQueryReader ? cached : null;
+  }
+}
+
 /// Asking any reader for the copy this device holds.
 extension TenantCachedRead on TenantDocumentReader {
   /// A reader over local storage only, or null where there is no local copy.

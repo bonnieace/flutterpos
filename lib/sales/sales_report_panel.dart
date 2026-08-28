@@ -21,6 +21,7 @@ import '../ui/card.dart';
 import '../ui/fields.dart';
 import '../ui/pagination.dart';
 import '../ui/scaffold.dart';
+import '../ui/rolling_number.dart';
 import '../ui/skeleton.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
@@ -216,15 +217,44 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
     }
   }
 
-  TenantGuardedLoader<_SalesReportView> _historyLoaderFor(String key) {
-    if (_historyLoaderKey == key && _historyLoader != null) {
-      return _historyLoader!;
-    }
+  TenantGuardedLoader<_SalesReportView>? _historyLoaderCached;
+
+  /// One pair of loaders per guard key: the day from the server, and the day
+  /// from the sale documents this device already holds.
+  void _composeHistoryLoaders(String key) {
+    if (_historyLoaderKey == key && _historyLoader != null) return;
     _historyLoaderKey = key;
     final businessDate = _businessDate;
     final chosenStaffId = _staffId;
     final cursor = _cursors[_pageIndex];
-    return _historyLoader = (session) async {
+    _historyLoader = _readWith(
+      widget.reader,
+      widget.reportReader,
+      businessDate: businessDate,
+      chosenStaffId: chosenStaffId,
+      cursor: cursor,
+    );
+    final cache = widget.reader.cached;
+    _historyLoaderCached = cache == null
+        ? null
+        : _readWith(
+            cache,
+            widget.reportReader?.cachedSalesHistory,
+            businessDate: businessDate,
+            chosenStaffId: chosenStaffId,
+            cursor: cursor,
+          );
+  }
+
+  /// The day's sales, over whichever pair of readers this is handed.
+  TenantGuardedLoader<_SalesReportView> _readWith(
+    TenantDataReader reader,
+    TenantSalesHistoryQueryReader? reportReader, {
+    required String businessDate,
+    required String? chosenStaffId,
+    required String? cursor,
+  }) {
+    return (session) async {
       final management = session.canAccess(
         allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
       );
@@ -238,8 +268,8 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
       final page =
           await TenantSaleHistoryRepository(
             session: session,
-            reader: widget.reader,
-            reportReader: widget.reportReader,
+            reader: reader,
+            reportReader: reportReader,
           ).loadReport(
             startBusinessDate: businessDate,
             endBusinessDate: businessDate,
@@ -249,7 +279,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           );
       final resolved = await TenantStaffNameResolver(
         session: session,
-        reader: widget.reader,
+        reader: reader,
       ).resolve(page.items.map((sale) => sale.soldById));
       return _SalesReportView(
         page: page,
@@ -412,10 +442,12 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
     // restarts nor blinks when they do.
     final scoped = TenantSessionScope.of(context).session;
     final band = scoped == null ? null : _totalsBandFor(key, scoped);
+    _composeHistoryLoaders(key);
     return TenantRouteGuard<_SalesReportView>(
       key: ValueKey(key),
       allowedRoles: TenantSaleHistoryRepository.reportRoles,
-      load: _historyLoaderFor(key),
+      load: _historyLoader!,
+      loadCached: _historyLoaderCached,
       // **The report itself, with placeholders where the read will land.** It
       // took the guard's default full-page spinner until 2026-08-27, which
       // replaced the receipt search, the date button and the pagination along
@@ -453,10 +485,37 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
         // a frame early. Drawing nothing is what it draws.
         null => const SizedBox.shrink(),
       },
-      failure: (context, error) => const Center(
-        key: ValueKey('sales-report-failure'),
-        child: Text('Sales could not be read for this day.'),
-      ),
+      // **The page, with a notice on it - not a sentence where the page was.**
+      // This used to draw one centred line and nothing else, which took the
+      // date picker and the receipt search away along with the sales: a person
+      // whose day failed to read could not even ask for a different day. The
+      // weekly report already keeps its furniture through a failure; this is
+      // the same call.
+      failure: (context, error) => switch (scoped) {
+        final session? => _SalesReportContents(
+          session: session,
+          view: null,
+          totalsBand: band,
+          businessDate: _businessDate,
+          management: session.canAccess(
+            allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
+          ),
+          receipt: _receipt,
+          submittedEnding: _submittedEnding,
+          receiptRejection: _receiptRejection,
+          receiptResult: null,
+          pageIndex: _pageIndex,
+          failureMessage: 'The sales for this day could not be read.',
+          onReceiptChanged: _onReceiptChanged,
+          onSubmitReceipt: _submitReceipt,
+          onPickDate: _pickBusinessDate,
+          onStaffChanged: _setStaff,
+          onPrevious: null,
+          onNext: null,
+          onOpenReturns: (sale) => _openReturns(context, sale),
+        ),
+        null => const SizedBox.shrink(),
+      },
       builder: (context, session, view) {
         final ending = _submittedEnding;
         final Widget? receiptResult = ending == null
@@ -577,6 +636,7 @@ final class _SalesReportContents extends StatelessWidget {
     required this.receiptRejection,
     required this.receiptResult,
     required this.pageIndex,
+    this.failureMessage,
     required this.onReceiptChanged,
     required this.onSubmitReceipt,
     required this.onPickDate,
@@ -596,6 +656,12 @@ final class _SalesReportContents extends StatelessWidget {
   /// The day's takings, on their own clock. Null where this member is not
   /// offered them at all, in which case no band is drawn.
   final Future<_TotalsBandData>? totalsBand;
+
+  /// What went wrong reading the day, or null where nothing did.
+  ///
+  /// Drawn as a notice above the controls rather than in place of them: the
+  /// read failing is a fact about the day, not about the screen.
+  final String? failureMessage;
 
   /// The day being asked about, which the panel knows before anything answers.
   final String businessDate;
@@ -629,6 +695,15 @@ final class _SalesReportContents extends StatelessWidget {
       key: const ValueKey('sales-report'),
       padding: EdgeInsets.all(inset),
       children: <Widget>[
+        if (failureMessage case final message?) ...<Widget>[
+          Callout(
+            key: const ValueKey('sales-report-failure'),
+            status: AppStatus.problem,
+            title: 'Not read',
+            message: message,
+          ),
+          SizedBox(height: tokens.spacing.s16),
+        ],
         _receiptSearch(context),
         if (receiptRejection case final message?) ...<Widget>[
           SizedBox(height: tokens.spacing.s12),
@@ -1164,13 +1239,24 @@ final class _ManagementSalesSummary extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: tokens.spacing.s4),
+                    // **It rolls, because this figure corrects itself.** The
+                    // takings come from a callable while the sales beside them
+                    // come off this device, so the number on screen can be
+                    // replaced a moment after it is read. A total that silently
+                    // becomes a different total is the kind of thing somebody
+                    // notices afterwards and stops trusting; the `numeric`
+                    // roles are tabular, so only the digits that changed move.
+                    //
+                    // **Still inside the `FittedBox`.** A phone's card has to
+                    // hold six figures of takings beside a transaction count,
+                    // and a truncated amount is a wrong amount where a smaller
+                    // one is the same amount.
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: AlignmentDirectional.centerStart,
-                      child: Text(
-                        currency.format(totals.sales),
-                        key: const ValueKey('sales-report-revenue'),
-                        maxLines: 1,
+                      child: RollingNumber(
+                        value: currency.format(totals.sales),
+                        textKey: const ValueKey('sales-report-revenue'),
                         style: tokens.typography.numericHero.copyWith(
                           color: currency.isKnown
                               ? tokens.colors.text.money
@@ -1201,9 +1287,9 @@ final class _ManagementSalesSummary extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: tokens.spacing.s4),
-                  Text(
-                    '${totals.transactions}',
-                    key: const ValueKey('sales-report-transactions'),
+                  RollingNumber(
+                    value: '${totals.transactions}',
+                    textKey: const ValueKey('sales-report-transactions'),
                     style: tokens.typography.numericHero.copyWith(
                       color: tokens.colors.text.primary,
                     ),
