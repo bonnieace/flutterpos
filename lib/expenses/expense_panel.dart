@@ -291,7 +291,11 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
             ? null
             : AppIconButton(
                 key: const ValueKey('expenses-record'),
-                icon: Icons.add,
+                // A filled circle at the prominent size, at the developer's
+                // direction on 2026-08-28: a bare `+` glyph at 18 on the dark
+                // toolbar was there but not findable.
+                icon: Icons.add_circle,
+                iconSize: AppButton.prominentIconSize,
                 semanticLabel: 'Record expense',
                 // **Tertiary, not primary.** The primary tier's label is the
                 // near-black ink that sits on a mint container, and an

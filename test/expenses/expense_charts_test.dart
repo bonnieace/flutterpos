@@ -17,38 +17,37 @@ import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('bars adapt to how many days they share', () {
-    test('a week of bars keeps the full width', () {
-      expect(
-        ExpenseChartMetrics.barWidthFor(available: 400, days: 7),
-        ExpenseChartMetrics.barWidth,
-      );
+  group('the day line adapts to how many days it spans', () {
+    // **The line replaced a set of bars on 2026-08-28**, to match the shape
+    // `bonnieace/Jengaapp` draws. What the bars needed was a measured width so
+    // thirty of them did not overlap; what the line needs is to know when its
+    // points stop being points.
+    test('a week of days carries its dots', () {
+      expect(7, lessThanOrEqualTo(ExpenseChartMetrics.maximumDottedDays));
     });
 
-    test('a month of bars is narrowed rather than overlapped', () {
-      // 320 logical pixels over 30 days is under 11 each; a fixed 14 would put
-      // every bar into its neighbour, and nothing would look wrong until a
-      // business spent on consecutive days.
-      final width = ExpenseChartMetrics.barWidthFor(available: 320, days: 30);
-      expect(width, lessThan(ExpenseChartMetrics.barWidth));
-      expect(
-        width * 30,
-        lessThan(320),
-        reason: 'Thirty bars have to fit inside the plot they are drawn in.',
-      );
+    test('a month of days does not', () {
+      // Thirty-one dots at radius 4 across a phone leaves under six pixels
+      // between centres, so they merge into a thick line and the line stops
+      // being readable at all.
+      expect(31, greaterThan(ExpenseChartMetrics.maximumDottedDays));
     });
 
-    test('a bar never shrinks below being a bar', () {
-      expect(
-        ExpenseChartMetrics.barWidthFor(available: 40, days: 366),
-        ExpenseChartMetrics.minimumBarWidth,
-      );
+    test("the line is drawn at the reference's own weight", () {
+      // Reproducing an arrangement and then drawing it a different weight is
+      // how a replica ends up *nearly* right.
+      expect(ExpenseChartMetrics.lineWidth, 4);
+      expect(ExpenseChartMetrics.dotRadius, 4);
+      expect(ExpenseChartMetrics.dotStrokeWidth, 2);
     });
 
-    test('no days at all is not a division by zero', () {
+    test('the area under the line fades rather than filling', () {
+      // A solid fill under a curve reads as a second quantity. The reference
+      // shades it; this keeps that and never lets it become a block.
+      expect(ExpenseChartMetrics.areaTopOpacity, lessThan(0.5));
       expect(
-        ExpenseChartMetrics.barWidthFor(available: 320, days: 0),
-        ExpenseChartMetrics.barWidth,
+        ExpenseChartMetrics.areaBottomOpacity,
+        lessThan(ExpenseChartMetrics.areaTopOpacity),
       );
     });
   });

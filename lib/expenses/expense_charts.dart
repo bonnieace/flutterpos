@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../reporting/reporting_currency.dart';
+import '../ui/spring.dart';
 import '../ui/tokens.dart';
 import 'expense.dart';
 
@@ -55,21 +56,32 @@ final class ExpenseChartMetrics {
   /// capture of this chart showed.
   static const double ringTextFraction = 0.82;
 
-  /// The widest a bar is drawn.
-  static const double barWidth = 14;
+  /// How thick the day line is drawn. The reference's `barWidth: 4`.
+  static const double lineWidth = 4;
 
-  /// The narrowest a bar may be squeezed to before it stops reading as a bar.
-  static const double minimumBarWidth = 3;
+  /// The dot on each day, at the reference's radius and stroke.
+  static const double dotRadius = 4;
+  static const double dotStrokeWidth = 2;
 
-  /// How much of each day's slot a bar fills, so bars never touch.
-  static const double barSlotFill = 0.6;
+  /// How many days may carry a dot before they stop being dots.
+  ///
+  /// **A month of them is a smear, not a set of points.** Thirty-one dots at
+  /// radius 4 across a 320-wide phone leaves under six pixels between centres,
+  /// so they merge into a thick line and the line stops being readable. Past
+  /// this the line speaks for itself.
+  static const int maximumDottedDays = 14;
 
-  /// The width one bar gets when [dates] of them have to share [available].
-  static double barWidthFor({required double available, required int days}) {
-    if (days <= 0) return barWidth;
-    final slot = available / days * barSlotFill;
-    return slot.clamp(minimumBarWidth, barWidth);
-  }
+  /// How far the shaded area under the line fades out.
+  static const double areaTopOpacity = 0.22;
+  static const double areaBottomOpacity = 0.02;
+
+  /// How long the composition ring takes to sweep in.
+  ///
+  /// **A spring rather than a duration, because it is spatial** - `claude.md`'s
+  /// motion rule - and it is driven through [SpringDrive] so a period changed
+  /// mid-sweep retargets from where the arc actually is instead of snapping
+  /// back to nothing and starting again.
+  static const double sweptFully = 1;
 
   /// What the vertical axis runs to when nothing was spent at all, so an empty
   /// chart is a flat floor rather than a division by zero.
@@ -87,7 +99,7 @@ final class ExpenseChartMetrics {
 /// separate two shades of green loses nothing (hard rule 4). This widget draws
 /// nothing at all for a period that spent nothing: a ring of one grey slice
 /// says a business had one expense, which is a different fact from none.
-final class ExpenseCompositionRing extends StatelessWidget {
+final class ExpenseCompositionRing extends StatefulWidget {
   const ExpenseCompositionRing({
     super.key,
     required this.period,
@@ -105,8 +117,40 @@ final class ExpenseCompositionRing extends StatelessWidget {
   }
 
   @override
+  State<ExpenseCompositionRing> createState() => _ExpenseCompositionRingState();
+}
+
+class _ExpenseCompositionRingState extends State<ExpenseCompositionRing>
+    with SingleTickerProviderStateMixin {
+  SpringDrive? _sweep;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tokens = AppTokens.componentOf(context);
+    final drive =
+        _sweep ??= SpringDrive(vsync: this, spring: tokens.motion.gentle);
+    // **`animateTo`, never `forward()`.** The reference's ring sweeps in from
+    // nothing, and this reproduces that - but a period changed while it is
+    // still sweeping retargets from where the arc is, which is the whole reason
+    // this is a spring and not a curve.
+    drive.animateTo(
+      ExpenseChartMetrics.sweptFully,
+      immediately: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
+    );
+  }
+
+  @override
+  void dispose() {
+    _sweep?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final period = widget.period;
+    final currency = widget.currency;
     final categories = period.spentCategories;
     if (categories.isEmpty) return const SizedBox.shrink();
     return Semantics(
@@ -122,26 +166,47 @@ final class ExpenseCompositionRing extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: <Widget>[
-            PieChart(
-              PieChartData(
-                sectionsSpace: ExpenseChartMetrics.sliceGap,
-                centerSpaceRadius: ExpenseChartMetrics.ringHoleRadius,
-                startDegreeOffset: -90,
-                sections: <PieChartSectionData>[
-                  for (var index = 0; index < categories.length; index++)
-                    PieChartSectionData(
-                      value: (period.totalByCategory[categories[index]] ?? 0)
-                          .toDouble(),
-                      color: colorFor(tokens, index),
-                      radius: ExpenseChartMetrics.ringThickness,
-                      // **No titles on the slices.** A percentage printed on a
-                      // thin arc is unreadable at a phone's width and it
-                      // duplicates the rows below, which have room to say it
-                      // properly.
-                      showTitle: false,
-                    ),
-                ],
-              ),
+            AnimatedBuilder(
+              animation: _sweep!.animation,
+              builder: (context, _) {
+                final swept = _sweep!.value.clamp(0.0, 1.0);
+                final total = period.total.toDouble();
+                return PieChart(
+                  PieChartData(
+                    sectionsSpace: ExpenseChartMetrics.sliceGap,
+                    centerSpaceRadius: ExpenseChartMetrics.ringHoleRadius,
+                    startDegreeOffset: -90,
+                    sections: <PieChartSectionData>[
+                      for (var index = 0; index < categories.length; index++)
+                        PieChartSectionData(
+                          value:
+                              (period.totalByCategory[categories[index]] ?? 0)
+                                  .toDouble() *
+                              swept,
+                          color: ExpenseCompositionRing.colorFor(tokens, index),
+                          radius: ExpenseChartMetrics.ringThickness,
+                          // **No titles on the slices.** A percentage printed
+                          // on a thin arc is unreadable at a phone's width and
+                          // it duplicates the rows below, which have room to
+                          // say it properly.
+                          showTitle: false,
+                        ),
+                      // **The remainder, drawn in nothing.** Scaling every
+                      // slice by the same factor would change no angle at all -
+                      // the arcs are proportions of whatever the values sum to.
+                      // What makes the ring *sweep* is an invisible section
+                      // holding the rest of the circle and giving it up.
+                      if (swept < 1)
+                        PieChartSectionData(
+                          value: total * (1 - swept),
+                          color: const Color(0x00000000),
+                          radius: ExpenseChartMetrics.ringThickness,
+                          showTitle: false,
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
             Column(
               mainAxisSize: MainAxisSize.min,
@@ -180,14 +245,17 @@ final class ExpenseCompositionRing extends StatelessWidget {
   }
 }
 
-/// One bar per business date across a period.
+/// One point per business date across a period, joined into a line.
 ///
-/// **Bars rather than the line the old app drew.** Its line joined one expense
-/// to the next by position in a list, so two rents a fortnight apart produced a
-/// slope that meant nothing - the x axis was the index, not the date. Spending
-/// is a set of separate events on separate days, and a bar per day is the shape
-/// that is actually true of it. A day with nothing on it is a gap in the row
-/// rather than a missing point, which is also the honest picture.
+/// **A line, as the reference draws it - but over dates rather than over a
+/// list.** `bonnieace/Jengaapp` plots `FlSpot(index, amount)` where the index
+/// is the position of a record in a filtered list, so two rents a fortnight
+/// apart produce a slope across no time at all and a busy week compresses into
+/// the same width as a quiet one. This keeps the reference's picture - curved,
+/// dotted, shaded underneath - and puts the days back on the x axis, so the
+/// distance between two points is the distance between two dates. A day with
+/// nothing spent on it is a point on the floor, which is the honest reading of
+/// a day nothing was spent.
 final class ExpenseDailyChart extends StatelessWidget {
   const ExpenseDailyChart({
     super.key,
@@ -218,32 +286,75 @@ final class ExpenseDailyChart extends StatelessWidget {
       excludeSemantics: true,
       child: SizedBox(
         height: ExpenseChartMetrics.dailyHeight,
-        // **The bar width is measured, not assumed.** Seven days and thirty
-        // days share this chart; a fixed 14 that reads well across a week
-        // overlaps its neighbours across a month, and the overlap is invisible
-        // until a business actually spends on consecutive days.
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final barWidth = ExpenseChartMetrics.barWidthFor(
-              available: constraints.maxWidth,
-              days: totalsMinor.length,
-            );
-            return BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
+        // **The dots come and go with the width of the period.** Seven days
+        // apart on a phone are points; thirty-one are a smear, and past
+        // `maximumDottedDays` the line carries the shape on its own.
+        child: Builder(
+          builder: (context) {
+            final dotted =
+                totalsMinor.length <= ExpenseChartMetrics.maximumDottedDays;
+            return LineChart(
+              LineChartData(
+                minX: 0,
+                maxX: (totalsMinor.length - 1).toDouble().clamp(0, 3650),
+                minY: 0,
                 maxY: ceiling,
-                barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
                     getTooltipColor: (_) => tokens.colors.surface.overlay,
-                    getTooltipItem: (group, _, rod, _) => BarTooltipItem(
-                      '${_dayLabel(group.x)}\n'
-                      '${currency.format(rod.toY)}',
-                      tokens.typography.labelMedium.copyWith(
-                        color: tokens.colors.text.primary,
+                    getTooltipItems: (spots) => <LineTooltipItem?>[
+                      for (final spot in spots)
+                        LineTooltipItem(
+                          '${_dayLabel(spot.x.toInt())}\n'
+                          '${currency.format(spot.y)}',
+                          tokens.typography.labelMedium.copyWith(
+                            color: tokens.colors.text.primary,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                lineBarsData: <LineChartBarData>[
+                  LineChartBarData(
+                    spots: <FlSpot>[
+                      for (var index = 0; index < totalsMinor.length; index++)
+                        FlSpot(index.toDouble(), totalsMinor[index] / 100),
+                    ],
+                    isCurved: true,
+                    // A curve through daily spending can dip below a floor of
+                    // nothing, and a shop cannot spend a negative amount.
+                    preventCurveOverShooting: true,
+                    color: chart.barEmphasis,
+                    barWidth: ExpenseChartMetrics.lineWidth,
+                    dotData: FlDotData(
+                      show: dotted,
+                      getDotPainter: (spot, percent, barData, index) =>
+                          FlDotCirclePainter(
+                            radius: ExpenseChartMetrics.dotRadius,
+                            color: chart.barEmphasis,
+                            strokeWidth: ExpenseChartMetrics.dotStrokeWidth,
+                            // The ground the chart is drawn on, so each dot reads as a
+                            // bead on the line rather than a blob in it.
+                            strokeColor: tokens.colors.surface.base,
+                          ),
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: <Color>[
+                          chart.barEmphasis.withValues(
+                            alpha: ExpenseChartMetrics.areaTopOpacity,
+                          ),
+                          chart.barEmphasis.withValues(
+                            alpha: ExpenseChartMetrics.areaBottomOpacity,
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ),
+                ],
                 titlesData: FlTitlesData(
                   leftTitles: const AxisTitles(
                     sideTitles: SideTitles(showTitles: false),
@@ -280,25 +391,6 @@ final class ExpenseDailyChart extends StatelessWidget {
                   getDrawingHorizontalLine: (_) =>
                       FlLine(color: chart.gridLine, strokeWidth: 1),
                 ),
-                barGroups: <BarChartGroupData>[
-                  for (var index = 0; index < totalsMinor.length; index++)
-                    BarChartGroupData(
-                      x: index,
-                      barRods: <BarChartRodData>[
-                        BarChartRodData(
-                          toY: totalsMinor[index] / 100,
-                          width: barWidth,
-                          borderRadius: BorderRadius.circular(tokens.radius.sm),
-                          // The heaviest day of the period is the one the eye
-                          // should land on, exactly as the weekly chart picks out
-                          // the best day of the week.
-                          color: peak > 0 && totalsMinor[index] == peak
-                              ? chart.barEmphasis
-                              : chart.bar,
-                        ),
-                      ],
-                    ),
-                ],
               ),
             );
           },

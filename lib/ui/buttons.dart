@@ -144,6 +144,17 @@ final class AppButton extends StatelessWidget {
   /// drawn at.
   static const double iconSize = 18;
 
+  /// The glyph size for a control that has to be found rather than read.
+  ///
+  /// **A second named size rather than a token scale.** §5.2 names two icon
+  /// sizes in the whole document - this component's 18 and `StatusBadge`'s 14 -
+  /// and the token layer has no control-size scale at all to extend. What this
+  /// is for is the page action in a top bar: an unlabelled glyph on a dark
+  /// toolbar, with no text beside it to make it findable, and 18 was too quiet
+  /// to be seen on a handset. The 48 target it sits in does not change, so §9
+  /// is untouched either way.
+  static const double prominentIconSize = 24;
+
   /// How wide this button wants to be, with its label on one line.
   ///
   /// **The component answers for its own geometry**, for the reason
@@ -399,7 +410,13 @@ final class AppIconButton extends StatelessWidget {
     this.tier = AppButtonTier.secondary,
     this.bordered = true,
     this.loading = false,
+    this.iconSize = AppButton.iconSize,
   });
+
+  /// How big the glyph is drawn inside the unchanging 48 square.
+  ///
+  /// See [AppButton.prominentIconSize] for the one case that raises it.
+  final double iconSize;
 
   final IconData icon;
 
@@ -472,7 +489,7 @@ final class AppIconButton extends StatelessWidget {
                     )
                   : Icon(
                       icon,
-                      size: AppButton.iconSize,
+                      size: iconSize,
                       color: disabled ? actions.disabledLabel : role.label,
                     ),
             ),
