@@ -124,6 +124,7 @@ final class _TenantReconciliationStatusPanelState
   String? _staffNamesSessionKey;
   String? _loaderKey;
   TenantGuardedLoader<_ReconciliationView>? _loader;
+  TenantGuardedLoader<_ReconciliationView>? _loaderCached;
 
   @override
   void didUpdateWidget(covariant TenantReconciliationStatusPanel oldWidget) {
@@ -242,14 +243,15 @@ final class _TenantReconciliationStatusPanelState
 
   /// One loader per guard key, so a closure rebuilt every frame cannot restart
   /// the load on an unrelated `setState`.
-  TenantGuardedLoader<_ReconciliationView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
-    return _loader = (session) async {
+    TenantGuardedLoader<_ReconciliationView> readWith(TenantDataReader reader) =>
+        (session) async {
       final day = await TenantReconciliationStatusRepository(
         session: session,
-        reader: widget.reader,
+        reader: reader,
       ).loadDay(widget.businessDate, pageSize: widget.pageSize, cursor: cursor);
       // A scheduled sweep and a sale trigger name no member of the business.
       return _ReconciliationView(
@@ -260,16 +262,21 @@ final class _TenantReconciliationStatusPanelState
         ]),
       );
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
     final guardKey = '${widget.businessDate}:$_generation:$_pageIndex:$cursor';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_ReconciliationView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantReconciliationStatusRepository.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('reconciliation-status-denied'),
         child: Text(

@@ -84,6 +84,7 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
   String? _staffNamesSessionKey;
   String? _loaderKey;
   TenantGuardedLoader<_ReturnFeedView>? _loader;
+  TenantGuardedLoader<_ReturnFeedView>? _loaderCached;
 
   static String _sessionKey(TenantSession session) =>
       '${session.uid}:${session.tenantId}:${session.epoch}';
@@ -127,14 +128,15 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
     });
   }
 
-  TenantGuardedLoader<_ReturnFeedView> _loaderFor(String key) {
-    if (_loaderKey == key && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (_loaderKey == key && _loader != null) return;
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
-    return _loader = (session) async {
+    TenantGuardedLoader<_ReturnFeedView> readWith(TenantDataReader reader) =>
+        (session) async {
       final page = await TenantReturnHistoryRepository(
         session: session,
-        reader: widget.reader,
+        reader: reader,
       ).loadReturns(pageSize: widget.pageSize, cursor: cursor);
       final names = await _resolverFor(session).resolve(
         page.items.expand(
@@ -147,6 +149,9 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
       );
       return _ReturnFeedView(page: page, names: names);
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   Future<void> _verify(TenantSession session, TenantReturn record) async {
@@ -191,9 +196,11 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
     final guardKey = 'return-feed:$_generation:$_pageIndex:$cursor';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_ReturnFeedView>(
       key: ValueKey(guardKey),
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('return-feed-denied'),
         child: Text('Returns are unavailable for this business.'),

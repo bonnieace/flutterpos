@@ -164,32 +164,37 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
     final request = widget.request;
-    return TenantRouteGuard<TenantNamedPage<TenantSalePage>>(
-      key: ValueKey('${request.key}:$_pageIndex:$cursor'),
-      load: (session) async {
-        final repository = TenantSaleHistoryRepository(
-          session: session,
-          reader: widget.reader,
-        );
-        final page = await switch (request) {
-          TenantShiftSaleHistoryRequest(:final shift) =>
-            repository.loadShiftSales(
-              shift: shift,
-              pageSize: widget.pageSize,
-              cursor: cursor,
-            ),
-          TenantOwnSaleHistoryRequest() => repository.loadOwnRecentSales(
+    TenantGuardedLoader<TenantNamedPage<TenantSalePage>> readWith(
+      TenantDataReader reader,
+    ) => (session) async {
+      final repository = TenantSaleHistoryRepository(
+        session: session,
+        reader: reader,
+      );
+      final page = await switch (request) {
+        TenantShiftSaleHistoryRequest(:final shift) =>
+          repository.loadShiftSales(
+            shift: shift,
             pageSize: widget.pageSize,
             cursor: cursor,
           ),
-        };
-        return TenantNamedPage<TenantSalePage>(
-          page: page,
-          names: await _resolverFor(
-            session,
-          ).resolve(page.items.map((sale) => sale.soldById)),
-        );
-      },
+        TenantOwnSaleHistoryRequest() => repository.loadOwnRecentSales(
+          pageSize: widget.pageSize,
+          cursor: cursor,
+        ),
+      };
+      return TenantNamedPage<TenantSalePage>(
+        page: page,
+        names: await _resolverFor(
+          session,
+        ).resolve(page.items.map((sale) => sale.soldById)),
+      );
+    };
+    final cache = widget.reader.cached;
+    return TenantRouteGuard<TenantNamedPage<TenantSalePage>>(
+      key: ValueKey('${request.key}:$_pageIndex:$cursor'),
+      load: readWith(widget.reader),
+      loadCached: cache == null ? null : readWith(cache),
       // **The page itself, with placeholders where the sales will be.** It used
       // to take the guard's default full-page spinner, which replaced the
       // heading and the pagination along with the records - so a person waiting

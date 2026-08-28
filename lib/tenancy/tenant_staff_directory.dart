@@ -488,6 +488,7 @@ final class _TenantStaffManagementPanelState
   int _generation = 0;
   String? _loaderKey;
   TenantGuardedLoader<TenantStaffPage>? _loader;
+  TenantGuardedLoader<TenantStaffPage>? _loaderCached;
 
   @override
   void dispose() {
@@ -553,17 +554,18 @@ final class _TenantStaffManagementPanelState
     setState(() => _pageIndex--);
   }
 
-  TenantGuardedLoader<TenantStaffPage> _loaderFor(String key) {
-    if (_loaderKey == key && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (_loaderKey == key && _loader != null) return;
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
     final search = _searchTerm;
     final role = _role;
     final status = _status;
-    return _loader = (session) =>
+    TenantGuardedLoader<TenantStaffPage> readWith(TenantDataReader reader) =>
+        (session) =>
         TenantStaffDirectoryRepository(
           session: session,
-          reader: widget.reader,
+          reader: reader,
           queryReader: widget.queryReader,
         ).queryPage(
           pageSize: widget.pageSize,
@@ -572,6 +574,9 @@ final class _TenantStaffManagementPanelState
           role: role,
           status: status,
         );
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   Future<void> _openForm(
@@ -762,10 +767,12 @@ final class _TenantStaffManagementPanelState
     final key =
         'staff:$_generation:$_pageIndex:$_searchTerm:'
         '${_role?.wireValue ?? '-'}:${_status?.wireValue ?? '-'}';
+    _composeLoaders(key);
     return TenantRouteGuard<TenantStaffPage>(
       key: ValueKey(key),
       allowedRoles: TenantStaffDirectoryScreen.allowedRoles,
-      load: _loaderFor(key),
+      load: _loader!,
+      loadCached: _loaderCached,
       failure: (context, error) => const Center(
         key: ValueKey('staff-directory-failure'),
         child: Text('The staff directory could not be read.'),

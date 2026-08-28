@@ -99,15 +99,35 @@ final class _TenantReconciliationRunPanelState
     extends State<TenantReconciliationRunPanel> {
   String? _loaderKey;
   TenantGuardedLoader<_RunView>? _loader;
+  TenantGuardedLoader<_RunView>? _loaderCached;
 
   /// One loader per run, so a rebuild cannot restart a read in flight.
+  /// The server read for [key].
   TenantGuardedLoader<_RunView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+    _composeLoaders(key);
+    return _loader!;
+  }
+
+  /// The same read over this device's own copy, or null where there is none.
+  ///
+  /// **A second accessor rather than a statement before the guard.** This
+  /// page's `build` is an arrow onto the guard itself, so there is nowhere to
+  /// put a compose call - and giving each half its own getter keeps the memo
+  /// doing what it always did: composing once per key, however many times it
+  /// is asked.
+  TenantGuardedLoader<_RunView>? _cachedLoaderFor(String key) {
+    _composeLoaders(key);
+    return _loaderCached;
+  }
+
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
-    return _loader = (session) async {
+    TenantGuardedLoader<_RunView> readWith(TenantDataReader reader) =>
+        (session) async {
       final run = await TenantReconciliationStatusRepository(
         session: session,
-        reader: widget.reader,
+        reader: reader,
       ).readRun(widget.jobId);
       final actorUid = run?.actorUid;
       // Resolved so this route and the day page describe one run identically. A
@@ -119,10 +139,13 @@ final class _TenantReconciliationRunPanelState
             ? const <String, String>{}
             : await TenantStaffNameResolver(
                 session: session,
-                reader: widget.reader,
+                reader: reader,
               ).resolve(<String>[actorUid]),
       );
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   @override
@@ -130,6 +153,7 @@ final class _TenantReconciliationRunPanelState
     key: ValueKey(widget.jobId),
     allowedRoles: TenantReconciliationStatusRepository.allowedRoles,
     load: _loaderFor(widget.jobId),
+    loadCached: _cachedLoaderFor(widget.jobId),
     denied: const Center(
       key: ValueKey('reconciliation-run-denied'),
       child: Text('Reconciliation runs are available to managers and owners.'),

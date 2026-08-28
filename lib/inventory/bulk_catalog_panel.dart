@@ -493,14 +493,15 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
     return confirmed && mounted;
   }
 
-  TenantGuardedLoader<_CatalogView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
-    return _loader = (session) async {
+    TenantGuardedLoader<_CatalogView> readWith(TenantDataReader reader) =>
+        (session) async {
       final repository = TenantCatalogRepository(
         session: session,
-        reader: widget.reader,
+        reader: reader,
       );
       final categories = await repository.loadCategories(
         pageSize: widget.categoryPageSize,
@@ -511,18 +512,24 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
       );
       return _CatalogView(categories: categories, products: products);
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   String? _loaderKey;
   TenantGuardedLoader<_CatalogView>? _loader;
+  TenantGuardedLoader<_CatalogView>? _loaderCached;
 
   @override
   Widget build(BuildContext context) {
     final guardKey = 'bulk-catalog:$_generation:$_pageIndex';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_CatalogView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantBulkCatalogRepository.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('bulk-catalog-denied'),
         child: Text(

@@ -200,27 +200,34 @@ final class _TenantCheckoutConfigurationPanelState
 
   /// One loader per guard key, cached so a `setState` for the busy flag or a
   /// notice does not restart the read and discard the half-typed form.
-  TenantGuardedLoader<TenantPublishedCheckoutConfiguration> _loaderFor(
+  void _composeLoaders(
     String key,
   ) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
-    return _loader = (session) => TenantCheckoutConfigurationPublisher(
+    TenantGuardedLoader<TenantPublishedCheckoutConfiguration> readWith(TenantDocumentReader reader) =>
+        (session) => TenantCheckoutConfigurationPublisher(
       session: session,
-      reader: widget.reader,
+      reader: reader,
     ).loadPublished();
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   String? _loaderKey;
   TenantGuardedLoader<TenantPublishedCheckoutConfiguration>? _loader;
+  TenantGuardedLoader<TenantPublishedCheckoutConfiguration>? _loaderCached;
 
   @override
   Widget build(BuildContext context) {
     final guardKey = 'checkout-configuration:$_generation';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<TenantPublishedCheckoutConfiguration>(
       key: ValueKey(guardKey),
       allowedRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('checkout-configuration-denied'),
         child: Text(

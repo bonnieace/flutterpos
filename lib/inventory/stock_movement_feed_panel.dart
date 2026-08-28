@@ -104,6 +104,7 @@ final class _TenantStockMovementFeedPanelState
   String? _staffNamesSessionKey;
   String? _loaderKey;
   TenantGuardedLoader<_MovementFeedView>? _loader;
+  TenantGuardedLoader<_MovementFeedView>? _loaderCached;
 
   @override
   void initState() {
@@ -161,15 +162,16 @@ final class _TenantStockMovementFeedPanelState
 
   /// One loader per guard key, so a closure rebuilt every frame cannot restart
   /// the page on an unrelated `setState`.
-  TenantGuardedLoader<_MovementFeedView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final source = _source;
     final cursor = _cursors[_pageIndex];
-    return _loader = (session) async {
+    TenantGuardedLoader<_MovementFeedView> readWith(TenantDocumentReader reader) =>
+        (session) async {
       final repository = TenantStockMovementFeedRepository(
         session: session,
-        reader: widget.reader,
+        reader: reader,
         groupReader: widget.groupReader,
       );
       final page = source == null
@@ -191,16 +193,21 @@ final class _TenantStockMovementFeedPanelState
         ]),
       );
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
     final guardKey = '${_source?.wireValue}:$_pageIndex:$cursor';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_MovementFeedView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantStockMovementFeedRepository.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('stock-movements-feed-denied'),
         child: Text('Stock movements are unavailable for this business.'),

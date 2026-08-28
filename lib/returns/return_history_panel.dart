@@ -278,17 +278,18 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
   /// every frame would therefore reload on every `setState` - discarding the
   /// half-filled record form each time the busy flag or a notice changed - so
   /// the loader is cached against the same key the guard is keyed by.
-  TenantGuardedLoader<_ReturnsView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final request = widget.request;
     final cursor = _cursors[_pageIndex];
     final pageIndex = _pageIndex;
-    return _loader = (session) async {
+    TenantGuardedLoader<_ReturnsView> readWith(TenantDataReader reader) =>
+        (session) async {
       final page =
           await TenantReturnHistoryRepository(
             session: session,
-            reader: widget.reader,
+            reader: reader,
           ).loadSaleReturns(
             saleId: request.saleId,
             pageSize: widget.pageSize,
@@ -311,24 +312,30 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
         returnable: pageIndex == 0 && !page.hasMore
             ? TenantReturnRequestRepository(
                 session: session,
-                reader: widget.reader,
+                reader: reader,
               ).describeReturnable(sale: request.sale, recorded: page)
             : null,
       );
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   String? _loaderKey;
   TenantGuardedLoader<_ReturnsView>? _loader;
+  TenantGuardedLoader<_ReturnsView>? _loaderCached;
 
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
     final request = widget.request;
     final guardKey = '${request.key}:$_generation:$_pageIndex:$cursor';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_ReturnsView>(
       key: ValueKey(guardKey),
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('sale-returns-denied'),
         child: Text('Returns are unavailable for this business.'),

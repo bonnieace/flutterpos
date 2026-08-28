@@ -66,6 +66,7 @@ final class _TenantAuditLogPanelState extends State<TenantAuditLogPanel> {
   String? _staffNamesSessionKey;
   String? _loaderKey;
   TenantGuardedLoader<_AuditView>? _loader;
+  TenantGuardedLoader<_AuditView>? _loaderCached;
 
   @override
   void initState() {
@@ -123,15 +124,16 @@ final class _TenantAuditLogPanelState extends State<TenantAuditLogPanel> {
 
   /// One loader per guard key, so a closure rebuilt every frame cannot restart
   /// the page on an unrelated `setState`.
-  TenantGuardedLoader<_AuditView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final eventType = _eventType;
     final cursor = _cursors[_pageIndex];
-    return _loader = (session) async {
+    TenantGuardedLoader<_AuditView> readWith(TenantDataReader reader) =>
+        (session) async {
       final repository = TenantAuditLogRepository(
         session: session,
-        reader: widget.reader,
+        reader: reader,
       );
       final page = eventType == null
           ? await repository.loadEvents(
@@ -155,16 +157,21 @@ final class _TenantAuditLogPanelState extends State<TenantAuditLogPanel> {
         ]),
       );
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
     final guardKey = '${_eventType?.wireValue}:$_pageIndex:$cursor';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_AuditView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantAuditLogRepository.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('audit-log-denied'),
         child: Text('The activity log is available to owners and admins.'),

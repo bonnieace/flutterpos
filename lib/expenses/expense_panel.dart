@@ -105,38 +105,54 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
 
   String? _loaderKey;
   TenantGuardedLoader<_ExpensesView>? _loader;
+  TenantGuardedLoader<_ExpensesView>? _cachedLoader;
 
   DateTime get _now => (widget.clock ?? _utcNow)().toUtc();
 
   /// Re-reads the period, after a record or a void changed what is in it.
   void _reload() => setState(() => _generation++);
 
-  /// One loader per guard key. A closure rebuilt every frame would re-read on
-  /// every keystroke of the form above it.
-  TenantGuardedLoader<_ExpensesView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  /// One pair of loaders per guard key. A closure rebuilt every frame would
+  /// re-read on every keystroke of the form above it.
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final endDate = checkoutBusinessDate(_now);
     final startDate = checkoutBusinessDate(
       _now.subtract(Duration(days: _range.days - 1)),
     );
-    return _loader = (session) async {
-      // **Both are Firestore reads and both serve from the cache**, so they are
-      // started together and neither waits on the other's round trip. There is
-      // no callable anywhere on this page, which is why it works with no signal
-      // at all - and why net profit is composed on the client from this rather
-      // than asked of a server.
-      final period = TenantExpenseRepository(
-        session: session,
-        reader: widget.reader,
-      ).readRange(startDate: startDate, endDate: endDate);
-      final currency = TenantReportingCurrency.read(
-        session: session,
-        reader: widget.reader,
-      );
-      return (period: await period, currency: await currency);
-    };
+    _loader = _readWith(widget.reader, startDate, endDate);
+    final cache = widget.reader.cached;
+    _cachedLoader = cache == null
+        ? null
+        : _readWith(cache, startDate, endDate);
   }
+
+  /// The page's whole read, over whichever reader it is handed.
+  ///
+  /// **One body, two readers.** The guard runs this against the server and
+  /// against this device's own copy at the same time; writing the read twice
+  /// would be two chances for them to drift into answering different questions.
+  TenantGuardedLoader<_ExpensesView> _readWith(
+    TenantDataReader reader,
+    String startDate,
+    String endDate,
+  ) => (session) async {
+    // **Both are Firestore reads and both serve from the cache**, so they are
+    // started together and neither waits on the other's round trip. There is
+    // no callable anywhere on this page, which is why it works with no signal
+    // at all - and why net profit is composed on the client from this rather
+    // than asked of a server.
+    final period = TenantExpenseRepository(
+      session: session,
+      reader: reader,
+    ).readRange(startDate: startDate, endDate: endDate);
+    final currency = TenantReportingCurrency.read(
+      session: session,
+      reader: reader,
+    );
+    return (period: await period, currency: await currency);
+  };
 
   /// Withdraws one record that should not have been there, and answers whether
   /// it was withdrawn.
@@ -242,10 +258,12 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
         },
       ),
     );
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_ExpensesView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantExpenseRepository.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _cachedLoader,
       // **The chooser stays on screen through every phase**, the way the sales
       // totals page keeps its own: the control that would take a person to a
       // different period must not be behind the read of this one.

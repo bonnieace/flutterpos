@@ -94,17 +94,41 @@ final class _TenantReceiptLookupPanelState
   }
 
   /// One loader per submitted receipt, so a rebuild does not re-issue the read.
+  /// The server read for [receipt].
   TenantGuardedLoader<TenantReceiptLookupResult> _loaderFor(String receipt) {
-    if (receipt == _loaderKey && _loader != null) return _loader!;
+    _composeLoaders(receipt);
+    return _loader!;
+  }
+
+  /// The same read over this device's own copy, or null where there is none.
+  ///
+  /// **A second accessor rather than a statement before the guard**, for the
+  /// reason the reconciliation run page has one: this guard is built inside a
+  /// list literal, where a compose call has nowhere to stand.
+  TenantGuardedLoader<TenantReceiptLookupResult>? _cachedLoaderFor(
+    String receipt,
+  ) {
+    _composeLoaders(receipt);
+    return _loaderCached;
+  }
+
+  void _composeLoaders(String receipt) {
+    if (receipt == _loaderKey && _loader != null) return;
     _loaderKey = receipt;
-    return _loader = (session) => TenantReceiptLookupRepository(
+    TenantGuardedLoader<TenantReceiptLookupResult> readWith(
+      TenantDataReader reader,
+    ) => (session) => TenantReceiptLookupRepository(
       session: session,
-      reader: widget.reader,
+      reader: reader,
     ).findByReceipt(receipt);
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   String? _loaderKey;
   TenantGuardedLoader<TenantReceiptLookupResult>? _loader;
+  TenantGuardedLoader<TenantReceiptLookupResult>? _loaderCached;
 
   /// Opens the return sheet over this list.
   ///
@@ -163,6 +187,7 @@ final class _TenantReceiptLookupPanelState
             key: ValueKey('receipt:$receipt'),
             allowedRoles: TenantReceiptLookupRepository.allowedRoles,
             load: _loaderFor(receipt),
+            loadCached: _cachedLoaderFor(receipt),
             denied: const Text(
               key: ValueKey('receipt-lookup-denied'),
               'Receipt lookup is unavailable for this business.',

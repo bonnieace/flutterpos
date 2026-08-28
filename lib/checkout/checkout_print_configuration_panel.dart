@@ -255,25 +255,32 @@ final class _TenantPrinterConfigurationPanelState
     return confirmed && mounted;
   }
 
-  TenantGuardedLoader<TenantConfiguredPrinter> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
-    return _loader = (session) => TenantPrinterConfigurationPublisher(
+    TenantGuardedLoader<TenantConfiguredPrinter> readWith(TenantDocumentReader reader) =>
+        (session) => TenantPrinterConfigurationPublisher(
       session: session,
-      reader: widget.reader,
+      reader: reader,
     ).loadConfigured();
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   String? _loaderKey;
   TenantGuardedLoader<TenantConfiguredPrinter>? _loader;
+  TenantGuardedLoader<TenantConfiguredPrinter>? _loaderCached;
 
   @override
   Widget build(BuildContext context) {
     final guardKey = 'printer-configuration:$_generation';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<TenantConfiguredPrinter>(
       key: ValueKey(guardKey),
       allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       loading: const LoadingState(message: 'Reading the printer settings.'),
       denied: const ErrorState(
         key: ValueKey('printer-configuration-denied'),

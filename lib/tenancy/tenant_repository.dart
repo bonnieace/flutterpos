@@ -86,6 +86,46 @@ abstract interface class TenantCollectionReader {
 abstract interface class TenantDataReader
     implements TenantDocumentReader, TenantCollectionReader {}
 
+/// A reader that can also answer out of a copy this device already holds.
+///
+/// **Separate from [TenantDataReader] on purpose.** Being able to read is a
+/// property every reader has; having a local copy is a property of the one
+/// backed by Firestore's own persistence, and of any test double that wants to
+/// stand in for it. Folding this into [TenantDataReader] would have obliged
+/// every fake in the suite to grow a cache it has no use for.
+abstract interface class TenantCacheReadable implements TenantDataReader {
+  /// The same reads, answered **only** from local storage.
+  ///
+  /// Never fails for a path it has not seen - it answers empty. See
+  /// [FirebaseTenantDocumentReader.cacheOnly] for why that is the right shape
+  /// for a page filling itself in.
+  TenantDataReader get cacheOnly;
+}
+
+/// Asking any reader for the copy this device holds.
+extension TenantCachedRead on TenantDocumentReader {
+  /// A reader over local storage only, or null where there is no local copy.
+  ///
+  /// **This is what lets a page opt into drawing early without being handed a
+  /// second reader.** Threading one through would have meant widening every
+  /// route typedef in the routing shell - each takes exactly one
+  /// [TenantDataReader] - to carry a companion that only a handful of routes
+  /// would ever name. A page asks the reader it already has instead.
+  ///
+  /// **Declared on [TenantDocumentReader], the narrowest of the boundaries**,
+  /// so the pages holding only that one can ask it too - and answering with a
+  /// [TenantDataReader] costs them nothing, since every one of those is a
+  /// document reader as well.
+  ///
+  /// Null for every reader that is not [TenantCacheReadable], which is every
+  /// test fake unless it says otherwise, so a suite keeps reading exactly the
+  /// way it did before this existed.
+  TenantDataReader? get cached {
+    final self = this;
+    return self is TenantCacheReadable ? self.cacheOnly : null;
+  }
+}
+
 /// The stock range supported by the inventory product query.
 ///
 /// This deliberately models only facts present on every product. There is no
@@ -375,6 +415,7 @@ abstract interface class TenantCollectionGroupReader {
 final class FirebaseTenantDocumentReader
     implements
         TenantDataReader,
+        TenantCacheReadable,
         TenantCollectionGroupReader,
         TenantProductSearchReader,
         TenantStaffDirectoryQueryReader,
@@ -408,6 +449,7 @@ final class FirebaseTenantDocumentReader
   /// **Nothing it returns escapes the checks the server-backed reader is under.**
   /// It is the same class over the same paths, and `TenantReadRepository` still
   /// validates every document it hands back against the tenant that asked.
+  @override
   FirebaseTenantDocumentReader get cacheOnly =>
       FirebaseTenantDocumentReader._(_firestore, Source.cache);
 

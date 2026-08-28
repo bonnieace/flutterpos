@@ -100,6 +100,7 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
 
   String? _loaderKey;
   TenantGuardedLoader<SalesTotalsView>? _loader;
+  TenantGuardedLoader<SalesTotalsView>? _loaderCached;
 
   /// What the business spent over the same days, or null.
   ///
@@ -159,13 +160,14 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
 
   /// One loader per guard key, so a closure rebuilt every frame cannot spend
   /// another callable invocation on an unrelated `setState`.
-  TenantGuardedLoader<SalesTotalsView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final period = _period;
     final chosenMember = _soldById;
     final chosenCategory = _categoryId;
-    return _loader = (session) async {
+    TenantGuardedLoader<SalesTotalsView> readWith(TenantDataReader reader) =>
+        (session) async {
       final context = await _sessionContext.load(session);
       // A category filters the figures only while this business's own canonical
       // list still contains it. A selection carried across a tenant switch, or
@@ -208,6 +210,9 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
         expenses: await _readExpenses(session, totals.query),
       );
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   @override
@@ -215,10 +220,12 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
     final guardKey =
         '${_period.name}:${_soldById ?? '-'}:${_categoryId ?? '-'}:'
         '$_generation';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<SalesTotalsView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantSalesTotalsGateway.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('sales-totals-denied'),
         child: Text('Sales totals are available to managers and owners.'),

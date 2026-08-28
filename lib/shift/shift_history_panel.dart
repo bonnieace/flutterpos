@@ -116,22 +116,27 @@ final class _TenantShiftHistoryPanelState
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
+    TenantGuardedLoader<TenantNamedPage<TenantShiftHistoryPage>> readWith(
+      TenantDataReader reader,
+    ) => (session) async {
+      final page = await TenantShiftHistoryRepository(
+        session: session,
+        reader: reader,
+      ).loadPage(scope: _scope, pageSize: widget.pageSize, cursor: cursor);
+      return TenantNamedPage<TenantShiftHistoryPage>(
+        page: page,
+        names: await _resolverFor(
+          session,
+        ).resolve(page.items.map((entry) => entry.staffId)),
+      );
+    };
+    final cache = widget.reader.cached;
     return TenantRouteGuard<TenantNamedPage<TenantShiftHistoryPage>>(
       // A new key restarts the guard for a new scope or page, so an earlier
       // page can never complete into the current one.
       key: ValueKey('${_scope.name}:$_pageIndex:$cursor'),
-      load: (session) async {
-        final page = await TenantShiftHistoryRepository(
-          session: session,
-          reader: widget.reader,
-        ).loadPage(scope: _scope, pageSize: widget.pageSize, cursor: cursor);
-        return TenantNamedPage<TenantShiftHistoryPage>(
-          page: page,
-          names: await _resolverFor(
-            session,
-          ).resolve(page.items.map((entry) => entry.staffId)),
-        );
-      },
+      load: readWith(widget.reader),
+      loadCached: cache == null ? null : readWith(cache),
       denied: const Center(
         key: ValueKey('shift-history-denied'),
         child: Text('Shift history is unavailable for this business.'),

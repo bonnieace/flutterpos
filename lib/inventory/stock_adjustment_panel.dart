@@ -230,16 +230,17 @@ final class _TenantProductStockPanelState
 
   /// One loader per guard key; a closure rebuilt every frame would reload on
   /// every `setState`.
-  TenantGuardedLoader<_StockView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final productId = widget.product.id;
     final cursor = _cursors[_pageIndex];
-    return _loader = (session) async {
+    TenantGuardedLoader<_StockView> readWith(TenantDataReader reader) =>
+        (session) async {
       final stock =
           await TenantProductStockRepository(
             session: session,
-            reader: widget.reader,
+            reader: reader,
           ).loadStock(
             productId: productId,
             pageSize: widget.pageSize,
@@ -255,6 +256,9 @@ final class _TenantProductStockPanelState
         differences: await _readDifferences(session, productId),
       );
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   /// Reads what reconciliation recorded against this product, and never fails
@@ -288,15 +292,18 @@ final class _TenantProductStockPanelState
 
   String? _loaderKey;
   TenantGuardedLoader<_StockView>? _loader;
+  TenantGuardedLoader<_StockView>? _loaderCached;
 
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
     final guardKey = '${widget.product.id}:$_pageIndex:$cursor';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_StockView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantProductStockRepository.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('product-stock-denied'),
         child: Text('Stock is unavailable for this business.'),
@@ -409,18 +416,23 @@ final class _TenantProductStockAdjustmentPanelState
 
   String? _loaderKey;
   TenantGuardedLoader<TenantProduct>? _loader;
+  TenantGuardedLoader<TenantProduct>? _loaderCached;
 
   /// One loader per guard key, for the reason the ledger's own has: a closure
   /// rebuilt every frame would re-read on every keystroke in the reason field
   /// and discard the half-filled form.
-  TenantGuardedLoader<TenantProduct> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final productId = widget.product.id;
-    return _loader = (session) => TenantProductStockRepository(
+    TenantGuardedLoader<TenantProduct> readWith(TenantDataReader reader) =>
+        (session) => TenantProductStockRepository(
       session: session,
-      reader: widget.reader,
+      reader: reader,
     ).readProduct(productId);
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   /// Reports [notice] the way this panel was wired to, and nothing more.
@@ -503,10 +515,12 @@ final class _TenantProductStockAdjustmentPanelState
   @override
   Widget build(BuildContext context) {
     final guardKey = '${widget.product.id}:$_generation';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<TenantProduct>(
       key: ValueKey(guardKey),
       allowedRoles: TenantProductStockRepository.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('product-stock-denied'),
         child: Text('Stock is unavailable for this business.'),

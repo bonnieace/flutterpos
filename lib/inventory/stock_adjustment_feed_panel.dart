@@ -76,6 +76,7 @@ final class _TenantStockAdjustmentFeedPanelState
   String? _staffNamesSessionKey;
   String? _loaderKey;
   TenantGuardedLoader<_FeedView>? _loader;
+  TenantGuardedLoader<_FeedView>? _loaderCached;
 
   static String _sessionKey(TenantSession session) =>
       '${session.uid}:${session.tenantId}:${session.epoch}';
@@ -109,15 +110,16 @@ final class _TenantStockAdjustmentFeedPanelState
 
   /// One loader per guard key, so a closure rebuilt every frame cannot restart
   /// the page on an unrelated `setState`.
-  TenantGuardedLoader<_FeedView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final productId = widget.product?.id;
     final cursor = _cursors[_pageIndex];
-    return _loader = (session) async {
+    TenantGuardedLoader<_FeedView> readWith(TenantDataReader reader) =>
+        (session) async {
       final repository = TenantStockAdjustmentFeedRepository(
         session: session,
-        reader: widget.reader,
+        reader: reader,
       );
       final page = productId == null
           ? await repository.loadAdjustments(
@@ -136,16 +138,21 @@ final class _TenantStockAdjustmentFeedPanelState
         ).resolve(page.items.map((record) => record.actorUid)),
       );
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
     final guardKey = '${widget.product?.id}:$_pageIndex:$cursor';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_FeedView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantStockAdjustmentFeedRepository.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('stock-adjustments-denied'),
         child: Text('Stock adjustments are unavailable for this business.'),

@@ -2209,7 +2209,15 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TenantRouteGuard<_HomeOverview>(
-    load: _readOverview,
+    load: (session) => _readOverviewWith(reader, session),
+    // **The front door draws from this device's own copy first.** Every read
+    // below already degrades to nothing on its own, so the home never showed an
+    // error - it showed a shop its own name and four blank figures until the
+    // network answered. The figures were on this disk the whole time.
+    loadCached: switch (reader.cached) {
+      final cached? => (session) => _readOverviewWith(cached, session),
+      null => null,
+    },
     // **The page is never gated on any of it, and that is the point of giving
     // every phase the same builder.** A business that has published no
     // branding, a read that failed, a read still in flight and a denied session
@@ -2230,7 +2238,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// unreconciled, a cashier may not read revenue at all, and a business with
   /// no published currency answers `unknown`. None of those is a reason for a
   /// shop to open on an error.
-  Future<_HomeOverview> _readOverview(TenantSession session) async {
+  Future<_HomeOverview> _readOverviewWith(
+    TenantDataReader reader,
+    TenantSession session,
+  ) async {
     final branding = _quiet(
       () => TenantBrandingRepository(session: session, reader: reader).load(),
     );

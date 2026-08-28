@@ -77,6 +77,7 @@ final class _TenantProductLedgerPanelState
   String? _staffNamesSessionKey;
   String? _loaderKey;
   TenantGuardedLoader<_LedgerView>? _loader;
+  TenantGuardedLoader<_LedgerView>? _loaderCached;
 
   @override
   void didUpdateWidget(covariant TenantProductLedgerPanel oldWidget) {
@@ -121,15 +122,16 @@ final class _TenantProductLedgerPanelState
     setState(() => _pageIndex--);
   }
 
-  TenantGuardedLoader<_LedgerView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
-    return _loader = (session) async {
+    TenantGuardedLoader<_LedgerView> readWith(TenantDataReader reader) =>
+        (session) async {
       final ledger =
           await TenantProductStockRepository(
             session: session,
-            reader: widget.reader,
+            reader: reader,
           ).loadLedger(
             productId: widget.productId,
             pageSize: widget.pageSize,
@@ -144,15 +146,20 @@ final class _TenantProductLedgerPanelState
         ]),
       );
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   @override
   Widget build(BuildContext context) {
     final guardKey = '${widget.productId}:$_pageIndex:${_cursors[_pageIndex]}';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_LedgerView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantProductStockRepository.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('product-ledger-denied'),
         child: Text('This product ledger is unavailable for this business.'),

@@ -1018,14 +1018,15 @@ final class _TenantCatalogManagementPanelState
 
   /// One loader per guard key, cached so a `setState` for the busy flag or a
   /// notice does not restart the read.
-  TenantGuardedLoader<_CatalogView> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
-    return _loader = (session) async {
+    TenantGuardedLoader<_CatalogView> readWith(TenantDataReader reader) =>
+        (session) async {
       final repository = TenantCatalogRepository(
         session: session,
-        reader: widget.reader,
+        reader: reader,
         productSearchReader: widget.productSearchReader,
       );
       final categories = await repository.loadCategories(
@@ -1033,7 +1034,7 @@ final class _TenantCatalogManagementPanelState
       );
       final supportsSearch =
           widget.productSearchReader != null ||
-          widget.reader is TenantProductSearchReader;
+          reader is TenantProductSearchReader;
       final products = supportsSearch
           ? await repository.searchProducts(
               pageSize: widget.pageSize,
@@ -1048,20 +1049,26 @@ final class _TenantCatalogManagementPanelState
             );
       return _CatalogView(categories: categories, products: products);
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   String? _loaderKey;
   TenantGuardedLoader<_CatalogView>? _loader;
+  TenantGuardedLoader<_CatalogView>? _loaderCached;
 
   @override
   Widget build(BuildContext context) {
     final guardKey =
         'inventory:$_generation:$_pageIndex:$_searchPrefix:'
         '${_categoryFilter ?? ''}:${_stockFilter.name}';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<_CatalogView>(
       key: ValueKey(guardKey),
       allowedRoles: null,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('catalog-management-denied'),
         child: Text(

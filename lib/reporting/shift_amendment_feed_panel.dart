@@ -88,6 +88,7 @@ final class _TenantShiftAmendmentPanelState
   String? _shiftId;
   String? _loaderKey;
   TenantGuardedLoader<TenantShiftAmendmentRecordPage>? _loader;
+  TenantGuardedLoader<TenantShiftAmendmentRecordPage>? _loaderCached;
 
   @override
   void initState() {
@@ -127,15 +128,16 @@ final class _TenantShiftAmendmentPanelState
 
   /// One loader per guard key, so a closure rebuilt every frame cannot restart
   /// the load on an unrelated `setState`.
-  TenantGuardedLoader<TenantShiftAmendmentRecordPage> _loaderFor(String key) {
-    if (key == _loaderKey && _loader != null) return _loader!;
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
     final shiftId = _shiftId;
-    return _loader = (session) {
+    TenantGuardedLoader<TenantShiftAmendmentRecordPage> readWith(TenantDataReader reader) =>
+        (session) {
       final repository = TenantShiftAmendmentFeedRepository(
         session: session,
-        reader: widget.reader,
+        reader: reader,
       );
       return shiftId == null
           ? repository.loadAmendments(pageSize: widget.pageSize, cursor: cursor)
@@ -145,16 +147,21 @@ final class _TenantShiftAmendmentPanelState
               cursor: cursor,
             );
     };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
     final guardKey = '$_shiftId:$_pageIndex:$cursor';
+    _composeLoaders(guardKey);
     return TenantRouteGuard<TenantShiftAmendmentRecordPage>(
       key: ValueKey(guardKey),
       allowedRoles: TenantShiftAmendmentFeedRepository.allowedRoles,
-      load: _loaderFor(guardKey),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('shift-amendments-denied'),
         child: Text('Shift corrections are available to managers and owners.'),

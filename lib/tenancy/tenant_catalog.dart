@@ -551,11 +551,20 @@ final class TenantCatalogPanel extends StatelessWidget {
   final TenantMovementFeedRouteBuilder? movementFeedRoute;
   final List<TenantRole> movementFeedRoles;
 
+  /// The catalog read, over whichever reader it is handed.
+  static TenantGuardedLoader<TenantCatalogSnapshot> _readWith(
+    TenantDataReader reader,
+  ) => (session) =>
+      TenantCatalogRepository(session: session, reader: reader).loadInitial();
+
   @override
   Widget build(BuildContext context) => TenantRouteGuard<TenantCatalogSnapshot>(
     allowedRoles: allowedRoles,
-    load: (session) =>
-        TenantCatalogRepository(session: session, reader: reader).loadInitial(),
+    load: _readWith(reader),
+    loadCached: switch (reader.cached) {
+      final cached? => _readWith(cached),
+      null => null,
+    },
     builder: (context, session, snapshot) => _CatalogContents(
       tenantId: session.tenantId,
       snapshot: snapshot,
