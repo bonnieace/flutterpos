@@ -21,6 +21,7 @@ final class TenantRouteGuard<T> extends StatefulWidget {
     required this.load,
     required this.builder,
     this.allowedRoles,
+    this.loadCached,
     this.loading,
     this.denied,
     this.failure,
@@ -29,6 +30,25 @@ final class TenantRouteGuard<T> extends StatefulWidget {
   final TenantGuardedLoader<T> load;
   final TenantGuardedBuilder<T> builder;
   final Iterable<TenantRole>? allowedRoles;
+
+  /// The same value, read from what this device already holds.
+  ///
+  /// **It runs beside [load] rather than before it, and it can never lose.**
+  /// Firestore's cache has held this app's documents since `main.dart` turned
+  /// persistence on; what was missing was anything willing to draw from it
+  /// while the network was still deciding. A page that has a copy shows the
+  /// copy now and corrects it when the server disagrees, instead of holding a
+  /// spinner for a minute and then saying it could not be read.
+  ///
+  /// **A cache miss is silence.** This loader's failures are dropped whole -
+  /// never shown, never logged as the page's error - because "not downloaded
+  /// yet" is not something to put in front of a shopkeeper. Only [load] can
+  /// fail this page.
+  ///
+  /// **The server always wins, whichever lands first.** A cached value that
+  /// arrives after the server's is discarded rather than drawn over it.
+  final TenantGuardedLoader<T>? loadCached;
+
   final Widget? loading;
   final Widget? denied;
   final Widget Function(BuildContext context, Object error)? failure;
@@ -47,6 +67,25 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
   Object? _error;
   int _generation = 0;
 
+  /// Whether [_value] came from this device rather than from the server.
+  bool _fromCache = false;
+
+  /// Whether the server has since been asked and refused.
+  ///
+  /// Only ever true beside a value, and it is what separates *this is what we
+  /// hold, the server has not answered yet* from *this is what we hold and the
+  /// server cannot be reached*. The first is a moment; the second is worth
+  /// saying out loud.
+  bool _stale = false;
+
+  /// Whether [load] has produced a value.
+  ///
+  /// **The one flag that keeps the cache from overwriting the server.** Both
+  /// reads are in flight together and either can land first; without this, a
+  /// slow cache read completing after a fast server read would replace a fresh
+  /// figure with an old one.
+  bool _hasServerValue = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -57,6 +96,12 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
   @override
   void didUpdateWidget(covariant TenantRouteGuard<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // **[TenantRouteGuard.loadCached] is deliberately not compared.** A panel
+    // that memoised its server loader but built a fresh cached closure each
+    // frame would re-read on every keystroke above it, and the cached read is
+    // an optimisation - a stale closure of it asks for the same thing. What
+    // would make it ask for something *else* is a filter change, and every
+    // panel here re-keys the guard for those, which rebuilds this State whole.
     if (oldWidget.load != widget.load ||
         oldWidget.allowedRoles != widget.allowedRoles) {
       // The scope itself may have been replaced in the same frame. Re-read it
@@ -94,8 +139,14 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
     _capturedSession = next;
     _value = null;
     _error = null;
+    _fromCache = false;
+    _stale = false;
+    _hasServerValue = false;
     _phase = _TenantGuardPhase.loading;
     unawaited(_load(next, generation));
+    if (widget.loadCached != null) {
+      unawaited(_loadFromCache(next, generation));
+    }
   }
 
   Future<void> _load(TenantSession captured, int generation) async {
@@ -104,15 +155,54 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
       if (!_isCurrent(captured, generation)) return;
       setState(() {
         _value = value;
+        _hasServerValue = true;
+        _fromCache = false;
+        _stale = false;
+        _error = null;
         _phase = _TenantGuardPhase.ready;
       });
     } catch (error) {
       if (!_isCurrent(captured, generation)) return;
       setState(() {
         _error = error;
-        _phase = _TenantGuardPhase.failure;
+        // **A page that already has a copy keeps it.** The read failed; what is
+        // on screen did not stop being what this device holds. Blanking it to
+        // announce the failure would take away the figures *and* the controls
+        // over a network that may be back in three seconds.
+        if (_value != null) {
+          _stale = true;
+        } else {
+          _phase = _TenantGuardPhase.failure;
+        }
       });
     }
+  }
+
+  /// Draws what this device already holds, unless the server got there first.
+  ///
+  /// Every exit here is silent. A cache with nothing in it, a cache that
+  /// refuses, a cache that answers too late - none of them is this page's
+  /// error, and none of them may disturb what [load] has done.
+  Future<void> _loadFromCache(TenantSession captured, int generation) async {
+    final T value;
+    try {
+      value = await widget.loadCached!(captured);
+    } catch (_) {
+      return;
+    }
+    if (!_isCurrent(captured, generation)) return;
+    if (_hasServerValue) return;
+    setState(() {
+      _value = value;
+      _fromCache = true;
+      // **Adopted even after the server has already refused**, which is the
+      // case worth spelling out: the two reads race, and a network that fails
+      // fast can lose to a disk that is busy. Landing on a failure page is not
+      // a reason to keep holding a copy back - it is the strongest reason to
+      // show one.
+      _stale = _error != null;
+      _phase = _TenantGuardPhase.ready;
+    });
   }
 
   bool _isCurrent(TenantSession captured, int generation) {
@@ -160,10 +250,47 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
             // going to look for damage.
             stillTrue: 'Nothing was changed.',
           ),
-    _TenantGuardPhase.ready => widget.builder(
-      context,
-      _capturedSession!,
-      _value as T,
+    _TenantGuardPhase.ready => TenantReadFreshness(
+      fromCache: _fromCache,
+      stale: _stale,
+      child: Builder(
+        // A `Builder` so the page below reads the freshness this guard just
+        // published rather than whatever was above the guard.
+        builder: (inner) =>
+            widget.builder(inner, _capturedSession!, _value as T),
+      ),
     ),
   };
+}
+
+/// Where the value under it came from, for a page that wants to say so.
+///
+/// **Published instead of widening [TenantGuardedBuilder].** Every guarded
+/// route in the app takes that builder, and almost none of them has anything
+/// to say about provenance - putting a third parameter on it would have edited
+/// twenty-odd call sites to give them an argument they ignore. A page that
+/// does care asks; the rest never know this exists.
+final class TenantReadFreshness extends InheritedWidget {
+  const TenantReadFreshness({
+    super.key,
+    required this.fromCache,
+    required this.stale,
+    required super.child,
+  });
+
+  /// Whether this came off this device rather than from the server.
+  final bool fromCache;
+
+  /// Whether the server has since been asked for it and could not be reached.
+  ///
+  /// Never true on its own: it only qualifies a value that is already here.
+  final bool stale;
+
+  /// The freshness of the nearest guarded value, or null outside one.
+  static TenantReadFreshness? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<TenantReadFreshness>();
+
+  @override
+  bool updateShouldNotify(TenantReadFreshness oldWidget) =>
+      oldWidget.fromCache != fromCache || oldWidget.stale != stale;
 }

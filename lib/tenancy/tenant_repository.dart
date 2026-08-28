@@ -380,17 +380,73 @@ final class FirebaseTenantDocumentReader
         TenantStaffDirectoryQueryReader,
         TenantSalesHistoryQueryReader {
   FirebaseTenantDocumentReader([FirebaseFirestore? firestore])
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : this._(firestore ?? FirebaseFirestore.instance, Source.serverAndCache);
+
+  FirebaseTenantDocumentReader._(this._firestore, this._source);
 
   final FirebaseFirestore _firestore;
 
-  @override
-  Future<TenantDocumentSnapshot?> getDocument(String path) async {
-    final snapshot = await _firestore.doc(path).get();
-    final data = snapshot.data();
-    if (!snapshot.exists || data == null) return null;
-    return TenantDocumentSnapshot(path: snapshot.reference.path, data: data);
+  /// Where a read is allowed to be answered from.
+  ///
+  /// **`serverAndCache` for the reader the app is built with**, which is the
+  /// `.get()` default this class had before the source was named at all - so
+  /// naming it changed nothing about the reader every route already holds.
+  final Source _source;
+
+  /// The same reader over the same project, answering **only** from what this
+  /// device already holds.
+  ///
+  /// **This is the whole offline story, and it is short because the cache was
+  /// always there.** `main.dart` turns Firestore's persistence on with no size
+  /// limit, so every document a route has ever read is already on this disk.
+  /// What was missing was anything that asked for it: `Source.serverAndCache`
+  /// blocks on the network whenever the SDK still believes it has one, which on
+  /// one bar of signal is a stall rather than a fallback. A reader that cannot
+  /// wait is the other half a route needs to draw immediately and correct
+  /// itself afterwards.
+  ///
+  /// **Nothing it returns escapes the checks the server-backed reader is under.**
+  /// It is the same class over the same paths, and `TenantReadRepository` still
+  /// validates every document it hands back against the tenant that asked.
+  FirebaseTenantDocumentReader get cacheOnly =>
+      FirebaseTenantDocumentReader._(_firestore, Source.cache);
+
+  GetOptions get _options => GetOptions(source: _source);
+
+  /// Runs [read], answering [empty] where this device simply holds nothing.
+  ///
+  /// **A cache miss is silence, not a failure.** `Source.cache` *throws* for a
+  /// path it has never seen rather than returning nothing, which is the right
+  /// answer for a caller that asked the cache a question and the wrong shape
+  /// for a caller using the cache to fill a screen while the server catches up.
+  /// A route reading ahead must not be able to turn "not downloaded yet" into
+  /// an error page.
+  ///
+  /// **Only in cache-only mode**, so the server-backed reader's failures still
+  /// reach the caller exactly as they always did. And every [FirebaseException]
+  /// counts, rather than one code: there is no server in this mode to refuse
+  /// anything, so the only thing the transport can be reporting is that it has
+  /// no copy.
+  Future<T> _heldOrEmpty<T>(Future<T> Function() read, T empty) async {
+    if (_source != Source.cache) return read();
+    try {
+      return await read();
+    } on FirebaseException {
+      return empty;
+    }
   }
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) =>
+      _heldOrEmpty(() async {
+        final snapshot = await _firestore.doc(path).get(_options);
+        final data = snapshot.data();
+        if (!snapshot.exists || data == null) return null;
+        return TenantDocumentSnapshot(
+          path: snapshot.reference.path,
+          data: data,
+        );
+      }, null);
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
@@ -407,8 +463,7 @@ final class FirebaseTenantDocumentReader
         .limit(query.limit);
     final cursor = query.startAfterDocumentId;
     if (cursor != null) request = request.startAfter(<Object>[cursor]);
-    final snapshot = await request.get();
-    return _snapshots(snapshot);
+    return _pageOf(request);
   }
 
   @override
@@ -427,8 +482,7 @@ final class FirebaseTenantDocumentReader
     // the cursor is that complete path. Firestore refuses a bare document ID
     // here - it accepts one only for a page whose collection path is known.
     if (cursor != null) request = request.startAfter(<Object>[cursor]);
-    final snapshot = await request.get();
-    return _snapshots(snapshot);
+    return _pageOf(request);
   }
 
   @override
@@ -480,7 +534,7 @@ final class FirebaseTenantDocumentReader
         ]);
       }
     }
-    return _snapshots(await request.get());
+    return _pageOf(request);
   }
 
   @override
@@ -503,7 +557,7 @@ final class FirebaseTenantDocumentReader
     if (query.startAfter case final cursor?) {
       request = request.startAfter(<Object>[cursor.documentId]);
     }
-    return _snapshots(await request.get());
+    return _pageOf(request);
   }
 
   @override
@@ -527,8 +581,16 @@ final class FirebaseTenantDocumentReader
         cursor.documentId,
       ]);
     }
-    return _snapshots(await request.get());
+    return _pageOf(request);
   }
+
+  /// One page, from wherever [_source] allows, empty where nothing is held.
+  Future<List<TenantQueryDocumentSnapshot>> _pageOf(
+    Query<Map<String, dynamic>> request,
+  ) => _heldOrEmpty(
+    () async => _snapshots(await request.get(_options)),
+    const <TenantQueryDocumentSnapshot>[],
+  );
 
   static List<TenantQueryDocumentSnapshot> _snapshots(
     QuerySnapshot<Map<String, dynamic>> snapshot,
