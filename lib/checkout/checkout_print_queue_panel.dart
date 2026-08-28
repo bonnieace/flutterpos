@@ -44,7 +44,7 @@ final class TenantPrintQueueScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppScaffold(
-    title: 'Receipts waiting',
+    title: 'Unprinted receipts',
     // §4.2's record-list row: this is a list of records.
     contentWidth: AppContentWidth.records,
     body: TenantPrintQueuePanel(queue: queue, onRetry: onRetry),

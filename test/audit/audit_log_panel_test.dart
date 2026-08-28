@@ -273,7 +273,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('view-audit-log')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Activity log'), findsOneWidget);
+      expect(find.text('Logs'), findsOneWidget);
       expect(find.byKey(const ValueKey('audit-log-entry-aud_001')), findsOne);
     });
 

@@ -110,6 +110,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.printerConfigurationRoles = const <TenantRole>[],
     this.printQueueRoute,
     this.printQueueStatus,
+    this.printQueueCount,
     this.catalogManagementRoute,
     this.catalogManagementRoles = const <TenantRole>[],
     this.memberName,
@@ -251,6 +252,14 @@ final class TenantRoutingShell extends StatefulWidget {
   /// is a button. Null draws no line, which is the honest rendering when
   /// nothing is waiting.
   final String? Function()? printQueueStatus;
+
+  /// How many receipts are waiting, for the launcher tile's badge.
+  ///
+  /// **A figure beside the sentence, not instead of it.** A tile has room for
+  /// a number on its glyph and a menu row has room for *2 waiting to send*, so
+  /// both are read from the same listing. Null where the queue cannot be
+  /// listed at all, which is not the same as a queue that is empty.
+  final int? Function()? printQueueCount;
 
   /// Optional guarded catalog-management route, injected for the same reason.
   ///
@@ -853,6 +862,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       printerConfigurationRoles: widget.printerConfigurationRoles,
       printQueueRoute: widget.printQueueRoute,
       printQueueStatus: widget.printQueueStatus,
+      printQueueCount: widget.printQueueCount,
       catalogManagementRoute: widget.catalogManagementRoute,
       catalogManagementRoles: widget.catalogManagementRoles,
       pendingCheckoutPanel: widget.pendingCheckoutPanel,
@@ -2068,6 +2078,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.printerConfigurationRoles = const <TenantRole>[],
     this.printQueueRoute,
     this.printQueueStatus,
+    this.printQueueCount,
     this.catalogManagementRoute,
     this.catalogManagementRoles = const <TenantRole>[],
     this.memberName,
@@ -2138,6 +2149,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// This device's queue depth, in words. See
   /// `TenantRoutingShell.printQueueStatus`.
   final String? Function()? printQueueStatus;
+
+  /// The same depth as a figure. See `TenantRoutingShell.printQueueCount`.
+  final int? Function()? printQueueCount;
 
   /// Optional guarded catalog-management route, supplied by the composition
   /// root. It is the one surface that can put a product in the catalog, which
@@ -2626,7 +2640,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       // to read, and this one sells.
       HomeDestination(
         destinationKey: const ValueKey('start-checkout'),
-        label: 'New sale',
+        label: 'Register',
         description:
             'Process sales, manage orders, and handle customer transactions.',
         icon: Icons.point_of_sale,
@@ -2691,11 +2705,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (printQueueRoute != null)
       HomeDestination(
         destinationKey: const ValueKey('receipts-waiting'),
-        label: 'Receipts waiting',
+        label: 'Unprinted receipts',
         description: 'Receipts this device has not sent to the printer yet.',
         group: 'Sales',
         icon: Icons.receipt_long_outlined,
         status: printQueueStatus?.call(),
+        // The figure for the tile's badge, beside the sentence for the row.
+        badgeCount: printQueueCount?.call(),
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -2787,7 +2803,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         membership.role.canAccess(checkoutConfigurationRoles))
       HomeDestination(
         destinationKey: const ValueKey('checkout-configuration'),
-        label: 'Checkout settings',
+        label: 'Settings',
         description: 'Decide what every price in the catalog means.',
         group: 'Settings',
         icon: Icons.tune_outlined,
@@ -2849,7 +2865,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (auditLogRoute != null && membership.role.canAccess(auditLogRoles))
       HomeDestination(
         destinationKey: const ValueKey('view-audit-log'),
-        label: 'View activity log',
+        label: 'Logs',
         group: 'Settings',
         icon: Icons.fact_check_outlined,
         onPressed: () {

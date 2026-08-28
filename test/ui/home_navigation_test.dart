@@ -47,6 +47,7 @@ HomeDestination _destination(
   String? status,
   String? group,
   String? description,
+  int? badgeCount,
 }) => HomeDestination(
   destinationKey: ValueKey(label),
   label: label,
@@ -55,6 +56,7 @@ HomeDestination _destination(
   isPrimary: isPrimary,
   group: group,
   description: description,
+  badgeCount: badgeCount,
   onPressed: enabled ? () {} : null,
 );
 
@@ -81,6 +83,106 @@ Rect _rectOf(WidgetTester tester, String label) => tester.getRect(
 
 void main() {
   group('home module grid', () {
+    // ------------------------------------------------------------------
+    // A tile's label, and the count on its glyph.
+    //
+    // **Both were reported off a handset rather than off a capture.** The
+    // screenshot harness photographs a settled tree, so a word broken across
+    // two lines with one letter on the second looked exactly like a word that
+    // fitted.
+    // ------------------------------------------------------------------
+
+    testWidgets('a single word is scaled to fit rather than broken', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        HomeModuleGrid(
+          destinations: <HomeDestination>[_destination('Inventory')],
+        ),
+        width: 360,
+      );
+
+      final label = tester.widget<Text>(find.text('Inventory'));
+      expect(label.maxLines, 1, reason: 'A word has nowhere to break.');
+      expect(label.softWrap, isFalse);
+      expect(
+        find.ancestor(
+          of: find.text('Inventory'),
+          matching: find.byType(FittedBox),
+        ),
+        findsWidgets,
+        reason: 'A word scaled down is the same word; a word cut is not.',
+      );
+    });
+
+    testWidgets('a phrase still takes its two lines', (tester) async {
+      await _pump(
+        tester,
+        HomeModuleGrid(
+          destinations: <HomeDestination>[_destination('Unprinted receipts')],
+        ),
+        width: 360,
+      );
+
+      final label = tester.widget<Text>(find.text('Unprinted receipts'));
+      expect(label.maxLines, 2);
+      expect(label.softWrap, isTrue);
+    });
+
+    testWidgets('a queue with something in it is counted and marked', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        HomeModuleGrid(
+          destinations: <HomeDestination>[
+            _destination('Unprinted receipts', badgeCount: 2),
+          ],
+        ),
+        width: 360,
+      );
+
+      expect(find.text('2'), findsOneWidget);
+      // The palette `spiritTheme` is built from, which is what this pumps.
+      const tokens = AppTokens.profoundVerdant;
+      final glyph = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(const ValueKey('Unprinted receipts')),
+          matching: find.byType(Icon),
+        ),
+      );
+      expect(glyph.color, tokens.colors.status.problem.fg);
+    });
+
+    testWidgets('a queue with nothing in it is neither counted nor red', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        HomeModuleGrid(
+          destinations: <HomeDestination>[
+            _destination('Unprinted receipts', badgeCount: 0),
+          ],
+        ),
+        width: 360,
+      );
+
+      // A permanent zero trains a person to stop looking at the one place that
+      // tells them something is stuck, and red on a device with nothing wrong
+      // says a problem that is not there.
+      expect(find.text('0'), findsNothing);
+      // The palette `spiritTheme` is built from, which is what this pumps.
+      const tokens = AppTokens.profoundVerdant;
+      final glyph = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(const ValueKey('Unprinted receipts')),
+          matching: find.byType(Icon),
+        ),
+      );
+      expect(glyph.color, isNot(tokens.colors.status.problem.fg));
+    });
+
     test('phones use a four-across launcher grid', () {
       expect(HomeModuleGrid.columnsFor(411), 4);
       expect(HomeModuleGrid.columnsFor(767), 4);

@@ -422,7 +422,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('checkout-configuration')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Checkout settings'), findsOne);
+      expect(find.text('Settings'), findsOne);
       _expectText(
         tester,
         'checkout-configuration-current',

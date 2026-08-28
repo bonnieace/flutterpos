@@ -1153,7 +1153,7 @@ void main() {
       // not raise a modal at all.
       expect(find.byType(NoticeDialog), findsNothing);
       expect(
-        find.textContaining('Receipts waiting'),
+        find.textContaining('Unprinted receipts'),
         findsNothing,
       );
     });

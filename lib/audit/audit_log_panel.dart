@@ -23,7 +23,7 @@ final class TenantAuditLogScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppScaffold(
-    title: 'Activity log',
+    title: 'Logs',
     contentWidth: AppContentWidth.records,
     body: TenantAuditLogPanel(reader: reader, eventType: eventType),
   );

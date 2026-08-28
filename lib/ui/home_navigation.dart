@@ -55,6 +55,7 @@ final class HomeDestination {
     required this.onPressed,
     this.status,
     this.isPrimary = false,
+    this.badgeCount,
     this.destinationKey,
     this.group,
     this.description,
@@ -98,6 +99,20 @@ final class HomeDestination {
   /// rather than leaving the page - a filled accent row at the top of the
   /// column, which is how the export draws it.
   final bool isPrimary;
+
+  /// How many things are waiting behind this destination, or null where it is
+  /// not the kind of destination that counts anything.
+  ///
+  /// **Not the same as [status], which is a sentence.** *2 waiting to send* is
+  /// what a menu row has room to say; a launcher tile has room for a figure on
+  /// its glyph and nothing else. A destination that sets this is also drawn in
+  /// the problem colour while the figure is above zero and in grey when it is
+  /// not, so the tile reads as *something needs doing here* at a glance and as
+  /// ordinary the rest of the time.
+  ///
+  /// **Never colour alone** - §9. The count is the figure, the drawer row
+  /// beside it still carries the sentence, and the tile's semantics say both.
+  final int? badgeCount;
 
   /// A key for the rendered row, so a test and a screenshot can reach a
   /// destination by name rather than by position.
@@ -489,6 +504,75 @@ final class HomeModuleGrid extends StatelessWidget {
   }
 }
 
+/// A launcher label that refuses to break a word in half.
+///
+/// **Whether it may wrap is a property of the label, not of the layout.** A
+/// phrase has a place to break and reads perfectly well over two lines; a
+/// single word has none, so `maxLines: 2` on *Inventory* produced *Inventor* +
+/// *y* rather than a smaller *Inventory*. This asks which it is and then does
+/// the right one - scale a word down to fit, let a phrase wrap.
+final class _ModuleLabel extends StatelessWidget {
+  const _ModuleLabel({required this.label, required this.style});
+
+  final String label;
+  final TextStyle style;
+
+  /// Whether [label] has anywhere to break.
+  static bool wraps(String label) => label.trim().contains(' ');
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text(
+      label,
+      textAlign: TextAlign.center,
+      style: style,
+      maxLines: wraps(label) ? 2 : 1,
+      // A word scaled to fit is the same word; a word cut short is a different
+      // one. The ellipsis is the floor under a label no scaling can save.
+      overflow: TextOverflow.ellipsis,
+      softWrap: wraps(label),
+    );
+    if (wraps(label)) return text;
+    return FittedBox(fit: BoxFit.scaleDown, child: text);
+  }
+}
+
+/// The count on a launcher's glyph, as a notification badge.
+///
+/// The recipe is `SyncIndicator`'s: the status colour filled, the page's own
+/// ground for the ring and the figure, and a tabular numeral so a two-digit
+/// count does not jitter as the queue drains.
+final class _ModuleBadge extends StatelessWidget {
+  const _ModuleBadge({required this.count});
+
+  final int count;
+
+  /// The most it will print before giving up on an exact figure.
+  static const int maximum = 99;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final problem = tokens.colors.status.problem;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: problem.fg,
+        borderRadius: BorderRadius.circular(tokens.radius.pill),
+        border: Border.all(color: tokens.colors.surface.base, width: 2),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s4),
+        child: Text(
+          count > maximum ? '$maximum+' : '$count',
+          style: tokens.typography.numericBody.copyWith(
+            color: tokens.colors.surface.base,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The old hub distinguished its modules with blue, teal, orange, purple,
 /// pink, and green glyphs. These are the accessible 400 tones of that same
 /// palette, used decoratively and never as a status signal.
@@ -534,45 +618,79 @@ final class _HomeModuleCard extends StatelessWidget {
     );
 
     if (compact) {
+      // **Counted destinations colour themselves, everything else takes its
+      // turn in the palette.** A queue with something in it is the one tile on
+      // this page that is asking for attention, and a rotating decorative
+      // accent cannot say that; a queue with nothing in it is not a problem and
+      // must not be painted as one.
+      final counted = destination.badgeCount;
+      final glyph = counted == null
+          ? accent
+          : counted > 0
+          ? colors.status.problem.fg
+          : colors.text.tertiary;
       final launcher = Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: tokens.spacing.s4,
-          vertical: tokens.spacing.s8,
-        ),
+        // **No horizontal inset, since 2026-08-28.** Four columns on a 360
+        // handset leave 74 per tile, and after the focus ring's own gutter this
+        // padding took the label down to 58 - narrower than the word
+        // *Inventory* at 14/w600, so a single word broke across two lines with
+        // one letter on the second. The 56 glyph well is centred in the column
+        // and never needed the inset; the label did.
+        padding: EdgeInsets.symmetric(vertical: tokens.spacing.s8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Container(
-              key: ValueKey('home-module-icon-${destination.label}'),
-              width: _compactGlyphWell,
-              height: _compactGlyphWell,
-              decoration: BoxDecoration(
-                color: enabled
-                    ? accent.withValues(alpha: 0.14)
-                    : colors.surface.sunken,
-                borderRadius: BorderRadius.circular(tokens.radius.lg),
-                border: Border.all(
-                  color: enabled
-                      ? accent.withValues(alpha: 0.38)
-                      : colors.surface.borderSubtle,
+            Stack(
+              // The badge sits on the corner of the well rather than inside it,
+              // which is where every launcher a shopkeeper already uses puts
+              // one.
+              clipBehavior: Clip.none,
+              children: <Widget>[
+                Container(
+                  key: ValueKey('home-module-icon-${destination.label}'),
+                  width: _compactGlyphWell,
+                  height: _compactGlyphWell,
+                  decoration: BoxDecoration(
+                    color: enabled
+                        ? glyph.withValues(alpha: 0.14)
+                        : colors.surface.sunken,
+                    borderRadius: BorderRadius.circular(tokens.radius.lg),
+                    border: Border.all(
+                      color: enabled
+                          ? glyph.withValues(alpha: 0.38)
+                          : colors.surface.borderSubtle,
+                    ),
+                  ),
+                  child: Icon(
+                    destination.icon,
+                    size: _compactGlyphSize,
+                    color: enabled ? glyph : colors.text.disabled,
+                  ),
                 ),
-              ),
-              child: Icon(
-                destination.icon,
-                size: _compactGlyphSize,
-                color: enabled ? accent : colors.text.disabled,
-              ),
+                // **No badge at all when there is nothing waiting.** A
+                // permanent zero trains a person to stop looking at the one
+                // place that tells them something is stuck - the same call
+                // `SyncIndicator` makes about its own badge.
+                if (counted != null && counted > 0)
+                  PositionedDirectional(
+                    top: -tokens.spacing.s4,
+                    end: -tokens.spacing.s4,
+                    child: _ModuleBadge(count: counted),
+                  ),
+              ],
             ),
             SizedBox(height: tokens.spacing.s8),
-            Text(
-              destination.label,
-              textAlign: TextAlign.center,
+            // **A single word is never broken.** *Inventory* and *Expenses* are
+            // one word each and wrapped a letter onto a second line; a word
+            // that does not fit is scaled down rather than snapped in half. A
+            // phrase - *Unprinted receipts* - still takes its two lines, which
+            // is what it wants.
+            _ModuleLabel(
+              label: destination.label,
               style: tokens.typography.bodyMedium.copyWith(
                 color: titleColor,
                 fontWeight: primary ? FontWeight.w700 : FontWeight.w600,
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

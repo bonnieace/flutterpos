@@ -202,6 +202,21 @@ Future<void> main() async {
   );
 }
 
+/// How many receipts this device is holding, or null when it cannot say.
+///
+/// **Separate from [_printQueueStatus], which answers a sentence.** The home's
+/// launcher tile has room for a figure on its glyph and nothing else, and the
+/// drawer row beside it still wants the words - so both are read, from the same
+/// listing, and a queue that cannot be listed is a queue with no figure rather
+/// than a queue with none in it.
+int? _printQueueCount(HivePrintJobQueue queue) {
+  try {
+    return queue.pending().jobs.length;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// This device's queue depth, in words, or null when there is nothing to say.
 ///
 /// The wording is `PrinterFailureNotice.queueDepth`; what is here is the read,
@@ -661,6 +676,7 @@ class SpiritPOSApp extends StatelessWidget {
           },
         ),
         printQueueStatus: () => _printQueueStatus(checkoutPrintJobs),
+        printQueueCount: () => _printQueueCount(checkoutPrintJobs),
         // The only path in the app that puts a product in the catalog, and the
         // last capability every other operational surface here already assumed.
         // Creating and retiring are direct Firestore writes, because the rules

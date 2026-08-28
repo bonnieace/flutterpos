@@ -177,7 +177,7 @@ final class TenantCheckoutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppScaffold(
-    title: 'New sale',
+    title: 'Register',
     contentWidth: AppContentWidth.full,
     body: TenantCheckoutPanel(cache: cache, drafts: drafts),
   );

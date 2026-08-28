@@ -41,7 +41,7 @@ final class TenantCheckoutConfigurationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppScaffold(
-    title: 'Checkout settings',
+    title: 'Settings',
     contentWidth: AppContentWidth.reading,
     body: SingleChildScrollView(
       // 24 until step 6, which is 4 more than the page header above it uses
