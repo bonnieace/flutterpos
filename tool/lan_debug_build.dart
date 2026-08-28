@@ -135,6 +135,33 @@ bool _syncConfig(String host) {
   if (target < 0) {
     throw StateError('No <domain> follows the managed marker in $configPath.');
   }
+  // **A host already listed elsewhere is refused rather than written twice**,
+  // and the cost of not checking is worth writing down: Android's parser
+  // rejects a duplicate `<domain>` inside one `domain-config`, and it rejects
+  // it by refusing to instantiate the application at all. The APK installs, the
+  // launcher icon appears, and every launch dies before Dart runs with
+  // `Failed to parse XML configuration from network_security_config` buried in
+  // logcat under a MIUI hang report. Nothing about the message points here.
+  //
+  // It bit on 2026-08-28 with `--host 127.0.0.1` for a run tunnelled over
+  // `adb reverse`, which is a perfectly reasonable thing to ask for - the three
+  // derived hosts above already cover loopback, so the right answer was that
+  // this entry was not needed at all.
+  final duplicate = lines.indexWhere(
+    (line) =>
+        line.contains('<domain') && RegExp('>${RegExp.escape(host)}<').hasMatch(line),
+  );
+  if (duplicate >= 0 && duplicate != target) {
+    throw StateError(
+      '$configPath already permits $host on line ${duplicate + 1}, and Android '
+      'refuses a <domain-config> that names one host twice - the app would '
+      'install and then die on launch before Dart runs.\n'
+      'Nothing needs adding: build against it directly with\n'
+      '  flutter build apk --debug '
+      '--dart-define=USE_FIREBASE_EMULATORS=true '
+      '--dart-define=FIREBASE_EMULATOR_HOST=$host',
+    );
+  }
   final replacement = lines[target].replaceFirst(
     RegExp(r'>[^<]*<'),
     '>$host<',
