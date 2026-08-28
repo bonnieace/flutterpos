@@ -93,12 +93,31 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
   void _chooseCategory(String? id) => setState(() => _categoryId = id);
   void _retry() => setState(() => _generation++);
 
-  TenantGuardedLoader<WeeklyReportView> _loaderFor(String key) {
+  String? _loaderKey;
+  TenantGuardedLoader<WeeklyReportView>? _loader;
+  TenantGuardedLoader<WeeklyReportView>? _loaderCached;
+
+  /// One pair of loaders per guard key.
+  ///
+  /// **This used to return a fresh closure on every call and ignore its key
+  /// entirely**, so `TenantRouteGuard.didUpdateWidget` saw a different loader
+  /// each frame and restarted the whole week - up to eight callables and six
+  /// chained Firestore pages - on any rebuild at all, including one caused by
+  /// the week that had just finished loading.
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
+    _loaderKey = key;
+    _loader = _readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : _readWith(cache);
+  }
+
+  TenantGuardedLoader<WeeklyReportView> _readWith(TenantDataReader reader) {
     return (session) async {
       final context = await _sessionContext.load(session);
       final sales =
           widget.salesRepositoryFactory?.call(session) ??
-          TenantSaleHistoryRepository(session: session, reader: widget.reader);
+          TenantSaleHistoryRepository(session: session, reader: reader);
       final loader = TenantWeeklyReportLoader(
         session: session,
         callable: widget.callable,
@@ -108,7 +127,7 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
         // read this report. A manager sees the week's gross figures and no net
         // card, which is the same boundary the margin already sits behind.
         expenses: TenantExpenseRepository.canSeeInSession(session)
-            ? TenantExpenseRepository(session: session, reader: widget.reader)
+            ? TenantExpenseRepository(session: session, reader: reader)
             : null,
         clock: widget.clock == null ? null : _now,
       );
@@ -143,10 +162,12 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
   Widget build(BuildContext context) {
     final key =
         'w$_weekOffset:${_soldById ?? '-'}:${_categoryId ?? '-'}:$_generation';
+    _composeLoaders(key);
     return TenantRouteGuard<WeeklyReportView>(
       key: ValueKey(key),
       allowedRoles: TenantSalesTotalsGateway.allowedRoles,
-      load: _loaderFor(key),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const _ReportsFrame(
         body: Center(
           key: ValueKey('weekly-report-denied'),

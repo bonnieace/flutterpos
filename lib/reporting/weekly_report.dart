@@ -110,6 +110,33 @@ final class TenantReportItem {
   final int revenueMinor;
 }
 
+/// What this device counted for a week out of the sale documents it holds.
+///
+/// **Offered only for a week the scan saw all of.** `_rollUpItems` walks the
+/// week's sales to build the best-sellers list, and it stops at
+/// [TenantWeeklyReportLoader.saleScanCap]; past that its running total is a
+/// floor rather than the week's takings. A floor presented as a total is the
+/// worst kind of wrong figure - a plausible one - so a truncated week offers
+/// nothing here and waits for the server instead.
+final class TenantWeeklyDeviceCount {
+  const TenantWeeklyDeviceCount({
+    required this.salesMinor,
+    required this.transactions,
+    required this.revenueByDateMinor,
+  });
+
+  /// The week's takings in whole minor units, summed from the sales scanned.
+  final int salesMinor;
+
+  /// How many sales that was.
+  final int transactions;
+
+  /// The same takings split by business date, for the chart.
+  final Map<String, int> revenueByDateMinor;
+
+  double get sales => salesMinor / 100;
+}
+
 /// Everything the weekly page draws, for one week and one set of filters.
 final class TenantWeeklyReport {
   const TenantWeeklyReport({
@@ -121,6 +148,7 @@ final class TenantWeeklyReport {
     required this.recentSales,
     required this.itemsSold,
     required this.scanWasTruncated,
+    this.counted,
     this.expenses,
   });
 
@@ -151,6 +179,19 @@ final class TenantWeeklyReport {
   /// `DESIGN_RULES.md` is about.
   final bool scanWasTruncated;
 
+  /// What this device counted for the week on its own, or null where it could
+  /// not count honestly.
+  ///
+  /// **This is what the page draws while the server is deciding.** Every
+  /// takings figure on this report comes from a Cloud Function that has no
+  /// offline story at all, where the sales those figures describe are Firestore
+  /// documents already on this disk. Counting them here is not a guess - it is
+  /// the same arithmetic, done from the same records, by the machine holding
+  /// them.
+  ///
+  /// It is never preferred over [totals]. A server answer replaces it.
+  final TenantWeeklyDeviceCount? counted;
+
   /// What the business spent over the same week, or null where it was not
   /// read - by role, by wiring, or because the read failed.
   final TenantExpensePeriod? expenses;
@@ -166,12 +207,18 @@ final class TenantWeeklyReport {
     return TenantNetProfitReport.from(gross: gross, expenses: expenses);
   }
 
-  double get sales => totals?.sales ?? 0;
-  int get transactions => totals?.transactions ?? 0;
+  /// Whether there is any basis at all for the takings cards.
+  ///
+  /// **Asked before the figures are drawn, because zero is a real answer.** A
+  /// week with no server totals and nothing counted here has takings of
+  /// *unknown*, not of nought, and the two must not be printed the same way.
+  bool get hasTakings => totals != null || counted != null;
+
+  double get sales => totals?.sales ?? counted?.sales ?? 0;
+  int get transactions => totals?.transactions ?? counted?.transactions ?? 0;
 
   /// The week's takings divided by the sales that produced them.
-  double get averageSale =>
-      transactions == 0 ? 0 : (totals?.sales ?? 0) / transactions;
+  double get averageSale => transactions == 0 ? 0 : sales / transactions;
 
   double? get previousAverageSale {
     final previous = previousTotals;
@@ -264,13 +311,19 @@ final class TenantWeeklyReportLoader {
     // page, so what a person sees is unchanged; a log naming a different day
     // of the same broken week is the whole of the difference.
     final pending = <Future<Object?>>[
+      // **Each day swallows its own refusal, since 2026-08-28.** These are
+      // callables, and a callable has no offline answer; before this, one of
+      // them failing threw out of `Future.wait` and took the whole page - the
+      // chart, the best sellers, the recent sales and the expense range, every
+      // one of which is a Firestore read that was sitting in this device's
+      // cache the entire time. The two members of this batch that already
+      // swallowed their own failures said as much; the days were simply never
+      // brought into line with them.
       for (final date in elapsed)
-        _gateway.load(
-          _gateway.createBusinessDateQuery(
-            businessDate: date,
-            soldById: soldById,
-            categoryId: categoryId,
-          ),
+        _dayTotals(
+          date: date,
+          soldById: soldById,
+          categoryId: categoryId,
         ),
       // Its own failure is already swallowed into a null - a missing
       // comparison, not a missing page - so it can share this list safely.
@@ -291,26 +344,67 @@ final class TenantWeeklyReportLoader {
     final settled = await Future.wait(pending);
     final byDate = <String, TenantSalesTotals>{
       for (var index = 0; index < elapsed.length; index++)
-        elapsed[index]: settled[index]! as TenantSalesTotals,
+        if (settled[index] case final TenantSalesTotals day) elapsed[index]: day,
     };
     final previous = settled[elapsed.length] as TenantSalesTotals?;
     final roll = elapsed.isEmpty
         ? const _ItemRoll.empty()
         : settled[elapsed.length + 1]! as _ItemRoll;
     final expenses = settled.last as TenantExpensePeriod?;
+    // **The week's total is the server's only when every day of it answered.**
+    // Summing the four days that landed and presenting it as the week would
+    // understate the takings without saying so, which is the one failure this
+    // page must not have. A partial answer is no answer; what draws instead is
+    // what this device counted, which is whole or absent.
+    final complete = byDate.length == elapsed.length && byDate.isNotEmpty;
     return TenantWeeklyReport(
       week: week,
-      totals: byDate.isEmpty ? null : _sum(byDate.values),
+      totals: complete ? _sum(byDate.values) : null,
       previousTotals: previous,
       revenueByWeekday: <double>[
-        for (final date in week.businessDates) byDate[date]?.sales ?? 0,
+        for (final date in week.businessDates)
+          byDate[date]?.sales ??
+              (roll.truncated
+                  ? 0
+                  : (roll.revenueByDate[date] ?? 0) / 100),
       ],
       topItems: roll.top(topItemCount),
       recentSales: roll.recent.take(recentSaleCount).toList(growable: false),
       itemsSold: roll.itemsSold,
       scanWasTruncated: roll.truncated,
+      counted: roll.truncated || elapsed.isEmpty
+          ? null
+          : TenantWeeklyDeviceCount(
+              salesMinor: roll.salesMinor,
+              transactions: roll.transactions,
+              revenueByDateMinor: roll.revenueByDate,
+            ),
       expenses: expenses,
     );
+  }
+
+  /// One day's totals, or null where the server could not be asked.
+  ///
+  /// The same treatment [_previousWeekTotals] and [_weekExpenses] already give
+  /// their own refusals: what goes missing is this day, not the page.
+  Future<TenantSalesTotals?> _dayTotals({
+    required String date,
+    String? soldById,
+    String? categoryId,
+  }) async {
+    try {
+      return await _gateway.load(
+        _gateway.createBusinessDateQuery(
+          businessDate: date,
+          soldById: soldById,
+          categoryId: categoryId,
+        ),
+      );
+    } on TenantSalesTotalsException {
+      return null;
+    } on FormatException {
+      return null;
+    }
   }
 
   /// What the business spent over this week, or null where it could not be
@@ -395,9 +489,11 @@ final class TenantWeeklyReportLoader {
     final revenue = <String, int>{};
     final names = <String, String>{};
     final recent = <TenantSale>[];
+    final revenueByDate = <String, int>{};
     var scanned = 0;
     var truncated = false;
     var itemsSold = 0;
+    var salesMinor = 0;
     String? cursor;
     try {
       while (scanned < saleScanCap) {
@@ -410,6 +506,9 @@ final class TenantWeeklyReportLoader {
         );
         for (final sale in page.items) {
           scanned++;
+          salesMinor += sale.totalMinor;
+          revenueByDate[sale.businessDate] =
+              (revenueByDate[sale.businessDate] ?? 0) + sale.totalMinor;
           if (recent.length < recentSaleCount) recent.add(sale);
           for (final line in sale.lines) {
             quantities[line.productId] =
@@ -438,6 +537,9 @@ final class TenantWeeklyReportLoader {
       recent: recent,
       itemsSold: itemsSold,
       truncated: truncated,
+      salesMinor: salesMinor,
+      transactions: scanned,
+      revenueByDate: revenueByDate,
     );
   }
 }
@@ -451,6 +553,9 @@ final class _ItemRoll {
     required this.recent,
     required this.itemsSold,
     required this.truncated,
+    this.salesMinor = 0,
+    this.transactions = 0,
+    this.revenueByDate = const <String, int>{},
   });
 
   const _ItemRoll.empty()
@@ -459,7 +564,10 @@ final class _ItemRoll {
       names = const <String, String>{},
       recent = const <TenantSale>[],
       itemsSold = 0,
-      truncated = false;
+      truncated = false,
+      salesMinor = 0,
+      transactions = 0,
+      revenueByDate = const <String, int>{};
 
   final Map<String, int> quantities;
   final Map<String, int> revenue;
@@ -467,6 +575,19 @@ final class _ItemRoll {
   final List<TenantSale> recent;
   final int itemsSold;
   final bool truncated;
+
+  /// The takings of every sale this pass saw, in whole minor units.
+  ///
+  /// **`totalMinor`, not the sum of the line totals.** A sale's discount lives
+  /// between the two, and what a shop took is the figure it was paid.
+  final int salesMinor;
+
+  /// How many sales that was.
+  final int transactions;
+
+  /// The same takings split by business date, so the chart has a bar per day
+  /// without a second pass over the same records.
+  final Map<String, int> revenueByDate;
 
   /// The best sellers by revenue, which is what the old page ordered by.
   List<TenantReportItem> top(int count) {

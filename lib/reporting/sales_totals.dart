@@ -27,10 +27,33 @@ final class FirebaseSalesTotalsCallable implements SalesTotalsCallable {
 
   final FirebaseFunctions _functions;
 
+  /// How long a shop waits for a figure before being told it cannot be had.
+  ///
+  /// **The plugin's own default is sixty seconds, and that is the wait this
+  /// names.** Nothing in this app had ever passed [HttpsCallableOptions], so
+  /// every callable inherited a minute - and a minute is not a timeout on a
+  /// counter, it is a hang. The weekly report asks for one of these per elapsed
+  /// day, so a week opened on a dead network spent that minute before it could
+  /// say so.
+  ///
+  /// **Eight seconds because the alternative is already drawn.** Since the
+  /// pages around this read from the device while the server is deciding, a
+  /// deadline is not a choice between a figure and nothing - it is a choice
+  /// between a figure and the copy already on screen. Long enough for a slow
+  /// but working connection, short enough that a broken one is reported while
+  /// somebody is still looking at the screen.
+  ///
+  /// [TenantSalesTotalsGateway.load] has always caught [TimeoutException] into
+  /// `unavailable`. Until this, that catch could never fire.
+  static const Duration deadline = Duration(seconds: 8);
+
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     final result = await _functions
-        .httpsCallable('getSalesComparison')
+        .httpsCallable(
+          'getSalesComparison',
+          options: HttpsCallableOptions(timeout: deadline),
+        )
         .call<Object?>(payload);
     return result.data;
   }

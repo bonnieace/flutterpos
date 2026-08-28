@@ -16,6 +16,7 @@ import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/status.dart';
+import '../ui/rolling_number.dart';
 import '../ui/skeleton.dart';
 import '../ui/tokens.dart';
 import 'reporting_currency.dart';
@@ -289,6 +290,18 @@ final class _MetricGrid extends StatelessWidget {
   String get _comparisonLabel =>
       week.isCurrent ? 'vs last week' : 'vs prior week';
 
+  /// Whether the takings on screen were counted here rather than served.
+  ///
+  /// **Said out loud rather than left to be noticed.** These figures normally
+  /// come from the server, which counts sales this device may never have held;
+  /// when they come from the sale records on the device instead, that is a
+  /// different claim about the same week and a shopkeeper is entitled to know
+  /// which one they are reading.
+  static bool _countedHere(TenantWeeklyReport? data) =>
+      data != null && data.totals == null && data.counted != null;
+
+  static const String _countedLabel = 'Counted on this device';
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -301,7 +314,15 @@ final class _MetricGrid extends StatelessWidget {
         cardKey: const ValueKey('weekly-report-sales'),
         title: 'TOTAL SALES',
         reading: reading,
-        value: data == null ? '—' : weeklyReportMoney(currency, data.sales),
+        // **`hasTakings`, not `data != null`, and zero is why.** A week whose
+        // server totals never landed and whose own sales could not be counted
+        // has takings of *unknown*; printing `KES 0.00` over a week of trade
+        // would be the plausible wrong figure this page is most able to do
+        // damage with.
+        value: data == null || !data.hasTakings
+            ? '—'
+            : weeklyReportMoney(currency, data.sales),
+        subtitle: _countedHere(data) ? _countedLabel : null,
         change: TenantWeeklyReport.change(data?.sales ?? 0, previous?.sales),
         comparisonLabel: _comparisonLabel,
         icon: Icons.attach_money,
@@ -359,7 +380,8 @@ final class _MetricGrid extends StatelessWidget {
         cardKey: const ValueKey('weekly-report-transactions'),
         title: 'TRANSACTIONS',
         reading: reading,
-        value: data == null ? '—' : '${data.transactions}',
+        value: data == null || !data.hasTakings ? '—' : '${data.transactions}',
+        subtitle: _countedHere(data) ? _countedLabel : null,
         change: TenantWeeklyReport.change(
           (data?.transactions ?? 0).toDouble(),
           previous?.transactions.toDouble(),
@@ -375,9 +397,10 @@ final class _MetricGrid extends StatelessWidget {
         cardKey: const ValueKey('weekly-report-average'),
         title: 'AVERAGE SALE',
         reading: reading,
-        value: data == null || data.transactions == 0
+        value: data == null || !data.hasTakings || data.transactions == 0
             ? '—'
             : weeklyReportMoney(currency, data.averageSale),
+        subtitle: _countedHere(data) ? _countedLabel : null,
         change: data == null
             ? null
             : TenantWeeklyReport.change(
@@ -443,6 +466,9 @@ final class _MetricGrid extends StatelessWidget {
     return Column(children: rows);
   }
 }
+
+/// What a card prints where it has no figure at all.
+const String _noFigure = '\u2014';
 
 final class _MetricCard extends StatelessWidget {
   const _MetricCard({
@@ -524,9 +550,25 @@ final class _MetricCard extends StatelessWidget {
                 tone: SkeletonTone.onRaised,
               ),
             )
-          else
+          // **A roll rather than a swap, because this figure is expected to
+          // change under a reader's eyes.** The takings are drawn from what
+          // this device counted and then corrected when the server answers; a
+          // number that silently becomes a different number is the kind of
+          // thing somebody notices afterwards and does not trust. `numeric`
+          // roles are tabular, so the digits that did not change hold still.
+          //
+          // An em dash is not a figure and cannot roll to one, so it stays a
+          // plain `Text` until there is something to count.
+          else if (value == _noFigure)
             Text(
               value,
+              style: tokens.typography.numericCompact.copyWith(
+                color: tokens.colors.text.primary,
+              ),
+            )
+          else
+            RollingNumber(
+              value: value,
               style: tokens.typography.numericCompact.copyWith(
                 color: tokens.colors.text.primary,
               ),
