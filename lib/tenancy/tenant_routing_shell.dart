@@ -108,6 +108,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.checkoutRoute,
     this.checkoutConfigurationRoute,
     this.checkoutConfigurationRoles = const <TenantRole>[],
+    this.brandingRoute,
+    this.brandingRoles = const <TenantRole>[],
     this.printerConfigurationRoute,
     this.printerConfigurationRoles = const <TenantRole>[],
     this.printQueueRoute,
@@ -235,6 +237,12 @@ final class TenantRoutingShell extends StatefulWidget {
   /// It is the only surface that can say where this business prints, and
   /// `docs/printer_transport.md` §6 forbids guessing an address — so until it
   /// has been used once, every receipt queues with `printer_not_configured`.
+  /// Opens the guarded screen a business names itself on.
+  final Widget Function(TenantDataReader reader)? brandingRoute;
+
+  /// The roles that route is offered to, decided by the tenancy domain.
+  final List<TenantRole> brandingRoles;
+
   final Widget Function(TenantDataReader reader)? printerConfigurationRoute;
 
   /// The roles that route is offered to, decided by the checkout domain. Owner
@@ -860,6 +868,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       checkoutRoute: widget.checkoutRoute,
       checkoutConfigurationRoute: widget.checkoutConfigurationRoute,
       checkoutConfigurationRoles: widget.checkoutConfigurationRoles,
+      brandingRoute: widget.brandingRoute,
+      brandingRoles: widget.brandingRoles,
       printerConfigurationRoute: widget.printerConfigurationRoute,
       printerConfigurationRoles: widget.printerConfigurationRoles,
       printQueueRoute: widget.printQueueRoute,
@@ -2101,6 +2111,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.checkoutRoute,
     this.checkoutConfigurationRoute,
     this.checkoutConfigurationRoles = const <TenantRole>[],
+    this.brandingRoute,
+    this.brandingRoles = const <TenantRole>[],
     this.printerConfigurationRoute,
     this.printerConfigurationRoles = const <TenantRole>[],
     this.printQueueRoute,
@@ -2165,6 +2177,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// Optional guarded printer settings route, supplied by the composition root.
   /// See `TenantRoutingShell.printerConfigurationRoute`.
+  /// Opens the guarded screen a business names itself on.
+  final Widget Function(TenantDataReader reader)? brandingRoute;
+
+  /// The roles that route is offered to, decided by the tenancy domain.
+  final List<TenantRole> brandingRoles;
+
   final Widget Function(TenantDataReader reader)? printerConfigurationRoute;
 
   /// The roles that route is offered to. Owner and administrator only.
@@ -2845,6 +2863,29 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               builder: (_) => TenantSessionScope(
                 controller: controller,
                 child: checkoutConfigurationRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    // First in *Settings*, because it is the first thing a business that has
+    // just been approved has to fix: until it is set the home carries no name
+    // and every receipt prints an unbranded header.
+    if (brandingRoute != null && membership.role.canAccess(brandingRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('business-details'),
+        label: 'Business details',
+        description:
+            'The name, slogan and logo the home and every receipt carry.',
+        group: 'Settings',
+        icon: Icons.storefront_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: brandingRoute!(reader),
               ),
             ),
           );

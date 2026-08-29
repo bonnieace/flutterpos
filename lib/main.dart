@@ -719,6 +719,16 @@ class SpiritPOSApp extends StatelessWidget {
         // `probe` is the transport's own connect-and-close, handed over so
         // *Test this printer* answers "is it reachable?" against what is typed,
         // before it is saved and without wasting a roll.
+        // The name and the receipt header, which nothing in this product could
+        // write until now: `TenantBrandingRepository` has always read
+        // `configuration/branding` and it was seeded by hand.
+        brandingRoute: (reader) => TenantBrandingScreen(
+          reader: reader,
+          writer: FirebaseTenantConfigurationDocumentWriter(
+            isOnline: isOnline,
+          ),
+        ),
+        brandingRoles: TenantBrandingPublisher.allowedRoles,
         printerConfigurationRoute: (reader) => TenantPrinterConfigurationScreen(
           reader: reader,
           writer: FirebaseTenantConfigurationDocumentWriter(
