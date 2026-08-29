@@ -7,8 +7,10 @@ import {
   parsePlatformAdminGrantCliArgs,
   PlatformGrantCliInputError,
   PlatformGrantOperatorError,
+  requireBootstrapEligible,
   requirePlatformGrantOperator,
 } from "./grantPlatformAdmin";
+import {FakeFirestore} from "../testing/fakeFirestore";
 import {PlatformAdminGrantError} from "../platform/grantPlatformAdmin";
 import {IdentityTransitionError} from "../platform/identityTransition";
 
@@ -231,3 +233,126 @@ test("CLI failure descriptions have stable safe exit states", () => {
     }
   );
 });
+
+// ---------------------------------------------------------------------------
+// --bootstrap: the very first platform administrator
+// ---------------------------------------------------------------------------
+
+const BOOTSTRAP_ARGUMENTS = [
+  "--bootstrap",
+  "--environment", "dev",
+  "--project-id", "multitenant-pos-b8326",
+  "--confirm-project-id", "multitenant-pos-b8326",
+  "--target-uid", "founder",
+  "--confirm-target-uid", "founder",
+  "--request-id", "platform-grant-request-001",
+  "--reason", "Bootstrapping the first platform administrator.",
+];
+
+test("a bootstrap needs no actor and records the target as its own", () => {
+  assert.deepEqual(parsePlatformAdminGrantCliArgs(BOOTSTRAP_ARGUMENTS), {
+    environment: "dev",
+    projectId: "multitenant-pos-b8326",
+    input: {
+      actorUid: "founder",
+      targetUid: "founder",
+      requestId: "platform-grant-request-001",
+      reason: "Bootstrapping the first platform administrator.",
+      bootstrap: true,
+    },
+  });
+});
+
+test("a bootstrap refuses an actor rather than quietly ignoring one", () => {
+  assert.throws(
+    () => parsePlatformAdminGrantCliArgs([
+      ...BOOTSTRAP_ARGUMENTS, "--actor-uid", "someone",
+    ]),
+    /--actor-uid is not accepted with --bootstrap/
+  );
+});
+
+test("the ordinary form still refuses a self-grant", () => {
+  assert.throws(
+    () => parsePlatformAdminGrantCliArgs(DEV_ARGUMENTS.map((value) =>
+      value === "platform-operator" ? "target-user" : value
+    )),
+    /must identify different users/
+  );
+});
+
+test("--bootstrap is refused when it is supplied twice", () => {
+  assert.throws(
+    () => parsePlatformAdminGrantCliArgs([...BOOTSTRAP_ARGUMENTS, "--bootstrap"]),
+    /supplied more than once/
+  );
+});
+
+test("a bootstrap is allowed on a project with no platform administrator", async () => {
+  const db = new FakeFirestore();
+  await db.collection("users").doc("founder").set({
+    accountType: "tenant_user",
+    globalStatus: "active",
+  });
+
+  await requireBootstrapEligible({db: db.asFirestore(), auth: UNUSED_AUTH}, "founder");
+});
+
+test("a bootstrap is refused once any platform administrator exists", async () => {
+  const db = new FakeFirestore();
+  await db.collection("users").doc("sitting-admin").set({
+    accountType: "platform_admin",
+    globalStatus: "active",
+  });
+
+  await assert.rejects(
+    () => requireBootstrapEligible({db: db.asFirestore(), auth: UNUSED_AUTH}, "founder"),
+    (error: unknown) => error instanceof PlatformGrantOperatorError &&
+      error.code === "bootstrap-not-eligible" && !error.recoverable
+  );
+});
+
+test("a bootstrap is refused while another grant is in flight", async () => {
+  const db = new FakeFirestore();
+  await db.collection("users").doc("someone-else").set({
+    accountType: "tenant_user",
+    identityTransition: "granting_platform",
+  });
+
+  await assert.rejects(
+    () => requireBootstrapEligible({db: db.asFirestore(), auth: UNUSED_AUTH}, "founder"),
+    (error: unknown) => error instanceof PlatformGrantOperatorError &&
+      error.code === "bootstrap-not-eligible"
+  );
+});
+
+test("the target's own half-finished grant does not refuse its own retry", async () => {
+  // `grantPlatformAdmin` is a resumable saga and the documented recovery from a
+  // recoverable failure is to re-run with the same request ID. Counting the
+  // target's own in-flight transition as "an administrator already exists"
+  // would strand a project with no administrator and no way to make one.
+  const db = new FakeFirestore();
+  await db.collection("users").doc("founder").set({
+    accountType: "tenant_user",
+    identityTransition: "granting_platform",
+  });
+
+  await requireBootstrapEligible({db: db.asFirestore(), auth: UNUSED_AUTH}, "founder");
+});
+
+test("a target already carrying the privilege can be re-run to completion", async () => {
+  const db = new FakeFirestore();
+  await db.collection("users").doc("founder").set({
+    accountType: "platform_admin",
+    globalStatus: "active",
+  });
+
+  await requireBootstrapEligible({db: db.asFirestore(), auth: UNUSED_AUTH}, "founder");
+});
+
+/** The bootstrap check never reaches Auth; this proves it by exploding if it does. */
+const UNUSED_AUTH = new Proxy({}, {
+  get() {
+    throw new Error("The bootstrap eligibility check must not call Auth.");
+  },
+}) as never;

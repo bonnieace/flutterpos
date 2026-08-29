@@ -23,20 +23,52 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'keyboard_controller.dart';
 import 'keyboard_scope.dart';
+import 'tenancy/account_registration.dart';
+import 'tenancy/password_reset.dart';
 import 'tenancy/sign_in.dart';
+import 'ui/buttons.dart';
 import 'ui/press.dart';
 import 'ui/status.dart';
 import 'ui/tokens.dart';
 import 'widgets/pos_keyboard.dart';
 
+/// Which of the three things this screen is doing.
+///
+/// **One screen rather than three routes.** All three are the same two or three
+/// fields in the same pane in front of the same keypad, and the person moving
+/// between them has typed an address they should not have to type again. A push
+/// would also put a back arrow on the app's front door, which is the one place
+/// there is nothing behind.
+enum LoginMode {
+  signIn,
+
+  /// Creating an account. The first step of the self-serve path: sign up,
+  /// verify the address, request a business, wait to be approved.
+  register,
+
+  /// Asking for a password-reset email.
+  resetPassword,
+}
+
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.signIn});
+  const LoginScreen({
+    super.key,
+    this.signIn,
+    this.registration,
+    this.passwordReset,
+  });
 
   /// The boundary this screen signs in through.
   ///
   /// Absent, it is a [FirebaseEmailPasswordSignIn] built on first submission, so
   /// a build that never submits never reaches `FirebaseAuth.instance`.
   final EmailPasswordSignIn? signIn;
+
+  /// The boundary this screen creates accounts through.
+  final EmailPasswordRegistration? registration;
+
+  /// The boundary this screen asks for reset emails through.
+  final RequestPasswordResetCallable? passwordReset;
 
   /// Whether the keypad is drawn beside the form at [screenWidth].
   ///
@@ -78,6 +110,29 @@ class _LoginScreenState extends State<LoginScreen> {
   late final EmailPasswordSignIn _signIn =
       widget.signIn ?? FirebaseEmailPasswordSignIn();
 
+  late final EmailPasswordRegistration _registration =
+      widget.registration ?? FirebaseEmailPasswordRegistration();
+
+  late final PasswordResetGateway _passwordReset = PasswordResetGateway(
+    callable: widget.passwordReset ?? FirebaseRequestPasswordResetCallable(),
+  );
+
+  /// Which of the three things this screen is doing. See [LoginMode].
+  LoginMode _mode = LoginMode.signIn;
+
+  final confirmController = TextEditingController();
+  final confirmFocus = FocusNode();
+
+  /// What registration refused about what was typed, if anything.
+  RegistrationInputDefect? _registrationDefect;
+
+  /// Whether a reset request has been accepted.
+  ///
+  /// A state rather than a notice, because it is the end of this screen's part
+  /// in the flow: the form is replaced by the sentence, so there is nothing
+  /// left to submit twice.
+  bool _resetAccepted = false;
+
   /// What the identity provider answered, if it answered.
   ///
   /// **An [AppNotice] rather than a `String?`, which is the model the seven
@@ -118,17 +173,20 @@ class _LoginScreenState extends State<LoginScreen> {
   /// text can be told apart from one that did. See [_handleInputChanged].
   String _seenEmail = '';
   String _seenPassword = '';
+  String _seenConfirmation = '';
 
   @override
   void initState() {
     super.initState();
     emailController.addListener(_handleInputChanged);
     passwordController.addListener(_handleInputChanged);
+    confirmController.addListener(_handleInputChanged);
     // The keypad follows the focus. `PillInput` did this from inside itself;
     // `AppTextField` knows nothing about an on-screen keyboard and should not,
     // so the two listeners that did it move up here with the controller.
     emailFocus.addListener(_handleEmailFocus);
     passwordFocus.addListener(_handlePasswordFocus);
+    confirmFocus.addListener(_handleConfirmFocus);
     // Focus email field by default
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -140,12 +198,16 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     emailController.removeListener(_handleInputChanged);
     passwordController.removeListener(_handleInputChanged);
+    confirmController.removeListener(_handleInputChanged);
     emailFocus.removeListener(_handleEmailFocus);
     passwordFocus.removeListener(_handlePasswordFocus);
+    confirmFocus.removeListener(_handleConfirmFocus);
     emailController.dispose();
     passwordController.dispose();
+    confirmController.dispose();
     emailFocus.dispose();
     passwordFocus.dispose();
+    confirmFocus.dispose();
     super.dispose();
   }
 
@@ -153,6 +215,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handlePasswordFocus() =>
       _attachKeypad(passwordController, passwordFocus);
+
+  void _handleConfirmFocus() => _attachKeypad(confirmController, confirmFocus);
 
   /// Points the on-screen keypad at the field that has just taken the focus.
   void _attachKeypad(TextEditingController controller, FocusNode node) {
@@ -169,17 +233,166 @@ class _LoginScreenState extends State<LoginScreen> {
   void _handleInputChanged() {
     final email = emailController.text;
     final password = passwordController.text;
-    if (email == _seenEmail && password == _seenPassword) return;
+    final confirmation = confirmController.text;
+    if (email == _seenEmail &&
+        password == _seenPassword &&
+        confirmation == _seenConfirmation) {
+      return;
+    }
     _seenEmail = email;
     _seenPassword = password;
-    if (_notice == null && _defect == null) return;
+    _seenConfirmation = confirmation;
+    if (_notice == null && _defect == null && _registrationDefect == null) {
+      return;
+    }
     setState(() {
       _notice = null;
       _defect = null;
+      _registrationDefect = null;
     });
   }
 
-  Future<void> _submit() async {
+  /// Moves to another mode, keeping the address and dropping everything else.
+  ///
+  /// **The address survives and the passwords do not.** Somebody who has just
+  /// been told an account already uses that address is about to sign in with
+  /// it, and somebody who cannot remember a password is about to ask for a
+  /// reset for the same address - so retyping it is the one thing this
+  /// transition should never ask for. A password carried across modes, by
+  /// contrast, would be a credential typed for one purpose reused for another.
+  void _changeMode(LoginMode mode) {
+    if (isLoading) return;
+    setState(() {
+      _mode = mode;
+      _notice = null;
+      _defect = null;
+      _registrationDefect = null;
+      _resetAccepted = false;
+      passwordController.clear();
+      confirmController.clear();
+      _seenPassword = '';
+      _seenConfirmation = '';
+      _passwordHidden = true;
+    });
+  }
+
+  /// Dispatches to whichever of the three this screen is doing.
+  Future<void> _submit() => switch (_mode) {
+    LoginMode.signIn => _submitSignIn(),
+    LoginMode.register => _submitRegistration(),
+    LoginMode.resetPassword => _submitPasswordReset(),
+  };
+
+  /// Creates the account, which leaves it signed in.
+  ///
+  /// The routing shell then takes over exactly as it does after a sign-in: it
+  /// finds an identity with no memberships and draws the business selector,
+  /// where `AccountVerificationPanel` and `TenantRequestForm` already live. So
+  /// nothing here navigates - the next step is somewhere this screen has never
+  /// needed to know about.
+  Future<void> _submitRegistration() async {
+    if (isLoading) return;
+
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+    final confirmation = confirmController.text;
+
+    final defect = registrationInputDefect(
+      email: email,
+      password: password,
+      confirmation: confirmation,
+    );
+    if (defect != null) {
+      setState(() {
+        _registrationDefect = defect;
+        _notice = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _registrationDefect = null;
+      _notice = null;
+      isLoading = true;
+    });
+
+    try {
+      await _registration.call(email: email, password: password);
+      // Deliberately still loading, for the reason sign-in gives: the shell
+      // replaces this screen once the session opens, and releasing the button
+      // first offers a second account against one that is already being made.
+      return;
+    } catch (error, stackTrace) {
+      if (mounted) {
+        final failure = registrationFailure(error);
+        setState(() {
+          // Reusing sign-in's notice mapping rather than writing a second one:
+          // `RegistrationFailure` carries `SignInFailureKind` for exactly this
+          // reason, so a refusal and an unreachable server are drawn the same
+          // way on both halves of this screen.
+          _notice = _noticeFor(
+            SignInFailure(kind: failure.kind, message: failure.message),
+          );
+          isLoading = false;
+        });
+      }
+      await Sentry.captureException(error, stackTrace: stackTrace);
+    }
+  }
+
+  /// Asks the server to send a reset link.
+  ///
+  /// **The accepted state says nothing about whether an account exists**, and
+  /// cannot: `requestPasswordReset` answers identically either way so that it
+  /// cannot be used to discover who has one. See `password_reset.dart`.
+  Future<void> _submitPasswordReset() async {
+    if (isLoading) return;
+
+    final email = emailController.text.trim();
+    final defect = passwordResetInputDefect(email: email);
+    if (defect != null) {
+      setState(() {
+        _defect = SignInInputDefect.missingEmail;
+        _notice = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _defect = null;
+      _notice = null;
+      isLoading = true;
+    });
+
+    try {
+      final gateway = _passwordReset;
+      await gateway.submit(gateway.createIntent(email: email));
+      if (mounted) {
+        setState(() {
+          _resetAccepted = true;
+          isLoading = false;
+        });
+      }
+    } catch (error, stackTrace) {
+      if (mounted) {
+        final failure = passwordResetFailure(error);
+        setState(() {
+          _notice = switch (failure.kind) {
+            PasswordResetFailureKind.refused => AppNotice.refused(
+              failure.message,
+            ),
+            PasswordResetFailureKind.unreachable => AppNotice.offline(
+              failure.message,
+            ),
+          };
+          isLoading = false;
+        });
+      }
+      await Sentry.captureException(error, stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> _submitSignIn() async {
     if (isLoading) return; // Prevent multiple clicks
 
     final email = emailController.text.trim();
@@ -295,7 +508,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Semantics(
                 header: true,
                 child: Text(
-                  'Welcome back',
+                  _heading,
                   style: tokens.typography.display.copyWith(
                     color: tokens.colors.text.primary,
                   ),
@@ -303,7 +516,8 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               SizedBox(height: tokens.spacing.s8),
               Text(
-                'Sign in to your account.',
+                _subheading,
+                key: const ValueKey('login-subheading'),
                 style: tokens.typography.bodyLarge.copyWith(
                   color: tokens.colors.text.secondary,
                 ),
@@ -323,26 +537,56 @@ class _LoginScreenState extends State<LoginScreen> {
                 error: _errorFor(SignInInputDefect.missingEmail),
                 errorKey: const ValueKey('login-email-error'),
               ),
-              SizedBox(height: tokens.spacing.s24),
-              _PillField(
-                key: const ValueKey('login-password'),
-                label: 'PASSWORD',
-                leading: Icons.lock_outline,
-                placeholder: '********',
-                controller: passwordController,
-                focusNode: passwordFocus,
-                obscureText: _passwordHidden,
-                obscuringCharacter: '*',
-                autocorrect: false,
-                enableSuggestions: false,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _submit(),
-                error: _errorFor(SignInInputDefect.missingPassword),
-                errorKey: const ValueKey('login-password-error'),
-                trailing: _revealToggle(tokens),
-              ),
-              SizedBox(height: tokens.spacing.s16),
-              _rememberRow(tokens),
+              if (_mode != LoginMode.resetPassword) ...<Widget>[
+                SizedBox(height: tokens.spacing.s24),
+                _PillField(
+                  key: const ValueKey('login-password'),
+                  label: _mode == LoginMode.register
+                      ? 'CHOOSE A PASSWORD'
+                      : 'PASSWORD',
+                  leading: Icons.lock_outline,
+                  placeholder: '********',
+                  controller: passwordController,
+                  focusNode: passwordFocus,
+                  obscureText: _passwordHidden,
+                  obscuringCharacter: '*',
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  textInputAction: _mode == LoginMode.register
+                      ? TextInputAction.next
+                      : TextInputAction.done,
+                  onSubmitted: (_) => _submit(),
+                  error: _passwordError,
+                  errorKey: const ValueKey('login-password-error'),
+                  trailing: _revealToggle(tokens),
+                ),
+              ],
+              if (_mode == LoginMode.register) ...<Widget>[
+                SizedBox(height: tokens.spacing.s24),
+                _PillField(
+                  key: const ValueKey('login-confirm'),
+                  label: 'TYPE IT AGAIN',
+                  leading: Icons.lock_outline,
+                  placeholder: '********',
+                  controller: confirmController,
+                  focusNode: confirmFocus,
+                  // Follows the reveal toggle above it: the field exists to
+                  // catch a typo in something nobody can read, and revealing
+                  // one half while hiding the other would defeat it.
+                  obscureText: _passwordHidden,
+                  obscuringCharacter: '*',
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _submit(),
+                  error: _confirmationError,
+                  errorKey: const ValueKey('login-confirm-error'),
+                ),
+              ],
+              if (_mode == LoginMode.signIn) ...<Widget>[
+                SizedBox(height: tokens.spacing.s16),
+                _rememberRow(tokens),
+              ],
               if (_notice case final answer?) ...<Widget>[
                 SizedBox(height: tokens.spacing.s16),
                 Callout(
@@ -351,14 +595,28 @@ class _LoginScreenState extends State<LoginScreen> {
                   message: answer.message,
                 ),
               ],
+              if (_resetAccepted) ...<Widget>[
+                SizedBox(height: tokens.spacing.s16),
+                Callout(
+                  key: const ValueKey('login-reset-accepted'),
+                  status: AppStatus.ok,
+                  message: passwordResetAcceptedMessage,
+                ),
+              ],
               SizedBox(height: tokens.spacing.s32),
-              _PillSubmitButton(
-                key: const ValueKey('login-submit'),
-                label: 'Sign in',
-                loading: isLoading,
-                onPressed: _submit,
-                tokens: tokens,
-              ),
+              // The one submit is hidden once a reset has been accepted: there
+              // is nothing left to ask for, and a live button beside "a link is
+              // on its way" invites a second request the server would throttle.
+              if (!_resetAccepted)
+                _PillSubmitButton(
+                  key: const ValueKey('login-submit'),
+                  label: _submitLabel,
+                  loading: isLoading,
+                  onPressed: _submit,
+                  tokens: tokens,
+                ),
+              SizedBox(height: tokens.spacing.s24),
+              ..._modeLinks(tokens),
             ],
           ),
         ),
@@ -369,6 +627,85 @@ class _LoginScreenState extends State<LoginScreen> {
   /// The error line under a field, where this screen refused that field.
   String? _errorFor(SignInInputDefect defect) =>
       _defect == defect ? signInInputDefectMessage(defect) : null;
+
+  /// The heading, which names what this screen is about to do.
+  String get _heading => switch (_mode) {
+    LoginMode.signIn => 'Welcome back',
+    LoginMode.register => 'Create an account',
+    LoginMode.resetPassword => 'Forgotten password',
+  };
+
+  String get _subheading => switch (_mode) {
+    LoginMode.signIn => 'Sign in to your account.',
+    LoginMode.register =>
+      'Create an account, then ask for a business to trade under.',
+    LoginMode.resetPassword =>
+      'Enter the address for the account and a link to set a new password '
+          'will be sent to it.',
+  };
+
+  String get _submitLabel => switch (_mode) {
+    LoginMode.signIn => 'Sign in',
+    LoginMode.register => 'Create account',
+    LoginMode.resetPassword => 'Send the link',
+  };
+
+  /// The error under the password field, from whichever check owns this mode.
+  String? get _passwordError => switch (_mode) {
+    LoginMode.register => _registrationErrorFor(<RegistrationInputDefect>[
+      RegistrationInputDefect.missingPassword,
+      RegistrationInputDefect.passwordTooShort,
+    ]),
+    _ => _errorFor(SignInInputDefect.missingPassword),
+  };
+
+  /// The error under the confirmation field.
+  String? get _confirmationError =>
+      _registrationErrorFor(<RegistrationInputDefect>[
+        RegistrationInputDefect.missingConfirmation,
+        // Drawn under the second field rather than the first: it is the second
+        // one that is wrong, because the first is what it is being checked
+        // against.
+        RegistrationInputDefect.confirmationMismatch,
+      ]);
+
+  String? _registrationErrorFor(List<RegistrationInputDefect> defects) {
+    final defect = _registrationDefect;
+    return defect != null && defects.contains(defect)
+        ? registrationInputDefectMessage(defect)
+        : null;
+  }
+
+  /// The ways out of this mode, under the submit.
+  ///
+  /// **Buttons, not sentences with a tappable word in them.** §9 makes a tap
+  /// target 48 high pass/fail, and a link inside a paragraph is neither 48 high
+  /// nor separately focusable. `AppButtonTier.tertiary` is the quiet tier, so
+  /// they read as secondary to the submit above without being hard to hit.
+  List<Widget> _modeLinks(AppTokens tokens) => switch (_mode) {
+    LoginMode.signIn => <Widget>[
+      _ModeLink(
+        key: const ValueKey('login-go-reset'),
+        label: 'I have forgotten my password',
+        onPressed: isLoading
+            ? null
+            : () => _changeMode(LoginMode.resetPassword),
+      ),
+      SizedBox(height: tokens.spacing.s8),
+      _ModeLink(
+        key: const ValueKey('login-go-register'),
+        label: 'Create an account',
+        onPressed: isLoading ? null : () => _changeMode(LoginMode.register),
+      ),
+    ],
+    LoginMode.register || LoginMode.resetPassword => <Widget>[
+      _ModeLink(
+        key: const ValueKey('login-go-sign-in'),
+        label: 'Back to sign in',
+        onPressed: isLoading ? null : () => _changeMode(LoginMode.signIn),
+      ),
+    ],
+  };
 
   /// The reveal toggle inside the password well.
   Widget _revealToggle(AppTokens tokens) => PressSurface(
@@ -723,3 +1060,23 @@ AppNotice _noticeFor(SignInFailure failure) => switch (failure.kind) {
   // was: the request never arrived.
   SignInFailureKind.unreachable => AppNotice.offline(failure.message),
 };
+
+
+/// One quiet route out of the current mode.
+///
+/// A real button rather than a tappable word inside a sentence: §9 makes the
+/// 48-high tap target pass/fail, and a `TextSpan` recognizer is neither that
+/// tall nor separately reachable by a keyboard or a screen reader.
+final class _ModeLink extends StatelessWidget {
+  const _ModeLink({super.key, required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => AppButton(
+    label: label,
+    tier: AppButtonTier.tertiary,
+    onPressed: onPressed,
+  );
+}

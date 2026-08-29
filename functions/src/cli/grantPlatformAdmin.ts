@@ -27,6 +27,12 @@ grant-platform-admin --environment ENV --project-id PROJECT \\
 
 ENV must be dev, staging, or prod and PROJECT must exactly match the source-
 controlled allowlist. Production additionally requires --confirm-production.
+
+--bootstrap grants the very first platform administrator, which the ordinary
+form cannot do: it requires an --actor-uid who is already one. It takes no
+actor - pass every other argument as usual - and it is refused outright if any
+platform administrator already exists, so it can be run once per project and
+stops working the moment it has succeeded.
 The emulator environment is reserved for the fixed localhost integration test.
 
 Run from functions/ after building, using Application Default Credentials that
@@ -55,7 +61,8 @@ export interface ExecutePlatformAdminGrantDependencies {
 
 export type PlatformGrantOperatorErrorCode =
   | "operator-unauthorized"
-  | "operator-verification-failed";
+  | "operator-verification-failed"
+  | "bootstrap-not-eligible";
 
 export class PlatformGrantOperatorError extends Error {
   constructor(
@@ -63,9 +70,12 @@ export class PlatformGrantOperatorError extends Error {
     readonly recoverable: boolean,
     readonly underlyingError?: unknown
   ) {
-    super(code === "operator-unauthorized" ?
-      "The authenticated operator is not an active platform administrator." :
-      "The operator authorization state could not be verified."
+    super(
+      code === "operator-unauthorized" ?
+        "The authenticated operator is not an active platform administrator." :
+        code === "bootstrap-not-eligible" ?
+          "A platform administrator already exists, so --bootstrap is refused." :
+          "The operator authorization state could not be verified."
     );
     this.name = "PlatformGrantOperatorError";
   }
@@ -156,6 +166,15 @@ export function parsePlatformAdminGrantCliArgs(
       index += 1;
       continue;
     }
+    if (argument === "--bootstrap") {
+      if (switches.has(argument)) {
+        throw new PlatformGrantCliInputError(
+          "--bootstrap was supplied more than once."
+        );
+      }
+      switches.add(argument);
+      continue;
+    }
     if (argument === "--confirm-production") {
       if (switches.has(argument)) {
         throw new PlatformGrantCliInputError(
@@ -195,15 +214,25 @@ export function parsePlatformAdminGrantCliArgs(
     );
   }
 
-  const actorUid = requireDocumentId(
-    requiredValue(values, "--actor-uid"),
-    "--actor-uid"
-  );
+  const bootstrap = switches.has("--bootstrap");
   const targetUid = requireDocumentId(
     requiredValue(values, "--target-uid"),
     "--target-uid"
   );
-  if (actorUid === targetUid) {
+  if (bootstrap && values.has("--actor-uid")) {
+    throw new PlatformGrantCliInputError(
+      "--actor-uid is not accepted with --bootstrap: a bootstrap has no operator."
+    );
+  }
+  // **The bootstrap records the target as its own actor.** There is nobody else
+  // to name, and leaving the field out would put a hole in an audit trail whose
+  // whole purpose is to say who did what. The `bootstrap: true` beside it is
+  // what tells this apart from a self-grant by a sitting administrator, which
+  // the ordinary form still refuses.
+  const actorUid = bootstrap
+    ? targetUid
+    : requireDocumentId(requiredValue(values, "--actor-uid"), "--actor-uid");
+  if (!bootstrap && actorUid === targetUid) {
     throw new PlatformGrantCliInputError(
       "--actor-uid and --target-uid must identify different users."
     );
@@ -226,6 +255,7 @@ export function parsePlatformAdminGrantCliArgs(
       targetUid,
       requestId,
       reason: normalizeReason(requiredValue(values, "--reason")),
+      ...(bootstrap ? {bootstrap: true} : {}),
     },
   };
 }
@@ -278,11 +308,62 @@ export async function requirePlatformGrantOperator(
   }
 }
 
+/**
+ * Refuses a bootstrap once the project has a platform administrator.
+ *
+ * **This is the whole safety argument for `--bootstrap`.** The ordinary form
+ * proves the caller is already an administrator; the bootstrap cannot, because
+ * on a fresh project there is nobody to be one. What it proves instead is that
+ * the privilege it is about to create does not exist yet - so the command works
+ * exactly once per project and refuses itself from then on.
+ *
+ * **The target is excluded from both checks, so a failed bootstrap can be
+ * retried.** `grantPlatformAdmin` is a resumable saga: a bootstrap that fails
+ * after acquiring the transition leaves the target mid-grant, and the documented
+ * recovery is to re-run with the same request ID. Counting the target's own
+ * half-finished state as "an administrator already exists" would make that
+ * recovery impossible and strand the project with no administrator at all.
+ */
+export async function requireBootstrapEligible(
+  dependencies: ExecutePlatformAdminGrantDependencies,
+  targetUid: string
+): Promise<void> {
+  try {
+    const [admins, granting] = await Promise.all([
+      dependencies.db
+        .collection("users")
+        .where("accountType", "==", "platform_admin")
+        .limit(2)
+        .get(),
+      dependencies.db
+        .collection("users")
+        .where("identityTransition", "==", "granting_platform")
+        .limit(2)
+        .get(),
+    ]);
+    const other = [...admins.docs, ...granting.docs].some(
+      (document) => document.id !== targetUid
+    );
+    if (other) throw new PlatformGrantOperatorError("bootstrap-not-eligible", false);
+  } catch (error) {
+    if (error instanceof PlatformGrantOperatorError) throw error;
+    throw new PlatformGrantOperatorError(
+      "operator-verification-failed",
+      true,
+      error
+    );
+  }
+}
+
 export async function executePlatformAdminGrant(
   dependencies: ExecutePlatformAdminGrantDependencies,
   input: GrantPlatformAdminInput
 ): Promise<GrantPlatformAdminResult> {
-  await requirePlatformGrantOperator(dependencies, input.actorUid);
+  if (input.bootstrap) {
+    await requireBootstrapEligible(dependencies, input.targetUid);
+  } else {
+    await requirePlatformGrantOperator(dependencies, input.actorUid);
+  }
   return grantPlatformAdmin(dependencies, input);
 }
 

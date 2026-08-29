@@ -1,3 +1,4 @@
+export 'account_registration.dart';
 export 'account_verification.dart';
 export 'email_delivery_status.dart';
 export 'tenant_access.dart';
@@ -14,6 +15,7 @@ export 'platform_tenant_review.dart';
 export 'platform_tenant_lifecycle.dart';
 export 'platform_tenant_archival.dart';
 export 'platform_global_user_status.dart';
+export 'password_reset.dart';
 export 'sign_in.dart';
 export 'tenant_id.dart';
 export 'tenant_invitation_acceptance.dart';

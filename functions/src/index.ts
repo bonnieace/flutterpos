@@ -2,6 +2,10 @@ import {getApps, initializeApp} from "firebase-admin/app";
 
 if (getApps().length === 0) initializeApp();
 
+// Runs inside account creation, so an Auth identity cannot exist without the
+// canonical root document `requestTenant` requires of every applicant.
+export {bootstrapSelfSignupIdentity} from "./auth/identityBootstrap";
+
 export {requestTenant} from "./tenants/onboarding";
 export {listMyTenants, setDefaultTenant} from "./tenants/routing";
 

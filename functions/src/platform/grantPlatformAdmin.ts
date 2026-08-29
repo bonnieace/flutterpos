@@ -31,6 +31,16 @@ export interface GrantPlatformAdminInput {
   actorUid: string;
   requestId: string;
   reason: string;
+  /**
+   * Whether this grant is the break-glass bootstrap of the very first platform
+   * administrator, which has no operator to act on its behalf.
+   *
+   * Recorded in the audit trail so a bootstrapped administrator is
+   * distinguishable from one an operator granted. It authorizes nothing: the
+   * refusal that makes this safe - that no platform administrator may already
+   * exist - is made by `requireBootstrapEligible` before the saga is entered.
+   */
+  bootstrap?: boolean;
 }
 
 export interface GrantPlatformAdminResult {
@@ -234,6 +244,7 @@ export async function grantPlatformAdmin(
         status: "transition_acquired",
         targetUid: input.targetUid,
         actorUid: input.actorUid,
+        ...(input.bootstrap ? {bootstrap: true} : {}),
         requestId: input.requestId,
         reason: input.reason,
         createdAt: transitionTimestamp,
