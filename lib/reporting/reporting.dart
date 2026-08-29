@@ -1,5 +1,7 @@
 export 'daily_metrics.dart';
 export 'daily_metrics_panel.dart';
+export 'monthly_report.dart';
+export 'monthly_report_panel.dart';
 export 'net_profit.dart';
 export 'profit_report.dart';
 export 'profit_statement.dart';
@@ -12,6 +14,7 @@ export 'reconciliation_run_panel.dart';
 export 'reconciliation_status.dart';
 export 'reconciliation_status_panel.dart';
 export 'reporting_currency.dart';
+export 'reports_hub_panel.dart';
 export 'sales_totals.dart';
 export 'sales_totals_choosers.dart';
 export 'sales_totals_panel.dart';

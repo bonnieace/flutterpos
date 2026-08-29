@@ -502,26 +502,74 @@ class SpiritPOSApp extends StatelessWidget {
           return token.claims?['platformRole'] == 'superAdmin';
         },
         tenantDataReader: tenantDataReader,
-        // The reconciled totals, and - one day at a time - why each day is in
-        // the state it is. The explanation is reached from the summary itself
-        // rather than from the landing screen, because that is where a manager
-        // already asks whether a day is reconciled.
-        // **The old app's weekly Reports & Analytics page**, which replaced the
-        // daily summary on this slot on 2026-08-27: those figures are the whole
-        // subject of the Sales route, and the week-against-week comparison is
-        // the reading this product did not otherwise have.
-        dailySummaryRoute: (reader) => TenantWeeklyReportScreen(
-          reader: reader,
-          callable: salesTotalsCallable,
-          // The sale-line roll-up behind *Top selling items* and *Recent
-          // transactions* needs the history reader, which the plain
-          // constructor cannot reach.
-          salesRepositoryFactory: (session) => TenantSaleHistoryRepository(
-            session: session,
+        // **The hub, restored 2026-08-29.** This slot held the daily summary,
+        // then the weekly report from 2026-08-27 - and a slot that can only
+        // name one report is why the other five had no entrance. The old app
+        // reached its reports through a hub and this does again, so the daily
+        // summary keeps the reconciliation chain it always declared while the
+        // week sits beside it rather than in its place.
+        dailySummaryRoute: (reader) => TenantReportsHubScreen(
+          // The reconciled totals, and - one day at a time - why each day is in
+          // the state it is. The explanation is reached from the summary itself
+          // rather than from the hub, because that is where a manager already
+          // asks whether a day is reconciled.
+          dailySummaryRoute: () => TenantDailySummaryScreen(
             reader: reader,
-            reportReader: tenantDataReader,
+            reconciliationRoute: (businessDate) =>
+                TenantReconciliationStatusScreen(
+                  reader: reader,
+                  businessDate: businessDate,
+                  actions: reconciliationActions,
+                ),
+            reconciliationRoles:
+                TenantReconciliationStatusRepository.allowedRoles,
+            // Reached from the summary rather than the hub for the same reason:
+            // the summary is where somebody learns that today has no reconciled
+            // figures yet, and this is the answer to that.
+            salesTotalsRoute: () => TenantSalesTotalsScreen(
+              callable: salesTotalsCallable,
+              reader: reader,
+            ),
+            salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
           ),
+          dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
+          // **The old app's weekly Reports & Analytics page**: the
+          // week-against-week comparison is the reading this product did not
+          // otherwise have.
+          weeklyReportRoute: () => TenantWeeklyReportScreen(
+            reader: reader,
+            callable: salesTotalsCallable,
+            // The sale-line roll-up behind *Top selling items* and *Recent
+            // transactions* needs the history reader, which the plain
+            // constructor cannot reach.
+            salesRepositoryFactory: (session) => TenantSaleHistoryRepository(
+              session: session,
+              reader: reader,
+              reportReader: tenantDataReader,
+            ),
+          ),
+          weeklyReportRoles: TenantSalesTotalsGateway.allowedRoles,
+          // A calendar month, which nothing else in this product can name: every
+          // standing period ends today, so once August began nothing could be
+          // asked how July went. Two range requests rather than the weekly
+          // report's one-per-day, which a month cannot afford.
+          monthlyReportRoute: () => TenantMonthlyReportScreen(
+            reader: reader,
+            callable: salesTotalsCallable,
+          ),
+          monthlyReportRoles: TenantSalesTotalsGateway.allowedRoles,
+          // The same screen the summary opens, reached directly as well: it is
+          // the only surface that can total *today*, and the summary it used to
+          // sit behind is normally blank for today by design.
+          salesTotalsRoute: () => TenantSalesTotalsScreen(
+            callable: salesTotalsCallable,
+            reader: reader,
+          ),
+          salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
         ),
+        // The hub itself is offered to whoever may read any report on it. Every
+        // card then re-asks the question with its own domain's list, so a role
+        // that reaches the hub still sees only the reports it may read.
         dailySummaryRoles: TenantSalesTotalsGateway.allowedRoles,
         expensesRoute: (reader) =>
             TenantExpensesScreen(reader: reader, writer: expenseWriter),
