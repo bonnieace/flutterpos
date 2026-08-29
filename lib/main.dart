@@ -722,6 +722,10 @@ class SpiritPOSApp extends StatelessWidget {
         // The name and the receipt header, which nothing in this product could
         // write until now: `TenantBrandingRepository` has always read
         // `configuration/branding` and it was seeded by hand.
+        // Reads the catalog cache this device already keeps for the till, so
+        // the home can say what a new business still has to do without costing
+        // it a Firestore read.
+        setupChecklist: TenantSetupChecklist(cache: checkoutCatalogCache),
         brandingRoute: (reader) => TenantBrandingScreen(
           reader: reader,
           writer: FirebaseTenantConfigurationDocumentWriter(

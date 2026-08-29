@@ -29,6 +29,7 @@ export 'tenant_route_guard.dart';
 export 'tenant_routing_shell.dart';
 export 'tenant_selection.dart';
 export 'tenant_session.dart';
+export 'tenant_setup_checklist.dart';
 export 'tenant_standing_banner.dart';
 export 'tenant_session_controller.dart';
 export 'tenant_staff_directory.dart';
