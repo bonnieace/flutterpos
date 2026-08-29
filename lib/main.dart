@@ -30,26 +30,45 @@ import 'ui/tokens.dart';
 Future<void> main() async {
   await SentryFlutter.init(
     (options) {
-      if (!firebaseEmulatorsRequested) {
+      // **Off in release, decided 2026-08-29 for the first live deployment.**
+      // The collector is reached over cleartext `http://`, which Android has
+      // blocked by default since API 28 and which the release manifest merges
+      // no `network_security_config` to permit - so release crash reporting was
+      // already dead. What made that worth acting on rather than leaving is
+      // what it would have done had it worked: `maskAllText` and
+      // `maskAllImages` were both off with session replay at 1.0, on a till, so
+      // every customer name, line item and figure on screen would have been
+      // recorded and sent to that host in the clear.
+      //
+      // A till trades without a crash reporter more safely than it trades with
+      // one that leaks. This comes back when the collector has TLS.
+      //
+      // **The empty string is what disables Sentry; leaving the DSN unset does
+      // not.** `SentryFlutter.init` throws `Invalid argument(s): DSN is
+      // required.` on a null DSN, and it throws it *before* `appRunner`, so the
+      // app never reaches its first frame: a device run against the emulators
+      // used to stop on the splash screen with nothing on screen to say why. An
+      // empty DSN is the SDK's own documented "run disabled".
+      //
+      // An emulator run is disabled for its own separate reason, unchanged: the
+      // events would be a developer's local noise, and the transport cannot
+      // reach the collector over cleartext from a handset anyway.
+      if (!kDebugMode || firebaseEmulatorsRequested) {
+        options.dsn = '';
+      } else {
         options.dsn =
             'http://f620ef1faeb840549bc58d8bb3d52ac5@glitchtip-oaeu77z41o045sbhwwdwngfk.5.189.157.23.sslip.io/1';
         options.tracesSampleRate = 1.0;
         options.profilesSampleRate = 1.0;
-        options.replay.sessionSampleRate = 1.0;
+        // **Masked even here.** A debug build is a developer's own machine, but
+        // this product's first live site runs on `multitenant-pos-b8326` - the
+        // same project a debug build points at - so what is on screen during a
+        // debug session can be a real shop's real customer. Replay is kept for
+        // errors only rather than for whole sessions.
+        options.replay.sessionSampleRate = 0.0;
         options.replay.onErrorSampleRate = 1.0;
-        options.privacy.maskAllImages = false;
-        options.privacy.maskAllText = false;
-      } else {
-        // **The empty string is what disables Sentry; leaving the DSN unset
-        // does not.** An emulator run has no crash reporter by design - the
-        // events would be a developer's own local noise, and the transport
-        // cannot reach the collector over cleartext from a handset anyway. But
-        // `SentryFlutter.init` throws `Invalid argument(s): DSN is required.`
-        // on a null DSN, and it throws it *before* `appRunner`, so the app
-        // never reached its first frame: a device run against the emulators
-        // stopped on the splash screen with nothing on screen to say why.
-        // An empty DSN is the SDK's own documented "run disabled".
-        options.dsn = '';
+        options.privacy.maskAllImages = true;
+        options.privacy.maskAllText = true;
       }
     },
     appRunner: () async {

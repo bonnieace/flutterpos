@@ -85,11 +85,13 @@ dependencies:
   dio: ^5.4.0
   firebase_storage: ^13.0.4
   syncfusion_flutter_pdf: ^31.2.18
-  http: any
+  # Pinned 2026-08-29: `any` let a transitive resolution decide the version a
+  # release build shipped, so two builds of the same commit could differ.
+  http: ^1.6.0
   audioplayers: ^5.2.1
   lottie: ^3.1.0
   flutter_esc_pos_network: ^1.0.3
-  flutter_esc_pos_utils: any
+  flutter_esc_pos_utils: ^1.0.1
   excel: ^4.0.6
   sentry_flutter: ^9.21.0
   
