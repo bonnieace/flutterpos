@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {HttpsError} from "firebase-functions/v2/https";
+import {TenantRecord} from "./model";
 import {
   assertPlatformAdminDocuments,
   assertTenantMemberDocuments,
   assertVerifiedTenantApplicant,
+  tenantSatisfiesAccessMode,
 } from "./authorization";
 
 function expectHttpsCode(expectedCode: string, callback: () => unknown): void {
@@ -144,4 +146,91 @@ test("a reactivated root rejects tokens minted before its auth cutoff", () => {
     1_000
   );
   assert.equal(fresh.uid, "user-1");
+});
+
+// ---------------------------------------------------------------------------
+// The provisional trading window
+// ---------------------------------------------------------------------------
+
+const HOUR = 60 * 60 * 1000;
+const NOW = Date.UTC(2026, 7, 29, 9);
+
+function tenantAt(status: string, provisionalUntil?: number) {
+  return {
+    name: "Shop",
+    slug: "shop",
+    status,
+    ownerUid: "owner",
+    ...(provisionalUntil === undefined ?
+      {} :
+      {provisionalUntil: {toMillis: () => provisionalUntil}}),
+  } as TenantRecord;
+}
+
+test("an approved business satisfies every mode", () => {
+  for (const mode of ["approved", "trading", "reading"] as const) {
+    assert.equal(
+      tenantSatisfiesAccessMode(tenantAt("active"), mode, NOW),
+      true,
+      mode
+    );
+  }
+});
+
+test("a request inside its window may trade but is not approved", () => {
+  const tenant = tenantAt("pending", NOW + HOUR);
+
+  assert.equal(tenantSatisfiesAccessMode(tenant, "trading", NOW), true);
+  assert.equal(tenantSatisfiesAccessMode(tenant, "reading", NOW), true);
+  // Provisioning an identity and mailing a stranger outlive the window.
+  assert.equal(tenantSatisfiesAccessMode(tenant, "approved", NOW), false);
+});
+
+test("a lapsed request may be read and not written", () => {
+  // The whole point of the read-only tail: a week of real trading does not
+  // become unreachable to the shop that did it.
+  const tenant = tenantAt("pending", NOW - HOUR);
+
+  assert.equal(tenantSatisfiesAccessMode(tenant, "reading", NOW), true);
+  assert.equal(tenantSatisfiesAccessMode(tenant, "trading", NOW), false);
+  assert.equal(tenantSatisfiesAccessMode(tenant, "approved", NOW), false);
+});
+
+test("the window shuts at the instant it names, not after it", () => {
+  const tenant = tenantAt("pending", NOW);
+
+  assert.equal(tenantSatisfiesAccessMode(tenant, "trading", NOW - 1), true);
+  assert.equal(tenantSatisfiesAccessMode(tenant, "trading", NOW), false);
+});
+
+test("a pending tenant with no window reads as lapsed, never as open", () => {
+  // Every tenant requested before this field existed, and every tenant seeded
+  // by hand. Trading must be the thing they cannot do.
+  const tenant = tenantAt("pending");
+
+  assert.equal(tenantSatisfiesAccessMode(tenant, "trading", NOW), false);
+  assert.equal(tenantSatisfiesAccessMode(tenant, "reading", NOW), true);
+});
+
+test("rejection, suspension and archival are dark in every mode", () => {
+  // A rejection is a decision about the business rather than a deadline it
+  // missed, so it keeps no read-only tail.
+  for (const status of ["rejected", "suspended", "archived"]) {
+    for (const mode of ["approved", "trading", "reading"] as const) {
+      assert.equal(
+        tenantSatisfiesAccessMode(tenantAt(status, NOW + HOUR), mode, NOW),
+        false,
+        `${status}/${mode}`
+      );
+    }
+  }
+});
+
+test("a provisional window cannot resurrect a rejected business", () => {
+  // `setTenantLifecycle` moves pending -> rejected without clearing the field,
+  // so the status check has to come first. It does.
+  assert.equal(
+    tenantSatisfiesAccessMode(tenantAt("rejected", NOW + HOUR), "trading", NOW),
+    false
+  );
 });

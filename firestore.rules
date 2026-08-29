@@ -38,14 +38,47 @@ service cloud.firestore {
         && get(rootUserPath(request.auth.uid)).data.accountType == 'tenant_user';
     }
 
-    function activeTenant(tenantId) {
-      return exists(tenantPath(tenantId))
-        && get(tenantPath(tenantId)).data.status == 'active';
+    // **A business that may be traded in.** Approved, or a self-serve request
+    // still inside the provisional window `requestTenant` opened for it.
+    //
+    // **The window is enforced here and needs no scheduled job**: it is a
+    // comparison against `request.time`, so it shuts by itself at the instant
+    // it names. A sweep exists to make the lapse *visible*, not to cause it.
+    //
+    // `provisionalUntil` is type-checked rather than assumed. A pending tenant
+    // written before this field existed has none, and must read as lapsed
+    // rather than as permanently trading.
+    function tradingTenant(tenantId) {
+      return exists(tenantPath(tenantId)) && (
+        get(tenantPath(tenantId)).data.status == 'active'
+        || (
+          get(tenantPath(tenantId)).data.status == 'pending'
+          && get(tenantPath(tenantId)).data.provisionalUntil is timestamp
+          && request.time < get(tenantPath(tenantId)).data.provisionalUntil
+        )
+      );
     }
 
-    function activeStaff(tenantId) {
+    // **A business whose records may be read.** Everything [tradingTenant]
+    // allows, plus a pending business whose window has shut.
+    //
+    // **Why a lapsed request keeps its reads.** A provisional week is real
+    // trading: real sales, real cash counted at close, and receipts customers
+    // are holding. Taking the records away at the stroke of the deadline would
+    // leave a shopkeeper unable to reconcile against paper they printed
+    // themselves. They cannot trade; they can still see what they did.
+    //
+    // `rejected`, `suspended` and `archived` are deliberately absent. A
+    // rejection is a decision about the business rather than a deadline it
+    // missed, and it goes dark exactly as it does today.
+    function readableTenant(tenantId) {
+      return exists(tenantPath(tenantId))
+        && get(tenantPath(tenantId)).data.status in ['active', 'pending'];
+    }
+
+    // The membership half of both gates, factored out so the two cannot drift.
+    function staffStanding(tenantId) {
       return tenantIdentity()
-        && activeTenant(tenantId)
         && exists(staffPath(tenantId, request.auth.uid))
         && get(staffPath(tenantId, request.auth.uid)).data.uid == request.auth.uid
         && get(staffPath(tenantId, request.auth.uid)).data.status == 'active'
@@ -57,12 +90,36 @@ service cloud.firestore {
         );
     }
 
+    // **May write.** Unchanged in meaning from before the provisional window
+    // existed - it is still "this member may act on this business" - and every
+    // write rule in this file still asks it. Only the set of tenant statuses it
+    // accepts grew.
+    function activeStaff(tenantId) {
+      return staffStanding(tenantId) && tradingTenant(tenantId);
+    }
+
+    // **May read.** Asked by the read rules only.
+    //
+    // **The split is deliberately fail-closed.** A read rule that was missed
+    // when this was introduced keeps asking [activeStaff] and simply denies a
+    // lapsed member one collection; a *write* rule that was missed would let a
+    // lapsed member write. So the widened predicate is the one that had to be
+    // opt-in, and it is.
+    function readingStaff(tenantId) {
+      return staffStanding(tenantId) && readableTenant(tenantId);
+    }
+
     function tenantRole(tenantId) {
       return get(staffPath(tenantId, request.auth.uid)).data.role;
     }
 
     function hasTenantRole(tenantId, roles) {
       return activeStaff(tenantId) && tenantRole(tenantId) in roles;
+    }
+
+    /// [hasTenantRole]'s read-side twin. See [readingStaff].
+    function hasReadingRole(tenantId, roles) {
+      return readingStaff(tenantId) && tenantRole(tenantId) in roles;
     }
 
     function platformAdmin() {
@@ -206,7 +263,7 @@ service cloud.firestore {
     // always the one its own path encodes; the client re-proves that path
     // anyway before showing a row.
     match /{ledgerPath=**}/stock_movements/{movementId} {
-      allow list: if hasTenantRole(
+      allow list: if hasReadingRole(
         resource.data.tenantId,
         ['owner', 'admin', 'manager']
       );
@@ -233,7 +290,7 @@ service cloud.firestore {
     }
 
     match /tenants/{tenantId} {
-      allow read: if activeStaff(tenantId) || platformAdmin();
+      allow read: if readingStaff(tenantId) || platformAdmin();
       allow write: if false;
 
       // A canonical staff record carries the member's email and phone number,
@@ -247,7 +304,7 @@ service cloud.firestore {
       match /staff/{uid} {
         allow read: if platformAdmin()
           || (
-            activeStaff(tenantId)
+            readingStaff(tenantId)
             && (
               uid == request.auth.uid
               || tenantRole(tenantId) in ['owner', 'admin', 'manager']
@@ -261,7 +318,7 @@ service cloud.firestore {
       }
 
       match /products/{productId} {
-        allow read: if activeStaff(tenantId);
+        allow read: if readingStaff(tenantId);
 
         allow create: if hasTenantRole(tenantId, ['owner', 'admin', 'manager'])
           && request.resource.data.quantity is int;
@@ -295,13 +352,13 @@ service cloud.firestore {
         // quantity, so a client that could append here could claim a movement
         // that never happened.
         match /stock_movements/{movementId} {
-          allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+          allow read: if hasReadingRole(tenantId, ['owner', 'admin', 'manager']);
           allow write: if false;
         }
       }
 
       match /categories/{categoryId} {
-        allow read: if activeStaff(tenantId);
+        allow read: if readingStaff(tenantId);
         allow create, update, delete: if hasTenantRole(
           tenantId,
           ['owner', 'admin', 'manager']
@@ -315,13 +372,13 @@ service cloud.firestore {
         // query must prove every possible result was issued by that cashier.
         // Firestore evaluates the candidate result set rather than filtering it
         // after the read, so an unscoped or foreign cashier query is denied.
-        allow get: if activeStaff(tenantId);
-        allow list: if hasTenantRole(
+        allow get: if readingStaff(tenantId);
+        allow list: if hasReadingRole(
             tenantId,
             ['owner', 'admin', 'manager']
           )
           || (
-            hasTenantRole(tenantId, ['cashier'])
+            hasReadingRole(tenantId, ['cashier'])
             && resource.data.soldById == request.auth.uid
           );
         allow create: if activeStaff(tenantId)
@@ -357,9 +414,9 @@ service cloud.firestore {
         // answering it. Settlement after an unacknowledged create depends on
         // that answer - only a successful read may conclude that nothing was
         // written - and a document that does not exist discloses nothing.
-        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager'])
+        allow read: if hasReadingRole(tenantId, ['owner', 'admin', 'manager'])
           || (
-            activeStaff(tenantId)
+            readingStaff(tenantId)
             && (resource == null || resource.data.staffId == request.auth.uid)
           );
         allow create: if activeStaff(tenantId)
@@ -440,7 +497,7 @@ service cloud.firestore {
       // verified, because the callable reads the immutable sale to bound the
       // restoration; refusing it here keeps that record out of the business.
       match /returns/{returnId} {
-        allow read: if activeStaff(tenantId);
+        allow read: if readingStaff(tenantId);
         allow create: if activeStaff(tenantId)
           && returnId == request.resource.data.returnId
           && request.resource.data.tenantId == tenantId
@@ -477,7 +534,7 @@ service cloud.firestore {
       // void, which adds three keys and freezes every other one, so a mistake
       // leaves both the original and the correction on the record.
       match /expenses/{expenseId} {
-        allow read: if hasTenantRole(tenantId, ['owner', 'admin']);
+        allow read: if hasReadingRole(tenantId, ['owner', 'admin']);
         allow create: if hasTenantRole(tenantId, ['owner', 'admin'])
           && expenseId == request.resource.data.expenseId
           && request.resource.data.tenantId == tenantId
@@ -530,12 +587,12 @@ service cloud.firestore {
       }
 
       match /configuration/{documentId} {
-        allow read: if activeStaff(tenantId);
+        allow read: if readingStaff(tenantId);
         allow write: if hasTenantRole(tenantId, ['owner', 'admin']);
       }
 
       match /subscription/{documentId} {
-        allow read: if activeStaff(tenantId) || platformAdmin();
+        allow read: if readingStaff(tenantId) || platformAdmin();
         allow write: if false;
       }
 
@@ -547,7 +604,7 @@ service cloud.firestore {
       // not been reconciled yet still answers. That is the normal state for
       // today, and the summary reports it as pending rather than as zero.
       match /daily_metrics/{businessDate} {
-        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow read: if hasReadingRole(tenantId, ['owner', 'admin', 'manager']);
         allow write: if false;
       }
 
@@ -572,7 +629,7 @@ service cloud.firestore {
       // a correction that never moved any stock, and one that could update or
       // delete could erase the only record of one that did.
       match /stock_adjustments/{adjustmentId} {
-        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow read: if hasReadingRole(tenantId, ['owner', 'admin', 'manager']);
         allow write: if false;
       }
 
@@ -604,12 +661,12 @@ service cloud.firestore {
       // that never succeeded. Reconciliation is requested through the callable,
       // which enforces its own roles and idempotency, never by writing a job.
       match /reconciliation_jobs/{jobId} {
-        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow read: if hasReadingRole(tenantId, ['owner', 'admin', 'manager']);
         allow write: if false;
       }
 
       match /reconciliation_dirty_days/{businessDate} {
-        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow read: if hasReadingRole(tenantId, ['owner', 'admin', 'manager']);
         allow write: if false;
       }
 
@@ -628,7 +685,7 @@ service cloud.firestore {
       // and a client that could write one could invent a discrepancy or erase
       // the only record of a real one.
       match /reconciliation_anomalies/{anomalyId} {
-        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow read: if hasReadingRole(tenantId, ['owner', 'admin', 'manager']);
         allow write: if false;
       }
 
@@ -667,7 +724,7 @@ service cloud.firestore {
       // correction that never happened, and one that could update or delete
       // could erase the only record of one that did.
       match /shift_amendments/{amendmentId} {
-        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow read: if hasReadingRole(tenantId, ['owner', 'admin', 'manager']);
         allow write: if false;
       }
 
@@ -693,7 +750,7 @@ service cloud.firestore {
       // fabricate evidence of an event that never happened, and one that could
       // update or delete could erase the only record of one that did.
       match /audit_logs/{documentId} {
-        allow read: if hasTenantRole(tenantId, ['owner', 'admin']) || platformAdmin();
+        allow read: if hasReadingRole(tenantId, ['owner', 'admin']) || platformAdmin();
         allow write: if false;
       }
 

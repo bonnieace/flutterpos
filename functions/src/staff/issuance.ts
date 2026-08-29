@@ -208,7 +208,7 @@ export const inviteStaff = onCall<InviteStaffRequest, Promise<InvitationMutation
     const requestId = requireRequestId(data.requestId);
     const db = getFirestore();
 
-    await preauthorizeTenantAdministrator(db, request, tenantId);
+    await preauthorizeTenantAdministrator(db, request, tenantId, {mode: "approved"});
     const secret = invitationHmacSecretValue();
     const deliveryId = operationDocumentId(auth.uid, "inviteStaff", tenantId, requestId);
     const operationInput = {email, name, phone, role};
@@ -248,7 +248,8 @@ export const inviteStaff = onCall<InviteStaffRequest, Promise<InvitationMutation
         request,
         tenantId,
         STAFF_MANAGEMENT_ROLES,
-        transaction
+        transaction,
+        {mode: "approved"}
       );
       const tenant = actorContext.tenant as StoredTenantRecord;
       const targetRootRef = db.collection("users").doc(targetIdentity.uid);
@@ -366,7 +367,7 @@ export const resendStaffInvitation = onCall<
     const requestId = requireRequestId(data.requestId);
     const db = getFirestore();
 
-    await preauthorizeTenantAdministrator(db, request, tenantId);
+    await preauthorizeTenantAdministrator(db, request, tenantId, {mode: "approved"});
     const targetIdentity = await readAuthIdentity(targetUid);
     const recipient = bindRecipientPrivacy(
       targetIdentity.email,
@@ -391,7 +392,7 @@ export const resendStaffInvitation = onCall<
       input: {targetUid},
     }, async (transaction): Promise<InvitationMutationResponse> => {
       const actorContext = await requireTenantMember(
-        db, request, tenantId, STAFF_MANAGEMENT_ROLES, transaction
+        db, request, tenantId, STAFF_MANAGEMENT_ROLES, transaction, {mode: "approved"}
       );
       const tenant = actorContext.tenant as StoredTenantRecord;
       const targetRootRef = db.collection("users").doc(targetUid);
@@ -501,7 +502,8 @@ export const replacePendingStaffEmail = onCall<
     const requestId = requireRequestId(data.requestId);
     const db = getFirestore();
 
-    const preliminaryContext = await preauthorizeTenantAdministrator(db, request, tenantId);
+    const preliminaryContext =
+      await preauthorizeTenantAdministrator(db, request, tenantId, {mode: "approved"});
     const secret = invitationHmacSecretValue();
     const deliveryId = operationDocumentId(
       auth.uid,
@@ -563,7 +565,7 @@ export const replacePendingStaffEmail = onCall<
       replacementIdentity,
       async (transaction): Promise<InvitationMutationResponse> => {
       const actorContext = await requireTenantMember(
-        db, request, tenantId, STAFF_MANAGEMENT_ROLES, transaction
+        db, request, tenantId, STAFF_MANAGEMENT_ROLES, transaction, {mode: "approved"}
       );
       const tenant = actorContext.tenant as StoredTenantRecord;
       const tenantRef = db.collection("tenants").doc(tenantId);

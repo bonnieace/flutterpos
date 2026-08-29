@@ -28,6 +28,20 @@ const TENANT_SLUG_MAX_LENGTH = 48;
 const TENANT_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/;
 const REQUEST_WINDOW_MILLISECONDS = 24 * 60 * 60 * 1000;
 
+/**
+ * How long a self-serve request may trade before somebody has approved it.
+ *
+ * **Set once, here, and never moved.** A window that could be extended would be
+ * a second way to grant access, reachable without the platform console and
+ * without the audit trail `setTenantLifecycle` writes. Approval is the only way
+ * out of it that adds time; everything else lets it run down.
+ *
+ * `firestore.rules` and `assertTenantMemberDocuments` both compare against the
+ * instant this produces. Neither of them can compute it, which is why it is
+ * written onto the tenant rather than derived from `createdAt` in two places.
+ */
+const PROVISIONAL_WINDOW_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
+
 interface RequestTenantRequest {
   name?: unknown;
   slug?: unknown;
@@ -106,6 +120,9 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
     const requestWindowStart = Timestamp.fromMillis(
       requestedAt.toMillis() - REQUEST_WINDOW_MILLISECONDS
     );
+    const provisionalUntil = Timestamp.fromMillis(
+      requestedAt.toMillis() + PROVISIONAL_WINDOW_MILLISECONDS
+    );
 
     return runIdempotentFirestoreTransaction(db, {
       actorUid: auth.uid,
@@ -181,6 +198,10 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
         status: "pending",
         ownerUid: applicant.uid,
         requestedBy: applicant.uid,
+        // The provisional trading window. A client clock never sees this: it is
+        // computed from `Timestamp.now()` on the server and compared against
+        // `request.time` in the rules.
+        provisionalUntil,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -204,6 +225,10 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
         role: "owner",
         membershipStatus: "active",
         tenantStatus: "pending",
+        // Mirrored so the app can tell a window that is still open from one
+        // that has shut without reading the tenant document first - the
+        // selector draws that difference before any tenant is opened.
+        provisionalUntil,
         invitationStatus: "accepted",
         isOwner: true,
         createdAt: FieldValue.serverTimestamp(),
@@ -228,6 +253,7 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
         eventType: "tenant_requested",
         fromStatus: null,
         toStatus: "pending",
+        provisionalUntil,
         actorUid: applicant.uid,
         requestId,
         createdAt: FieldValue.serverTimestamp(),
@@ -256,7 +282,13 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
         createdAt: requestedAt,
       });
 
-      return {tenantId: tenantRef.id, name, slug, status: "pending"};
+      return {
+        tenantId: tenantRef.id,
+        name,
+        slug,
+        status: "pending",
+        provisionalUntil: provisionalUntil.toMillis(),
+      };
     });
   }
 );

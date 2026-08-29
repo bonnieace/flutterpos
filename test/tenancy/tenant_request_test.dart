@@ -5,6 +5,7 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  _provisionalWindowTests();
   group('TenantRequestGateway', () {
     test('normalizes input and derives an identity-bound payload', () async {
       final callable = _RecordingCallable();
@@ -105,18 +106,21 @@ void main() {
           'name': 'Another business',
           'slug': 'business-a',
           'status': 'pending',
+          'provisionalUntil': _provisionalUntilMillis,
         },
         {
           'tenantId': 'tenant-a',
           'name': 'Business A',
           'slug': 'another-slug',
           'status': 'pending',
+          'provisionalUntil': _provisionalUntilMillis,
         },
         {
           'tenantId': 'escape/path',
           'name': 'Business A',
           'slug': 'business-a',
           'status': 'pending',
+          'provisionalUntil': _provisionalUntilMillis,
         },
         {
           'tenantId': 'tenant-a',
@@ -369,6 +373,78 @@ TenantRequestIdentity _identity(
   ),
 );
 
+/// 2026-09-05 09:00 UTC: a week after the request the fixtures represent.
+const int _provisionalUntilMillis = 1788339600000;
+
+TenantRequestGateway _gatewayWith(RequestTenantCallable callable) =>
+    TenantRequestGateway(
+      identity: _identity('user-a'),
+      callable: callable,
+      requestIdFactory: () => 'tenant-request-1',
+    );
+
+void _provisionalWindowTests() {
+  group('the provisional window the response carries', () {
+    test('is decoded as the instant the server computed', () async {
+      final gateway = _gatewayWith(_FixedCallable(_success()));
+      final result = await gateway.submit(
+        gateway.createIntent(name: 'Chilltent West', slug: 'chilltent-west'),
+      );
+
+      expect(
+        result.provisionalUntil,
+        DateTime.fromMillisecondsSinceEpoch(
+          _provisionalUntilMillis,
+          isUtc: true,
+        ),
+      );
+      expect(result.provisionalUntil.isUtc, isTrue);
+    });
+
+    test('a response without one is refused rather than assumed', () async {
+      // The window is the only thing that says how long this business may
+      // trade. A response that omits it is a server this client does not
+      // understand, not a business with no deadline.
+      final gateway = _gatewayWith(
+        const _FixedCallable(<String, Object?>{
+          'tenantId': 'tenant-generated',
+          'name': 'Chilltent West',
+          'slug': 'chilltent-west',
+          'status': 'pending',
+        }),
+      );
+
+      await expectLater(
+        gateway.submit(
+          gateway.createIntent(name: 'Chilltent West', slug: 'chilltent-west'),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('a window that is not a whole number of millis is refused', () async {
+      for (final value in <Object?>['soon', 1788339600000.5, null]) {
+        final gateway = _gatewayWith(
+          _FixedCallable(<String, Object?>{
+            ..._success(),
+            'provisionalUntil': value,
+          }),
+        );
+
+        await expectLater(
+          gateway.submit(
+            gateway.createIntent(
+              name: 'Chilltent West',
+              slug: 'chilltent-west',
+            ),
+          ),
+          throwsA(isA<FormatException>()),
+        );
+      }
+    });
+  });
+}
+
 Map<String, Object?> _success({
   String name = 'Chilltent West',
   String slug = 'chilltent-west',
@@ -377,4 +453,5 @@ Map<String, Object?> _success({
   'name': name,
   'slug': slug,
   'status': 'pending',
+  'provisionalUntil': _provisionalUntilMillis,
 };

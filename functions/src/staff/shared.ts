@@ -12,7 +12,10 @@ import {
   Transaction,
 } from "firebase-admin/firestore";
 import {CallableRequest, HttpsError} from "firebase-functions/v2/https";
-import {requireTenantMember} from "../core/authorization";
+import {
+  requireTenantMember,
+  TenantAccessOptions,
+} from "../core/authorization";
 import {buildIdempotencyIdentity} from "../core/idempotency";
 import {
   isTenantRole,
@@ -140,9 +143,12 @@ export async function readAuthIdentity(uid: string): Promise<AuthIdentity> {
 export async function preauthorizeTenantAdministrator<T>(
   db: Firestore,
   request: CallableRequest<T>,
-  tenantId: string
+  tenantId: string,
+  options?: TenantAccessOptions
 ): Promise<TenantAuthorizationContext> {
-  return requireTenantMember(db, request, tenantId, STAFF_MANAGEMENT_ROLES);
+  return requireTenantMember(
+    db, request, tenantId, STAFF_MANAGEMENT_ROLES, undefined, options
+  );
 }
 
 export function prepareTargetRoot(

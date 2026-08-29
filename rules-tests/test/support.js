@@ -155,6 +155,10 @@ export function activeTenantDocuments({
   tenantStatus = "active",
   staffStatus = "active",
   accountType = "tenant_user",
+  // When set, the instant a self-serve request's provisional trading window
+  // shuts. Omitted entirely when absent, so a fixture can reproduce a pending
+  // tenant written before the field existed.
+  provisionalUntil = undefined,
 } = {}) {
   return {
     [`users/${uid}`]: {
@@ -166,6 +170,7 @@ export function activeTenantDocuments({
       name: tenantId,
       ownerUid: role === "owner" ? uid : "owner-a",
       status: tenantStatus,
+      ...(provisionalUntil === undefined ? {} : { provisionalUntil }),
     },
     [`tenants/${tenantId}/staff/${uid}`]: {
       uid,

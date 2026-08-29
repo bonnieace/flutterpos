@@ -95,6 +95,7 @@ final class TenantRequestResult {
     required this.tenantId,
     required this.name,
     required this.slug,
+    required this.provisionalUntil,
   });
 
   factory TenantRequestResult.fromCallable(
@@ -102,7 +103,7 @@ final class TenantRequestResult {
     required String expectedName,
     required String expectedSlug,
   }) {
-    const keys = {'tenantId', 'name', 'slug', 'status'};
+    const keys = {'tenantId', 'name', 'slug', 'status', 'provisionalUntil'};
     if (value is! Map || value.length != keys.length) {
       throw const FormatException(
         'requestTenant response must contain the expected fields.',
@@ -121,9 +122,18 @@ final class TenantRequestResult {
     if (data['tenantId'] is! String ||
         data['name'] is! String ||
         data['slug'] is! String ||
-        data['status'] != 'pending') {
+        data['status'] != 'pending' ||
+        data['provisionalUntil'] is! int) {
       throw const FormatException('requestTenant returned an invalid result.');
     }
+    // The instant the provisional trading window shuts, as the server computed
+    // it. Read here so the confirmation can say how long there is without a
+    // second round trip; the canonical copy lives on the tenant document and on
+    // the membership mirror, and both are what every later screen reads.
+    final provisionalUntil = DateTime.fromMillisecondsSinceEpoch(
+      data['provisionalUntil']! as int,
+      isUtc: true,
+    );
     late final String tenantId;
     late final String name;
     late final String slug;
@@ -137,12 +147,23 @@ final class TenantRequestResult {
     if (name != expectedName || slug != expectedSlug) {
       throw const FormatException('requestTenant returned another business.');
     }
-    return TenantRequestResult._(tenantId: tenantId, name: name, slug: slug);
+    return TenantRequestResult._(
+      tenantId: tenantId,
+      name: name,
+      slug: slug,
+      provisionalUntil: provisionalUntil,
+    );
   }
 
   final String tenantId;
   final String name;
   final String slug;
+
+  /// When the provisional trading window shuts, in UTC.
+  ///
+  /// A self-serve request may trade until this instant and may only be read
+  /// after it. Approval before then replaces the question entirely.
+  final DateTime provisionalUntil;
   TenantStatus get status => TenantStatus.pending;
 }
 

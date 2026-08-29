@@ -966,6 +966,9 @@ final class _ShellRequestCallable implements RequestTenantCallable {
       'name': name,
       'slug': slug,
       'status': 'pending',
+      // The provisional trading window the server opens for a self-serve
+      // request. 2026-09-05 09:00 UTC.
+      'provisionalUntil': 1788339600000,
     };
   }
 }
