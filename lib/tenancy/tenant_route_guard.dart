@@ -212,7 +212,11 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
         current.uid == captured.uid &&
         current.tenantId == captured.tenantId &&
         current.epoch == captured.epoch &&
-        current.canAccess(allowedRoles: widget.allowedRoles);
+        // A guarded route is a page to look at; whether its actions are
+        // offered is each action's own question, asked with `canAccess`. So a
+        // lapsed business opens its reports and finds no write controls on
+        // them, rather than being told the page does not exist.
+        current.canRead(allowedRoles: widget.allowedRoles);
   }
 
   // The three defaults below are `design.md` §5.1's `LoadingState` and

@@ -819,6 +819,116 @@ void main() {
     });
   });
 
+  group('the end of a provisional trading window', () {
+    /// The hazard: a window shuts at a timestamp, silently, possibly while the
+    /// device is offline. A sale saved before that instant and submitted after
+    /// it is refused by the server for good - money taken, receipt handed over,
+    /// no record anywhere. So the till stops taking sales it cannot prove were
+    /// sent, before anything is written and before a price is quoted.
+
+    void openProvisional(Duration untilExpiry) {
+      sessions
+        ..clear()
+        ..open(
+          uid: 'user-a',
+          membership: _membership(
+            'tenant-a',
+            tenantStatus: TenantStatus.pending,
+            provisionalUntil: clock.call().add(untilExpiry),
+          ),
+        );
+    }
+
+    test('sells freely while the deadline is far off', () async {
+      openProvisional(const Duration(days: 3));
+
+      final record = await _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+      ).createDraft(_request());
+
+      expect(record.checkoutId, isNotEmpty);
+    });
+
+    test('sells near the deadline while nothing is waiting to be sent', () async {
+      // An up-to-date device may sell right up to the instant: each of those
+      // sales goes straight out.
+      openProvisional(const Duration(hours: 2));
+
+      final record = await _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+      ).createDraft(_request());
+
+      expect(record.checkoutId, isNotEmpty);
+    });
+
+    test('refuses near the deadline while a sale is still unsent', () async {
+      openProvisional(const Duration(hours: 2));
+      final service = _service(sessions, cache, outbox, receipts, clock);
+      // One sale saved and not yet submitted is exactly the state that would be
+      // stranded by the deadline.
+      await service.createDraft(_request());
+
+      await expectLater(
+        service.createDraft(_request()),
+        throwsA(
+          isA<CheckoutDraftException>().having(
+            (error) => error.code,
+            'code',
+            'provisional_window_closing',
+          ),
+        ),
+      );
+    });
+
+    test('an unsent sale far from the deadline is no obstacle', () async {
+      // The refusal is about the deadline, not about the outbox: offline
+      // selling is the whole point of the outbox and stays available.
+      openProvisional(const Duration(days: 3));
+      final service = _service(sessions, cache, outbox, receipts, clock);
+      await service.createDraft(_request());
+
+      final second = await service.createDraft(_request());
+
+      expect(second.checkoutId, isNotEmpty);
+    });
+
+    test('an approved business is never refused for this reason', () async {
+      // No deadline, so no hazard, however much is waiting to be sent.
+      final service = _service(sessions, cache, outbox, receipts, clock);
+      await service.createDraft(_request());
+
+      final second = await service.createDraft(_request());
+
+      expect(second.checkoutId, isNotEmpty);
+    });
+
+    test('a lapsed business cannot start a sale at all', () async {
+      // Refused by the session check rather than by the deadline check: a
+      // lapsed business fails `canAccess`, which is what read-only means.
+      openProvisional(const Duration(hours: -1));
+
+      await expectLater(
+        _service(sessions, cache, outbox, receipts, clock).createDraft(
+          _request(),
+        ),
+        throwsA(
+          isA<CheckoutDraftException>().having(
+            (error) => error.code,
+            'code',
+            'no_selected_session',
+          ),
+        ),
+      );
+    });
+  });
 }
 
 CheckoutDraftRequest _request({int quantity = 1}) => CheckoutDraftRequest(
@@ -918,13 +1028,18 @@ final class _Clock {
   DateTime call() => value;
 }
 
-TenantMembership _membership(String tenantId) => TenantMembership(
+TenantMembership _membership(
+  String tenantId, {
+  TenantStatus tenantStatus = TenantStatus.active,
+  DateTime? provisionalUntil,
+}) => TenantMembership(
   tenantId: tenantId,
   tenantName: tenantId,
   tenantSlug: tenantId,
   role: TenantRole.cashier,
   membershipStatus: MembershipStatus.active,
-  tenantStatus: TenantStatus.active,
+  tenantStatus: tenantStatus,
+  provisionalUntil: provisionalUntil,
   isOwner: false,
   mirrorVersion: 1,
   createdAt: DateTime.utc(2026, 1, 1),

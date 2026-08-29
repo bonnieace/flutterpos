@@ -26,7 +26,9 @@ import 'platform_tenant_review.dart';
 import 'platform_tenant_lifecycle.dart';
 import 'platform_tenant_archival.dart';
 import 'platform_global_user_status.dart';
+import 'tenant_access.dart';
 import 'tenant_bootstrap.dart';
+import 'tenant_standing_banner.dart';
 import 'tenant_branding.dart';
 import 'tenant_catalog.dart';
 import 'tenant_default_tenant.dart';
@@ -538,7 +540,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   void _selectTenant(TenantMembership membership) {
     final uid = _uid;
-    if (uid == null || !membership.canAccess()) return;
+    if (uid == null || !membership.canRead()) return;
     final token = ++_flowToken;
     unawaited(_openTenant(uid, membership.tenantId, token));
   }
@@ -1247,7 +1249,7 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
                               subtitle: Text(
                                 '${tenantRoleLabel(membership.role)} - ${status.label}',
                               ),
-                              trailing: membership.canAccess()
+                              trailing: membership.canRead()
                                   ? const Icon(Icons.chevron_right)
                                   : canAccept
                                   ? IconButton(
@@ -1263,8 +1265,12 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
                                       ),
                                     )
                                   : const Icon(Icons.lock_outline),
-                              enabled: membership.canAccess() || canAccept,
-                              onTap: membership.canAccess()
+                              // **`canRead`, not `canAccess`.** A request whose
+                              // provisional week ran out still opens: it holds
+                              // a week of real trading its owner needs to see,
+                              // and every write inside is refused on its own.
+                              enabled: membership.canRead() || canAccept,
+                              onTap: membership.canRead()
                                   ? () => widget.onOpen(membership)
                                   : canAccept
                                   ? () => _toggleAcceptance(membership)
@@ -1339,6 +1345,15 @@ final class _EmptyBusinessList extends StatelessWidget {
 
 enum TenantMembershipDisplayStatus {
   accessible('Accessible'),
+
+  /// A self-serve request inside its provisional window: trading, on a
+  /// deadline. Named for what it is rather than for the deadline, because the
+  /// row is a list of businesses and the countdown belongs on the business.
+  provisional('Trial'),
+
+  /// A request whose window has shut. Opens, and cannot be traded in.
+  lapsed('Read-only'),
+
   pending('Pending'),
   inactive('Inactive'),
   rejected('Rejected'),
@@ -1354,6 +1369,18 @@ enum TenantMembershipDisplayStatus {
 TenantMembershipDisplayStatus tenantMembershipDisplayStatus(
   TenantMembership membership,
 ) {
+  // Asked before `canAccess`, because a provisional business *can* trade and
+  // would otherwise read as plainly accessible - which is true and is not the
+  // thing somebody choosing a business needs to know about it.
+  switch (membership.standing) {
+    case TenantStanding.provisional:
+      return TenantMembershipDisplayStatus.provisional;
+    case TenantStanding.lapsed:
+      return TenantMembershipDisplayStatus.lapsed;
+    case TenantStanding.approved:
+    case TenantStanding.closed:
+      break;
+  }
   if (membership.canAccess()) return TenantMembershipDisplayStatus.accessible;
   return switch (membership.tenantStatus) {
     TenantStatus.rejected => TenantMembershipDisplayStatus.rejected,
@@ -2424,6 +2451,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 isOwnFigures: false,
               ),
               SizedBox(height: tokens.spacing.s32),
+              // Above the grid rather than below it: a business that cannot
+              // trade should say so before somebody taps *Register* and finds
+              // out from a refusal.
+              TenantStandingBanner(access: membership.access),
               HomeModuleGrid(destinations: destinations),
               if (_figures(context, overview) case final grid?) ...[
                 SizedBox(height: tokens.spacing.s32),

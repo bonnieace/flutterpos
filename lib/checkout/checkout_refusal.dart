@@ -44,6 +44,17 @@ final class CheckoutRefusal {
           'Try again in a moment.',
       cashierCanFix: true,
     ),
+    // The provisional trading window is about to shut and this device is still
+    // holding sales the server has not confirmed. Cashier-fixable: getting
+    // online clears it, which is exactly what the sentence asks for.
+    'provisional_window_closing' => const CheckoutRefusal._(
+      'provisional_window_closing',
+      'This business has not been approved yet and its trial ends within a '
+          'day. Sales already saved on this device have not reached the server, '
+          'and after the trial ends they never will. Get online so they can be '
+          'sent, then sell again.',
+      cashierCanFix: true,
+    ),
     'no_open_shift' => const CheckoutRefusal._(
       'no_open_shift',
       'Open a shift before selling.',

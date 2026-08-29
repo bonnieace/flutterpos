@@ -194,8 +194,9 @@ final class CheckoutSalePayload {
   factory CheckoutSalePayload.fromOutboxRecord(
     CheckoutOutboxRecord record, {
     required TenantSession session,
+    DateTime? now,
   }) {
-    if (!session.canAccess()) {
+    if (!session.canAccess(now: now)) {
       throw const CheckoutSaleFormatException(
         'An active canonical session is required to parse a checkout.',
       );
@@ -215,6 +216,7 @@ final class CheckoutSalePayload {
       checkoutId: record.checkoutId,
       payload: record.payload,
       payloadHash: record.payloadHash,
+      now: now,
     );
   }
 
@@ -227,8 +229,18 @@ final class CheckoutSalePayload {
     required String checkoutId,
     required Map<String, Object?> payload,
     required String payloadHash,
+    /// The instant the session's standing is judged against.
+    ///
+    /// **Threaded rather than read from the wall clock**, because a provisional
+    /// trading window turned "is this session usable" into a question with a
+    /// time in it. The draft builder stamps a business date and a receipt
+    /// sequence from its own clock and must judge the session from the same one,
+    /// or it can refuse a sale the rest of the same method would have built.
+    /// Absent, this is the wall clock, which is what every production caller
+    /// wants and what every caller had before the window existed.
+    DateTime? now,
   }) {
-    if (!session.canAccess()) {
+    if (!session.canAccess(now: now)) {
       throw const CheckoutSaleFormatException(
         'An active canonical session is required to parse a checkout.',
       );
