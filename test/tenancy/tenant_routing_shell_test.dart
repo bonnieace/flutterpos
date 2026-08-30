@@ -492,10 +492,6 @@ void main() {
         find.byKey(const ValueKey('tenant-request-name')),
         '  New   Business ',
       );
-      await tester.enterText(
-        find.byKey(const ValueKey('tenant-request-slug')),
-        ' New-Business ',
-      );
       // The form scrolls now. Step 5a's page header costs this route 72
       // logical pixels of body, so at the 800 x 600 test surface the review
       // control sits below the fold of the panel's own scroll view, and a tap
@@ -511,11 +507,17 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tenant-request-confirm')));
       await _pumpRouting(tester);
 
-      expect(callable.payloads.single, {
-        'name': 'New Business',
-        'slug': 'new-business',
-        'requestId': 'routing-tenant-request',
-      });
+      final payload = callable.payloads.single;
+      expect(payload['name'], 'New Business');
+      expect(payload['requestId'], 'routing-tenant-request');
+      // The slug is derived from the name and the clock, and this route injects
+      // no clock - so its shape is what can be asserted, not its value. The
+      // exact derivation is pinned in `tenant_request_test.dart`.
+      expect(
+        payload['slug'],
+        matches(RegExp(r'^new-business-\d{8}-\d{4}$')),
+      );
+      expect(payload.keys.toSet(), <String>{'name', 'slug', 'requestId'});
       expect(fixture.gateway.rootCalls, 2);
       expect(fixture.gateway.listCalls, 2);
       expect(find.text('Business tenant-requested'), findsOneWidget);

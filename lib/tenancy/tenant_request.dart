@@ -227,6 +227,7 @@ final class TenantRequestForm extends StatefulWidget {
     required this.onCancel,
     this.requestIdFactory,
     this.isCurrent,
+    this.clock,
   });
 
   final TenantRequestIdentity identity;
@@ -236,6 +237,10 @@ final class TenantRequestForm extends StatefulWidget {
   final TenantRequestIdFactory? requestIdFactory;
   final TenantRequestCurrentCheck? isCurrent;
 
+  /// What the derived slug's timestamp is read from. Injected so a test can
+  /// assert an exact slug rather than one that changes every minute.
+  final DateTime Function()? clock;
+
   @override
   State<TenantRequestForm> createState() => _TenantRequestFormState();
 }
@@ -243,7 +248,6 @@ final class TenantRequestForm extends StatefulWidget {
 final class _TenantRequestFormState extends State<TenantRequestForm> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _slugController = TextEditingController();
   TenantRequestIntent? _intent;
   bool _confirming = false;
   bool _submitting = false;
@@ -264,7 +268,6 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
   @override
   void dispose() {
     _nameController.dispose();
-    _slugController.dispose();
     super.dispose();
   }
 
@@ -287,7 +290,11 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
       final gateway = _gateway();
       final intent = gateway.createIntent(
         name: _nameController.text,
-        slug: _slugController.text,
+        // Derived rather than asked for: see `deriveTenantRequestSlug`.
+        slug: deriveTenantRequestSlug(
+          _nameController.text,
+          (widget.clock ?? DateTime.now)().toUtc(),
+        ),
       );
       setState(() {
         _intent = intent;
@@ -360,18 +367,7 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
             onChanged: _fieldChanged,
             validator: (value) => _validateName(value ?? ''),
           ),
-          SizedBox(height: tokens.spacing.s12),
-          AppTextField(
-            key: const ValueKey('tenant-request-slug'),
-            controller: _slugController,
-            enabled: !_submitting,
-            label: 'Business slug',
-            helper: 'Lower-case letters, numbers, and single hyphens.',
-            autocorrect: false,
-            enableSuggestions: false,
-            onChanged: _fieldChanged,
-            validator: (value) => _validateSlug(value ?? ''),
-          ),
+
           if (_confirming && _intent != null) ...[
             SizedBox(height: tokens.spacing.s16),
             Text(
@@ -451,6 +447,54 @@ String normalizeTenantRequestSlug(String value) {
   return slug;
 }
 
+/// The longest slug the server will accept.
+const int maximumTenantSlugLength = 48;
+
+/// `chilltent-20260830-1645` - the name, then when it was asked for.
+///
+/// **The slug stopped being a question on 2026-08-30.** It was a second field
+/// asking somebody who wants to open a shop to invent a URL-safe identifier and
+/// then explaining, in a helper line, what "lower-case letters, numbers and
+/// single hyphens" means. Nothing in the app shows a slug to anybody afterwards
+/// - it exists so `tenant_slugs/{slug}` can reserve a name - and the one thing
+/// it must be is unique, which a person guessing is *worse* at than a clock is.
+/// The failure it produced was the worst kind: `already-exists`, after the
+/// form had been filled in, for a name somebody else had taken.
+///
+/// **The timestamp is what makes it unique, so it is not optional.** Two shops
+/// called "Chilltent" a minute apart get different slugs; the same shop
+/// requested twice in the same minute does not, and that collision is the one
+/// the server's `already-exists` still exists to catch.
+///
+/// Minute precision rather than seconds: it is long enough to be unique in
+/// practice and short enough to leave the name room inside 48 characters.
+String deriveTenantRequestSlug(String name, DateTime nowUtc) {
+  final stamp = _slugStamp(nowUtc);
+  // Everything that is not a letter or a digit becomes one hyphen, which folds
+  // spaces, apostrophes and ampersands alike. `&` in "Bob & Sons" is not worth
+  // a rule of its own.
+  var base = name
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'-+'), '-')
+      .replaceAll(RegExp(r'^-|-$'), '');
+  // A name made entirely of punctuation, or of a script this transliterates
+  // nothing of, still has to produce a usable slug rather than a refusal.
+  if (base.isEmpty) base = 'shop';
+  final room = maximumTenantSlugLength - stamp.length - 1;
+  if (base.length > room) {
+    base = base.substring(0, room).replaceAll(RegExp(r'-$'), '');
+  }
+  if (base.isEmpty) base = 'shop';
+  return '$base-$stamp';
+}
+
+String _slugStamp(DateTime nowUtc) {
+  final t = nowUtc.toUtc();
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${t.year}${two(t.month)}${two(t.day)}-${two(t.hour)}${two(t.minute)}';
+}
+
 String tenantRequestSafeError(Object error) {
   if (error is TenantRequestCallableException) {
     return switch (error.code) {
@@ -472,15 +516,6 @@ String? _validateName(String value) {
     return null;
   } on ArgumentError {
     return 'Enter a business name between 2 and 100 characters.';
-  }
-}
-
-String? _validateSlug(String value) {
-  try {
-    normalizeTenantRequestSlug(value);
-    return null;
-  } on ArgumentError {
-    return 'Use 3-48 lower-case letters, numbers, or single hyphens.';
   }
 }
 

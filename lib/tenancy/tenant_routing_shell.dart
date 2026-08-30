@@ -1234,10 +1234,31 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
       ],
       body: Column(
         children: [
+          // **A cap, not a flex share, since 2026-08-30.** This was a
+          // `Flexible`, which defaults to `flex: 1` - the same flex the list
+          // below has - so the panels were given exactly half the viewport
+          // whether they needed it or not. The request form then scrolled
+          // inside that half with its own fields clipped, under an empty list
+          // occupying the other half. `Flexible` reads like "take what you
+          // need"; in a `Column` it means "take your share".
+          //
+          // Natural height up to three quarters, so a tall form on a short
+          // window still scrolls rather than overflowing, and a short one takes
+          // only what it uses.
           if (panels.isNotEmpty)
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(mainAxisSize: MainAxisSize.min, children: panels),
+            LayoutBuilder(
+              builder: (context, constraints) => ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: constraints.maxHeight.isFinite
+                      ? constraints.maxHeight * 0.75
+                      : double.infinity,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: panels,
+                  ),
+                ),
               ),
             ),
           Expanded(

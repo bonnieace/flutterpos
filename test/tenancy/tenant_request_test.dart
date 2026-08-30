@@ -5,6 +5,7 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  _slugDerivationTests();
   _provisionalWindowTests();
   group('TenantRequestGateway', () {
     test('normalizes input and derives an identity-bound payload', () async {
@@ -156,7 +157,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('tenant-request-review')));
     await tester.pump();
     expect(
-      find.text('Submit Chilltent West (chilltent-west) for platform review?'),
+      find.text(
+        'Submit Chilltent West (chilltent-west-20260830-1645) for platform '
+        'review?',
+      ),
       findsOneWidget,
     );
     expect(callable.payloads, isEmpty);
@@ -173,7 +177,8 @@ void main() {
 
     expect(callable.payloads.single, {
       'name': 'Chilltent West',
-      'slug': 'chilltent-west',
+      // Derived from the name and the clock, not typed.
+      'slug': 'chilltent-west-20260830-1645',
       'requestId': 'tenant-widget-request',
     });
     expect(fixture.successes.single.tenantId, 'tenant-generated');
@@ -194,7 +199,9 @@ void main() {
     await tester.pump();
     expect(callable.payloads, hasLength(1));
 
-    completion.complete(_success());
+    // The response must echo the *derived* slug, or the strict decoder
+    // rejects it as another business - which is what it is there to do.
+    completion.complete(_success(slug: 'chilltent-west-20260830-1645'));
     await tester.pumpAndSettle();
     expect(fixture.successes, hasLength(1));
   });
@@ -238,6 +245,7 @@ void main() {
             identity: identity,
             callable: callable,
             requestIdFactory: () => 'tenant-widget-request',
+            clock: () => _slugNow,
             onSuccess: successes.add,
             onCancel: () {},
           ),
@@ -280,10 +288,6 @@ Future<void> _enterRequest(WidgetTester tester) async {
     find.byKey(const ValueKey('tenant-request-name')),
     '  Chilltent   West  ',
   );
-  await tester.enterText(
-    find.byKey(const ValueKey('tenant-request-slug')),
-    ' Chilltent-West ',
-  );
   await tester.pump();
 }
 
@@ -300,6 +304,8 @@ final class _FormFixture {
           identity: _identity('user-a'),
           callable: callable,
           requestIdFactory: () => 'tenant-widget-request',
+          // Fixed, so the derived slug is a value these tests can name.
+          clock: () => _slugNow,
           onSuccess: successes.add,
           onCancel: () {},
         ),
@@ -455,3 +461,95 @@ Map<String, Object?> _success({
   'status': 'pending',
   'provisionalUntil': _provisionalUntilMillis,
 };
+
+// ---------------------------------------------------------------------------
+// The slug is derived rather than asked for
+// ---------------------------------------------------------------------------
+
+final DateTime _slugNow = DateTime.utc(2026, 8, 30, 16, 45);
+
+void _slugDerivationTests() {
+  group('deriving a slug from the name', () {
+    test('is the name, then when it was asked for', () {
+      expect(
+        deriveTenantRequestSlug('Chilltent', _slugNow),
+        'chilltent-20260830-1645',
+      );
+    });
+
+    test('folds spaces and punctuation into single hyphens', () {
+      expect(
+        deriveTenantRequestSlug("Bob & Sons' Shop", _slugNow),
+        'bob-sons-shop-20260830-1645',
+      );
+    });
+
+    test('never produces a leading, trailing or doubled hyphen', () {
+      // All three are refused by `normalizeTenantRequestSlug`, so a derivation
+      // that produced one would fail the same request it was meant to simplify.
+      for (final name in <String>[
+        '  Chilltent  ',
+        '---Chilltent---',
+        'Chill   tent',
+        '!!!',
+        'a',
+      ]) {
+        final slug = deriveTenantRequestSlug(name, _slugNow);
+        expect(slug.startsWith('-'), isFalse, reason: name);
+        expect(slug.endsWith('-'), isFalse, reason: name);
+        expect(slug.contains('--'), isFalse, reason: name);
+        // The real proof: the server's own normalizer accepts it.
+        expect(() => normalizeTenantRequestSlug(slug), returnsNormally,
+            reason: name);
+      }
+    });
+
+    test('a name with nothing usable in it still yields a slug', () {
+      // Punctuation only, or a script this transliterates nothing of. It still
+      // has to produce something the server accepts rather than a refusal.
+      expect(deriveTenantRequestSlug('!!!', _slugNow), 'shop-20260830-1645');
+      expect(deriveTenantRequestSlug('日本語', _slugNow), 'shop-20260830-1645');
+    });
+
+    test('a very long name is truncated to fit the 48-character limit', () {
+      final slug = deriveTenantRequestSlug('a' * 200, _slugNow);
+
+      expect(slug.length, lessThanOrEqualTo(maximumTenantSlugLength));
+      expect(slug.endsWith('-20260830-1645'), isTrue);
+      expect(() => normalizeTenantRequestSlug(slug), returnsNormally);
+    });
+
+    test('truncation never leaves a hyphen against the timestamp', () {
+      // Cutting mid-word can land exactly on a separator, which would produce
+      // the `--` the server refuses.
+      final slug = deriveTenantRequestSlug('${'ab ' * 40}tail', _slugNow);
+
+      expect(slug.contains('--'), isFalse);
+      expect(() => normalizeTenantRequestSlug(slug), returnsNormally);
+    });
+
+    test('two shops of the same name a minute apart differ', () {
+      expect(
+        deriveTenantRequestSlug('Chilltent', _slugNow),
+        isNot(
+          deriveTenantRequestSlug(
+            'Chilltent',
+            _slugNow.add(const Duration(minutes: 1)),
+          ),
+        ),
+      );
+    });
+
+    test('the timestamp is read in UTC, not the device zone', () {
+      // The same instant expressed in another zone must derive the same slug,
+      // or two devices would disagree about one business.
+      expect(
+        deriveTenantRequestSlug(
+          'Chilltent',
+          _slugNow.toLocal(),
+        ),
+        deriveTenantRequestSlug('Chilltent', _slugNow),
+      );
+    });
+  });
+}
