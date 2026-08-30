@@ -188,6 +188,56 @@ mid-transition is retried with the same `--request-id`; the saga resumes.
 Afterwards, grant every further administrator with the ordinary form, which
 requires a sitting administrator as `--actor-uid`.
 
+## 10b. Running the whole thing locally, without seeding anything
+
+Verified end to end on 2026-08-30: signup → root document → verified address →
+business request → a provisional business writing to its own catalog, with an
+empty emulator and no seed script.
+
+```bash
+export JAVA_HOME="D:/firebase-emulator-tools/jdk21/jdk-21.0.12+8"
+export PATH="/d/firebase-emulator-tools/jdk21/jdk-21.0.12+8/bin:$PATH"
+export FUNCTIONS_DISCOVERY_TIMEOUT=120
+npx firebase emulators:start --only auth,firestore,functions
+```
+
+**Two traps, both of which look like something else.**
+
+1. **`FUNCTIONS_DISCOVERY_TIMEOUT=120` is not optional here.** `functions/lib/index.js`
+   takes about 4.4 s just to load on this machine, and discovery also has to spawn the
+   process and serialise the backend spec inside its default 10 s. Over that budget the
+   emulator prints *"Cannot determine backend specification"* and starts with **zero
+   functions loaded** — while still announcing "All emulators ready", so it reads as a
+   working suite in which every callable happens to 404.
+
+2. **Secrets must be in `functions/.env.local`, not only `functions/.secret.local`.**
+   With a secret missing from `.env.local` the emulator reaches for the *real* Secret
+   Manager and fails the entire load with a 403 — including on a `demo-*` project, and
+   including when the value is exported in the shell. The error names only the first
+   unresolved secret, so it looks like one bad secret rather than a missing convention.
+   All six belong in both files; local placeholder values are fine, except
+   `EMAIL_RECIPIENT_HMAC_KEYRING`, which is parsed as JSON:
+   `{"currentVersion":"v1","keys":{"v1":"<base64>"}}`.
+
+**Verifying the address without a mail provider.** `sendAccountVerification` delivers
+through Brevo, which a local run has no working key for — but the Auth emulator still
+issues the code. Request it, then follow the link the emulator lists:
+
+```bash
+curl "http://127.0.0.1:9099/emulator/v1/projects/<project>/oobCodes"
+```
+
+`requestTenant` refuses an unverified applicant, so this step cannot be skipped.
+
+**What no longer needs seeding.** `rules-tests/scripts/seed-dev-emulator.js` exists to
+hand a developer "the smallest business that can actually ring up a sale". Since the
+provisional window landed, a self-serve signup reaches the same place on its own: the
+business trades for a week without anybody approving it. The seed script is still the
+faster route to a *stocked* shop, and still the only way to get one without clicking
+through signup.
+
+---
+
 ## 11. Backfills
 
 Only if data pre-dates the search-prefix fields:
