@@ -1,3 +1,4 @@
+import {getAuth} from "firebase-admin/auth";
 import {
   FieldValue,
   getFirestore,
@@ -5,6 +6,7 @@ import {
 } from "firebase-admin/firestore";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {
+  assertVerifiedAuthIdentity,
   requireAuthenticatedUser,
   requireVerifiedTenantApplicant,
 } from "../core/authorization";
@@ -109,7 +111,18 @@ function configuredLimitForViolation(
 
 export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantResponse>>(
   async (request: CallableRequest<RequestTenantRequest>): Promise<RequestTenantResponse> => {
-    const auth = requireAuthenticatedUser(request);
+    const auth = requireAuthenticatedUser(request, {allowUnverified: true});
+    // The Auth record, not the token: somebody who has just followed the link in
+    // their mailbox still holds a token minted at sign-in that says otherwise,
+    // for up to an hour. Read outside the transaction below, because a network
+    // call inside one lengthens it and is re-issued on every contention retry.
+    let authIdentity;
+    try {
+      authIdentity = await getAuth().getUser(auth.uid);
+    } catch {
+      throw new HttpsError("failed-precondition", "The current identity is unavailable.");
+    }
+    assertVerifiedAuthIdentity(auth.uid, authIdentity);
     const data = requireObject(request.data);
     const name = normalizeTenantName(data.name);
     const slug = normalizeTenantSlug(data.slug);

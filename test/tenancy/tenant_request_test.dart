@@ -281,6 +281,16 @@ void main() {
       'Business request could not be submitted. Please try again.',
     );
   });
+
+  test('a refusal says so rather than inviting a retry that cannot work', () {
+    expect(
+      tenantRequestSafeError(
+        const TenantRequestCallableException('permission-denied'),
+      ),
+      'This account cannot request a business. Check that your email is '
+      'verified and that you are signed in with the right account.',
+    );
+  });
 }
 
 Future<void> _enterRequest(WidgetTester tester) async {

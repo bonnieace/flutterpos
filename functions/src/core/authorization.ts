@@ -59,6 +59,42 @@ export function assertActiveRootUser(
   return rawUser;
 }
 
+/** Enough of an Auth record to judge whether its owner may act. */
+export interface VerifiableAuthIdentity {
+  disabled: boolean;
+  emailVerified: boolean;
+}
+
+/**
+ * Confirms the address is verified against the **Auth record** rather than the
+ * caller's ID token.
+ *
+ * `token.email_verified` is minted at sign-in and does not change when somebody
+ * follows the link in their mailbox, so a token up to an hour old still reads
+ * false for an address that is in fact verified - while the client's own
+ * `reload()` has already flipped `User.emailVerified` and unlocked the control.
+ * The person is told to verify, verifies, watches the button light up, presses
+ * it, and is refused. Reading the Auth record closes that gap, and is what every
+ * other callable here already does; see `staff/acceptance.ts`.
+ *
+ * Pure on purpose: the caller fetches the record, so this stays testable without
+ * standing up `getAuth()`.
+ */
+export function assertVerifiedAuthIdentity(
+  uid: string,
+  identity: VerifiableAuthIdentity | undefined
+): void {
+  if (!identity) {
+    throw new HttpsError("failed-precondition", "The current identity is unavailable.");
+  }
+  if (identity.disabled) {
+    throw new HttpsError("permission-denied", "This account is not active.");
+  }
+  if (identity.emailVerified !== true) {
+    throw new HttpsError("permission-denied", "A verified email is required.");
+  }
+}
+
 export function assertVerifiedTenantApplicant(
   uid: string,
   rawUser: RootUserRecord | undefined,
@@ -164,7 +200,11 @@ export async function requireVerifiedTenantApplicant<T>(
   request: CallableRequest<T>,
   transaction?: Transaction
 ): Promise<{uid: string; user: RootUserRecord}> {
-  const auth = requireAuthenticatedUser(request);
+  // Verification is established by the caller against the Auth record, before
+  // this transaction opens - see `assertVerifiedAuthIdentity`. Checking the token
+  // again here would reinstate the stale-token refusal from inside the
+  // transaction, where the caller's own check cannot reach it.
+  const auth = requireAuthenticatedUser(request, {allowUnverified: true});
   const userRef = db.collection("users").doc(auth.uid);
   const userSnapshot = transaction ? await transaction.get(userRef) : await userRef.get();
   return {

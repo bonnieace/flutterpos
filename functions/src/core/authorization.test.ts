@@ -5,6 +5,7 @@ import {TenantRecord} from "./model";
 import {
   assertPlatformAdminDocuments,
   assertTenantMemberDocuments,
+  assertVerifiedAuthIdentity,
   assertVerifiedTenantApplicant,
   tenantSatisfiesAccessMode,
 } from "./authorization";
@@ -14,6 +15,33 @@ function expectHttpsCode(expectedCode: string, callback: () => unknown): void {
     return error instanceof HttpsError && error.code === expectedCode;
   });
 }
+
+test("a verified Auth record admits the applicant the stale token would refuse", () => {
+  assert.doesNotThrow(() => assertVerifiedAuthIdentity(
+    "user-1",
+    {disabled: false, emailVerified: true}
+  ));
+});
+
+test("an unverified address is refused, and a disabled account before it", () => {
+  expectHttpsCode("permission-denied", () => assertVerifiedAuthIdentity(
+    "user-1",
+    {disabled: false, emailVerified: false}
+  ));
+  // Disabled is judged first: an account that is off has nothing to say about
+  // whether its address was ever confirmed.
+  expectHttpsCode("permission-denied", () => assertVerifiedAuthIdentity(
+    "user-1",
+    {disabled: true, emailVerified: true}
+  ));
+});
+
+test("a missing Auth record is a precondition, not a refusal", () => {
+  expectHttpsCode("failed-precondition", () => assertVerifiedAuthIdentity(
+    "user-1",
+    undefined
+  ));
+});
 
 test("tenant authorization uses canonical documents instead of mirror counters", () => {
   const context = assertTenantMemberDocuments(

@@ -504,6 +504,14 @@ String tenantRequestSafeError(Object error) {
         'Your business request limit has been reached. Please try again later.',
       'failed-precondition' =>
         'This account is not currently eligible to request a business.',
+      // Deliberately does not name which refusal it was. The server distinguishes
+      // an inactive root, a platform identity and a sign-in older than an auth
+      // cutoff; saying so here would leak the shape of accounts that are not the
+      // caller's. What it must not do is invite a retry, which is what the
+      // fallback below does and which cannot succeed for any of these.
+      'permission-denied' =>
+        'This account cannot request a business. Check that your email is '
+            'verified and that you are signed in with the right account.',
       _ => 'Business request could not be submitted. Please try again.',
     };
   }
