@@ -106,20 +106,6 @@
       ]
     },
     {
-      "collectionGroup": "tenant_memberships",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "tenants",
       "queryScope": "COLLECTION",
       "fields": [
@@ -187,34 +173,6 @@
       "collectionGroup": "sales",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "shiftId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "sales",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "soldById",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "sales",
-      "queryScope": "COLLECTION",
-      "fields": [
         {"fieldPath": "businessDate", "order": "ASCENDING"},
         {"fieldPath": "receiptSequence", "order": "ASCENDING"},
         {"fieldPath": "__name__", "order": "ASCENDING"}
@@ -246,34 +204,6 @@
         {"fieldPath": "shiftId", "order": "ASCENDING"},
         {"fieldPath": "soldById", "order": "ASCENDING"},
         {"fieldPath": "__name__", "order": "DESCENDING"}
-      ]
-    },
-    {
-      "collectionGroup": "returns",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "saleId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "returns",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "tenantId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
       ]
     },
     {
@@ -327,48 +257,6 @@
         {
           "fieldPath": "__name__",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "shifts",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "tenant_memberships",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "tenantId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "stock_movements",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "tenantId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
         }
       ]
     },
@@ -615,6 +503,34 @@
     {
       "collectionGroup": "staff_invitations",
       "fieldPath": "uid",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tenant_memberships",
+      "fieldPath": "tenantId",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "stock_movements",
+      "fieldPath": "tenantId",
       "indexes": [
         {
           "order": "ASCENDING",

@@ -73,3 +73,16 @@ docs/stitch/stitch_chilltent_pos_redesign_system/
 # Debug APKs built by tool/lan_debug_build.dart against a LAN address.
 # One per DHCP lease, 224 MB each, and none of them belong in history.
 chilltent-lan-debug-*.apk
+
+# Firebase Hosting's deploy cache. Written by `firebase deploy --only hosting`
+# and rebuilt from `public/` whenever it is missing.
+/.firebase/
+
+# Gradle's home when a build runs without GRADLE_USER_HOME pointing at D:.
+# It is a cache of downloaded dependencies, and large enough that `du` on it
+# does not finish; see CLAUDE.md for the variable that keeps it off C:.
+/android/gradle-home/
+
+# `screenshots.zip` above catches only that exact name, and a browser download
+# of a second copy is "screenshots (3).zip".
+screenshots*.zip

@@ -25,6 +25,21 @@ taken on 2026-08-29 — which means **real sales share a project with developmen
 data and development platform administrators, and there is no separate place
 left to test.** Worth revisiting before a second site.
 
+**The Firestore database is not created by any of this.** A project can exist, be
+on Blaze, and hold no database at all — `firebase firestore:databases:list` answers
+"No databases found", and every rules or index deploy fails until one exists. Create
+it explicitly, and note that **the location is permanent**:
+
+```bash
+firebase firestore:databases:create "(default)" --location us-central1
+```
+
+`us-central1` is chosen to match where the functions land. Nothing in this repo sets
+a region, so all 51 deploy to `us-central1` by default and the two belong together;
+a database in Europe with functions in Iowa pays a round trip on every read. Blocking
+functions are the exception and are pinned elsewhere regardless — see
+[Functions](#7-functions).
+
 **Identity Platform must be enabled.** `bootstrapSelfSignupIdentity` is an Auth
 blocking function (`functions/src/auth/identityBootstrap.ts`), and blocking
 functions require Identity Platform rather than plain Firebase Auth. Without it
@@ -58,9 +73,19 @@ firebase functions:secrets:set REMOVE_BG_API_KEY
 
 ## 3. Params
 
-Eight, as environment configuration. Three are **URLs that must resolve to a page
-that exists** — there is no hosting block in `firebase.json` yet, so these have
-nowhere to point today.
+Eight, as environment configuration. A deploy reads them from
+`functions/.env.<projectId>` — the deploy-time counterpart to `.env.local`, which
+only the emulator ever reads. Without that file the CLI stops and prompts for each
+`defineString` it cannot resolve, so a scripted deploy hangs rather than fails.
+Nothing secret belongs in it; these values are visible in the deployed function's
+configuration.
+
+Three are **URLs that must resolve to a page that exists**, and the constraint is
+sharper than it looks. Two are handed to `generateEmailVerificationLink` /
+`generatePasswordResetLink` as `url:`, and **Auth refuses a continue URI on a domain
+outside its authorized list**. A placeholder does not merely land nowhere — it
+throws, the send fails, and nobody can verify an address. `<project>.web.app` is
+authorized from day one, which is what [Hosting](#3b-hosting) exists to serve.
 
 | Param | What it is |
 |---|---|
@@ -72,6 +97,43 @@ nowhere to point today.
 | `STAFF_INVITATION_SENDER_EMAIL` | From-address for invitations specifically. |
 | `STAFF_INVITATION_SENDER_NAME` | From-name for invitations. |
 | `PLATFORM_ALERTS_URL` | Named in a platform alert email. |
+
+## 3b. Hosting
+
+Four of the eight params point here, and two of them *must* — see
+[Params](#3-params).
+
+```bash
+firebase deploy --only hosting
+```
+
+`public/` holds five static pages and a shared stylesheet, served at
+`https://<project>.web.app`:
+
+| Path | Reached by |
+|---|---|
+| `/auth/verified` | a person, after Firebase has verified their address |
+| `/auth/password-reset-complete` | a person, after their password is changed |
+| `/staff/invitation` | the emailed staff invitation link |
+| `/platform/alerts` | a link inside a platform alert email |
+| `/` | nothing — it exists so the bare domain is not a 404 |
+
+They are deliberately inert: no sign-in, no state, and no script beyond reading
+`tenantId` out of the query string on the invitation page. **Firebase's own action
+handler does the verifying**; these pages are only where a person lands afterwards,
+which is why a wrong value here breaks the send rather than the page.
+
+`cleanUrls: true` in `firebase.json` maps `/auth/verified` to `auth/verified.html`,
+so the params must not carry the `.html`.
+
+The invitation page cannot accept an invitation, and says so. That link carries
+`tenantId`, `uid`, `invitationVersion` and `invitationToken` as query parameters —
+it *is* the payload, not a redirect to one — but nothing on Android can receive it,
+so the page directs people to the in-app selector. The token is deliberately not
+displayed. See [Still open](#still-open).
+
+This is also where `/.well-known/assetlinks.json` goes if Android App Links are
+ever wired up.
 
 ---
 
@@ -113,9 +175,29 @@ Ten jobs, all Africa/Nairobi. Created by deploying the `onSchedule` functions.
 firebase deploy --only firestore:rules,firestore:indexes,storage
 ```
 
-`firestore.indexes.json` carries **42 composite indexes and 2 field overrides**.
+`firestore.indexes.json` carries **34 composite indexes and 4 field overrides**.
 Deploy them *before* first use: a missing composite index fails a query at
 runtime with a console link, which is a poor way for a shop to discover it.
+
+**Eight entries had to be removed before the first deploy would pass.** Each was a
+single field plus the automatic `__name__` tiebreak — which is what a single-field
+index already is — and Firestore rejects them with
+
+```
+HTTP Error: 400, this index is not necessary, configure using single field index controls
+```
+
+Six were `COLLECTION`-scoped and simply redundant: Firestore maintains a
+single-field index on every field in both directions, and all six already existed
+in the project unasked. The other two were `COLLECTION_GROUP`-scoped and still
+needed, but only a **field override** can express a collection-group single-field
+index — `tenant_memberships.tenantId` (backing the repair sweep in
+`functions/src/repair/membershipMirrorStore.ts`) and `stock_movements.tenantId`.
+They now sit beside `staff.uid` and `staff_invitations.uid`, which were already
+overrides for the same reason.
+
+The error names one collection group per attempt, so this surfaces as a run of
+consecutive failed deploys unless all six are fixed at once.
 
 Verify the rules against the emulator first — this is the one suite that proves
 the authorization boundary:
@@ -134,8 +216,67 @@ JDK 17, which Gradle needs, so scope the override to the command.
 ## 7. Functions
 
 ```bash
-cd functions && npm test && npm run deploy   # 438 tests, then 51 functions
+cd functions && npm test                     # 438 tests
+firebase deploy --only functions --force     # 51 functions
 ```
+
+**`--force` is not optional.** `consumePendingPlatformAlert` and
+`mergeSaleReconciliationJob` declare a retry failure policy, and the CLI refuses:
+
+```
+Error: Pass the --force option to deploy functions with a failure policy
+```
+
+It aborts before deploying *anything*, so without the flag the run is a no-op that
+looks like a crash. Be aware `--force` also suppresses the prompt before deleting
+functions no longer present in source — harmless on a first deploy, less so later.
+
+**Enable Identity Platform before deploying, not after.**
+`bootstrapSelfSignupIdentity` is registered by patching the Identity Toolkit config,
+which fails on a project that has not been upgraded:
+
+```
+OPERATION_NOT_ALLOWED : Blocking Functions may only be configured for GCIP projects.
+```
+
+The Cloud Function is still *created*, so `firebase functions:list` shows it and it
+reads as deployed — while Auth never calls it and every self-signup silently gets no
+root document. Enable at `console.cloud.google.com/customer-identity`, then deploy
+that one function again. It lands in **`us-east1`**: `firebase-functions` pins
+blocking functions there, and nothing in this repo chooses it.
+
+**The first 2nd-gen deploy partially fails, and that is expected.** Eventarc's
+service agent is created *during* the deploy and its permissions propagate
+afterwards, so event-triggered functions fail with
+
+```
+Permission denied while using the Eventarc Service Agent
+... Since this is your first time using 2nd gen functions, we need a little bit
+longer to finish setting everything up. Retry the deployment in a few minutes.
+```
+
+Retry; it succeeds. Nothing needs fixing.
+
+**Three functions always report a failed invoker, and always will.** A
+`firebase-tools` bug, present through at least 15.28.2:
+
+```
+Unable to set the invoker for the IAM policy on the following functions:
+        deliverAccountVerification, deliverPasswordReset, deliverPlatformAlertNotification
+```
+
+alongside a bare `Cannot read properties of undefined (reading 'filter')` that
+swallows the real error. Those three are exactly the ones declaring
+`invoker: "private"`. In `lib/gcp/cloudtasks.js`, `setEnqueuer` calls
+`existing.bindings.filter(...)` on the queue's IAM policy — and a queue with no
+bindings comes back from the IAM API **without a `bindings` field at all**.
+
+`"private"` resolves to an empty member list, so the policy being written is "no
+enqueuer binding" onto a queue that already has none. **It crashes computing a
+no-op, and the queues are already in the state the code asks for.** Nothing is
+broken. But the condition never clears — an empty policy *is* the correct end state
+— so any deploy touching these three exits non-zero forever. Do not read that exit
+code as a failed deploy in CI.
 
 ## 8. Brevo
 
@@ -148,6 +289,36 @@ cd functions && npm test && npm run deploy   # 438 tests, then 51 functions
 
 Without step 3 nothing ever records a bounce, so a suppressed address looks
 like a delivery that simply never arrived.
+
+**Authenticating the domain takes four DNS records.** Brevo does not ask for SPF —
+it authenticates with DKIM CNAMEs instead:
+
+| Type | Name | Purpose |
+|---|---|---|
+| TXT | `@` | `brevo-code:…` ownership check |
+| CNAME | `brevo1._domainkey` | DKIM |
+| CNAME | `brevo2._domainkey` | DKIM |
+| TXT | `_dmarc` | `v=DMARC1; p=none; …` |
+
+Three further CNAMEs (`noreply`, `r.noreply`, `img.noreply`) are branding only —
+they rebrand tracking links and images — and can be skipped.
+
+**If the domain also forwards inbound mail, none of this disturbs it.** Forwarding
+depends on the MX records and an existing SPF TXT, and Brevo touches neither. The
+one thing that *would* break it is adding a **second** `v=spf1` record: a domain
+may have exactly one, and two is a permanent error that takes out sending and
+forwarding together. If Brevo ever does ask for SPF, merge the includes into the
+existing record rather than adding another.
+
+Adding a `noreply` CNAME does not affect the *address* `noreply@` — mail routes by
+the apex MX, not by a `noreply` subdomain.
+
+**Turn click tracking off for transactional email.** Brevo rewrites the links in
+what it sends, and every link this app sends is single-use: a Firebase `oobCode` for
+verification or reset, or an invitation token. Mail scanners and link-preview bots
+follow rewritten URLs and consume the code before the recipient clicks. The symptom
+is somebody reporting "invalid or expired link" about a link that has just
+arrived.
 
 ## 9. Firebase Auth
 
@@ -288,8 +459,9 @@ Known and deliberate, so a deploy is not surprised by them:
   Integrity, which needs the release keystore's SHA-256. Until then
   `requestPasswordReset` — the only `enforceAppCheck: true` callable — fails in
   a release build. The UI maps that to "this app could not prove itself".
-- **No hosting.** The three continue-URL params have nowhere to point, and
-  Android App Links need `/.well-known/assetlinks.json` on the same domain.
+- **No App Links.** Hosting now exists (see [Hosting](#3b-hosting)), but
+  `/.well-known/assetlinks.json` is not published and the app declares no intent
+  filter, so no emailed link can open the app.
 - **Emailed invitation links cannot open the app.** `Uri.base` on Android is a
   `file://` path, and there is no `app_links` dependency or intent-filter.
   Mobile staff must use the in-app visible-acceptance path in the selector.

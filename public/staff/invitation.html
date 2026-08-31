@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff invitation — ChillTent</title>
+<link rel="stylesheet" href="/_style.css">
+<main>
+  <p class="mark">ChillTent</p>
+  <h1>You have been invited to a business</h1>
+  <p class="lead">Accept it inside the app — this page cannot do it for you.</p>
+  <ol>
+    <li>Install ChillTent and sign in with <strong>this same email address</strong>.</li>
+    <li>Open the business selector.</li>
+    <li>The invitation is waiting there. Accept it from the list.</li>
+  </ol>
+  <p>Opening the app directly from an emailed link is not wired up yet, which is
+     why the acceptance lives in the selector rather than here.</p>
+  <footer id="ref">Invitation reference unavailable.</footer>
+</main>
+<script>
+  // The token in the query string is proof of the invitation and is deliberately
+  // not shown; the tenant reference is enough for someone to identify it.
+  var tenant = new URLSearchParams(location.search).get('tenantId');
+  if (tenant) {
+    document.getElementById('ref').innerHTML =
+      'Business reference: <code></code>';
+    document.querySelector('#ref code').textContent = tenant;
+  }
+</script>
