@@ -294,6 +294,7 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
           const EmptyState(
             title: 'No shift is open',
             hint: 'Open one to start selling.',
+            illustration: 'schedule.svg',
           ),
         ),
         TenantShiftPhase.unavailable => _surface(

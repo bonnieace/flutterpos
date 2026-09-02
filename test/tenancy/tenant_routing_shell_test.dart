@@ -443,40 +443,16 @@ void main() {
     await fixture.dispose(tester);
   });
 
-  testWidgets('an unverified identity is offered the one way forward', (
+  testWidgets('an account with no business is taken through signing up', (
     tester,
   ) async {
-    final callable = _ShellVerificationCallable();
+    // **The selector is not where signing up happens any more.** It used to be
+    // the one screen an unverified identity could reach, so the verification
+    // card was drawn on it - on a screen about choosing between businesses, to
+    // somebody who has none. An account with no membership and no invitation
+    // has not finished signing up, and goes to the flow that finishes it.
     final fixture = _ShellFixture(
       memberships: [],
-      sendAccountVerificationCallable: callable,
-      reloadIdentity: () async {},
-    );
-    await fixture.pump(tester);
-
-    fixture.auth.add('user-a');
-    await _pumpRouting(tester);
-
-    // Requesting a business and accepting an invitation both require a
-    // verified address, so without this panel the selector is a dead end.
-    expect(find.byKey(const ValueKey('show-tenant-request')), findsNothing);
-    expect(find.byKey(const ValueKey('account-verification')), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('account-verification-send')));
-    await tester.pump();
-    await tester.pump();
-    expect(callable.payloads.single, <String, Object?>{
-      'requestId': 'routing-verify-request',
-    });
-    await fixture.dispose(tester);
-  });
-
-  testWidgets('a verified identity is never offered verification', (
-    tester,
-  ) async {
-    final fixture = _ShellFixture(
-      memberships: [],
-      emailVerified: true,
       sendAccountVerificationCallable: _ShellVerificationCallable(),
       reloadIdentity: () async {},
     );
@@ -485,8 +461,55 @@ void main() {
     fixture.auth.add('user-a');
     await _pumpRouting(tester);
 
+    expect(find.byKey(const ValueKey('routing-onboarding')), findsOneWidget);
+    // This profile has no name, so the flow asks for one before anything else.
+    expect(find.byKey(const ValueKey('onboarding-account-step')), findsOneWidget);
     expect(find.byKey(const ValueKey('account-verification')), findsNothing);
-    expect(find.byKey(const ValueKey('show-tenant-request')), findsOneWidget);
+    expect(find.byKey(const ValueKey('show-tenant-request')), findsNothing);
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('a named but unverified account waits on the verify step', (
+    tester,
+  ) async {
+    final fixture = _ShellFixture(
+      memberships: [],
+      profile: _signedUpProfile,
+      sendAccountVerificationCallable: _ShellVerificationCallable(),
+      reloadIdentity: () async {},
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    expect(find.byKey(const ValueKey('onboarding-verify-step')), findsOneWidget);
+    // Nothing was pressed to get here and nothing needs to be: the first email
+    // was enqueued by `completeSelfSignup`.
+    expect(find.byKey(const ValueKey('onboarding-verify-resend')), findsOneWidget);
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('a verified account with no business is asked to create one', (
+    tester,
+  ) async {
+    final fixture = _ShellFixture(
+      memberships: [],
+      profile: _signedUpProfile,
+      emailVerified: true,
+      reloadIdentity: () async {},
+      // The form builds its own Firebase callable when none is supplied, and
+      // there is no Firebase in a widget test.
+      requestTenantCallable: _ShellRequestCallable((_, _) {}),
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    expect(find.byKey(const ValueKey('onboarding-business-step')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tenant-request-name')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tenant-request-currency')), findsOneWidget);
     await fixture.dispose(tester);
   });
 
@@ -509,7 +532,7 @@ void main() {
   });
 
   testWidgets(
-    'requests a pending business from no-access routing without opening it',
+    'creates a pending business from onboarding without opening it',
     (tester) async {
       late final _ShellFixture fixture;
       final callable = _ShellRequestCallable((name, slug) {
@@ -524,25 +547,26 @@ void main() {
       });
       fixture = _ShellFixture(
         memberships: [],
+        profile: _signedUpProfile,
         emailVerified: true,
+        reloadIdentity: () async {},
         requestTenantCallable: callable,
       );
       await fixture.pump(tester);
 
       fixture.auth.add('user-a');
       await _pumpRouting(tester);
-      expect(find.byKey(const ValueKey('show-tenant-request')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('onboarding-business-step')),
+        findsOneWidget,
+      );
 
-      await tester.tap(find.byKey(const ValueKey('show-tenant-request')));
-      await tester.pump();
       await tester.enterText(
         find.byKey(const ValueKey('tenant-request-name')),
         '  New   Business ',
       );
-      // The form scrolls now. Step 5a's page header costs this route 72
-      // logical pixels of body, so at the 800 x 600 test surface the review
-      // control sits below the fold of the panel's own scroll view, and a tap
-      // at its centre lands on whatever is painted there instead.
+      // The step scrolls, so a tap at a control's centre would otherwise land
+      // on whatever is painted at that point instead.
       await tester.ensureVisible(
         find.byKey(const ValueKey('tenant-request-review')),
       );
@@ -557,13 +581,33 @@ void main() {
       final payload = callable.payloads.single;
       expect(payload['name'], 'New Business');
       expect(payload['requestId'], 'routing-tenant-request');
+      // The currency the select offers first, published at
+      // `configuration/checkout` by the same transaction that creates the
+      // business - so a new till can price a sale before anybody opens
+      // Settings.
+      expect(payload['currency'], 'TZS');
       // The slug is derived from the name and the clock, and this route injects
       // no clock - so its shape is what can be asserted, not its value. The
       // exact derivation is pinned in `tenant_request_test.dart`.
       expect(payload['slug'], matches(RegExp(r'^new-business-\d{8}-\d{4}$')));
-      expect(payload.keys.toSet(), <String>{'name', 'slug', 'requestId'});
-      expect(fixture.gateway.rootCalls, 2);
-      expect(fixture.gateway.listCalls, 2);
+      expect(payload.keys.toSet(), <String>{
+        'name',
+        'slug',
+        'currency',
+        'requestId',
+      });
+
+      // The flow ends on a statement rather than dropping somebody back onto a
+      // list of one, and nothing has been opened yet.
+      expect(
+        find.byKey(const ValueKey('onboarding-complete-step')),
+        findsOneWidget,
+      );
+      expect(fixture.openedController, isNull);
+
+      await tester.tap(find.byKey(const ValueKey('onboarding-open-business')));
+      await _pumpRouting(tester);
+
       expect(find.text('Business tenant-requested'), findsOneWidget);
       expect(find.text('Administrator - Pending'), findsOneWidget);
       expect(fixture.openedController, isNull);
@@ -817,6 +861,18 @@ const _activeProfile = RootRoutingProfile(
   globalStatus: 'active',
 );
 
+/// An account that answered the first onboarding step and stopped.
+///
+/// The onboarding route reads the name and the phone off the root profile, so
+/// the difference between this and [_activeProfile] is the difference between
+/// somebody who has to be asked who they are and somebody who does not.
+const _signedUpProfile = RootRoutingProfile(
+  accountType: RootAccountType.tenantUser,
+  globalStatus: 'active',
+  displayName: 'Boniface Masota',
+  phone: '+255712345678',
+);
+
 final class _ShellFixture {
   _ShellFixture({
     required List<TenantMembership> memberships,
@@ -1048,6 +1104,7 @@ final class _ShellRequestCallable implements RequestTenantCallable {
       'tenantId': 'tenant-requested',
       'name': name,
       'slug': slug,
+      'currency': payload['currency']! as String,
       'status': 'pending',
       // The provisional trading window the server opens for a self-serve
       // request. 2026-09-05 09:00 UTC.

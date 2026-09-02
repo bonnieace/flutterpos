@@ -651,6 +651,7 @@ final class _CatalogContents extends StatelessWidget {
           const EmptyState(
             key: ValueKey('catalog-categories-empty'),
             title: 'No categories yet',
+            illustration: 'empty.svg',
           )
         else
           Wrap(
@@ -698,6 +699,7 @@ final class _CatalogContents extends StatelessWidget {
           empty: const EmptyState(
             key: ValueKey('catalog-products-empty'),
             title: 'No products yet',
+            illustration: 'empty.svg',
           ),
         ),
         // **Deliberately still a caption and not a `Callout`.** The sweep's rule

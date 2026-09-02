@@ -156,6 +156,7 @@ final class _CategoryContents extends StatelessWidget {
             key: const ValueKey('expense-category-empty'),
             title: 'Nothing under ${category.label.toLowerCase()}',
             hint: 'This heading had no spending in the days shown.',
+            illustration: 'empty-wallet.svg',
           )
         else ...<Widget>[
           ExpenseDailyChart(

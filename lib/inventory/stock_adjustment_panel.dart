@@ -13,8 +13,8 @@ import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/pagination.dart';
 import '../ui/record_list.dart';
+import '../ui/routes.dart';
 import '../ui/scaffold.dart';
-import '../ui/sheet.dart';
 import '../ui/skeleton.dart';
 import '../ui/snackbar.dart';
 import '../ui/stats.dart';
@@ -61,19 +61,23 @@ final class TenantProductStockScreen extends StatelessWidget {
   );
 }
 
-/// Opens the correction form as a sheet over the surface that asked for it.
+/// Opens the correction form as a screen of its own.
 ///
-/// **A sheet rather than a route, at the product owner's direction on
-/// 2026-08-26.** Correcting a figure is one short errand with one answer, and
-/// pushing a whole screen for it took a person away from the catalog they were
-/// working down and made them navigate back to carry on. The sheet keeps that
-/// list on screen behind the scrim.
+/// **A route again, at the product owner's direction on 2026-09-02**, reversing
+/// the 2026-08-26 move to a sheet. The reason is the keyboard: this form's
+/// subject is a *number a person types*, and a sheet is anchored to the bottom
+/// of the screen, which is where the keys come up. Every arrangement that put
+/// the quantity field and the submit control in the lower half of the sheet put
+/// them under the keyboard the moment the field took focus - so the one figure
+/// being entered was the one thing that could not be seen while entering it.
+/// `showAppSheet` now lifts a sheet clear of the keys, and a form whose whole
+/// purpose is typing still belongs on a surface that was never fighting them.
 ///
 /// **The answer lands on the surface underneath, not in here.** A confirmed
-/// adjustment closes the sheet and the sentence is shown by [showAppSnackBar]
+/// adjustment pops this route and the sentence is shown by [showAppSnackBar]
 /// over the catalog — see [TenantProductStockAdjustmentPanel.onCompleted] for
 /// why a refusal deliberately does not.
-Future<void> openTenantProductStockAdjustmentSheet(
+Future<void> openTenantProductStockAdjustmentScreen(
   BuildContext context, {
   required TenantDataReader reader,
   required TenantProduct product,
@@ -81,30 +85,36 @@ Future<void> openTenantProductStockAdjustmentSheet(
   String Function()? requestIdFactory,
 }) async {
   // The same scope the catalog was authorized against, captured before the
-  // sheet exists: a sheet is a route of its own and inherits nothing from the
-  // page it covers, so without this the guard inside it would find no session.
+  // route exists: a pushed route inherits nothing from the page it covers, so
+  // without this the guard inside it would find no session.
   final sessions = TenantSessionScope.of(context);
-  final answer = await showAppSheet<AppNotice>(
-    context,
-    // The form is a select, a direction, two fields and a pair of buttons. At
-    // `half` the submit control sits below the fold on a phone, which is the
-    // trap `AppSheetDetent.half`'s own doc records against the till's cart.
-    initialDetent: AppSheetDetent.full,
-    builder: (sheetContext, controller) => TenantSessionScope(
-      controller: sessions,
-      child: TenantProductStockAdjustmentPanel(
-        reader: reader,
-        product: product,
-        actions: actions,
-        requestIdFactory: requestIdFactory,
-        scrollController: controller,
-        onCompleted: (notice) => Navigator.of(sheetContext).pop(notice),
-        onCancel: () => Navigator.of(sheetContext).pop(),
+  final answer = await Navigator.of(context).push<AppNotice>(
+    AppPageRoute<AppNotice>(
+      builder: (routeContext) => TenantSessionScope(
+        controller: sessions,
+        child: AppScaffold(
+          // §7's "title appears once": the errand names the toolbar and the
+          // product names the line under it, which is what this said before it
+          // was briefly a sheet.
+          title: 'Adjust stock',
+          subtitle: product.name,
+          // A form, which is §4.2's `reading` row rather than the `records`
+          // row the stock ledger screen above it takes.
+          contentWidth: AppContentWidth.reading,
+          body: TenantProductStockAdjustmentPanel(
+            reader: reader,
+            product: product,
+            actions: actions,
+            requestIdFactory: requestIdFactory,
+            onCompleted: (notice) => Navigator.of(routeContext).pop(notice),
+            onCancel: () => Navigator.of(routeContext).pop(),
+          ),
+        ),
       ),
     ),
   );
   // `context.mounted` because the await above spans the whole life of the
-  // sheet, and the catalog under it can be disposed by a tenant switch while
+  // route, and the catalog under it can be disposed by a tenant switch while
   // it is up. Announcing a stock change over a torn-down page would throw.
   if (answer != null && context.mounted) showAppSnackBar(context, answer);
 }
@@ -268,25 +278,25 @@ final class _TenantProductStockPanelState
     final cursor = _cursors[_pageIndex];
     TenantGuardedLoader<_StockView> readWith(TenantDataReader reader) =>
         (session) async {
-      final stock =
-          await TenantProductStockRepository(
-            session: session,
-            reader: reader,
-          ).loadStock(
-            productId: productId,
-            pageSize: widget.pageSize,
-            cursor: cursor,
+          final stock =
+              await TenantProductStockRepository(
+                session: session,
+                reader: reader,
+              ).loadStock(
+                productId: productId,
+                pageSize: widget.pageSize,
+                cursor: cursor,
+              );
+          return _StockView(
+            stock: stock,
+            names: await _resolverFor(session).resolve(
+              stock.movements.items
+                  .map((movement) => movement.actorUid)
+                  .whereType<String>(),
+            ),
+            differences: await _readDifferences(session, productId),
           );
-      return _StockView(
-        stock: stock,
-        names: await _resolverFor(session).resolve(
-          stock.movements.items
-              .map((movement) => movement.actorUid)
-              .whereType<String>(),
-        ),
-        differences: await _readDifferences(session, productId),
-      );
-    };
+        };
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -387,7 +397,6 @@ final class TenantProductStockAdjustmentPanel extends StatefulWidget {
     required this.product,
     this.actions,
     this.requestIdFactory,
-    this.scrollController,
     this.onCompleted,
     this.onCancel,
   });
@@ -402,15 +411,10 @@ final class TenantProductStockAdjustmentPanel extends StatefulWidget {
   /// One fresh request ID per confirmation intent.
   final String Function()? requestIdFactory;
 
-  /// The sheet's own controller, which must reach the scrollable this builds or
-  /// dragging the form scrolls the form and the sheet never moves. Null when
-  /// this panel is pumped outside a sheet, which is how its tests reach it.
-  final ScrollController? scrollController;
-
   /// Called with the confirmation once, and only once, a correction commits.
   ///
   /// **Only a commit reports out, and a refusal deliberately does not.** The
-  /// sheet closes on this callback, so handing it a refusal would throw away a
+  /// route pops on this callback, so handing it a refusal would throw away a
   /// half-typed reason and a chosen type at the exact moment a person needs
   /// them to fix what was wrong. A refusal stays here as a [Callout] over the
   /// form that produced it; an ambiguous outcome does too, because the figure
@@ -464,9 +468,9 @@ final class _TenantProductStockAdjustmentPanelState
     final productId = widget.product.id;
     TenantGuardedLoader<TenantProduct> readWith(TenantDataReader reader) =>
         (session) => TenantProductStockRepository(
-      session: session,
-      reader: reader,
-    ).readProduct(productId);
+          session: session,
+          reader: reader,
+        ).readProduct(productId);
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -573,7 +577,6 @@ final class _TenantProductStockAdjustmentPanelState
         canAdjust:
             widget.actions?.adjustCallable != null &&
             TenantStockAdjustmentGateway.canAdjustInSession(session),
-        scrollController: widget.scrollController,
         onCancel: widget.onCancel,
         onAdjust: (type, quantityDelta, reason) =>
             _adjust(session, product, type, quantityDelta, reason),
@@ -1019,7 +1022,6 @@ final class _AdjustStockContents extends StatelessWidget {
     required this.busy,
     required this.notice,
     required this.canAdjust,
-    required this.scrollController,
     required this.onAdjust,
     required this.onCancel,
   });
@@ -1028,10 +1030,6 @@ final class _AdjustStockContents extends StatelessWidget {
   final bool busy;
   final AppNotice? notice;
   final bool canAdjust;
-
-  /// The sheet's drag controller. See
-  /// [TenantProductStockAdjustmentPanel.scrollController].
-  final ScrollController? scrollController;
 
   final void Function(
     TenantStockAdjustmentType type,
@@ -1047,10 +1045,8 @@ final class _AdjustStockContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return ListView(
       key: const ValueKey('product-stock-adjust'),
-      controller: scrollController,
-      // No top inset: the sheet's own handle already sits above this, and
-      // `AppSheetDetent` pads it. The bottom is the sheet's rather than a
-      // page's, so the submit control clears the sheet's edge.
+      // The page's own inset. No top one: `AppScaffold` already spends a gap
+      // under the toolbar, and the toolbar is what carries the title now.
       padding: EdgeInsets.fromLTRB(
         tokens.spacing.s20,
         0,
@@ -1058,18 +1054,7 @@ final class _AdjustStockContents extends StatelessWidget {
         tokens.spacing.s24,
       ),
       children: <Widget>[
-        // **The sheet's own title, carrying what `AppScaffold` used to.** §7's
-        // "title appears once": the errand names the header and the product
-        // names the subtitle, which is exactly what the adjust *route*'s app bar
-        // said before it became this. The `SectionHeading` that used to repeat
-        // `Adjust stock` inside the form below is gone for the same rule.
-        PageHeader(
-          key: const ValueKey('product-stock-adjust-header'),
-          title: 'Adjust stock',
-          subtitle: product.name,
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        // The figure the form is about, re-read canonically when the sheet
+        // The figure the form is about, re-read canonically when the screen
         // opened. `StatRow` rather than a bare number because this is a
         // headline figure and §2.1's negative case needs a container, a glyph
         // and a word - a red number alone is §9's own counter-example.
@@ -1088,8 +1073,8 @@ final class _AdjustStockContents extends StatelessWidget {
         ),
         if (notice case final answer?) ...<Widget>[
           SizedBox(height: tokens.spacing.s16),
-          // Only a refusal or an unknown outcome reaches here: a commit closes
-          // the sheet and is announced over the catalog instead. See
+          // Only a refusal or an unknown outcome reaches here: a commit pops
+          // the route and is announced over the catalog instead. See
           // [TenantProductStockAdjustmentPanel.onCompleted].
           Callout(
             key: const ValueKey('product-stock-notice'),
@@ -1108,13 +1093,14 @@ final class _AdjustStockContents extends StatelessWidget {
           )
         else
           // A session that may not adjust must never be offered the control
-          // that opens this sheet - the catalog withholds it - so arriving here
-          // without the permission is a wiring fault rather than a state to
-          // design for, and it says so instead of drawing an empty sheet.
+          // that opens this screen - the catalog withholds it - so arriving
+          // here without the permission is a wiring fault rather than a state
+          // to design for, and it says so instead of drawing an empty page.
           const Callout(
             key: ValueKey('product-stock-adjust-denied'),
             status: AppStatus.problem,
-            message: 'Only an owner, administrator, or manager may correct '
+            message:
+                'Only an owner, administrator, or manager may correct '
                 'stock.',
           ),
       ],

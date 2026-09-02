@@ -23,7 +23,6 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'keyboard_controller.dart';
 import 'keyboard_scope.dart';
-import 'tenancy/account_registration.dart';
 import 'tenancy/password_reset.dart';
 import 'tenancy/sign_in.dart';
 import 'ui/buttons.dart';
@@ -42,10 +41,6 @@ import 'widgets/pos_keyboard.dart';
 enum LoginMode {
   signIn,
 
-  /// Creating an account. The first step of the self-serve path: sign up,
-  /// verify the address, request a business, wait to be approved.
-  register,
-
   /// Asking for a password-reset email.
   resetPassword,
 }
@@ -54,7 +49,7 @@ class LoginScreen extends StatefulWidget {
   const LoginScreen({
     super.key,
     this.signIn,
-    this.registration,
+    this.createAccountRoute,
     this.passwordReset,
   });
 
@@ -65,7 +60,18 @@ class LoginScreen extends StatefulWidget {
   final EmailPasswordSignIn? signIn;
 
   /// The boundary this screen creates accounts through.
-  final EmailPasswordRegistration? registration;
+  /// Builds the route *Create an account* opens.
+  ///
+  /// **Signing up left this screen on 2026-09-02.** It used to be a third mode
+  /// here, taking an email and a password and nothing else - no name, no phone -
+  /// and then deliberately not navigating, which left the person on the business
+  /// selector with the rest of signing up scattered across it. `OnboardingFlow`
+  /// is that flow now, and it is a route rather than a mode because it has three
+  /// steps and a mailbox in the middle of it.
+  ///
+  /// Null hides the link: a host with nowhere to send somebody must not offer to
+  /// send them there.
+  final WidgetBuilder? createAccountRoute;
 
   /// The boundary this screen asks for reset emails through.
   final RequestPasswordResetCallable? passwordReset;
@@ -110,21 +116,12 @@ class _LoginScreenState extends State<LoginScreen> {
   late final EmailPasswordSignIn _signIn =
       widget.signIn ?? FirebaseEmailPasswordSignIn();
 
-  late final EmailPasswordRegistration _registration =
-      widget.registration ?? FirebaseEmailPasswordRegistration();
-
   late final PasswordResetGateway _passwordReset = PasswordResetGateway(
     callable: widget.passwordReset ?? FirebaseRequestPasswordResetCallable(),
   );
 
-  /// Which of the three things this screen is doing. See [LoginMode].
+  /// Which of the two things this screen is doing. See [LoginMode].
   LoginMode _mode = LoginMode.signIn;
-
-  final confirmController = TextEditingController();
-  final confirmFocus = FocusNode();
-
-  /// What registration refused about what was typed, if anything.
-  RegistrationInputDefect? _registrationDefect;
 
   /// Whether a reset request has been accepted.
   ///
@@ -173,20 +170,17 @@ class _LoginScreenState extends State<LoginScreen> {
   /// text can be told apart from one that did. See [_handleInputChanged].
   String _seenEmail = '';
   String _seenPassword = '';
-  String _seenConfirmation = '';
 
   @override
   void initState() {
     super.initState();
     emailController.addListener(_handleInputChanged);
     passwordController.addListener(_handleInputChanged);
-    confirmController.addListener(_handleInputChanged);
     // The keypad follows the focus. `PillInput` did this from inside itself;
     // `AppTextField` knows nothing about an on-screen keyboard and should not,
     // so the two listeners that did it move up here with the controller.
     emailFocus.addListener(_handleEmailFocus);
     passwordFocus.addListener(_handlePasswordFocus);
-    confirmFocus.addListener(_handleConfirmFocus);
     // Focus email field by default
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -198,16 +192,12 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     emailController.removeListener(_handleInputChanged);
     passwordController.removeListener(_handleInputChanged);
-    confirmController.removeListener(_handleInputChanged);
     emailFocus.removeListener(_handleEmailFocus);
     passwordFocus.removeListener(_handlePasswordFocus);
-    confirmFocus.removeListener(_handleConfirmFocus);
     emailController.dispose();
     passwordController.dispose();
-    confirmController.dispose();
     emailFocus.dispose();
     passwordFocus.dispose();
-    confirmFocus.dispose();
     super.dispose();
   }
 
@@ -215,8 +205,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handlePasswordFocus() =>
       _attachKeypad(passwordController, passwordFocus);
-
-  void _handleConfirmFocus() => _attachKeypad(confirmController, confirmFocus);
 
   /// Points the on-screen keypad at the field that has just taken the focus.
   void _attachKeypad(TextEditingController controller, FocusNode node) {
@@ -233,22 +221,13 @@ class _LoginScreenState extends State<LoginScreen> {
   void _handleInputChanged() {
     final email = emailController.text;
     final password = passwordController.text;
-    final confirmation = confirmController.text;
-    if (email == _seenEmail &&
-        password == _seenPassword &&
-        confirmation == _seenConfirmation) {
-      return;
-    }
+    if (email == _seenEmail && password == _seenPassword) return;
     _seenEmail = email;
     _seenPassword = password;
-    _seenConfirmation = confirmation;
-    if (_notice == null && _defect == null && _registrationDefect == null) {
-      return;
-    }
+    if (_notice == null && _defect == null) return;
     setState(() {
       _notice = null;
       _defect = null;
-      _registrationDefect = null;
     });
   }
 
@@ -266,78 +245,24 @@ class _LoginScreenState extends State<LoginScreen> {
       _mode = mode;
       _notice = null;
       _defect = null;
-      _registrationDefect = null;
       _resetAccepted = false;
       passwordController.clear();
-      confirmController.clear();
       _seenPassword = '';
-      _seenConfirmation = '';
       _passwordHidden = true;
     });
   }
 
-  /// Dispatches to whichever of the three this screen is doing.
+  /// Dispatches to whichever of the two this screen is doing.
   Future<void> _submit() => switch (_mode) {
     LoginMode.signIn => _submitSignIn(),
-    LoginMode.register => _submitRegistration(),
     LoginMode.resetPassword => _submitPasswordReset(),
   };
 
-  /// Creates the account, which leaves it signed in.
-  ///
-  /// The routing shell then takes over exactly as it does after a sign-in: it
-  /// finds an identity with no memberships and draws the business selector,
-  /// where `AccountVerificationPanel` and `TenantRequestForm` already live. So
-  /// nothing here navigates - the next step is somewhere this screen has never
-  /// needed to know about.
-  Future<void> _submitRegistration() async {
-    if (isLoading) return;
-
-    final email = emailController.text.trim();
-    final password = passwordController.text;
-    final confirmation = confirmController.text;
-
-    final defect = registrationInputDefect(
-      email: email,
-      password: password,
-      confirmation: confirmation,
-    );
-    if (defect != null) {
-      setState(() {
-        _registrationDefect = defect;
-        _notice = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _registrationDefect = null;
-      _notice = null;
-      isLoading = true;
-    });
-
-    try {
-      await _registration.call(email: email, password: password);
-      // Deliberately still loading, for the reason sign-in gives: the shell
-      // replaces this screen once the session opens, and releasing the button
-      // first offers a second account against one that is already being made.
-      return;
-    } catch (error, stackTrace) {
-      if (mounted) {
-        final failure = registrationFailure(error);
-        setState(() {
-          // Reusing sign-in's notice mapping rather than writing a second one:
-          // `RegistrationFailure` carries `SignInFailureKind` for exactly this
-          // reason, so a refusal and an unreachable server are drawn the same
-          // way on both halves of this screen.
-          _notice = _noticeFor(
-            SignInFailure(kind: failure.kind, message: failure.message),
-          );
-          isLoading = false;
-        });
-      }
-      await Sentry.captureException(error, stackTrace: stackTrace);
-    }
+  /// Opens the signup flow, which owns everything after this screen.
+  void _createAccount() {
+    final route = widget.createAccountRoute;
+    if (isLoading || route == null) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: route));
   }
 
   /// Asks the server to send a reset link.
@@ -541,9 +466,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 SizedBox(height: tokens.spacing.s24),
                 _PillField(
                   key: const ValueKey('login-password'),
-                  label: _mode == LoginMode.register
-                      ? 'CHOOSE A PASSWORD'
-                      : 'PASSWORD',
+                  label: 'PASSWORD',
                   leading: Icons.lock_outline,
                   placeholder: '********',
                   controller: passwordController,
@@ -552,35 +475,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   obscuringCharacter: '*',
                   autocorrect: false,
                   enableSuggestions: false,
-                  textInputAction: _mode == LoginMode.register
-                      ? TextInputAction.next
-                      : TextInputAction.done,
+                  textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _submit(),
                   error: _passwordError,
                   errorKey: const ValueKey('login-password-error'),
                   trailing: _revealToggle(tokens),
-                ),
-              ],
-              if (_mode == LoginMode.register) ...<Widget>[
-                SizedBox(height: tokens.spacing.s24),
-                _PillField(
-                  key: const ValueKey('login-confirm'),
-                  label: 'TYPE IT AGAIN',
-                  leading: Icons.lock_outline,
-                  placeholder: '********',
-                  controller: confirmController,
-                  focusNode: confirmFocus,
-                  // Follows the reveal toggle above it: the field exists to
-                  // catch a typo in something nobody can read, and revealing
-                  // one half while hiding the other would defeat it.
-                  obscureText: _passwordHidden,
-                  obscuringCharacter: '*',
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _submit(),
-                  error: _confirmationError,
-                  errorKey: const ValueKey('login-confirm-error'),
                 ),
               ],
               if (_mode == LoginMode.signIn) ...<Widget>[
@@ -631,14 +530,11 @@ class _LoginScreenState extends State<LoginScreen> {
   /// The heading, which names what this screen is about to do.
   String get _heading => switch (_mode) {
     LoginMode.signIn => 'Welcome back',
-    LoginMode.register => 'Create an account',
     LoginMode.resetPassword => 'Forgotten password',
   };
 
   String get _subheading => switch (_mode) {
     LoginMode.signIn => 'Sign in to your account.',
-    LoginMode.register =>
-      'Create an account, then ask for a business to trade under.',
     LoginMode.resetPassword =>
       'Enter the address for the account and a link to set a new password '
           'will be sent to it.',
@@ -646,35 +542,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String get _submitLabel => switch (_mode) {
     LoginMode.signIn => 'Sign in',
-    LoginMode.register => 'Create account',
     LoginMode.resetPassword => 'Send the link',
   };
 
-  /// The error under the password field, from whichever check owns this mode.
-  String? get _passwordError => switch (_mode) {
-    LoginMode.register => _registrationErrorFor(<RegistrationInputDefect>[
-      RegistrationInputDefect.missingPassword,
-      RegistrationInputDefect.passwordTooShort,
-    ]),
-    _ => _errorFor(SignInInputDefect.missingPassword),
-  };
-
-  /// The error under the confirmation field.
-  String? get _confirmationError =>
-      _registrationErrorFor(<RegistrationInputDefect>[
-        RegistrationInputDefect.missingConfirmation,
-        // Drawn under the second field rather than the first: it is the second
-        // one that is wrong, because the first is what it is being checked
-        // against.
-        RegistrationInputDefect.confirmationMismatch,
-      ]);
-
-  String? _registrationErrorFor(List<RegistrationInputDefect> defects) {
-    final defect = _registrationDefect;
-    return defect != null && defects.contains(defect)
-        ? registrationInputDefectMessage(defect)
-        : null;
-  }
+  /// The error under the password field.
+  String? get _passwordError => _errorFor(SignInInputDefect.missingPassword);
 
   /// The ways out of this mode, under the submit.
   ///
@@ -684,21 +556,27 @@ class _LoginScreenState extends State<LoginScreen> {
   /// they read as secondary to the submit above without being hard to hit.
   List<Widget> _modeLinks(AppTokens tokens) => switch (_mode) {
     LoginMode.signIn => <Widget>[
-      _ModeLink(
-        key: const ValueKey('login-go-reset'),
-        label: 'I have forgotten my password',
-        onPressed: isLoading
-            ? null
-            : () => _changeMode(LoginMode.resetPassword),
-      ),
-      SizedBox(height: tokens.spacing.s8),
-      _ModeLink(
-        key: const ValueKey('login-go-register'),
-        label: 'Create an account',
-        onPressed: isLoading ? null : () => _changeMode(LoginMode.register),
-      ),
+      // **Signing up is a second way in, not a footnote.** It is the only other
+      // thing a person can do from this screen and it opens a whole flow, so it
+      // reads as a button beside the submit rather than as one more quiet line
+      // under it. Secondary rather than primary: there is exactly one primary
+      // action on a screen and it is *Sign in*.
+      //
+      // **Rounded, at the product owner's direction on 2026-09-02.** The one
+      // control on this screen that leads somewhere else rather than submitting
+      // what is on it, and the capsule is what says so before the label is
+      // read.
+      if (widget.createAccountRoute != null)
+        AppButton(
+          key: const ValueKey('login-go-register'),
+          label: 'Create an account',
+          tier: AppButtonTier.secondary,
+          expand: true,
+          pill: true,
+          onPressed: isLoading ? null : _createAccount,
+        ),
     ],
-    LoginMode.register || LoginMode.resetPassword => <Widget>[
+    LoginMode.resetPassword => <Widget>[
       _ModeLink(
         key: const ValueKey('login-go-sign-in'),
         label: 'Back to sign in',
@@ -730,6 +608,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+  /// The two things a person decides about their own sign-in, on one row.
+  ///
+  /// **The reset link sits here rather than under the submit.** It is a
+  /// *credential* question - the same question the password field above it is
+  /// about - and it used to be stacked below the button with "Create an
+  /// account", which put "I cannot get into my account" and "I do not have one"
+  /// in the same list as though they were the same kind of answer.
   Widget _rememberRow(AppTokens tokens) => SizedBox(
     height: tokens.density.minimumTapTarget.height,
     child: Row(
@@ -746,11 +631,29 @@ class _LoginScreenState extends State<LoginScreen> {
           },
         ),
         SizedBox(width: tokens.spacing.s12),
-        Text(
-          'Remember me',
-          style: tokens.typography.bodyMedium.copyWith(
-            color: tokens.colors.text.secondary,
+        // **`Expanded` and no `Spacer`.** With both, the label and the spacer
+        // each took a flex share of the free space and "Remember me" ellipsised
+        // to "Remember ..." on a 360dp handset with room to spare beside it.
+        // The label takes the whole gap instead and gives only when there is
+        // genuinely not enough - the link never shrinks, because shrinking a
+        // target is what hard rule 4 forbids.
+        Expanded(
+          child: Text(
+            'Remember me',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.typography.bodyMedium.copyWith(
+              color: tokens.colors.text.secondary,
+            ),
           ),
+        ),
+        _InlineLink(
+          key: const ValueKey('login-go-reset'),
+          label: 'Forgot password?',
+          tokens: tokens,
+          onPressed: isLoading
+              ? null
+              : () => _changeMode(LoginMode.resetPassword),
         ),
       ],
     ),
@@ -868,7 +771,11 @@ class _PillFieldState extends State<_PillField> {
           ),
           child: Row(
             children: <Widget>[
-              Icon(widget.leading, size: _pillIconSize, color: colors.text.tertiary),
+              Icon(
+                widget.leading,
+                size: _pillIconSize,
+                color: colors.text.tertiary,
+              ),
               SizedBox(width: tokens.spacing.s12),
               Expanded(
                 child: TextField(
@@ -991,7 +898,10 @@ final class _PillSubmitButton extends StatelessWidget {
         fillWidth: true,
         excludeSemantics: true,
         child: DecoratedBox(
-          decoration: BoxDecoration(color: role.container, borderRadius: radius),
+          decoration: BoxDecoration(
+            color: role.container,
+            borderRadius: radius,
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               minHeight: tokens.density.minimumTapTarget.height,
@@ -1061,12 +971,57 @@ AppNotice _noticeFor(SignInFailure failure) => switch (failure.kind) {
   SignInFailureKind.unreachable => AppNotice.offline(failure.message),
 };
 
-
 /// One quiet route out of the current mode.
 ///
 /// A real button rather than a tappable word inside a sentence: §9 makes the
 /// 48-high tap target pass/fail, and a `TextSpan` recognizer is neither that
 /// tall nor separately reachable by a keyboard or a screen reader.
+/// A quiet control that sits *inside* a row rather than under a button.
+///
+/// **A button, not a tappable word.** Hard rule 4 makes a 48-high target
+/// pass/fail and a span inside a paragraph is neither 48 high nor separately
+/// focusable, which is the same reason [_ModeLink] exists. [PressSurface]
+/// carries the hover, pressed and focus-visible states with it, so this ships
+/// the states hard rule 5 asks for rather than being a coloured label.
+///
+/// **The colour is `text.primary`, which is what "white" is here.** It is pure
+/// `#FFFFFF` under the dark palette and `on-surface` `#D4E7DD` under Profound
+/// Verdant - the brightest ink either theme has. Writing `Colors.white` would
+/// be hard rule 2's hardcoded value and would go on rendering white after a
+/// palette that is not dark arrives.
+final class _InlineLink extends StatelessWidget {
+  const _InlineLink({
+    super.key,
+    required this.label,
+    required this.tokens,
+    required this.onPressed,
+  });
+
+  final String label;
+  final AppTokens tokens;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => PressSurface(
+    borderRadius: BorderRadius.circular(tokens.radius.sm),
+    onPressed: onPressed,
+    minimumTapTarget: tokens.density.minimumTapTarget,
+    hoverOverlay: tokens.colors.action.tertiary.hoverFill(),
+    pressedOverlay: tokens.colors.action.tertiary.pressedFill(),
+    child: Padding(
+      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s8),
+      child: Text(
+        label,
+        style: tokens.typography.bodyMedium.copyWith(
+          color: onPressed == null
+              ? tokens.colors.text.disabled
+              : tokens.colors.text.primary,
+        ),
+      ),
+    ),
+  );
+}
+
 final class _ModeLink extends StatelessWidget {
   const _ModeLink({super.key, required this.label, required this.onPressed});
 

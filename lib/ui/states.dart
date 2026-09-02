@@ -49,6 +49,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'illustration.dart';
 import 'spring.dart';
 import 'status.dart';
 import 'tokens.dart';
@@ -60,7 +61,13 @@ import 'tokens.dart';
 /// That is why nothing here is `status.problem` and why the mark is the
 /// page's own quiet colours rather than a warning.
 final class EmptyState extends StatelessWidget {
-  const EmptyState({super.key, required this.title, this.hint, this.action});
+  const EmptyState({
+    super.key,
+    required this.title,
+    this.hint,
+    this.action,
+    this.illustration,
+  });
 
   /// §7's "one-line statement of what would be here". A noun phrase about the
   /// records, not an apology: *No products yet*, not *Sorry, nothing found*.
@@ -81,6 +88,18 @@ final class EmptyState extends StatelessWidget {
   /// allow it, which is the caller's judgement and never this widget's.
   final Widget? action;
 
+  /// A file in `assets/illustrations/` to draw in place of the painted mark.
+  ///
+  /// **Additive, and null everywhere it is not named.** The painted
+  /// [_EmptyMark] stays the default because it is the state this component
+  /// shipped in and because it is the only one of the two that animates - an
+  /// SVG has no draw-on. A screen opts in by naming a file, and what it gets
+  /// is a drawing about *that* screen's emptiness rather than the same box
+  /// twenty-one times.
+  ///
+  /// The file's own colours are not used; see `AppIllustration`.
+  final String? illustration;
+
   /// The mark's side, in logical pixels.
   ///
   /// Named rather than tokenised: `design.md` states no illustration size
@@ -88,6 +107,15 @@ final class EmptyState extends StatelessWidget {
   /// `claude.md` forbids one rule before it forbids magic numbers. 96 is two of
   /// §9's 48 tap targets, which is the nearest thing to a derivation available.
   static const double markSize = 96;
+
+  /// The side an [illustration] fits inside.
+  ///
+  /// Named on the same grounds as [markSize], and larger for the same reason
+  /// that one is 96: a painted box outline reads at two tap targets, and a
+  /// drawing with a scene in it does not. 168 is three and a half of §9's 48,
+  /// which is the nearest derivation available and still leaves the title
+  /// above the fold on the shortest phone this app supports.
+  static const double illustrationSize = 168;
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +128,10 @@ final class EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const _EmptyMark(),
+              if (illustration case final asset?)
+                AppIllustration(asset: asset, size: illustrationSize)
+              else
+                const _EmptyMark(),
               SizedBox(height: tokens.spacing.s16),
               Text(
                 title,

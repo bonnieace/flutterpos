@@ -22,6 +22,14 @@ export type GlobalStatus = (typeof GLOBAL_STATUSES)[number];
 export interface RootUserRecord {
   email?: string;
   displayName?: string;
+  /**
+   * The person's own number, in E.164.
+   *
+   * Captured at signup and copied onto the owner's canonical staff record when
+   * they create a business - `requestTenant` wrote `phone: ""` there until this
+   * existed, because nothing had ever asked for one.
+   */
+  phone?: string;
   accountType?: AccountType;
   identityOrigin?: "self_signup" | "staff_invitation" | "platform_bootstrap";
   identityTransition?:

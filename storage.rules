@@ -14,13 +14,16 @@ service firebase.storage {
       return /databases/(default)/documents/tenants/$(tenantId)/staff/$(request.auth.uid);
     }
 
-    function activeMember(tenantId) {
+    // **The membership half of the gate, with nothing said about the business.**
+    // Split out on 2026-09-02 because the two halves answer different
+    // questions: this one is "is this person still staff here", and the tenant
+    // status below is "may this business be traded in at all".
+    function memberStanding(tenantId) {
       return request.auth != null
         && firestore.exists(rootUserPath())
         && firestore.get(rootUserPath()).data.globalStatus == 'active'
         && firestore.get(rootUserPath()).data.accountType == 'tenant_user'
         && firestore.exists(tenantPath(tenantId))
-        && firestore.get(tenantPath(tenantId)).data.status == 'active'
         && firestore.exists(staffPath(tenantId))
         && firestore.get(staffPath(tenantId)).data.uid == request.auth.uid
         && firestore.get(staffPath(tenantId)).data.status == 'active'
@@ -32,14 +35,50 @@ service firebase.storage {
         );
     }
 
+    // **A business that may be traded in.** The same two cases `firestore.rules`
+    // names in its own `tradingTenant()`: approved, or a self-serve request
+    // still inside the provisional window `requestTenant` opened for it.
+    //
+    // **This clause was missing here until 2026-09-02, and the gap had a shape.**
+    // Firestore let a provisional business sell, count a till and print a
+    // receipt; Storage let it do none of the one thing it needs a file for. A
+    // shopkeeper who had just signed up could ring up a sale and could not put
+    // a photograph on the product they were selling, until a platform
+    // administrator approved them - which is not a week of real trading.
+    //
+    // `provisionalUntil` is type-checked rather than assumed, exactly as it is
+    // in `firestore.rules`: a pending tenant written before the field existed
+    // has none and must read as lapsed, not as permanently trading.
+    function tradingTenant(tenantId) {
+      return firestore.get(tenantPath(tenantId)).data.status == 'active'
+        || (
+          firestore.get(tenantPath(tenantId)).data.status == 'pending'
+          && firestore.get(tenantPath(tenantId)).data.provisionalUntil is timestamp
+          && request.time < firestore.get(tenantPath(tenantId)).data.provisionalUntil
+        );
+    }
+
+    // **A business whose pictures may still be shown.** Mirrors
+    // `readableTenant()`: a lapsed provisional business keeps its reads, because
+    // its records are still readable and a catalog of broken images is a worse
+    // account of the week than a catalog it can look at but not change.
+    function readableTenant(tenantId) {
+      return firestore.get(tenantPath(tenantId)).data.status in ['active', 'pending'];
+    }
+
+    function readingMember(tenantId) {
+      return memberStanding(tenantId) && readableTenant(tenantId);
+    }
+
     function inventoryManager(tenantId) {
-      return activeMember(tenantId)
+      return memberStanding(tenantId)
+        && tradingTenant(tenantId)
         && firestore.get(staffPath(tenantId)).data.role
           in ['owner', 'admin', 'manager'];
     }
 
     match /tenantProductImages/{tenantId}/{productId}/{imageId} {
-      allow read: if activeMember(tenantId);
+      allow read: if readingMember(tenantId);
       allow create, update: if inventoryManager(tenantId)
         && request.resource.size > 0
         && request.resource.size <= 5 * 1024 * 1024

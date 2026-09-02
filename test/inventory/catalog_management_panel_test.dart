@@ -221,7 +221,7 @@ void main() {
       // The correction is a sheet rather than a route since 2026-08-26, so what
       // decides whether the menu offers it is this opener, not the builder
       // above. The entry is what this test is about; opening it is not.
-      adjustStockSheet: (context, product) async {},
+      adjustStockRoute: (context, product) async {},
       productStockRoles: const <TenantRole>[TenantRole.owner],
     );
 
@@ -1673,7 +1673,7 @@ Future<void> _pump(
   TenantProductImageStore? imageStore,
   TenantProductBackgroundRemover? backgroundRemover,
   TenantProductRouteBuilder? productStockRoute,
-  TenantProductAdjustStockOpener? adjustStockSheet,
+  TenantProductAdjustStockOpener? adjustStockRoute,
   List<TenantRole> productStockRoles = const <TenantRole>[],
 }) async {
   tester.view.physicalSize = Size(width, 3600);
@@ -1697,7 +1697,7 @@ Future<void> _pump(
             imageStore: imageStore,
             backgroundRemover: backgroundRemover,
             productStockRoute: productStockRoute,
-            adjustStockSheet: adjustStockSheet,
+            adjustStockRoute: adjustStockRoute,
             productStockRoles: productStockRoles,
           ),
         ),

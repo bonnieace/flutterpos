@@ -20,7 +20,9 @@ import '../ui/states.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import 'account_profile.dart';
 import 'account_verification.dart';
+import 'onboarding_flow.dart';
 import 'email_delivery_status.dart';
 import 'platform_tenant_review.dart';
 import 'platform_tenant_lifecycle.dart';
@@ -93,6 +95,10 @@ final class TenantRoutingShell extends StatefulWidget {
     this.requestTenantCallable,
     this.tenantRequestIdFactory,
     this.sendAccountVerificationCallable,
+    this.completeSelfSignupCallable,
+    this.changeSignupEmailCallable,
+    this.accountProfileRequestIdFactory,
+    this.readEmail,
     this.emailDeliveryStatusCallable,
     this.accountVerificationRequestIdFactory,
     this.reloadIdentity,
@@ -163,6 +169,15 @@ final class TenantRoutingShell extends StatefulWidget {
   final RequestTenantCallable? requestTenantCallable;
   final TenantRequestIdFactory? tenantRequestIdFactory;
   final SendAccountVerificationCallable? sendAccountVerificationCallable;
+
+  /// The two calls that finish signing up. See `account_profile.dart`.
+  final CompleteSelfSignupCallable? completeSelfSignupCallable;
+  final ChangeSignupEmailCallable? changeSignupEmailCallable;
+  final AccountProfileRequestIdFactory? accountProfileRequestIdFactory;
+
+  /// The signed-in address, for the verify step to name. Read from Auth rather
+  /// than from the root document, which is a mirror of it.
+  final String? Function()? readEmail;
 
   /// Reads whether the caller's own address can receive mail. Optional: while
   /// it is absent the verification panel simply does not make that claim.
@@ -766,6 +781,46 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     super.dispose();
   }
 
+  /// Whether this account has not finished signing up.
+  ///
+  /// **Derived rather than a phase of its own**, because it is a fact about the
+  /// account rather than a place the router moved to: an identity with no
+  /// business, no invitation and nothing to choose between has not finished
+  /// signing up, whether it was created a minute ago or a year ago. Reading it
+  /// here means a resumed signup and a fresh one arrive at the same widget by
+  /// the same route.
+  ///
+  /// **A cached empty list is not proof.** `fromCache` means the server could
+  /// not be reached, and "we could not ask" must never be drawn as "you have no
+  /// business" - so an offline device keeps the selector and its Retry.
+  bool get _isOnboarding {
+    if (_phase != _RoutingPhase.selector &&
+        _phase != _RoutingPhase.noAccessibleTenant) {
+      return false;
+    }
+    final result = _bootstrapResult;
+    if (result == null || result.fromCache) return false;
+    if (result.selection.visible.isNotEmpty) return false;
+    return result.profile.accountType == RootAccountType.tenantUser &&
+        result.profile.isActive &&
+        widget.reloadIdentity != null;
+  }
+
+  OnboardingIdentity _onboardingIdentity() {
+    final uid = _uid;
+    final profile = _bootstrapResult?.profile;
+    return OnboardingIdentity(
+      uid: uid,
+      email: widget.readEmail?.call(),
+      emailVerified: uid == null
+          ? false
+          : widget.isEmailVerified?.call(uid) ?? false,
+      displayName: profile?.displayName,
+      phone: profile?.phone,
+      profile: profile,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_phase == _RoutingPhase.signedOut) return widget.signedOut;
@@ -792,6 +847,32 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
         ),
         _RoutingPhase.signingOut => const _RoutingProgress(
           message: 'Signing you out.',
+        ),
+        _RoutingPhase.selector ||
+        _RoutingPhase.noAccessibleTenant when _isOnboarding => OnboardingFlow(
+          key: const ValueKey('routing-onboarding'),
+          readIdentity: _onboardingIdentity,
+          reloadIdentity: () async {
+            await widget.reloadIdentity?.call();
+            if (mounted) setState(() {});
+          },
+          onSignOut: _signOut,
+          onOpenBusiness: (_) => _retry(),
+          completeSelfSignupCallable: widget.completeSelfSignupCallable,
+          changeSignupEmailCallable: widget.changeSignupEmailCallable,
+          sendAccountVerificationCallable:
+              widget.sendAccountVerificationCallable,
+          requestTenantCallable: widget.requestTenantCallable,
+          accountProfileRequestIdFactory: widget.accountProfileRequestIdFactory,
+          accountVerificationRequestIdFactory:
+              widget.accountVerificationRequestIdFactory,
+          tenantRequestIdFactory: widget.tenantRequestIdFactory,
+          // A pushed wizard sits above this route, and two of them polling is
+          // two of everything. See `OnboardingFlow.isCurrent`.
+          isCurrent: () =>
+              mounted &&
+              _isOnboarding &&
+              (ModalRoute.of(context)?.isCurrent ?? true),
         ),
         _RoutingPhase.selector ||
         _RoutingPhase.noAccessibleTenant => TenantBusinessSelector(
@@ -1288,30 +1369,15 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
     // no behaviour and it is an improvement rather than a concession: at the
     // height where this first broke, the old layout had already crushed the
     // membership list to 56 pixels to make room for the form.
+    // **Verification is not asked for here any more.** This screen used to
+    // carry `AccountVerificationPanel`, because it was where an unverified
+    // identity got stuck - it could neither request a business nor accept an
+    // invitation, and nothing else would draw the card. `OnboardingFlow` owns
+    // that step now and the routing shell sends a membership-less account there
+    // instead, so the only people who reach this screen unverified are ones who
+    // already belong to a business and are choosing between businesses. Asking
+    // them to verify, on a list, would be asking about something else.
     final panels = <Widget>[
-      if (widget.verificationIdentity?.canSendVerification == true &&
-          widget.onReloadIdentity != null)
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            tokens.spacing.s20,
-            tokens.spacing.s20,
-            tokens.spacing.s20,
-            0,
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: AccountVerificationPanel(
-              identity: widget.verificationIdentity!,
-              callable:
-                  widget.sendAccountVerificationCallable ??
-                  FirebaseSendAccountVerificationCallable(),
-              onReload: widget.onReloadIdentity!,
-              deliveryStatusCallable: widget.emailDeliveryStatusCallable,
-              requestIdFactory: widget.accountVerificationRequestIdFactory,
-              isCurrent: widget.isCurrent,
-            ),
-          ),
-        ),
       if (_requestingTenant && widget.requestIdentity != null)
         Padding(
           padding: EdgeInsets.fromLTRB(

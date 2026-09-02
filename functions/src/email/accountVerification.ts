@@ -297,6 +297,60 @@ async function enqueueVerification(task: AccountVerificationTask): Promise<void>
   }
 }
 
+/**
+ * Hashes the recipient, derives the delivery id, and enqueues one send.
+ *
+ * **Extracted because three callers now need the same recipe** and none of them
+ * may reinvent it: the `deliveryId` is a `stablePrivateId` over the uid, the key
+ * version, the recipient hash and the `requestId`, and it is the *only* thing
+ * stopping a retried call from sending a second message - the task id derived
+ * from it is what Cloud Tasks deduplicates on. A caller that hashed the address
+ * slightly differently, or that stirred a timestamp into the id, would get a
+ * fresh delivery for every attempt and nothing downstream would notice.
+ *
+ * [email] must already be normalized: it is the address the link is minted for
+ * and the address the hash is taken of, so a caller that passed the raw Auth
+ * value would suppress against one string and send to another.
+ *
+ * Every function that calls this must declare `EMAIL_RECIPIENT_HMAC_KEYRING`
+ * among its secrets. There is no way to check that here - the value simply is
+ * not there at runtime - so it is stated where it can be read.
+ */
+export async function enqueueAccountVerificationFor(options: {
+  uid: string;
+  email: string;
+  requestId: string;
+  requestAuthTime: number;
+}): Promise<void> {
+  const keyring = parseRecipientHmacKeyring(EMAIL_RECIPIENT_HMAC_KEYRING.value());
+  const recipient = hashRecipient(options.email, keyring);
+  const deliveryId = stablePrivateId(
+    "account-verification-delivery",
+    options.uid,
+    recipient.keyVersion,
+    recipient.recipientHash,
+    options.requestId
+  );
+  await enqueueVerification({
+    deliveryId,
+    targetUid: options.uid,
+    normalizedEmail: options.email,
+    recipientHash: recipient.recipientHash,
+    recipientHashKeyVersion: recipient.keyVersion,
+    requestAuthTime: options.requestAuthTime,
+  });
+}
+
+/**
+ * The **resend** button, and nothing else.
+ *
+ * The first message of an account's life is enqueued by `completeSelfSignup`
+ * without anybody pressing anything; this is what the person presses when that
+ * one did not arrive. Hence the guards it keeps and the helper above does not:
+ * `isRecentAuthTime` bounds how long a stolen session can ask for mail, and the
+ * token-email comparison refuses a session whose address has moved underneath
+ * it.
+ */
 export const sendAccountVerification = onCall<unknown, Promise<{accepted: true}>>(
   {secrets: [EMAIL_RECIPIENT_HMAC_KEYRING]},
   async (request: CallableRequest<unknown>) => {
@@ -320,21 +374,10 @@ export const sendAccountVerification = onCall<unknown, Promise<{accepted: true}>
       throw new HttpsError("permission-denied", "This account is not active.");
     }
     if (current.emailVerified) return {accepted: true};
-    const keyring = parseRecipientHmacKeyring(EMAIL_RECIPIENT_HMAC_KEYRING.value());
-    const recipient = hashRecipient(current.email, keyring);
-    const deliveryId = stablePrivateId(
-      "account-verification-delivery",
-      caller.uid,
-      recipient.keyVersion,
-      recipient.recipientHash,
-      requestId
-    );
-    await enqueueVerification({
-      deliveryId,
-      targetUid: caller.uid,
-      normalizedEmail: current.email,
-      recipientHash: recipient.recipientHash,
-      recipientHashKeyVersion: recipient.keyVersion,
+    await enqueueAccountVerificationFor({
+      uid: caller.uid,
+      email: current.email,
+      requestId,
       requestAuthTime: caller.token.auth_time,
     });
     return {accepted: true};

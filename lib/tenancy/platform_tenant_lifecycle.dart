@@ -872,7 +872,10 @@ final class _PlatformLifecycleTenantScreenState
       );
     }
     if (_items.isEmpty) {
-      return const EmptyState(title: 'No active or suspended businesses');
+      return const EmptyState(
+        title: 'No active or suspended businesses',
+        illustration: 'approve.svg',
+      );
     }
     return RefreshIndicator(
       onRefresh: _reload,

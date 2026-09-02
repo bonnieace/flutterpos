@@ -176,6 +176,7 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
           key: ValueKey('branding-denied'),
           title: 'Business details are not shown for this role',
           hint: 'An owner or an administrator can change them.',
+          illustration: 'access-denied.svg',
         ),
       ),
       loading: const Center(

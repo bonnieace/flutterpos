@@ -861,7 +861,10 @@ final class _PlatformPendingTenantReviewScreenState
       );
     }
     if (_items.isEmpty) {
-      return const EmptyState(title: 'No pending business requests');
+      return const EmptyState(
+        title: 'No pending business requests',
+        illustration: 'approve.svg',
+      );
     }
     return ListView.separated(
       padding: EdgeInsets.all(tokens.spacing.s20),

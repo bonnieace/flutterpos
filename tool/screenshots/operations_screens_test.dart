@@ -122,8 +122,8 @@ Future<void> _chooseCorrectionImage(WidgetTester tester) async {
   // `19-correct-a-product` already fell into once.
   //
   // **The picture rather than the `Product image` heading, which went on
-  // 2026-08-26.** It is unique either way: on the compact sheet only the
-  // masthead draws it, and on the wide one only the image column does.
+  // 2026-08-26.** The image well is the only thing that draws it, at every
+  // width, since the form went back to being a route on 2026-09-02.
   await tester.ensureVisible(
     find.byKey(const ValueKey('inventory-product-image-preview')),
   );
@@ -790,10 +790,10 @@ void main() {
   // is the "a fixture that hides the case the component exists for" trap this
   // family has already recorded once.
   screenshotCase(
-    '21c-adjust-stock-sheet',
+    '21c-adjust-stock-screen',
     build: () => inSession(
       _SheetHost(
-        open: (context) => openTenantProductStockAdjustmentSheet(
+        open: (context) => openTenantProductStockAdjustmentScreen(
           context,
           reader: FakeTenantReader.business(),
           product: seedProduct('pd-bread-white'),
@@ -805,13 +805,13 @@ void main() {
     viewports: responsiveViewports,
   );
 
-  // The same sheet on a product the server holds a negative quantity for, which
-  // is the one state of the figure above the form that carries a status.
+  // The same screen on a product the server holds a negative quantity for,
+  // which is the one state of the figure above the form that carries a status.
   screenshotCase(
     '21d-adjust-stock-below-zero',
     build: () => inSession(
       _SheetHost(
-        open: (context) => openTenantProductStockAdjustmentSheet(
+        open: (context) => openTenantProductStockAdjustmentScreen(
           context,
           reader: FakeTenantReader.business(),
           product: seedProduct('pd-milk-500'),

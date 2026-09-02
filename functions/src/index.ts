@@ -6,6 +6,11 @@ if (getApps().length === 0) initializeApp();
 // canonical root document `requestTenant` requires of every applicant.
 export {bootstrapSelfSignupIdentity} from "./auth/identityBootstrap";
 
+// The rest of signing up: the name and phone that account creation had no way
+// to carry, the first verification email nobody has to ask for, and the one
+// window in which a never-verified address may still be corrected.
+export {changeSignupEmail, completeSelfSignup} from "./auth/selfSignupProfile";
+
 export {requestTenant} from "./tenants/onboarding";
 export {listMyTenants, setDefaultTenant} from "./tenants/routing";
 

@@ -7,9 +7,20 @@
   <p class="mark">ChillTent</p>
   <div class="tick">&check;</div>
   <h1>Your email address is verified</h1>
-  <p class="lead">You can close this page and go back to the app.</p>
-  <p>Signing in again is not necessary. If the app is still showing the old
-     state, pull to refresh the account screen.</p>
-  <footer>Next step in the app: <strong>Request a business</strong> — it stays
-     locked until an address is verified, which it now is.</footer>
+  <!--
+    On a phone with the app installed this page is usually never seen: the
+    same URL is an Android App Link, so following the link opens the app
+    straight onto the next step of signing up. This is what a device without
+    the app - a laptop, a borrowed phone - reads instead, and what the App
+    Link falls back to when the hand-off does not fire.
+
+    The wording no longer asks anybody to refresh anything. The app watches
+    for the verification whenever it comes back to the foreground, so
+    switching to it is the whole of the remaining instruction.
+  -->
+  <p class="lead">Switch back to the app — it carries on from here by itself.</p>
+  <p>There is nothing left to press on this page, and signing in again is not
+     necessary.</p>
+  <footer>Next in the app: <strong>tell us about your business</strong>, and
+     you can start selling.</footer>
 </main>

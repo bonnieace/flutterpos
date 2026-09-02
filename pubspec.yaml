@@ -94,6 +94,7 @@ dependencies:
   flutter_esc_pos_utils: ^1.0.1
   excel: ^4.0.6
   sentry_flutter: ^9.21.0
+  flutter_svg: ^2.3.0
   
   
 
@@ -130,6 +131,12 @@ flutter:
     # delegate tints them - a multi-coloured file is refused, which is the whole
     # of what makes an authored asset survive a palette change.
     - assets/lottie/
+    # unDraw illustrations (MIT, no attribution). Sourced multi-colour, which
+    # the Lottie note above would refuse - the difference is that these are
+    # never drawn in the colours they ship with. `AppIllustration` binds each of
+    # unDraw's five palette slots to a token role at render time, so the file on
+    # disk is a shape and the palette is still `AppTokens`.
+    - assets/illustrations/
 
   # Profound Verdant §typography, and `docs/stitch/OPEN_QUESTIONS.md` decision 20.
   # **The families changed on 2026-08-22**, from Roboto/Roboto Mono to Hanken
