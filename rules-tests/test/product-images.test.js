@@ -1,6 +1,7 @@
 import { after, before, beforeEach, describe, test } from "node:test";
 
 import { assertFails, assertSucceeds } from "@firebase/rules-unit-testing";
+import { Timestamp } from "firebase/firestore";
 import { deleteObject, getBytes, ref, uploadBytes } from "firebase/storage";
 
 import {
@@ -15,6 +16,18 @@ let testEnvironment;
 const imagePath =
   "tenantProductImages/tenant-a/product-a/00000000-0000-4000-8000-000000000001.png";
 const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+const HOUR_MILLISECONDS = 60 * 60 * 1000;
+
+/** The provisional trading window `requestTenant` opens, still open. */
+function openWindow() {
+  return Timestamp.fromMillis(Date.now() + HOUR_MILLISECONDS);
+}
+
+/** The same window, shut. */
+function shutWindow() {
+  return Timestamp.fromMillis(Date.now() - HOUR_MILLISECONDS);
+}
 
 function upload(storage, path = imagePath, options = {}) {
   return uploadBytes(ref(storage, path), options.bytes ?? png, {
@@ -110,6 +123,91 @@ describe("tenant product image storage rules", () => {
     await assertFails(
       upload(storage, imagePath, { bytes: new Uint8Array(5 * 1024 * 1024 + 1) }),
     );
+  });
+
+  test("a pending business inside its window uploads like an approved one", async () => {
+    // The gap this closes: Firestore let a self-serve business sell from the
+    // hour it was created and Storage made it wait for a platform approval, so
+    // the first thing a new shopkeeper tried to do - photograph their stock -
+    // was the one thing refused.
+    await seedDocuments(
+      testEnvironment,
+      activeTenantDocuments({
+        uid: "manager-a",
+        role: "manager",
+        tenantStatus: "pending",
+        provisionalUntil: openWindow(),
+      }),
+    );
+    const storage = authenticatedStorage(testEnvironment, "manager-a");
+    await assertSucceeds(upload(storage));
+    await assertSucceeds(getBytes(ref(storage, imagePath)));
+    await assertSucceeds(deleteObject(ref(storage, imagePath)));
+  });
+
+  test("a shut window keeps the pictures visible and refuses new ones", async () => {
+    await seedDocuments(
+      testEnvironment,
+      activeTenantDocuments({
+        uid: "manager-a",
+        role: "manager",
+        tenantStatus: "pending",
+        provisionalUntil: openWindow(),
+      }),
+    );
+    await assertSucceeds(upload(authenticatedStorage(testEnvironment, "manager-a")));
+
+    await seedDocuments(
+      testEnvironment,
+      activeTenantDocuments({
+        uid: "manager-a",
+        role: "manager",
+        tenantStatus: "pending",
+        provisionalUntil: shutWindow(),
+      }),
+    );
+    const lapsed = authenticatedStorage(testEnvironment, "manager-a");
+    await assertSucceeds(getBytes(ref(lapsed, imagePath)));
+    await assertFails(upload(lapsed, imagePath.replace("0001", "0002")));
+    await assertFails(deleteObject(ref(lapsed, imagePath)));
+  });
+
+  test("a pending business with no window at all never traded", async () => {
+    // Written before `provisionalUntil` existed. It must read as lapsed rather
+    // than as permanently provisional, which is what an untyped read would
+    // give.
+    await seedDocuments(
+      testEnvironment,
+      activeTenantDocuments({
+        uid: "manager-a",
+        role: "manager",
+        tenantStatus: "pending",
+      }),
+    );
+    await assertFails(upload(authenticatedStorage(testEnvironment, "manager-a")));
+  });
+
+  test("a rejected business is dark", async () => {
+    await seedDocuments(
+      testEnvironment,
+      activeTenantDocuments({ uid: "manager-a", role: "manager" }),
+    );
+    await assertSucceeds(upload(authenticatedStorage(testEnvironment, "manager-a")));
+
+    for (const tenantStatus of ["rejected", "suspended", "archived"]) {
+      await seedDocuments(
+        testEnvironment,
+        activeTenantDocuments({
+          uid: "manager-a",
+          role: "manager",
+          tenantStatus,
+          provisionalUntil: openWindow(),
+        }),
+      );
+      const storage = authenticatedStorage(testEnvironment, "manager-a");
+      await assertFails(getBytes(ref(storage, imagePath)));
+      await assertFails(upload(storage, imagePath.replace("0001", "0003")));
+    }
   });
 
   test("managers can delete an owned image", async () => {
