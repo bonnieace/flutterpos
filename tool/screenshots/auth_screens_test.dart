@@ -10,7 +10,6 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/login_screen.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/widgets/pos_keyboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -326,20 +325,21 @@ final class _CaptureRequestTenant implements RequestTenantCallable {
   };
 }
 
-Widget _onboarding(OnboardingIdentity identity) => MaterialApp(
-  theme: spiritTheme,
-  home: OnboardingFlow(
-    readIdentity: () => identity,
-    reloadIdentity: () async {},
-    onSignOut: () async {},
-    onOpenBusiness: (_) {},
-    completeSelfSignupCallable: const _CaptureComplete(),
-    changeSignupEmailCallable: const _CaptureChangeEmail(),
-    requestTenantCallable: const _CaptureRequestTenant(),
-    accountProfileRequestIdFactory: () => 'profile-capture-000000',
-    tenantRequestIdFactory: () => 'tenant-capture-000000',
-    clock: () => DateTime.utc(2026, 8, 30, 16, 45),
-  ),
+/// **No `MaterialApp` of its own.** `captureScreen` already wraps what it is
+/// given in one - with `screenshotTheme()` and the debug banner off - so a
+/// second one nested inside took `spiritTheme` instead of the capture theme and
+/// painted the checked-mode stripe across the corner of every onboarding frame.
+Widget _onboarding(OnboardingIdentity identity) => OnboardingFlow(
+  readIdentity: () => identity,
+  reloadIdentity: () async {},
+  onSignOut: () async {},
+  onOpenBusiness: (_) {},
+  completeSelfSignupCallable: const _CaptureComplete(),
+  changeSignupEmailCallable: const _CaptureChangeEmail(),
+  requestTenantCallable: const _CaptureRequestTenant(),
+  accountProfileRequestIdFactory: () => 'profile-capture-000000',
+  tenantRequestIdFactory: () => 'tenant-capture-000000',
+  clock: () => DateTime.utc(2026, 8, 30, 16, 45),
 );
 
 const OnboardingIdentity _namedIdentity = OnboardingIdentity(
@@ -377,7 +377,9 @@ void onboardingScreenshots() {
       // brought into view before it can be pressed - otherwise the tap lands
       // on whatever is painted at that point and the capture is of the
       // unopened state.
-      final reveal = find.byKey(const ValueKey('onboarding-verify-change-email'));
+      final reveal = find.byKey(
+        const ValueKey('onboarding-verify-change-email'),
+      );
       await tester.ensureVisible(reveal);
       await tester.pump();
       await tester.tap(reveal);

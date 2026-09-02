@@ -32,8 +32,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
-import '../ui/progress_steps.dart';
-import '../ui/scaffold.dart';
+import '../ui/illustration.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -495,78 +494,129 @@ class _OnboardingFlowState extends State<OnboardingFlow>
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final step = _step;
-    return AppScaffold(
-      // **Short, because `PageHeader` does not shrink a title.** The bar renders
-      // `title.lg` with `titleSpacing: 0` and no wrapping, so a long title
-      // ellipsises. These match the progress labels, which is the better copy
-      // anyway: the header names the step and the bar underneath says where the
-      // step sits.
-      title: switch (step) {
-        OnboardingStep.account => 'About you',
-        OnboardingStep.verify => 'Check your email',
-        OnboardingStep.business => 'Your business',
-        OnboardingStep.complete => "You're set up",
-      },
-      contentWidth: AppContentWidth.reading,
-      // **The leading control is left to render, and that is a layout
-      // requirement rather than a navigation preference.** `AppScaffold` sets
-      // `titleSpacing: 0` on the deliberate ground that "the leading control's
-      // own 48 square is the gap" - so a route that suppresses the leading
-      // control has no gutter at all and its title sits flush against the screen
-      // edge, which reads as clipped. Suppressing it here did exactly that on a
-      // 360dp handset.
-      //
-      // It is the right affordance too: on the pushed wizard, back is the way
-      // out to sign-in, and popping mid-flow is safe because the shell
-      // underneath re-derives the same step from the same state.
-      actions: <Widget>[
-        if (step != OnboardingStep.complete &&
-            widget.readIdentity().uid != null)
-          AppButton(
-            key: const ValueKey('onboarding-sign-out'),
-            label: 'Sign out',
-            tier: AppButtonTier.tertiary,
-            onPressed: _busy ? null : widget.onSignOut,
-          ),
-      ],
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(tokens.spacing.s20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            AppProgressSteps(
-              key: const ValueKey('onboarding-progress'),
-              currentIndex: switch (step) {
-                OnboardingStep.account => 0,
-                OnboardingStep.verify => 1,
-                OnboardingStep.business || OnboardingStep.complete => 2,
-              },
-              steps: const <AppProgressStep>[
-                AppProgressStep(label: 'About you'),
-                AppProgressStep(label: 'Verify'),
-                AppProgressStep(label: 'Your business'),
-              ],
+    // **The sign-in screen's frame, not `AppScaffold`'s, since 2026-09-02.**
+    // Signing in and signing up are one errand seen twice, and they were drawn
+    // as two different kinds of page: sign-in a bare centred credential column,
+    // this a titled route with a toolbar, a back arrow and a progress bar. The
+    // frame is what carried that difference - a person reads the shape of a
+    // page before they read a word of it - so it is the frame that moves.
+    //
+    // Every value below is `_form`'s in `login_screen.dart`: `surface.base` on
+    // a bare `Scaffold`, the s24/s32 inset, `layout.credential`, and the
+    // display-plus-body heading pair with s8 between them and s40 under.
+    return Scaffold(
+      backgroundColor: tokens.colors.surface.base,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: tokens.spacing.s24,
+              vertical: tokens.spacing.s32,
             ),
-            SizedBox(height: tokens.spacing.s24),
-            if (_notice != null) ...[
-              Callout(
-                key: const ValueKey('onboarding-notice'),
-                status: _notice!.status,
-                message: _notice!.message,
+            child: ConstrainedBox(
+              // 448, whose own token doc reads "sign-in, and the tenant-entry
+              // screens" - so this column was always meant to be one of these
+              // and was the only one not taking it.
+              constraints: BoxConstraints(maxWidth: tokens.layout.credential),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  // **The heading is the step indicator now.** The stepper is
+                  // gone at the product owner's direction on 2026-09-02: three
+                  // steps is a flow, not a process worth charting, and the bar
+                  // spent the top of every screen saying so. What it did carry
+                  // - where you are, and how much is left - the subheadings say
+                  // in words instead.
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      _heading(step),
+                      key: const ValueKey('onboarding-heading'),
+                      style: tokens.typography.display.copyWith(
+                        color: tokens.colors.text.primary,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: tokens.spacing.s8),
+                  Text(
+                    _subheading(step),
+                    key: const ValueKey('onboarding-subheading'),
+                    style: tokens.typography.bodyLarge.copyWith(
+                      color: tokens.colors.text.secondary,
+                    ),
+                  ),
+                  SizedBox(height: tokens.spacing.s40),
+                  if (_notice != null) ...<Widget>[
+                    Callout(
+                      key: const ValueKey('onboarding-notice'),
+                      status: _notice!.status,
+                      message: _notice!.message,
+                    ),
+                    SizedBox(height: tokens.spacing.s16),
+                  ],
+                  switch (step) {
+                    OnboardingStep.account => _buildAccountStep(tokens),
+                    OnboardingStep.verify => _buildVerifyStep(tokens),
+                    OnboardingStep.business => _buildBusinessStep(),
+                    OnboardingStep.complete => _buildCompleteStep(tokens),
+                  },
+                  // **The way out, which the toolbar used to hold.** Losing the
+                  // app bar loses its back arrow, and a flow with no exit is a
+                  // trap for anybody who mistyped an address on step 1. It sits
+                  // at the foot rather than the top because it is the last
+                  // thing anyone here wants, and it is a real button rather
+                  // than a tappable word for hard rule 4's 48.
+                  if (step != OnboardingStep.complete &&
+                      widget.readIdentity().uid != null) ...<Widget>[
+                    SizedBox(height: tokens.spacing.s24),
+                    Center(
+                      child: AppButton(
+                        key: const ValueKey('onboarding-sign-out'),
+                        label: 'Sign out',
+                        tier: AppButtonTier.tertiary,
+                        onPressed: _busy ? null : widget.onSignOut,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              SizedBox(height: tokens.spacing.s16),
-            ],
-            switch (step) {
-              OnboardingStep.account => _buildAccountStep(tokens),
-              OnboardingStep.verify => _buildVerifyStep(tokens),
-              OnboardingStep.business => _buildBusinessStep(),
-              OnboardingStep.complete => _buildCompleteStep(tokens),
-            },
-          ],
+            ),
+          ),
         ),
       ),
     );
   }
+
+  /// The step's name, in the role `login_screen.dart` gives *Welcome back*.
+  String _heading(OnboardingStep step) => switch (step) {
+    OnboardingStep.account =>
+      widget.readIdentity().uid == null
+          ? 'Create your account'
+          : 'Almost there',
+    OnboardingStep.verify => 'Check your email',
+    OnboardingStep.business => 'Your business',
+    OnboardingStep.complete => "You're set up",
+  };
+
+  /// One plain sentence under it, in the role *Sign in to your account* holds.
+  ///
+  /// **These carry what the progress bar used to.** Each one says where the
+  /// person is in the flow - *two more steps*, *one more step*, *the last one* -
+  /// so removing the chart did not remove the answer to "how much of this is
+  /// left", which is the only question it was really answering.
+  String _subheading(OnboardingStep step) => switch (step) {
+    OnboardingStep.account =>
+      widget.readIdentity().uid == null
+          ? 'Two more steps and your till is open.'
+          : 'Finish the account you already started.',
+    OnboardingStep.verify =>
+      'We sent a link to ${widget.readIdentity().email ?? 'your address'}. '
+          'Open it and this screen moves on by itself.',
+    OnboardingStep.business =>
+      'The last step. You can trade straight away while it is reviewed.',
+    OnboardingStep.complete => 'Your till is ready to take its first sale.',
+  };
 
   Widget _buildAccountStep(AppTokens tokens) {
     final creating = widget.readIdentity().uid == null;
@@ -574,21 +624,16 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       key: const ValueKey('onboarding-account-step'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        // **Nothing stands above the first field on a new account.** The
-        // sentence that used to - "We will use this to set up your till and
-        // your receipts" - explained a use nobody had asked about yet, above
-        // two fields that need no explaining. The resumed case keeps its line
-        // because it answers a question a person really does have: why they
-        // are on step 1 with an account they already made.
-        if (!creating) ...<Widget>[
-          const Text('Finish setting up the account you already have.'),
-          SizedBox(height: tokens.spacing.s16),
-        ],
         AppTextField(
           key: const ValueKey('onboarding-name'),
           controller: _nameController,
           enabled: !_busy,
           label: 'Full name',
+          // The glyph and the example between them do what a helper sentence
+          // was doing: say what belongs in the box without spending a line
+          // under it.
+          leading: Icons.person_outline,
+          placeholder: 'Amina Wanjiru',
           error: _nameError,
           textCapitalization: TextCapitalization.words,
           onChanged: (_) {
@@ -599,6 +644,9 @@ class _OnboardingFlowState extends State<OnboardingFlow>
         AppPhoneField(
           key: const ValueKey('onboarding-phone'),
           label: 'Mobile number',
+          // No `leading` and no placeholder: the dial-code selector is this
+          // field's leading control and `AppPhoneField` already shows
+          // `712 345 678` in the box, which is the example wanted here.
           error: _phoneError,
           enabled: !_busy,
           code: _dialCode.code,
@@ -629,6 +677,12 @@ class _OnboardingFlowState extends State<OnboardingFlow>
             controller: _emailController,
             enabled: !_busy,
             label: 'Email',
+            // `email_outlined` and this exact example are what the sign-in
+            // screen shows in the same box, which is the whole point of the
+            // change: the field a person met on the way in is the field they
+            // meet on the way up.
+            leading: Icons.email_outlined,
+            placeholder: 'name@example.com',
             keyboardType: TextInputType.emailAddress,
             autocorrect: false,
             enableSuggestions: false,
@@ -639,6 +693,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
             controller: _passwordController,
             enabled: !_busy,
             label: 'Choose a password',
+            leading: Icons.lock_outline,
             helper: 'At least $minimumRegistrationPasswordLength characters.',
             obscureText: true,
             autocorrect: false,
@@ -650,6 +705,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
             controller: _confirmController,
             enabled: !_busy,
             label: 'Type it again',
+            leading: Icons.lock_outline,
             obscureText: true,
             autocorrect: false,
             enableSuggestions: false,
@@ -663,6 +719,12 @@ class _OnboardingFlowState extends State<OnboardingFlow>
           // The step's one action, so it takes the step's whole width rather
           // than sitting as a label-width box in a stretched column.
           expand: true,
+          // **A capsule, because the sign-in screen's submit is one.** The
+          // primary action is the most-looked-at thing on either screen, and
+          // *Sign in* being a capsule while *Create account* was a rounded
+          // rectangle was the loudest remaining difference between two pages
+          // that are meant to read as one errand.
+          pill: true,
           loading: _busy,
           onPressed: _submitAccount,
         ),
@@ -671,17 +733,29 @@ class _OnboardingFlowState extends State<OnboardingFlow>
   }
 
   Widget _buildVerifyStep(AppTokens tokens) {
-    final email = widget.readIdentity().email ?? 'your address';
     return Column(
       key: const ValueKey('onboarding-verify-step'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Text(
-          'We have sent a link to $email. Open it, then come back here - this '
-          'screen moves on by itself once the address is verified.',
-          key: const ValueKey('onboarding-verify-message'),
+        // **The one step where nothing is being typed and nothing can be
+        // hurried.** A person is waiting on a message in another app, and the
+        // screen has no field to draw their eye - so the drawing is doing the
+        // work the form does everywhere else, which is telling them at a glance
+        // what this page is about.
+        //
+        // It sits above the controls and not below them because at 168 it still
+        // leaves *Send again* and *Wrong address?* on the first screenful of a
+        // 360x640 handset - measured, because this is the one page somebody
+        // reaches when they are already stuck.
+        Center(
+          child: AppIllustration(
+            key: const ValueKey('onboarding-verify-illustration'),
+            asset: 'mail-sent.svg',
+            size: EmptyState.illustrationSize,
+            semanticLabel: 'A letter on its way',
+          ),
         ),
-        SizedBox(height: tokens.spacing.s20),
+        SizedBox(height: tokens.spacing.s24),
         Row(
           children: <Widget>[
             Expanded(
@@ -773,12 +847,17 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       requestIdFactory: widget.tenantRequestIdFactory,
       isCurrent: widget.isCurrent,
       clock: widget.clock,
-      heading: 'Tell us about your business',
-      description:
-          'This names your till and every receipt it prints. You can trade '
-          'straight away while the business is reviewed.',
+      // Null: the frame above already carries the display heading, and a
+      // `SectionHeading` under it would be the same page named twice.
+      heading: null,
+      // Both null: the frame's heading and subheading above already say this,
+      // and the fact about the name is the name field's helper now.
+      description: null,
       reviewLabel: 'Review',
       submitLabel: 'Create business',
+      // See the account step's submit: every primary in this flow is the
+      // capsule the sign-in screen uses.
+      pillSubmit: true,
       onSuccess: _businessCreated,
     );
   }
@@ -805,6 +884,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
         AppButton(
           key: const ValueKey('onboarding-open-business'),
           label: 'Open the till',
+          pill: true,
           tier: AppButtonTier.primary,
           onPressed: widget.onOpenBusiness == null
               ? null

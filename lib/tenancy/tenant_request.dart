@@ -268,6 +268,7 @@ final class TenantRequestForm extends StatefulWidget {
     this.onCancel,
     this.heading = 'Request a business',
     this.description = 'New businesses remain pending until platform review.',
+    this.pillSubmit = false,
     this.reviewLabel = 'Review request',
     this.submitLabel = 'Submit request',
     this.requestIdFactory,
@@ -284,8 +285,26 @@ final class TenantRequestForm extends StatefulWidget {
   /// is offered either way, because that one returns to this form.
   final VoidCallback? onCancel;
 
-  final String heading;
-  final String description;
+  /// Null draws no heading at all, for a host whose own frame already names
+  /// the page - which is what the onboarding wizard's display heading does.
+  final String? heading;
+
+  /// Draws the submit as a capsule, for a host whose other primaries are.
+  ///
+  /// **Off by default and true only in onboarding.** The business selector
+  /// hosts this same form inside the app, where every primary is `radius.md`;
+  /// the wizard hosts it beside a sign-in screen whose submit is a capsule. The
+  /// form should look like the page it is on rather than pick one shape and be
+  /// wrong on the other.
+  final bool pillSubmit;
+
+  /// Null draws no paragraph, for a host whose frame already says this.
+  ///
+  /// The onboarding wizard's subheading carries the one fact worth standing
+  /// above a form - that trading starts immediately - and what this used to add
+  /// about the name is now the name field's own helper, which is where a fact
+  /// about one field belongs.
+  final String? description;
   final String reviewLabel;
   final String submitLabel;
   final TenantRequestIdFactory? requestIdFactory;
@@ -437,15 +456,23 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeading(widget.heading),
-          SizedBox(height: tokens.spacing.s8),
-          Text(widget.description),
-          SizedBox(height: tokens.spacing.s16),
+          if (widget.heading case final title?) ...<Widget>[
+            SectionHeading(title),
+            SizedBox(height: tokens.spacing.s8),
+          ],
+          if (widget.description case final paragraph?) ...<Widget>[
+            Text(paragraph),
+            SizedBox(height: tokens.spacing.s16),
+          ],
           AppTextField(
             key: const ValueKey('tenant-request-name'),
             controller: _nameController,
             enabled: !_submitting,
             label: 'Business name',
+            // Moved off the standing paragraph on 2026-09-02: it is a fact
+            // about this field, and a helper is where those go - which is also
+            // how the currency field below already explains itself.
+            helper: 'This names your till and every receipt it prints.',
             autovalidateMode: AutovalidateMode.onUserInteraction,
             onChanged: _fieldChanged,
             validator: (value) => _validateName(value ?? ''),
@@ -514,43 +541,55 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
             ),
           ],
           SizedBox(height: tokens.spacing.s16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (_confirming || widget.onCancel != null) ...[
-                AppButton(
-                  key: const ValueKey('tenant-request-cancel'),
-                  label: _confirming ? 'Back' : 'Cancel',
-                  tier: AppButtonTier.tertiary,
-                  onPressed: _submitting
-                      ? null
-                      : _confirming
-                      ? () => setState(() {
-                          _confirming = false;
-                          _safeError = null;
-                        })
-                      : widget.onCancel,
-                ),
-                SizedBox(width: tokens.spacing.s8),
+          // **A lone submit fills the row.** With a Cancel beside it the pair
+          // sits at the trailing edge, which is the dialog convention this form
+          // has always used. Without one - the onboarding step, which has no
+          // screen behind it to cancel to - a right-aligned button was a
+          // label-width box floating in a stretched column, while every other
+          // step of that flow had a full-width primary.
+          if (!_confirming && widget.onCancel == null)
+            _submitButton(expand: true)
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (_confirming || widget.onCancel != null) ...[
+                  AppButton(
+                    key: const ValueKey('tenant-request-cancel'),
+                    label: _confirming ? 'Back' : 'Cancel',
+                    tier: AppButtonTier.tertiary,
+                    onPressed: _submitting
+                        ? null
+                        : _confirming
+                        ? () => setState(() {
+                            _confirming = false;
+                            _safeError = null;
+                          })
+                        : widget.onCancel,
+                  ),
+                  SizedBox(width: tokens.spacing.s8),
+                ],
+                _submitButton(),
               ],
-              AppButton(
-                key: ValueKey(
-                  _confirming
-                      ? 'tenant-request-confirm'
-                      : 'tenant-request-review',
-                ),
-                label: _confirming ? widget.submitLabel : widget.reviewLabel,
-                icon: Icons.add_business_outlined,
-                tier: AppButtonTier.primary,
-                loading: _submitting,
-                onPressed: _confirming ? _submit : _review,
-              ),
-            ],
-          ),
+            ),
         ],
       ),
     );
   }
+
+  /// The form's primary, in the two widths it is drawn at.
+  Widget _submitButton({bool expand = false}) => AppButton(
+    key: ValueKey(
+      _confirming ? 'tenant-request-confirm' : 'tenant-request-review',
+    ),
+    label: _confirming ? widget.submitLabel : widget.reviewLabel,
+    pill: widget.pillSubmit,
+    expand: expand,
+    icon: Icons.add_business_outlined,
+    tier: AppButtonTier.primary,
+    loading: _submitting,
+    onPressed: _confirming ? _submit : _review,
+  );
 }
 
 /// The offered currencies, most likely first.
