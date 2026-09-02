@@ -52,6 +52,7 @@ final class SyncIndicator extends StatelessWidget {
     required this.onOpen,
     this.needsAttention = false,
     this.icon = Icons.upload_outlined,
+    this.subject = 'Checkouts on this device',
   });
 
   /// How many checkouts are still on this device.
@@ -66,6 +67,7 @@ final class SyncIndicator extends StatelessWidget {
   final bool needsAttention;
 
   final IconData icon;
+  final String subject;
 
   /// §9's touch target, which is also `AppButton`'s `lg`.
   static const double size = 48;
@@ -80,8 +82,8 @@ final class SyncIndicator extends StatelessWidget {
     return Semantics(
       button: true,
       label: waiting == 0
-          ? 'Checkouts on this device: none waiting'
-          : 'Checkouts on this device: $waiting waiting',
+          ? '$subject: none waiting'
+          : '$subject: $waiting waiting',
       excludeSemantics: true,
       child: PressSurface(
         borderRadius: radius,

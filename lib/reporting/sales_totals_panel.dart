@@ -6,6 +6,7 @@ import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../checkout/checkout_tender.dart';
+import '../checkout/checkout_outbox.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -20,6 +21,7 @@ import 'net_profit.dart';
 import 'sales_totals.dart';
 import 'sales_totals_choosers.dart';
 import 'sales_totals_session_context.dart';
+import 'device_sales_totals.dart';
 
 /// Route showing what a business has taken over a chosen stretch of days.
 ///
@@ -33,6 +35,7 @@ final class TenantSalesTotalsScreen extends StatelessWidget {
     super.key,
     required this.callable,
     required this.reader,
+    this.checkoutOutbox,
     this.clock,
   });
 
@@ -41,6 +44,7 @@ final class TenantSalesTotalsScreen extends StatelessWidget {
   /// Reads the canonical categories the breakdown can filter by. Nothing else
   /// on this route touches Firestore; the figures come from the callable.
   final TenantDataReader reader;
+  final HiveCheckoutOutbox? checkoutOutbox;
 
   final DateTime Function()? clock;
 
@@ -51,6 +55,7 @@ final class TenantSalesTotalsScreen extends StatelessWidget {
     body: TenantSalesTotalsPanel(
       callable: callable,
       reader: reader,
+      checkoutOutbox: checkoutOutbox,
       clock: clock,
     ),
   );
@@ -66,6 +71,7 @@ final class TenantSalesTotalsPanel extends StatefulWidget {
     super.key,
     required this.callable,
     required this.reader,
+    this.checkoutOutbox,
     this.clock,
     this.period = TenantSalesPeriod.today,
     this.categoryPageSize = 50,
@@ -74,6 +80,7 @@ final class TenantSalesTotalsPanel extends StatefulWidget {
 
   final SalesTotalsCallable callable;
   final TenantDataReader reader;
+  final HiveCheckoutOutbox? checkoutOutbox;
   final DateTime Function()? clock;
 
   /// The period the surface opens on. Today, because that is the figure the
@@ -102,6 +109,14 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
   TenantGuardedLoader<SalesTotalsView>? _loader;
   TenantGuardedLoader<SalesTotalsView>? _loaderCached;
 
+  late final SalesTotalsSessionContextLoader _serverSessionContext =
+      SalesTotalsSessionContextLoader(
+        reader: widget.reader,
+        categoryPageSize: widget.categoryPageSize,
+        staffPageSize: widget.staffPageSize,
+      );
+  SalesTotalsSessionContextLoader? _deviceSessionContext;
+
   /// What the business spent over the same days, or null.
   ///
   /// Swallowed into a null on failure, like every other qualifier on this page:
@@ -110,6 +125,7 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
   Future<TenantExpensePeriod?> _readExpenses(
     TenantSession session,
     TenantSalesTotalsQuery query,
+    TenantDataReader reader,
   ) async {
     if (query.soldById != null ||
         query.categoryId != null ||
@@ -119,23 +135,12 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
     try {
       return await TenantExpenseRepository(
         session: session,
-        reader: widget.reader,
+        reader: reader,
       ).readRange(startDate: query.startDate, endDate: query.endDate);
     } catch (_) {
       return null;
     }
   }
-
-  /// The category list, staff list, and currency for one session, so none of
-  /// them can label - or filter - another business's figures. All three are
-  /// cached because the filters change often and none of them depends on the
-  /// period, the member, or the category.
-  late final SalesTotalsSessionContextLoader _sessionContext =
-      SalesTotalsSessionContextLoader(
-        reader: widget.reader,
-        categoryPageSize: widget.categoryPageSize,
-        staffPageSize: widget.staffPageSize,
-      );
 
   void _choosePeriod(TenantSalesPeriod period) {
     if (period == _period) return;
@@ -166,9 +171,10 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
     final period = _period;
     final chosenMember = _soldById;
     final chosenCategory = _categoryId;
-    TenantGuardedLoader<SalesTotalsView> readWith(TenantDataReader reader) =>
-        (session) async {
-      final context = await _sessionContext.load(session);
+    TenantGuardedLoader<SalesTotalsView> serverLoader(
+      TenantDataReader reader,
+    ) => (session) async {
+      final context = await _serverSessionContext.load(session);
       // A category filters the figures only while this business's own canonical
       // list still contains it. A selection carried across a tenant switch, or
       // one that has since been deleted, silently reverts to the whole catalog
@@ -207,12 +213,60 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
         // dates come from the answered query rather than the selection, so the
         // spending covers exactly the days the takings above it were counted
         // over.
-        expenses: await _readExpenses(session, totals.query),
+        expenses: await _readExpenses(session, totals.query, reader),
       );
     };
-    _loader = readWith(widget.reader);
+    _loader = serverLoader(widget.reader);
     final cache = widget.reader.cached;
-    _loaderCached = cache == null ? null : readWith(cache);
+    final deviceContext = cache == null
+        ? null
+        : _deviceSessionContext ??= SalesTotalsSessionContextLoader(
+            reader: cache,
+            categoryPageSize: widget.categoryPageSize,
+            staffPageSize: widget.staffPageSize,
+          );
+    _loaderCached = cache == null
+        ? null
+        : (session) async {
+            final context = await deviceContext!.load(session);
+            final categoryId =
+                chosenCategory != null &&
+                    context.categories.nameOf(chosenCategory) != null
+                ? chosenCategory
+                : null;
+            final aggregator = TenantDeviceSalesAggregator(
+              session: session,
+              cacheReader: cache,
+              outbox: widget.checkoutOutbox,
+              clock: widget.clock,
+            );
+            final soldById =
+                chosenMember != null &&
+                    (chosenMember == session.uid ||
+                        context.staff.contains(chosenMember))
+                ? chosenMember
+                : null;
+            final result = await aggregator.load(
+              aggregator.createQuery(
+                period: period,
+                soldById: soldById,
+                categoryId: categoryId,
+              ),
+            );
+            final totals = result.totals;
+            if (totals == null) {
+              throw StateError(
+                result.truncated
+                    ? 'device_sales_truncated'
+                    : 'device_sales_conflicting_evidence',
+              );
+            }
+            return SalesTotalsView(
+              totals: totals,
+              context: context,
+              expenses: await _readExpenses(session, totals.query, cache),
+            );
+          };
   }
 
   @override
@@ -239,7 +293,7 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
         selfUid: TenantSessionScope.of(context).session?.uid,
         categoryId: _categoryId,
         sessionContext:
-            _sessionContext.cached ?? SalesTotalsSessionContext.empty,
+            _serverSessionContext.cached ?? SalesTotalsSessionContext.empty,
         onChoosePeriod: _choosePeriod,
         onChooseMember: _chooseMember,
         onChooseCategory: _chooseCategory,
@@ -366,14 +420,18 @@ final class _SalesTotalsContents extends StatelessWidget {
         // Permanent, and true of every answer this route will ever give: what
         // these figures are counted from, and which other screen's figures they
         // are not.
-        const Disclosure(
+        Disclosure(
           key: ValueKey('sales-totals-basis-disclosure'),
           summary: 'What these totals include',
           child: Text(
             key: ValueKey('sales-totals-basis'),
-            'The server adds these up from the sales it holds right now, so a '
-            'sale still waiting on a device is not in them. They are not the '
-            'reconciled figures the daily summary reports.',
+            totals?.basis == TenantSalesTotalsBasis.device
+                ? 'On this device. These figures include cached sales and '
+                      'checkouts still waiting to sync. They may not include '
+                      'sales made on other devices.'
+                : 'The server adds these up from the sales it holds right now. '
+                      'They are not the reconciled figures the daily summary '
+                      'reports.',
           ),
         ),
         SizedBox(height: tokens.spacing.s16),

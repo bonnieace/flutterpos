@@ -98,19 +98,17 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
 
     final TenantBrandingUpdateIntent intent;
     try {
-      intent = TenantBrandingPublisher(
-        session: session,
-        reader: widget.reader,
-      ).buildUpdateIntent(
-        companyName: _companyName.text,
-        slogan: _slogan.text,
-        logoUrl: _logoUrl.text,
-        published: published,
-      );
+      intent = TenantBrandingPublisher(session: session, reader: widget.reader)
+          .buildUpdateIntent(
+            companyName: _companyName.text,
+            slogan: _slogan.text,
+            logoUrl: _logoUrl.text,
+            published: published,
+          );
     } on TenantBrandingException catch (error) {
-      setState(() => _notice = AppNotice.refused(
-        tenantBrandingFailureMessage(error),
-      ));
+      setState(
+        () => _notice = AppNotice.refused(tenantBrandingFailureMessage(error)),
+      );
       return;
     }
 
@@ -118,11 +116,17 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
       _saving = true;
       _notice = null;
     });
-    final result = await writer.merge(path: intent.path, data: intent.toDocument());
+    final result = await writer.merge(
+      path: intent.path,
+      data: intent.toDocument(),
+    );
     if (!mounted) return;
     setState(() {
       _saving = false;
       _notice = switch (result.kind) {
+        TenantConfigurationWriteKind.queued => const AppNotice.offline(
+          'Saved on this device; waiting to sync.',
+        ),
         TenantConfigurationWriteKind.committed => const AppNotice.confirmed(
           'Saved. The home and every receipt printed from now on carry these '
           'details.',
@@ -153,6 +157,7 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final cache = widget.reader.cached;
     return TenantRouteGuard<TenantPublishedBranding>(
       key: ValueKey('branding-$_generation'),
       allowedRoles: TenantBrandingPublisher.allowedRoles,
@@ -160,6 +165,12 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
         session: session,
         reader: widget.reader,
       ).loadPublished(),
+      loadCached: cache == null
+          ? null
+          : (session) => TenantBrandingPublisher(
+              session: session,
+              reader: cache,
+            ).loadPublished(),
       denied: const Center(
         child: EmptyState(
           key: ValueKey('branding-denied'),

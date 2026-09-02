@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/fields.dart';
@@ -1179,6 +1180,33 @@ void main() {
     expect(find.textContaining('7.50'), findsOne);
     expect(callable.payloads.last['tenantId'], 'tenant-b');
   });
+
+  testWidgets('device totals render before a held server and are replaced', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[_response()], deferred: true);
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      callable,
+      reader: _DeviceReader(),
+      settle: false,
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(_figure(tester, 'sales-totals-amount'), 'KES 9.00');
+    await _open(tester, 'What these totals include');
+    expect(find.textContaining('On this device'), findsOneWidget);
+    expect(callable.pending, hasLength(1));
+
+    callable.completeFirst();
+    await tester.pump();
+    await tester.pump();
+    expect(_figure(tester, 'sales-totals-amount'), 'KES 4820.75');
+    expect(find.textContaining('On this device'), findsNothing);
+  });
 }
 
 Future<void> _pump(
@@ -1220,7 +1248,7 @@ Future<void> _pump(
 }
 
 /// Answers the canonical category, staff, and configuration reads, or refuses.
-final class _Reader implements TenantDataReader {
+class _Reader implements TenantDataReader {
   _Reader({
     Map<String, List<String>> categories = const <String, List<String>>{},
     Map<String, Map<String, String?>> staff =
@@ -1350,6 +1378,61 @@ final class _Reader implements TenantDataReader {
     );
   }
 }
+
+final class _DeviceReader extends _Reader
+    implements TenantCacheReadable, TenantSalesHistoryQueryReader {
+  _DeviceReader() : super(currency: 'KES');
+
+  @override
+  TenantDataReader get cacheOnly => this;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
+    TenantSalesHistoryQuery query,
+  ) async => <TenantQueryDocumentSnapshot>[
+    TenantQueryDocumentSnapshot(
+      path: 'tenants/tenant-a/sales/checkout-device-a',
+      data: <String, Object?>{
+        'checkoutId': 'checkout-device-a',
+        'tenantId': 'tenant-a',
+        'soldById': 'owner-a',
+        'payloadHash': 'a'.padRight(64, 'a'),
+        'payloadSchemaVersion': 2,
+        'tender': 'cash',
+        'currency': 'KES',
+        'businessDate': '2026-07-31',
+        'shiftId': 'shift-a',
+        'deviceId': _deviceId,
+        'receiptNumber': formatCheckoutReceiptNumber(
+          deviceId: _deviceId,
+          businessDate: '2026-07-31',
+          sequence: 1,
+        ),
+        'receiptSequence': 1,
+        'items': <Object?>[
+          <String, Object?>{
+            'productId': 'product-a',
+            'name': 'Item',
+            'quantity': 1,
+            'unitPriceMinor': 1000,
+            'lineTotalMinor': 1000,
+            'unitCostMinor': 400,
+            'costMinor': 400,
+          },
+        ],
+        'subtotalMinor': 1000,
+        'subtotal': 10.0,
+        'discountMinor': 100,
+        'discount': 1.0,
+        'totalMinor': 900,
+        'total': 9.0,
+        'createdAt': DateTime.utc(2026, 7, 31, 8),
+      },
+    ),
+  ];
+}
+
+const String _deviceId = 'dev-0123456789abcdef0123456789abcdef';
 
 TenantSessionController _controller(TenantRole role) =>
     TenantSessionController()

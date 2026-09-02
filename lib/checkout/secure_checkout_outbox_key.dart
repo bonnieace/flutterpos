@@ -61,6 +61,10 @@ final class SecureCheckoutOutboxEncryptionKeyProvider
   /// outbox's key would tie evidence's fate to a receipt's.
   static const printJobsStorageKey = 'checkout-print-jobs-aes-key-v1';
 
+  /// Separate key for non-checkout pending mutations. These records can be
+  /// reviewed or discarded independently without ever risking sale evidence.
+  static const tenantMutationStorageKey = 'tenant-mutation-outbox-aes-key-v1';
+
   final CheckoutOutboxSecureValueStore _storage;
   final Random _random;
   final String _storageKey;

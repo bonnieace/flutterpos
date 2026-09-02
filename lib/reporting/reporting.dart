@@ -1,4 +1,5 @@
 export 'daily_metrics.dart';
+export 'device_sales_totals.dart';
 export 'daily_metrics_panel.dart';
 export 'monthly_report.dart';
 export 'monthly_report_panel.dart';

@@ -56,6 +56,51 @@ void main() {
   });
 
   testWidgets(
+    'opens cached tenant before a degraded network answers and then refreshes',
+    (tester) async {
+      final liveProfile = Completer<RootRoutingProfile>();
+      final cachedAt = DateTime.utc(2026, 8, 30, 9);
+      final fixture = _ShellFixture(
+        memberships: [_membership('tenant-a')],
+        localTenantId: 'tenant-a',
+        profileFuture: liveProfile.future,
+        rootCache: _MemoryRootCache(
+          CachedRootRoutingProfile(profile: _activeProfile, cachedAt: cachedAt),
+        ),
+        directoryCache: _MemoryDirectoryCache(
+          CachedTenantDirectory(
+            memberships: [_membership('tenant-a')],
+            cachedAt: cachedAt,
+          ),
+        ),
+      );
+      await fixture.pump(tester);
+
+      fixture.auth.add('user-a');
+      await _pumpRouting(tester);
+
+      expect(find.text('Business tenant-a'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('offline-bootstrap-banner')),
+        findsOneWidget,
+      );
+      expect(fixture.gateway.rootCalls, 1);
+      expect(fixture.gateway.listCalls, 0);
+
+      liveProfile.complete(_activeProfile);
+      await _pumpRouting(tester);
+
+      expect(fixture.gateway.listCalls, 1);
+      expect(
+        find.byKey(const ValueKey('offline-bootstrap-banner')),
+        findsNothing,
+      );
+      expect(find.text('Business tenant-a'), findsOneWidget);
+      await fixture.dispose(tester);
+    },
+  );
+
+  testWidgets(
     'refreshes the routing profile only after making a tenant default',
     (tester) async {
       late final _ShellFixture fixture;
@@ -220,7 +265,9 @@ void main() {
       expect(find.text('Tenant B current'), findsOneWidget);
       expect(find.text('Business tenant-b'), findsNothing);
       expect(fixture.store.value, 'tenant-b');
-      expect(fixture.gateway.listCalls, 3);
+      // Startup reuses the directory projection it already loaded; switching
+      // performs the only second authoritative directory read.
+      expect(fixture.gateway.listCalls, 2);
 
       reader.tenantARequest!.complete(
         TenantDocumentSnapshot(
@@ -513,10 +560,7 @@ void main() {
       // The slug is derived from the name and the clock, and this route injects
       // no clock - so its shape is what can be asserted, not its value. The
       // exact derivation is pinned in `tenant_request_test.dart`.
-      expect(
-        payload['slug'],
-        matches(RegExp(r'^new-business-\d{8}-\d{4}$')),
-      );
+      expect(payload['slug'], matches(RegExp(r'^new-business-\d{8}-\d{4}$')));
       expect(payload.keys.toSet(), <String>{'name', 'slug', 'requestId'});
       expect(fixture.gateway.rootCalls, 2);
       expect(fixture.gateway.listCalls, 2);
@@ -798,6 +842,8 @@ final class _ShellFixture {
     this.pendingCheckoutPanel,
     this.checkoutRoute,
     String? failSelectionWriteFor,
+    RootRoutingProfileCache rootCache = const NullRootRoutingProfileCache(),
+    TenantDirectoryCache directoryCache = const NullTenantDirectoryCache(),
   }) : gateway = _FakeGateway(
          memberships: memberships,
          profile: profile,
@@ -810,7 +856,8 @@ final class _ShellFixture {
        ) {
     service = TenantBootstrapService(
       rootGateway: gateway,
-      directory: TenantDirectory(gateway),
+      rootCache: rootCache,
+      directory: TenantDirectory(gateway, cache: directoryCache),
       selectionStore: store,
     );
   }
@@ -887,6 +934,40 @@ final class _ShellFixture {
   Future<void> dispose(WidgetTester tester) async {
     await auth.close();
     await tester.pumpWidget(const SizedBox());
+  }
+}
+
+final class _MemoryRootCache implements RootRoutingProfileCache {
+  _MemoryRootCache(this.value);
+
+  CachedRootRoutingProfile? value;
+
+  @override
+  Future<CachedRootRoutingProfile?> read(String uid) async => value;
+
+  @override
+  Future<void> write(String uid, RootRoutingProfile profile) async {
+    value = CachedRootRoutingProfile(
+      profile: profile,
+      cachedAt: DateTime.now().toUtc(),
+    );
+  }
+}
+
+final class _MemoryDirectoryCache implements TenantDirectoryCache {
+  _MemoryDirectoryCache(this.value);
+
+  CachedTenantDirectory? value;
+
+  @override
+  Future<CachedTenantDirectory?> read(String uid) async => value;
+
+  @override
+  Future<void> write(String uid, Iterable<TenantMembership> memberships) async {
+    value = CachedTenantDirectory(
+      memberships: List<TenantMembership>.from(memberships),
+      cachedAt: DateTime.now().toUtc(),
+    );
   }
 }
 

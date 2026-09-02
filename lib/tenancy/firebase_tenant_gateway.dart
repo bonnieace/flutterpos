@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show SocketException;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,7 +8,10 @@ import 'tenant_bootstrap.dart';
 import 'tenant_directory.dart';
 
 final class FirebaseTenantGateway
-    implements TenantDirectoryGateway, RootRoutingGateway {
+    implements
+        TenantDirectoryGateway,
+        RootRoutingGateway,
+        CachedRootRoutingGateway {
   FirebaseTenantGateway({
     FirebaseFirestore? firestore,
     FirebaseFunctions? functions,
@@ -17,14 +21,48 @@ final class FirebaseTenantGateway
   final FirebaseFirestore _firestore;
   final FirebaseFunctions _functions;
 
+  static const Duration deadline = Duration(seconds: 8);
+
   @override
   Future<RootRoutingProfile> getRootRoutingProfile(String uid) async {
-    final snapshot = await _firestore.collection('users').doc(uid).get();
+    final DocumentSnapshot<Map<String, dynamic>> snapshot;
+    try {
+      snapshot = await _firestore
+          .collection('users')
+          .doc(uid)
+          .get(const GetOptions(source: Source.server))
+          .timeout(deadline);
+    } on TimeoutException {
+      throw const TenantBootstrapUnavailable('deadline-exceeded');
+    } on FirebaseException catch (error) {
+      if (_transportFailures.contains(error.code)) {
+        throw TenantBootstrapUnavailable(error.code);
+      }
+      rethrow;
+    } on SocketException {
+      throw const TenantBootstrapUnavailable('unavailable');
+    }
     final data = snapshot.data();
     if (!snapshot.exists || data == null) {
       throw StateError('The signed-in account has no root profile.');
     }
     return RootRoutingProfile.fromJson(data);
+  }
+
+  @override
+  Future<RootRoutingProfile?> getCachedRootRoutingProfile(String uid) async {
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(uid)
+          .get(const GetOptions(source: Source.cache));
+      final data = snapshot.data();
+      return snapshot.exists && data != null
+          ? RootRoutingProfile.fromJson(data)
+          : null;
+    } on FirebaseException {
+      return null;
+    }
   }
 
   /// Callable failures that mean *we could not ask*, rather than *the answer
@@ -48,12 +86,18 @@ final class FirebaseTenantGateway
   }) async {
     final HttpsCallableResult<Object?> result;
     try {
-      result = await _functions.httpsCallable('listMyTenants').call<Object?>(
-        <String, Object?>{
-          'pageSize': pageSize,
-          if (cursor != null) 'cursor': cursor,
-        },
-      );
+      result = await _functions
+          .httpsCallable(
+            'listMyTenants',
+            options: HttpsCallableOptions(timeout: deadline),
+          )
+          .call<Object?>(<String, Object?>{
+            'pageSize': pageSize,
+            if (cursor != null) 'cursor': cursor,
+          })
+          .timeout(deadline);
+    } on TimeoutException {
+      throw const TenantDirectoryUnavailable('deadline-exceeded');
     } on FirebaseFunctionsException catch (error) {
       if (_transportFailures.contains(error.code)) {
         throw TenantDirectoryUnavailable(error.code);

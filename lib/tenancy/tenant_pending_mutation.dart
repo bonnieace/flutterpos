@@ -1,0 +1,912 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+import 'package:hive/hive.dart';
+
+import '../checkout/checkout_outbox.dart';
+import 'tenant_id.dart';
+import 'tenant_repository.dart';
+import 'tenant_session.dart';
+import 'tenant_switch.dart';
+
+enum TenantPendingMutationKind {
+  expenseCreate,
+  expenseVoid,
+  pendingReturnCreate,
+  brandingMerge,
+  printerConfigurationMerge,
+}
+
+enum TenantPendingMutationState {
+  queued,
+  submitting,
+  awaitingConfirmation,
+  confirmed,
+  rejected,
+  needsAttention,
+}
+
+final class TenantPendingMutationException implements Exception {
+  const TenantPendingMutationException(this.code);
+
+  final String code;
+
+  @override
+  String toString() => 'TenantPendingMutationException($code)';
+}
+
+final class TenantPendingMutationRecord {
+  TenantPendingMutationRecord._({
+    required this.uid,
+    required this.tenantId,
+    required this.operationId,
+    required this.kind,
+    required this.targetPath,
+    required Map<String, Object?> payload,
+    required this.payloadHash,
+    required this.replacedValueFingerprint,
+    required this.state,
+    required this.attemptCount,
+    required this.retryAt,
+    required this.leaseOwner,
+    required this.leaseExpiresAt,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.reasonCode,
+  }) : payload = _freezeMap(payload);
+
+  static const int schemaVersion = 1;
+
+  final String uid;
+  final String tenantId;
+  final String operationId;
+  final TenantPendingMutationKind kind;
+  final String targetPath;
+  final Map<String, Object?> payload;
+  final String payloadHash;
+  final String? replacedValueFingerprint;
+  final TenantPendingMutationState state;
+  final int attemptCount;
+  final DateTime? retryAt;
+  final String? leaseOwner;
+  final DateTime? leaseExpiresAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String? reasonCode;
+
+  String get storageKey => tenantPendingMutationStorageKey(
+    uid: uid,
+    tenantId: tenantId,
+    operationId: operationId,
+  );
+
+  bool get isUnresolved =>
+      state != TenantPendingMutationState.confirmed &&
+      state != TenantPendingMutationState.rejected;
+
+  Map<String, Object?> toStorage() => <String, Object?>{
+    'schemaVersion': schemaVersion,
+    'uid': uid,
+    'tenantId': tenantId,
+    'operationId': operationId,
+    'kind': kind.name,
+    'targetPath': targetPath,
+    'payload': _mutableJson(payload),
+    'payloadHash': payloadHash,
+    'replacedValueFingerprint': replacedValueFingerprint,
+    'state': state.name,
+    'attemptCount': attemptCount,
+    'retryAtMs': retryAt?.millisecondsSinceEpoch,
+    'leaseOwner': leaseOwner,
+    'leaseExpiresAtMs': leaseExpiresAt?.millisecondsSinceEpoch,
+    'createdAtMs': createdAt.millisecondsSinceEpoch,
+    'updatedAtMs': updatedAt.millisecondsSinceEpoch,
+    'reasonCode': reasonCode,
+  };
+
+  TenantPendingMutationRecord copyWith({
+    required TenantPendingMutationState state,
+    required DateTime updatedAt,
+    int? attemptCount,
+    DateTime? retryAt,
+    String? leaseOwner,
+    DateTime? leaseExpiresAt,
+    String? reasonCode,
+  }) => TenantPendingMutationRecord._(
+    uid: uid,
+    tenantId: tenantId,
+    operationId: operationId,
+    kind: kind,
+    targetPath: targetPath,
+    payload: payload,
+    payloadHash: payloadHash,
+    replacedValueFingerprint: replacedValueFingerprint,
+    state: state,
+    attemptCount: attemptCount ?? this.attemptCount,
+    retryAt: retryAt,
+    leaseOwner: leaseOwner,
+    leaseExpiresAt: leaseExpiresAt,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+    reasonCode: reasonCode,
+  );
+}
+
+String tenantPendingMutationStorageKey({
+  required String uid,
+  required String tenantId,
+  required String operationId,
+}) {
+  final safeUid = _keySegment(uid, 'uid');
+  final safeTenant = validateTenantId(tenantId);
+  final safeOperation = validateTenantDocumentId(
+    operationId,
+    fieldName: 'operationId',
+  );
+  if (safeOperation.contains(':')) {
+    throw ArgumentError('operationId must not contain a colon.');
+  }
+  return '$safeUid:$safeTenant:$safeOperation';
+}
+
+String tenantMutationFingerprint(Map<String, Object?> value) =>
+    sha256.convert(utf8.encode(jsonEncode(_canonicalJson(value)))).toString();
+
+/// Stable comparison value for configuration conflict detection.
+///
+/// Server timestamps are transport metadata rather than configuration, and
+/// Firestore timestamp values cannot be encoded as canonical JSON.
+String tenantConfigurationMutationFingerprint(Map<String, Object?> value) =>
+    tenantMutationFingerprint(<String, Object?>{
+      for (final entry in value.entries)
+        if (entry.key != 'updatedAt' && _isJsonValue(entry.value))
+          entry.key: entry.value,
+    });
+
+final class TenantPendingMutationStore {
+  TenantPendingMutationStore._(this._box, this._clock);
+
+  static const String boxName = 'tenant-mutation-outbox-v1';
+  static const Duration leaseDuration = Duration(minutes: 2);
+  static const Duration confirmedRetention = Duration(days: 7);
+  static const Duration initialBackoff = Duration(seconds: 30);
+  static const Duration maximumBackoff = Duration(minutes: 30);
+  static final Map<String, Future<void>> _tails = <String, Future<void>>{};
+
+  final Box<dynamic> _box;
+  final DateTime Function() _clock;
+  final StreamController<void> _changes = StreamController<void>.broadcast(
+    sync: true,
+  );
+
+  /// Fires after durable local evidence changes. The landing page combines
+  /// this with checkout-outbox signals so queued non-sale work is visible
+  /// immediately, not only after the next reconnect.
+  Stream<void> get changes => _changes.stream;
+
+  bool isDue(TenantPendingMutationRecord record) =>
+      record.retryAt?.isAfter(_clock().toUtc()) != true;
+
+  bool hasActiveLease(TenantPendingMutationRecord record) =>
+      record.state == TenantPendingMutationState.submitting &&
+      record.leaseExpiresAt?.isAfter(_clock().toUtc()) == true;
+
+  static Future<TenantPendingMutationStore> open({
+    required CheckoutOutboxEncryptionKeyProvider keyProvider,
+    HiveInterface? hive,
+    DateTime Function()? clock,
+  }) async {
+    final key = await keyProvider.loadOrCreateKey();
+    if (key.length != HiveCheckoutOutbox.encryptionKeyBytes) {
+      throw const TenantPendingMutationException('invalid_encryption_key');
+    }
+    final box = await (hive ?? Hive).openBox<dynamic>(
+      boxName,
+      encryptionCipher: HiveAesCipher(List<int>.from(key)),
+      crashRecovery: false,
+    );
+    return TenantPendingMutationStore._(box, clock ?? _utcNow);
+  }
+
+  factory TenantPendingMutationStore.fromBox(
+    Box<dynamic> box, {
+    DateTime Function()? clock,
+  }) => TenantPendingMutationStore._(box, clock ?? _utcNow);
+
+  Future<TenantPendingMutationRecord> enqueue({
+    required String uid,
+    required String tenantId,
+    required String operationId,
+    required TenantPendingMutationKind kind,
+    required String targetPath,
+    required Map<String, Object?> payload,
+    String? replacedValueFingerprint,
+  }) async {
+    final key = tenantPendingMutationStorageKey(
+      uid: uid,
+      tenantId: tenantId,
+      operationId: operationId,
+    );
+    _requireTarget(tenantId, targetPath, kind);
+    final frozen = _freezeMap(payload);
+    final hash = tenantMutationFingerprint(frozen);
+    return _serialized(key, () async {
+      final raw = _box.get(key);
+      if (raw != null) {
+        final existing = _parseRecord(key, raw);
+        if (existing.payloadHash == hash &&
+            existing.targetPath == targetPath &&
+            existing.kind == kind) {
+          return existing;
+        }
+        throw const TenantPendingMutationException('operation_id_conflict');
+      }
+      final now = _clock().toUtc();
+      final record = TenantPendingMutationRecord._(
+        uid: uid,
+        tenantId: tenantId,
+        operationId: operationId,
+        kind: kind,
+        targetPath: targetPath,
+        payload: frozen,
+        payloadHash: hash,
+        replacedValueFingerprint: replacedValueFingerprint,
+        state: TenantPendingMutationState.queued,
+        attemptCount: 0,
+        retryAt: now,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        createdAt: now,
+        updatedAt: now,
+        reasonCode: null,
+      );
+      await _box.put(key, record.toStorage());
+      _changes.add(null);
+      return record;
+    });
+  }
+
+  Future<List<TenantPendingMutationRecord>> recordsForSession({
+    required String uid,
+    required String tenantId,
+  }) async {
+    final prefix = '${_keySegment(uid, 'uid')}:${validateTenantId(tenantId)}:';
+    final records = <TenantPendingMutationRecord>[];
+    for (final rawKey in _box.keys) {
+      if (rawKey is! String || !rawKey.startsWith(prefix)) continue;
+      records.add(_parseRecord(rawKey, _box.get(rawKey)));
+    }
+    records.sort((a, b) {
+      final time = a.createdAt.compareTo(b.createdAt);
+      return time != 0 ? time : a.operationId.compareTo(b.operationId);
+    });
+    return List<TenantPendingMutationRecord>.unmodifiable(records);
+  }
+
+  Future<TenantPendingMutationRecord> acquire(
+    TenantPendingMutationRecord record, {
+    required String leaseOwner,
+  }) => _change(record, (current, now) {
+    final expired = current.leaseExpiresAt?.isAfter(now) != true;
+    if (current.state == TenantPendingMutationState.submitting && !expired) {
+      throw const TenantPendingMutationException('lease_held');
+    }
+    if (current.state != TenantPendingMutationState.queued &&
+        current.state != TenantPendingMutationState.submitting) {
+      throw const TenantPendingMutationException('invalid_transition');
+    }
+    if (current.retryAt?.isAfter(now) == true) {
+      throw const TenantPendingMutationException('retry_not_due');
+    }
+    return current.copyWith(
+      state: TenantPendingMutationState.submitting,
+      updatedAt: now,
+      attemptCount: current.attemptCount + 1,
+      leaseOwner: _keySegment(leaseOwner, 'leaseOwner'),
+      leaseExpiresAt: now.add(leaseDuration),
+    );
+  });
+
+  Future<TenantPendingMutationRecord> markAwaiting(
+    TenantPendingMutationRecord record,
+  ) => _transition(record, TenantPendingMutationState.awaitingConfirmation);
+
+  Future<TenantPendingMutationRecord> markConfirmed(
+    TenantPendingMutationRecord record,
+  ) => _transition(record, TenantPendingMutationState.confirmed);
+
+  Future<TenantPendingMutationRecord> markRejected(
+    TenantPendingMutationRecord record,
+    String reasonCode,
+  ) => _transition(
+    record,
+    TenantPendingMutationState.rejected,
+    reasonCode: reasonCode,
+  );
+
+  Future<TenantPendingMutationRecord> markNeedsAttention(
+    TenantPendingMutationRecord record,
+    String reasonCode,
+  ) => _transition(
+    record,
+    TenantPendingMutationState.needsAttention,
+    reasonCode: reasonCode,
+  );
+
+  Future<TenantPendingMutationRecord> retryLater(
+    TenantPendingMutationRecord record,
+  ) => _change(record, (current, now) {
+    final exponent = current.attemptCount.clamp(1, 7) - 1;
+    final seconds = initialBackoff.inSeconds * (1 << exponent);
+    final delay = Duration(
+      seconds: seconds.clamp(
+        initialBackoff.inSeconds,
+        maximumBackoff.inSeconds,
+      ),
+    );
+    return current.copyWith(
+      state: TenantPendingMutationState.queued,
+      updatedAt: now,
+      attemptCount: current.attemptCount,
+      retryAt: now.add(delay),
+    );
+  });
+
+  Future<void> purgeConfirmed() async {
+    final before = _clock().toUtc().subtract(confirmedRetention);
+    for (final key in _box.keys.toList(growable: false)) {
+      if (key is! String) continue;
+      final record = _parseRecord(key, _box.get(key));
+      if (record.state == TenantPendingMutationState.confirmed &&
+          record.updatedAt.isBefore(before)) {
+        await _box.delete(key);
+        _changes.add(null);
+      }
+    }
+  }
+
+  /// Removes retained failure evidence only after a person has reviewed it.
+  Future<void> acknowledge({
+    required String uid,
+    required String tenantId,
+    required String operationId,
+  }) async {
+    final key = tenantPendingMutationStorageKey(
+      uid: uid,
+      tenantId: tenantId,
+      operationId: operationId,
+    );
+    await _serialized(key, () async {
+      final raw = _box.get(key);
+      if (raw == null) return;
+      final record = _parseRecord(key, raw);
+      if (record.state != TenantPendingMutationState.rejected &&
+          record.state != TenantPendingMutationState.needsAttention) {
+        throw const TenantPendingMutationException('not_reviewable');
+      }
+      await _box.delete(key);
+      _changes.add(null);
+    });
+  }
+
+  Future<TenantPendingMutationRecord> _transition(
+    TenantPendingMutationRecord record,
+    TenantPendingMutationState state, {
+    String? reasonCode,
+  }) => _change(
+    record,
+    (current, now) => current.copyWith(
+      state: state,
+      updatedAt: now,
+      attemptCount: current.attemptCount,
+      reasonCode: reasonCode,
+    ),
+  );
+
+  Future<TenantPendingMutationRecord> _change(
+    TenantPendingMutationRecord record,
+    TenantPendingMutationRecord Function(
+      TenantPendingMutationRecord current,
+      DateTime now,
+    )
+    update,
+  ) => _serialized(record.storageKey, () async {
+    final raw = _box.get(record.storageKey);
+    if (raw == null) {
+      throw const TenantPendingMutationException('operation_not_found');
+    }
+    final current = _parseRecord(record.storageKey, raw);
+    final changed = update(current, _clock().toUtc());
+    await _box.put(record.storageKey, changed.toStorage());
+    _changes.add(null);
+    return changed;
+  });
+
+  Future<T> _serialized<T>(String key, Future<T> Function() action) async {
+    final lock = '${_box.name}:$key';
+    final previous = _tails[lock] ?? Future<void>.value();
+    final release = Completer<void>();
+    _tails[lock] = release.future;
+    try {
+      await previous;
+      return await action();
+    } finally {
+      release.complete();
+      if (identical(_tails[lock], release.future)) _tails.remove(lock);
+    }
+  }
+}
+
+enum TenantMutationSubmissionOutcome { committed, uncertain, rejected }
+
+final class TenantMutationSubmissionResult {
+  const TenantMutationSubmissionResult(this.outcome, [this.reasonCode]);
+
+  final TenantMutationSubmissionOutcome outcome;
+  final String? reasonCode;
+}
+
+abstract interface class TenantMutationSubmissionGateway {
+  Future<TenantMutationSubmissionResult> submit(
+    TenantPendingMutationRecord record,
+  );
+}
+
+abstract interface class TenantMutationConfirmationGateway {
+  Future<Map<String, Object?>?> read(String targetPath);
+}
+
+final class TenantPendingMutationWorker {
+  TenantPendingMutationWorker({
+    required TenantPendingMutationStore store,
+    required TenantMutationSubmissionGateway submission,
+    required TenantMutationConfirmationGateway confirmation,
+    required String workerId,
+  }) : _store = store,
+       _submission = submission,
+       _confirmation = confirmation,
+       _workerId = _keySegment(workerId, 'workerId');
+
+  final TenantPendingMutationStore _store;
+  final TenantMutationSubmissionGateway _submission;
+  final TenantMutationConfirmationGateway _confirmation;
+  final String _workerId;
+  Future<void>? _running;
+
+  Future<void> run(TenantSession session) =>
+      _running ??= _run(session).whenComplete(() => _running = null);
+
+  Future<void> _run(TenantSession session) async {
+    final records = await _store.recordsForSession(
+      uid: session.uid,
+      tenantId: session.tenantId,
+    );
+    final byTarget = <String, List<TenantPendingMutationRecord>>{};
+    for (var record in records) {
+      byTarget.putIfAbsent(record.targetPath, () => []).add(record);
+    }
+    // Path order is strict (create before void); different documents do not
+    // hold one another behind an unreachable request.
+    await Future.wait<void>(byTarget.values.map(_runTarget));
+    await _store.purgeConfirmed();
+  }
+
+  Future<void> _runTarget(List<TenantPendingMutationRecord> records) async {
+    for (var record in records) {
+      if (record.state == TenantPendingMutationState.rejected ||
+          record.state == TenantPendingMutationState.needsAttention) {
+        break;
+      }
+      if (record.state == TenantPendingMutationState.confirmed) continue;
+      try {
+        if (_store.hasActiveLease(record)) continue;
+        if (record.state == TenantPendingMutationState.awaitingConfirmation ||
+            record.state == TenantPendingMutationState.submitting) {
+          final canonical = await _confirmation.read(record.targetPath);
+          if (_containsPayload(canonical, record.payload)) {
+            await _store.markConfirmed(record);
+            continue;
+          }
+          if (_isConfiguration(record) && canonical != null) {
+            final expected = record.replacedValueFingerprint;
+            final actual = tenantConfigurationMutationFingerprint(canonical);
+            if (expected != null && actual != expected) {
+              await _store.markNeedsAttention(
+                record,
+                'configuration_changed_before_confirmation',
+              );
+              break;
+            }
+          }
+          record = await _store.retryLater(record);
+        }
+        if (!_store.isDue(record)) continue;
+        // An earlier attempt had an uncertain outcome. Confirm the exact
+        // target again at retry time; the first confirmation may have raced a
+        // write that reached Firestore just after its deadline.
+        if (record.attemptCount > 0) {
+          final canonical = await _confirmation.read(record.targetPath);
+          if (_containsPayload(canonical, record.payload)) {
+            await _store.markConfirmed(record);
+            continue;
+          }
+        }
+        final expected = record.replacedValueFingerprint;
+        if (_isConfiguration(record) && expected != null) {
+          final canonical = await _confirmation.read(record.targetPath);
+          final actual = tenantConfigurationMutationFingerprint(
+            canonical ?? const {},
+          );
+          if (actual != expected) {
+            await _store.markNeedsAttention(
+              record,
+              'configuration_changed_before_sync',
+            );
+            break;
+          }
+        }
+        record = await _store.acquire(record, leaseOwner: _workerId);
+        final result = await _submission.submit(record);
+        switch (result.outcome) {
+          case TenantMutationSubmissionOutcome.committed:
+            await _store.markConfirmed(record);
+          case TenantMutationSubmissionOutcome.uncertain:
+            await _store.markAwaiting(record);
+          case TenantMutationSubmissionOutcome.rejected:
+            await _store.markRejected(record, result.reasonCode ?? 'rejected');
+            return;
+        }
+      } catch (_) {
+        try {
+          await _store.retryLater(record);
+        } catch (_) {}
+        return;
+      }
+    }
+  }
+}
+
+final class TenantPendingMutationSwitchStateSource
+    implements TenantSwitchStateSource {
+  const TenantPendingMutationSwitchStateSource(this._store);
+
+  final TenantPendingMutationStore _store;
+
+  @override
+  TenantSwitchStateArea get area => TenantSwitchStateArea.pendingWrites;
+
+  @override
+  Future<TenantSwitchInspection?> inspect(TenantSession session) async {
+    final records = await _store.recordsForSession(
+      uid: session.uid,
+      tenantId: session.tenantId,
+    );
+    return records.any((record) => record.isUnresolved)
+        ? TenantSwitchInspection.blocked(
+            area: area,
+            session: session,
+            blocker: TenantSwitchBlocker.pendingWrites,
+          )
+        : TenantSwitchInspection.clean(area: area, session: session);
+  }
+}
+
+typedef TenantPendingMutationUidProvider = String? Function();
+
+/// Applies unresolved local evidence over a cache or live tenant reader.
+/// Rejected, conflicting and confirmed records are deliberately absent.
+final class TenantPendingMutationOverlayReader
+    implements
+        TenantCacheReadable,
+        TenantSalesHistoryQueryReader,
+        TenantStaffDirectoryQueryReader,
+        TenantProductSearchReader,
+        TenantCollectionGroupReader {
+  const TenantPendingMutationOverlayReader({
+    required TenantDataReader base,
+    required TenantPendingMutationStore store,
+    required TenantPendingMutationUidProvider currentUid,
+  }) : _base = base,
+       _store = store,
+       _currentUid = currentUid;
+
+  final TenantDataReader _base;
+  final TenantPendingMutationStore _store;
+  final TenantPendingMutationUidProvider _currentUid;
+
+  @override
+  TenantDataReader get cacheOnly {
+    final base = _base;
+    final cached = base is TenantCacheReadable ? base.cacheOnly : base;
+    return TenantPendingMutationOverlayReader(
+      base: cached,
+      store: _store,
+      currentUid: _currentUid,
+    );
+  }
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    final canonical = await _base.getDocument(path);
+    final identity = _tenantFromPath(path);
+    final uid = _currentUid();
+    if (identity == null || uid == null) return canonical;
+    final records = await _active(uid, identity);
+    var data = canonical == null
+        ? <String, Object?>{}
+        : <String, Object?>{...canonical.data};
+    var present = canonical != null;
+    for (final record in records) {
+      if (record.targetPath != path) continue;
+      data.addAll(record.payload);
+      present = true;
+    }
+    return present ? TenantDocumentSnapshot(path: path, data: data) : null;
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async {
+    final canonical = await _base.getCollectionPage(query);
+    final identity = _tenantFromPath(query.collectionPath);
+    final uid = _currentUid();
+    if (identity == null || uid == null) return canonical;
+    final records = await _active(uid, identity);
+    final byPath = <String, Map<String, Object?>>{
+      for (final item in canonical) item.path: <String, Object?>{...item.data},
+    };
+    for (final record in records) {
+      if (!record.targetPath.startsWith('${query.collectionPath}/')) continue;
+      final data = byPath.putIfAbsent(
+        record.targetPath,
+        () => <String, Object?>{},
+      );
+      data.addAll(record.payload);
+      if (record.kind == TenantPendingMutationKind.expenseCreate ||
+          record.kind == TenantPendingMutationKind.pendingReturnCreate) {
+        data.putIfAbsent('createdAt', () => record.createdAt);
+      } else if (record.kind == TenantPendingMutationKind.expenseVoid) {
+        data.putIfAbsent('voidedAt', () => record.createdAt);
+      }
+    }
+    final items = <TenantQueryDocumentSnapshot>[];
+    for (final entry in byPath.entries) {
+      final id = entry.key.split('/').last;
+      final cursor = query.startAfterDocumentId;
+      if (cursor != null &&
+          (query.descending
+              ? id.compareTo(cursor) >= 0
+              : id.compareTo(cursor) <= 0)) {
+        continue;
+      }
+      if (!query.equalityFilters.entries.every(
+        (filter) => entry.value[filter.key] == filter.value,
+      )) {
+        continue;
+      }
+      items.add(
+        TenantQueryDocumentSnapshot(path: entry.key, data: entry.value),
+      );
+    }
+    items.sort((left, right) {
+      final order = left.path
+          .split('/')
+          .last
+          .compareTo(right.path.split('/').last);
+      return query.descending ? -order : order;
+    });
+    return items.take(query.limit).toList(growable: false);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
+    TenantSalesHistoryQuery query,
+  ) {
+    final Object base = _base;
+    if (base is! TenantSalesHistoryQueryReader) {
+      throw StateError('Sales history query is unavailable.');
+    }
+    return base.queryTenantSalesHistory(query);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantStaff(
+    TenantStaffDirectoryQuery query,
+  ) {
+    final Object base = _base;
+    if (base is! TenantStaffDirectoryQueryReader) {
+      throw StateError('Staff directory query is unavailable.');
+    }
+    return base.queryTenantStaff(query);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantProducts(
+    TenantProductSearchQuery query,
+  ) {
+    final Object base = _base;
+    if (base is! TenantProductSearchReader) {
+      throw StateError('Product search is unavailable.');
+    }
+    return base.searchTenantProducts(query);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionGroupPage(
+    TenantCollectionGroupQuery query,
+  ) {
+    final Object base = _base;
+    if (base is! TenantCollectionGroupReader) {
+      throw StateError('Collection group query is unavailable.');
+    }
+    return base.getCollectionGroupPage(query);
+  }
+
+  Future<List<TenantPendingMutationRecord>> _active(
+    String uid,
+    String tenantId,
+  ) async => <TenantPendingMutationRecord>[
+    for (final record in await _store.recordsForSession(
+      uid: uid,
+      tenantId: tenantId,
+    ))
+      if (record.state == TenantPendingMutationState.queued ||
+          record.state == TenantPendingMutationState.submitting ||
+          record.state == TenantPendingMutationState.awaitingConfirmation)
+        record,
+  ];
+}
+
+bool _isConfiguration(TenantPendingMutationRecord record) =>
+    record.kind == TenantPendingMutationKind.brandingMerge ||
+    record.kind == TenantPendingMutationKind.printerConfigurationMerge;
+
+bool _containsPayload(
+  Map<String, Object?>? canonical,
+  Map<String, Object?> expected,
+) {
+  if (canonical == null) return false;
+  for (final entry in expected.entries) {
+    if (jsonEncode(_canonicalJson(canonical[entry.key])) !=
+        jsonEncode(_canonicalJson(entry.value))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void _requireTarget(
+  String tenantId,
+  String path,
+  TenantPendingMutationKind kind,
+) {
+  final prefix = 'tenants/${validateTenantId(tenantId)}/';
+  if (!path.startsWith(prefix) || path.split('/').length != 4) {
+    throw const TenantPendingMutationException('target_escaped_tenant');
+  }
+  final collection = path.split('/')[2];
+  final expected = switch (kind) {
+    TenantPendingMutationKind.expenseCreate ||
+    TenantPendingMutationKind.expenseVoid => 'expenses',
+    TenantPendingMutationKind.pendingReturnCreate => 'returns',
+    TenantPendingMutationKind.brandingMerge ||
+    TenantPendingMutationKind.printerConfigurationMerge => 'configuration',
+  };
+  if (collection != expected) {
+    throw const TenantPendingMutationException('invalid_target');
+  }
+}
+
+TenantPendingMutationRecord _parseRecord(String key, Object? raw) {
+  try {
+    final map = Map<Object?, Object?>.from(raw! as Map);
+    if (map['schemaVersion'] != TenantPendingMutationRecord.schemaVersion) {
+      throw const FormatException();
+    }
+    final uid = map['uid']! as String;
+    final tenantId = map['tenantId']! as String;
+    final operationId = map['operationId']! as String;
+    if (tenantPendingMutationStorageKey(
+          uid: uid,
+          tenantId: tenantId,
+          operationId: operationId,
+        ) !=
+        key) {
+      throw const FormatException();
+    }
+    final payload = <String, Object?>{
+      for (final entry in (map['payload']! as Map).entries)
+        entry.key! as String: entry.value,
+    };
+    final hash = map['payloadHash']! as String;
+    if (tenantMutationFingerprint(payload) != hash) {
+      throw const FormatException();
+    }
+    return TenantPendingMutationRecord._(
+      uid: uid,
+      tenantId: validateTenantId(tenantId),
+      operationId: operationId,
+      kind: TenantPendingMutationKind.values.byName(map['kind']! as String),
+      targetPath: map['targetPath']! as String,
+      payload: payload,
+      payloadHash: hash,
+      replacedValueFingerprint: map['replacedValueFingerprint'] as String?,
+      state: TenantPendingMutationState.values.byName(map['state']! as String),
+      attemptCount: map['attemptCount']! as int,
+      retryAt: _instant(map['retryAtMs']),
+      leaseOwner: map['leaseOwner'] as String?,
+      leaseExpiresAt: _instant(map['leaseExpiresAtMs']),
+      createdAt: _instant(map['createdAtMs'])!,
+      updatedAt: _instant(map['updatedAtMs'])!,
+      reasonCode: map['reasonCode'] as String?,
+    );
+  } catch (_) {
+    throw const TenantPendingMutationException('unreadable_record');
+  }
+}
+
+DateTime? _instant(Object? value) => value == null
+    ? null
+    : DateTime.fromMillisecondsSinceEpoch(value as int, isUtc: true);
+
+String _keySegment(String value, String field) {
+  if (value.isEmpty || value != value.trim() || value.contains(':')) {
+    throw ArgumentError.value(value, field);
+  }
+  return value;
+}
+
+Map<String, Object?> _freezeMap(Map<String, Object?> source) =>
+    Map<String, Object?>.unmodifiable(<String, Object?>{
+      for (final entry in source.entries) entry.key: _freeze(entry.value),
+    });
+
+Object? _freeze(Object? value) => switch (value) {
+  Map() => _freezeMap(<String, Object?>{
+    for (final entry in value.entries) entry.key as String: entry.value,
+  }),
+  List() => List<Object?>.unmodifiable(value.map(_freeze)),
+  String() || num() || bool() || null => value,
+  _ => throw const TenantPendingMutationException('non_json_payload'),
+};
+
+Object? _mutableJson(Object? value) => switch (value) {
+  Map() => <String, Object?>{
+    for (final entry in value.entries)
+      entry.key as String: _mutableJson(entry.value),
+  },
+  List() => <Object?>[for (final item in value) _mutableJson(item)],
+  _ => value,
+};
+
+Object? _canonicalJson(Object? value) => switch (value) {
+  Map() => <String, Object?>{
+    for (final key in (value.keys.cast<String>().toList()..sort()))
+      key: _canonicalJson(value[key]),
+  },
+  List() => <Object?>[for (final item in value) _canonicalJson(item)],
+  _ => value,
+};
+
+bool _isJsonValue(Object? value) => switch (value) {
+  null || String() || num() || bool() => true,
+  List() => value.every(_isJsonValue),
+  Map() =>
+    value.keys.every((key) => key is String) &&
+        value.values.every(_isJsonValue),
+  _ => false,
+};
+
+DateTime _utcNow() => DateTime.now().toUtc();
+
+String? _tenantFromPath(String path) {
+  final parts = path.split('/');
+  if (parts.length < 2 || parts[0] != 'tenants') return null;
+  try {
+    return validateTenantId(parts[1]);
+  } on ArgumentError {
+    return null;
+  }
+}

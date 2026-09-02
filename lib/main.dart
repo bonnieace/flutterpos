@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -109,6 +111,13 @@ Future<void> main() async {
           storage: secureValueStore,
         ),
       );
+      final tenantMutationStore = await TenantPendingMutationStore.open(
+        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+          storage: secureValueStore,
+          storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+              .tenantMutationStorageKey,
+        ),
+      );
       final checkoutCatalogCache = await HiveCheckoutCatalogCache.open(
         keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
           storage: secureValueStore,
@@ -188,6 +197,17 @@ Future<void> main() async {
           cache: HiveTenantDirectoryCache(tenantSelectionBox),
         ),
         selectionStore: HiveTenantSelectionStore(tenantSelectionBox),
+        rootCache: HiveRootRoutingProfileCache(tenantSelectionBox),
+        observer: (event) {
+          Sentry.addBreadcrumb(
+            Breadcrumb(
+              category: 'tenant.bootstrap',
+              message: event.kind.name,
+              level: SentryLevel.info,
+              data: event.toData(),
+            ),
+          );
+        },
       );
 
       TenantInvitationLink? invitationLink;
@@ -203,6 +223,7 @@ Future<void> main() async {
           child: SpiritPOSApp(
             bootstrapService: bootstrapService,
             checkoutOutbox: checkoutOutbox,
+            tenantMutationStore: tenantMutationStore,
             checkoutCatalogCache: checkoutCatalogCache,
             checkoutReceiptCounters: checkoutReceiptCounters,
             checkoutPrintJobs: checkoutPrintJobs,
@@ -289,6 +310,7 @@ class SpiritPOSApp extends StatelessWidget {
     super.key,
     required this.bootstrapService,
     required this.checkoutOutbox,
+    required this.tenantMutationStore,
     required this.checkoutCatalogCache,
     required this.checkoutReceiptCounters,
     required this.checkoutPrintJobs,
@@ -304,6 +326,7 @@ class SpiritPOSApp extends StatelessWidget {
 
   final TenantBootstrapService bootstrapService;
   final HiveCheckoutOutbox checkoutOutbox;
+  final TenantPendingMutationStore tenantMutationStore;
   final HiveCheckoutCatalogCache checkoutCatalogCache;
   final HiveCheckoutReceiptCounters checkoutReceiptCounters;
 
@@ -325,7 +348,13 @@ class SpiritPOSApp extends StatelessWidget {
   Widget build(BuildContext context) {
     Future<bool> isOnline() async =>
         await connectivity.checkConnectivity() != ConnectivityResult.none;
-    final tenantDataReader = FirebaseTenantDocumentReader();
+    final rawTenantDataReader = FirebaseTenantDocumentReader();
+    final tenantDataReader = TenantPendingMutationOverlayReader(
+      base: rawTenantDataReader,
+      store: tenantMutationStore,
+      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+    );
+    final mutationGateway = FirebaseTenantMutationGateway();
     // The one call that turns a committed sale into a receipt on its way to
     // paper. Composed here because this is the only place holding all four
     // pieces at once: the durable queue, the platform transport, the loaded
@@ -344,21 +373,32 @@ class SpiritPOSApp extends StatelessWidget {
       CheckoutOutboxRecord record,
       TenantSession session,
     ) async {
-      final printer = await TenantPrinterConfigurationRepository(
+      final cacheReader = tenantDataReader.cacheOnly;
+      final reads = await Future.wait<Object?>(<Future<Object?>>[
+        TenantPrinterConfigurationRepository(
+          session: session,
+          reader: cacheReader,
+        ).load().catchError((_) => const TenantConfiguredPrinter.absent()),
+        _receiptBusinessName(session, cacheReader),
+      ]);
+      final sale = CheckoutSalePayload.fromOutboxRecord(
+        record,
         session: session,
-        reader: tenantDataReader,
-      ).load();
-      final result = await printDispatcher.dispatch(
-        CheckoutSalePayload.fromOutboxRecord(record, session: session),
-        printer: printer,
+      );
+      final result = await printDispatcher.enqueue(
+        sale,
+        printer: reads[0]! as TenantConfiguredPrinter,
         // The same value and the same fallback the home's title uses, so the
         // paper and the app name the business identically.
-        businessName: await _receiptBusinessName(session, tenantDataReader),
+        businessName: reads[1] as String?,
         servedBy: FirebaseAuth.instance.currentUser?.displayName,
       );
-      return result.outcome == CheckoutPrintOutcome.sent
-          ? null
-          : result.reasonCode;
+      if (result.outcome == CheckoutPrintOutcome.refused) {
+        return result.reasonCode;
+      }
+      // The durable job exists; transport now runs independently of checkout.
+      unawaited(printDispatcher.retry(sale.receiptNumber));
+      return null;
     }
 
     // Recording a pending return changes no stock and is open to every active
@@ -366,9 +406,12 @@ class SpiritPOSApp extends StatelessWidget {
     // the two stay a deliberate two-person control. The same actions reach the
     // returns route from shift history and from a receipt lookup.
     final returnActions = TenantReturnActions(
-      writer: FirebaseTenantReturnWriter(
-        firestore: FirebaseFirestore.instance,
-        isOnline: isOnline,
+      writer: QueuedTenantReturnWriter(
+        store: tenantMutationStore,
+        remote: FirebaseTenantReturnWriter(
+          firestore: FirebaseFirestore.instance,
+          isOnline: isOnline,
+        ),
       ),
       verifyCallable: FirebaseVerifyReturnCallable(),
     );
@@ -376,9 +419,12 @@ class SpiritPOSApp extends StatelessWidget {
     // administrator only - the rules enforce it - and the same online check
     // every other client write uses: an expense is recorded on the server, so
     // there is nothing honest to show for one attempted with no connection.
-    final expenseWriter = FirebaseTenantExpenseWriter(
-      firestore: FirebaseFirestore.instance,
-      isOnline: isOnline,
+    final expenseWriter = QueuedTenantExpenseWriter(
+      store: tenantMutationStore,
+      remote: FirebaseTenantExpenseWriter(
+        firestore: FirebaseFirestore.instance,
+        isOnline: isOnline,
+      ),
     );
     // The only path in the app that can set stock to an arbitrary figure.
     // It is management-only, which the callable itself enforces, and it is
@@ -471,6 +517,9 @@ class SpiritPOSApp extends StatelessWidget {
           checkoutStateSource: CheckoutOutboxTenantSwitchStateSource(
             checkoutOutbox,
           ),
+          pendingWritesStateSource: TenantPendingMutationSwitchStateSource(
+            tenantMutationStore,
+          ),
           cashCloseStateSource: TenantShiftSwitchStateSource(tenantShiftState),
         ),
         tenantSwitchOnlineCheck: () async => isOnline(),
@@ -497,6 +546,12 @@ class SpiritPOSApp extends StatelessWidget {
             cache: checkoutCatalogCache,
             reader: tenantDataReader,
           );
+          final mutationWorker = TenantPendingMutationWorker(
+            store: tenantMutationStore,
+            submission: mutationGateway,
+            confirmation: mutationGateway,
+            workerId: deviceId,
+          );
           // The order these run in is a tested contract, not a comment here.
           final pass = CheckoutSyncPass(
             recover: coordinator.recoverSelectedSession,
@@ -507,9 +562,10 @@ class SpiritPOSApp extends StatelessWidget {
           return (trigger) async {
             // A sale saved at the till needs submitting and confirming; it does
             // not need the whole product catalog re-read.
-            await pass.run(
-              refreshDerivedData: trigger is! CheckoutSaveSyncRequest,
-            );
+            await Future.wait<void>(<Future<void>>[
+              pass.run(refreshDerivedData: trigger is! CheckoutSaveSyncRequest),
+              mutationWorker.run(sessionController.requireSession()),
+            ]);
             return null;
           };
         },
@@ -548,6 +604,7 @@ class SpiritPOSApp extends StatelessWidget {
             salesTotalsRoute: () => TenantSalesTotalsScreen(
               callable: salesTotalsCallable,
               reader: reader,
+              checkoutOutbox: checkoutOutbox,
             ),
             salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
           ),
@@ -558,6 +615,7 @@ class SpiritPOSApp extends StatelessWidget {
           weeklyReportRoute: () => TenantWeeklyReportScreen(
             reader: reader,
             callable: salesTotalsCallable,
+            checkoutOutbox: checkoutOutbox,
             // The sale-line roll-up behind *Top selling items* and *Recent
             // transactions* needs the history reader, which the plain
             // constructor cannot reach.
@@ -575,6 +633,7 @@ class SpiritPOSApp extends StatelessWidget {
           monthlyReportRoute: () => TenantMonthlyReportScreen(
             reader: reader,
             callable: salesTotalsCallable,
+            checkoutOutbox: checkoutOutbox,
           ),
           monthlyReportRoles: TenantSalesTotalsGateway.allowedRoles,
           // The same screen the summary opens, reached directly as well: it is
@@ -583,6 +642,7 @@ class SpiritPOSApp extends StatelessWidget {
           salesTotalsRoute: () => TenantSalesTotalsScreen(
             callable: salesTotalsCallable,
             reader: reader,
+            checkoutOutbox: checkoutOutbox,
           ),
           salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
         ),
@@ -597,6 +657,7 @@ class SpiritPOSApp extends StatelessWidget {
           reader: reader,
           reportReader: tenantDataReader,
           totalsCallable: salesTotalsCallable,
+          checkoutOutbox: checkoutOutbox,
           returnActions: returnActions,
         ),
         receiptLookupRoles: TenantSaleHistoryRepository.reportRoles,
@@ -728,16 +789,26 @@ class SpiritPOSApp extends StatelessWidget {
         setupChecklist: TenantSetupChecklist(cache: checkoutCatalogCache),
         brandingRoute: (reader) => TenantBrandingScreen(
           reader: reader,
-          writer: FirebaseTenantConfigurationDocumentWriter(
-            isOnline: isOnline,
+          writer: QueuedTenantConfigurationWriter(
+            store: tenantMutationStore,
+            cacheReader: reader.cached ?? reader,
+            currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+            remote: FirebaseTenantConfigurationDocumentWriter(
+              isOnline: isOnline,
+            ),
           ),
         ),
         brandingRoles: TenantBrandingPublisher.allowedRoles,
         printerConfigurationRoute: (reader) => TenantPrinterConfigurationScreen(
           reader: reader,
-          writer: FirebaseTenantConfigurationDocumentWriter(
-            firestore: FirebaseFirestore.instance,
-            isOnline: isOnline,
+          writer: QueuedTenantConfigurationWriter(
+            store: tenantMutationStore,
+            cacheReader: reader.cached ?? reader,
+            currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+            remote: FirebaseTenantConfigurationDocumentWriter(
+              firestore: FirebaseFirestore.instance,
+              isOnline: isOnline,
+            ),
           ),
           probe: printerTransport.probe,
         ),
@@ -840,10 +911,16 @@ class SpiritPOSApp extends StatelessWidget {
         ),
         catalogManagementRoles: TenantCatalogManagementRepository.allowedRoles,
         pendingCheckoutPanel: CheckoutPendingEvidencePanel(
-          source: CheckoutOutboxEvidenceSource(checkoutOutbox),
+          source: CombinedLocalWorkEvidenceSource(
+            checkouts: CheckoutOutboxEvidenceSource(checkoutOutbox),
+            mutations: tenantMutationStore,
+          ),
           // Without this the counts are read once when the session opens, so a
           // sale rang up moments earlier is reported as no sale at all.
-          refreshSignals: checkoutSyncSignals.evidenceChanges,
+          refreshSignals: mergeLocalWorkEvidenceSignals(
+            checkoutSyncSignals.evidenceChanges,
+            tenantMutationStore.changes,
+          ),
         ),
         // §4.4 v0.7's top bar wants the signed-in member's name. Firebase has
         // already loaded it, so this hands over state that exists rather than

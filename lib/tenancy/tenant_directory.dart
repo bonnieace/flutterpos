@@ -110,6 +110,26 @@ final class TenantDirectory {
   final int maximumPages;
   final TenantDirectoryCache _cache;
 
+  /// Reads only the UID-bound projection already stored on this device.
+  Future<TenantDirectoryLoad?> loadCached({required String uid}) async {
+    final cached = await _cache.read(uid);
+    if (cached == null) return null;
+    return TenantDirectoryLoad(
+      memberships: cached.memberships,
+      fromCache: true,
+      cachedAt: cached.cachedAt,
+    );
+  }
+
+  /// Reads the authoritative directory once and refreshes the device copy.
+  Future<TenantDirectoryLoad> refresh({required String uid}) async {
+    final memberships = await _loadEveryPage();
+    try {
+      await _cache.write(uid, memberships);
+    } catch (_) {}
+    return TenantDirectoryLoad(memberships: memberships, fromCache: false);
+  }
+
   /// Every page, from the server, falling back to this device's last copy.
   ///
   /// **The fallback needs a [uid] and silently declines without one**, because
@@ -119,25 +139,14 @@ final class TenantDirectory {
   /// cache anyway.
   Future<TenantDirectoryLoad> load({String? uid}) async {
     try {
+      if (uid != null) return await refresh(uid: uid);
       final memberships = await _loadEveryPage();
-      if (uid != null) {
-        // Best effort. A device that cannot write its cache has still just
-        // loaded its businesses, and failing that sign-in over a bookkeeping
-        // write would trade the thing that worked for the thing that did not.
-        try {
-          await _cache.write(uid, memberships);
-        } catch (_) {}
-      }
       return TenantDirectoryLoad(memberships: memberships, fromCache: false);
     } on TenantDirectoryUnavailable {
       if (uid == null) rethrow;
-      final cached = await _cache.read(uid);
+      final cached = await loadCached(uid: uid);
       if (cached == null) rethrow;
-      return TenantDirectoryLoad(
-        memberships: cached.memberships,
-        fromCache: true,
-        cachedAt: cached.cachedAt,
-      );
+      return cached;
     }
   }
 

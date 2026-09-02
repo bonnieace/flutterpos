@@ -94,7 +94,7 @@ void main() {
       expect(find.text('0'), findsNothing);
       await _open(tester);
       expect(
-        find.text('No checkouts are stored on this device.'),
+        find.text('No local work is stored on this device.'),
         findsOneWidget,
       );
     });
@@ -131,10 +131,7 @@ void main() {
     ) async {
       await _pumpPanel(tester, const _FailingSource());
 
-      expect(
-        find.text('Local checkout evidence is unavailable.'),
-        findsOneWidget,
-      );
+      expect(find.text('Local work evidence is unavailable.'), findsOneWidget);
       expect(find.textContaining('malformed_record'), findsNothing);
     });
 
@@ -154,7 +151,7 @@ void main() {
       expect(find.text('2'), findsNothing);
       await _open(tester);
       expect(
-        find.text('No checkouts are stored on this device.'),
+        find.text('No local work is stored on this device.'),
         findsOneWidget,
       );
       await _open(tester);
@@ -204,7 +201,7 @@ void main() {
       expect(await _count(tester, 'Needs attention'), 0);
       expect(await _count(tester, 'Confirmed'), 0);
       expect(
-        find.text('No checkouts are stored on this device.'),
+        find.text('No local work is stored on this device.'),
         findsNothing,
       );
     });
@@ -342,8 +339,10 @@ Future<CheckoutOutboxRecord> _save(
   payload: <String, Object?>{'checkoutId': checkoutId},
 );
 
-TenantSession _session() =>
-    TenantSession.fromMembership(uid: 'user-a', membership: _membership('tenant-a'));
+TenantSession _session() => TenantSession.fromMembership(
+  uid: 'user-a',
+  membership: _membership('tenant-a'),
+);
 
 final List<int> _encryptionKey = List<int>.generate(
   HiveCheckoutOutbox.encryptionKeyBytes,
@@ -370,7 +369,9 @@ final class _CountingSource implements CheckoutEvidenceSource {
   @override
   Future<CheckoutEvidenceSummary> summarize(TenantSession session) async {
     final index = calls++;
-    return _summaries[index < _summaries.length ? index : _summaries.length - 1];
+    return _summaries[index < _summaries.length
+        ? index
+        : _summaries.length - 1];
   }
 }
 

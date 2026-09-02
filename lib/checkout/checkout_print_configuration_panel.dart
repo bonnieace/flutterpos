@@ -258,11 +258,13 @@ final class _TenantPrinterConfigurationPanelState
   void _composeLoaders(String key) {
     if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
-    TenantGuardedLoader<TenantConfiguredPrinter> readWith(TenantDocumentReader reader) =>
+    TenantGuardedLoader<TenantConfiguredPrinter> readWith(
+      TenantDocumentReader reader,
+    ) =>
         (session) => TenantPrinterConfigurationPublisher(
-      session: session,
-      reader: reader,
-    ).loadConfigured();
+          session: session,
+          reader: reader,
+        ).loadConfigured();
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -309,6 +311,9 @@ final class _TenantPrinterConfigurationPanelState
 
 AppNotice _resultNotice(TenantConfigurationWriteResult result) =>
     switch (result.kind) {
+      TenantConfigurationWriteKind.queued => const AppNotice.offline(
+        'Saved on this device; waiting to sync.',
+      ),
       TenantConfigurationWriteKind.committed => const AppNotice.confirmed(
         'Saved. Receipts from this device go there from the next sale.',
       ),

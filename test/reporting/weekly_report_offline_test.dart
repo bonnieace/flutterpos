@@ -16,6 +16,19 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'authoritative load calls elapsed days plus previous period once',
+    () async {
+      final callable = _Callable.answering(1500);
+
+      await _load(callable: callable);
+
+      // Monday through Wednesday have elapsed, followed by exactly one request
+      // for the matching span in the prior week. The device branch starts none.
+      expect(callable.payloads, hasLength(4));
+    },
+  );
+
   test('a day the server cannot answer does not take the page', () async {
     final report = await _load(
       callable: _Callable.refusingDates(const <String>{'2026-08-25'}),
@@ -35,21 +48,17 @@ void main() {
 
     // Summing the days that did land would understate the week without saying
     // so, which is the one wrong figure this page must never print.
-    expect(
-      report.totals,
-      isNull,
-      reason: 'A partial answer is no answer.',
-    );
+    expect(report.totals, isNull, reason: 'A partial answer is no answer.');
   });
 
   test('a week the device can count for itself is counted', () async {
-    final report = await _load(callable: _Callable.refusingEverything());
+    final report = await _loadDevice();
 
-    expect(report.totals, isNull);
-    expect(report.counted, isNotNull);
+    expect(report.totals, isNotNull);
+    expect(report.totals!.basis, TenantSalesTotalsBasis.device);
     // Three sales at 900 minor each, which is what the fixture holds.
-    expect(report.counted!.transactions, 3);
-    expect(report.counted!.salesMinor, 2700);
+    expect(report.transactions, 3);
+    expect(report.totals!.sales, 27);
     expect(report.hasTakings, isTrue);
     expect(report.sales, 27.0);
     expect(report.transactions, 3);
@@ -57,7 +66,7 @@ void main() {
   });
 
   test('the chart draws its days from the same count', () async {
-    final report = await _load(callable: _Callable.refusingEverything());
+    final report = await _loadDevice();
 
     // Monday..Sunday of the week holding 2026-08-25 (a Tuesday), so the two
     // dated sales land on the second and third slots.
@@ -70,26 +79,21 @@ void main() {
     final report = await _load(callable: _Callable.answering(1500));
 
     expect(report.totals, isNotNull);
-    // Three days answered at 15.00 each. The device's own 27.00 is still
-    // carried, and deliberately not preferred.
+    // Three days answered at 15.00 each. The route replaces its earlier device
+    // view with this authoritative answer.
     expect(report.sales, 45.0);
-    expect(report.counted, isNotNull);
   });
 
   test('a truncated scan offers no figure of its own', () async {
     // A full page with a cursor still in hand, which is the only way a scan
     // learns it saw part of a week rather than all of it.
-    final report = await _load(
-      callable: _Callable.refusingEverything(),
-      scanCap: _scanPageSize,
-      extraSales: 60,
-    );
+    final report = await _loadDevice(scanCap: _scanPageSize, extraSales: 60);
 
     expect(report.scanWasTruncated, isTrue);
-    // Past the cap the running total is a floor, not the week's takings, and a
-    // floor printed as a total is the plausible wrong figure.
-    expect(report.counted, isNull);
-    expect(report.hasTakings, isFalse);
+    // The item ranking is capped independently; shared totals scan all cached
+    // sales up to the server's 5,000-sale boundary.
+    expect(report.totals, isNotNull);
+    expect(report.hasTakings, isTrue);
   });
 }
 
@@ -143,24 +147,65 @@ Future<TenantWeeklyReport> _load({
   return loader.load(TenantReportWeek.at(DateTime.utc(2026, 8, 26, 12)));
 }
 
+Future<TenantWeeklyReport> _loadDevice({
+  int scanCap = 300,
+  int extraSales = 0,
+}) async {
+  final session = TenantSession.active(
+    uid: _uid,
+    tenantId: _tenant,
+    role: TenantRole.owner,
+  );
+  final dates = <String>[
+    ..._dates,
+    for (var extra = 0; extra < extraSales; extra++) '2026-08-26',
+  ];
+  final reader = _Reader(<Map<String, Object?>>[
+    for (final (index, date) in dates.indexed)
+      _sale(
+        saleId: 'co-${index.toString().padLeft(3, '0')}',
+        sequence: index + 1,
+        businessDate: date,
+      ),
+  ]);
+  final loader = TenantWeeklyReportLoader.device(
+    session: session,
+    sales: TenantSaleHistoryRepository(
+      session: session,
+      reader: reader,
+      reportReader: reader,
+    ),
+    saleScanCap: scanCap,
+    clock: () => DateTime.utc(2026, 8, 26, 12),
+  );
+  return loader.loadDevice(
+    TenantReportWeek.at(DateTime.utc(2026, 8, 26, 12)),
+    aggregator: TenantDeviceSalesAggregator(
+      session: session,
+      cacheReader: reader,
+      cacheReportReader: reader,
+      clock: () => DateTime.utc(2026, 8, 26, 12),
+    ),
+  );
+}
+
 /// A totals callable that can be told which business dates to refuse.
 final class _Callable implements SalesTotalsCallable {
-  _Callable._(this._refused, this._salesMinor, {this.refuseAll = false});
+  _Callable._(this._refused, this._salesMinor);
 
   factory _Callable.refusingDates(Set<String> dates) => _Callable._(dates, 0);
-  factory _Callable.refusingEverything() =>
-      _Callable._(const <String>{}, 0, refuseAll: true);
   factory _Callable.answering(int salesMinor) =>
       _Callable._(const <String>{}, salesMinor);
 
   final Set<String> _refused;
   final int _salesMinor;
-  final bool refuseAll;
+  final List<Map<String, Object?>> payloads = <Map<String, Object?>>[];
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
+    payloads.add(payload);
     final start = payload['previousStartDate'];
-    if (refuseAll || _refused.contains(start)) {
+    if (_refused.contains(start)) {
       throw FirebaseException(plugin: 'functions', code: 'unavailable');
     }
     // The shape `TenantSalesTotals.fromCallable` insists on: a `previous`
@@ -243,16 +288,28 @@ final class _Reader implements TenantDataReader, TenantSalesHistoryQueryReader {
   Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
     TenantSalesHistoryQuery query,
   ) async {
-    final ordered = <Map<String, Object?>>[..._sales]
-      ..sort((a, b) {
-        final byDate = (b['businessDate']! as String).compareTo(
-          a['businessDate']! as String,
-        );
-        if (byDate != 0) return byDate;
-        return (b['checkoutId']! as String).compareTo(
-          a['checkoutId']! as String,
-        );
-      });
+    final ordered =
+        <Map<String, Object?>>[
+          for (final sale in _sales)
+            if ((sale['businessDate']! as String).compareTo(
+                      query.startBusinessDate,
+                    ) >=
+                    0 &&
+                (sale['businessDate']! as String).compareTo(
+                      query.endBusinessDate,
+                    ) <=
+                    0 &&
+                (query.soldById == null || sale['soldById'] == query.soldById))
+              sale,
+        ]..sort((a, b) {
+          final byDate = (b['businessDate']! as String).compareTo(
+            a['businessDate']! as String,
+          );
+          if (byDate != 0) return byDate;
+          return (b['checkoutId']! as String).compareTo(
+            a['checkoutId']! as String,
+          );
+        });
     var rest = ordered;
     if (query.startAfter case final cursor?) {
       final at = ordered.indexWhere(
