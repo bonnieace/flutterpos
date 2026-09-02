@@ -93,6 +93,9 @@ enum TenantSalesScope {
   oneMember,
 }
 
+/// Provenance of a totals figure currently shown to the user.
+enum TenantSalesTotalsBasis { device, server }
+
 /// Why the server did not answer.
 ///
 /// Reading is repeatable, so unlike the reconciliation request there is no
@@ -263,6 +266,39 @@ final class TenantSalesTenderBreakdown {
     );
   }
 
+  /// Builds the same closed, reconciled bucket set from device-side minor
+  /// units. It deliberately passes through [tryDecode], keeping one integrity
+  /// check for server and local answers.
+  static TenantSalesTenderBreakdown fromDeviceMinorUnits({
+    required Map<String, int> salesMinor,
+    required Map<String, int> transactions,
+    required int totalSalesMinor,
+    required int totalTransactions,
+  }) {
+    final expected = <String>{
+      ...checkoutTenderWireValues,
+      unrecordedBucket,
+      unrecognisedBucket,
+    };
+    if (salesMinor.keys.toSet().length != expected.length ||
+        transactions.keys.toSet().length != expected.length ||
+        !salesMinor.keys.toSet().containsAll(expected) ||
+        !transactions.keys.toSet().containsAll(expected)) {
+      throw const FormatException('Device tender buckets are incomplete.');
+    }
+    return tryDecode(
+      <String, Object?>{
+        for (final bucket in expected)
+          bucket: <String, Object?>{
+            'sales': salesMinor[bucket]! / 100,
+            'transactions': transactions[bucket]!,
+          },
+      },
+      sales: totalSalesMinor / 100,
+      transactions: totalTransactions,
+    )!;
+  }
+
   /// The server's bucket for a sale carrying no tender at all.
   static const String unrecordedBucket = 'unrecorded';
 
@@ -316,6 +352,7 @@ final class TenantSalesTotals {
     required this.transactions,
     required this.incompleteCostLineCount,
     required this.tenderBreakdown,
+    required this.basis,
   });
 
   factory TenantSalesTotals.fromCallable(
@@ -363,6 +400,47 @@ final class TenantSalesTotals {
         sales: sales,
         transactions: transactions,
       ),
+      basis: TenantSalesTotalsBasis.server,
+    );
+  }
+
+  /// A strictly reconciled aggregate derived only from records held by this
+  /// device. Monetary inputs stay in minor units until the public view model is
+  /// built so grouping cannot introduce floating-point drift.
+  factory TenantSalesTotals.fromDevice({
+    required TenantSalesTotalsQuery query,
+    required int scannedTransactions,
+    required int salesMinor,
+    required int costMinor,
+    required int transactions,
+    required int incompleteCostLineCount,
+    required Map<String, int> tenderSalesMinor,
+    required Map<String, int> tenderTransactions,
+  }) {
+    if (scannedTransactions < 0 ||
+        scannedTransactions > maximumTransactions ||
+        salesMinor < 0 ||
+        costMinor < 0 ||
+        transactions < 0 ||
+        transactions > scannedTransactions ||
+        incompleteCostLineCount < 0 ||
+        !query.isCategoryFiltered && transactions != scannedTransactions) {
+      throw const FormatException('Device sales totals are inconsistent.');
+    }
+    return TenantSalesTotals._(
+      query: query,
+      scannedTransactions: scannedTransactions,
+      sales: salesMinor / 100,
+      profit: (salesMinor - costMinor) / 100,
+      transactions: transactions,
+      incompleteCostLineCount: incompleteCostLineCount,
+      tenderBreakdown: TenantSalesTenderBreakdown.fromDeviceMinorUnits(
+        salesMinor: tenderSalesMinor,
+        transactions: tenderTransactions,
+        totalSalesMinor: salesMinor,
+        totalTransactions: transactions,
+      ),
+      basis: TenantSalesTotalsBasis.device,
     );
   }
 
@@ -384,6 +462,7 @@ final class TenantSalesTotals {
     required double profit,
     required int transactions,
     required int incompleteCostLineCount,
+    TenantSalesTotalsBasis basis = TenantSalesTotalsBasis.server,
   }) => TenantSalesTotals._(
     query: query,
     scannedTransactions: transactions,
@@ -392,6 +471,7 @@ final class TenantSalesTotals {
     transactions: transactions,
     incompleteCostLineCount: incompleteCostLineCount,
     tenderBreakdown: null,
+    basis: basis,
   );
 
   /// The server's `SALES_QUERY_LIMIT`; a period holding more is refused
@@ -427,6 +507,10 @@ final class TenantSalesTotals {
   /// How [sales] and [transactions] split by how each sale was paid for, or
   /// `null` when the server reported no split at all.
   final TenantSalesTenderBreakdown? tenderBreakdown;
+
+  final TenantSalesTotalsBasis basis;
+
+  double get averageSale => transactions == 0 ? 0 : sales / transactions;
 
   bool get hasCompleteCostData => incompleteCostLineCount == 0;
 

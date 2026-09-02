@@ -155,6 +155,9 @@ final class TenantExpenseVoidIntent {
 
 /// What became of a write.
 enum TenantExpenseWriteKind {
+  /// Saved durably on this device and waiting for synchronization.
+  queued,
+
   /// The server accepted it.
   committed,
 
@@ -173,6 +176,9 @@ final class TenantExpenseWriteResult {
 
   const TenantExpenseWriteResult.committed()
     : this._(TenantExpenseWriteKind.committed);
+
+  const TenantExpenseWriteResult.queued()
+    : this._(TenantExpenseWriteKind.queued);
 
   const TenantExpenseWriteResult.rejected(String reasonCode)
     : this._(TenantExpenseWriteKind.rejected, reasonCode);

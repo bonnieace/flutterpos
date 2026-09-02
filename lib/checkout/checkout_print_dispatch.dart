@@ -86,6 +86,36 @@ final class CheckoutPrintDispatcher {
   final PrinterTransport _transport;
   final CapabilityProfile _profile;
 
+  /// Builds and durably queues a receipt without touching the transport.
+  /// Checkout uses this local-only boundary so a slow or unreachable printer
+  /// can never hold the successful sale path open.
+  Future<CheckoutPrintResult> enqueue(
+    CheckoutSalePayload sale, {
+    required TenantConfiguredPrinter printer,
+    String? businessName,
+    String? servedBy,
+  }) async {
+    if (!printer.canPrint) {
+      return const CheckoutPrintResult.refused(
+        PrinterTransportCode.notConfigured,
+      );
+    }
+    final configuration = printer.require();
+    final bytes = CheckoutReceiptBody(
+      profile: _profile,
+      configuration: configuration,
+    ).build(sale, businessName: businessName, servedBy: servedBy);
+    final job = await _queue.enqueue(
+      tenantId: sale.tenantId,
+      receiptNumber: sale.receiptNumber,
+      endpoint: configuration.endpoint,
+      bytes: bytes,
+    );
+    return job.state == PrintJobState.printed
+        ? CheckoutPrintResult.sent(job)
+        : CheckoutPrintResult.queued(job, 'queued_for_printing');
+  }
+
   /// Queues [sale]'s receipt and attempts to send it.
   ///
   /// **Never throws for a printing reason.** Every failure the transport or the
@@ -100,27 +130,14 @@ final class CheckoutPrintDispatcher {
     String? businessName,
     String? servedBy,
   }) async {
-    if (!printer.canPrint) {
-      // No address, no job. See the library note: the receipt is recoverable
-      // from the sale because the key is the receipt number.
-      return const CheckoutPrintResult.refused(
-        PrinterTransportCode.notConfigured,
-      );
-    }
-    final configuration = printer.require();
-    final bytes = CheckoutReceiptBody(
-      profile: _profile,
-      configuration: configuration,
-    ).build(sale, businessName: businessName, servedBy: servedBy);
-
-    // Written durably **before** anything is dialled, so a crash between the
-    // two leaves a job to resume rather than a receipt nobody remembers.
-    final job = await _queue.enqueue(
-      tenantId: sale.tenantId,
-      receiptNumber: sale.receiptNumber,
-      endpoint: configuration.endpoint,
-      bytes: bytes,
+    final prepared = await enqueue(
+      sale,
+      printer: printer,
+      businessName: businessName,
+      servedBy: servedBy,
     );
+    if (prepared.outcome == CheckoutPrintOutcome.refused) return prepared;
+    final job = prepared.job!;
     if (job.state == PrintJobState.printed) {
       // Already sent by an earlier dispatch for the same receipt. Idempotence,
       // arriving from the queue rather than from here.

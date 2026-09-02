@@ -123,9 +123,7 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
     );
     _loader = _readWith(widget.reader, startDate, endDate);
     final cache = widget.reader.cached;
-    _cachedLoader = cache == null
-        ? null
-        : _readWith(cache, startDate, endDate);
+    _cachedLoader = cache == null ? null : _readWith(cache, startDate, endDate);
   }
 
   /// The page's whole read, over whichever reader it is handed.
@@ -978,6 +976,10 @@ class _VoidExpenseFormState extends State<_VoidExpenseForm> {
     if (!mounted) return;
     setState(() => _busy = false);
     switch (result.kind) {
+      case TenantExpenseWriteKind.queued:
+        widget.onCompleted(
+          const AppNotice.offline('Saved on this device; waiting to sync.'),
+        );
       case TenantExpenseWriteKind.committed:
         widget.onCompleted(
           const AppNotice(message: 'Expense voided.', status: AppStatus.ok),
@@ -1156,6 +1158,10 @@ class _RecordExpenseFormState extends State<_RecordExpenseForm> {
     if (!mounted) return;
     setState(() => _busy = false);
     switch (result.kind) {
+      case TenantExpenseWriteKind.queued:
+        widget.onCompleted(
+          const AppNotice.offline('Saved on this device; waiting to sync.'),
+        );
       case TenantExpenseWriteKind.committed:
         widget.onCompleted(
           const AppNotice(message: 'Expense recorded.', status: AppStatus.ok),

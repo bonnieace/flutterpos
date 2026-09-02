@@ -22,22 +22,29 @@ final class TenantSaleException implements Exception {
 
 /// One immutable line of a canonical sale document.
 ///
-/// The optional cost fields the draft may write are deliberately parsed away
-/// rather than exposed: product cost and profit remain outside this surface.
+/// The immutable category and cost snapshot is retained for device reporting.
+/// Whether profit may be displayed remains a role decision made by the report,
+/// not by this read model.
 final class TenantSaleLine {
   const TenantSaleLine._({
     required this.productId,
     required this.name,
+    required this.categoryId,
     required this.quantity,
     required this.unitPriceMinor,
     required this.lineTotalMinor,
+    required this.unitCostMinor,
+    required this.lineCostMinor,
   });
 
   final String productId;
   final String name;
+  final String? categoryId;
   final int quantity;
   final int unitPriceMinor;
   final int lineTotalMinor;
+  final int? unitCostMinor;
+  final int? lineCostMinor;
 }
 
 /// Strict read model for `tenants/{tenantId}/sales/{saleId}`.
@@ -471,13 +478,23 @@ List<TenantSaleLine> _parseLines(Object? raw) {
     if (lineTotalMinor != unitPriceMinor * quantity) {
       throw const TenantSaleException('inconsistent_sale_line');
     }
+    final categoryId = _optionalDocumentId(line, 'categoryId');
+    final unitCostMinor = _optionalInt(line, 'unitCostMinor', minimum: 0);
+    final lineCostMinor = _optionalInt(line, 'costMinor', minimum: 0);
+    if ((unitCostMinor == null) != (lineCostMinor == null) ||
+        unitCostMinor != null && lineCostMinor != unitCostMinor * quantity) {
+      throw const TenantSaleException('inconsistent_sale_line_cost');
+    }
     lines.add(
       TenantSaleLine._(
         productId: productId,
         name: _requiredString(line, 'name'),
+        categoryId: categoryId,
         quantity: quantity,
         unitPriceMinor: unitPriceMinor,
         lineTotalMinor: lineTotalMinor,
+        unitCostMinor: unitCostMinor,
+        lineCostMinor: lineCostMinor,
       ),
     );
   }
@@ -504,6 +521,20 @@ String _requiredDocumentId(Map<String, Object?> data, String field) {
   } on ArgumentError {
     throw const TenantSaleException('invalid_sale_document');
   }
+}
+
+String? _optionalDocumentId(Map<String, Object?> data, String field) {
+  if (data[field] == null) return null;
+  return _requiredDocumentId(data, field);
+}
+
+int? _optionalInt(
+  Map<String, Object?> data,
+  String field, {
+  required int minimum,
+}) {
+  if (data[field] == null) return null;
+  return _requiredInt(data, field, minimum: minimum);
 }
 
 String _requiredDeviceId(Map<String, Object?> data) {

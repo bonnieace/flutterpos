@@ -43,6 +43,10 @@ String lastSelectedTenantStorageKey(String uid) =>
 String tenantDirectoryStorageKey(String uid) =>
     '${_deviceLocalUid(uid)}:tenantDirectory';
 
+/// Where this device keeps the root routing projection for an Auth UID.
+String rootRoutingProfileStorageKey(String uid) =>
+    '${_deviceLocalUid(uid)}:rootRoutingProfile';
+
 /// The shared shape of every device-local key: a UID that cannot forge one.
 ///
 /// The colon is the separator, so a UID containing one could address another

@@ -284,8 +284,9 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     final request = widget.request;
     final cursor = _cursors[_pageIndex];
     final pageIndex = _pageIndex;
-    TenantGuardedLoader<_ReturnsView> readWith(TenantDataReader reader) =>
-        (session) async {
+    TenantGuardedLoader<_ReturnsView> readWith(
+      TenantDataReader reader,
+    ) => (session) async {
       final page =
           await TenantReturnHistoryRepository(
             session: session,
@@ -477,6 +478,9 @@ AppNotice _verificationNotice(TenantReturnVerificationFailure failure) =>
 /// only that the record this screen was asked to write exists.
 AppNotice _resultNotice(TenantReturnWriteResult result) =>
     switch (result.kind) {
+      TenantReturnWriteKind.queued => const AppNotice.offline(
+        'Saved on this device; waiting to sync. No stock has been restored.',
+      ),
       TenantReturnWriteKind.committed => const AppNotice.confirmed(
         'Return recorded. No stock has been restored yet; a manager must '
         'verify it first.',

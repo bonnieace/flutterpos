@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -106,6 +108,57 @@ void main() {
     },
   );
 
+  test('cached bootstrap asks neither root nor directory gateway', () async {
+    final gateway = _HangingGateway();
+    final now = DateTime.utc(2026, 8, 30, 9);
+    final bootstrap = TenantBootstrapService(
+      rootGateway: gateway,
+      rootCache: _MemoryRootCache(
+        CachedRootRoutingProfile(profile: _activeProfile, cachedAt: now),
+      ),
+      directory: TenantDirectory(
+        gateway,
+        cache: _MemoryDirectoryCache(
+          CachedTenantDirectory(
+            memberships: [_membership('tenant-a')],
+            cachedAt: now,
+          ),
+        ),
+      ),
+      selectionStore: _MemorySelectionStore('tenant-a'),
+    );
+
+    final result = await bootstrap.loadCached('user-a');
+
+    expect(result?.kind, TenantBootstrapKind.tenant);
+    expect(result?.selection.selected?.tenantId, 'tenant-a');
+    expect(result?.fromCache, isTrue);
+    expect(gateway.rootCalls, 0);
+    expect(gateway.directoryCalls, 0);
+  });
+
+  test(
+    'cached bootstrap requires both root and directory projections',
+    () async {
+      final gateway = _HangingGateway();
+      final bootstrap = TenantBootstrapService(
+        rootGateway: gateway,
+        rootCache: _MemoryRootCache(
+          CachedRootRoutingProfile(
+            profile: _activeProfile,
+            cachedAt: DateTime.utc(2026, 8, 30),
+          ),
+        ),
+        directory: TenantDirectory(gateway),
+        selectionStore: _MemorySelectionStore('tenant-a'),
+      );
+
+      expect(await bootstrap.loadCached('user-a'), isNull);
+      expect(gateway.rootCalls, 0);
+      expect(gateway.directoryCalls, 0);
+    },
+  );
+
   test('platform identities never load tenant memberships', () async {
     final gateway = _FakeGateway(
       profile: const RootRoutingProfile(
@@ -205,6 +258,74 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('root routing profile storage shape round-trips', () {
+    final restored = RootRoutingProfile.fromJson(_activeProfile.toJson());
+    expect(restored.accountType, RootAccountType.tenantUser);
+    expect(restored.globalStatus, 'active');
+    expect(restored.defaultTenantId, 'tenant-a');
+  });
+}
+
+const _activeProfile = RootRoutingProfile(
+  accountType: RootAccountType.tenantUser,
+  globalStatus: 'active',
+  defaultTenantId: 'tenant-a',
+);
+
+final class _HangingGateway
+    implements TenantDirectoryGateway, RootRoutingGateway {
+  int rootCalls = 0;
+  int directoryCalls = 0;
+
+  @override
+  Future<RootRoutingProfile> getRootRoutingProfile(String uid) {
+    rootCalls++;
+    return Completer<RootRoutingProfile>().future;
+  }
+
+  @override
+  Future<TenantListPage> listMyTenants({
+    required int pageSize,
+    String? cursor,
+  }) {
+    directoryCalls++;
+    return Completer<TenantListPage>().future;
+  }
+}
+
+final class _MemoryRootCache implements RootRoutingProfileCache {
+  _MemoryRootCache(this.value);
+
+  CachedRootRoutingProfile? value;
+
+  @override
+  Future<CachedRootRoutingProfile?> read(String uid) async => value;
+
+  @override
+  Future<void> write(String uid, RootRoutingProfile profile) async {
+    value = CachedRootRoutingProfile(
+      profile: profile,
+      cachedAt: DateTime.now().toUtc(),
+    );
+  }
+}
+
+final class _MemoryDirectoryCache implements TenantDirectoryCache {
+  _MemoryDirectoryCache(this.value);
+
+  CachedTenantDirectory? value;
+
+  @override
+  Future<CachedTenantDirectory?> read(String uid) async => value;
+
+  @override
+  Future<void> write(String uid, Iterable<TenantMembership> memberships) async {
+    value = CachedTenantDirectory(
+      memberships: List<TenantMembership>.from(memberships),
+      cachedAt: DateTime.now().toUtc(),
+    );
+  }
 }
 
 final class _FakeGateway implements TenantDirectoryGateway, RootRoutingGateway {

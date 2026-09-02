@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../checkout/checkout_draft.dart';
+import '../checkout/checkout_outbox.dart';
 import '../checkout/checkout_receipt.dart';
 import '../checkout/checkout_tender.dart';
 import '../reporting/reporting_currency.dart';
+import '../reporting/device_sales_totals.dart';
 import '../reporting/sales_totals.dart';
 import '../reporting/sales_totals_session_context.dart';
 import '../returns/return_actions.dart';
@@ -37,6 +39,7 @@ final class TenantSalesReportScreen extends StatelessWidget {
     this.reportReader,
     this.totalsCallable,
     this.returnActions,
+    this.checkoutOutbox,
     this.clock,
   });
 
@@ -44,6 +47,7 @@ final class TenantSalesReportScreen extends StatelessWidget {
   final TenantSalesHistoryQueryReader? reportReader;
   final SalesTotalsCallable? totalsCallable;
   final TenantReturnActions? returnActions;
+  final HiveCheckoutOutbox? checkoutOutbox;
   final DateTime Function()? clock;
 
   @override
@@ -56,6 +60,7 @@ final class TenantSalesReportScreen extends StatelessWidget {
       reportReader: reportReader,
       totalsCallable: totalsCallable,
       returnActions: returnActions,
+      checkoutOutbox: checkoutOutbox,
       clock: clock,
     ),
   );
@@ -69,6 +74,7 @@ final class TenantSalesReportPanel extends StatefulWidget {
     this.reportReader,
     this.totalsCallable,
     this.returnActions,
+    this.checkoutOutbox,
     this.clock,
     this.pageSize = 20,
     this.staffPageSize = 50,
@@ -78,6 +84,7 @@ final class TenantSalesReportPanel extends StatefulWidget {
   final TenantSalesHistoryQueryReader? reportReader;
   final SalesTotalsCallable? totalsCallable;
   final TenantReturnActions? returnActions;
+  final HiveCheckoutOutbox? checkoutOutbox;
   final DateTime Function()? clock;
   final int pageSize;
   final int staffPageSize;
@@ -99,6 +106,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   TenantGuardedLoader<_SalesReportView>? _historyLoader;
   String? _receiptLoaderKey;
   TenantGuardedLoader<TenantReceiptEndingLookupResult>? _receiptLoader;
+  TenantGuardedLoader<TenantReceiptEndingLookupResult>? _receiptLoaderCached;
   final Map<String, Future<_SalesTotalsOutcome>> _totals =
       <String, Future<_SalesTotalsOutcome>>{};
 
@@ -114,14 +122,8 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
       <String, Future<SalesTotalsSessionContext>>{};
 
   /// What the totals band is waiting on, per guard key.
-  final Map<String, Future<_TotalsBandData>> _bands =
-      <String, Future<_TotalsBandData>>{};
-  late final SalesTotalsSessionContextLoader _sessionContext =
-      SalesTotalsSessionContextLoader(
-        reader: widget.reader,
-        staffPageSize: widget.staffPageSize,
-      );
-
+  final Map<String, _TotalsBandController> _bands =
+      <String, _TotalsBandController>{};
   @override
   void initState() {
     super.initState();
@@ -135,6 +137,9 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   @override
   void dispose() {
     _receipt.dispose();
+    for (final band in _bands.values) {
+      band.dispose();
+    }
     super.dispose();
   }
 
@@ -233,6 +238,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
       businessDate: businessDate,
       chosenStaffId: chosenStaffId,
       cursor: cursor,
+      cacheOnly: false,
     );
     final cache = widget.reader.cached;
     _historyLoaderCached = cache == null
@@ -243,6 +249,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
             businessDate: businessDate,
             chosenStaffId: chosenStaffId,
             cursor: cursor,
+            cacheOnly: true,
           );
   }
 
@@ -253,16 +260,21 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
     required String businessDate,
     required String? chosenStaffId,
     required String? cursor,
+    required bool cacheOnly,
   }) {
     return (session) async {
       final management = session.canAccess(
         allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
       );
-      final context = await _contextFor(session, management: management);
+      final context = await _contextFor(
+        session,
+        reader: reader,
+        management: management,
+      );
       final appliedStaffId =
           management &&
               chosenStaffId != null &&
-              context.staff.contains(chosenStaffId)
+              (cacheOnly || context.staff.contains(chosenStaffId))
           ? chosenStaffId
           : null;
       final page =
@@ -309,58 +321,110 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   ///
   /// Null where there is nothing to read: a cashier does not see the band, and
   /// no callable means the figures were never on offer.
-  Future<_TotalsBandData>? _totalsBandFor(String key, TenantSession session) {
+  _TotalsBandController? _totalsBandFor(String key, TenantSession session) {
     final management = session.canAccess(
       allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
     );
-    if (!management || widget.totalsCallable == null) return null;
+    final cache = widget.reader.cached;
+    if (!management || cache == null && widget.totalsCallable == null) {
+      return null;
+    }
     final businessDate = _businessDate;
     final chosenStaffId = _staffId;
-    return _bands.putIfAbsent(key, () async {
-      final context = await _contextFor(session, management: true);
-      final appliedStaffId =
-          chosenStaffId != null && context.staff.contains(chosenStaffId)
-          ? chosenStaffId
-          : null;
-      final gateway = TenantSalesTotalsGateway(
-        session: session,
-        callable: widget.totalsCallable!,
-        clock: widget.clock,
-      );
-      return _TotalsBandData(
-        outcome: await _totalsFor(
-          session,
-          gateway.createBusinessDateQuery(
-            businessDate: businessDate,
-            soldById: appliedStaffId,
-          ),
-        ),
-        currency: context.currency,
-      );
+    return _bands.putIfAbsent(key, () {
+      final Future<_TotalsBandData>? local = cache == null
+          ? null
+          : () async {
+              final context = await _contextFor(
+                session,
+                reader: cache,
+                management: true,
+              );
+              final aggregator = TenantDeviceSalesAggregator(
+                session: session,
+                cacheReader: cache,
+                outbox: widget.checkoutOutbox,
+                clock: widget.clock,
+              );
+              final result = await aggregator.load(
+                aggregator.createBusinessDateQuery(
+                  businessDate: businessDate,
+                  // Preserve the requested scope even when the local staff
+                  // directory has not cached that member yet.
+                  soldById: chosenStaffId,
+                ),
+              );
+              final totals = result.totals;
+              if (totals == null) {
+                throw StateError('device_sales_unavailable');
+              }
+              return _TotalsBandData(
+                outcome: _SalesTotalsOutcome(value: totals),
+                currency: context.currency,
+              );
+            }();
+      final callable = widget.totalsCallable;
+      final Future<_TotalsBandData>? server = callable == null
+          ? null
+          : () async {
+              final context = await _contextFor(
+                session,
+                reader: widget.reader,
+                management: true,
+              );
+              final appliedStaffId =
+                  chosenStaffId != null && context.staff.contains(chosenStaffId)
+                  ? chosenStaffId
+                  : null;
+              final gateway = TenantSalesTotalsGateway(
+                session: session,
+                callable: callable,
+                clock: widget.clock,
+              );
+              return _TotalsBandData(
+                outcome: await _totalsFor(
+                  session,
+                  gateway.createBusinessDateQuery(
+                    businessDate: businessDate,
+                    soldById: appliedStaffId,
+                  ),
+                ),
+                currency: context.currency,
+              );
+            }();
+      return _TotalsBandController(local: local, server: server);
     });
   }
 
   /// The context for [session], read at most once however many regions ask.
   Future<SalesTotalsSessionContext> _contextFor(
     TenantSession session, {
+    required TenantDataReader reader,
     required bool management,
   }) {
     final key =
-        '${session.uid}:${session.tenantId}:${session.epoch}:$management';
+        '${session.uid}:${session.tenantId}:${session.epoch}:$management:'
+        '${identityHashCode(reader)}';
     return _contexts.putIfAbsent(
       key,
-      () => management ? _sessionContext.load(session) : _cashierContext(session),
+      () => management
+          ? SalesTotalsSessionContextLoader(
+              reader: reader,
+              staffPageSize: widget.staffPageSize,
+            ).load(session)
+          : _cashierContext(session, reader),
     );
   }
 
   Future<SalesTotalsSessionContext> _cashierContext(
     TenantSession session,
+    TenantDataReader reader,
   ) async {
     TenantReportingCurrency currency;
     try {
       currency = await TenantReportingCurrency.read(
         session: session,
-        reader: widget.reader,
+        reader: reader,
       );
     } catch (_) {
       currency = TenantReportingCurrency.unknown;
@@ -404,7 +468,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
       return _receiptLoader!;
     }
     _receiptLoaderKey = key;
-    return _receiptLoader = (session) =>
+    _receiptLoader = (session) =>
         TenantReceiptLookupRepository(
           session: session,
           reader: widget.reader,
@@ -414,6 +478,20 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           soldById: soldById,
           maximumBusinessDate: _todayBusinessDate,
         );
+    final cache = widget.reader.cached;
+    _receiptLoaderCached = cache == null
+        ? null
+        : (session) =>
+              TenantReceiptLookupRepository(
+                session: session,
+                reader: cache,
+              ).findByEnding(
+                businessDate: businessDate,
+                ending: ending,
+                soldById: soldById,
+                maximumBusinessDate: _todayBusinessDate,
+              );
+    return _receiptLoader!;
   }
 
   /// Opens the return sheet over this list.
@@ -531,6 +609,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
                   businessDate: view.businessDate,
                   soldById: view.appliedStaffId,
                 ),
+                loadCached: _receiptLoaderCached,
                 failure: (context, error) => Callout(
                   key: const ValueKey('sales-receipt-failure'),
                   status: AppStatus.problem,
@@ -655,7 +734,7 @@ final class _SalesReportContents extends StatelessWidget {
 
   /// The day's takings, on their own clock. Null where this member is not
   /// offered them at all, in which case no band is drawn.
-  final Future<_TotalsBandData>? totalsBand;
+  final _TotalsBandController? totalsBand;
 
   /// What went wrong reading the day, or null where nothing did.
   ///
@@ -1124,14 +1203,14 @@ final class _SaleMetaSkeleton extends StatelessWidget {
 final class _TotalsBand extends StatelessWidget {
   const _TotalsBand({required this.band, required this.businessDate});
 
-  final Future<_TotalsBandData> band;
+  final _TotalsBandController band;
   final String businessDate;
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<_TotalsBandData>(
-    future: band,
-    builder: (context, snapshot) {
-      final data = snapshot.data;
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: band,
+    builder: (context, child) {
+      final data = band.data;
       if (data == null) {
         // `_totalsBandFor` catches its own refusals into an outcome, so
         // nothing that reaches this branch is something the band can word. It
@@ -1149,6 +1228,44 @@ final class _TotalsBand extends StatelessWidget {
       );
     },
   );
+}
+
+final class _TotalsBandController extends ChangeNotifier {
+  _TotalsBandController({
+    required Future<_TotalsBandData>? local,
+    required Future<_TotalsBandData>? server,
+  }) {
+    local
+        ?.then((value) {
+          if (_disposed || _serverWon) return;
+          data = value;
+          notifyListeners();
+        })
+        .catchError((Object _) {});
+    server
+        ?.then((value) {
+          if (_disposed) return;
+          if (value.outcome.value != null) {
+            _serverWon = true;
+            data = value;
+            notifyListeners();
+          } else if (data == null) {
+            data = value;
+            notifyListeners();
+          }
+        })
+        .catchError((Object _) {});
+  }
+
+  _TotalsBandData? data;
+  bool _serverWon = false;
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 }
 
 final class _ManagementSalesSummary extends StatelessWidget {
@@ -1209,6 +1326,16 @@ final class _ManagementSalesSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
+          if (totals.basis == TenantSalesTotalsBasis.device) ...<Widget>[
+            Text(
+              'On this device',
+              key: const ValueKey('sales-report-device-basis'),
+              style: tokens.typography.labelMedium.copyWith(
+                color: tokens.colors.text.secondary,
+              ),
+            ),
+            SizedBox(height: tokens.spacing.s12),
+          ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[

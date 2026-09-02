@@ -118,7 +118,10 @@ final class TenantReturnCreateIntent {
 
 /// Guarded read/intent boundary for recording a return against one sale.
 final class TenantReturnRequestRepository extends TenantReadRepository {
-  TenantReturnRequestRepository({required super.session, required super.reader});
+  TenantReturnRequestRepository({
+    required super.session,
+    required super.reader,
+  });
 
   /// Every active member may record a **pending** return.
   ///
@@ -234,7 +237,8 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
     }
     final safeReason = _normalizedReason(reason);
     final remaining = <String, int>{
-      for (final line in returnable.lines) line.productId: line.remainingQuantity,
+      for (final line in returnable.lines)
+        line.productId: line.remainingQuantity,
     };
 
     final lines = <TenantReturnRequestLine>[];
@@ -279,6 +283,9 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
 
 /// The outcome of one attempted return write.
 enum TenantReturnWriteKind {
+  /// Saved durably on this device and waiting for synchronization.
+  queued,
+
   /// The server acknowledged the write.
   committed,
 
@@ -297,6 +304,8 @@ final class TenantReturnWriteResult {
 
   const TenantReturnWriteResult.committed()
     : this._(TenantReturnWriteKind.committed);
+
+  const TenantReturnWriteResult.queued() : this._(TenantReturnWriteKind.queued);
 
   const TenantReturnWriteResult.rejected(String reasonCode)
     : this._(TenantReturnWriteKind.rejected, reasonCode);
@@ -404,7 +413,8 @@ final class FirebaseTenantReturnWriter implements TenantReturnWriter {
 
   static TenantReturnDocumentCreator _firestoreCreator(
     FirebaseFirestore firestore,
-  ) => (path, data) => firestore.doc(path).set(data);
+  ) =>
+      (path, data) => firestore.doc(path).set(data);
 }
 
 /// A fresh request ID for one confirmation intent.

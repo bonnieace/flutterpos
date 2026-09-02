@@ -39,6 +39,18 @@ void main() {
       );
 
   group('a configured printer', () {
+    test('local enqueue persists a job without touching transport', () async {
+      final transport = _FakeTransport();
+
+      final result = await dispatcher(
+        transport,
+      ).enqueue(_sale(), printer: _printer(), businessName: 'Kilimani Grocers');
+
+      expect(result.outcome, CheckoutPrintOutcome.queued);
+      expect(queue.read(_sale().receiptNumber), isNotNull);
+      expect(transport.sends, isEmpty);
+    });
+
     test('builds the receipt, queues it, and sends it', () async {
       final transport = _FakeTransport();
 
@@ -55,17 +67,19 @@ void main() {
       expect(transport.sends.single, isNotEmpty);
     });
 
-    test('keys the job on the receipt number the sale already carries', () async {
-      final sale = _sale();
+    test(
+      'keys the job on the receipt number the sale already carries',
+      () async {
+        final sale = _sale();
 
-      final result = await dispatcher(_FakeTransport()).dispatch(
-        sale,
-        printer: _printer(),
-      );
+        final result = await dispatcher(
+          _FakeTransport(),
+        ).dispatch(sale, printer: _printer());
 
-      expect(result.job!.receiptNumber, sale.receiptNumber);
-      expect(box.keys, contains(sale.receiptNumber));
-    });
+        expect(result.job!.receiptNumber, sale.receiptNumber);
+        expect(box.keys, contains(sale.receiptNumber));
+      },
+    );
 
     test('dispatching one sale twice sends it once', () async {
       // The idempotence arrives from the queue rather than from here, and this
@@ -88,10 +102,9 @@ void main() {
         failWith: PrinterTransportCode.writeTimeout,
       );
 
-      final result = await dispatcher(transport).dispatch(
-        _sale(),
-        printer: _printer(),
-      );
+      final result = await dispatcher(
+        transport,
+      ).dispatch(_sale(), printer: _printer());
 
       expect(result.outcome, CheckoutPrintOutcome.queued);
       expect(result.reasonCode, PrinterTransportCode.writeTimeout);
@@ -100,40 +113,46 @@ void main() {
       expect(queue.read(_sale().receiptNumber), isNotNull);
     });
 
-    test('never throws for a printing reason, because a sale path calls it', () async {
-      // §6.3's argument with a larger consequence: a receipt that can break a
-      // checkout is a paper jam that can lose a sale.
-      for (final code in PrinterTransportCode.all) {
-        final local = await Hive.openBox<dynamic>('dispatch-$code');
-        final subject = CheckoutPrintDispatcher(
-          queue: HivePrintJobQueue.fromBox(local),
-          transport: _FakeTransport(failWith: code),
-          profile: profile,
+    test(
+      'never throws for a printing reason, because a sale path calls it',
+      () async {
+        // §6.3's argument with a larger consequence: a receipt that can break a
+        // checkout is a paper jam that can lose a sale.
+        for (final code in PrinterTransportCode.all) {
+          final local = await Hive.openBox<dynamic>('dispatch-$code');
+          final subject = CheckoutPrintDispatcher(
+            queue: HivePrintJobQueue.fromBox(local),
+            transport: _FakeTransport(failWith: code),
+            profile: profile,
+          );
+
+          final result = await subject.dispatch(_sale(), printer: _printer());
+
+          expect(result.outcome, CheckoutPrintOutcome.queued, reason: code);
+          expect(result.reasonCode, code, reason: code);
+        }
+      },
+    );
+
+    test(
+      'a retry re-sends the bytes the sale produced, not new ones',
+      () async {
+        // A receipt retried after a price change must print what was charged.
+        final transport = _FakeTransport(
+          failWith: PrinterTransportCode.unreachable,
         );
+        final sale = _sale();
+        final subject = dispatcher(transport);
+        final failed = await subject.dispatch(sale, printer: _printer());
+        final queuedBytes = failed.job!.bytes;
 
-        final result = await subject.dispatch(_sale(), printer: _printer());
+        transport.failWith = null;
+        final retried = await subject.retry(sale.receiptNumber);
 
-        expect(result.outcome, CheckoutPrintOutcome.queued, reason: code);
-        expect(result.reasonCode, code, reason: code);
-      }
-    });
-
-    test('a retry re-sends the bytes the sale produced, not new ones', () async {
-      // A receipt retried after a price change must print what was charged.
-      final transport = _FakeTransport(
-        failWith: PrinterTransportCode.unreachable,
-      );
-      final sale = _sale();
-      final subject = dispatcher(transport);
-      final failed = await subject.dispatch(sale, printer: _printer());
-      final queuedBytes = failed.job!.bytes;
-
-      transport.failWith = null;
-      final retried = await subject.retry(sale.receiptNumber);
-
-      expect(retried.outcome, CheckoutPrintOutcome.sent);
-      expect(transport.sends.single, queuedBytes);
-    });
+        expect(retried.outcome, CheckoutPrintOutcome.sent);
+        expect(transport.sends.single, queuedBytes);
+      },
+    );
   });
 
   group('retry, on a job that is not failed', () {
@@ -157,24 +176,27 @@ void main() {
       expect(transport.sends, hasLength(1));
     });
 
-    test('a printed job is not re-sent, because that is what reprint is', () async {
-      // Reaching `printed` means the queue never re-sends on its own, and a
-      // second copy is an audited act. This must not become a back door to it.
-      final transport = _FakeTransport();
-      final sale = _sale();
-      final subject = dispatcher(transport);
-      await subject.dispatch(sale, printer: _printer());
+    test(
+      'a printed job is not re-sent, because that is what reprint is',
+      () async {
+        // Reaching `printed` means the queue never re-sends on its own, and a
+        // second copy is an audited act. This must not become a back door to it.
+        final transport = _FakeTransport();
+        final sale = _sale();
+        final subject = dispatcher(transport);
+        await subject.dispatch(sale, printer: _printer());
 
-      final result = await subject.retry(sale.receiptNumber);
+        final result = await subject.retry(sale.receiptNumber);
 
-      expect(result.outcome, CheckoutPrintOutcome.sent);
-      expect(transport.sends, hasLength(1));
-    });
+        expect(result.outcome, CheckoutPrintOutcome.sent);
+        expect(transport.sends, hasLength(1));
+      },
+    );
 
     test('an unknown receipt refuses rather than throwing', () async {
-      final result = await dispatcher(_FakeTransport()).retry(
-        'CT-A7F-20260729-9999',
-      );
+      final result = await dispatcher(
+        _FakeTransport(),
+      ).retry('CT-A7F-20260729-9999');
 
       expect(result.outcome, CheckoutPrintOutcome.refused);
     });
@@ -187,10 +209,9 @@ void main() {
       // customer LAN is someone else's device.
       final transport = _FakeTransport();
 
-      final result = await dispatcher(transport).dispatch(
-        _sale(),
-        printer: const TenantConfiguredPrinter.absent(),
-      );
+      final result = await dispatcher(
+        transport,
+      ).dispatch(_sale(), printer: const TenantConfiguredPrinter.absent());
 
       expect(result.outcome, CheckoutPrintOutcome.refused);
       expect(result.reasonCode, PrinterTransportCode.notConfigured);
@@ -199,33 +220,41 @@ void main() {
       expect(transport.sends, isEmpty);
     });
 
-    test('a malformed document refuses exactly as an absent one does', () async {
-      final result = await dispatcher(_FakeTransport()).dispatch(
-        _sale(),
-        printer: const TenantConfiguredPrinter.malformed(),
-      );
+    test(
+      'a malformed document refuses exactly as an absent one does',
+      () async {
+        final result = await dispatcher(
+          _FakeTransport(),
+        ).dispatch(_sale(), printer: const TenantConfiguredPrinter.malformed());
 
-      expect(result.outcome, CheckoutPrintOutcome.refused);
-      expect(box.keys, isEmpty);
-    });
+        expect(result.outcome, CheckoutPrintOutcome.refused);
+        expect(box.keys, isEmpty);
+      },
+    );
 
-    test('the refused receipt is recoverable, because the key is derived', () async {
-      // The reason refusing is safe: the sale is durable and the job key is the
-      // receipt number, so queueing it once a printer exists produces the same
-      // job rather than a second delivery.
-      final sale = _sale();
-      final subject = dispatcher(_FakeTransport());
-      await subject.dispatch(
-        sale,
-        printer: const TenantConfiguredPrinter.absent(),
-      );
+    test(
+      'the refused receipt is recoverable, because the key is derived',
+      () async {
+        // The reason refusing is safe: the sale is durable and the job key is the
+        // receipt number, so queueing it once a printer exists produces the same
+        // job rather than a second delivery.
+        final sale = _sale();
+        final subject = dispatcher(_FakeTransport());
+        await subject.dispatch(
+          sale,
+          printer: const TenantConfiguredPrinter.absent(),
+        );
 
-      final later = await subject.dispatch(sale, printer: _printer());
+        final later = await subject.dispatch(sale, printer: _printer());
 
-      expect(later.outcome, CheckoutPrintOutcome.sent);
-      expect(later.job!.receiptNumber, sale.receiptNumber);
-      expect(box.keys.where((key) => key == sale.receiptNumber), hasLength(1));
-    });
+        expect(later.outcome, CheckoutPrintOutcome.sent);
+        expect(later.job!.receiptNumber, sale.receiptNumber);
+        expect(
+          box.keys.where((key) => key == sale.receiptNumber),
+          hasLength(1),
+        );
+      },
+    );
   });
 }
 
@@ -246,12 +275,11 @@ final class _FakeTransport implements PrinterTransport {
   final List<List<int>> sends = <List<int>>[];
 
   @override
-  PrinterTransportCapability get capability =>
-      const PrinterTransportCapability(
-        kind: PrinterTransportKind.directTcp,
-        endpointIsPrinter: true,
-        label: 'Fake',
-      );
+  PrinterTransportCapability get capability => const PrinterTransportCapability(
+    kind: PrinterTransportKind.directTcp,
+    endpointIsPrinter: true,
+    label: 'Fake',
+  );
 
   @override
   Future<void> probe(PrinterEndpoint endpoint) async {}

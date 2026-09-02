@@ -383,6 +383,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   SetGlobalUserStatusCallable? _defaultGlobalUserStatusCallable;
   TenantSwitchCoordinator? _tenantSwitchCoordinator;
   TenantSessionRecovery? _tenantSessionRecovery;
+  Future<void>? _bootstrapRefresh;
+  Timer? _bootstrapRefreshDebounce;
 
   @override
   void initState() {
@@ -456,6 +458,14 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   void _triggerTenantRecovery([Object? trigger]) {
     if (_sessionController.session == null) return;
+    // A null trigger is the composition root's reconnect/full-refresh signal.
+    // Single-flight and the debounce keep repeated signals cheap.
+    if (trigger == null) _scheduleBootstrapRefresh();
+    _runTenantRecovery(trigger);
+  }
+
+  void _runTenantRecovery([Object? trigger]) {
+    if (_sessionController.session == null) return;
     final factory = widget.tenantSessionRecoveryFactory;
     if (factory == null) return;
     final recovery = _tenantSessionRecovery ??= factory(_sessionController);
@@ -480,6 +490,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     _membership = null;
     _platformIdentity = null;
     _error = null;
+    _bootstrapRefreshDebounce?.cancel();
     if (nextUid == null) {
       if (!mounted) return;
       setState(() => _phase = _RoutingPhase.signedOut);
@@ -491,38 +502,141 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   Future<void> _bootstrap(String uid, int token) async {
     try {
-      final result = await widget.bootstrapService.load(uid);
+      final cached = await widget.bootstrapService.loadCached(uid);
       if (!_isCurrent(uid, token)) return;
-      _bootstrapResult = result;
-      switch (result.kind) {
-        case TenantBootstrapKind.tenant:
-          final selected = result.selection.selected;
-          if (selected == null) {
-            throw StateError('Tenant bootstrap omitted its selected tenant.');
-          }
-          await _openTenant(uid, selected.tenantId, token);
-          return;
-        case TenantBootstrapKind.selector:
-          setState(() => _phase = _RoutingPhase.selector);
-          return;
-        case TenantBootstrapKind.noAccessibleTenant:
-          setState(() => _phase = _RoutingPhase.noAccessibleTenant);
-          return;
-        case TenantBootstrapKind.platform:
-          final hasClaim =
-              await (widget.hasPlatformSuperAdminClaim?.call(uid) ??
-                  Future<bool>.value(false));
-          if (!_isCurrent(uid, token)) return;
-          _platformIdentity = PlatformReviewIdentity(
-            uid: uid,
-            profile: result.profile,
-            hasSuperAdminClaim: hasClaim,
-          );
-          setState(() => _phase = _RoutingPhase.platform);
-          return;
+      if (cached?.kind == TenantBootstrapKind.tenant) {
+        final selected = cached!.selection.selected;
+        if (selected == null) {
+          throw StateError('Tenant bootstrap omitted its selected tenant.');
+        }
+        _openResolvedTenant(uid, selected, cached, token);
+        _startBootstrapRefresh(uid, token);
+        return;
       }
+      final result = await widget.bootstrapService.refresh(uid);
+      if (!_isCurrent(uid, token)) return;
+      await _applyInitialBootstrap(uid, result, token);
     } catch (error) {
       if (!_isCurrent(uid, token)) return;
+      _showFailure(error);
+    }
+  }
+
+  Future<void> _applyInitialBootstrap(
+    String uid,
+    TenantBootstrapResult result,
+    int token,
+  ) async {
+    _bootstrapResult = result;
+    switch (result.kind) {
+      case TenantBootstrapKind.tenant:
+        final selected = result.selection.selected;
+        if (selected == null) {
+          throw StateError('Tenant bootstrap omitted its selected tenant.');
+        }
+        _openResolvedTenant(uid, selected, result, token);
+        return;
+      case TenantBootstrapKind.selector:
+        setState(() => _phase = _RoutingPhase.selector);
+        return;
+      case TenantBootstrapKind.noAccessibleTenant:
+        setState(() => _phase = _RoutingPhase.noAccessibleTenant);
+        return;
+      case TenantBootstrapKind.platform:
+        final hasClaim =
+            await (widget.hasPlatformSuperAdminClaim?.call(uid) ??
+                Future<bool>.value(false));
+        if (!_isCurrent(uid, token)) return;
+        _platformIdentity = PlatformReviewIdentity(
+          uid: uid,
+          profile: result.profile,
+          hasSuperAdminClaim: hasClaim,
+        );
+        setState(() => _phase = _RoutingPhase.platform);
+        return;
+    }
+  }
+
+  void _openResolvedTenant(
+    String uid,
+    TenantMembership membership,
+    TenantBootstrapResult result,
+    int token,
+  ) {
+    if (!_isCurrent(uid, token)) return;
+    _sessionController.open(uid: uid, membership: membership);
+    setState(() {
+      _bootstrapResult = result;
+      _membership = membership;
+      _error = null;
+      _phase = _RoutingPhase.tenant;
+    });
+    unawaited(
+      widget.bootstrapService
+          .rememberOpenedTenant(uid: uid, tenantId: membership.tenantId)
+          .catchError((_) {}),
+    );
+    _runTenantRecovery();
+  }
+
+  void _scheduleBootstrapRefresh() {
+    final uid = _uid;
+    if (uid == null || _phase != _RoutingPhase.tenant) return;
+    _bootstrapRefreshDebounce?.cancel();
+    _bootstrapRefreshDebounce = Timer(const Duration(seconds: 1), () {
+      if (!mounted || _uid != uid || _phase != _RoutingPhase.tenant) return;
+      _startBootstrapRefresh(uid, _flowToken);
+    });
+  }
+
+  void _startBootstrapRefresh(String uid, int token) {
+    if (_bootstrapRefresh != null) return;
+    final pending = _refreshOpenSession(uid, token);
+    _bootstrapRefresh = pending;
+    unawaited(
+      pending.whenComplete(() {
+        if (identical(_bootstrapRefresh, pending)) _bootstrapRefresh = null;
+      }),
+    );
+  }
+
+  Future<void> _refreshOpenSession(String uid, int token) async {
+    try {
+      final result = await widget.bootstrapService.refresh(uid);
+      if (!_isCurrent(uid, token) || _phase != _RoutingPhase.tenant) return;
+      final currentTenantId = _sessionController.session?.tenantId;
+      final currentMatches = result.selection.visible.where(
+        (membership) =>
+            membership.tenantId == currentTenantId && membership.canRead(),
+      );
+      if (result.kind == TenantBootstrapKind.platform) {
+        _sessionController.clear();
+        _membership = null;
+        await _applyInitialBootstrap(uid, result, token);
+        return;
+      }
+      if (currentMatches.length == 1) {
+        _openResolvedTenant(uid, currentMatches.single, result, token);
+        return;
+      }
+
+      // A refresh never silently switches a live till to another business.
+      _sessionController.clear();
+      setState(() {
+        _bootstrapResult = result;
+        _membership = null;
+        _phase = result.selection.visible.isEmpty
+            ? _RoutingPhase.noAccessibleTenant
+            : _RoutingPhase.selector;
+      });
+    } on TenantBootstrapUnavailable catch (error) {
+      debugPrint('Tenant bootstrap refresh unavailable: ${error.code}');
+    } on TenantDirectoryUnavailable catch (error) {
+      debugPrint('Tenant directory refresh unavailable: ${error.code}');
+    } catch (error) {
+      if (!_isCurrent(uid, token)) return;
+      _sessionController.clear();
+      _membership = null;
       _showFailure(error);
     }
   }
@@ -545,7 +659,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
         _membership = membership;
         _phase = _RoutingPhase.tenant;
       });
-      _triggerTenantRecovery();
+      _runTenantRecovery();
     } catch (error) {
       if (!_isCurrent(uid, token)) return;
       _showFailure(error);
@@ -594,6 +708,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     final uid = _uid;
     if (uid == null) return;
     final token = ++_flowToken;
+    _bootstrapRefreshDebounce?.cancel();
     _sessionController.clear();
     setState(() {
       _bootstrapResult = null;
@@ -607,6 +722,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   Future<void> _signOut() async {
     ++_flowToken;
+    _bootstrapRefreshDebounce?.cancel();
     _sessionController.clear();
     setState(() {
       _membership = null;
@@ -643,6 +759,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   @override
   void dispose() {
     _flowToken++;
+    _bootstrapRefreshDebounce?.cancel();
     _authSubscription?.cancel();
     _tenantRecoverySubscription?.cancel();
     _sessionController.dispose();
@@ -708,7 +825,17 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
               (_phase == _RoutingPhase.selector ||
                   _phase == _RoutingPhase.noAccessibleTenant),
         ),
-        _RoutingPhase.tenant => _buildTenantRoute(context),
+        _RoutingPhase.tenant => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            if (_bootstrapResult case TenantBootstrapResult(
+              fromCache: true,
+              cachedAt: final cachedAt,
+            ))
+              _OfflineBootstrapBanner(cachedAt: cachedAt),
+            Expanded(child: _buildTenantRoute(context)),
+          ],
+        ),
         _RoutingPhase.platform => _buildPlatformRoute(),
         _RoutingPhase.failure => TenantBootstrapFailure(
           error: _error,
@@ -3304,6 +3431,54 @@ String tenantSwitchBlockerMessage(
     'A business switch is already in progress.',
 };
 
+final class _OfflineBootstrapBanner extends StatelessWidget {
+  const _OfflineBootstrapBanner({required this.cachedAt});
+
+  final DateTime? cachedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final role = tokens.colors.status.info;
+    final age = cachedAt == null
+        ? null
+        : DateTime.now().toUtc().difference(cachedAt!);
+    final ageText = switch (age) {
+      null => null,
+      final value when value.inDays > 0 => '${value.inDays}d old',
+      final value when value.inHours > 0 => '${value.inHours}h old',
+      final value => '${value.inMinutes.clamp(0, 59)}m old',
+    };
+    return Material(
+      key: const ValueKey('offline-bootstrap-banner'),
+      color: role.bg,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: tokens.spacing.s16,
+            vertical: tokens.spacing.s8,
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.cloud_off_outlined, size: 20, color: role.fg),
+              SizedBox(width: tokens.spacing.s8),
+              Expanded(
+                child: Text(
+                  'Working from data saved on this device'
+                  '${ageText == null ? '' : ' ($ageText)'}. '
+                  'Changes will sync when connected.',
+                  style: tokens.typography.caption.copyWith(color: role.fg),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 final class TenantBootstrapFailure extends StatelessWidget {
   const TenantBootstrapFailure({
     super.key,
@@ -3337,7 +3512,9 @@ final class TenantBootstrapFailure extends StatelessWidget {
   /// does not exist. `TenantDirectoryUnavailable` reaching this screen means
   /// the opposite: the account is presumably fine and this device has simply
   /// never been online with it, so there is nothing saved here to open.
-  bool get _isUnreachable => error is TenantDirectoryUnavailable;
+  bool get _isUnreachable =>
+      error is TenantDirectoryUnavailable ||
+      error is TenantBootstrapUnavailable;
 
   @override
   Widget build(BuildContext context) => Scaffold(

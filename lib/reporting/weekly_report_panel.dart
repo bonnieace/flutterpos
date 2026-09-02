@@ -23,6 +23,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../checkout/checkout_outbox.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
 import '../expenses/expense_repository.dart';
@@ -32,6 +33,7 @@ import '../tenancy/tenant_session_controller.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
 import 'profit_report.dart';
+import 'device_sales_totals.dart';
 import 'reporting_currency.dart';
 import 'sales_totals.dart';
 import 'sales_totals_session_context.dart';
@@ -53,6 +55,7 @@ final class TenantWeeklyReportScreen extends StatefulWidget {
     required this.reader,
     required this.callable,
     this.salesRepositoryFactory,
+    this.checkoutOutbox,
     this.clock,
   });
 
@@ -63,6 +66,7 @@ final class TenantWeeklyReportScreen extends StatefulWidget {
   /// reader with no Firestore behind it.
   final TenantSaleHistoryRepository Function(TenantSession session)?
   salesRepositoryFactory;
+  final HiveCheckoutOutbox? checkoutOutbox;
 
   final DateTime Function()? clock;
 
@@ -107,30 +111,46 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
   void _composeLoaders(String key) {
     if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
-    _loader = _readWith(widget.reader);
+    _loader = _readWith(widget.reader, deviceOnly: false);
     final cache = widget.reader.cached;
-    _loaderCached = cache == null ? null : _readWith(cache);
+    _loaderCached = cache == null ? null : _readWith(cache, deviceOnly: true);
   }
 
-  TenantGuardedLoader<WeeklyReportView> _readWith(TenantDataReader reader) {
+  TenantGuardedLoader<WeeklyReportView> _readWith(
+    TenantDataReader reader, {
+    required bool deviceOnly,
+  }) {
     return (session) async {
-      final context = await _sessionContext.load(session);
-      final sales =
-          widget.salesRepositoryFactory?.call(session) ??
-          TenantSaleHistoryRepository(session: session, reader: reader);
-      final loader = TenantWeeklyReportLoader(
-        session: session,
-        callable: widget.callable,
-        sales: sales,
-        // Built from this route's own reader, and only for a session that may
-        // be shown spending at all - which is narrower than the roles that may
-        // read this report. A manager sees the week's gross figures and no net
-        // card, which is the same boundary the margin already sits behind.
-        expenses: TenantExpenseRepository.canSeeInSession(session)
-            ? TenantExpenseRepository(session: session, reader: reader)
-            : null,
-        clock: widget.clock == null ? null : _now,
-      );
+      final context = await SalesTotalsSessionContextLoader(
+        reader: reader,
+      ).load(session);
+      // A repository factory supplied by the live route may close over its
+      // Firestore reader. Never reuse it for the cached branch.
+      final sales = deviceOnly
+          ? TenantSaleHistoryRepository(session: session, reader: reader)
+          : widget.salesRepositoryFactory?.call(session) ??
+                TenantSaleHistoryRepository(session: session, reader: reader);
+      final expenses = TenantExpenseRepository.canSeeInSession(session)
+          ? TenantExpenseRepository(session: session, reader: reader)
+          : null;
+      final loader = deviceOnly
+          ? TenantWeeklyReportLoader.device(
+              session: session,
+              sales: sales,
+              expenses: expenses,
+              clock: widget.clock == null ? null : _now,
+            )
+          : TenantWeeklyReportLoader(
+              session: session,
+              callable: widget.callable,
+              sales: sales,
+              // Built from this route's own reader, and only for a session that may
+              // be shown spending at all - which is narrower than the roles that may
+              // read this report. A manager sees the week's gross figures and no net
+              // card, which is the same boundary the margin already sits behind.
+              expenses: expenses,
+              clock: widget.clock == null ? null : _now,
+            );
       // A stale selection is dropped rather than sent: the same rule the totals
       // page applies, for the same reason - a colleague or a category can stop
       // existing between one read and the next.
@@ -147,14 +167,30 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
               context.categories.nameOf(chosenCategory) != null
           ? chosenCategory
           : null;
-      return WeeklyReportView(
-        report: await loader.load(
-          TenantReportWeek.at(_now(), offset: _weekOffset),
-          soldById: member,
-          categoryId: category,
-        ),
-        context: context,
-      );
+      final week = TenantReportWeek.at(_now(), offset: _weekOffset);
+      final report = deviceOnly
+          ? await loader.loadDevice(
+              week,
+              aggregator: TenantDeviceSalesAggregator(
+                session: session,
+                cacheReader: reader,
+                outbox: widget.checkoutOutbox,
+                clock: widget.clock == null ? null : _now,
+              ),
+              soldById: member,
+              categoryId: category,
+            )
+          : await loader.load(week, soldById: member, categoryId: category);
+      // Individual callable refusals are intentionally contained by the model
+      // so item/expense reads can still be tested in isolation. At the route
+      // boundary they are not an authoritative totals response: keep the
+      // complete device result visible until all elapsed days answer.
+      if (!deviceOnly &&
+          week.elapsedBusinessDates(_now()).isNotEmpty &&
+          report.totals == null) {
+        throw StateError('server_week_totals_incomplete');
+      }
+      return WeeklyReportView(report: report, context: context);
     };
   }
 

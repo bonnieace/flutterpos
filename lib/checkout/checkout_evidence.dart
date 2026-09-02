@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_pending_mutation.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/status.dart';
@@ -18,6 +19,7 @@ final class CheckoutEvidenceSummary {
     this.awaitingConfirmation = 0,
     this.confirmed = 0,
     this.needsAttention = 0,
+    this.mutations = const TenantMutationEvidenceSummary(),
   });
 
   final int savedOffline;
@@ -25,23 +27,165 @@ final class CheckoutEvidenceSummary {
   final int awaitingConfirmation;
   final int confirmed;
   final int needsAttention;
+  final TenantMutationEvidenceSummary mutations;
 
   int get total =>
       savedOffline +
       submitting +
       awaitingConfirmation +
       confirmed +
-      needsAttention;
+      needsAttention +
+      mutations.total;
 
   /// Records that still block tenant switching.
   int get unsettled =>
-      savedOffline + submitting + awaitingConfirmation + needsAttention;
+      savedOffline +
+      submitting +
+      awaitingConfirmation +
+      needsAttention +
+      mutations.unsettled;
+
+  CheckoutEvidenceSummary withMutations(TenantMutationEvidenceSummary value) =>
+      CheckoutEvidenceSummary(
+        savedOffline: savedOffline,
+        submitting: submitting,
+        awaitingConfirmation: awaitingConfirmation,
+        confirmed: confirmed,
+        needsAttention: needsAttention,
+        mutations: value,
+      );
+}
+
+/// Counts and retained review evidence for safe non-checkout mutations.
+final class TenantMutationEvidenceSummary {
+  const TenantMutationEvidenceSummary({
+    this.queued = 0,
+    this.submitting = 0,
+    this.awaitingConfirmation = 0,
+    this.confirmed = 0,
+    this.rejected = 0,
+    this.needsAttention = 0,
+    this.reviewItems = const <TenantPendingMutationRecord>[],
+  });
+
+  final int queued;
+  final int submitting;
+  final int awaitingConfirmation;
+  final int confirmed;
+  final int rejected;
+  final int needsAttention;
+  final List<TenantPendingMutationRecord> reviewItems;
+
+  int get total =>
+      queued +
+      submitting +
+      awaitingConfirmation +
+      confirmed +
+      rejected +
+      needsAttention;
+
+  int get unsettled =>
+      queued + submitting + awaitingConfirmation + needsAttention;
+
+  int get failures => rejected + needsAttention;
 }
 
 /// The narrow read boundary used by the pending-checkout evidence panel.
 abstract interface class CheckoutEvidenceSource {
   Future<CheckoutEvidenceSummary> summarize(TenantSession session);
 }
+
+abstract interface class TenantMutationEvidenceController {
+  Future<void> acknowledge(TenantSession session, String operationId);
+}
+
+/// Joins the checkout outbox and mutation outbox into one session-scoped read.
+final class CombinedLocalWorkEvidenceSource
+    implements CheckoutEvidenceSource, TenantMutationEvidenceController {
+  const CombinedLocalWorkEvidenceSource({
+    required CheckoutEvidenceSource checkouts,
+    required TenantPendingMutationStore mutations,
+  }) : _checkouts = checkouts,
+       _mutations = mutations;
+
+  final CheckoutEvidenceSource _checkouts;
+  final TenantPendingMutationStore _mutations;
+
+  @override
+  Future<CheckoutEvidenceSummary> summarize(TenantSession session) async {
+    final checkoutFuture = _checkouts.summarize(session);
+    final mutationFuture = _summarizeMutations(session);
+    final checkouts = await checkoutFuture;
+    return checkouts.withMutations(await mutationFuture);
+  }
+
+  Future<TenantMutationEvidenceSummary> _summarizeMutations(
+    TenantSession session,
+  ) async {
+    final records = await _mutations.recordsForSession(
+      uid: session.uid,
+      tenantId: session.tenantId,
+    );
+    var queued = 0;
+    var submitting = 0;
+    var awaitingConfirmation = 0;
+    var confirmed = 0;
+    var rejected = 0;
+    var needsAttention = 0;
+    final review = <TenantPendingMutationRecord>[];
+    for (final record in records) {
+      switch (record.state) {
+        case TenantPendingMutationState.queued:
+          queued++;
+        case TenantPendingMutationState.submitting:
+          submitting++;
+        case TenantPendingMutationState.awaitingConfirmation:
+          awaitingConfirmation++;
+        case TenantPendingMutationState.confirmed:
+          confirmed++;
+        case TenantPendingMutationState.rejected:
+          rejected++;
+          review.add(record);
+        case TenantPendingMutationState.needsAttention:
+          needsAttention++;
+          review.add(record);
+      }
+    }
+    return TenantMutationEvidenceSummary(
+      queued: queued,
+      submitting: submitting,
+      awaitingConfirmation: awaitingConfirmation,
+      confirmed: confirmed,
+      rejected: rejected,
+      needsAttention: needsAttention,
+      reviewItems: List<TenantPendingMutationRecord>.unmodifiable(review),
+    );
+  }
+
+  @override
+  Future<void> acknowledge(TenantSession session, String operationId) =>
+      _mutations.acknowledge(
+        uid: session.uid,
+        tenantId: session.tenantId,
+        operationId: operationId,
+      );
+}
+
+/// Combines local-evidence streams without adding a polling timer.
+Stream<Object?> mergeLocalWorkEvidenceSignals(
+  Stream<Object?> checkouts,
+  Stream<Object?> mutations,
+) => Stream<Object?>.multi((controller) {
+  final subscriptions = <StreamSubscription<Object?>>[
+    checkouts.listen(controller.add, onError: controller.addError),
+    mutations.listen(controller.add, onError: controller.addError),
+  ];
+  controller.onCancel = () async {
+    for (final subscription in subscriptions) {
+      await subscription.cancel();
+    }
+  };
+});
 
 /// Counts encrypted outbox records for the exact session UID and tenant.
 final class CheckoutOutboxEvidenceSource implements CheckoutEvidenceSource {
@@ -188,12 +332,22 @@ final class _CheckoutPendingEvidencePanelState
           : _EvidenceContents(previous, rereading: true),
       denied: const SizedBox.shrink(),
       failure: (context, error) =>
-          const Text('Local checkout evidence is unavailable.'),
+          const Text('Local work evidence is unavailable.'),
       builder: (context, session, summary) {
         // Caching the answer for the next refresh's loading frame. This assigns
         // a field rather than calling `setState`, so it adds no build cycle.
         _last = summary;
-        return _EvidenceContents(summary);
+        final source = widget.source;
+        final mutationController = source is TenantMutationEvidenceController
+            ? source as TenantMutationEvidenceController
+            : null;
+        return _EvidenceContents(
+          summary,
+          onAcknowledge: mutationController == null
+              ? null
+              : (operationId) =>
+                    mutationController.acknowledge(session, operationId),
+        );
       },
     );
   }
@@ -215,7 +369,11 @@ final class _CheckoutPendingEvidencePanelState
 /// is answering "where did my sale go", and a list that omitted the empty buckets
 /// would make an absent line and a zero indistinguishable.
 final class _EvidenceContents extends StatefulWidget {
-  const _EvidenceContents(this.summary, {this.rereading = false});
+  const _EvidenceContents(
+    this.summary, {
+    this.rereading = false,
+    this.onAcknowledge,
+  });
 
   final CheckoutEvidenceSummary summary;
 
@@ -223,6 +381,7 @@ final class _EvidenceContents extends StatefulWidget {
   /// flight. Said out loud rather than left to be inferred, because the figures
   /// are about work the device may be in the middle of moving.
   final bool rereading;
+  final Future<void> Function(String operationId)? onAcknowledge;
 
   @override
   State<_EvidenceContents> createState() => _EvidenceContentsState();
@@ -230,6 +389,7 @@ final class _EvidenceContents extends StatefulWidget {
 
 final class _EvidenceContentsState extends State<_EvidenceContents> {
   bool _open = false;
+  bool _reviewing = false;
 
   /// What is still waiting, which is what the badge counts.
   ///
@@ -240,7 +400,11 @@ final class _EvidenceContentsState extends State<_EvidenceContents> {
       widget.summary.savedOffline +
       widget.summary.submitting +
       widget.summary.awaitingConfirmation +
-      widget.summary.needsAttention;
+      widget.summary.needsAttention +
+      widget.summary.mutations.queued +
+      widget.summary.mutations.submitting +
+      widget.summary.mutations.awaitingConfirmation +
+      widget.summary.mutations.needsAttention;
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +412,9 @@ final class _EvidenceContentsState extends State<_EvidenceContents> {
     final indicator = SyncIndicator(
       key: const ValueKey('pending-checkout-evidence'),
       waiting: _waiting,
-      needsAttention: summary.needsAttention > 0,
+      needsAttention:
+          summary.needsAttention > 0 || summary.mutations.failures > 0,
+      subject: 'Local work on this device',
       onOpen: () => setState(() => _open = true),
     );
     if (!_open) return indicator;
@@ -276,14 +442,14 @@ final class _EvidenceContentsState extends State<_EvidenceContents> {
     final tokens = AppTokens.componentOf(context);
     return SyncQueuePanel(
       key: const ValueKey('pending-checkout-evidence-panel'),
-      title: 'Checkouts on this device',
+      title: 'Local work on this device',
       onClose: () => setState(() => _open = false),
       // **The empty sentence survives, inside the panel.** A device holding
       // nothing draws no badge at all - §5.1's rule, and the reason the button is
       // quiet when there is no news - so the one place left to say it is the
       // readout somebody opened to ask.
       emptyMessage: summary.total == 0
-          ? 'No checkouts are stored on this device.'
+          ? 'No local work is stored on this device.'
           : null,
       entries: <SyncQueueEntry>[
         SyncQueueEntry(
@@ -302,6 +468,35 @@ final class _EvidenceContentsState extends State<_EvidenceContents> {
           status: summary.needsAttention > 0 ? AppStatus.problem : null,
         ),
         SyncQueueEntry(label: 'Confirmed', count: summary.confirmed),
+        SyncQueueEntry(
+          label: 'Queued changes',
+          count: summary.mutations.queued,
+          status: summary.mutations.queued > 0 ? AppStatus.attention : null,
+        ),
+        SyncQueueEntry(
+          label: 'Submitting changes',
+          count: summary.mutations.submitting,
+        ),
+        SyncQueueEntry(
+          label: 'Awaiting change confirmation',
+          count: summary.mutations.awaitingConfirmation,
+        ),
+        SyncQueueEntry(
+          label: 'Changes needing review',
+          count: summary.mutations.needsAttention,
+          status: summary.mutations.needsAttention > 0
+              ? AppStatus.problem
+              : null,
+        ),
+        SyncQueueEntry(
+          label: 'Rejected changes',
+          count: summary.mutations.rejected,
+          status: summary.mutations.rejected > 0 ? AppStatus.problem : null,
+        ),
+        SyncQueueEntry(
+          label: 'Confirmed changes',
+          count: summary.mutations.confirmed,
+        ),
       ],
       explanation: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,14 +517,28 @@ final class _EvidenceContentsState extends State<_EvidenceContents> {
                     ),
               ),
             ),
+          if (summary.mutations.reviewItems.isNotEmpty) ...<Widget>[
+            TextButton(
+              key: const ValueKey('local-work-review-link'),
+              onPressed: () => setState(() => _reviewing = !_reviewing),
+              child: Text(_reviewing ? 'Hide review items' : 'Review failures'),
+            ),
+            if (_reviewing)
+              for (final record in summary.mutations.reviewItems)
+                _MutationReviewRow(
+                  record: record,
+                  onAcknowledge: widget.onAcknowledge,
+                ),
+          ],
           // §7's *Long copy*: this explains policy rather than the current
           // state, so it folds. It was a permanent three-line paragraph.
           const Disclosure(
             key: ValueKey('pending-checkout-evidence-policy'),
             summary: 'Why can I not send these?',
             child: Text(
-              'This panel is read-only. Submission and confirmation remain '
-              'automatic; no checkout can be edited, retried, or deleted here.',
+              'Submission and confirmation remain automatic. Checkouts cannot '
+              'be edited or deleted here. Failed safe changes remain as '
+              'evidence until they are reviewed and acknowledged.',
             ),
           ),
         ],
@@ -342,3 +551,52 @@ final class _EvidenceContentsState extends State<_EvidenceContents> {
   /// enough room for its longest label and no more.
   static const double _panelWidth = 320;
 }
+
+final class _MutationReviewRow extends StatefulWidget {
+  const _MutationReviewRow({required this.record, this.onAcknowledge});
+
+  final TenantPendingMutationRecord record;
+  final Future<void> Function(String operationId)? onAcknowledge;
+
+  @override
+  State<_MutationReviewRow> createState() => _MutationReviewRowState();
+}
+
+final class _MutationReviewRowState extends State<_MutationReviewRow> {
+  bool _working = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final record = widget.record;
+    final reason = record.reasonCode?.replaceAll('_', ' ') ?? 'not accepted';
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(_mutationKindLabel(record.kind)),
+      subtitle: Text(reason),
+      trailing: widget.onAcknowledge == null
+          ? null
+          : TextButton(
+              onPressed: _working
+                  ? null
+                  : () async {
+                      setState(() => _working = true);
+                      try {
+                        await widget.onAcknowledge!(record.operationId);
+                      } finally {
+                        if (mounted) setState(() => _working = false);
+                      }
+                    },
+              child: const Text('Acknowledge'),
+            ),
+    );
+  }
+}
+
+String _mutationKindLabel(TenantPendingMutationKind kind) => switch (kind) {
+  TenantPendingMutationKind.expenseCreate => 'Expense creation',
+  TenantPendingMutationKind.expenseVoid => 'Expense void',
+  TenantPendingMutationKind.pendingReturnCreate => 'Pending return',
+  TenantPendingMutationKind.brandingMerge => 'Branding change',
+  TenantPendingMutationKind.printerConfigurationMerge => 'Printer change',
+};

@@ -24,6 +24,7 @@ import '../tenancy/tenant_session.dart';
 import '../expenses/expense.dart';
 import '../expenses/expense_repository.dart';
 import 'net_profit.dart';
+import 'device_sales_totals.dart';
 import 'sales_totals.dart';
 
 /// One Monday-to-Sunday week, named by how many weeks back it is.
@@ -110,33 +111,6 @@ final class TenantReportItem {
   final int revenueMinor;
 }
 
-/// What this device counted for a week out of the sale documents it holds.
-///
-/// **Offered only for a week the scan saw all of.** `_rollUpItems` walks the
-/// week's sales to build the best-sellers list, and it stops at
-/// [TenantWeeklyReportLoader.saleScanCap]; past that its running total is a
-/// floor rather than the week's takings. A floor presented as a total is the
-/// worst kind of wrong figure - a plausible one - so a truncated week offers
-/// nothing here and waits for the server instead.
-final class TenantWeeklyDeviceCount {
-  const TenantWeeklyDeviceCount({
-    required this.salesMinor,
-    required this.transactions,
-    required this.revenueByDateMinor,
-  });
-
-  /// The week's takings in whole minor units, summed from the sales scanned.
-  final int salesMinor;
-
-  /// How many sales that was.
-  final int transactions;
-
-  /// The same takings split by business date, for the chart.
-  final Map<String, int> revenueByDateMinor;
-
-  double get sales => salesMinor / 100;
-}
-
 /// Everything the weekly page draws, for one week and one set of filters.
 final class TenantWeeklyReport {
   const TenantWeeklyReport({
@@ -148,7 +122,6 @@ final class TenantWeeklyReport {
     required this.recentSales,
     required this.itemsSold,
     required this.scanWasTruncated,
-    this.counted,
     this.expenses,
   });
 
@@ -179,19 +152,6 @@ final class TenantWeeklyReport {
   /// `DESIGN_RULES.md` is about.
   final bool scanWasTruncated;
 
-  /// What this device counted for the week on its own, or null where it could
-  /// not count honestly.
-  ///
-  /// **This is what the page draws while the server is deciding.** Every
-  /// takings figure on this report comes from a Cloud Function that has no
-  /// offline story at all, where the sales those figures describe are Firestore
-  /// documents already on this disk. Counting them here is not a guess - it is
-  /// the same arithmetic, done from the same records, by the machine holding
-  /// them.
-  ///
-  /// It is never preferred over [totals]. A server answer replaces it.
-  final TenantWeeklyDeviceCount? counted;
-
   /// What the business spent over the same week, or null where it was not
   /// read - by role, by wiring, or because the read failed.
   final TenantExpensePeriod? expenses;
@@ -210,12 +170,12 @@ final class TenantWeeklyReport {
   /// Whether there is any basis at all for the takings cards.
   ///
   /// **Asked before the figures are drawn, because zero is a real answer.** A
-  /// week with no server totals and nothing counted here has takings of
-  /// *unknown*, not of nought, and the two must not be printed the same way.
-  bool get hasTakings => totals != null || counted != null;
+  /// week with no server or device totals has takings of *unknown*, not of
+  /// nought, and the two must not be printed the same way.
+  bool get hasTakings => totals != null;
 
-  double get sales => totals?.sales ?? counted?.sales ?? 0;
-  int get transactions => totals?.transactions ?? counted?.transactions ?? 0;
+  double get sales => totals?.sales ?? 0;
+  int get transactions => totals?.transactions ?? 0;
 
   /// The week's takings divided by the sales that produced them.
   double get averageSale => transactions == 0 ? 0 : sales / transactions;
@@ -255,6 +215,24 @@ final class TenantWeeklyReportLoader {
        _gateway = TenantSalesTotalsGateway(
          session: session,
          callable: callable,
+         clock: clock,
+       ),
+       _sales = sales,
+       _expenses = expenses,
+       _clock = clock ?? _utcNow;
+
+  TenantWeeklyReportLoader.device({
+    required TenantSession session,
+    required TenantSaleHistoryRepository sales,
+    TenantExpenseRepository? expenses,
+    DateTime Function()? clock,
+    this.recentSaleCount = 8,
+    this.topItemCount = 5,
+    this.saleScanCap = 300,
+  }) : _session = session,
+       _gateway = TenantSalesTotalsGateway(
+         session: session,
+         callable: const _NeverWeeklyTotalsCallable(),
          clock: clock,
        ),
        _sales = sales,
@@ -320,11 +298,7 @@ final class TenantWeeklyReportLoader {
       // swallowed their own failures said as much; the days were simply never
       // brought into line with them.
       for (final date in elapsed)
-        _dayTotals(
-          date: date,
-          soldById: soldById,
-          categoryId: categoryId,
-        ),
+        _dayTotals(date: date, soldById: soldById, categoryId: categoryId),
       // Its own failure is already swallowed into a null - a missing
       // comparison, not a missing page - so it can share this list safely.
       _previousWeekTotals(
@@ -344,7 +318,8 @@ final class TenantWeeklyReportLoader {
     final settled = await Future.wait(pending);
     final byDate = <String, TenantSalesTotals>{
       for (var index = 0; index < elapsed.length; index++)
-        if (settled[index] case final TenantSalesTotals day) elapsed[index]: day,
+        if (settled[index] case final TenantSalesTotals day)
+          elapsed[index]: day,
     };
     final previous = settled[elapsed.length] as TenantSalesTotals?;
     final roll = elapsed.isEmpty
@@ -354,8 +329,8 @@ final class TenantWeeklyReportLoader {
     // **The week's total is the server's only when every day of it answered.**
     // Summing the four days that landed and presenting it as the week would
     // understate the takings without saying so, which is the one failure this
-    // page must not have. A partial answer is no answer; what draws instead is
-    // what this device counted, which is whole or absent.
+    // page must not have. A partial answer is no answer; the separate device
+    // loader remains visible until a complete authoritative result arrives.
     final complete = byDate.length == elapsed.length && byDate.isNotEmpty;
     return TenantWeeklyReport(
       week: week,
@@ -364,22 +339,93 @@ final class TenantWeeklyReportLoader {
       revenueByWeekday: <double>[
         for (final date in week.businessDates)
           byDate[date]?.sales ??
-              (roll.truncated
-                  ? 0
-                  : (roll.revenueByDate[date] ?? 0) / 100),
+              (roll.truncated ? 0 : (roll.revenueByDate[date] ?? 0) / 100),
       ],
       topItems: roll.top(topItemCount),
       recentSales: roll.recent.take(recentSaleCount).toList(growable: false),
       itemsSold: roll.itemsSold,
       scanWasTruncated: roll.truncated,
-      counted: roll.truncated || elapsed.isEmpty
-          ? null
-          : TenantWeeklyDeviceCount(
-              salesMinor: roll.salesMinor,
-              transactions: roll.transactions,
-              revenueByDateMinor: roll.revenueByDate,
-            ),
       expenses: expenses,
+    );
+  }
+
+  /// Reads the same week without starting a callable. Every totals query is
+  /// answered by the cache/outbox aggregator; comparisons are intentionally
+  /// absent until the authoritative branch arrives.
+  Future<TenantWeeklyReport> loadDevice(
+    TenantReportWeek week, {
+    required TenantDeviceSalesAggregator aggregator,
+    String? soldById,
+    String? categoryId,
+  }) async {
+    final now = _clock().toUtc();
+    final elapsed = week.elapsedBusinessDates(now).toList(growable: false);
+    if (elapsed.isEmpty) {
+      return TenantWeeklyReport(
+        week: week,
+        totals: null,
+        previousTotals: null,
+        revenueByWeekday: List<double>.filled(7, 0),
+        topItems: const <TenantReportItem>[],
+        recentSales: const <TenantSale>[],
+        itemsSold: 0,
+        scanWasTruncated: false,
+      );
+    }
+    final totalsFuture = aggregator.load(
+      aggregator.createRangeQuery(
+        startBusinessDate: week.startBusinessDate,
+        endBusinessDate: week.endBusinessDateAt(now),
+        soldById: soldById,
+        categoryId: categoryId,
+      ),
+    );
+    final dayFutures = <Future<TenantDeviceSalesTotals>>[
+      for (final date in elapsed)
+        aggregator.load(
+          aggregator.createBusinessDateQuery(
+            businessDate: date,
+            soldById: soldById,
+            categoryId: categoryId,
+          ),
+        ),
+    ];
+    final settled = await Future.wait<Object?>(<Future<Object?>>[
+      totalsFuture,
+      Future.wait<TenantDeviceSalesTotals>(dayFutures),
+      _rollUpItems(week, now: now, soldById: soldById),
+      _weekExpenses(week, now: now),
+    ]);
+    final totalResult = settled[0]! as TenantDeviceSalesTotals;
+    final totals = totalResult.totals;
+    if (totals == null) {
+      throw StateError(
+        totalResult.truncated
+            ? 'device_sales_truncated'
+            : 'device_sales_conflicting_evidence',
+      );
+    }
+    final dayResults = settled[1]! as List<TenantDeviceSalesTotals>;
+    if (dayResults.any((result) => result.totals == null)) {
+      throw StateError('device_sales_day_unavailable');
+    }
+    final byDate = <String, TenantSalesTotals>{
+      for (var index = 0; index < elapsed.length; index++)
+        elapsed[index]: dayResults[index].totals!,
+    };
+    final roll = settled[2]! as _ItemRoll;
+    return TenantWeeklyReport(
+      week: week,
+      totals: totals,
+      previousTotals: null,
+      revenueByWeekday: <double>[
+        for (final date in week.businessDates) byDate[date]?.sales ?? 0,
+      ],
+      topItems: roll.top(topItemCount),
+      recentSales: roll.recent.take(recentSaleCount).toList(growable: false),
+      itemsSold: roll.itemsSold,
+      scanWasTruncated: roll.truncated,
+      expenses: settled[3] as TenantExpensePeriod?,
     );
   }
 
@@ -493,7 +539,6 @@ final class TenantWeeklyReportLoader {
     var scanned = 0;
     var truncated = false;
     var itemsSold = 0;
-    var salesMinor = 0;
     String? cursor;
     try {
       while (scanned < saleScanCap) {
@@ -506,7 +551,6 @@ final class TenantWeeklyReportLoader {
         );
         for (final sale in page.items) {
           scanned++;
-          salesMinor += sale.totalMinor;
           revenueByDate[sale.businessDate] =
               (revenueByDate[sale.businessDate] ?? 0) + sale.totalMinor;
           if (recent.length < recentSaleCount) recent.add(sale);
@@ -537,11 +581,17 @@ final class TenantWeeklyReportLoader {
       recent: recent,
       itemsSold: itemsSold,
       truncated: truncated,
-      salesMinor: salesMinor,
-      transactions: scanned,
       revenueByDate: revenueByDate,
     );
   }
+}
+
+final class _NeverWeeklyTotalsCallable implements SalesTotalsCallable {
+  const _NeverWeeklyTotalsCallable();
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) =>
+      throw StateError('A device weekly report cannot invoke a callable.');
 }
 
 /// The one pass over a week's sales, before it is sorted into two lists.
@@ -553,8 +603,6 @@ final class _ItemRoll {
     required this.recent,
     required this.itemsSold,
     required this.truncated,
-    this.salesMinor = 0,
-    this.transactions = 0,
     this.revenueByDate = const <String, int>{},
   });
 
@@ -565,8 +613,6 @@ final class _ItemRoll {
       recent = const <TenantSale>[],
       itemsSold = 0,
       truncated = false,
-      salesMinor = 0,
-      transactions = 0,
       revenueByDate = const <String, int>{};
 
   final Map<String, int> quantities;
@@ -575,15 +621,6 @@ final class _ItemRoll {
   final List<TenantSale> recent;
   final int itemsSold;
   final bool truncated;
-
-  /// The takings of every sale this pass saw, in whole minor units.
-  ///
-  /// **`totalMinor`, not the sum of the line totals.** A sale's discount lives
-  /// between the two, and what a shop took is the figure it was paid.
-  final int salesMinor;
-
-  /// How many sales that was.
-  final int transactions;
 
   /// The same takings split by business date, so the chart has a bar per day
   /// without a second pass over the same records.

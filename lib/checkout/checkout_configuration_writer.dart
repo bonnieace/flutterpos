@@ -36,6 +36,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// The same four this app's every write boundary answers in, so a surface maps
 /// them to `AppNotice` once rather than inventing a fifth.
 enum TenantConfigurationWriteKind {
+  /// Saved durably on this device and waiting for synchronization.
+  queued,
+
   /// The server acknowledged the write.
   committed,
 
@@ -54,6 +57,9 @@ final class TenantConfigurationWriteResult {
 
   const TenantConfigurationWriteResult.committed()
     : this._(TenantConfigurationWriteKind.committed);
+
+  const TenantConfigurationWriteResult.queued()
+    : this._(TenantConfigurationWriteKind.queued);
 
   const TenantConfigurationWriteResult.rejected(String reasonCode)
     : this._(TenantConfigurationWriteKind.rejected, reasonCode);
@@ -171,5 +177,6 @@ final class FirebaseTenantConfigurationDocumentWriter
 
   static TenantConfigurationDocumentMerger _firestoreMerger(
     FirebaseFirestore firestore,
-  ) => (path, data) => firestore.doc(path).set(data, SetOptions(merge: true));
+  ) =>
+      (path, data) => firestore.doc(path).set(data, SetOptions(merge: true));
 }

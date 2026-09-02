@@ -1,6 +1,7 @@
 import 'tenant_directory.dart';
 import 'tenant_id.dart';
 import 'tenant_membership.dart';
+import 'root_routing_profile_cache.dart';
 import 'tenant_selection.dart';
 
 enum RootAccountType { tenantUser, platformAdmin }
@@ -46,11 +47,62 @@ final class RootRoutingProfile {
   final String? defaultTenantId;
 
   bool get isActive => globalStatus == 'active';
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'accountType': switch (accountType) {
+      RootAccountType.tenantUser => 'tenant_user',
+      RootAccountType.platformAdmin => 'platform_admin',
+    },
+    'globalStatus': globalStatus,
+    if (defaultTenantId != null) 'defaultTenantId': defaultTenantId,
+  };
 }
 
 abstract interface class RootRoutingGateway {
   Future<RootRoutingProfile> getRootRoutingProfile(String uid);
 }
+
+/// Optional migration seam over Firestore's already-persisted device cache.
+abstract interface class CachedRootRoutingGateway {
+  Future<RootRoutingProfile?> getCachedRootRoutingProfile(String uid);
+}
+
+final class TenantBootstrapUnavailable implements Exception {
+  const TenantBootstrapUnavailable(this.code);
+
+  final String code;
+
+  @override
+  String toString() => 'TenantBootstrapUnavailable($code)';
+}
+
+enum TenantBootstrapTraceKind {
+  cacheHit,
+  cacheMiss,
+  refreshSucceeded,
+  refreshUnavailable,
+  refreshFailed,
+}
+
+final class TenantBootstrapTrace {
+  const TenantBootstrapTrace({
+    required this.kind,
+    this.elapsedMilliseconds,
+    this.cacheAgeSeconds,
+  });
+
+  final TenantBootstrapTraceKind kind;
+  final int? elapsedMilliseconds;
+  final int? cacheAgeSeconds;
+
+  Map<String, Object?> toData() => <String, Object?>{
+    'kind': kind.name,
+    if (elapsedMilliseconds != null) 'elapsedMilliseconds': elapsedMilliseconds,
+    if (cacheAgeSeconds != null) 'cacheAgeSeconds': cacheAgeSeconds,
+  };
+}
+
+typedef TenantBootstrapObserver = void Function(TenantBootstrapTrace event);
 
 abstract interface class TenantSelectionStore {
   Future<String?> readLastSelectedTenant(String uid);
@@ -90,24 +142,116 @@ final class TenantBootstrapService {
     required RootRoutingGateway rootGateway,
     required TenantDirectory directory,
     required TenantSelectionStore selectionStore,
+    RootRoutingProfileCache rootCache = const NullRootRoutingProfileCache(),
+    TenantBootstrapObserver? observer,
   }) : _rootGateway = rootGateway,
        _directory = directory,
-       _selectionStore = selectionStore;
+       _selectionStore = selectionStore,
+       _rootCache = rootCache,
+       _observer = observer;
 
   final RootRoutingGateway _rootGateway;
   final TenantDirectory _directory;
   final TenantSelectionStore _selectionStore;
+  final RootRoutingProfileCache _rootCache;
+  final TenantBootstrapObserver? _observer;
 
-  Future<TenantBootstrapResult> load(String uid) async {
-    final normalizedUid = uid.trim();
-    if (normalizedUid.isEmpty) {
-      throw ArgumentError.value(uid, 'uid', 'Cannot be empty.');
+  /// Opens only from device state. Null means this account has not been primed.
+  Future<TenantBootstrapResult?> loadCached(String uid) async {
+    final normalizedUid = _uid(uid);
+    var root = await _rootCache.read(normalizedUid);
+    if (root == null && _rootGateway is CachedRootRoutingGateway) {
+      final cache = _rootGateway as CachedRootRoutingGateway;
+      try {
+        final migrated = await cache.getCachedRootRoutingProfile(normalizedUid);
+        if (migrated != null) {
+          root = CachedRootRoutingProfile(
+            profile: migrated,
+            cachedAt: DateTime.now().toUtc(),
+          );
+          try {
+            await _rootCache.write(normalizedUid, migrated);
+          } catch (_) {}
+        }
+      } catch (_) {}
     }
-    final profile = await _rootGateway.getRootRoutingProfile(normalizedUid);
+    final directory = await _directory.loadCached(uid: normalizedUid);
+    if (root == null || directory == null) {
+      _observer?.call(
+        const TenantBootstrapTrace(kind: TenantBootstrapTraceKind.cacheMiss),
+      );
+      return null;
+    }
+    final profile = root.profile;
+    // A stale disabled or platform projection may never grant tenant access.
+    if (!profile.isActive ||
+        profile.accountType == RootAccountType.platformAdmin) {
+      _observer?.call(
+        const TenantBootstrapTrace(kind: TenantBootstrapTraceKind.cacheMiss),
+      );
+      return null;
+    }
+    final cachedAt = root.cachedAt.isBefore(directory.cachedAt!)
+        ? root.cachedAt
+        : directory.cachedAt!;
+    _observer?.call(
+      TenantBootstrapTrace(
+        kind: TenantBootstrapTraceKind.cacheHit,
+        cacheAgeSeconds: DateTime.now().toUtc().difference(cachedAt).inSeconds,
+      ),
+    );
+    return _resolve(
+      uid: normalizedUid,
+      profile: profile,
+      directory: directory,
+      fromCache: true,
+      cachedAt: cachedAt,
+    );
+  }
+
+  /// Reads the authoritative routing projection and refreshes both caches.
+  Future<TenantBootstrapResult> refresh(String uid) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      final result = await _refreshAuthoritative(uid);
+      _observer?.call(
+        TenantBootstrapTrace(
+          kind: TenantBootstrapTraceKind.refreshSucceeded,
+          elapsedMilliseconds: stopwatch.elapsedMilliseconds,
+        ),
+      );
+      return result;
+    } catch (error) {
+      final unavailable =
+          error is TenantBootstrapUnavailable ||
+          error is TenantDirectoryUnavailable;
+      _observer?.call(
+        TenantBootstrapTrace(
+          kind: unavailable
+              ? TenantBootstrapTraceKind.refreshUnavailable
+              : TenantBootstrapTraceKind.refreshFailed,
+          elapsedMilliseconds: stopwatch.elapsedMilliseconds,
+        ),
+      );
+      rethrow;
+    }
+  }
+
+  Future<TenantBootstrapResult> _refreshAuthoritative(String uid) async {
+    final normalizedUid = _uid(uid);
+    final RootRoutingProfile profile;
+    try {
+      profile = await _rootGateway.getRootRoutingProfile(normalizedUid);
+    } on TenantBootstrapUnavailable {
+      rethrow;
+    }
     if (!profile.isActive) {
       throw StateError('The signed-in account is disabled.');
     }
     if (profile.accountType == RootAccountType.platformAdmin) {
+      try {
+        await _rootCache.write(normalizedUid, profile);
+      } catch (_) {}
       return TenantBootstrapResult(
         kind: TenantBootstrapKind.platform,
         profile: profile,
@@ -116,14 +260,35 @@ final class TenantBootstrapService {
     }
 
     final results = await Future.wait<Object?>([
-      _directory.load(uid: normalizedUid),
+      _directory.refresh(uid: normalizedUid),
       _selectionStore.readLastSelectedTenant(normalizedUid),
     ]);
     final directory = results[0]! as TenantDirectoryLoad;
-    final memberships = directory.memberships;
-    final lastSelectedTenantId = results[1] as String?;
+    try {
+      await _rootCache.write(normalizedUid, profile);
+    } catch (_) {}
+    return _resolve(
+      uid: normalizedUid,
+      profile: profile,
+      directory: directory,
+      lastSelectedTenantId: results[1] as String?,
+    );
+  }
+
+  /// Compatibility name for callers that explicitly want a live bootstrap.
+  Future<TenantBootstrapResult> load(String uid) => refresh(uid);
+
+  Future<TenantBootstrapResult> _resolve({
+    required String uid,
+    required RootRoutingProfile profile,
+    required TenantDirectoryLoad directory,
+    String? lastSelectedTenantId,
+    bool fromCache = false,
+    DateTime? cachedAt,
+  }) async {
+    lastSelectedTenantId ??= await _selectionStore.readLastSelectedTenant(uid);
     final selection = resolveTenantSelection(
-      memberships: memberships,
+      memberships: directory.memberships,
       lastSelectedTenantId: lastSelectedTenantId,
       defaultTenantId: profile.defaultTenantId,
     );
@@ -138,9 +303,17 @@ final class TenantBootstrapService {
       kind: kind,
       profile: profile,
       selection: selection,
-      fromCache: directory.fromCache,
-      cachedAt: directory.cachedAt,
+      fromCache: fromCache,
+      cachedAt: cachedAt,
     );
+  }
+
+  String _uid(String uid) {
+    final normalized = uid.trim();
+    if (normalized.isEmpty) {
+      throw ArgumentError.value(uid, 'uid', 'Cannot be empty.');
+    }
+    return normalized;
   }
 
   /// Revalidates the canonical projection before persisting a device-local

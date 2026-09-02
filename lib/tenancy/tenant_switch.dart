@@ -301,11 +301,15 @@ final class TenantSwitchCoordinator {
 /// mutation queue and no editable tenant workflow.
 List<TenantSwitchStateSource> safeLandingTenantSwitchStateSources({
   TenantSwitchStateSource? checkoutStateSource,
+  TenantSwitchStateSource? pendingWritesStateSource,
   TenantSwitchStateSource? cashCloseStateSource,
 }) => <TenantSwitchStateSource>[
   checkoutStateSource ??
       const _ExplicitCleanTenantSwitchSource(TenantSwitchStateArea.checkout),
-  _ExplicitCleanTenantSwitchSource(TenantSwitchStateArea.pendingWrites),
+  pendingWritesStateSource ??
+      const _ExplicitCleanTenantSwitchSource(
+        TenantSwitchStateArea.pendingWrites,
+      ),
   cashCloseStateSource ??
       const _ExplicitCleanTenantSwitchSource(TenantSwitchStateArea.cashClose),
   _ExplicitCleanTenantSwitchSource(TenantSwitchStateArea.workflow),

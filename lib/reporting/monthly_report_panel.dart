@@ -20,6 +20,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../checkout/checkout_outbox.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../ui/buttons.dart';
@@ -28,6 +29,7 @@ import '../ui/states.dart';
 import '../ui/stats.dart';
 import '../ui/tokens.dart';
 import 'monthly_report.dart';
+import 'device_sales_totals.dart';
 import 'profit_report.dart';
 import 'reporting_currency.dart';
 import 'sales_totals.dart';
@@ -46,12 +48,14 @@ final class TenantMonthlyReportScreen extends StatefulWidget {
     super.key,
     required this.reader,
     required this.callable,
+    this.checkoutOutbox,
     this.clock,
   });
 
   /// Reads the published currency. The figures come from [callable].
   final TenantDataReader reader;
   final SalesTotalsCallable callable;
+  final HiveCheckoutOutbox? checkoutOutbox;
   final DateTime Function()? clock;
 
   @override
@@ -87,12 +91,12 @@ class _TenantMonthlyReportScreenState extends State<TenantMonthlyReportScreen> {
   void _composeLoaders(String key) {
     if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
-    _loader = _readWith(widget.reader);
+    _loader = _readServer(widget.reader);
     final cache = widget.reader.cached;
-    _loaderCached = cache == null ? null : _readWith(cache);
+    _loaderCached = cache == null ? null : _readDevice(cache);
   }
 
-  TenantGuardedLoader<MonthlyReportView> _readWith(TenantDataReader reader) {
+  TenantGuardedLoader<MonthlyReportView> _readServer(TenantDataReader reader) {
     return (session) async {
       final loader = TenantMonthlyReportLoader(
         session: session,
@@ -109,6 +113,51 @@ class _TenantMonthlyReportScreenState extends State<TenantMonthlyReportScreen> {
         reader: reader,
       );
       return MonthlyReportView(report: report, currency: currency);
+    };
+  }
+
+  TenantGuardedLoader<MonthlyReportView> _readDevice(TenantDataReader reader) {
+    return (session) async {
+      final now = _now();
+      final month = TenantReportMonth.at(now, offset: _monthOffset);
+      final aggregator = TenantDeviceSalesAggregator(
+        session: session,
+        cacheReader: reader,
+        outbox: widget.checkoutOutbox,
+        clock: widget.clock == null ? null : _now,
+      );
+      TenantSalesTotals? totals;
+      if (month.hasBegun(now)) {
+        final result = await aggregator.load(
+          aggregator.createRangeQuery(
+            startBusinessDate: month.startBusinessDate,
+            endBusinessDate: month.endBusinessDateAt(now),
+          ),
+        );
+        totals = result.totals;
+        if (totals == null) {
+          throw StateError(
+            result.truncated
+                ? 'device_sales_truncated'
+                : 'device_sales_conflicting_evidence',
+          );
+        }
+      }
+      final currency = await TenantReportingCurrency.read(
+        session: session,
+        reader: reader,
+      );
+      return MonthlyReportView(
+        report: TenantMonthlyReport(
+          month: month,
+          totals: totals,
+          // A device-only total never carries a comparison percentage. The
+          // authoritative branch will add one when both server periods land.
+          previousTotals: null,
+          isPartial: month.isCurrent,
+        ),
+        currency: currency,
+      );
     };
   }
 
@@ -296,6 +345,18 @@ final class _MonthlyReportContents extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
+          if (totals.basis == TenantSalesTotalsBasis.device)
+            Padding(
+              padding: EdgeInsets.only(bottom: tokens.spacing.s16),
+              child: Text(
+                'On this device. Sales from other devices may not be included; '
+                'the server total will replace this when available.',
+                key: const ValueKey('monthly-report-device-basis'),
+                style: tokens.typography.caption.copyWith(
+                  color: tokens.colors.text.secondary,
+                ),
+              ),
+            ),
           if (report.isPartial)
             Padding(
               padding: EdgeInsets.only(bottom: tokens.spacing.s16),
@@ -392,7 +453,7 @@ String monthlyReportFailureMessage(Object error) {
     return switch (error.failure) {
       TenantSalesTotalsFailure.periodTooLarge =>
         'This month holds more sales than the server will add up at once. '
-        'Use the weekly report for a narrower stretch.',
+            'Use the weekly report for a narrower stretch.',
       TenantSalesTotalsFailure.forbidden =>
         'This account may not read the business totals.',
       TenantSalesTotalsFailure.unavailable =>

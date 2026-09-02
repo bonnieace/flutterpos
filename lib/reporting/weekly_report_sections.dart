@@ -20,6 +20,7 @@ import '../ui/rolling_number.dart';
 import '../ui/skeleton.dart';
 import '../ui/tokens.dart';
 import 'reporting_currency.dart';
+import 'sales_totals.dart';
 import 'sales_totals_session_context.dart';
 import 'weekly_report.dart';
 import 'weekly_report_charts.dart';
@@ -152,6 +153,18 @@ final class WeeklyReportContents extends StatelessWidget {
       key: const ValueKey('weekly-report-body'),
       padding: EdgeInsets.symmetric(vertical: tokens.spacing.s8),
       children: <Widget>[
+        if (report?.totals?.basis == TenantSalesTotalsBasis.device) ...<Widget>[
+          const Callout(
+            key: ValueKey('weekly-report-device-basis'),
+            status: AppStatus.info,
+            title: 'On this device',
+            message:
+                'These figures include saved sales on this device. Sales from '
+                'other devices and comparison percentages will appear after '
+                'the server responds.',
+          ),
+          SizedBox(height: tokens.spacing.s24),
+        ],
         if (failureMessage case final message?) ...<Widget>[
           Callout(
             key: const ValueKey('weekly-report-failure'),
@@ -298,9 +311,9 @@ final class _MetricGrid extends StatelessWidget {
   /// different claim about the same week and a shopkeeper is entitled to know
   /// which one they are reading.
   static bool _countedHere(TenantWeeklyReport? data) =>
-      data != null && data.totals == null && data.counted != null;
+      data?.totals?.basis == TenantSalesTotalsBasis.device;
 
-  static const String _countedLabel = 'Counted on this device';
+  static const String _countedLabel = 'On this device';
 
   @override
   Widget build(BuildContext context) {
