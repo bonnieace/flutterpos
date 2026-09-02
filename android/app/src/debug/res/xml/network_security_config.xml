@@ -63,6 +63,6 @@
           list grows a dead address every time somebody rebuilds. The home LAN
           above is a different network and keeps its own line.
         -->
-        <domain includeSubdomains="false">10.170.85.53</domain>
+        <domain includeSubdomains="false">10.1.3.3</domain>
     </domain-config>
 </network-security-config>
