@@ -90,26 +90,70 @@ Future<T?> showAppSheet<T>(
     // The handle is drawn here rather than by Material, so it takes §2.1's
     // border colour and §2.3's pill instead of the theme's grey lozenge.
     showDragHandle: false,
-    builder: (context) => DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: initialDetent.fraction,
-      minChildSize: AppSheetDetent.half.fraction,
-      maxChildSize: AppSheetDetent.full.fraction,
-      // **The detents, and the whole of what v0.8 changed.** The sheet snaps to
-      // the nearest of these on release rather than settling on the velocity of
-      // the gesture that got there.
-      snap: true,
-      snapSizes: <double>[
-        for (final detent in AppSheetDetent.values) detent.fraction,
-      ],
-      builder: (context, controller) => _Surface(
-        controller: controller,
-        masthead: masthead,
-        mastheadFraction: mastheadFraction,
-        child: builder(context, controller),
+    builder: (context) => _AboveTheKeyboard(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: initialDetent.fraction,
+        minChildSize: AppSheetDetent.half.fraction,
+        maxChildSize: AppSheetDetent.full.fraction,
+        // **The detents, and the whole of what v0.8 changed.** The sheet snaps to
+        // the nearest of these on release rather than settling on the velocity of
+        // the gesture that got there.
+        snap: true,
+        snapSizes: <double>[
+          for (final detent in AppSheetDetent.values) detent.fraction,
+        ],
+        builder: (context, controller) => _Surface(
+          controller: controller,
+          masthead: masthead,
+          mastheadFraction: mastheadFraction,
+          child: builder(context, controller),
+        ),
       ),
     ),
   );
+}
+
+/// Gives the sheet the screen that is left once the keyboard has taken its
+/// share, rather than the screen the keyboard is sitting on top of.
+///
+/// **The defect this fixes, reported on a device on 2026-09-02**: a sheet is
+/// anchored to the bottom of the *screen*, and the keyboard covers the bottom
+/// of the screen. Every detent is a fraction of a height that does not account
+/// for it, so the pinned action bar and the last field or two of any form
+/// were underneath the keys - and the amount someone was typing was one of the
+/// things they could not see while typing it.
+///
+/// **A plain [Padding], deliberately not an animated one.** `viewInsets.bottom`
+/// is reported progressively while the keyboard travels, so tracking it
+/// directly makes the sheet move *with* the keys rather than chasing them. An
+/// animation on top of that would be a second, slower opinion about a movement
+/// the platform is already driving - and the motion rule's demand that a
+/// spatial change be interruptible from its current position is met exactly by
+/// having no animation of our own to interrupt.
+///
+/// **The inset is removed from what the sheet sees**, the way `Scaffold` does
+/// when `resizeToAvoidBottomInset` consumes it: it has been spent here, and a
+/// descendant that padded by it again would leave a second keyboard's worth of
+/// empty space above the real one.
+final class _AboveTheKeyboard extends StatelessWidget {
+  const _AboveTheKeyboard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    if (keyboard <= 0) return child;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: MediaQuery.removeViewInsets(
+        context: context,
+        removeBottom: true,
+        child: child,
+      ),
+    );
+  }
 }
 
 /// A band that fills the top of a sheet, under its own corners.
@@ -170,9 +214,8 @@ final class _Surface extends StatelessWidget {
   /// §2.3's row for "dialogs, bottom sheets", on the top corners only — a sheet
   /// is anchored to the bottom edge and rounding the corners it is anchored by
   /// draws a gap the page shows through.
-  static BorderRadius radiusOf(AppTokens tokens) => BorderRadius.vertical(
-    top: Radius.circular(tokens.radius.lg),
-  );
+  static BorderRadius radiusOf(AppTokens tokens) =>
+      BorderRadius.vertical(top: Radius.circular(tokens.radius.lg));
 
   /// The handle: 32 x 4 at `radius.pill`.
   ///

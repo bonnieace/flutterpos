@@ -16,7 +16,6 @@ import '../ui/fields.dart';
 import '../ui/pagination.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
-import '../ui/sheet.dart';
 import '../ui/skeleton.dart';
 import '../ui/snackbar.dart';
 import '../ui/status.dart';
@@ -55,7 +54,7 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
     this.imageStore,
     this.backgroundRemover,
     this.productStockRoute,
-    this.adjustStockSheet,
+    this.adjustStockRoute,
     this.productStockRoles = const <TenantRole>[],
     this.adjustmentFeedRoute,
     this.adjustmentFeedRoles = const <TenantRole>[],
@@ -99,13 +98,13 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
 
   final TenantProductRouteBuilder? productStockRoute;
 
-  /// Opens the stock-correction sheet. See [TenantProductAdjustStockOpener].
+  /// Opens the stock-correction screen. See [TenantProductAdjustStockOpener].
   ///
   /// **Separate from [productStockRoute] since 2026-08-26**, where the two used
-  /// to be one builder taking a mode. Reading a ledger is a route and
-  /// correcting a figure is a sheet, and one signature could not honestly
-  /// describe both.
-  final TenantProductAdjustStockOpener? adjustStockSheet;
+  /// to be one builder taking a mode. Both are routes again, but only one of
+  /// them reports an answer back to this catalog, and a builder that answers
+  /// with a widget cannot carry that.
+  final TenantProductAdjustStockOpener? adjustStockRoute;
 
   final List<TenantRole> productStockRoles;
   final TenantAdjustmentFeedRouteBuilder? adjustmentFeedRoute;
@@ -130,7 +129,7 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
       imageStore: imageStore,
       backgroundRemover: backgroundRemover,
       productStockRoute: productStockRoute,
-      adjustStockSheet: adjustStockSheet,
+      adjustStockRoute: adjustStockRoute,
       productStockRoles: productStockRoles,
       adjustmentFeedRoute: adjustmentFeedRoute,
       adjustmentFeedRoles: adjustmentFeedRoles,
@@ -162,7 +161,7 @@ final class TenantCatalogManagementPanel extends StatefulWidget {
     this.imageStore,
     this.backgroundRemover,
     this.productStockRoute,
-    this.adjustStockSheet,
+    this.adjustStockRoute,
     this.productStockRoles = const <TenantRole>[],
     this.adjustmentFeedRoute,
     this.adjustmentFeedRoles = const <TenantRole>[],
@@ -184,13 +183,13 @@ final class TenantCatalogManagementPanel extends StatefulWidget {
   final TenantProductBackgroundRemover? backgroundRemover;
   final TenantProductRouteBuilder? productStockRoute;
 
-  /// Opens the stock-correction sheet. See [TenantProductAdjustStockOpener].
+  /// Opens the stock-correction screen. See [TenantProductAdjustStockOpener].
   ///
   /// **Separate from [productStockRoute] since 2026-08-26**, where the two used
-  /// to be one builder taking a mode. Reading a ledger is a route and
-  /// correcting a figure is a sheet, and one signature could not honestly
-  /// describe both.
-  final TenantProductAdjustStockOpener? adjustStockSheet;
+  /// to be one builder taking a mode. Both are routes again, but only one of
+  /// them reports an answer back to this catalog, and a builder that answers
+  /// with a widget cannot carry that.
+  final TenantProductAdjustStockOpener? adjustStockRoute;
 
   final List<TenantRole> productStockRoles;
   final TenantAdjustmentFeedRouteBuilder? adjustmentFeedRoute;
@@ -464,9 +463,11 @@ final class _TenantCatalogManagementPanelState
     final file = result.files.single;
     final bytes = file.bytes;
     if (bytes == null) {
-      _report(const AppNotice.refused(
+      _report(
+        const AppNotice.refused(
           'That image could not be read. Choose a JPEG, PNG, or WebP file.',
-        ));
+        ),
+      );
       return null;
     }
     try {
@@ -477,86 +478,55 @@ final class _TenantCatalogManagementPanelState
     }
   }
 
-
-  /// Opens a product form as a sheet over this catalog.
+  /// Opens a product form as a screen of its own.
   ///
-  /// **Two arrangements, decided by width, at the product owner's direction on
-  /// 2026-08-26.** Below §4.1's `medium` floor the picture is the sheet's
-  /// masthead - bleeding into its own top corners, drag handle overlaid, the
-  /// fields scrolling underneath. At and above it the two-column form survives
-  /// unchanged, because a wide sheet has room to put the picture beside its
-  /// fields rather than above them.
+  /// **A route again, at the product owner's direction on 2026-09-02**,
+  /// reversing the 2026-08-26 move to a sheet and taking the compact masthead
+  /// arrangement with it. Both forms ask for money - a price, a cost - and a
+  /// sheet is anchored to the bottom of the screen, which is where the keyboard
+  /// comes up: the fields at the foot of the form were under the keys at the
+  /// moment they were being typed into.
   ///
-  /// The masthead needs the picture the form is holding, and it is built above
-  /// that form's state; [_ProductImagePreviewModel] is what carries it across.
-  Future<T?> _openProductFormSheet<T>({
-    required TenantProduct? product,
-    required Widget Function(
-      ScrollController controller,
-      _ProductImagePreviewModel? preview,
-    )
-    form,
-  }) {
+  /// **What the masthead did, `_FormWithImageWell` already does.** Its narrow
+  /// arrangement is the picture above the fields in one column, which is what
+  /// the masthead was for; the difference was only that a sheet's top band
+  /// bleeds into the sheet's own corners. A route has no such corners to fill,
+  /// so the well draws its own preview again and `_ProductImagePreviewModel` -
+  /// which existed solely to carry the picture up out of the form's state and
+  /// into the sheet's chrome - is gone with it.
+  Future<T?> _openProductFormRoute<T>({required Widget Function() form}) {
     final controller = TenantSessionScope.of(context);
-    final compact = !AppLayout.contract.isAtLeast(
-      MediaQuery.sizeOf(context).width,
-      AppBreakpoint.medium,
-    );
-    final preview = compact
-        ? (_ProductImagePreviewModel(product: product)..show(_productImage))
-        : null;
-    return showAppSheet<T>(
-      context,
-      initialDetent: AppSheetDetent.full,
-      masthead: preview == null
-          ? null
-          : (context) => ListenableBuilder(
-              listenable: preview,
-              builder: (context, _) => _ProductImagePreview(
-                key: const ValueKey('inventory-product-masthead'),
-                image: preview.image,
-                product: preview.shownProduct,
-                // The masthead is the sheet's own top; its corners are the
-                // sheet's and it must not round any of its own inside them.
-                square: true,
-              ),
-            ),
-      builder: (sheetContext, sheetController) => TenantSessionScope(
-        controller: controller,
-        child: form(sheetController, preview),
+    return Navigator.of(context).push<T>(
+      AppPageRoute<T>(
+        builder: (routeContext) =>
+            TenantSessionScope(controller: controller, child: form()),
       ),
     );
   }
 
   Future<void> _openAddProduct(TenantSession session, _CatalogView view) async {
-    final submit = await _openProductFormSheet<bool>(
-      product: null,
-      form: (sheetController, preview) => _AddProductScreen(
-            scrollController: sheetController,
-            preview: preview,
-            categories: view.categories.items,
-            moreCategories: view.categories.hasMore,
-            name: _productName,
-            sku: _productSku,
-            price: _productPrice,
-            cost: _productCost,
-            canRecordCost:
-                TenantCatalogManagementRepository.canRecordCostInSession(
-                  session,
-                ),
-            selectedCategoryId: _selectedCategoryId,
-            image: _productImage,
-            busy: _busy,
-            onCategorySelected: (categoryId) {
-              _selectedCategoryId = categoryId;
-            },
-            onChooseImage: widget.imageStore == null
-                ? null
-                : _chooseProductImage,
-            onImageChanged: (image) => _productImage = image,
-            session: session,
-            backgroundRemover: widget.backgroundRemover,
-          ),
+    final submit = await _openProductFormRoute<bool>(
+      form: () => _AddProductScreen(
+        categories: view.categories.items,
+        moreCategories: view.categories.hasMore,
+        name: _productName,
+        sku: _productSku,
+        price: _productPrice,
+        cost: _productCost,
+        canRecordCost: TenantCatalogManagementRepository.canRecordCostInSession(
+          session,
+        ),
+        selectedCategoryId: _selectedCategoryId,
+        image: _productImage,
+        busy: _busy,
+        onCategorySelected: (categoryId) {
+          _selectedCategoryId = categoryId;
+        },
+        onChooseImage: widget.imageStore == null ? null : _chooseProductImage,
+        onImageChanged: (image) => _productImage = image,
+        session: session,
+        backgroundRemover: widget.backgroundRemover,
+      ),
     );
     if (submit == true && mounted) await _addProduct(session, view);
   }
@@ -588,7 +558,7 @@ final class _TenantCatalogManagementPanelState
   /// stays over this list rather than replacing it, so the row a person was
   /// working on is still behind the scrim when they close it.
   Future<void> _adjustProduct(TenantProduct product) async {
-    final open = widget.adjustStockSheet;
+    final open = widget.adjustStockRoute;
     if (open == null || _busy) return;
     await open(context, product);
   }
@@ -800,28 +770,23 @@ final class _TenantCatalogManagementPanelState
     if (callable == null || _busy) return;
     final capturedKey = _sessionKey(session);
 
-    final draft = await _openProductFormSheet<_ProductEditDraft>(
-      product: product,
-      form: (sheetController, preview) => _EditProductScreen(
-            scrollController: sheetController,
-            preview: preview,
-            product: product,
-            categories: view.categories.items,
-            moreCategories: view.categories.hasMore,
-            // A price and a cost are money and sit behind owner or
-            // administrator. The field is not offered at all to anyone else,
-            // because the callable reads its tier from the fields a payload
-            // names: a form that offered a price it knew would be refused
-            // would teach a manager only that the app guesses.
-            canChangeMoney:
-                TenantCatalogManagementRepository.canRecordCostInSession(
-                  session,
-                ),
-            canChangeImage: widget.imageStore != null,
-            onChooseImage: _chooseProductImage,
-            session: session,
-            backgroundRemover: widget.backgroundRemover,
-          ),
+    final draft = await _openProductFormRoute<_ProductEditDraft>(
+      form: () => _EditProductScreen(
+        product: product,
+        categories: view.categories.items,
+        moreCategories: view.categories.hasMore,
+        // A price and a cost are money and sit behind owner or
+        // administrator. The field is not offered at all to anyone else,
+        // because the callable reads its tier from the fields a payload
+        // names: a form that offered a price it knew would be refused
+        // would teach a manager only that the app guesses.
+        canChangeMoney:
+            TenantCatalogManagementRepository.canRecordCostInSession(session),
+        canChangeImage: widget.imageStore != null,
+        onChooseImage: _chooseProductImage,
+        session: session,
+        backgroundRemover: widget.backgroundRemover,
+      ),
     );
     if (draft == null || !_stillCurrent(capturedKey)) return;
 
@@ -1025,31 +990,31 @@ final class _TenantCatalogManagementPanelState
     final cursor = _cursors[_pageIndex];
     TenantGuardedLoader<_CatalogView> readWith(TenantDataReader reader) =>
         (session) async {
-      final repository = TenantCatalogRepository(
-        session: session,
-        reader: reader,
-        productSearchReader: widget.productSearchReader,
-      );
-      final categories = await repository.loadCategories(
-        pageSize: widget.categoryPageSize,
-      );
-      final supportsSearch =
-          widget.productSearchReader != null ||
-          reader is TenantProductSearchReader;
-      final products = supportsSearch
-          ? await repository.searchProducts(
-              pageSize: widget.pageSize,
-              cursor: cursor,
-              searchPrefix: _searchPrefix.isEmpty ? null : _searchPrefix,
-              categoryId: _categoryFilter,
-              stock: _stockFilter,
-            )
-          : await repository.loadProducts(
-              pageSize: widget.pageSize,
-              cursor: cursor,
-            );
-      return _CatalogView(categories: categories, products: products);
-    };
+          final repository = TenantCatalogRepository(
+            session: session,
+            reader: reader,
+            productSearchReader: widget.productSearchReader,
+          );
+          final categories = await repository.loadCategories(
+            pageSize: widget.categoryPageSize,
+          );
+          final supportsSearch =
+              widget.productSearchReader != null ||
+              reader is TenantProductSearchReader;
+          final products = supportsSearch
+              ? await repository.searchProducts(
+                  pageSize: widget.pageSize,
+                  cursor: cursor,
+                  searchPrefix: _searchPrefix.isEmpty ? null : _searchPrefix,
+                  categoryId: _categoryFilter,
+                  stock: _stockFilter,
+                )
+              : await repository.loadProducts(
+                  pageSize: widget.pageSize,
+                  cursor: cursor,
+                );
+          return _CatalogView(categories: categories, products: products);
+        };
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -1118,7 +1083,7 @@ final class _TenantCatalogManagementPanelState
         // itself enforces may correct a figure, and the gateway is what
         // decides that rather than this surface.
         canAdjust:
-            widget.adjustStockSheet != null &&
+            widget.adjustStockRoute != null &&
             session.canAccess(allowedRoles: widget.productStockRoles) &&
             TenantStockAdjustmentGateway.canAdjustInSession(session),
         canViewCost: TenantCatalogManagementRepository.canRecordCostInSession(
@@ -1330,7 +1295,10 @@ final class _UnifiedInventoryContents extends StatelessWidget {
         children: <Widget>[
           add,
           SizedBox(height: tokens.spacing.s12),
-          AppActionRow(expandActions: true, actions: <Widget>[bulk, categories]),
+          AppActionRow(
+            expandActions: true,
+            actions: <Widget>[bulk, categories],
+          ),
         ],
       );
     }
@@ -1650,9 +1618,7 @@ final class _InventoryReading extends StatelessWidget {
             child: wide
                 ? _table(context)
                 : Padding(
-                    padding: EdgeInsets.symmetric(
-                      vertical: tokens.spacing.s4,
-                    ),
+                    padding: EdgeInsets.symmetric(vertical: tokens.spacing.s4),
                     child: Column(
                       children: <Widget>[
                         for (var card = 0; card < _cards; card++)
@@ -1942,10 +1908,7 @@ final class _InventoryMetricSkeleton extends StatelessWidget {
           ),
         ),
         SizedBox(height: tokens.spacing.s4),
-        SkeletonLine(
-          widthFactor: widthFactor,
-          style: tokens.typography.mono,
-        ),
+        SkeletonLine(widthFactor: widthFactor, style: tokens.typography.mono),
       ],
     );
   }
@@ -2976,12 +2939,14 @@ String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
 ///
 /// The form and its image are one continuous surface. The action pair stays
 /// fixed, horizontal, and reachable while the form itself scrolls.
-/// The body of a product form: the fields, and the controls that submit them.
 ///
-/// **A sheet body rather than a route since 2026-08-26.** It was an
-/// `AppScaffold` with the fields in a `ListView` and the actions pinned under
-/// them; the actions and the scroll are unchanged, and what left is the page
-/// chrome - a sheet supplies its own.
+/// **A route again since 2026-09-02**, which is what it was before it spent a
+/// week as a sheet body. The `ListView` and the pinned action bar never
+/// changed; what came back is the page chrome around them, and with it a
+/// toolbar that names the errand and a way out of it that is not a drag.
+///
+/// **§7's "title appears once", and the toolbar is where.** `AppScaffold` puts
+/// the title and its subtitle in the bar, so nothing repeats them in the body.
 final class _CatalogProductFormScreen extends StatelessWidget {
   const _CatalogProductFormScreen({
     required this.screenKey,
@@ -2990,8 +2955,6 @@ final class _CatalogProductFormScreen extends StatelessWidget {
     this.subtitle,
     required this.form,
     required this.actions,
-    this.scrollController,
-    this.showsHeader = true,
   });
 
   final Key screenKey;
@@ -3001,47 +2964,32 @@ final class _CatalogProductFormScreen extends StatelessWidget {
   final Widget form;
   final List<Widget> actions;
 
-  /// The sheet's own controller, so dragging the form drags the sheet. Null
-  /// where this is still pumped as a page, which is how its tests reach it.
-  final ScrollController? scrollController;
-
-  /// Drawn above the fields where the sheet has no masthead to carry it.
-  ///
-  /// **§7's "title appears once", read across two arrangements.** A sheet has
-  /// no app bar, so the errand has to be named inside it - except on the
-  /// compact sheet, where the masthead is the picture and the header sits
-  /// above the fields under it. Either way it is stated exactly once.
-  final bool showsHeader;
-
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return KeyedSubtree(
+    return AppScaffold(
       key: screenKey,
-      child: Column(
+      title: title,
+      subtitle: subtitle,
+      // §4.2's row for a form rather than the `records` row the catalog behind
+      // it takes: a price and a name do not want 1200 pixels of line length.
+      contentWidth: AppContentWidth.reading,
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Expanded(
-            // **The fields scroll, not the sheet.** The sheet's own drag is
-            // coupled to this controller, so a form taller than the sheet
-            // scrolls its fields under a masthead that stays put - rather than
-            // putting a second scrollbar on a surface that already has one.
+            // The fields scroll; the action pair below them does not, so the
+            // control that submits the form is reachable from any scroll
+            // position without hunting for it.
             child: ListView(
               key: scrollKey,
-              controller: scrollController,
               padding: EdgeInsets.fromLTRB(
                 tokens.spacing.s20,
-                showsHeader ? tokens.spacing.s8 : tokens.spacing.s16,
+                tokens.spacing.s8,
                 tokens.spacing.s20,
                 tokens.spacing.s24,
               ),
-              children: <Widget>[
-                if (showsHeader) ...<Widget>[
-                  PageHeader(title: title, subtitle: subtitle),
-                  SizedBox(height: tokens.spacing.s16),
-                ],
-                form,
-              ],
+              children: <Widget>[form],
             ),
           ),
           DecoratedBox(
@@ -3085,8 +3033,6 @@ final class _AddProductScreen extends StatefulWidget {
     required this.onImageChanged,
     required this.session,
     required this.backgroundRemover,
-    this.scrollController,
-    this.preview,
   });
 
   final List<TenantCategory> categories;
@@ -3107,15 +3053,6 @@ final class _AddProductScreen extends StatefulWidget {
   /// form neither reads nor writes anything else through them.
   final TenantSession session;
   final TenantProductBackgroundRemover? backgroundRemover;
-
-  /// The sheet's own controller, which must reach the scrollable this builds or
-  /// dragging the form scrolls the form and the sheet never moves.
-  final ScrollController? scrollController;
-
-  /// Published so the sheet's masthead can paint the same picture this form is
-  /// changing. Null in the wide arrangement, which draws its own.
-  /// See [_ProductImagePreviewModel].
-  final _ProductImagePreviewModel? preview;
 
   @override
   State<_AddProductScreen> createState() => _AddProductScreenState();
@@ -3140,37 +3077,25 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
   void _acceptImage(TenantProductImageCandidate candidate) {
     setState(() => _image = candidate);
     widget.onImageChanged(candidate);
-    // Alongside `setState` rather than instead of it: this form stays
-    // authoritative and the model carries only what the masthead paints.
-    widget.preview?.show(candidate);
   }
 
   void _removeImage() {
     setState(() => _image = null);
     widget.onImageChanged(null);
-    widget.preview?.show(null);
   }
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final choose = widget.onChooseImage;
-    // A masthead means the sheet is already showing the picture, so the well
-    // below draws its controls and nothing else - and the fields sit in one
-    // column under it rather than beside a second copy of the image.
-    final hasMasthead = widget.preview != null;
     return _CatalogProductFormScreen(
       screenKey: const ValueKey('catalog-management-add-screen'),
       scrollKey: const ValueKey('catalog-management-add-scroll'),
       title: 'Add product',
-      scrollController: widget.scrollController,
-      showsHeader: !hasMasthead,
       form: _FormWithImageWell(
-        stacked: hasMasthead,
         well: choose == null
             ? null
             : _ProductImageWell(
-                showsPreview: !hasMasthead,
                 image: _image,
                 savedImageRemoved: false,
                 remover: widget.backgroundRemover,
@@ -3507,8 +3432,6 @@ final class _EditProductScreen extends StatefulWidget {
     required this.onChooseImage,
     required this.session,
     required this.backgroundRemover,
-    this.scrollController,
-    this.preview,
   });
 
   final TenantProduct product;
@@ -3525,15 +3448,6 @@ final class _EditProductScreen extends StatefulWidget {
   /// Both only so the image well can decide whether to offer a cut-out.
   final TenantSession session;
   final TenantProductBackgroundRemover? backgroundRemover;
-
-  /// The sheet's own controller, which must reach the scrollable this builds or
-  /// dragging the form scrolls the form and the sheet never moves.
-  final ScrollController? scrollController;
-
-  /// Published so the sheet's masthead can paint the same picture this form is
-  /// changing. Null in the wide arrangement, which draws its own.
-  /// See [_ProductImagePreviewModel].
-  final _ProductImagePreviewModel? preview;
 
   @override
   State<_EditProductScreen> createState() => _EditProductScreenState();
@@ -3562,9 +3476,6 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
       _image = candidate;
       _removeImage = false;
     });
-    // Alongside `setState` rather than instead of it: this form stays
-    // authoritative and the model carries only what the masthead paints.
-    widget.preview?.show(candidate);
   }
 
   /// Whether there is anything for *Remove image* to act on: a photograph
@@ -3592,12 +3503,9 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
     final tokens = AppTokens.componentOf(context);
     // The form is one continuous page surface; its image section is not a
     // raised card nested inside a modal card.
-    final hasMasthead = widget.preview != null;
     final form = _FormWithImageWell(
-      stacked: hasMasthead,
       well: widget.canChangeImage
           ? _ProductImageWell(
-              showsPreview: !hasMasthead,
               product: widget.product,
               image: _image,
               savedImageRemoved: _removeImage,
@@ -3611,10 +3519,6 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
                         _image = null;
                         _removeImage = true;
                       });
-                      // `savedRemoved` so the masthead stops showing the saved
-                      // photograph too: dropping the picture must look like
-                      // dropping it, not like reverting to the old one.
-                      widget.preview?.show(null, savedRemoved: true);
                     }
                   : null,
             )
@@ -3764,8 +3668,6 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
       scrollKey: const ValueKey('catalog-management-edit-scroll'),
       title: 'Correct product',
       subtitle: widget.product.name,
-      scrollController: widget.scrollController,
-      showsHeader: widget.preview == null,
       form: form,
       actions: <Widget>[
         AppButton(
@@ -3820,16 +3722,7 @@ final class _ProductImageWell extends StatefulWidget {
     required this.onChoose,
     required this.onImageChanged,
     required this.onRemoveImage,
-    this.showsPreview = true,
   });
-
-  /// Whether this draws the picture as well as the controls.
-  ///
-  /// **False on a sheet with a masthead**, where the picture is already the top
-  /// of the sheet: drawing it again here is the "double card" this arrangement
-  /// exists to remove. True in the wide two-column form, where the image column
-  /// is the picture and its controls together.
-  final bool showsPreview;
 
   /// The product being corrected, whose saved photograph is shown until a new
   /// one is chosen. Null in the add form, which has no product yet.
@@ -3929,30 +3822,28 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        if (widget.showsPreview) ...<Widget>[
-          // **No `SectionHeading('Product image')` here since 2026-08-26.** On
-          // the sheet the picture *is* the top of the sheet and needs no label;
-          // in the wide two-column form the column is plainly a picture and its
-          // controls. Either way the heading was naming what the reader could
-          // already see, which is §7's own complaint about it.
-          //
-          // The lesser of the old form's 350 and a square of whatever width
-          // this well was given, so a phone draws a square rather than a
-          // letterbox and a desktop draws the figure the old form drew.
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: tokens.layout.productImagePreview,
-            ),
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: _ProductImagePreview(
-                image: widget.image,
-                product: _showsSavedImage ? widget.product : null,
-              ),
+        // **No `SectionHeading('Product image')` here since 2026-08-26.** The
+        // column is plainly a picture and its controls - above the fields on a
+        // phone, beside them on a wider screen - and the heading was naming
+        // what the reader could already see, which is §7's own complaint about
+        // it.
+        //
+        // The lesser of the old form's 350 and a square of whatever width this
+        // well was given, so a phone draws a square rather than a letterbox and
+        // a desktop draws the figure the old form drew.
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: tokens.layout.productImagePreview,
+          ),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: _ProductImagePreview(
+              image: widget.image,
+              product: _showsSavedImage ? widget.product : null,
             ),
           ),
-          SizedBox(height: tokens.spacing.s12),
-        ],
+        ),
+        SizedBox(height: tokens.spacing.s12),
         Row(
           children: <Widget>[
             Expanded(
@@ -4027,57 +3918,8 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
 
 /// What the well shows: the photograph chosen here, the one already saved, or
 /// the fact that there is neither.
-/// The picture a product form is currently showing.
-///
-/// **It exists because the masthead is outside the form's own subtree.** A
-/// sheet's masthead is built by `showAppSheet`, which is above the form state
-/// holding the chosen photograph — so the two cannot see each other by
-/// ordinary means, and the picture has to be published somewhere they both
-/// reach.
-///
-/// **The form stays authoritative.** This carries only what is needed to
-/// *paint* — the chosen bytes and whether the saved photograph still counts —
-/// and the form writes to it alongside its own `setState` rather than instead
-/// of it. Making this the source of truth would mean rewriting both forms'
-/// image handling to fix a rendering seam, which is a much larger change for
-/// no behaviour gained.
-final class _ProductImagePreviewModel extends ChangeNotifier {
-  _ProductImagePreviewModel({this.product});
-
-  /// The product being corrected, or null in the add form.
-  final TenantProduct? product;
-
-  TenantProductImageCandidate? _image;
-  bool _savedRemoved = false;
-
-  TenantProductImageCandidate? get image => _image;
-
-  /// The saved photograph, or null once it has been chosen away or removed.
-  TenantProduct? get shownProduct =>
-      _image == null && !_savedRemoved ? product : null;
-
-  void show(TenantProductImageCandidate? image, {bool savedRemoved = false}) {
-    if (_image == image && _savedRemoved == savedRemoved) return;
-    _image = image;
-    _savedRemoved = savedRemoved;
-    notifyListeners();
-  }
-}
-
 final class _ProductImagePreview extends StatelessWidget {
-  const _ProductImagePreview({
-    super.key,
-    required this.image,
-    required this.product,
-    this.square = false,
-  });
-
-  /// Draws no corner radius of its own.
-  ///
-  /// **True where this *is* the sheet's top.** The sheet clips to §2.3's
-  /// `radius.lg`; a second radius inside that one shows the surface through
-  /// four crescents at the corners.
-  final bool square;
+  const _ProductImagePreview({required this.image, required this.product});
 
   final TenantProductImageCandidate? image;
 
@@ -4087,8 +3929,7 @@ final class _ProductImagePreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    // Zero where this is the sheet's own top: see [square].
-    final radius = BorderRadius.circular(square ? 0 : tokens.radius.md);
+    final radius = BorderRadius.circular(tokens.radius.md);
     if (image case final chosen?) {
       return ClipRRect(
         borderRadius: radius,
@@ -4146,24 +3987,11 @@ final class _ProductImagePreview extends StatelessWidget {
 /// image section for both and two different arrangements for one job is how
 /// they drift apart.
 final class _FormWithImageWell extends StatelessWidget {
-  const _FormWithImageWell({
-    required this.well,
-    required this.fields,
-    this.stacked = false,
-  });
-
-  /// Forces the single-column arrangement whatever the width.
-  ///
-  /// **True on a sheet with a masthead.** The two-column form exists to put a
-  /// picture beside its fields; where the picture is already the top of the
-  /// sheet, a second column would be an empty one - and the well under it is
-  /// three controls, which do not want half the width.
+  const _FormWithImageWell({required this.well, required this.fields});
 
   /// Null where the form offers no image at all - no store is configured, or
   /// this session may not change one - in which case the fields are the whole
   /// form and there is no second column to make.
-  final bool stacked;
-
   final Widget? well;
 
   final List<Widget> fields;
@@ -4182,12 +4010,10 @@ final class _FormWithImageWell extends StatelessWidget {
     // underneath, which sizes its content by intrinsic height, and a
     // `LayoutBuilder` refuses to answer an intrinsic query - the defect
     // `Pagination` records by name after three dialogs threw it.
-    final wide =
-        !stacked &&
-        AppLayout.contract.isAtLeast(
-          MediaQuery.sizeOf(context).width,
-          AppBreakpoint.medium,
-        );
+    final wide = AppLayout.contract.isAtLeast(
+      MediaQuery.sizeOf(context).width,
+      AppBreakpoint.medium,
+    );
     if (!wide) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -891,12 +891,12 @@ class SpiritPOSApp extends StatelessWidget {
             product: product,
             actions: stockActions,
           ),
-          // The correcting half, which is a sheet over the catalog rather than
-          // a route since 2026-08-26. The composition root still owns the
-          // callable; what changed is that it hands over the errand instead of
-          // a screen for the catalog to push.
-          adjustStockSheet: (context, product) =>
-              openTenantProductStockAdjustmentSheet(
+          // The correcting half. The composition root still owns the callable;
+          // what it hands over is the errand rather than a screen for the
+          // catalog to push, because the correction also owns its own dismissal
+          // and the sentence it leaves behind on the catalog.
+          adjustStockRoute: (context, product) =>
+              openTenantProductStockAdjustmentScreen(
                 context,
                 reader: reader,
                 product: product,
