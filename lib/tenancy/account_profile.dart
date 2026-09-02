@@ -190,6 +190,17 @@ final class AccountProfileGateway {
       kind: SignInFailureKind.refused,
       message: 'This account cannot be set up. Contact support.',
     ),
+    // **The callable is not there.** A build that reaches a backend without
+    // `completeSelfSignup` deployed answers `not-found`, and it used to fall
+    // through to "Something went wrong", which is the one sentence that cannot
+    // be acted on by the person reading it *or* by whoever they report it to.
+    // The account itself is fine - it exists and the flow resumes at this same
+    // step - so this says the part that is actually wrong.
+    'not-found' || 'unimplemented' => (
+      kind: SignInFailureKind.unreachable,
+      message: 'This app is newer than the server. Update the app, or ask '
+          'support to finish the deployment.',
+    ),
     'unavailable' || 'deadline-exceeded' => (
       kind: SignInFailureKind.unreachable,
       message: 'The server could not be reached. Check your connection.',

@@ -89,6 +89,17 @@ void main() {
       }
     });
 
+    test('a missing callable says the server is behind, not "went wrong"', () {
+      // Seen on a device on 2026-09-02: the app shipped ahead of the backend,
+      // the callable answered `not-found`, and the flow showed the one sentence
+      // that tells neither the person nor support anything.
+      final failure = accountProfileFailure(
+        const AccountProfileException('not-found'),
+      );
+      expect(failure.kind, SignInFailureKind.unreachable);
+      expect(failure.message, contains('newer than the server'));
+    });
+
     test('a taken address points at signing in instead', () {
       final failure = accountProfileFailure(
         const AccountProfileException('already-exists'),
@@ -105,6 +116,7 @@ void main() {
         'resource-exhausted',
         'failed-precondition',
         'permission-denied',
+        'not-found',
         'internal',
       ]) {
         final failure = accountProfileFailure(AccountProfileException(code));
