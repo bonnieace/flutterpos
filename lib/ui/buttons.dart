@@ -101,6 +101,7 @@ final class AppButton extends StatelessWidget {
     this.icon,
     this.loading = false,
     this.expand = false,
+    this.pill = false,
     this.focusNode,
     this.autofocus = false,
   });
@@ -120,6 +121,19 @@ final class AppButton extends StatelessWidget {
   /// §5.2: leading icon, 18px, optional. A trailing icon is reserved for
   /// disclosure and is not offered here.
   final IconData? icon;
+
+  /// Draws the button as a capsule instead of on §2.3's `radius.md`.
+  ///
+  /// **Opt-in per call site, at the product owner's direction on 2026-09-02**,
+  /// and off everywhere it is not asked for. The default below is a design
+  /// decision with a reason behind it - the Stitch render's own `.btn-primary`
+  /// is `0.5rem`, not a capsule - so a screen that wants the older shape says
+  /// so here rather than the whole app changing under it.
+  ///
+  /// It moves the shape and nothing else: one `radius` feeds the container, the
+  /// border and [PressSurface], so hover, pressed, focus-visible, disabled and
+  /// loading all take the capsule with them.
+  final bool pill;
 
   /// §2.1's loading row: the container is held, the label is replaced by a
   /// 16px spinner in the label colour, **and the width is frozen** so a button
@@ -236,7 +250,10 @@ final class AppButton extends StatelessWidget {
     // `0.5rem` in the served Tailwind config of every exported screen - 8, not
     // a pill. The 2026-08-23 pill override is withdrawn at the product owner's
     // direction: the instruction is now that the Stitch render is the target.
-    final radius = BorderRadius.circular(tokens.radius.md);
+    // [pill] opts one button back out; see its own note.
+    final radius = BorderRadius.circular(
+      pill ? tokens.radius.pill : tokens.radius.md,
+    );
 
     final labelStyle = tokens.typography.labelLarge.copyWith(color: labelColor);
 

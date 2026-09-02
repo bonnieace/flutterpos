@@ -206,7 +206,6 @@ class _LoginScreenState extends State<LoginScreen> {
   void _handlePasswordFocus() =>
       _attachKeypad(passwordController, passwordFocus);
 
-
   /// Points the on-screen keypad at the field that has just taken the focus.
   void _attachKeypad(TextEditingController controller, FocusNode node) {
     if (!_keypadShown || !node.hasFocus) return;
@@ -562,12 +561,18 @@ class _LoginScreenState extends State<LoginScreen> {
       // reads as a button beside the submit rather than as one more quiet line
       // under it. Secondary rather than primary: there is exactly one primary
       // action on a screen and it is *Sign in*.
+      //
+      // **Rounded, at the product owner's direction on 2026-09-02.** The one
+      // control on this screen that leads somewhere else rather than submitting
+      // what is on it, and the capsule is what says so before the label is
+      // read.
       if (widget.createAccountRoute != null)
         AppButton(
           key: const ValueKey('login-go-register'),
           label: 'Create an account',
           tier: AppButtonTier.secondary,
           expand: true,
+          pill: true,
           onPressed: isLoading ? null : _createAccount,
         ),
     ],
@@ -766,7 +771,11 @@ class _PillFieldState extends State<_PillField> {
           ),
           child: Row(
             children: <Widget>[
-              Icon(widget.leading, size: _pillIconSize, color: colors.text.tertiary),
+              Icon(
+                widget.leading,
+                size: _pillIconSize,
+                color: colors.text.tertiary,
+              ),
               SizedBox(width: tokens.spacing.s12),
               Expanded(
                 child: TextField(
@@ -889,7 +898,10 @@ final class _PillSubmitButton extends StatelessWidget {
         fillWidth: true,
         excludeSemantics: true,
         child: DecoratedBox(
-          decoration: BoxDecoration(color: role.container, borderRadius: radius),
+          decoration: BoxDecoration(
+            color: role.container,
+            borderRadius: radius,
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               minHeight: tokens.density.minimumTapTarget.height,
@@ -958,7 +970,6 @@ AppNotice _noticeFor(SignInFailure failure) => switch (failure.kind) {
   // was: the request never arrived.
   SignInFailureKind.unreachable => AppNotice.offline(failure.message),
 };
-
 
 /// One quiet route out of the current mode.
 ///

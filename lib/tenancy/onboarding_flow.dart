@@ -413,7 +413,9 @@ class _OnboardingFlowState extends State<OnboardingFlow>
         // Deliberately not "sent": the server accepts responsibility for a
         // request, which is not the same as a message arriving. See
         // `AccountVerificationResult`.
-        _notice = const AppNotice.confirmed('Another email has been requested.');
+        _notice = const AppNotice.confirmed(
+          'Another email has been requested.',
+        );
       });
     } catch (error) {
       if (!mounted) return;
@@ -572,12 +574,16 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       key: const ValueKey('onboarding-account-step'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Text(
-          creating
-              ? 'We will use this to set up your till and your receipts.'
-              : 'Finish setting up the account you already have.',
-        ),
-        SizedBox(height: tokens.spacing.s16),
+        // **Nothing stands above the first field on a new account.** The
+        // sentence that used to - "We will use this to set up your till and
+        // your receipts" - explained a use nobody had asked about yet, above
+        // two fields that need no explaining. The resumed case keeps its line
+        // because it answers a question a person really does have: why they
+        // are on step 1 with an account they already made.
+        if (!creating) ...<Widget>[
+          const Text('Finish setting up the account you already have.'),
+          SizedBox(height: tokens.spacing.s16),
+        ],
         AppTextField(
           key: const ValueKey('onboarding-name'),
           controller: _nameController,
@@ -593,7 +599,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
         AppPhoneField(
           key: const ValueKey('onboarding-phone'),
           label: 'Mobile number',
-          helper: 'So a colleague or support can reach you.',
           error: _phoneError,
           enabled: !_busy,
           code: _dialCode.code,
@@ -618,8 +623,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
           },
         ),
         if (creating) ...[
-          SizedBox(height: tokens.spacing.s24),
-          SectionHeading('How you will sign in'),
           SizedBox(height: tokens.spacing.s16),
           AppTextField(
             key: const ValueKey('onboarding-email'),
@@ -657,6 +660,9 @@ class _OnboardingFlowState extends State<OnboardingFlow>
           key: const ValueKey('onboarding-account-submit'),
           label: creating ? 'Create account' : 'Continue',
           tier: AppButtonTier.primary,
+          // The step's one action, so it takes the step's whole width rather
+          // than sitting as a label-width box in a stretched column.
+          expand: true,
           loading: _busy,
           onPressed: _submitAccount,
         ),
