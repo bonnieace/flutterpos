@@ -310,6 +310,7 @@ final class _ShiftHistoryContents extends StatelessWidget {
             key: ValueKey('shift-history-empty'),
             title: 'No closed shifts yet',
             hint: 'A shift appears here once it has been closed.',
+            illustration: 'schedule.svg',
           ),
         ),
         SizedBox(height: tokens.spacing.s16),

@@ -714,7 +714,10 @@ final class _PlatformRejectedTenantScreenState
     if (_items.isEmpty) {
       // No hint and no action: §7 asks for "one sentence on how to create one"
       // and a rejected business is not something anybody here creates.
-      return const EmptyState(title: 'No rejected businesses');
+      return const EmptyState(
+        title: 'No rejected businesses',
+        illustration: 'approve.svg',
+      );
     }
     return RefreshIndicator(
       onRefresh: _reload,

@@ -161,6 +161,7 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
               hint:
                   'A receipt appears here only if it did not reach the '
                   'printer.',
+              illustration: 'printing-invoices.svg',
             ),
             items: <RecordItem>[for (final job in listing.jobs) _item(job)],
           ),

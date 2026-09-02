@@ -187,6 +187,7 @@ final class TenantReportsHubScreen extends StatelessWidget {
                 key: ValueKey('reports-hub-empty'),
                 title: 'No reports are shown for this role',
                 hint: 'An owner, an administrator or a manager can read them.',
+                illustration: 'access-denied.svg',
               ),
             )
           : SingleChildScrollView(

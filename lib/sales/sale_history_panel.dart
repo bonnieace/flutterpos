@@ -331,6 +331,7 @@ final class _SaleHistoryContents extends StatelessWidget {
               key: ValueKey('sale-history-empty'),
               title: 'No sales yet',
               hint: 'A sale appears here once it has been confirmed.',
+              illustration: 'no-data.svg',
             ),
           )
         else

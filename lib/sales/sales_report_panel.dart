@@ -1611,6 +1611,7 @@ final class _ReceiptSearchResult extends StatelessWidget {
         key: ValueKey('sales-receipt-missing'),
         title: 'Receipt not found',
         hint: 'Check the selected date and receipt ending, then try again.',
+        illustration: 'file-search.svg',
       );
     }
     return Column(
@@ -1666,6 +1667,10 @@ final class _SalesPresentation extends StatelessWidget {
         hint: filtered
             ? 'Try another date or staff member.'
             : 'Transactions recorded on this date will appear here.',
+        // A filter that matched nothing and a day that had nothing are
+        // different facts, and section 7 already gives them different words.
+        // They get different drawings for the same reason.
+        illustration: filtered ? 'file-search.svg' : 'no-data.svg',
       );
     }
     final tokens = AppTokens.componentOf(context);

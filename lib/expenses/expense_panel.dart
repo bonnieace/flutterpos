@@ -272,6 +272,7 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
           key: ValueKey('expenses-denied'),
           title: 'Expenses are not shown for this role',
           hint: 'An owner or an administrator can record and review them.',
+          illustration: 'access-denied.svg',
         ),
       ),
       failure: (context, error) => _ExpensesFrame(
@@ -460,6 +461,7 @@ final class _ExpensesContents extends StatelessWidget {
                 ? 'Record rent, wages, fuel or a repair and it counts against '
                       'profit from then on.'
                 : null,
+            illustration: 'empty-wallet.svg',
           ),
         ],
       ],

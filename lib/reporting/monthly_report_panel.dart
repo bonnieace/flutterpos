@@ -327,6 +327,9 @@ final class _MonthlyReportContents extends StatelessWidget {
           key: ValueKey('monthly-report-not-begun'),
           title: 'This month has not started',
           hint: 'Choose a month that has.',
+          // A calendar rather than the empty-read drawing: nothing is
+          // missing here, the month simply has not happened.
+          illustration: 'calendar.svg',
         ),
       );
     }
@@ -336,6 +339,7 @@ final class _MonthlyReportContents extends StatelessWidget {
           key: const ValueKey('monthly-report-empty'),
           title: 'Nothing was recorded in ${report.month.label}',
           hint: 'No sale carries a business date in this month.',
+          illustration: 'no-data.svg',
         ),
       );
     }

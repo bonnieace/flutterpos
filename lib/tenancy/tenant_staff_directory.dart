@@ -984,6 +984,7 @@ final class _StaffManagementContents extends StatelessWidget {
             hint: _hasQuery
                 ? 'Try a different name, email, role, or status.'
                 : 'Invite somebody to give them access to this business.',
+            illustration: _hasQuery ? 'file-search.svg' : 'team.svg',
           ),
           actionsFor: actionsFor,
         ),
