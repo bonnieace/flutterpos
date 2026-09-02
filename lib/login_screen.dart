@@ -557,18 +557,17 @@ class _LoginScreenState extends State<LoginScreen> {
   /// they read as secondary to the submit above without being hard to hit.
   List<Widget> _modeLinks(AppTokens tokens) => switch (_mode) {
     LoginMode.signIn => <Widget>[
-      _ModeLink(
-        key: const ValueKey('login-go-reset'),
-        label: 'I have forgotten my password',
-        onPressed: isLoading
-            ? null
-            : () => _changeMode(LoginMode.resetPassword),
-      ),
-      SizedBox(height: tokens.spacing.s8),
+      // **Signing up is a second way in, not a footnote.** It is the only other
+      // thing a person can do from this screen and it opens a whole flow, so it
+      // reads as a button beside the submit rather than as one more quiet line
+      // under it. Secondary rather than primary: there is exactly one primary
+      // action on a screen and it is *Sign in*.
       if (widget.createAccountRoute != null)
-        _ModeLink(
+        AppButton(
           key: const ValueKey('login-go-register'),
           label: 'Create an account',
+          tier: AppButtonTier.secondary,
+          expand: true,
           onPressed: isLoading ? null : _createAccount,
         ),
     ],
@@ -604,6 +603,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+  /// The two things a person decides about their own sign-in, on one row.
+  ///
+  /// **The reset link sits here rather than under the submit.** It is a
+  /// *credential* question - the same question the password field above it is
+  /// about - and it used to be stacked below the button with "Create an
+  /// account", which put "I cannot get into my account" and "I do not have one"
+  /// in the same list as though they were the same kind of answer.
   Widget _rememberRow(AppTokens tokens) => SizedBox(
     height: tokens.density.minimumTapTarget.height,
     child: Row(
@@ -620,11 +626,29 @@ class _LoginScreenState extends State<LoginScreen> {
           },
         ),
         SizedBox(width: tokens.spacing.s12),
-        Text(
-          'Remember me',
-          style: tokens.typography.bodyMedium.copyWith(
-            color: tokens.colors.text.secondary,
+        // **`Expanded` and no `Spacer`.** With both, the label and the spacer
+        // each took a flex share of the free space and "Remember me" ellipsised
+        // to "Remember ..." on a 360dp handset with room to spare beside it.
+        // The label takes the whole gap instead and gives only when there is
+        // genuinely not enough - the link never shrinks, because shrinking a
+        // target is what hard rule 4 forbids.
+        Expanded(
+          child: Text(
+            'Remember me',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.typography.bodyMedium.copyWith(
+              color: tokens.colors.text.secondary,
+            ),
           ),
+        ),
+        _InlineLink(
+          key: const ValueKey('login-go-reset'),
+          label: 'Forgot password?',
+          tokens: tokens,
+          onPressed: isLoading
+              ? null
+              : () => _changeMode(LoginMode.resetPassword),
         ),
       ],
     ),
@@ -941,6 +965,52 @@ AppNotice _noticeFor(SignInFailure failure) => switch (failure.kind) {
 /// A real button rather than a tappable word inside a sentence: §9 makes the
 /// 48-high tap target pass/fail, and a `TextSpan` recognizer is neither that
 /// tall nor separately reachable by a keyboard or a screen reader.
+/// A quiet control that sits *inside* a row rather than under a button.
+///
+/// **A button, not a tappable word.** Hard rule 4 makes a 48-high target
+/// pass/fail and a span inside a paragraph is neither 48 high nor separately
+/// focusable, which is the same reason [_ModeLink] exists. [PressSurface]
+/// carries the hover, pressed and focus-visible states with it, so this ships
+/// the states hard rule 5 asks for rather than being a coloured label.
+///
+/// **The colour is `text.primary`, which is what "white" is here.** It is pure
+/// `#FFFFFF` under the dark palette and `on-surface` `#D4E7DD` under Profound
+/// Verdant - the brightest ink either theme has. Writing `Colors.white` would
+/// be hard rule 2's hardcoded value and would go on rendering white after a
+/// palette that is not dark arrives.
+final class _InlineLink extends StatelessWidget {
+  const _InlineLink({
+    super.key,
+    required this.label,
+    required this.tokens,
+    required this.onPressed,
+  });
+
+  final String label;
+  final AppTokens tokens;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => PressSurface(
+    borderRadius: BorderRadius.circular(tokens.radius.sm),
+    onPressed: onPressed,
+    minimumTapTarget: tokens.density.minimumTapTarget,
+    hoverOverlay: tokens.colors.action.tertiary.hoverFill(),
+    pressedOverlay: tokens.colors.action.tertiary.pressedFill(),
+    child: Padding(
+      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s8),
+      child: Text(
+        label,
+        style: tokens.typography.bodyMedium.copyWith(
+          color: onPressed == null
+              ? tokens.colors.text.disabled
+              : tokens.colors.text.primary,
+        ),
+      ),
+    ),
+  );
+}
+
 final class _ModeLink extends StatelessWidget {
   const _ModeLink({super.key, required this.label, required this.onPressed});
 
