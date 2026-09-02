@@ -17,19 +17,27 @@ void main() {
       );
 
       final result = await gateway.submit(
-        gateway.createIntent(name: '  Chilltent   West  ', slug: ' WEST-Shop '),
+        gateway.createIntent(
+          name: '  Chilltent   West  ',
+          slug: ' WEST-Shop ',
+          currency: ' tzs ',
+        ),
       );
 
       expect(callable.payloads, [
         {
           'name': 'Chilltent West',
           'slug': 'west-shop',
+          // Normalized to one casing on the way out, the way the name and the
+          // slug already are.
+          'currency': 'TZS',
           'requestId': 'tenant-request-1',
         },
       ]);
       expect(result.tenantId, 'tenant-generated');
       expect(result.name, 'Chilltent West');
       expect(result.slug, 'west-shop');
+      expect(result.currency, 'TZS');
       expect(result.status, TenantStatus.pending);
     });
 
@@ -47,7 +55,11 @@ void main() {
         (name: 'Valid name', slug: 'two--hyphens'),
       ]) {
         expect(
-          () => gateway.createIntent(name: input.name, slug: input.slug),
+          () => gateway.createIntent(
+            name: input.name,
+            slug: input.slug,
+            currency: 'TZS',
+          ),
           throwsArgumentError,
         );
       }
@@ -65,7 +77,11 @@ void main() {
           callable: _RecordingCallable(),
         );
         expect(
-          () => gateway.createIntent(name: 'Valid name', slug: 'valid-slug'),
+          () => gateway.createIntent(
+            name: 'Valid name',
+            slug: 'valid-slug',
+            currency: 'TZS',
+          ),
           throwsStateError,
         );
       }
@@ -85,7 +101,11 @@ void main() {
 
       expect(
         second.submit(
-          first.createIntent(name: 'Business A', slug: 'business-a'),
+          first.createIntent(
+            name: 'Business A',
+            slug: 'business-a',
+            currency: 'TZS',
+          ),
         ),
         throwsStateError,
       );
@@ -106,6 +126,7 @@ void main() {
           'tenantId': 'tenant-a',
           'name': 'Another business',
           'slug': 'business-a',
+          'currency': 'TZS',
           'status': 'pending',
           'provisionalUntil': _provisionalUntilMillis,
         },
@@ -113,6 +134,7 @@ void main() {
           'tenantId': 'tenant-a',
           'name': 'Business A',
           'slug': 'another-slug',
+          'currency': 'TZS',
           'status': 'pending',
           'provisionalUntil': _provisionalUntilMillis,
         },
@@ -120,6 +142,7 @@ void main() {
           'tenantId': 'escape/path',
           'name': 'Business A',
           'slug': 'business-a',
+          'currency': 'TZS',
           'status': 'pending',
           'provisionalUntil': _provisionalUntilMillis,
         },
@@ -127,6 +150,7 @@ void main() {
           'tenantId': 'tenant-a',
           'name': 'Business A',
           'slug': 'business-a',
+          'currency': 'TZS',
           'status': 'pending',
           'extra': true,
         },
@@ -138,7 +162,11 @@ void main() {
         );
         await expectLater(
           gateway.submit(
-            gateway.createIntent(name: 'Business A', slug: 'business-a'),
+            gateway.createIntent(
+            name: 'Business A',
+            slug: 'business-a',
+            currency: 'TZS',
+          ),
           ),
           throwsA(isA<FormatException>()),
         );
@@ -158,8 +186,8 @@ void main() {
     await tester.pump();
     expect(
       find.text(
-        'Submit Chilltent West (chilltent-west-20260830-1645) for platform '
-        'review?',
+        'Submit Chilltent West (chilltent-west-20260830-1645), trading in '
+        'TZS, for platform review?',
       ),
       findsOneWidget,
     );
@@ -179,6 +207,8 @@ void main() {
       'name': 'Chilltent West',
       // Derived from the name and the clock, not typed.
       'slug': 'chilltent-west-20260830-1645',
+      // The select's default, which is the first offered currency.
+      'currency': 'TZS',
       'requestId': 'tenant-widget-request',
     });
     expect(fixture.successes.single.tenantId, 'tenant-generated');
@@ -333,6 +363,7 @@ final class _RecordingCallable implements RequestTenantCallable {
     return _success(
       name: payload['name']! as String,
       slug: payload['slug']! as String,
+      currency: payload['currency']! as String,
     );
   }
 }
@@ -404,7 +435,11 @@ void _provisionalWindowTests() {
     test('is decoded as the instant the server computed', () async {
       final gateway = _gatewayWith(_FixedCallable(_success()));
       final result = await gateway.submit(
-        gateway.createIntent(name: 'Chilltent West', slug: 'chilltent-west'),
+        gateway.createIntent(
+          name: 'Chilltent West',
+          slug: 'chilltent-west',
+          currency: 'TZS',
+        ),
       );
 
       expect(
@@ -426,13 +461,18 @@ void _provisionalWindowTests() {
           'tenantId': 'tenant-generated',
           'name': 'Chilltent West',
           'slug': 'chilltent-west',
+          'currency': 'TZS',
           'status': 'pending',
         }),
       );
 
       await expectLater(
         gateway.submit(
-          gateway.createIntent(name: 'Chilltent West', slug: 'chilltent-west'),
+          gateway.createIntent(
+          name: 'Chilltent West',
+          slug: 'chilltent-west',
+          currency: 'TZS',
+        ),
         ),
         throwsA(isA<FormatException>()),
       );
@@ -452,6 +492,7 @@ void _provisionalWindowTests() {
             gateway.createIntent(
               name: 'Chilltent West',
               slug: 'chilltent-west',
+              currency: 'TZS',
             ),
           ),
           throwsA(isA<FormatException>()),
@@ -464,10 +505,12 @@ void _provisionalWindowTests() {
 Map<String, Object?> _success({
   String name = 'Chilltent West',
   String slug = 'chilltent-west',
+  String currency = 'TZS',
 }) => {
   'tenantId': 'tenant-generated',
   'name': name,
   'slug': slug,
+  'currency': currency,
   'status': 'pending',
   'provisionalUntil': _provisionalUntilMillis,
 };

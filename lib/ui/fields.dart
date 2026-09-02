@@ -733,3 +733,176 @@ final class AppFieldWell extends StatelessWidget {
     );
   }
 }
+
+/// A dialling code and a subscriber number, as one field.
+///
+/// **Two controls, one well, because it is one answer.** A phone number typed
+/// into a single box asks the person to convert what is printed on their SIM
+/// pack - `0712 345 678` - into what E.164 wants - `+255712345678` - which means
+/// dropping a trunk prefix they think of as part of the number and prepending a
+/// country code that is not written anywhere. Most will type what they know and
+/// be refused. Splitting the control moves that conversion into the app.
+///
+/// It draws itself in [AppFieldWell] rather than beside one, so the label, the
+/// helper, the error slot and the focus outline are §5.2's single pattern rather
+/// than a fourth drawing of it - which is what the well being public is for. The
+/// codes are plain [AppSelectItem]s so this shares [AppSelect]'s menu chrome and
+/// its option-level keys.
+final class AppPhoneField extends StatefulWidget {
+  const AppPhoneField({
+    super.key,
+    required this.label,
+    required this.code,
+    required this.codes,
+    required this.onCodeChanged,
+    required this.controller,
+    this.helper,
+    this.error,
+    this.enabled = true,
+    this.onChanged,
+    this.autofocus = false,
+    this.textInputAction,
+    this.onSubmitted,
+  });
+
+  final String label;
+
+  /// The selected dialling code, matching one of [codes] by value.
+  final String code;
+
+  /// The offered codes. The label is the menu row - "Tanzania (+255)" - while
+  /// the collapsed control shows the value alone, so a wide country name never
+  /// squeezes the digits.
+  final List<AppSelectItem<String>> codes;
+
+  final ValueChanged<String?>? onCodeChanged;
+  final TextEditingController controller;
+  final String? helper;
+  final String? error;
+  final bool enabled;
+  final ValueChanged<String>? onChanged;
+  final bool autofocus;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  State<AppPhoneField> createState() => _AppPhoneFieldState();
+}
+
+class _AppPhoneFieldState extends State<AppPhoneField> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    final enabled = widget.enabled;
+    final textStyle = tokens.density
+        .body(tokens.typography)
+        .copyWith(
+          color: enabled ? colors.text.primary : colors.action.disabledLabel,
+        );
+
+    return AppFieldWell(
+      label: widget.label,
+      helper: widget.helper,
+      error: widget.error,
+      enabled: enabled,
+      focused: _focused,
+      child: Focus(
+        onFocusChange: (focused) {
+          // One well, so either half having the keys is the well being focused.
+          // Tracking them separately would flicker the outline as the person
+          // tabs from the code to the digits, which is the opposite of what the
+          // outline is for.
+          if (!mounted || _focused == focused) return;
+          setState(() => _focused = focused);
+        },
+        child: Row(
+          children: <Widget>[
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                key: const ValueKey('phone-dial-code'),
+                value: widget.code,
+                isDense: true,
+                itemHeight: null,
+                focusColor: Colors.transparent,
+                style: textStyle,
+                iconEnabledColor: colors.text.secondary,
+                iconDisabledColor: colors.action.disabledLabel,
+                dropdownColor: colors.surface.overlay,
+                borderRadius: BorderRadius.circular(tokens.radius.md),
+                onChanged: enabled ? widget.onCodeChanged : null,
+                // Collapsed, the control shows the code alone. Expanded, it
+                // shows the country too, because "+255" is only recognisable to
+                // somebody who already knows the answer.
+                selectedItemBuilder: (context) => <Widget>[
+                  for (final item in widget.codes)
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(item.value, style: textStyle),
+                    ),
+                ],
+                items: <DropdownMenuItem<String>>[
+                  for (final item in widget.codes)
+                    DropdownMenuItem<String>(
+                      key: item.key,
+                      value: item.value,
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // A hairline rather than a gap: the two halves are one answer, and
+            // spacing alone reads as two fields that happen to be adjacent.
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s12),
+              child: SizedBox(
+                height: tokens.spacing.s24,
+                child: VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: enabled
+                      ? colors.surface.borderStrong
+                      : colors.action.disabledBorder,
+                ),
+              ),
+            ),
+            Expanded(
+              child: TextField(
+                key: const ValueKey('phone-local-number'),
+                controller: widget.controller,
+                enabled: enabled,
+                autofocus: widget.autofocus,
+                keyboardType: TextInputType.phone,
+                textInputAction: widget.textInputAction,
+                autocorrect: false,
+                enableSuggestions: false,
+                style: textStyle,
+                cursorColor: colors.text.primary,
+                onChanged: widget.onChanged,
+                onSubmitted: widget.onSubmitted,
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedErrorBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  hintText: '712 345 678',
+                  hintStyle: textStyle.copyWith(color: colors.text.tertiary),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

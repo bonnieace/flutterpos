@@ -74,10 +74,12 @@
     "public": "public",
     "cleanUrls": true,
     "trailingSlash": false,
+    "_comment_ignore": "`**/.*` used to be here and it excluded `.well-known/` from every deploy - which is where Android reads assetlinks.json to verify an App Link. The App Link then fails silently: no error, the link simply opens a browser instead of the app. The dotfiles that glob was for are named individually instead.",
     "ignore": [
       "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "**/.git/**",
+      "**/.DS_Store"
     ],
     "headers": [
       {

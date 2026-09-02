@@ -14,6 +14,33 @@ void main() {
       expect(find.byKey(const ValueKey('login-go-sign-in')), findsNothing);
     });
 
+    testWidgets('creating an account opens the signup flow as a route', (
+      tester,
+    ) async {
+      // Signing up stopped being a mode of this screen on 2026-09-02: it takes
+      // a name and a phone the login form never had, and it continues past
+      // verification into creating a business. What this screen still owns is
+      // the door.
+      var opened = 0;
+      await _pump(tester, createAccountRoute: (_) {
+        opened++;
+        return const Placeholder();
+      });
+
+      await _tap(tester, 'login-go-register');
+
+      expect(opened, 1);
+    });
+
+    testWidgets('the door is hidden where there is nowhere to send anybody', (
+      tester,
+    ) async {
+      await _pump(tester, createAccountRoute: null, offerCreateAccount: false);
+
+      expect(find.byKey(const ValueKey('login-go-register')), findsNothing);
+      expect(find.byKey(const ValueKey('login-go-reset')), findsOneWidget);
+    });
+
     testWidgets('the address survives a mode change and the password does not', (
       tester,
     ) async {
@@ -39,111 +66,10 @@ void main() {
     testWidgets('every mode can get back to sign in', (tester) async {
       await _pump(tester);
 
-      for (final key in <String>['login-go-register', 'login-go-reset']) {
-        await _tap(tester, key);
-        expect(find.byKey(const ValueKey('login-go-sign-in')), findsOneWidget);
-        await _tap(tester, 'login-go-sign-in');
-        expect(find.byKey(const ValueKey('login-go-register')), findsOneWidget);
-      }
-    });
-  });
-
-  group('creating an account', () {
-    testWidgets('asks for the password twice', (tester) async {
-      await _pump(tester);
-      await _tap(tester, 'login-go-register');
-
-      expect(find.byKey(const ValueKey('login-password')), findsOneWidget);
-      expect(find.byKey(const ValueKey('login-confirm')), findsOneWidget);
-      expect(find.text('Create account'), findsOneWidget);
-    });
-
-    testWidgets('a mistyped confirmation never reaches the boundary', (
-      tester,
-    ) async {
-      final registration = _Registration();
-      await _pump(tester, registration: registration);
-      await _tap(tester, 'login-go-register');
-      await _fill(tester, password: 'hunter22', confirmation: 'hunter2');
-
-      await _tap(tester, 'login-submit');
-
-      expect(registration.attempts, isEmpty);
-      expect(find.text('The two passwords are not the same.'), findsOneWidget);
-    });
-
-    testWidgets('a password under the minimum never reaches it either', (
-      tester,
-    ) async {
-      final registration = _Registration();
-      await _pump(tester, registration: registration);
-      await _tap(tester, 'login-go-register');
-      await _fill(tester, password: 'short', confirmation: 'short');
-
-      await _tap(tester, 'login-submit');
-
-      expect(registration.attempts, isEmpty);
-      expect(find.textContaining('at least'), findsOneWidget);
-    });
-
-    testWidgets('a good pair reaches the boundary with a trimmed address', (
-      tester,
-    ) async {
-      final registration = _Registration();
-      await _pump(tester, registration: registration);
-      await _tap(tester, 'login-go-register');
-      await _fill(
-        tester,
-        email: '  owner@example.com  ',
-        password: 'hunter22',
-        confirmation: 'hunter22',
-      );
-
-      await _tapWithoutSettling(tester, 'login-submit');
-
-      expect(registration.attempts, hasLength(1));
-      expect(registration.attempts.single.email, 'owner@example.com');
-      // Not trimmed: a space is a character a password may contain.
-      expect(registration.attempts.single.password, 'hunter22');
-    });
-
-    testWidgets('an address already in use says what to do next', (
-      tester,
-    ) async {
-      await _pump(
-        tester,
-        registration: _Registration(
-          failure: const RegistrationException('email-already-in-use'),
-        ),
-      );
-      await _tap(tester, 'login-go-register');
-      await _fill(tester, password: 'hunter22', confirmation: 'hunter22');
-
-      await _tap(tester, 'login-submit');
-      await tester.pump();
-
-      expect(find.textContaining('already uses'), findsOneWidget);
-    });
-
-    testWidgets('no raw channel error can reach the screen', (tester) async {
-      // The property the boundary exists for, asserted at the screen: anything
-      // that is not a `RegistrationException` becomes a written sentence.
-      await _pump(
-        tester,
-        registration: _Registration(
-          failure: StateError(
-            'dev.flutter.pigeon.FirebaseAuthHostApi.createUser',
-          ),
-        ),
-      );
-      await _tap(tester, 'login-go-register');
-      await _fill(tester, password: 'hunter22', confirmation: 'hunter22');
-
-      await _tap(tester, 'login-submit');
-      await tester.pump();
-
-      expect(find.textContaining('dev.flutter.pigeon'), findsNothing);
-      expect(find.textContaining('could not be created'), findsOneWidget);
+      await _tap(tester, 'login-go-reset');
+      expect(find.byKey(const ValueKey('login-go-sign-in')), findsOneWidget);
+      await _tap(tester, 'login-go-sign-in');
+      expect(find.byKey(const ValueKey('login-go-register')), findsOneWidget);
     });
   });
 
@@ -154,7 +80,6 @@ void main() {
 
       expect(find.byKey(const ValueKey('login-email')), findsOneWidget);
       expect(find.byKey(const ValueKey('login-password')), findsNothing);
-      expect(find.byKey(const ValueKey('login-confirm')), findsNothing);
     });
 
     testWidgets('an empty address is refused before the server is asked', (
@@ -231,7 +156,8 @@ void main() {
 
 Future<void> _pump(
   WidgetTester tester, {
-  EmailPasswordRegistration? registration,
+  WidgetBuilder? createAccountRoute,
+  bool offerCreateAccount = true,
   RequestPasswordResetCallable? passwordReset,
 }) async {
   tester.view.physicalSize = const Size(500, 1600);
@@ -244,7 +170,9 @@ Future<void> _pump(
       theme: spiritTheme,
       home: LoginScreen(
         signIn: _SignIn(),
-        registration: registration ?? _Registration(),
+        createAccountRoute: offerCreateAccount
+            ? (createAccountRoute ?? (_) => const Placeholder())
+            : null,
         passwordReset: passwordReset ?? _ResetCallable(),
       ),
     ),
@@ -258,37 +186,16 @@ Future<void> _tap(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
 }
 
-/// Taps without settling.
-///
-/// **A successful submit never settles, deliberately.** Both sign-in and
-/// registration stay loading on success, because the routing shell replaces
-/// this screen once the session opens and releasing the button first would
-/// offer a second attempt against one already in flight. So the spinner is
-/// still turning when the assertion runs, and `pumpAndSettle` would wait for a
-/// screen that is meant never to come back.
-Future<void> _tapWithoutSettling(WidgetTester tester, String key) async {
-  await tester.ensureVisible(find.byKey(ValueKey(key)));
-  await tester.tap(find.byKey(ValueKey(key)));
-  await tester.pump();
-}
-
 Future<void> _fill(
   WidgetTester tester, {
   String email = 'owner@example.com',
   String? password,
-  String? confirmation,
 }) async {
   await tester.enterText(find.byKey(const ValueKey('login-email')), email);
   if (password != null) {
     await tester.enterText(
       find.byKey(const ValueKey('login-password')),
       password,
-    );
-  }
-  if (confirmation != null) {
-    await tester.enterText(
-      find.byKey(const ValueKey('login-confirm')),
-      confirmation,
     );
   }
   await tester.pump();
@@ -301,27 +208,6 @@ final class _SignIn implements EmailPasswordSignIn {
     required String password,
     required bool remember,
   }) async {}
-}
-
-final class _RegistrationAttempt {
-  const _RegistrationAttempt({required this.email, required this.password});
-
-  final String email;
-  final String password;
-}
-
-final class _Registration implements EmailPasswordRegistration {
-  _Registration({this.failure});
-
-  final Object? failure;
-  final List<_RegistrationAttempt> attempts = <_RegistrationAttempt>[];
-
-  @override
-  Future<void> call({required String email, required String password}) async {
-    attempts.add(_RegistrationAttempt(email: email, password: password));
-    final thrown = failure;
-    if (thrown != null) throw thrown;
-  }
 }
 
 final class _ResetCallable implements RequestPasswordResetCallable {

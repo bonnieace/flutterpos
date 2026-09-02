@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/login_screen.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/widgets/pos_keyboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -134,6 +135,7 @@ List<TenantMembership> _selectorMemberships() => <TenantMembership>[
 ];
 
 void main() {
+  onboardingScreenshots();
   screenshotCase(
     '01-sign-in',
     build: () => const LoginScreen(),
@@ -277,4 +279,127 @@ void main() {
       viewports: responsiveViewports,
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Signing up
+// ---------------------------------------------------------------------------
+//
+// **Four pictures of one flow**, which is the point of it. Before 2026-09-02
+// these states were spread across the login screen's register mode and two
+// panels bolted to the business selector, and the harness had a picture of
+// none of them. What the images can show is each step's layout, its progress
+// header and the states its controls can be in. What they cannot show is the
+// thing the flow is actually about: that leaving for a mailbox and coming back
+// advances it without a tap. That needs a device.
+
+final class _CaptureComplete implements CompleteSelfSignupCallable {
+  const _CaptureComplete();
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async => <String, Object?>{
+    'displayName': payload['displayName'],
+    'phone': payload['phone'],
+  };
+}
+
+final class _CaptureChangeEmail implements ChangeSignupEmailCallable {
+  const _CaptureChangeEmail();
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async => <String, Object?>{
+    'email': payload['email'],
+  };
+}
+
+final class _CaptureRequestTenant implements RequestTenantCallable {
+  const _CaptureRequestTenant();
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async => <String, Object?>{
+    'tenantId': 'tenant-generated',
+    'name': payload['name'],
+    'slug': payload['slug'],
+    'currency': payload['currency'],
+    'status': 'pending',
+    'provisionalUntil': 1788339600000,
+  };
+}
+
+Widget _onboarding(OnboardingIdentity identity) => MaterialApp(
+  theme: spiritTheme,
+  home: OnboardingFlow(
+    readIdentity: () => identity,
+    reloadIdentity: () async {},
+    onSignOut: () async {},
+    onOpenBusiness: (_) {},
+    completeSelfSignupCallable: const _CaptureComplete(),
+    changeSignupEmailCallable: const _CaptureChangeEmail(),
+    requestTenantCallable: const _CaptureRequestTenant(),
+    accountProfileRequestIdFactory: () => 'profile-capture-000000',
+    tenantRequestIdFactory: () => 'tenant-capture-000000',
+    clock: () => DateTime.utc(2026, 8, 30, 16, 45),
+  ),
+);
+
+const OnboardingIdentity _namedIdentity = OnboardingIdentity(
+  uid: 'user-a',
+  email: 'boniface@example.com',
+  displayName: 'Boniface Masota',
+  phone: '+255712345678',
+  profile: RootRoutingProfile(
+    accountType: RootAccountType.tenantUser,
+    globalStatus: 'active',
+  ),
+);
+
+void onboardingScreenshots() {
+  screenshotCase(
+    '10-onboarding-about-you',
+    settle: false,
+    build: () => _onboarding(const OnboardingIdentity()),
+  );
+
+  screenshotCase(
+    '11-onboarding-verify',
+    settle: false,
+    build: () => _onboarding(_namedIdentity),
+  );
+
+  // The one state that only exists after somebody presses something, which is
+  // the class the harness has historically had no picture of.
+  screenshotCase(
+    '11b-onboarding-verify-wrong-address',
+    settle: false,
+    build: () => _onboarding(_namedIdentity),
+    afterPump: (tester) async {
+      // The step scrolls at the narrow viewports, so the control has to be
+      // brought into view before it can be pressed - otherwise the tap lands
+      // on whatever is painted at that point and the capture is of the
+      // unopened state.
+      final reveal = find.byKey(const ValueKey('onboarding-verify-change-email'));
+      await tester.ensureVisible(reveal);
+      await tester.pump();
+      await tester.tap(reveal);
+      await tester.pump();
+    },
+  );
+
+  screenshotCase(
+    '12-onboarding-business',
+    settle: false,
+    build: () => _onboarding(
+      const OnboardingIdentity(
+        uid: 'user-a',
+        email: 'boniface@example.com',
+        emailVerified: true,
+        displayName: 'Boniface Masota',
+        phone: '+255712345678',
+        profile: RootRoutingProfile(
+          accountType: RootAccountType.tenantUser,
+          globalStatus: 'active',
+        ),
+      ),
+    ),
+  );
 }

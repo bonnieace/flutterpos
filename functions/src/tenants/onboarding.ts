@@ -28,6 +28,7 @@ const TENANT_NAME_MAX_LENGTH = 100;
 const TENANT_SLUG_MIN_LENGTH = 3;
 const TENANT_SLUG_MAX_LENGTH = 48;
 const TENANT_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/;
+const TENANT_CURRENCY_PATTERN = /^[A-Z]{3}$/;
 const REQUEST_WINDOW_MILLISECONDS = 24 * 60 * 60 * 1000;
 
 /**
@@ -47,6 +48,7 @@ const PROVISIONAL_WINDOW_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
 interface RequestTenantRequest {
   name?: unknown;
   slug?: unknown;
+  currency?: unknown;
   requestId?: unknown;
 }
 
@@ -54,6 +56,7 @@ interface RequestTenantResponse {
   tenantId: string;
   name: string;
   slug: string;
+  currency: string;
   status: "pending";
 }
 
@@ -80,6 +83,45 @@ function normalizeTenantSlug(value: unknown): string {
     );
   }
   return slug;
+}
+
+/**
+ * The ISO 4217 code the new business will trade in.
+ *
+ * **Asked for at creation because the alternative is a till that refuses every
+ * sale.** `TenantCheckoutConfiguration` fails closed on a missing or malformed
+ * currency and `tenant_setup_checklist.dart` exists to explain that state to a
+ * brand-new owner - so a business born without one is born broken, and the
+ * checklist's first item is an apology for this parameter not existing.
+ *
+ * The rule is deliberately the same one
+ * `TenantCheckoutConfigurationPublisher.buildUpdateIntent` applies on the client:
+ * three letters, upper-cased, because an ISO 4217 code has exactly one casing
+ * and `kes` is a spelling of `KES` rather than a different setting.
+ */
+function normalizeTenantCurrency(value: unknown): string {
+  const currency = requireString(value, "currency", {
+    minLength: 3,
+    maxLength: 3,
+  }).toUpperCase();
+  if (!TENANT_CURRENCY_PATTERN.test(currency)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "currency must be a three-letter ISO 4217 code."
+    );
+  }
+  return currency;
+}
+
+/**
+ * The owner's own number, or an empty string where there is not one to copy.
+ *
+ * Absent on every account created before signup asked for a phone, which is why
+ * this degrades to the `""` this field held unconditionally until now rather
+ * than refusing the request.
+ */
+function ownerPhone(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function advisoryCounter(value: unknown): number {
@@ -126,6 +168,7 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
     const data = requireObject(request.data);
     const name = normalizeTenantName(data.name);
     const slug = normalizeTenantSlug(data.slug);
+    const currency = normalizeTenantCurrency(data.currency);
     const requestId = requireRequestId(data.requestId);
     const db = getFirestore();
     const tenantRef = db.collection("tenants").doc();
@@ -141,7 +184,7 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
       actorUid: auth.uid,
       operation: "requestTenant",
       requestId,
-      input: {name, slug},
+      input: {name, slug, currency},
     }, async (transaction) => {
       // Root eligibility is checked transactionally so identityTransition cannot
       // race this tenant creation.
@@ -199,6 +242,7 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
       const tokenName = typeof auth.token.name === "string" ? auth.token.name : "";
       const ownerName = (applicant.user.displayName ?? tokenName).trim();
       const staffRef = tenantRef.collection("staff").doc(applicant.uid);
+      const checkoutRef = tenantRef.collection("configuration").doc("checkout");
       const mirrorRef = userRef.collection("tenant_memberships").doc(tenantRef.id);
       const lifecycleRef = tenantRef.collection("lifecycle_history").doc(requestId);
       const auditRef = tenantRef.collection("audit_logs").doc(requestId);
@@ -218,11 +262,20 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
+      // Exactly the keys the client publisher writes - `currency` and
+      // `updatedBy` from `documentData()`, plus the server `updatedAt` its
+      // writer adds - so the strict read model parses this and the settings
+      // screen replaces it without noticing it was seeded rather than typed.
+      transaction.create(checkoutRef, {
+        currency,
+        updatedBy: applicant.uid,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
       transaction.create(staffRef, {
         uid: applicant.uid,
         email: ownerEmail,
         name: ownerName,
-        phone: "",
+        phone: ownerPhone(applicant.user.phone),
         role: "owner",
         status: "active",
         invitationStatus: "accepted",
@@ -299,6 +352,7 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
         tenantId: tenantRef.id,
         name,
         slug,
+        currency,
         status: "pending",
         provisionalUntil: provisionalUntil.toMillis(),
       };

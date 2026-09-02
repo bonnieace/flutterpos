@@ -47,3 +47,6 @@ export 'tenant_staff_update.dart';
 export 'tenant_switch.dart';
 export 'tenant_types.dart';
 export 'tenant_visible_invitation_acceptance.dart';
+export 'account_profile.dart';
+export 'onboarding_flow.dart';
+export 'phone_number.dart';

@@ -11,6 +11,8 @@ final class RootRoutingProfile {
     required this.accountType,
     required this.globalStatus,
     this.defaultTenantId,
+    this.displayName,
+    this.phone,
   });
 
   factory RootRoutingProfile.fromJson(Map<String, Object?> json) {
@@ -39,6 +41,8 @@ final class RootRoutingProfile {
       accountType: accountType,
       globalStatus: globalStatus as String,
       defaultTenantId: defaultTenantId,
+      displayName: _optionalText(json['displayName']),
+      phone: _optionalText(json['phone']),
     );
   }
 
@@ -46,7 +50,23 @@ final class RootRoutingProfile {
   final String globalStatus;
   final String? defaultTenantId;
 
+  /// The person's own name, or null where signup never captured one.
+  ///
+  /// **Absent on every account created before signup asked**, which is why it is
+  /// read leniently and is nullable rather than required: a profile that refused
+  /// to parse without it would lock every existing account out of routing. Its
+  /// absence is what sends somebody back to the first onboarding step to supply
+  /// it, so an old account resumes rather than being stranded.
+  final String? displayName;
+
+  /// The person's own number in E.164, or null for the same reason.
+  final String? phone;
+
   bool get isActive => globalStatus == 'active';
+
+  /// Whether signup ever finished collecting who this is.
+  bool get hasCompleteProfile =>
+      (displayName?.isNotEmpty ?? false) && (phone?.isNotEmpty ?? false);
 
   Map<String, Object?> toJson() => <String, Object?>{
     'accountType': switch (accountType) {
@@ -55,7 +75,20 @@ final class RootRoutingProfile {
     },
     'globalStatus': globalStatus,
     if (defaultTenantId != null) 'defaultTenantId': defaultTenantId,
+    if (displayName != null) 'displayName': displayName,
+    if (phone != null) 'phone': phone,
   };
+}
+
+/// A string field that is allowed to be missing, blank, or the wrong type.
+///
+/// Anything unusable reads as null rather than raising, because these two fields
+/// are profile data on a document whose job is routing: a malformed name must
+/// never be the reason somebody cannot reach their own till.
+String? _optionalText(Object? value) {
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
 }
 
 abstract interface class RootRoutingGateway {

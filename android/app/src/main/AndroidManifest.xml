@@ -37,6 +37,36 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!--
+              **Coming back from the mailbox.** The verification link is minted
+              with `handleCodeInApp: false`, so Firebase's own hosted handler
+              consumes the oobCode and *then* redirects to the continue URL -
+              which means by the time this filter fires the address is already
+              verified and the app has nothing to parse. Its only job is to
+              bring the app to the foreground; `OnboardingFlow`'s resume
+              listener notices the verification and moves the step on.
+
+              That is also why there is no deep-link package and no oobCode
+              handling in Dart: adding either would be a second implementation
+              of something Firebase has already done.
+
+              `autoVerify` needs `/.well-known/assetlinks.json` served from each
+              host below, holding this app's signing SHA-256. A device without
+              the app installed follows the same URL to `public/auth/verified`
+              and reads the page instead, which is the fallback rather than an
+              error path.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="multitenant-pos-b8326.web.app"
+                      android:path="/auth/verified"/>
+                <data android:scheme="https"
+                      android:host="swahilipro.com"
+                      android:path="/auth/verified"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

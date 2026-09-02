@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'login_screen.dart';
+import 'tenancy/onboarding_flow.dart';
 import 'tenancy/tenancy.dart';
 import 'theme.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
@@ -506,6 +507,10 @@ class SpiritPOSApp extends StatelessWidget {
         // Reloading is the only way the app can observe a verification it did
         // not itself perform, which is what makes "I have verified" honest.
         reloadIdentity: () async => FirebaseAuth.instance.currentUser?.reload(),
+        // The address the verify step names, read from Auth rather than from
+        // the root document - the document holds a mirror of it, and after a
+        // change in place the mirror is the half that can lag.
+        readEmail: () => FirebaseAuth.instance.currentUser?.email,
         // Turns a silent non-delivery into a stated one. Without it a user
         // whose address is suppressed sees the request accepted and taps send
         // again indefinitely.
@@ -929,7 +934,35 @@ class SpiritPOSApp extends StatelessWidget {
         // invitation has no display name until somebody types one.
         memberName: () => FirebaseAuth.instance.currentUser?.displayName,
         signOut: FirebaseAuth.instance.signOut,
-        signedOut: const LoginScreen(),
+        // **Signing up is a route this screen opens, not a mode inside it.**
+        // The wizard is pushed above the shell, so account creation - which
+        // signs the new identity in and makes the shell rebuild underneath -
+        // does not tear the flow down mid-way through it. It pops when the
+        // business is open, revealing a shell that has already routed there.
+        signedOut: LoginScreen(
+          createAccountRoute: (context) => OnboardingFlow(
+            readIdentity: () {
+              final user = FirebaseAuth.instance.currentUser;
+              return OnboardingIdentity(
+                uid: user?.uid,
+                email: user?.email,
+                emailVerified: user?.emailVerified ?? false,
+                // Deliberately not read from Firestore: a fresh signup has no
+                // root document to read until the blocking function has
+                // written one, and what this flow has just saved it already
+                // knows. See `OnboardingFlow._savedDisplayName`.
+                displayName: user?.displayName,
+                phone: null,
+              );
+            },
+            reloadIdentity: () async =>
+                FirebaseAuth.instance.currentUser?.reload(),
+            onSignOut: FirebaseAuth.instance.signOut,
+            // Popping reveals the routing shell, which re-bootstrapped when the
+            // business was created and has already opened it.
+            onOpenBusiness: (_) => Navigator.of(context).pop(),
+          ),
+        ),
       ),
     );
   }

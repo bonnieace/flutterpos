@@ -81,12 +81,16 @@ final class TenantRequestIntent {
     required this.uid,
     required this.name,
     required this.slug,
+    required this.currency,
     required this.requestId,
   });
 
   final String uid;
   final String name;
   final String slug;
+
+  /// The ISO 4217 code the business will trade in from its first minute.
+  final String currency;
   final String requestId;
 }
 
@@ -95,6 +99,7 @@ final class TenantRequestResult {
     required this.tenantId,
     required this.name,
     required this.slug,
+    required this.currency,
     required this.provisionalUntil,
   });
 
@@ -102,8 +107,16 @@ final class TenantRequestResult {
     Object? value, {
     required String expectedName,
     required String expectedSlug,
+    required String expectedCurrency,
   }) {
-    const keys = {'tenantId', 'name', 'slug', 'status', 'provisionalUntil'};
+    const keys = {
+      'tenantId',
+      'name',
+      'slug',
+      'currency',
+      'status',
+      'provisionalUntil',
+    };
     if (value is! Map || value.length != keys.length) {
       throw const FormatException(
         'requestTenant response must contain the expected fields.',
@@ -122,6 +135,7 @@ final class TenantRequestResult {
     if (data['tenantId'] is! String ||
         data['name'] is! String ||
         data['slug'] is! String ||
+        data['currency'] is! String ||
         data['status'] != 'pending' ||
         data['provisionalUntil'] is! int) {
       throw const FormatException('requestTenant returned an invalid result.');
@@ -137,20 +151,25 @@ final class TenantRequestResult {
     late final String tenantId;
     late final String name;
     late final String slug;
+    late final String currency;
     try {
       tenantId = validateTenantId(data['tenantId']! as String);
       name = normalizeTenantRequestName(data['name']! as String);
       slug = normalizeTenantRequestSlug(data['slug']! as String);
+      currency = normalizeTenantRequestCurrency(data['currency']! as String);
     } on ArgumentError {
       throw const FormatException('requestTenant returned an invalid result.');
     }
-    if (name != expectedName || slug != expectedSlug) {
+    if (name != expectedName ||
+        slug != expectedSlug ||
+        currency != expectedCurrency) {
       throw const FormatException('requestTenant returned another business.');
     }
     return TenantRequestResult._(
       tenantId: tenantId,
       name: name,
       slug: slug,
+      currency: currency,
       provisionalUntil: provisionalUntil,
     );
   }
@@ -158,6 +177,11 @@ final class TenantRequestResult {
   final String tenantId;
   final String name;
   final String slug;
+
+  /// What the business trades in, already published at `configuration/checkout`
+  /// by the same transaction that created it - so the till can price a sale
+  /// before anybody has opened Settings.
+  final String currency;
 
   /// When the provisional trading window shuts, in UTC.
   ///
@@ -183,12 +207,14 @@ final class TenantRequestGateway {
   TenantRequestIntent createIntent({
     required String name,
     required String slug,
+    required String currency,
   }) {
     if (!_identity.canRequestTenant) {
       throw StateError('This identity cannot request a tenant.');
     }
     final normalizedName = normalizeTenantRequestName(name);
     final normalizedSlug = normalizeTenantRequestSlug(slug);
+    final normalizedCurrency = normalizeTenantRequestCurrency(currency);
     final requestId = _requestIdFactory();
     if (!_tenantRequestIdPattern.hasMatch(requestId)) {
       throw StateError('The tenant request ID generator is invalid.');
@@ -197,6 +223,7 @@ final class TenantRequestGateway {
       uid: _identity.uid,
       name: normalizedName,
       slug: normalizedSlug,
+      currency: normalizedCurrency,
       requestId: requestId,
     );
   }
@@ -208,23 +235,41 @@ final class TenantRequestGateway {
     final response = await _callable.call(<String, Object?>{
       'name': intent.name,
       'slug': intent.slug,
+      'currency': intent.currency,
       'requestId': intent.requestId,
     });
     return TenantRequestResult.fromCallable(
       response,
       expectedName: intent.name,
       expectedSlug: intent.slug,
+      expectedCurrency: intent.currency,
     );
   }
 }
 
+/// The one form that creates a business, wherever a business is being created.
+///
+/// **Two hosts, one widget, deliberately.** It is the third step of onboarding
+/// and it is the panel behind *Request business* on the selector, and those are
+/// the same act: an owner making their second shop answers the same questions as
+/// somebody making their first. Two forms would be two places for the currency
+/// to be forgotten, and forgetting it is what `tenant_setup_checklist.dart`
+/// exists to apologise for.
+///
+/// [heading], [description] and the button labels are the only difference
+/// between the hosts, because the only difference between the hosts is what the
+/// person is in the middle of.
 final class TenantRequestForm extends StatefulWidget {
   const TenantRequestForm({
     super.key,
     required this.identity,
     required this.callable,
     required this.onSuccess,
-    required this.onCancel,
+    this.onCancel,
+    this.heading = 'Request a business',
+    this.description = 'New businesses remain pending until platform review.',
+    this.reviewLabel = 'Review request',
+    this.submitLabel = 'Submit request',
     this.requestIdFactory,
     this.isCurrent,
     this.clock,
@@ -233,7 +278,16 @@ final class TenantRequestForm extends StatefulWidget {
   final TenantRequestIdentity identity;
   final RequestTenantCallable callable;
   final ValueChanged<TenantRequestResult> onSuccess;
-  final VoidCallback onCancel;
+
+  /// Null where there is nowhere to go back to - the onboarding step has no
+  /// screen behind it, so it offers no Cancel. *Back* out of the confirmation
+  /// is offered either way, because that one returns to this form.
+  final VoidCallback? onCancel;
+
+  final String heading;
+  final String description;
+  final String reviewLabel;
+  final String submitLabel;
   final TenantRequestIdFactory? requestIdFactory;
   final TenantRequestCurrentCheck? isCurrent;
 
@@ -248,6 +302,8 @@ final class TenantRequestForm extends StatefulWidget {
 final class _TenantRequestFormState extends State<TenantRequestForm> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _otherCurrencyController = TextEditingController();
+  String _currencySelection = tenantRequestCurrencies.first;
   TenantRequestIntent? _intent;
   bool _confirming = false;
   bool _submitting = false;
@@ -268,7 +324,27 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
   @override
   void dispose() {
     _nameController.dispose();
+    _otherCurrencyController.dispose();
     super.dispose();
+  }
+
+  /// What the two currency controls mean together.
+  ///
+  /// The select holds the answer unless it holds the sentinel, in which case the
+  /// field beneath it does. Both ends normalize through the same function, so
+  /// `kes` typed into the field is the `KES` the list would have given.
+  String get _currency => _currencySelection == tenantRequestOtherCurrency
+      ? _otherCurrencyController.text
+      : _currencySelection;
+
+  String? _validateCurrency() {
+    if (_currencySelection != tenantRequestOtherCurrency) return null;
+    try {
+      normalizeTenantRequestCurrency(_otherCurrencyController.text);
+      return null;
+    } on ArgumentError {
+      return 'Enter a three-letter ISO 4217 code, such as ZMW.';
+    }
   }
 
   void _fieldChanged(String _) {
@@ -286,6 +362,12 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
   void _review() {
     if (_submitting || !_isCurrent()) return;
     if (!_formKey.currentState!.validate()) return;
+    // The free-text currency is outside the `Form`, because it is only
+    // sometimes there at all; validating it here keeps one refusal path.
+    if (_validateCurrency() != null) {
+      setState(() {});
+      return;
+    }
     try {
       final gateway = _gateway();
       final intent = gateway.createIntent(
@@ -295,6 +377,7 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
           _nameController.text,
           (widget.clock ?? DateTime.now)().toUtc(),
         ),
+        currency: _currency,
       );
       setState(() {
         _intent = intent;
@@ -354,9 +437,9 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeading('Request a business'),
+          SectionHeading(widget.heading),
           SizedBox(height: tokens.spacing.s8),
-          const Text('New businesses remain pending until platform review.'),
+          Text(widget.description),
           SizedBox(height: tokens.spacing.s16),
           AppTextField(
             key: const ValueKey('tenant-request-name'),
@@ -367,11 +450,55 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
             onChanged: _fieldChanged,
             validator: (value) => _validateName(value ?? ''),
           ),
+          SizedBox(height: tokens.spacing.s16),
+          AppSelect<String>(
+            key: const ValueKey('tenant-request-currency'),
+            label: 'Currency',
+            value: _currencySelection,
+            enabled: !_submitting,
+            helper: 'Every sale is recorded in this currency.',
+            items: [
+              for (final code in tenantRequestCurrencies)
+                AppSelectItem<String>(
+                  key: ValueKey('tenant-request-currency-$code'),
+                  value: code,
+                  label: '$code - ${_currencyNames[code] ?? code}',
+                ),
+              const AppSelectItem<String>(
+                key: ValueKey('tenant-request-currency-other'),
+                value: tenantRequestOtherCurrency,
+                label: 'Something else',
+              ),
+            ],
+            onChanged: _submitting
+                ? null
+                : (value) => setState(() {
+                    _currencySelection = value ?? _currencySelection;
+                    _resetIntent();
+                  }),
+          ),
+          if (_currencySelection == tenantRequestOtherCurrency) ...[
+            SizedBox(height: tokens.spacing.s12),
+            AppTextField(
+              key: const ValueKey('tenant-request-currency-code'),
+              controller: _otherCurrencyController,
+              enabled: !_submitting,
+              label: 'ISO 4217 currency code',
+              helper: 'Three letters, such as ZMW, MWK, or ETB.',
+              error: _validateCurrency(),
+              maxLength: 3,
+              textCapitalization: TextCapitalization.characters,
+              autocorrect: false,
+              enableSuggestions: false,
+              onChanged: _fieldChanged,
+            ),
+          ],
 
           if (_confirming && _intent != null) ...[
             SizedBox(height: tokens.spacing.s16),
             Text(
-              'Submit ${_intent!.name} (${_intent!.slug}) for platform review?',
+              'Submit ${_intent!.name} (${_intent!.slug}), trading in '
+              '${_intent!.currency}, for platform review?',
               key: const ValueKey('tenant-request-confirmation'),
             ),
           ],
@@ -390,27 +517,29 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              AppButton(
-                key: const ValueKey('tenant-request-cancel'),
-                label: _confirming ? 'Back' : 'Cancel',
-                tier: AppButtonTier.tertiary,
-                onPressed: _submitting
-                    ? null
-                    : _confirming
-                    ? () => setState(() {
-                        _confirming = false;
-                        _safeError = null;
-                      })
-                    : widget.onCancel,
-              ),
-              SizedBox(width: tokens.spacing.s8),
+              if (_confirming || widget.onCancel != null) ...[
+                AppButton(
+                  key: const ValueKey('tenant-request-cancel'),
+                  label: _confirming ? 'Back' : 'Cancel',
+                  tier: AppButtonTier.tertiary,
+                  onPressed: _submitting
+                      ? null
+                      : _confirming
+                      ? () => setState(() {
+                          _confirming = false;
+                          _safeError = null;
+                        })
+                      : widget.onCancel,
+                ),
+                SizedBox(width: tokens.spacing.s8),
+              ],
               AppButton(
                 key: ValueKey(
                   _confirming
                       ? 'tenant-request-confirm'
                       : 'tenant-request-review',
                 ),
-                label: _confirming ? 'Submit request' : 'Review request',
+                label: _confirming ? widget.submitLabel : widget.reviewLabel,
                 icon: Icons.add_business_outlined,
                 tier: AppButtonTier.primary,
                 loading: _submitting,
@@ -422,6 +551,44 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
       ),
     );
   }
+}
+
+/// The offered currencies, most likely first.
+///
+/// **A short list rather than every ISO 4217 code**, because somebody setting up
+/// a shop is choosing between the few their customers pay in, and a list of 180
+/// is a worse question than a text field. [tenantRequestOtherCurrency] is the
+/// escape hatch for everybody else and it validates identically - so the list is
+/// a convenience over the field, never a restriction on it.
+const List<String> tenantRequestCurrencies = <String>[
+  'TZS',
+  'KES',
+  'UGX',
+  'RWF',
+];
+
+/// What the currency select holds while the free-text field is the real answer.
+const String tenantRequestOtherCurrency = 'other';
+
+/// The same rule `TenantCheckoutConfigurationPublisher.buildUpdateIntent`
+/// applies, because this writes the document that one replaces.
+const Map<String, String> _currencyNames = <String, String>{
+  'TZS': 'Tanzanian shilling',
+  'KES': 'Kenyan shilling',
+  'UGX': 'Ugandan shilling',
+  'RWF': 'Rwandan franc',
+};
+
+String normalizeTenantRequestCurrency(String value) {
+  final currency = value.trim().toUpperCase();
+  if (!_tenantCurrencyPattern.hasMatch(currency)) {
+    throw ArgumentError.value(
+      value,
+      'currency',
+      'Must be a three-letter ISO 4217 code.',
+    );
+  }
+  return currency;
 }
 
 String normalizeTenantRequestName(String value) {
@@ -537,4 +704,5 @@ String _secureTenantRequestId() {
 }
 
 final _tenantSlugPattern = RegExp(r'^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$');
+final _tenantCurrencyPattern = RegExp(r'^[A-Z]{3}$');
 final _tenantRequestIdPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$');
