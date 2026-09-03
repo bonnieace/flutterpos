@@ -87,20 +87,13 @@ final class _TenantCheckoutConfigurationPanelState
     extends State<TenantCheckoutConfigurationPanel> {
   int _generation = 0;
   bool _busy = false;
-  AppNotice? _notice;
 
-  /// Reports one write outcome, on the surface its kind belongs to.
+  /// Reports one write outcome, over the screen rather than inside the page.
   ///
-  /// See `noticeIsTransient`: a confirmation withdraws itself, and everything
-  /// that names a next step stays where it was drawn.
-  void _report(AppNotice notice) {
-    if (noticeIsTransient(notice)) {
-      showAppSnackBar(context, notice);
-      return;
-    }
-    setState(() => _notice = notice);
-  }
-
+  /// See `showAppSnackBar`: since 2026-09-03 every outcome goes there, and
+  /// inline text is left to the one thing it is still right for - a field
+  /// saying what is wrong with what was typed into it.
+  void _report(AppNotice notice) => showAppSnackBar(context, notice);
 
   /// Restarts the guarded read, so what is shown is the server's own document
   /// rather than the value that was just typed.
@@ -143,7 +136,6 @@ final class _TenantCheckoutConfigurationPanelState
 
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final result = await writer.publish(intent);
@@ -200,16 +192,16 @@ final class _TenantCheckoutConfigurationPanelState
 
   /// One loader per guard key, cached so a `setState` for the busy flag or a
   /// notice does not restart the read and discard the half-typed form.
-  void _composeLoaders(
-    String key,
-  ) {
+  void _composeLoaders(String key) {
     if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
-    TenantGuardedLoader<TenantPublishedCheckoutConfiguration> readWith(TenantDocumentReader reader) =>
+    TenantGuardedLoader<TenantPublishedCheckoutConfiguration> readWith(
+      TenantDocumentReader reader,
+    ) =>
         (session) => TenantCheckoutConfigurationPublisher(
-      session: session,
-      reader: reader,
-    ).loadPublished();
+          session: session,
+          reader: reader,
+        ).loadPublished();
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -241,7 +233,6 @@ final class _TenantCheckoutConfigurationPanelState
       builder: (context, session, published) => _ConfigurationContents(
         published: published,
         busy: _busy,
-        notice: _notice,
         canPublish: widget.writer != null,
         onPublish: (currency) => _publish(session, published, currency),
       ),
@@ -298,14 +289,12 @@ final class _ConfigurationContents extends StatefulWidget {
   const _ConfigurationContents({
     required this.published,
     required this.busy,
-    required this.notice,
     required this.canPublish,
     required this.onPublish,
   });
 
   final TenantPublishedCheckoutConfiguration published;
   final bool busy;
-  final AppNotice? notice;
   final bool canPublish;
   final void Function(String currency) onPublish;
 
@@ -401,14 +390,6 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
             onPressed: _canSubmit
                 ? () => widget.onPublish(_currency.text)
                 : null,
-          ),
-        ],
-        if (widget.notice case final answer?) ...[
-          SizedBox(height: tokens.spacing.s16),
-          Callout(
-            key: const ValueKey('checkout-configuration-notice'),
-            status: answer.status,
-            message: answer.message,
           ),
         ],
       ],

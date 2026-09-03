@@ -868,6 +868,24 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       key: const ValueKey('onboarding-complete-step'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        // **The same reason the verify step carries one.** Nothing is typed on
+        // this step and nothing can be hurried, so the drawing does the work
+        // the form does everywhere else in this flow - telling somebody at a
+        // glance what the page is about. `approve.svg` is the asset the
+        // platform's own review screens end on, which is this same fact read
+        // from the other side of the desk.
+        //
+        // No `semanticLabel`: the heading above and the three details below
+        // already state every fact here, and hard rule 4 forbids a picture
+        // being the only carrier of one.
+        Center(
+          child: AppIllustration(
+            key: const ValueKey('onboarding-complete-illustration'),
+            asset: 'approve.svg',
+            size: EmptyState.illustrationSize,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s24),
         Text('${result.name} is ready.', style: tokens.typography.titleMedium),
         SizedBox(height: tokens.spacing.s16),
         _Detail(label: 'Trades as', value: result.slug),

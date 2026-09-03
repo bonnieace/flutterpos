@@ -35,6 +35,20 @@ import 'tokens.dart';
 /// Shows [notice] over whatever is on screen, and replaces any notice already
 /// up.
 ///
+/// **Every write outcome comes here, at the product owner's direction on
+/// 2026-09-03.** There used to be a `noticeIsTransient` rule beside this: a
+/// confirmation withdrew itself and everything else - a refusal, an unknown
+/// outcome, an offline skip - stayed inline in a [Callout], on the argument
+/// that a sentence naming a next step must not disappear before it is read.
+/// The direction reverses that. A page reports what it did over itself, and
+/// the only thing left inline is a **field saying what is wrong with what was
+/// typed into it** - which belongs beside the field, not over the page, and is
+/// not what this is for.
+///
+/// The dwell still differs by status: see [AppSnackBar.dwell] and its longer
+/// sibling, so an answer somebody has to act on stays up longer than one they
+/// only have to see.
+///
 /// **Replaces rather than queues, and that is the decision.** Material's
 /// messenger queues, so two writes in quick succession would show the first
 /// answer for its full dwell before the second appeared — which on a till means
@@ -185,25 +199,3 @@ final class AppSnackBar extends StatelessWidget {
   }
 }
 
-/// Whether [notice] is the kind that should withdraw itself.
-///
-/// **One rule, written once, for every surface in this app that reports a
-/// write.** Before 2026-08-26 all eleven of them rendered every outcome as an
-/// inline [Callout] that stayed until the page was left or re-read — so a
-/// confirmation nobody needed to act on occupied the same space, with the same
-/// permanence, as a refusal somebody had to fix.
-///
-/// **The split is by whether anything is left to do:**
-///
-/// - [AppStatus.ok] — the write landed and there is nothing to decide. It goes
-///   to [showAppSnackBar] and takes itself away.
-/// - Everything else — a refusal, an unknown outcome, an offline skip — stays
-///   where it was drawn. Each of those sentences names something to check, and
-///   a sentence that names a next step must not be able to disappear before it
-///   is read.
-///
-/// **A sheet is the one exception and takes the opposite default**, because it
-/// has no "where it was drawn" to stay in: a sheet that closes on success
-/// reports out and a sheet that refuses stays open. Same rule, read from the
-/// other side.
-bool noticeIsTransient(AppNotice notice) => notice.status == AppStatus.ok;

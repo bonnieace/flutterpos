@@ -17,6 +17,7 @@ export 'checkout_print_failures.dart';
 export 'checkout_print_configuration_panel.dart';
 export 'checkout_print_jobs.dart';
 export 'checkout_print_queue_panel.dart';
+export 'checkout_printer_test_page.dart';
 export 'checkout_print_transport.dart';
 export 'checkout_receipt.dart';
 export 'checkout_receipt_body.dart';

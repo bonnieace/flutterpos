@@ -8,6 +8,7 @@ import 'package:flutter_application_1/returns/returns.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
+import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -411,13 +412,13 @@ void main() {
     expect(intent.lines.single.productId, 'product-1');
     expect(intent.lines.single.quantity, 2);
     expect(
-      noticeMessage(tester, 'sale-returns-notice'),
+      snackNotice(tester).message,
       startsWith('Return recorded. No stock has been restored yet'),
     );
     // **`ok` is a claim about the record, not about the stock**, and the
     // sentence beside it is what keeps that honest: the return exists, and
     // nothing has moved until a manager verifies it.
-    expect(noticeStatus(tester, 'sale-returns-notice'), AppStatus.ok);
+    expect(snackNotice(tester).status, AppStatus.ok);
   });
 
   testWidgets('the quantity can never exceed what is available', (
@@ -470,7 +471,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      noticeMessage(tester, 'sale-returns-notice'),
+      snackNotice(tester).message,
       startsWith('The result is unknown.'),
     );
 
@@ -539,7 +540,7 @@ void main() {
       'requestId': 'verify-return-abcdefgh',
     });
     expect(
-      noticeMessage(tester, 'sale-returns-notice'),
+      snackNotice(tester).message,
       'Restored 3 units across 2 products.',
     );
   });
@@ -671,12 +672,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        noticeMessage(tester, 'sale-returns-notice'),
+        snackNotice(tester).message,
         entry.value.$1,
         reason: entry.key.first,
       );
       expect(
-        noticeStatus(tester, 'sale-returns-notice'),
+        snackNotice(tester).status,
         entry.value.$2,
         reason: entry.key.first,
       );
@@ -715,7 +716,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      noticeMessage(tester, 'sale-returns-notice'),
+      snackNotice(tester).message,
       startsWith('The verification response could not be trusted.'),
     );
   });
@@ -762,7 +763,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // The previous business's result may never surface in the new session.
-    expect(find.byKey(const ValueKey('sale-returns-notice')), findsNothing);
+    expect(find.byType(AppSnackBar), findsNothing);
   });
 
   testWidgets('an incomplete returns page offers no record form', (

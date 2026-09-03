@@ -212,7 +212,7 @@ void main() {
       await tester.pump();
 
       expect(
-        noticeMessage(tester, 'print-queue-notice'),
+        snackNotice(tester).message,
         PrinterFailureNotice.of(PrinterTransportCode.connectTimeout).message,
       );
     });

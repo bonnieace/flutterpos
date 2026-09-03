@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
+import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -208,13 +209,13 @@ void main() {
       'requestId': 'adjust-stock-abcdefgh',
     });
     expect(
-      noticeMessage(tester, 'product-stock-notice'),
+      snackNotice(tester).message,
       'Stock changed from 7 to 11.',
     );
     // **This notice sits directly above the "Reconciliation found" section**,
     // which draws every recorded difference as a red `Callout`. A bare sentence
     // there read as part of the problem rather than as the answer to it.
-    expect(noticeStatus(tester, 'product-stock-notice'), AppStatus.ok);
+    expect(snackNotice(tester).status, AppStatus.ok);
     // The quantity is re-read, so what is shown is the server's evidence rather
     // than an optimistic local figure.
     expect(reader.productReads, 2);
@@ -284,7 +285,7 @@ void main() {
     await _submit(tester, units: '4', reason: 'Delivery received');
 
     expect(
-      noticeMessage(tester, 'product-stock-notice'),
+      snackNotice(tester).message,
       startsWith('The result is unknown.'),
     );
     // The quantity is re-read after an unknown outcome, because only the server
@@ -326,10 +327,10 @@ void main() {
       'adjust-stock-second2',
     ]);
     expect(
-      noticeMessage(tester, 'product-stock-notice'),
+      snackNotice(tester).message,
       startsWith('This product no longer exists'),
     );
-    expect(noticeStatus(tester, 'product-stock-notice'), AppStatus.problem);
+    expect(snackNotice(tester).status, AppStatus.problem);
   });
 
   testWidgets('a response that cannot be trusted is reported, not shown', (
@@ -344,7 +345,7 @@ void main() {
     await _submit(tester, units: '4', reason: 'Delivery received');
 
     expect(
-      noticeMessage(tester, 'product-stock-notice'),
+      snackNotice(tester).message,
       startsWith('The adjustment response could not be trusted.'),
     );
   });
@@ -372,7 +373,7 @@ void main() {
     await tester.pump();
 
     // The result belonged to a session that is no longer selected.
-    expect(find.byKey(const ValueKey('product-stock-notice')), findsNothing);
+    expect(find.byType(AppSnackBar), findsNothing);
   });
 
   testWidgets('the ledger pages forward and back', (tester) async {

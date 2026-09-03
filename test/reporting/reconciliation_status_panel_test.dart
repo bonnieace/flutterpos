@@ -727,7 +727,7 @@ void main() {
 
       expect(callable.payloads, isEmpty);
       expect(
-        find.byKey(const ValueKey('reconciliation-request-notice')),
+        find.byType(AppSnackBar),
         findsNothing,
       );
     });
@@ -751,13 +751,13 @@ void main() {
       await _tap(tester, 'reconciliation-request-confirm');
 
       expect(
-        noticeMessage(tester, 'reconciliation-request-notice'),
+        snackNotice(tester).message,
         'A check of this kind was asked for too recently, so nothing was '
         'queued. The server allows one catch-up every 5 minutes and one full '
         'check every 24 hours.',
       );
       expect(
-        noticeStatus(tester, 'reconciliation-request-notice'),
+        snackNotice(tester).status,
         AppStatus.problem,
       );
     });
@@ -791,14 +791,14 @@ void main() {
         'reconcile-first11',
       ]);
       expect(
-        noticeMessage(tester, 'reconciliation-request-notice'),
+        snackNotice(tester).message,
         startsWith('The result is unknown.'),
       );
       // **Not `problem`.** A job may well have been queued and the sentence's own
       // instruction is to go and look, which is what §2.1 gives `attention`.
       // Painting it red would report a failure the app has no evidence of.
       expect(
-        noticeStatus(tester, 'reconciliation-request-notice'),
+        snackNotice(tester).status,
         AppStatus.attention,
       );
       expect(reader.queries.length, greaterThan(readsBefore));
@@ -854,7 +854,7 @@ void main() {
       await _tap(tester, 'reconciliation-request-confirm');
 
       expect(
-        noticeMessage(tester, 'reconciliation-request-notice'),
+        snackNotice(tester).message,
         startsWith('The server answer could not be trusted.'),
       );
       expect(reader.queries.length, greaterThan(readsBefore));

@@ -12,12 +12,11 @@
 /// the same four write outcomes mapped to `AppNotice`, and the same re-read on
 /// anything that is not a flat refusal.
 ///
-/// **`probe` is why this is a screen rather than a settings row.**
-/// `PrinterTransport.probe` connects and closes without printing, so *Test this
-/// printer* answers "is it reachable?" without wasting paper — and it is the
-/// first thing worth knowing when a shop phones in. It runs against what is
-/// **typed**, not what is stored, so an address can be checked before it is
-/// saved.
+/// **The test print is why this is a screen rather than a settings row.**
+/// *Test this printer* puts a page on the roll — the mark, the settings and a
+/// ruler one row wide — which is the first thing worth having when a shop
+/// phones in. It runs against what is **typed**, not what is stored, so a
+/// printer can be checked before it is saved.
 library;
 
 import 'package:flutter/material.dart';
@@ -39,16 +38,23 @@ import 'checkout_print_configuration.dart';
 import 'checkout_print_failures.dart';
 import 'checkout_print_transport_base.dart';
 
-/// Confirms an address is reachable without printing. Injected so a test never
+/// Prints one test page against what is **typed**. Injected so a test never
 /// opens a socket, and so a build with no transport simply cannot offer it.
-typedef PrinterProbe = Future<void> Function(PrinterEndpoint endpoint);
+///
+/// **It takes the whole configuration rather than an address**, because the
+/// page prints the paper width and the cutter setting and is laid out to that
+/// width: testing an 80mm roll with a 58mm setting is one of the two faults
+/// this control exists to catch, and a function handed only a host could not
+/// catch it.
+typedef PrinterTestPrint =
+    Future<void> Function(TenantPrinterConfiguration configuration);
 
 final class TenantPrinterConfigurationScreen extends StatelessWidget {
   const TenantPrinterConfigurationScreen({
     super.key,
     required this.reader,
     this.writer,
-    this.probe,
+    this.testPrint,
     this.onPublished,
   });
 
@@ -61,7 +67,7 @@ final class TenantPrinterConfigurationScreen extends StatelessWidget {
 
   /// While absent, *Test this printer* is not offered. A control that cannot
   /// work is worse than a missing one.
-  final PrinterProbe? probe;
+  final PrinterTestPrint? testPrint;
 
   final VoidCallback? onPublished;
 
@@ -77,7 +83,7 @@ final class TenantPrinterConfigurationScreen extends StatelessWidget {
       child: TenantPrinterConfigurationPanel(
         reader: reader,
         writer: writer,
-        probe: probe,
+        testPrint: testPrint,
         onPublished: onPublished,
       ),
     ),
@@ -89,13 +95,13 @@ final class TenantPrinterConfigurationPanel extends StatefulWidget {
     super.key,
     required this.reader,
     this.writer,
-    this.probe,
+    this.testPrint,
     this.onPublished,
   });
 
   final TenantDocumentReader reader;
   final TenantConfigurationDocumentWriter? writer;
-  final PrinterProbe? probe;
+  final PrinterTestPrint? testPrint;
   final VoidCallback? onPublished;
 
   @override
@@ -107,7 +113,6 @@ final class _TenantPrinterConfigurationPanelState
     extends State<TenantPrinterConfigurationPanel> {
   int _generation = 0;
   bool _busy = false;
-  AppNotice? _notice;
 
   void _reload() => setState(() => _generation++);
 
@@ -148,14 +153,13 @@ final class _TenantPrinterConfigurationPanelState
             configured: configured,
           );
     } on TenantPrinterConfigurationException catch (error) {
-      setState(() => _notice = _refusalNotice(error.code));
+      _report(_refusalNotice(error.code));
       return;
     }
     if (!await _confirmed(intent) || !_stillCurrent(capturedKey)) return;
 
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final result = await writer.merge(
@@ -163,7 +167,7 @@ final class _TenantPrinterConfigurationPanelState
         data: intent.documentData(),
       );
       if (!_stillCurrent(capturedKey)) return;
-      setState(() => _notice = _resultNotice(result));
+      _report(_resultNotice(result));
       // A committed change and an unknown one are both re-read: the second
       // because only the server says what is stored, and the first because the
       // document is what a receipt will be dialled at, not the typed value.
@@ -176,32 +180,54 @@ final class _TenantPrinterConfigurationPanelState
     }
   }
 
-  /// Connects to what is **typed** and closes, without printing.
+  /// Prints a test page on what is **typed**.
   ///
-  /// Deliberately not against what is stored: the whole use is checking an
-  /// address before committing to it. It builds its own `PrinterEndpoint`, so
-  /// the same validation that guards the document guards this.
+  /// Deliberately not against what is stored: the whole use is checking a
+  /// printer before committing to it. It builds its own
+  /// `TenantPrinterConfiguration`, so the same validation that guards the
+  /// document guards this.
+  ///
+  /// **It prints rather than probes, at the product owner's direction on
+  /// 2026-09-03.** A connect-and-close answered *is that address reachable*,
+  /// and the question a shopkeeper is actually asking is whether a receipt will
+  /// come out and be readable. Only paper answers that, and the paper is also
+  /// the only thing that can show a width set to the wrong roll.
   Future<void> _test(_PrinterFormValues values) async {
-    final probe = widget.probe;
-    if (probe == null || _busy) return;
+    final testPrint = widget.testPrint;
+    if (testPrint == null || _busy) return;
     final parsedPort = int.tryParse(values.port.trim());
-    final PrinterEndpoint endpoint;
+    final TenantPrinterConfiguration configuration;
     try {
       if (parsedPort == null) throw ArgumentError('port');
-      endpoint = PrinterEndpoint(host: values.host.trim(), port: parsedPort);
+      configuration = TenantPrinterConfiguration(
+        transport: values.transport,
+        endpoint: PrinterEndpoint(host: values.host.trim(), port: parsedPort),
+        paperWidth: values.paperWidth,
+        hasCutter: values.hasCutter,
+        bridgeToken: values.bridgeToken,
+      );
     } on ArgumentError {
+      _report(_refusalNotice('invalid_address'));
+      return;
+    } on FormatException {
       _report(_refusalNotice('invalid_address'));
       return;
     }
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
-      await probe(endpoint);
+      await testPrint(configuration);
       if (!mounted) return;
+      // **"Sent", never "printed".** `PrinterTransport.send` returning means
+      // the bytes were handed off, and this app has no status read-back to
+      // prove paper moved - so the sentence names what was sent and asks the
+      // one person who can see the roll to look at it.
       _report(
-        const AppNotice.confirmed('The printer answered. Nothing was printed.'),
+        const AppNotice.confirmed(
+          'A test page was sent to the printer. Check that what comes out '
+          'fills the width of the roll.',
+        ),
       );
     } on PrinterTransportException catch (error) {
       if (!mounted) return;
@@ -213,18 +239,13 @@ final class _TenantPrinterConfigurationPanelState
     }
   }
 
-  /// Announces a probe's answer over the screen rather than inside the form.
+  /// Announces a test print's answer over the screen rather than inside the
+  /// form.
   ///
-  /// **A snack bar rather than the `Callout` this used until 2026-08-26, and
-  /// the split is between what a sentence is *about*.** A save outcome is the
-  /// state of this page - the printer either changed or it did not - and it is
-  /// still a `Callout`, because it stays true until something else is saved. A
-  /// probe changes nothing at all: it is a momentary answer to *is that address
-  /// reachable*, and it was sitting in the same block under the form,
-  /// indistinguishable from the record of a write.
-  ///
-  /// It also sat below the buttons, so on a phone the answer to the control a
-  /// person had just pressed appeared off the bottom of the screen.
+  /// **A snack bar rather than the `Callout` this used until 2026-08-26**: the
+  /// answer belongs to the control that was just pressed, and inside the form
+  /// it sat below the buttons - so on a phone the answer to a button appeared
+  /// off the bottom of the screen.
   void _report(AppNotice notice) => showAppSnackBar(context, notice);
 
   Future<bool> _confirmed(TenantPrinterUpdateIntent intent) async {
@@ -299,9 +320,8 @@ final class _TenantPrinterConfigurationPanelState
       builder: (context, session, configured) => _PrinterContents(
         configured: configured,
         busy: _busy,
-        notice: _notice,
         canPublish: widget.writer != null,
-        canTest: widget.probe != null,
+        canTest: widget.testPrint != null,
         onPublish: (values) => _publish(session, configured, values),
         onTest: _test,
       ),
@@ -381,7 +401,6 @@ final class _PrinterContents extends StatefulWidget {
   const _PrinterContents({
     required this.configured,
     required this.busy,
-    required this.notice,
     required this.canPublish,
     required this.canTest,
     required this.onPublish,
@@ -390,7 +409,6 @@ final class _PrinterContents extends StatefulWidget {
 
   final TenantConfiguredPrinter configured;
   final bool busy;
-  final AppNotice? notice;
   final bool canPublish;
   final bool canTest;
   final void Function(_PrinterFormValues values) onPublish;
@@ -588,14 +606,6 @@ class _PrinterContentsState extends State<_PrinterContents> {
                       : null,
                 ),
             ],
-          ),
-        ],
-        if (widget.notice case final answer?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          Callout(
-            key: const ValueKey('printer-configuration-notice'),
-            status: answer.status,
-            message: answer.message,
           ),
         ],
       ],

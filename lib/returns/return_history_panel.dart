@@ -155,7 +155,6 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  AppNotice? _notice;
 
   /// Retained only across an ambiguous attempt, so a retry addresses the same
   /// deterministic document instead of recording the reversal twice.
@@ -213,7 +212,6 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     final capturedKey = _sessionKey(session);
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final intent =
@@ -244,7 +242,7 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     } on TenantReturnException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
-      setState(() => _notice = _refusalNotice(error.code));
+      _answer(_refusalNotice(error.code));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -261,7 +259,7 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
       completed(notice);
       return;
     }
-    setState(() => _notice = notice);
+    showAppSnackBar(context, notice);
   }
 
   /// Whether the session this work was authorized against is still selected.
@@ -351,7 +349,6 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
         selfUid: session.uid,
         pageIndex: _pageIndex,
         busy: _busy,
-        notice: _notice,
         canRecord:
             widget.actions?.writer != null &&
             session.canAccess(
@@ -384,7 +381,6 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     final capturedKey = _sessionKey(session);
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final gateway = TenantReturnVerificationGateway(
@@ -397,8 +393,8 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
       );
       final result = await gateway.submit(gateway.createIntent());
       if (!_stillCurrent(capturedKey)) return;
-      setState(
-        () => _notice = AppNotice.confirmed(
+      _answer(
+        AppNotice.confirmed(
           'Restored ${result.restoredUnits} '
           '${result.restoredUnits == 1 ? 'unit' : 'units'} across '
           '${result.restoredProducts.length} '
@@ -408,15 +404,15 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
       _reload();
     } on TenantReturnVerificationException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
-      setState(() => _notice = _verificationNotice(error.failure));
+      _answer(_verificationNotice(error.failure));
       // Only an unknown outcome may have restored stock, and only the server
       // can say. Re-reading is the one safe response; retrying is not.
       if (error.mayHaveCommitted) _reload();
     } on FormatException {
       if (!_stillCurrent(capturedKey)) return;
       // The call may well have restored stock; only its answer was unusable.
-      setState(
-        () => _notice = const AppNotice.unknown(
+      _answer(
+        const AppNotice.unknown(
           'The verification response could not be trusted. Reload this page '
           'to see what the server recorded.',
         ),
@@ -517,7 +513,6 @@ final class _SaleReturnsContents extends StatelessWidget {
     required this.selfUid,
     required this.pageIndex,
     required this.busy,
-    required this.notice,
     required this.canRecord,
     required this.canVerify,
     required this.onNextPage,
@@ -534,7 +529,6 @@ final class _SaleReturnsContents extends StatelessWidget {
   final String selfUid;
   final int pageIndex;
   final bool busy;
-  final AppNotice? notice;
   final bool canRecord;
 
   /// Whether this session may restore stock. The action is offered on a pending
@@ -636,14 +630,6 @@ final class _SaleReturnsContents extends StatelessWidget {
                 'Anyone can record a return. Verifying one and restoring its '
                 'stock is an owner, administrator, or manager action, so a '
                 'return you record here waits for one of them.',
-          ),
-        ],
-        if (notice case final answer?) ...[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('sale-returns-notice'),
-            status: answer.status,
-            message: answer.message,
           ),
         ],
         if (showHistory) ...[

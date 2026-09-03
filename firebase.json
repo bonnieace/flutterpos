@@ -50,9 +50,13 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "storage": {
-    "rules": "storage.rules"
-  },
+  "_comment_storage": "An array, not an object, and that is the whole point. The object form takes no `bucket` key - firebase-tools ignores one silently and releases to whatever it calls the default bucket, printing `released rules storage.rules to firebase.storage` with no name in it either way. The array form is the documented way to name a bucket, and the deploy output names it back. This app writes to the bucket `firebase_options.dart` gives as `storageBucket`; if a deploy lands anywhere else, every upload is refused by whatever rules that other bucket happens to carry, with a 403 indistinguishable from a rule that says no.",
+  "storage": [
+    {
+      "bucket": "multitenant-pos-b8326.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ],
   "functions": [
     {
       "source": "functions",

@@ -220,19 +220,13 @@ final class _TenantCatalogManagementPanelState
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  AppNotice? _notice;
 
-  /// Reports one write outcome, on the surface its kind belongs to.
+  /// Reports one write outcome, over the screen rather than inside the page.
   ///
-  /// See `noticeIsTransient`: a confirmation withdraws itself, and everything
-  /// that names a next step stays where it was drawn.
-  void _report(AppNotice notice) {
-    if (noticeIsTransient(notice)) {
-      showAppSnackBar(context, notice);
-      return;
-    }
-    setState(() => _notice = notice);
-  }
+  /// See `showAppSnackBar`: since 2026-09-03 every outcome goes there, and
+  /// inline text is left to the one thing it is still right for - a field
+  /// saying what is wrong with what was typed into it.
+  void _report(AppNotice notice) => showAppSnackBar(context, notice);
 
   Timer? _searchDebounce;
   String _searchPrefix = '';
@@ -382,7 +376,6 @@ final class _TenantCatalogManagementPanelState
 
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final result = await writer.createCategory(intent);
@@ -438,7 +431,6 @@ final class _TenantCatalogManagementPanelState
     }
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final result = await writer.renameCategory(intent);
@@ -625,7 +617,6 @@ final class _TenantCatalogManagementPanelState
 
     setState(() {
       _busy = true;
-      _notice = null;
     });
     TenantProductImageUpload? upload;
     try {
@@ -736,7 +727,6 @@ final class _TenantCatalogManagementPanelState
 
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final result = await writer.retireProduct(intent);
@@ -796,7 +786,6 @@ final class _TenantCatalogManagementPanelState
       if (store == null) return;
       setState(() {
         _busy = true;
-        _notice = null;
       });
       try {
         stagedImage = await store.upload(
@@ -806,10 +795,8 @@ final class _TenantCatalogManagementPanelState
         );
       } on TenantProductImageException catch (error) {
         if (_stillCurrent(capturedKey)) {
-          setState(() {
-            _busy = false;
-            _notice = _imageNotice(error);
-          });
+          setState(() => _busy = false);
+          _report(_imageNotice(error));
         }
         return;
       }
@@ -839,10 +826,8 @@ final class _TenantCatalogManagementPanelState
         );
       }
       _forgetEditRequestId();
-      setState(() {
-        _busy = false;
-        _notice = _refusalNotice(error.code);
-      });
+      setState(() => _busy = false);
+      _report(_refusalNotice(error.code));
       return;
     }
     if (!await _confirmed(
@@ -864,7 +849,6 @@ final class _TenantCatalogManagementPanelState
 
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final result = await TenantProductUpdateGateway(
@@ -905,8 +889,8 @@ final class _TenantCatalogManagementPanelState
       // unusable. The request ID is kept for exactly that reason: repeating
       // this same correction answers off the server's record rather than
       // auditing it twice.
-      setState(
-        () => _notice = const AppNotice.unknown(
+      _report(
+        const AppNotice.unknown(
           'The correction was sent and its answer could not be trusted. The '
           'catalog below has been re-read; it states what the server holds.',
         ),
@@ -1055,7 +1039,6 @@ final class _TenantCatalogManagementPanelState
       builder: (context, session, view) => _UnifiedInventoryContents(
         view: view,
         busy: _busy,
-        notice: _notice,
         canWrite:
             widget.writer != null &&
             session.canAccess(
@@ -1125,7 +1108,6 @@ final class _UnifiedInventoryContents extends StatelessWidget {
   const _UnifiedInventoryContents({
     required this.view,
     required this.busy,
-    required this.notice,
     required this.canWrite,
     required this.canRetire,
     required this.canEdit,
@@ -1154,7 +1136,6 @@ final class _UnifiedInventoryContents extends StatelessWidget {
 
   final _CatalogView view;
   final bool busy;
-  final AppNotice? notice;
   final bool canWrite;
   final bool canRetire;
   final bool canEdit;
@@ -1511,14 +1492,6 @@ final class _UnifiedInventoryContents extends StatelessWidget {
       ),
       children: <Widget>[
         if (canWrite) _actionHeader(context, compact: !wide),
-        if (notice case final answer?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          Callout(
-            key: const ValueKey('catalog-management-notice'),
-            status: answer.status,
-            message: answer.message,
-          ),
-        ],
         SizedBox(height: tokens.spacing.s20),
         _filters(context, compact: !wide),
         SizedBox(height: tokens.spacing.s16),
@@ -2700,8 +2673,18 @@ AppNotice _imageNotice(TenantProductImageException error) =>
       'unsupported_image_type' => const AppNotice.refused(
         'Choose a JPEG, PNG, or WebP image.',
       ),
-      _ => const AppNotice.refused(
-        'The product image could not be uploaded. Nothing was written.',
+      // **The code goes in the sentence, and it is not clutter.** Two of
+      // Storage's refusals are this app's own fault and are worded above; every
+      // other one - `permission-denied`, `unauthenticated`, `unauthorized`,
+      // `retry-limit-exceeded`, a plain network timeout - arrived here as one
+      // indistinguishable line, so a shop reporting "it will not upload" was
+      // reporting five different faults under one name and neither they nor
+      // anybody reading a screenshot could tell which. The sentence still says
+      // what happened first and what it cost; the code is what makes the report
+      // worth having.
+      _ => AppNotice.refused(
+        'The product image could not be uploaded (${error.code}). Nothing was '
+        'written.',
       ),
     };
 

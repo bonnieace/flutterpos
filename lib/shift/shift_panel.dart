@@ -440,6 +440,10 @@ String shiftErrorMessage(String? code) => switch (code) {
     'Close the open shift in the other business first.',
   'shift_open_on_other_device' =>
     'This shift is open on another device. Close it there first.',
+  'shift_open_on_earlier_install' =>
+    'This shift was opened on this device before the app was reinstalled, and '
+        'the sales it holds are no longer on it. An owner or administrator '
+        'must close it.',
   'unsynchronized_shift_sales' =>
     'Some sales in this shift are not synchronized yet. Wait for them '
         'before closing.',

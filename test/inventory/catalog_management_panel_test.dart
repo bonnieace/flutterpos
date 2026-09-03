@@ -557,6 +557,62 @@ void main() {
     expect(imageStore.removed, <Uri>[imageStore.uploads.single.url]);
   });
 
+  testWidgets('a refused upload names the code Storage gave it', (
+    tester,
+  ) async {
+    // **Five faults used to arrive under one sentence.** `permission-denied`,
+    // `unauthenticated`, `unauthorized`, `retry-limit-exceeded` and a plain
+    // network timeout all read as "could not be uploaded", so a shop reporting
+    // that it will not upload was reporting any of five things and no
+    // screenshot could tell them apart. On 2026-09-03 that cost a session of
+    // guesswork against a live backend, which is what this test is here to
+    // stop happening twice.
+    FilePicker.platform = _FilePicker(_onePixelPng);
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      imageStore: _RefusingImageStore('permission-denied'),
+    );
+
+    await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
+    await tester.tap(
+      find.byKey(const ValueKey('inventory-choose-product-image')),
+    );
+    await tester.pumpAndSettle();
+    await _confirmProduct(tester);
+
+    expect(snackNotice(tester).message, contains('permission-denied'));
+    // Still says what it cost, which is the half a shopkeeper acts on.
+    expect(snackNotice(tester).message, contains('Nothing was written'));
+    expect(snackNotice(tester).status, AppStatus.problem);
+  });
+
+  testWidgets('the two refusals this app makes itself stay in plain words', (
+    tester,
+  ) async {
+    // A file too large or of the wrong type is refused before a byte leaves the
+    // device, and naming a code for either would be naming this app's own rule
+    // as if it were the server's.
+    FilePicker.platform = _FilePicker(Uint8List.fromList(<int>[1, 2, 3]));
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      imageStore: _ImageStore(),
+    );
+
+    await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
+    await tester.tap(
+      find.byKey(const ValueKey('inventory-choose-product-image')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(snackNotice(tester).message, 'Choose a JPEG, PNG, or WebP image.');
+  });
+
   testWidgets('a committed replacement removes the superseded owned image', (
     tester,
   ) async {
@@ -628,7 +684,7 @@ void main() {
     );
     expect(writer.products, isEmpty);
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('Enter a price as a plain amount'),
     );
   });
@@ -647,7 +703,7 @@ void main() {
 
     expect(writer.products, isEmpty);
     expect(
-      find.byKey(const ValueKey('catalog-management-notice')),
+      find.byType(AppSnackBar),
       findsNothing,
     );
     // The typing survives a cancellation, because cancelling is not a mistake.
@@ -670,7 +726,7 @@ void main() {
     await _confirmProduct(tester);
 
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('The result is unknown.'),
     );
     await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
@@ -905,11 +961,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('Nothing was retired.'),
     );
     expect(
-      noticeStatus(tester, 'catalog-management-notice'),
+      snackNotice(tester).status,
       AppStatus.problem,
     );
     // A proven refusal changed nothing, so there is nothing to re-read.
@@ -926,12 +982,12 @@ void main() {
     await _confirmProduct(tester);
 
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('This device is offline'),
     );
     // §2.1 gives `info` the words "offline, read-only, informational", so an
     // offline write is that row by name rather than by judgement.
-    expect(noticeStatus(tester, 'catalog-management-notice'), AppStatus.info);
+    expect(snackNotice(tester).status, AppStatus.info);
   });
 
   testWidgets('a longer catalog pages, and retiring is reachable on page two', (
@@ -981,7 +1037,7 @@ void main() {
     // The write was authorized against a business that is no longer open, so
     // its result never reaches this screen.
     expect(
-      find.byKey(const ValueKey('catalog-management-notice')),
+      find.byType(AppSnackBar),
       findsNothing,
     );
   });
@@ -1261,7 +1317,7 @@ void main() {
     );
     expect(callable.payloads, isEmpty);
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('Nothing on the form differs'),
     );
     // **Not a refusal, even though the client refused to send it.** There was
@@ -1269,7 +1325,7 @@ void main() {
     // nothing is wrong. It is deliberately not `neutral` either - the bulk
     // report gives that to an unchanged *row*, and one status meaning two
     // things at two scales is the failure §2.1 exists to end.
-    expect(noticeStatus(tester, 'catalog-management-notice'), AppStatus.info);
+    expect(snackNotice(tester).status, AppStatus.info);
   });
 
   testWidgets('a refused correction changes nothing and says why', (
@@ -1293,7 +1349,7 @@ void main() {
     await _correct(tester, 'pd-1', name: 'Brown bread loaf');
 
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('That category no longer exists'),
     );
     // A proven refusal changed nothing, so there is nothing to re-read.
@@ -1317,7 +1373,7 @@ void main() {
     await _correct(tester, 'pd-1', name: 'Brown bread loaf');
 
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('The result is unknown.'),
     );
     await _correct(tester, 'pd-1', name: 'Brown bread loaf');
@@ -1415,7 +1471,7 @@ void main() {
     await _correct(tester, 'pd-1', name: 'Brown bread loaf');
 
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('The correction was sent and its answer could not be trusted'),
     );
     expect(reader.pages.where((path) => path == _productsPath).length, 2);
@@ -1449,7 +1505,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey('catalog-management-notice')),
+      find.byType(AppSnackBar),
       findsNothing,
     );
   });
@@ -1709,6 +1765,7 @@ Future<void> _pump(
 }
 
 Future<void> _openCorrection(WidgetTester tester, String productId) async {
+  await _waitOutSnackBar(tester);
   await _tapProductAction(
     tester,
     productId,
@@ -1745,12 +1802,13 @@ Future<void> _review(WidgetTester tester) async {
 
 /// Opens the correction form, changes one field, and confirms it.
 ///
-/// **It waits the confirmation out before returning**, which is not tidiness. A
-/// committed correction is a floating snack bar since 2026-08-26, and a
-/// floating snack bar sits over the bottom of the surface - so a second
-/// `_correct` in the same test found its *Review* control covered and `tap`
-/// reported that the offset "would not hit test". Waiting leaves the catalog in
-/// the state the next action expects.
+/// **It leaves the answer on screen**, because since 2026-09-03 every outcome
+/// is a snack bar and reading one is what most of these tests are for. The wait
+/// that used to be here has moved to the front of the actions that follow -
+/// `_openCorrection` and `_fillProduct` - which is where it was always really
+/// needed: a floating snack bar sits over the bottom of the surface, so a
+/// second correction in one test found its *Review* control covered and `tap`
+/// reported that the offset "would not hit test".
 Future<void> _correct(
   WidgetTester tester,
   String productId, {
@@ -1764,7 +1822,6 @@ Future<void> _correct(
   await _review(tester);
   await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
   await tester.pumpAndSettle();
-  await _waitOutSnackBar(tester);
 }
 
 /// Advances past a snack bar's dwell and waits for it to leave.
@@ -1799,6 +1856,7 @@ Future<void> _fillProduct(
   required String sku,
   required String price,
 }) async {
+  await _waitOutSnackBar(tester);
   if (find
       .byKey(const ValueKey('catalog-management-product-name'))
       .evaluate()
@@ -1839,9 +1897,6 @@ Future<void> _confirmProduct(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
   await tester.pumpAndSettle();
-  // See `_correct`: a committed write is a floating snack bar now, and it sits
-  // over the bottom of the surface the next action reaches for.
-  await _waitOutSnackBar(tester);
 }
 
 String _text(WidgetTester tester, String key) =>
@@ -2159,6 +2214,30 @@ final class _SearchReader implements TenantProductSearchReader {
           product,
     ].take(query.limit).toList(growable: false);
   }
+}
+
+/// A store that refuses every upload with [code].
+///
+/// Named for what it is for: the sentence a shop reads when Storage says no is
+/// the only account of the fault anybody outside this machine ever gets.
+final class _RefusingImageStore implements TenantProductImageStore {
+  _RefusingImageStore(this.code);
+
+  final String code;
+
+  @override
+  Future<TenantProductImageUpload> upload({
+    required String tenantId,
+    required String productId,
+    required TenantProductImageCandidate candidate,
+  }) async => throw TenantProductImageException(code);
+
+  @override
+  Future<void> removeOwned({
+    required String tenantId,
+    required String productId,
+    required Uri imageUrl,
+  }) async {}
 }
 
 final class _ImageStore implements TenantProductImageStore {

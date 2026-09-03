@@ -63,20 +63,13 @@ final class TenantPrintQueuePanel extends StatefulWidget {
 
 class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
   String? _sending;
-  AppNotice? _notice;
 
-  /// Reports one write outcome, on the surface its kind belongs to.
+  /// Reports one write outcome, over the screen rather than inside the page.
   ///
-  /// See `noticeIsTransient`: a confirmation withdraws itself, and everything
-  /// that names a next step stays where it was drawn.
-  void _report(AppNotice notice) {
-    if (noticeIsTransient(notice)) {
-      showAppSnackBar(context, notice);
-      return;
-    }
-    setState(() => _notice = notice);
-  }
-
+  /// See `showAppSnackBar`: since 2026-09-03 every outcome goes there, and
+  /// inline text is left to the one thing it is still right for - a field
+  /// saying what is wrong with what was typed into it.
+  void _report(AppNotice notice) => showAppSnackBar(context, notice);
 
   /// **Read on every build rather than held in a field.** The queue is a
   /// durable box that the sale path and the recovery pass both write to, so a
@@ -89,14 +82,15 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
     if (onRetry == null || _sending != null) return;
     setState(() {
       _sending = job.receiptNumber;
-      _notice = null;
     });
     try {
       final failure = await onRetry(job.receiptNumber);
       if (!mounted) return;
-      _report(failure == null
+      _report(
+        failure == null
             ? PrinterFailureNotice.sent
-            : PrinterFailureNotice.of(failure));
+            : PrinterFailureNotice.of(failure),
+      );
     } finally {
       if (mounted) setState(() => _sending = null);
     }
@@ -141,14 +135,6 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
                   : '${listing.unreadable} queued receipts could not be read '
                         'and are not listed below. They were not sent, and '
                         'nothing else was affected.',
-            ),
-            SizedBox(height: tokens.spacing.s16),
-          ],
-          if (_notice case final answer?) ...<Widget>[
-            Callout(
-              key: const ValueKey('print-queue-notice'),
-              status: answer.status,
-              message: answer.message,
             ),
             SizedBox(height: tokens.spacing.s16),
           ],

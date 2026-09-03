@@ -147,25 +147,13 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  AppNotice? _notice;
 
-  /// Reports one write outcome, on the surface its kind belongs to.
+  /// Reports one write outcome, over the screen rather than inside the page.
   ///
-  /// See `noticeIsTransient`: a confirmation withdraws itself, and everything
-  /// that names a next step stays where it was drawn.
-  ///
-  /// **`_reportNotice` rather than `_report`, which every sibling surface
-  /// calls it**: `_report` is already this screen's *bulk report* - the
-  /// previewed pages - and one name for two unrelated things on the busiest
-  /// state in the file is how a rename goes wrong later.
-  void _reportNotice(AppNotice notice) {
-    if (noticeIsTransient(notice)) {
-      showAppSnackBar(context, notice);
-      return;
-    }
-    setState(() => _notice = notice);
-  }
-
+  /// See `showAppSnackBar`: since 2026-09-03 every outcome goes there, and
+  /// inline text is left to the one thing it is still right for - a field
+  /// saying what is wrong with what was typed into it.
+  void _reportNotice(AppNotice notice) => showAppSnackBar(context, notice);
 
   @override
   void dispose() {
@@ -221,7 +209,6 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
 
   void _changeTask(_BulkTask task) => setState(() {
     _task = task;
-    _notice = null;
     _discardPlan();
   });
 
@@ -250,7 +237,6 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
       setState(() {
         _field = field;
         _clearCost = clearsCost;
-        _notice = null;
         _discardPlan();
       });
 
@@ -277,7 +263,6 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
     final repository = TenantBulkCatalogRepository(session: session);
     setState(() {
       _busy = true;
-      _notice = null;
       _discardPlan();
     });
     try {
@@ -351,7 +336,6 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
 
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final report = batchPlan != null
@@ -499,19 +483,19 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
     final cursor = _cursors[_pageIndex];
     TenantGuardedLoader<_CatalogView> readWith(TenantDataReader reader) =>
         (session) async {
-      final repository = TenantCatalogRepository(
-        session: session,
-        reader: reader,
-      );
-      final categories = await repository.loadCategories(
-        pageSize: widget.categoryPageSize,
-      );
-      final products = await repository.loadProducts(
-        pageSize: widget.pageSize,
-        cursor: cursor,
-      );
-      return _CatalogView(categories: categories, products: products);
-    };
+          final repository = TenantCatalogRepository(
+            session: session,
+            reader: reader,
+          );
+          final categories = await repository.loadCategories(
+            pageSize: widget.categoryPageSize,
+          );
+          final products = await repository.loadProducts(
+            pageSize: widget.pageSize,
+            cursor: cursor,
+          );
+          return _CatalogView(categories: categories, products: products);
+        };
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -544,7 +528,6 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
         view: view,
         task: _task,
         busy: _busy,
-        notice: _notice,
         report: _report,
         // Which halves this build has at all. A missing callable is a half this
         // route does not offer, exactly as a missing writer is on the catalog
@@ -576,7 +559,6 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
         onPreview: () => _preview(session, view),
         onCommit: () => _commit(session),
         onDiscard: () => setState(() {
-          _notice = null;
           _discardPlan();
         }),
         onNextPage: () => _nextPage(view.products.nextCursor),
@@ -602,7 +584,6 @@ final class _BulkCatalogContents extends StatelessWidget {
     required this.view,
     required this.task,
     required this.busy,
-    required this.notice,
     required this.report,
     required this.canCorrect,
     required this.canImport,
@@ -631,7 +612,6 @@ final class _BulkCatalogContents extends StatelessWidget {
   final _CatalogView view;
   final _BulkTask task;
   final bool busy;
-  final AppNotice? notice;
   final TenantBulkCatalogReport? report;
   final bool canCorrect;
   final bool canImport;
@@ -765,14 +745,6 @@ final class _BulkCatalogContents extends StatelessWidget {
         // `AppNotice` rather than a `String?` is what makes that an invariant
         // a reader can see instead of one they have to trace the assignments
         // to establish.
-        if (notice case final answer?) ...[
-          SizedBox(height: tokens.spacing.s16),
-          Callout(
-            key: const ValueKey('bulk-catalog-notice'),
-            status: answer.status,
-            message: answer.message,
-          ),
-        ],
         SizedBox(height: tokens.spacing.s24),
         if (task == _BulkTask.correct)
           ..._correctionForm(context)

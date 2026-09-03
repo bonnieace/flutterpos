@@ -12,6 +12,7 @@ import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/stats.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'reconciliation_actions.dart';
@@ -118,27 +119,40 @@ final class _TenantReconciliationAnomalyPanelState
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  AppNotice? _notice;
 
-  // **This surface keeps every outcome inline, and it is the one exception to
-  // the sweep of 2026-08-26.** `noticeIsTransient` sends a confirmation to a
-  // snack bar everywhere else; here the confirmation carries the *View this
-  // shift's corrections* control in `Callout.action`, and it carries it because
-  // the row the sentence is about has just been deleted from the list - so that
-  // button is the only way back to what was recorded.
-  //
-  // A snack bar can hold an action, but it withdraws itself after four seconds,
-  // and a control worth putting on a confirmation is one worth being able to
-  // find. So the trail keeps its `Callout` and this state keeps `_notice`.
-
-  /// The shift the current notice is about, when its corrections trail is worth
-  /// offering beside it.
+  /// Reports one correction's outcome over the screen, with the way back to
+  /// what it recorded.
   ///
-  /// Set after a correction that succeeded - the row it resolved has been deleted,
-  /// so the trail is the only remaining account of it - and after one whose
-  /// outcome is unknown, where whether a correction was recorded is exactly the
-  /// open question. Left null for a refusal that certainly changed nothing.
-  String? _noticeShiftId;
+  /// **This surface was the one exception to the 2026-08-26 sweep and is not an
+  /// exception any more.** It kept its `Callout` because the confirmation
+  /// carries the *View this shift's corrections* control, and it carries that
+  /// because the row the sentence is about has just been deleted from the list.
+  /// The product owner's direction on 2026-09-03 is that every outcome is a
+  /// snack bar, so the control comes with it: `showAppSnackBar` takes an action
+  /// exactly as `Callout` does. **What is genuinely lost is dwell** - the button
+  /// withdraws itself after a few seconds where before it stayed - and the trail
+  /// remains reachable from the business's own corrections list.
+  ///
+  /// [shiftId] is the shift whose trail is worth offering: the one a correction
+  /// resolved, or the one whose outcome is unknown, where whether anything was
+  /// recorded is exactly the open question. Null for a refusal that certainly
+  /// changed nothing.
+  void _report(AppNotice notice, {String? shiftId}) => showAppSnackBar(
+    context,
+    notice,
+    action: shiftId == null
+        ? null
+        : AppButton(
+            key: const ValueKey('reconciliation-amend-notice-trail'),
+            label: 'View this shift\'s corrections',
+            icon: Icons.history_edu_outlined,
+            onPressed: () => openTenantShiftAmendments(
+              context,
+              reader: widget.reader,
+              shiftId: shiftId,
+            ),
+          ),
+  );
 
   TenantReconciliationAnomalyKind? _kind;
 
@@ -218,11 +232,7 @@ final class _TenantReconciliationAnomalyPanelState
     final shiftId = anomaly.shiftId;
     if (callable == null || shiftId == null || _busy) return;
     final capturedKey = _sessionKey(session);
-    setState(() {
-      _busy = true;
-      _notice = null;
-      _noticeShiftId = null;
-    });
+    setState(() => _busy = true);
     try {
       final gateway = TenantShiftAmendmentGateway(
         session: session,
@@ -235,13 +245,10 @@ final class _TenantReconciliationAnomalyPanelState
       );
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
-      setState(() {
-        _notice = _amendedNotice(result);
-        // The server's own answer, not the shift this page asked about, so the
-        // trail offered beside the notice is narrowed to the shift that was
-        // actually corrected.
-        _noticeShiftId = result.shiftId;
-      });
+      // The server's own answer, not the shift this page asked about, so the
+      // trail offered beside the notice is narrowed to the shift that was
+      // actually corrected.
+      _report(_amendedNotice(result), shiftId: result.shiftId);
       _reload();
     } on TenantShiftAmendmentException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
@@ -249,26 +256,26 @@ final class _TenantReconciliationAnomalyPanelState
       // request ID. Every other refusal left the shift exactly as it was, and
       // reusing its ID would make a later attempt fail as a duplicate.
       if (!error.mayHaveAmended) _requestId = null;
-      setState(() {
-        _notice = _refusalNotice(error.failure);
-        // Whether a correction was recorded is the open question after an unknown
-        // outcome, and the trail is where it is answered. A refusal that certainly
-        // changed nothing has nothing to look at.
-        _noticeShiftId = error.mayHaveAmended ? shiftId : null;
-      });
+      // Whether a correction was recorded is the open question after an unknown
+      // outcome, and the trail is where it is answered. A refusal that certainly
+      // changed nothing has nothing to look at.
+      _report(
+        _refusalNotice(error.failure),
+        shiftId: error.mayHaveAmended ? shiftId : null,
+      );
       if (error.mayHaveAmended) _reload();
     } on FormatException {
       if (!_stillCurrent(capturedKey)) return;
       // The shift may well have been amended; only the answer was unusable.
-      setState(() {
-        _notice = const AppNotice.unknown(
+      _report(
+        const AppNotice.unknown(
           'The server answer could not be trusted. The shift may have been '
           'corrected; this list has been read again, so check whether the '
           'difference is still listed - or this shift\'s corrections - before '
           'trying once more.',
-        );
-        _noticeShiftId = shiftId;
-      });
+        ),
+        shiftId: shiftId,
+      );
       _reload();
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -282,11 +289,13 @@ final class _TenantReconciliationAnomalyPanelState
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
     final kind = _kind;
-    TenantGuardedLoader<TenantReconciliationAnomalyPage> readWith(TenantDataReader reader) =>
+    TenantGuardedLoader<TenantReconciliationAnomalyPage> readWith(
+      TenantDataReader reader,
+    ) =>
         (session) => TenantReconciliationAnomalyRepository(
-      session: session,
-      reader: reader,
-    ).loadPage(kind: kind, pageSize: widget.pageSize, cursor: cursor);
+          session: session,
+          reader: reader,
+        ).loadPage(kind: kind, pageSize: widget.pageSize, cursor: cursor);
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -317,8 +326,6 @@ final class _TenantReconciliationAnomalyPanelState
         selected: _kind,
         pageIndex: _pageIndex,
         busy: _busy,
-        notice: _notice,
-        noticeShiftId: _noticeShiftId,
         // The correction appears only when the composition root injected the
         // callable and the session holds a role the server would accept.
         // Offering it otherwise would teach an operator nothing except that the
@@ -426,8 +433,6 @@ final class _AnomalyContents extends StatelessWidget {
     required this.selected,
     required this.pageIndex,
     required this.busy,
-    required this.notice,
-    required this.noticeShiftId,
     required this.canAmend,
     required this.amendOffered,
     required this.onAmend,
@@ -442,10 +447,6 @@ final class _AnomalyContents extends StatelessWidget {
   final TenantReconciliationAnomalyKind? selected;
   final int pageIndex;
   final bool busy;
-  final AppNotice? notice;
-
-  /// The shift the notice is about, when its trail is worth offering beside it.
-  final String? noticeShiftId;
 
   final bool canAmend;
   final bool amendOffered;
@@ -524,29 +525,6 @@ final class _AnomalyContents extends StatelessWidget {
             ],
           ),
         ),
-        // What the correction did, as a status rather than a paragraph. **The
-        // trail button is the `Callout`'s own action** rather than a separate
-        // control under it: §5.1 gives `Callout` an action slot for exactly this
-        // — one control belonging to the notice — and the row this notice is
-        // about has been deleted from the list, or may have been, so without it
-        // the correction the sentence names is reachable only by opening the
-        // whole business's trail and reading down.
-        if (notice case final answer?) ...[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('reconciliation-amend-notice'),
-            status: answer.status,
-            message: answer.message,
-            action: noticeShiftId == null
-                ? null
-                : AppButton(
-                    key: const ValueKey('reconciliation-amend-notice-trail'),
-                    label: 'View this shift\'s corrections',
-                    icon: Icons.history_edu_outlined,
-                    onPressed: () => onOpenAmendments(noticeShiftId!),
-                  ),
-          ),
-        ],
         if (amendOffered && !canAmend && _listsShiftVariance) ...[
           SizedBox(height: tokens.spacing.s12),
           // The same notice the day page has carried behind the same component

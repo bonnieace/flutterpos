@@ -261,6 +261,14 @@ void main() {
       expect(find.text('TZS'), findsOneWidget);
       expect(fixture.opened, isEmpty);
 
+      // **Wait the submission snack bar out before pressing anything.** The
+      // step gained its drawing on 2026-09-03, which pushes *Open the till*
+      // down to where the snack bar sits on an 800x600 test surface - and a
+      // snack bar is a real widget that really does take the tap. It goes on
+      // its own after four seconds; the button is under it until then.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
       await _tap(tester, 'onboarding-open-business');
       expect(fixture.opened, hasLength(1));
     });

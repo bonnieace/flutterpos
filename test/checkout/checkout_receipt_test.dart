@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_application_1/checkout/checkout.dart';
+import 'package:flutter_application_1/platform/device_identity.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -135,6 +136,105 @@ void main() {
       box = await _openBox();
       final restored = await _counters(box).resolveDeviceId();
 
+      expect(restored, first);
+    });
+
+    test('binds a new identity to the device the platform names', () async {
+      final first = await _counters(
+        box,
+        hardware: const _Hardware('android-id-a'),
+      ).resolveDeviceId();
+
+      // What a reinstall leaves behind: the app's own data is gone, and the
+      // platform still answers the same thing.
+      await box.delete(HiveCheckoutReceiptCounters.deviceIdentityKey);
+      final second = await _counters(
+        box,
+        seed: 29,
+        hardware: const _Hardware('android-id-a'),
+      ).resolveDeviceId();
+
+      expect(
+        checkoutDeviceHardwareDigest(second),
+        checkoutDeviceHardwareDigest(first),
+        reason: 'The same till must be recognisable as itself.',
+      );
+      expect(
+        checkoutDeviceHardwareDigest(first),
+        deriveCheckoutDeviceHardwareDigest('android-id-a'),
+      );
+      expect(first, contains(deriveCheckoutDeviceHardwareDigest('android-id-a')));
+    });
+
+    test('gives a reinstalled till a receipt code of its own', () async {
+      final first = await _counters(
+        box,
+        hardware: const _Hardware('android-id-a'),
+      ).resolveDeviceId();
+      await box.delete(HiveCheckoutReceiptCounters.deviceIdentityKey);
+      final second = await _counters(
+        box,
+        seed: 29,
+        hardware: const _Hardware('android-id-a'),
+      ).resolveDeviceId();
+
+      // The counter died with the app's data. If the receipt device code came
+      // back unchanged the restarted sequence would reissue today's numbers.
+      expect(second, isNot(first));
+      expect(
+        checkoutReceiptDeviceCode(second),
+        isNot(checkoutReceiptDeviceCode(first)),
+      );
+    });
+
+    test('separates two devices that answer differently', () async {
+      final first = await _counters(
+        box,
+        hardware: const _Hardware('android-id-a'),
+      ).resolveDeviceId();
+      await box.delete(HiveCheckoutReceiptCounters.deviceIdentityKey);
+      final second = await _counters(
+        box,
+        hardware: const _Hardware('android-id-b'),
+      ).resolveDeviceId();
+
+      expect(
+        checkoutDeviceHardwareDigest(second),
+        isNot(checkoutDeviceHardwareDigest(first)),
+      );
+    });
+
+    test('falls back to random where the platform offers nothing', () async {
+      final deviceId = await _counters(
+        box,
+        hardware: const _Hardware(null),
+      ).resolveDeviceId();
+
+      validateCheckoutDeviceId(deviceId);
+      await box.delete(HiveCheckoutReceiptCounters.deviceIdentityKey);
+      final second = await _counters(
+        box,
+        seed: 29,
+        hardware: const _Hardware(null),
+      ).resolveDeviceId();
+
+      expect(
+        checkoutDeviceHardwareDigest(second),
+        isNot(checkoutDeviceHardwareDigest(deviceId)),
+        reason: 'Nothing durable was offered, so nothing durable is claimed.',
+      );
+    });
+
+    test('leaves an identity that is already stored alone', () async {
+      final first = await counters.resolveDeviceId();
+
+      final restored = await _counters(
+        box,
+        hardware: const _Hardware('android-id-a'),
+      ).resolveDeviceId();
+
+      // Rebinding would change the receipt device code of a till mid-day and
+      // orphan the counter standing behind it.
       expect(restored, first);
     });
 
@@ -352,12 +452,26 @@ Future<Box<dynamic>> _openBox() => Hive.openBox<dynamic>(
   crashRecovery: false,
 );
 
-HiveCheckoutReceiptCounters _counters(Box<dynamic> box) =>
-    HiveCheckoutReceiptCounters.fromBox(
-      box,
-      clock: _clock,
-      random: Random(11),
-    );
+HiveCheckoutReceiptCounters _counters(
+  Box<dynamic> box, {
+  int seed = 11,
+  DeviceHardwareIdentity? hardware,
+}) => HiveCheckoutReceiptCounters.fromBox(
+  box,
+  clock: _clock,
+  random: Random(seed),
+  hardwareIdentity: hardware,
+);
+
+/// What the platform answers, including when it answers nothing.
+final class _Hardware implements DeviceHardwareIdentity {
+  const _Hardware(this._value);
+
+  final String? _value;
+
+  @override
+  Future<String?> read() async => _value;
+}
 
 final List<int> _encryptionKey = List<int>.generate(
   HiveCheckoutReceiptCounters.encryptionKeyBytes,

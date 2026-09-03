@@ -66,19 +66,13 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  AppNotice? _notice;
 
-  /// Reports one write outcome, on the surface its kind belongs to.
+  /// Reports one write outcome, over the screen rather than inside the page.
   ///
-  /// See `noticeIsTransient`: a confirmation withdraws itself, and everything
-  /// that names a next step stays where it was drawn.
-  void _report(AppNotice notice) {
-    if (noticeIsTransient(notice)) {
-      showAppSnackBar(context, notice);
-      return;
-    }
-    setState(() => _notice = notice);
-  }
+  /// See `showAppSnackBar`: since 2026-09-03 every outcome goes there, and
+  /// inline text is left to the one thing it is still right for - a field
+  /// saying what is wrong with what was typed into it.
+  void _report(AppNotice notice) => showAppSnackBar(context, notice);
 
   TenantStaffNameResolver? _staffNames;
   String? _staffNamesSessionKey;
@@ -134,21 +128,21 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
     final cursor = _cursors[_pageIndex];
     TenantGuardedLoader<_ReturnFeedView> readWith(TenantDataReader reader) =>
         (session) async {
-      final page = await TenantReturnHistoryRepository(
-        session: session,
-        reader: reader,
-      ).loadReturns(pageSize: widget.pageSize, cursor: cursor);
-      final names = await _resolverFor(session).resolve(
-        page.items.expand(
-          (record) => <String>[
-            record.createdBy,
-            if (record.verification case final verification?)
-              verification.verifiedBy,
-          ],
-        ),
-      );
-      return _ReturnFeedView(page: page, names: names);
-    };
+          final page = await TenantReturnHistoryRepository(
+            session: session,
+            reader: reader,
+          ).loadReturns(pageSize: widget.pageSize, cursor: cursor);
+          final names = await _resolverFor(session).resolve(
+            page.items.expand(
+              (record) => <String>[
+                record.createdBy,
+                if (record.verification case final verification?)
+                  verification.verifiedBy,
+              ],
+            ),
+          );
+          return _ReturnFeedView(page: page, names: names);
+        };
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -160,7 +154,6 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
     final capturedKey = _sessionKey(session);
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final gateway = TenantReturnVerificationGateway(
@@ -171,10 +164,12 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
       );
       final result = await gateway.submit(gateway.createIntent());
       if (!_stillCurrent(capturedKey)) return;
-      _report(AppNotice.confirmed(
+      _report(
+        AppNotice.confirmed(
           'Verified this return and restored ${result.restoredUnits} '
           '${result.restoredUnits == 1 ? 'unit' : 'units'}.',
-        ));
+        ),
+      );
       _reload();
     } on TenantReturnVerificationException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
@@ -182,10 +177,12 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
       if (error.mayHaveCommitted) _reload();
     } on FormatException {
       if (!_stillCurrent(capturedKey)) return;
-      _report(const AppNotice.unknown(
+      _report(
+        const AppNotice.unknown(
           'The verification response could not be trusted. The returns list '
           'has been reloaded so the server can show what happened.',
-        ));
+        ),
+      );
       _reload();
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -214,7 +211,6 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
         selfUid: session.uid,
         pageIndex: _pageIndex,
         busy: _busy,
-        notice: _notice,
         canVerify:
             widget.actions?.verifyCallable != null &&
             TenantReturnVerificationGateway.canVerifyInSession(session),
@@ -232,7 +228,6 @@ final class _ReturnFeedContents extends StatelessWidget {
     required this.selfUid,
     required this.pageIndex,
     required this.busy,
-    required this.notice,
     required this.canVerify,
     required this.onPrevious,
     required this.onNext,
@@ -243,7 +238,6 @@ final class _ReturnFeedContents extends StatelessWidget {
   final String selfUid;
   final int pageIndex;
   final bool busy;
-  final AppNotice? notice;
   final bool canVerify;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
@@ -269,14 +263,6 @@ final class _ReturnFeedContents extends StatelessWidget {
             message:
                 'Only an owner, administrator, or manager can verify a return '
                 'and restore stock.',
-          ),
-        ],
-        if (notice case final answer?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('return-feed-notice'),
-            status: answer.status,
-            message: answer.message,
           ),
         ],
         if (page.items.isNotEmpty) ...<Widget>[
@@ -421,8 +407,6 @@ AppNotice _verificationFailureNotice(TenantReturnVerificationFailure failure) =>
 
 String _lineLabel(TenantReturnLine line) =>
     '${line.quantity} x ${line.productName ?? line.productId}';
-
-
 
 /// One return, as the old till drew one.
 ///

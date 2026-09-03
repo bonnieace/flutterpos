@@ -101,19 +101,13 @@ final class _TenantReconciliationStatusPanelState
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  AppNotice? _notice;
 
-  /// Reports one write outcome, on the surface its kind belongs to.
+  /// Reports one write outcome, over the screen rather than inside the page.
   ///
-  /// See `noticeIsTransient`: a confirmation withdraws itself, and everything
-  /// that names a next step stays where it was drawn.
-  void _report(AppNotice notice) {
-    if (noticeIsTransient(notice)) {
-      showAppSnackBar(context, notice);
-      return;
-    }
-    setState(() => _notice = notice);
-  }
+  /// See `showAppSnackBar`: since 2026-09-03 every outcome goes there, and
+  /// inline text is left to the one thing it is still right for - a field
+  /// saying what is wrong with what was typed into it.
+  void _report(AppNotice notice) => showAppSnackBar(context, notice);
 
   TenantReconciliationMode _mode = TenantReconciliationMode.incremental;
 
@@ -198,7 +192,6 @@ final class _TenantReconciliationStatusPanelState
     final capturedKey = _sessionKey(session);
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final gateway = TenantReconciliationRequestGateway(
@@ -229,8 +222,8 @@ final class _TenantReconciliationStatusPanelState
     } on FormatException {
       if (!_stillCurrent(capturedKey)) return;
       // The request may well have been queued; only its answer was unusable.
-      setState(
-        () => _notice = const AppNotice.unknown(
+      _report(
+        const AppNotice.unknown(
           'The server answer could not be trusted. A check may have been '
           'queued; read this page again before asking for another.',
         ),
@@ -247,8 +240,9 @@ final class _TenantReconciliationStatusPanelState
     if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
-    TenantGuardedLoader<_ReconciliationView> readWith(TenantDataReader reader) =>
-        (session) async {
+    TenantGuardedLoader<_ReconciliationView> readWith(
+      TenantDataReader reader,
+    ) => (session) async {
       final day = await TenantReconciliationStatusRepository(
         session: session,
         reader: reader,
@@ -292,7 +286,6 @@ final class _TenantReconciliationStatusPanelState
         selfUid: session.uid,
         pageIndex: _pageIndex,
         busy: _busy,
-        notice: _notice,
         mode: _mode,
         // The request affordance appears only when the composition root
         // injected the callable and the session holds a role the server would
@@ -368,7 +361,6 @@ final class _ReconciliationContents extends StatelessWidget {
     required this.selfUid,
     required this.pageIndex,
     required this.busy,
-    required this.notice,
     required this.mode,
     required this.canRequest,
     required this.requestOffered,
@@ -383,7 +375,6 @@ final class _ReconciliationContents extends StatelessWidget {
   final String selfUid;
   final int pageIndex;
   final bool busy;
-  final AppNotice? notice;
   final TenantReconciliationMode mode;
   final bool canRequest;
   final bool requestOffered;
@@ -545,18 +536,6 @@ final class _ReconciliationContents extends StatelessWidget {
         // This was a bare `Text` whose sentence was the only thing separating
         // "Queued as rj_000123" from "Only an owner can ask for a check" — the
         // §1 failure in the one place it decides whether somebody presses the
-        // button again. The `AppNotice` carries the answer and the `Callout`
-        // draws it; §5.1 gives that component "permanent notice paragraphs" and
-        // the step-4 sweep ruled that a notice about *this page, this write*
-        // does not fold.
-        if (notice case final answer?) ...[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('reconciliation-request-notice'),
-            status: answer.status,
-            message: answer.message,
-          ),
-        ],
         if (requestOffered) ...[
           SizedBox(height: tokens.spacing.s24),
           if (canRequest)

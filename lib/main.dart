@@ -23,6 +23,7 @@ import 'checkout/checkout.dart';
 import 'dev/firebase_emulators.dart';
 import 'expenses/expenses.dart';
 import 'inventory/inventory.dart';
+import 'platform/device_identity.dart';
 import 'reporting/reporting.dart';
 import 'returns/returns.dart';
 import 'sales/sales.dart';
@@ -130,6 +131,9 @@ Future<void> main() async {
       // the receipt numbering it draws from, and the shift it belongs to must
       // share exactly one fate.
       final checkoutReceiptCounters = await HiveCheckoutReceiptCounters.open(
+        // The platform's own answer to "which device is this", so an identity
+        // minted after a reinstall still names the till it is running on.
+        hardwareIdentity: const MethodChannelDeviceHardwareIdentity(),
         keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
           storage: secureValueStore,
         ),
@@ -782,16 +786,13 @@ class SpiritPOSApp extends StatelessWidget {
         // this has been used once every receipt queues with
         // `printer_not_configured` and no paper comes out.
         //
-        // `probe` is the transport's own connect-and-close, handed over so
-        // *Test this printer* answers "is it reachable?" against what is typed,
-        // before it is saved and without wasting a roll.
+        // `testPrint` puts a page on the roll against what is typed, before it
+        // is saved. The transport moves the bytes and `CheckoutPrinterTestPage`
+        // decides what they say; neither of them is the screen's business, so
+        // the screen is handed one function and no printer at all.
         // The name and the receipt header, which nothing in this product could
         // write until now: `TenantBrandingRepository` has always read
         // `configuration/branding` and it was seeded by hand.
-        // Reads the catalog cache this device already keeps for the till, so
-        // the home can say what a new business still has to do without costing
-        // it a Firestore read.
-        setupChecklist: TenantSetupChecklist(cache: checkoutCatalogCache),
         brandingRoute: (reader) => TenantBrandingScreen(
           reader: reader,
           writer: QueuedTenantConfigurationWriter(
@@ -815,7 +816,13 @@ class SpiritPOSApp extends StatelessWidget {
               isOnline: isOnline,
             ),
           ),
-          probe: printerTransport.probe,
+          testPrint: (configuration) => printerTransport.send(
+            configuration.endpoint,
+            CheckoutPrinterTestPage(
+              profile: printerCapabilityProfile,
+              configuration: configuration,
+            ).build(at: DateTime.now()),
+          ),
         ),
         printerConfigurationRoles:
             TenantPrinterConfigurationPublisher.allowedRoles,

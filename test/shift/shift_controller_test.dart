@@ -561,6 +561,28 @@ void main() {
       expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
     });
 
+    test('names an earlier installation of this same device', () async {
+      server.shifts['tenants/tenant-a/shifts/shift-before'] = _document(
+        overrides: <String, Object?>{
+          'shiftId': 'shift-before',
+          // The durable half of `_deviceA`, under a different installation
+          // half: this device, before the app was reinstalled on it.
+          'deviceId': 'dev-0123456789abcdef01234567deadbeef',
+        },
+      );
+      final controller = _controller(sessions, state, server);
+
+      final result = await controller.openShift();
+
+      // Still refused - the closing summary comes from local sale evidence,
+      // which that installation took with it - but "close it there first"
+      // would send a cashier to the device in their own hand.
+      expect(result.phase, TenantShiftPhase.none);
+      expect(result.errorCode, 'shift_open_on_earlier_install');
+      expect(result.otherDeviceShiftOpen, isTrue);
+      expect(server.created, isEmpty);
+    });
+
     test('fails closed on two open shifts for one device', () async {
       for (final id in <String>['shift-one', 'shift-two']) {
         server.shifts['tenants/tenant-a/shifts/$id'] = _document(

@@ -91,6 +91,11 @@ dependencies:
   audioplayers: ^5.2.1
   lottie: ^3.1.0
   flutter_esc_pos_network: ^1.0.3
+  # Direct since 2026-09-03: `CheckoutPrinterTestPage` draws its own mark and
+  # `Generator.imageRaster` takes an `image` `Image`. It was already here as a
+  # transitive of `flutter_esc_pos_utils`; it is named now because a file of
+  # ours imports it.
+  image: ^4.3.0
   flutter_esc_pos_utils: ^1.0.1
   excel: ^4.0.6
   sentry_flutter: ^9.21.0

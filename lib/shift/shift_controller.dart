@@ -567,6 +567,29 @@ final class TenantShiftController extends ChangeNotifier {
     );
   }
 
+  /// Whether one of [shifts] was opened by a previous installation *here*.
+  ///
+  /// Compares the durable half of the device IDs - see
+  /// [checkoutDeviceHardwareDigest] - which is equal across a reinstall of the
+  /// same till and unequal between two tills. A stored ID that predates that
+  /// split, or one written by a device whose platform offered nothing durable,
+  /// simply never matches, which is the answer this had before.
+  bool _openedByAnEarlierInstall(List<TenantShift> shifts) {
+    final String here;
+    try {
+      here = checkoutDeviceHardwareDigest(_deviceId);
+    } on ArgumentError {
+      return false;
+    }
+    return shifts.any((shift) {
+      try {
+        return checkoutDeviceHardwareDigest(shift.deviceId) == here;
+      } on ArgumentError {
+        return false;
+      }
+    });
+  }
+
   /// Adopts this cashier's canonical open shift instead of opening a duplicate.
   ///
   /// Returns `null` only when no canonical open shift exists for this cashier
@@ -592,7 +615,15 @@ final class TenantShiftController extends ChangeNotifier {
         captured,
         TenantShiftState(
           phase: TenantShiftPhase.none,
-          errorCode: 'shift_open_on_other_device',
+          // **Whether the other device is this one is worth saying.** A shift
+          // opened before this app was reinstalled belongs to an identity that
+          // no longer exists, so "close it there first" sends a cashier to a
+          // device they are already holding. The refusal is the same - the
+          // closing summary comes from local sale evidence, which that
+          // installation took with it - but the sentence has to be true.
+          errorCode: _openedByAnEarlierInstall(shifts)
+              ? 'shift_open_on_earlier_install'
+              : 'shift_open_on_other_device',
           otherDeviceShiftOpen: true,
           otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
         ),

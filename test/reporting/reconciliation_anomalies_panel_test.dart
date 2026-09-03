@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_application_1/ui/fields.dart';
@@ -537,7 +538,7 @@ void main() {
       'requestId': 'amend-shift-abcdefgh',
     });
     expect(
-      noticeMessage(tester, 'reconciliation-amend-notice'),
+      snackNotice(tester).message,
       'Shift shift-a on 2026-07-31 now records 1350.25 instead of 1200.50, '
       'over 10 transactions rather than 9. The counted cash was not changed. '
       'Recorded as sm_abc.',
@@ -574,15 +575,15 @@ void main() {
     // The shift is exactly as it was, so the difference stays listed and the
     // page is not re-read to prove something that did not happen.
     expect(
-      noticeMessage(tester, 'reconciliation-amend-notice'),
+      snackNotice(tester).message,
       contains('this shift cannot be corrected'),
     );
     expect(
-      noticeStatus(tester, 'reconciliation-amend-notice'),
+      snackNotice(tester).status,
       AppStatus.problem,
     );
     expect(
-      noticeStatus(tester, 'reconciliation-amend-notice'),
+      snackNotice(tester).status,
       AppStatus.problem,
     );
     expect(reader.queries.length, 1);
@@ -613,14 +614,14 @@ void main() {
     // The shift may or may not have been corrected, and only the server's own
     // record can settle it.
     expect(
-      noticeMessage(tester, 'reconciliation-amend-notice'),
+      snackNotice(tester).message,
       contains('The result is unknown'),
     );
     // **Not `problem`.** The shift may well have been corrected, and the
     // sentence's own instruction is to go and look - which is what §2.1 gives
     // `attention` rather than a failure.
     expect(
-      noticeStatus(tester, 'reconciliation-amend-notice'),
+      snackNotice(tester).status,
       AppStatus.attention,
     );
     expect(reader.queries.length, 2);
@@ -644,7 +645,7 @@ void main() {
     await _amend(tester, 'shift_b', 'Late offline sale');
 
     expect(
-      noticeMessage(tester, 'reconciliation-amend-notice'),
+      snackNotice(tester).message,
       contains('could not be trusted'),
     );
     expect(find.textContaining('tenant-b'), findsNothing);
@@ -674,7 +675,7 @@ void main() {
 
     expect(callable.payloads, isEmpty);
     expect(
-      find.byKey(const ValueKey('reconciliation-amend-notice')),
+      find.byType(AppSnackBar),
       findsNothing,
     );
   });
@@ -709,7 +710,7 @@ void main() {
 
     // Tenant A's correction must never report itself on tenant B's screen.
     expect(
-      find.byKey(const ValueKey('reconciliation-amend-notice')),
+      find.byType(AppSnackBar),
       findsNothing,
     );
   });
@@ -925,7 +926,7 @@ void main() {
     );
     await _amend(tester, 'shift_b', 'Late offline sale');
 
-    expect(find.byKey(const ValueKey('reconciliation-amend-notice')), findsOne);
+    expect(find.byType(AppSnackBar), findsOne);
     expect(
       find.byKey(const ValueKey('reconciliation-amend-notice-trail')),
       findsNothing,

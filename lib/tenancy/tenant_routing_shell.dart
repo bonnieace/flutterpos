@@ -30,8 +30,6 @@ import 'platform_tenant_archival.dart';
 import 'platform_global_user_status.dart';
 import 'tenant_access.dart';
 import 'tenant_bootstrap.dart';
-import 'tenant_setup_checklist.dart';
-import 'tenant_standing_banner.dart';
 import 'tenant_branding.dart';
 import 'tenant_catalog.dart';
 import 'tenant_default_tenant.dart';
@@ -117,7 +115,6 @@ final class TenantRoutingShell extends StatefulWidget {
     this.checkoutConfigurationRoles = const <TenantRole>[],
     this.brandingRoute,
     this.brandingRoles = const <TenantRole>[],
-    this.setupChecklist,
     this.printerConfigurationRoute,
     this.printerConfigurationRoles = const <TenantRole>[],
     this.printQueueRoute,
@@ -249,21 +246,17 @@ final class TenantRoutingShell extends StatefulWidget {
   /// deliberately narrower than the roles that may sell.
   final List<TenantRole> checkoutConfigurationRoles;
 
-  /// Optional guarded printer settings route, injected for the same reason.
-  ///
-  /// It is the only surface that can say where this business prints, and
-  /// `docs/printer_transport.md` §6 forbids guessing an address — so until it
-  /// has been used once, every receipt queues with `printer_not_configured`.
-  /// Reads what a new business still has to do before it can sell, from the
-  /// catalog cache this device already keeps. Absent, the card is never drawn.
-  final TenantSetupChecklist? setupChecklist;
-
   /// Opens the guarded screen a business names itself on.
   final Widget Function(TenantDataReader reader)? brandingRoute;
 
   /// The roles that route is offered to, decided by the tenancy domain.
   final List<TenantRole> brandingRoles;
 
+  /// Optional guarded printer settings route, injected for the same reason.
+  ///
+  /// It is the only surface that can say where this business prints, and
+  /// `docs/printer_transport.md` §6 forbids guessing an address — so until it
+  /// has been used once, every receipt queues with `printer_not_configured`.
   final Widget Function(TenantDataReader reader)? printerConfigurationRoute;
 
   /// The roles that route is offered to, decided by the checkout domain. Owner
@@ -1084,7 +1077,6 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       checkoutConfigurationRoles: widget.checkoutConfigurationRoles,
       brandingRoute: widget.brandingRoute,
       brandingRoles: widget.brandingRoles,
-      setupChecklist: widget.setupChecklist,
       printerConfigurationRoute: widget.printerConfigurationRoute,
       printerConfigurationRoles: widget.printerConfigurationRoles,
       printQueueRoute: widget.printQueueRoute,
@@ -1570,75 +1562,6 @@ final class _EmptyBusinessList extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Pushes a route that takes this landing screen's reader, under the session
-/// scope it was opened in - the same shape every destination on this screen
-/// uses, factored out because the setup card opens two of them too.
-void _openReaderRoute(
-  BuildContext context,
-  TenantDataReader reader,
-  Widget Function(TenantDataReader reader) route,
-) {
-  final controller = TenantSessionScope.of(context);
-  Navigator.of(context).push(
-    AppPageRoute<void>(
-      builder: (_) =>
-          TenantSessionScope(controller: controller, child: route(reader)),
-    ),
-  );
-}
-
-/// Draws the setup card once the cache has answered, and nothing before then.
-///
-/// **Nothing while it is reading**, deliberately: a card that appeared a beat
-/// after the home had settled would shift the grid under a finger already on
-/// its way to a destination.
-final class _SetupChecklistSlot extends StatefulWidget {
-  const _SetupChecklistSlot({
-    required this.checklist,
-    this.onOpenCurrency,
-    this.onOpenProducts,
-  });
-
-  final TenantSetupChecklist checklist;
-  final VoidCallback? onOpenCurrency;
-  final VoidCallback? onOpenProducts;
-
-  @override
-  State<_SetupChecklistSlot> createState() => _SetupChecklistSlotState();
-}
-
-class _SetupChecklistSlotState extends State<_SetupChecklistSlot> {
-  Future<TenantSetupState>? _reading;
-  TenantSession? _readFor;
-
-  @override
-  Widget build(BuildContext context) {
-    final session = TenantSessionScope.of(context).session;
-    if (session == null) return const SizedBox.shrink();
-    if (!TenantSetupChecklist.showsInSession(session)) {
-      return const SizedBox.shrink();
-    }
-    // One read per session rather than one per build: a `FutureBuilder` handed
-    // a fresh future every frame reads Hive every frame.
-    if (!identical(_readFor, session)) {
-      _readFor = session;
-      _reading = widget.checklist.read(session);
-    }
-    return FutureBuilder<TenantSetupState>(
-      future: _reading,
-      builder: (context, snapshot) {
-        final state = snapshot.data;
-        if (state == null || state.isComplete) return const SizedBox.shrink();
-        return TenantSetupChecklistCard(
-          state: state,
-          onOpenCurrency: widget.onOpenCurrency,
-          onOpenProducts: widget.onOpenProducts,
-        );
-      },
     );
   }
 }
@@ -2403,7 +2326,6 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.checkoutConfigurationRoles = const <TenantRole>[],
     this.brandingRoute,
     this.brandingRoles = const <TenantRole>[],
-    this.setupChecklist,
     this.printerConfigurationRoute,
     this.printerConfigurationRoles = const <TenantRole>[],
     this.printQueueRoute,
@@ -2466,18 +2388,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// deliberately narrower than the roles that may sell.
   final List<TenantRole> checkoutConfigurationRoles;
 
-  /// Optional guarded printer settings route, supplied by the composition root.
-  /// See `TenantRoutingShell.printerConfigurationRoute`.
-  /// Reads what a new business still has to do before it can sell, from the
-  /// catalog cache this device already keeps. Absent, the card is never drawn.
-  final TenantSetupChecklist? setupChecklist;
-
   /// Opens the guarded screen a business names itself on.
   final Widget Function(TenantDataReader reader)? brandingRoute;
 
   /// The roles that route is offered to, decided by the tenancy domain.
   final List<TenantRole> brandingRoles;
 
+  /// Optional guarded printer settings route, supplied by the composition root.
+  /// See `TenantRoutingShell.printerConfigurationRoute`.
   final Widget Function(TenantDataReader reader)? printerConfigurationRoute;
 
   /// The roles that route is offered to. Owner and administrator only.
@@ -2764,32 +2682,6 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 isOwnFigures: false,
               ),
               SizedBox(height: tokens.spacing.s32),
-              // Above the grid rather than below it: a business that cannot
-              // trade should say so before somebody taps *Register* and finds
-              // out from a refusal.
-              TenantStandingBanner(access: membership.access),
-              // Reads Hive, not Firestore: see `tenant_setup_checklist.dart`.
-              // A `FutureBuilder` rather than a guarded load because there is
-              // nothing to authorize - the session was authorized to reach this
-              // screen, and the answer comes off this device.
-              if (setupChecklist case final checklist?)
-                _SetupChecklistSlot(
-                  checklist: checklist,
-                  onOpenCurrency: checkoutConfigurationRoute == null
-                      ? null
-                      : () => _openReaderRoute(
-                          context,
-                          reader,
-                          checkoutConfigurationRoute!,
-                        ),
-                  onOpenProducts: catalogManagementRoute == null
-                      ? null
-                      : () => _openReaderRoute(
-                          context,
-                          reader,
-                          catalogManagementRoute!,
-                        ),
-                ),
               HomeModuleGrid(destinations: destinations),
               if (_figures(context, overview) case final grid?) ...[
                 SizedBox(height: tokens.spacing.s32),

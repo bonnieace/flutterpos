@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:hive/hive.dart';
 
+import '../platform/device_identity.dart';
 import '../tenancy/tenant_id.dart';
 import 'checkout_outbox.dart';
 
@@ -16,6 +17,25 @@ const int checkoutReceiptDeviceCodeLength = 3;
 
 /// Minimum zero-padded width of the per-device daily sequence.
 const int checkoutReceiptSequenceDigits = 4;
+
+/// Hexadecimal characters of a device ID that name the device itself.
+///
+/// **A device ID is two halves, and the split is what makes it safe.** The
+/// leading [checkoutDeviceHardwareDigits] are a digest of a platform value that
+/// survives a reinstall, so the same till is recognisable as itself across one -
+/// which is the whole point, because a shift left open by an identity that no
+/// longer exists can never be closed. The trailing
+/// [checkoutDeviceInstallDigits] are fresh on every installation, because the
+/// daily receipt counter lives in app data and dies with it: an identity that
+/// were durable *all the way through* would restart a counter under a device
+/// code that had already issued those numbers, and reissuing a receipt number
+/// is the one failure this file exists to prevent.
+const int checkoutDeviceHardwareDigits = 24;
+
+/// Hexadecimal characters of a device ID that name this installation of it.
+///
+/// See [checkoutDeviceHardwareDigits] for why an identity has both halves.
+const int checkoutDeviceInstallDigits = 8;
 
 /// The largest sequence one device may issue for one business date.
 ///
@@ -63,12 +83,37 @@ String validateCheckoutBusinessDate(String value) {
 /// The code is a deterministic digest of the durable installation identifier,
 /// so it never exposes the identifier itself and never changes for a device.
 String checkoutReceiptDeviceCode(String deviceId) {
-  final digest = sha256.convert(utf8.encode(validateCheckoutDeviceId(deviceId)));
+  final digest = sha256.convert(
+    utf8.encode(validateCheckoutDeviceId(deviceId)),
+  );
   return digest
       .toString()
       .substring(0, checkoutReceiptDeviceCodeLength)
       .toUpperCase();
 }
+
+/// The half of [deviceId] that names the device rather than the installation.
+///
+/// Two IDs sharing this digest are the same physical till, one of them seen
+/// before a reinstall and one after. Nothing else may be concluded from it: it
+/// is a digest, so it is not the platform value, and two devices whose platform
+/// answered nothing share it only by the same accident that would have
+/// collided their whole IDs before.
+String checkoutDeviceHardwareDigest(String deviceId) =>
+    validateCheckoutDeviceId(
+      deviceId,
+    ).substring(4, 4 + checkoutDeviceHardwareDigits);
+
+/// Digests a platform device value into the durable half of a device ID.
+///
+/// The domain prefix keeps this digest from ever equalling one taken of the
+/// same value for another purpose, and the digest itself is what makes the
+/// stored identity safe to hold at all: the platform value that produced it
+/// cannot be read back out of it.
+String deriveCheckoutDeviceHardwareDigest(String hardwareId) => sha256
+    .convert(utf8.encode('checkout-device-hardware-v1:$hardwareId'))
+    .toString()
+    .substring(0, checkoutDeviceHardwareDigits);
 
 /// Formats the frozen receipt for one device, business date, and sequence.
 String formatCheckoutReceiptNumber({
@@ -82,7 +127,10 @@ String formatCheckoutReceiptNumber({
   final compactDate = validateCheckoutBusinessDate(
     businessDate,
   ).replaceAll('-', '');
-  final padded = sequence.toString().padLeft(checkoutReceiptSequenceDigits, '0');
+  final padded = sequence.toString().padLeft(
+    checkoutReceiptSequenceDigits,
+    '0',
+  );
   return '$checkoutReceiptPrefix-${checkoutReceiptDeviceCode(deviceId)}'
       '-$compactDate-$padded';
 }
@@ -100,7 +148,11 @@ String checkoutReceiptCounterKey({
   final safeDeviceId = validateCheckoutDeviceId(deviceId);
   final safeDate = validateCheckoutBusinessDate(businessDate);
   if (safeTenantId.contains(':')) {
-    throw ArgumentError.value(tenantId, 'tenantId', 'Must not contain a colon.');
+    throw ArgumentError.value(
+      tenantId,
+      'tenantId',
+      'Must not contain a colon.',
+    );
   }
   return '$safeTenantId:$safeDeviceId:$safeDate:receiptCounter';
 }
@@ -125,7 +177,12 @@ typedef CheckoutReceiptClock = DateTime Function();
 /// reissue a receipt number that a committed sale already carries, which is
 /// strictly worse than refusing the checkout.
 final class HiveCheckoutReceiptCounters {
-  HiveCheckoutReceiptCounters._(this._box, this._clock, this._random);
+  HiveCheckoutReceiptCounters._(
+    this._box,
+    this._clock,
+    this._random,
+    this._hardwareIdentity,
+  );
 
   static const boxName = 'checkout-receipt-counters-v1';
   static const schemaVersion = 1;
@@ -142,6 +199,7 @@ final class HiveCheckoutReceiptCounters {
   final Box<dynamic> _box;
   final CheckoutReceiptClock _clock;
   final Random _random;
+  final DeviceHardwareIdentity? _hardwareIdentity;
   Future<String>? _deviceId;
 
   static Future<HiveCheckoutReceiptCounters> open({
@@ -149,6 +207,7 @@ final class HiveCheckoutReceiptCounters {
     HiveInterface? hive,
     CheckoutReceiptClock? clock,
     Random? random,
+    DeviceHardwareIdentity? hardwareIdentity,
   }) async {
     final key = await keyProvider.loadOrCreateKey();
     if (key.length != encryptionKeyBytes) {
@@ -163,6 +222,7 @@ final class HiveCheckoutReceiptCounters {
       box,
       clock ?? _utcNow,
       random ?? Random.secure(),
+      hardwareIdentity,
     );
   }
 
@@ -171,16 +231,31 @@ final class HiveCheckoutReceiptCounters {
     Box<dynamic> box, {
     CheckoutReceiptClock? clock,
     Random? random,
+    DeviceHardwareIdentity? hardwareIdentity,
   }) => HiveCheckoutReceiptCounters._(
     box,
     clock ?? _utcNow,
     random ?? Random.secure(),
+    hardwareIdentity,
   );
 
-  /// Resolves the installation identifier, creating it exactly once.
+  /// Resolves the device identifier, creating it exactly once.
   ///
   /// The value is memoized per process and persisted durably, so the device
   /// code printed on a receipt is stable across restarts and tenants.
+  ///
+  /// **A new one is bound to the device wherever the platform offers something
+  /// to bind to.** See [checkoutDeviceHardwareDigits]: the leading half of a
+  /// fresh ID digests the platform's durable device value, so a reinstall
+  /// produces an ID whose hardware half matches the one it replaced and a till
+  /// can tell that a shift left open by its predecessor was its own. The
+  /// trailing half stays random per installation, which is what keeps the
+  /// receipt counter - destroyed with the app's data - from restarting under a
+  /// device code that has already issued today's numbers.
+  ///
+  /// **An ID already stored is returned exactly as it is**, without asking the
+  /// platform anything. Rewriting it would change the receipt device code of a
+  /// till mid-day and orphan the counter standing behind it.
   Future<String> resolveDeviceId() async {
     // A failed resolution is not memoized, so a corrupt record can be fixed by
     // reinstalling without leaving a permanently poisoned in-memory future.
@@ -211,19 +286,42 @@ final class HiveCheckoutReceiptCounters {
           throw const CheckoutReceiptException('malformed_device_identity');
         }
       }
-      final suffix = List<String>.generate(
-        16,
-        (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
-      ).join();
-      final deviceId = 'dev-$suffix';
+      final hardware = await _hardwareDigest();
+      final deviceId =
+          'dev-'
+          '${hardware ?? _randomHex(checkoutDeviceHardwareDigits)}'
+          '${_randomHex(checkoutDeviceInstallDigits)}';
       await _box.put(deviceIdentityKey, <String, Object?>{
         'schemaVersion': schemaVersion,
         'deviceId': validateCheckoutDeviceId(deviceId),
         'createdAtMs': _clock().toUtc().millisecondsSinceEpoch,
+        // Read by nothing, and written for whoever next holds a device that
+        // keeps forgetting itself: it says whether the hardware half above
+        // means anything. Unknown keys are ignored on read, so an identity
+        // written before this field existed still loads.
+        'hardwareBound': hardware != null,
       });
       return deviceId;
     });
   }
+
+  /// The durable half of a fresh ID, or null when there is nothing to bind to.
+  ///
+  /// A platform that throws, is not there, or has no answer costs the identity
+  /// nothing it did not already lack: the caller falls back to random, which is
+  /// what every ID minted before this seam existed was made of.
+  Future<String?> _hardwareDigest() async {
+    final identity = _hardwareIdentity;
+    if (identity == null) return null;
+    final hardwareId = await identity.read();
+    if (hardwareId == null || hardwareId.isEmpty) return null;
+    return deriveCheckoutDeviceHardwareDigest(hardwareId);
+  }
+
+  String _randomHex(int digits) => List<String>.generate(
+    digits ~/ 2,
+    (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+  ).join();
 
   /// Atomically allocates the next sequence for one device and business date.
   ///

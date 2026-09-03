@@ -436,7 +436,6 @@ final class _TenantProductStockAdjustmentPanelState
     extends State<TenantProductStockAdjustmentPanel> {
   int _generation = 0;
   bool _busy = false;
-  AppNotice? _notice;
 
   /// Retained only across an ambiguous attempt, so a retry addresses the same
   /// idempotency record instead of moving the same stock twice.
@@ -483,7 +482,7 @@ final class _TenantProductStockAdjustmentPanelState
       completed(notice);
       return;
     }
-    setState(() => _notice = notice);
+    showAppSnackBar(context, notice);
   }
 
   /// Adjusts this product's stock through the session- and product-bound
@@ -501,7 +500,6 @@ final class _TenantProductStockAdjustmentPanelState
     final capturedKey = _sessionKey(session);
     setState(() {
       _busy = true;
-      _notice = null;
     });
     try {
       final gateway = TenantStockAdjustmentGateway(
@@ -573,7 +571,6 @@ final class _TenantProductStockAdjustmentPanelState
       builder: (context, session, product) => _AdjustStockContents(
         product: product,
         busy: _busy,
-        notice: _notice,
         canAdjust:
             widget.actions?.adjustCallable != null &&
             TenantStockAdjustmentGateway.canAdjustInSession(session),
@@ -1020,7 +1017,6 @@ final class _AdjustStockContents extends StatelessWidget {
   const _AdjustStockContents({
     required this.product,
     required this.busy,
-    required this.notice,
     required this.canAdjust,
     required this.onAdjust,
     required this.onCancel,
@@ -1028,7 +1024,6 @@ final class _AdjustStockContents extends StatelessWidget {
 
   final TenantProduct product;
   final bool busy;
-  final AppNotice? notice;
   final bool canAdjust;
 
   final void Function(
@@ -1071,17 +1066,6 @@ final class _AdjustStockContents extends StatelessWidget {
             ),
           ],
         ),
-        if (notice case final answer?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          // Only a refusal or an unknown outcome reaches here: a commit pops
-          // the route and is announced over the catalog instead. See
-          // [TenantProductStockAdjustmentPanel.onCompleted].
-          Callout(
-            key: const ValueKey('product-stock-notice'),
-            status: answer.status,
-            message: answer.message,
-          ),
-        ],
         SizedBox(height: tokens.spacing.s16),
         if (canAdjust)
           _AdjustStockForm(

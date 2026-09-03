@@ -185,11 +185,11 @@ void main() {
     // and nothing needs doing. Painting it the same red as a forbidden change
     // would report a fault where the intent is already satisfied.
     expect(
-      noticeMessage(tester, 'checkout-configuration-notice'),
+      snackNotice(tester).message,
       'That is already the published currency.',
     );
     expect(
-      noticeStatus(tester, 'checkout-configuration-notice'),
+      snackNotice(tester).status,
       AppStatus.info,
     );
     expect(writer.published, isEmpty);
@@ -213,11 +213,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      noticeMessage(tester, 'checkout-configuration-notice'),
+      snackNotice(tester).message,
       'Enter a three-letter ISO 4217 currency code, such as KES or UGX.',
     );
     expect(
-      noticeStatus(tester, 'checkout-configuration-notice'),
+      snackNotice(tester).status,
       AppStatus.problem,
     );
     expect(writer.published, isEmpty);
@@ -242,7 +242,7 @@ void main() {
     await _publish(tester, 'KES');
 
     expect(
-      noticeMessage(tester, 'checkout-configuration-notice'),
+      snackNotice(tester).message,
       startsWith('This device is offline'),
     );
     // Nothing was published, so nothing needs re-reading anywhere.
@@ -261,7 +261,7 @@ void main() {
     await _publish(tester, 'UGX');
 
     expect(
-      noticeMessage(tester, 'checkout-configuration-notice'),
+      snackNotice(tester).message,
       startsWith('The change was refused'),
     );
     // A proved refusal wrote nothing, so there is nothing new to read.
@@ -289,7 +289,7 @@ void main() {
     // This write names one document and one value, so unlike a return or an
     // adjustment it carries no request ID and a retry converges.
     expect(
-      noticeMessage(tester, 'checkout-configuration-notice'),
+      snackNotice(tester).message,
       contains('publishing the same code again is safe'),
     );
     expect(reader.requested.length, 2);
@@ -370,7 +370,7 @@ void main() {
 
     // The result belonged to a session that is no longer selected.
     expect(
-      find.byKey(const ValueKey('checkout-configuration-notice')),
+      find.byType(AppSnackBar),
       findsNothing,
     );
   });

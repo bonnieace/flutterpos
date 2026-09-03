@@ -20,6 +20,7 @@ import '../checkout/checkout_configuration_writer.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/snackbar.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -67,7 +68,6 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
   /// somebody who is typing is the defect this flag exists to prevent.
   bool _seeded = false;
 
-  AppNotice? _notice;
   bool _saving = false;
   int _generation = 0;
 
@@ -106,15 +106,15 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
             published: published,
           );
     } on TenantBrandingException catch (error) {
-      setState(
-        () => _notice = AppNotice.refused(tenantBrandingFailureMessage(error)),
+      showAppSnackBar(
+        context,
+        AppNotice.refused(tenantBrandingFailureMessage(error)),
       );
       return;
     }
 
     setState(() {
       _saving = true;
-      _notice = null;
     });
     final result = await writer.merge(
       path: intent.path,
@@ -123,34 +123,34 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
     if (!mounted) return;
     setState(() {
       _saving = false;
-      _notice = switch (result.kind) {
-        TenantConfigurationWriteKind.queued => const AppNotice.offline(
-          'Saved on this device; waiting to sync.',
-        ),
-        TenantConfigurationWriteKind.committed => const AppNotice.confirmed(
-          'Saved. The home and every receipt printed from now on carry these '
-          'details.',
-        ),
-        TenantConfigurationWriteKind.rejected => const AppNotice.refused(
-          'The server refused the change, so nothing was saved.',
-        ),
-        // §2.1's `attention` is "awaiting", which an unknown write is. The page
-        // re-reads rather than guessing which way it went.
-        TenantConfigurationWriteKind.ambiguous => const AppNotice.unknown(
-          'It is not certain whether that saved. The details below have been '
-          'read again.',
-        ),
-        TenantConfigurationWriteKind.unavailable => const AppNotice.offline(
-          'This device is offline, so nothing was sent. The details are '
-          'unchanged.',
-        ),
-      };
       if (result.kind != TenantConfigurationWriteKind.rejected) {
         // Re-read after anything that may have landed, including the ambiguous
         // case: the document decides what is published, not this screen.
         _seeded = false;
         _generation++;
       }
+    });
+    showAppSnackBar(context, switch (result.kind) {
+      TenantConfigurationWriteKind.queued => const AppNotice.offline(
+        'Saved on this device; waiting to sync.',
+      ),
+      TenantConfigurationWriteKind.committed => const AppNotice.confirmed(
+        'Saved. The home and every receipt printed from now on carry these '
+        'details.',
+      ),
+      TenantConfigurationWriteKind.rejected => const AppNotice.refused(
+        'The server refused the change, so nothing was saved.',
+      ),
+      // §2.1's `attention` is "awaiting", which an unknown write is. The page
+      // re-reads rather than guessing which way it went.
+      TenantConfigurationWriteKind.ambiguous => const AppNotice.unknown(
+        'It is not certain whether that saved. The details below have been '
+        'read again.',
+      ),
+      TenantConfigurationWriteKind.unavailable => const AppNotice.offline(
+        'This device is offline, so nothing was sent. The details are '
+        'unchanged.',
+      ),
     });
   }
 
@@ -251,14 +251,6 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
                 enableSuggestions: false,
                 enabled: canPublish && !_saving,
               ),
-              if (_notice case final notice?) ...<Widget>[
-                SizedBox(height: tokens.spacing.s16),
-                Callout(
-                  key: const ValueKey('branding-notice'),
-                  status: notice.status,
-                  message: notice.message,
-                ),
-              ],
               SizedBox(height: tokens.spacing.s24),
               AppButton(
                 key: const ValueKey('branding-save'),

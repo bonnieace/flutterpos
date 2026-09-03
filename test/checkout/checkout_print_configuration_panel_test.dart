@@ -3,6 +3,7 @@ import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/checkout/checkout_print_configuration_panel.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_application_1/ui/states.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -139,7 +140,7 @@ void main() {
         'updatedBy': 'owner-a',
       });
       expect(
-        noticeStatus(tester, 'printer-configuration-notice'),
+        snackNotice(tester).status,
         AppStatus.ok,
       );
       // Re-read, because the document is what a receipt is dialled at rather
@@ -157,7 +158,7 @@ void main() {
 
       expect(writer.merges, isEmpty);
       expect(
-        noticeMessage(tester, 'printer-configuration-notice'),
+        snackNotice(tester).message,
         startsWith('Enter the printer address as a name or an IP'),
       );
     });
@@ -174,7 +175,7 @@ void main() {
 
       expect(writer.merges, isEmpty);
       expect(
-        noticeMessage(tester, 'printer-configuration-notice'),
+        snackNotice(tester).message,
         startsWith('Enter the port as a number'),
       );
     });
@@ -196,7 +197,7 @@ void main() {
 
       expect(writer.merges, isEmpty);
       expect(
-        noticeStatus(tester, 'printer-configuration-notice'),
+        snackNotice(tester).status,
         AppStatus.info,
       );
     });
@@ -239,7 +240,7 @@ void main() {
       await _save(tester, host: '192.168.1.50');
 
       expect(
-        noticeStatus(tester, 'printer-configuration-notice'),
+        snackNotice(tester).status,
         AppStatus.info,
       );
     });
@@ -258,23 +259,23 @@ void main() {
 
       expect(reader.requested, hasLength(1));
       expect(
-        noticeStatus(tester, 'printer-configuration-notice'),
+        snackNotice(tester).status,
         AppStatus.problem,
       );
     });
   });
 
   group('testing a printer', () {
-    testWidgets('probes what is typed, not what is stored', (tester) async {
-      // The whole use is checking an address before committing to it.
-      final probed = <PrinterEndpoint>[];
+    testWidgets('prints what is typed, not what is stored', (tester) async {
+      // The whole use is checking a printer before committing to it.
+      final printed = <TenantPrinterConfiguration>[];
 
       await _pump(
         tester,
         _controller(),
         _Reader(stored: _stored()),
         writer: _Writer(),
-        probe: (endpoint) async => probed.add(endpoint),
+        testPrint: (configuration) async => printed.add(configuration),
       );
       await tester.enterText(
         find.byKey(const ValueKey('printer-configuration-host')),
@@ -284,36 +285,37 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('printer-configuration-test')));
       await tester.pumpAndSettle();
 
-      expect(probed.single.host, '192.168.1.99');
-      // **A snack bar since 2026-08-26.** A probe changes nothing, so its
-      // answer is not the state of this page and no longer sits in the same
-      // block as the record of a save.
+      expect(printed.single.endpoint.host, '192.168.1.99');
+      // **The whole configuration, not an address.** The page prints the paper
+      // width and is laid out to it, so a width set to the wrong roll is a
+      // fault this control can show and a bare host could not carry.
+      expect(printed.single.paperWidth, PrinterPaperWidth.columns32);
+      // **A snack bar since 2026-08-26.** The answer belongs to the button that
+      // was just pressed, not to the record of a save.
       expect(
         snackNotice(tester).message,
-        'The printer answered. Nothing was printed.',
-      );
-      expect(
-        find.byKey(const ValueKey('printer-configuration-notice')),
-        findsNothing,
+        startsWith('A test page was sent to the printer.'),
       );
     });
 
-    testWidgets('says nothing was printed, because nothing was', (
+    testWidgets('says sent, and asks somebody to look at the roll', (
       tester,
     ) async {
-      // `probe` connects and closes. Onboarding needs the answer without
-      // wasting paper, and the sentence must not imply a test page came out.
+      // `PrinterTransport.send` returning means the bytes were handed off and
+      // never that paper moved, so the sentence must not claim it did - and the
+      // one person who can see the roll is asked to check the width on it.
       await _pump(
         tester,
         _controller(),
         _Reader(stored: _stored()),
         writer: _Writer(),
-        probe: (_) async {},
+        testPrint: (_) async {},
       );
       await tester.tap(find.byKey(const ValueKey('printer-configuration-test')));
       await tester.pumpAndSettle();
 
-      expect(snackNotice(tester).message, contains('Nothing was printed'));
+      expect(snackNotice(tester).message, contains('was sent to the printer'));
+      expect(snackNotice(tester).message, contains('width of the roll'));
       expect(snackNotice(tester).status, AppStatus.ok);
     });
 
@@ -327,7 +329,7 @@ void main() {
         _controller(),
         _Reader(stored: _stored()),
         writer: _Writer(),
-        probe: (_) async => throw const PrinterTransportException(
+        testPrint: (_) async => throw const PrinterTransportException(
           PrinterTransportCode.connectTimeout,
         ),
       );
@@ -340,7 +342,7 @@ void main() {
       );
     });
 
-    testWidgets('is not offered where there is no transport to probe with', (
+    testWidgets('is not offered where there is no transport to print with', (
       tester,
     ) async {
       // A control that cannot work is worse than a missing one.
@@ -439,7 +441,7 @@ Future<void> _pump(
   TenantSessionController controller,
   _Reader reader, {
   TenantConfigurationDocumentWriter? writer,
-  PrinterProbe? probe,
+  PrinterTestPrint? testPrint,
 }) async {
   tester.view.physicalSize = const Size(1400, 2400);
   tester.view.devicePixelRatio = 1;
@@ -453,7 +455,7 @@ Future<void> _pump(
           body: TenantPrinterConfigurationPanel(
             reader: reader,
             writer: writer,
-            probe: probe,
+            testPrint: testPrint,
           ),
         ),
       ),
