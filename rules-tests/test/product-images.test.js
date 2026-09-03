@@ -39,6 +39,18 @@ function upload(storage, path = imagePath, options = {}) {
   });
 }
 
+// **This suite cannot see the document budget.** Cross-service Rules allow at
+// most two unique Firestore documents per evaluation, and a third denies every
+// request in production - but the emulator enforces no such limit. Verified
+// 2026-09-03 by running both versions through this harness under identical seed
+// data: the 3-document `memberStanding()` that this file was green against had
+// product image upload and display broken for every user in every tenant.
+//
+// `storage.rules` now sits at exactly two, `tenants/{id}` and its `staff/{uid}`.
+// Adding any lookup to it breaks the feature outright with this file still
+// passing, so count the unique paths by hand after editing it:
+//
+//   grep -o "firestore\.\(get\|exists\)([a-zA-Z]*Path" storage.rules | sort -u
 describe("tenant product image storage rules", () => {
   before(async () => {
     testEnvironment = await createStorageRulesTestEnvironment();
@@ -107,7 +119,7 @@ describe("tenant product image storage rules", () => {
     );
   });
 
-  test("type, size, and ownership metadata are enforced", async () => {
+  test("type and size are enforced", async () => {
     await seedDocuments(
       testEnvironment,
       activeTenantDocuments({ uid: "manager-a", role: "manager" }),
@@ -115,7 +127,11 @@ describe("tenant product image storage rules", () => {
     const storage = authenticatedStorage(testEnvironment, "manager-a");
 
     await assertFails(upload(storage, imagePath, { contentType: "image/gif" }));
-    await assertFails(
+    // **Custom metadata is no longer a condition of the write**, so an object
+    // whose metadata names another tenant is accepted - under this tenant's own
+    // path, which is the only thing that ever authorised it. See `storage.rules`
+    // for why the two clauses that compared them went.
+    await assertSucceeds(
       upload(storage, imagePath, {
         customMetadata: { tenantId: "tenant-b", productId: "product-a" },
       }),

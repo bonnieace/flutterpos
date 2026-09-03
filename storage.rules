@@ -2,10 +2,6 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    function rootUserPath() {
-      return /databases/(default)/documents/users/$(request.auth.uid);
-    }
-
     function tenantPath(tenantId) {
       return /databases/(default)/documents/tenants/$(tenantId);
     }
@@ -18,11 +14,30 @@ service firebase.storage {
     // Split out on 2026-09-02 because the two halves answer different
     // questions: this one is "is this person still staff here", and the tenant
     // status below is "may this business be traded in at all".
+    //
+    // **Two documents is the ceiling, and that is why the root user document is
+    // not read here.** Cross-service Rules allow no more than two *unique*
+    // Firestore documents per evaluation; a third denies the request outright,
+    // with a 403 indistinguishable from a rule that says no. This function used
+    // to read `users/{uid}` as well as the two below, which put every upload and
+    // every image read one document over the line - so the feature could not
+    // work for anybody, in any tenant, with any data. Repeat reads of the two
+    // paths here are free, because a document is cached for the evaluation.
+    //
+    // **What that costs.** `users/{uid}` carried `globalStatus == 'active'` and
+    // `accountType == 'tenant_user'`. Suspending a user globally calls
+    // `auth.updateUser(uid, {disabled: true})` and revokes their refresh tokens,
+    // so a suspended account stops minting tokens and `request.auth` goes null
+    // here on its own - but not before an already-issued ID token expires, up to
+    // an hour later. Inside that window a just-suspended member keeps the
+    // product images of a tenant whose staff record still says `active`.
+    // `firestore.rules` closes the same window with `authValidAfterSeconds`;
+    // this file never had that check, and cannot afford the read that would feed
+    // it. Widening the gap to product images is the price of the feature
+    // existing at all. Close it properly by having global suspension write
+    // through to the staff records, which this gate already reads.
     function memberStanding(tenantId) {
       return request.auth != null
-        && firestore.exists(rootUserPath())
-        && firestore.get(rootUserPath()).data.globalStatus == 'active'
-        && firestore.get(rootUserPath()).data.accountType == 'tenant_user'
         && firestore.exists(tenantPath(tenantId))
         && firestore.exists(staffPath(tenantId))
         && firestore.get(staffPath(tenantId)).data.uid == request.auth.uid
@@ -77,15 +92,22 @@ service firebase.storage {
           in ['owner', 'admin', 'manager'];
     }
 
+    // **Custom metadata is not a condition of the write.** The two clauses that
+    // compared `request.resource.metadata.tenantId` and `.productId` against the
+    // path wildcards went on 2026-09-03. They authorised nothing: the path is
+    // what `inventoryManager(tenantId)` is checked against, so an object landing
+    // under this tenant's prefix is this tenant's object whatever its metadata
+    // claims, and a member who can write here can write any metadata they like.
+    // What the clauses did do is deny every upload that omitted them - reading a
+    // field off a null `metadata` is an evaluation error, not a false - which
+    // made an optional client convenience load-bearing for the whole feature.
     match /tenantProductImages/{tenantId}/{productId}/{imageId} {
       allow read: if readingMember(tenantId);
       allow create, update: if inventoryManager(tenantId)
         && request.resource.size > 0
         && request.resource.size <= 5 * 1024 * 1024
         && request.resource.contentType
-          in ['image/jpeg', 'image/png', 'image/webp']
-        && request.resource.metadata.tenantId == tenantId
-        && request.resource.metadata.productId == productId;
+          in ['image/jpeg', 'image/png', 'image/webp'];
       allow delete: if inventoryManager(tenantId);
     }
   }
