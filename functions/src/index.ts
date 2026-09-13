@@ -65,6 +65,7 @@ export {
   adjustStock,
   getSalesComparison,
   importProducts,
+  recordReceiptReprint,
   removeProductBackground,
   updateProduct,
   updateProducts,
@@ -72,6 +73,7 @@ export {
 } from "./operations";
 
 export {
+  acknowledgeReconciliationAnomaly,
   amendShiftSummary,
   mergeSaleReconciliationJob,
   requestTenantReconciliation,

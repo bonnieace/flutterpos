@@ -7,6 +7,7 @@ import {
   validateInvitationDeliveryTask,
 } from "./invitationDelivery";
 import {hashRecipient} from "../email/recipientHash";
+import {storedCredentialBootstrapRequired} from "./shared";
 
 const TASK = {
   deliveryId: "delivery-1",
@@ -49,6 +50,31 @@ test("verified invitees use the proof action directly without generating credent
   }, "https://app.example.test/accept-invitation");
   assert.equal(generated, false);
   assert.match(link, /invitationToken=private-token/);
+});
+
+test("an invitation written before the rename still picks its own email", () => {
+  // `visibleAcceptanceAllowed` was the exact negation of this question until
+  // 2026-09-08. Reading it is what stops an invitation already in the
+  // collection being sent the wrong one of the two letters after the rename.
+  assert.equal(
+    storedCredentialBootstrapRequired({visibleAcceptanceAllowed: false}),
+    true
+  );
+  assert.equal(
+    storedCredentialBootstrapRequired({visibleAcceptanceAllowed: true}),
+    false
+  );
+  // Absent entirely, which is an invitation from before either field existed:
+  // the safe answer is the link that sets a password on the way through.
+  assert.equal(storedCredentialBootstrapRequired({}), true);
+  // The new field wins wherever it is present.
+  assert.equal(
+    storedCredentialBootstrapRequired({
+      credentialBootstrapRequired: false,
+      visibleAcceptanceAllowed: false,
+    }),
+    false
+  );
 });
 
 test("staff delivery recipient is bound to the shared versioned HMAC", () => {

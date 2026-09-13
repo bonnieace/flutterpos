@@ -14,21 +14,21 @@ library;
 
 import 'checkout_print_transport_base.dart';
 
-PrinterTransport createPrinterTransport() => const UnsupportedPrinterTransport();
+PrinterTransport createPrinterTransport() =>
+    const UnsupportedPrinterTransport();
 
 final class UnsupportedPrinterTransport implements PrinterTransport {
   const UnsupportedPrinterTransport();
 
   @override
-  PrinterTransportCapability get capability =>
-      const PrinterTransportCapability(
-        kind: PrinterTransportKind.none,
-        // Nothing is configurable, so the question does not arise; `false`
-        // keeps a setup screen from offering a printer address field it could
-        // never use.
-        endpointIsPrinter: false,
-        label: 'Printing is not available on this platform',
-      );
+  PrinterTransportCapability get capability => const PrinterTransportCapability(
+    kind: PrinterTransportKind.none,
+    // Nothing is configurable, so the question does not arise; `false`
+    // keeps a setup screen from offering a printer address field it could
+    // never use.
+    endpointIsPrinter: false,
+    label: 'Printing is not available on this platform',
+  );
 
   @override
   Future<void> probe(PrinterEndpoint endpoint) async =>

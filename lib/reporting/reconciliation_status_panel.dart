@@ -267,7 +267,6 @@ final class _TenantReconciliationStatusPanelState
     final guardKey = '${widget.businessDate}:$_generation:$_pageIndex:$cursor';
     _composeLoaders(guardKey);
     return TenantRouteGuard<_ReconciliationView>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantReconciliationStatusRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

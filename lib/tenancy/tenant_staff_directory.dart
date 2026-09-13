@@ -791,7 +791,6 @@ final class _TenantStaffManagementPanelState
         '${_role?.wireValue ?? '-'}:${_status?.wireValue ?? '-'}';
     _composeLoaders(key);
     return TenantRouteGuard<TenantStaffPage>(
-      key: ValueKey(key),
       allowedRoles: TenantStaffDirectoryScreen.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
@@ -1590,7 +1589,7 @@ final class _StaffTableRow extends StatelessWidget {
               Expanded(flex: 2, child: invitation),
             ],
             SizedBox(width: tokens.spacing.s8),
-            SizedBox(width: 72, child: actions),
+            SizedBox(width: tokens.spacing.s64, child: actions),
           ],
         ),
       ),
@@ -1719,8 +1718,10 @@ final class _StaffActionMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (actions.isEmpty) return const SizedBox(width: 48, height: 48);
     final tokens = AppTokens.componentOf(context);
+    if (actions.isEmpty) {
+      return SizedBox(width: tokens.spacing.s48, height: tokens.spacing.s48);
+    }
     return PopupMenuButton<int>(
       key: ValueKey('staff-actions-${staff.uid}'),
       tooltip: 'Actions for ${staff.displayName}',

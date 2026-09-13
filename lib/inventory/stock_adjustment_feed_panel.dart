@@ -117,27 +117,27 @@ final class _TenantStockAdjustmentFeedPanelState
     final cursor = _cursors[_pageIndex];
     TenantGuardedLoader<_FeedView> readWith(TenantDataReader reader) =>
         (session) async {
-      final repository = TenantStockAdjustmentFeedRepository(
-        session: session,
-        reader: reader,
-      );
-      final page = productId == null
-          ? await repository.loadAdjustments(
-              pageSize: widget.pageSize,
-              cursor: cursor,
-            )
-          : await repository.loadProductAdjustments(
-              productId: productId,
-              pageSize: widget.pageSize,
-              cursor: cursor,
-            );
-      return _FeedView(
-        page: page,
-        names: await _resolverFor(
-          session,
-        ).resolve(page.items.map((record) => record.actorUid)),
-      );
-    };
+          final repository = TenantStockAdjustmentFeedRepository(
+            session: session,
+            reader: reader,
+          );
+          final page = productId == null
+              ? await repository.loadAdjustments(
+                  pageSize: widget.pageSize,
+                  cursor: cursor,
+                )
+              : await repository.loadProductAdjustments(
+                  productId: productId,
+                  pageSize: widget.pageSize,
+                  cursor: cursor,
+                );
+          return _FeedView(
+            page: page,
+            names: await _resolverFor(
+              session,
+            ).resolve(page.items.map((record) => record.actorUid)),
+          );
+        };
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -149,7 +149,6 @@ final class _TenantStockAdjustmentFeedPanelState
     final guardKey = '${widget.product?.id}:$_pageIndex:$cursor';
     _composeLoaders(guardKey);
     return TenantRouteGuard<_FeedView>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantStockAdjustmentFeedRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

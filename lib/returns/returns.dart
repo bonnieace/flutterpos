@@ -3,5 +3,6 @@ export 'return_feed_panel.dart';
 export 'return_history.dart';
 export 'return_history_panel.dart';
 export 'return_journal.dart';
+export 'return_offsets.dart';
 export 'return_request.dart';
 export 'return_verification.dart';

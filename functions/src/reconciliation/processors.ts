@@ -1,6 +1,7 @@
 import {
   DocumentData,
   DocumentReference,
+  DocumentSnapshot,
   FieldPath,
   FieldValue,
   Firestore,
@@ -14,9 +15,11 @@ import {
   digest,
   shiftAnomalyId,
   shiftExpectationId,
+  shiftTenderAnomalyId,
   stockCheckpointHash,
   stockComparisonOutcome,
   trailingIsoDates,
+  TENDER_DECLARATION_REQUIRED_FROM,
 } from "./model";
 import {ClaimedReconciliationJob} from "./jobs";
 import {SaleLike, moneyToMinorUnits, minorUnitsToMoney} from "../operations/domain";
@@ -54,7 +57,15 @@ export interface StockPageResult {
 export interface ShiftPageResult {
   processed: number;
   varianceCount: number;
+  /** Shifts whose declared takings disagree with what their sales derive. */
+  tenderVarianceCount: number;
   hasMore: boolean;
+}
+
+/** What one verification found, so a page can count the two kinds apart. */
+interface ShiftVerificationResult {
+  salesVariance: boolean;
+  tenderVariance: boolean;
 }
 
 interface ProductResult {
@@ -207,18 +218,39 @@ async function regenerateDailyMetric(
     }, {merge: false});
     for (const shift of result.shifts) {
       const id = shiftExpectationId(businessDate, shift.shiftId);
+      // **The version tag is load-bearing, not decoration.** `shiftAnomalyId`
+      // is keyed by this digest, so without a term that every pre-deploy
+      // generation lacks, a regeneration that happened to reproduce an earlier
+      // one would merge today's figures into an anomaly document written
+      // against the old shape. The tender terms are the honest half: a split
+      // that changed is a different expectation, and an in-flight verifier
+      // holding the old generation is then correctly refused.
       const generation = digest([
+        "shift-expectation-v2",
         metricGeneration,
         shift.shiftId,
         `${shift.sales}`,
         `${shift.transactions}`,
+        `${shift.tenders.cashMinor}`,
+        `${shift.tenders.mpesaMinor}`,
+        `${shift.tenders.cardMinor}`,
+        `${shift.tenders.unattributedMinor}`,
       ]);
+      const {tenders, ...aggregate} = shift;
       transaction.set(tenantRef.collection("shift_expectations").doc(id), {
-        ...shift,
+        ...aggregate,
         tenantId,
         expectationId: id,
         generation,
         metricGeneration,
+        // Flattened rather than nested so the verifier can read one field at a
+        // time and tell "this expectation predates the split" from "this shift
+        // took nothing by that method".
+        expectedCashMinor: tenders.cashMinor,
+        expectedMpesaMinor: tenders.mpesaMinor,
+        expectedCardMinor: tenders.cardMinor,
+        expectedUnattributedMinor: tenders.unattributedMinor,
+        tenderExpectationVersion: 1,
         needsVerification: true,
         updatedAt: FieldValue.serverTimestamp(),
         createdAt: FieldValue.serverTimestamp(),
@@ -705,7 +737,7 @@ async function verifyShiftExpectation(
   db: Firestore,
   job: ClaimedReconciliationJob,
   expectation: QueryDocumentSnapshot<DocumentData>
-): Promise<boolean> {
+): Promise<ShiftVerificationResult> {
   const tenantRef = db.collection("tenants").doc(job.tenantId);
   const shiftId = expectation.get("shiftId");
   const generation = expectation.get("generation");
@@ -717,7 +749,7 @@ async function verifyShiftExpectation(
       const currentExpectation = await transaction.get(expectation.ref);
       await assertCurrentLease(transaction, db, job);
       if (!currentExpectation.exists || currentExpectation.get("needsVerification") !== true) {
-        return false;
+        return {salesVariance: false, tenderVariance: false};
       }
       const currentShiftId = currentExpectation.get("shiftId");
       const currentGeneration = currentExpectation.get("generation");
@@ -725,30 +757,36 @@ async function verifyShiftExpectation(
         typeof currentShiftId === "string" && currentShiftId.length > 0 &&
         !currentShiftId.includes("/") && typeof currentGeneration === "string" &&
         currentGeneration.length > 0
-      ) return false;
+      ) return {salesVariance: false, tenderVariance: false};
       transaction.update(expectation.ref, {
         needsVerification: false,
         verificationStatus: "quarantined",
         lastErrorCode: "invalid_shift_expectation",
         updatedAt: FieldValue.serverTimestamp(),
       });
-      return true;
+      // Counted as a difference, as it was before this returned two flags: a
+      // quarantined expectation is one the run could not verify, and a job that
+      // reported none would say the day reconciled cleanly.
+      return {salesVariance: true, tenderVariance: false};
     });
   }
   const shiftRef = tenantRef.collection("shifts").doc(shiftId);
   const verificationRef = tenantRef.collection("shift_verifications")
     .doc(`${job.jobId}_${digest([expectation.id])}`);
+  const tenderAnomalyRef = tenantRef.collection("reconciliation_anomalies")
+    .doc(shiftTenderAnomalyId(shiftId));
   return db.runTransaction(async (transaction) => {
-    const [currentExpectation, shiftSnapshot] = await transaction.getAll(
-      expectation.ref,
-      shiftRef
-    );
+    // The tender anomaly is read here, with the others, because a transaction
+    // may not read after it writes - and this one is both updated when the
+    // declaration still disagrees and deleted when it no longer does.
+    const [currentExpectation, shiftSnapshot, currentTenderAnomaly] =
+      await transaction.getAll(expectation.ref, shiftRef, tenderAnomalyRef);
     await assertCurrentLease(transaction, db, job);
     if (
       !currentExpectation.exists ||
       currentExpectation.get("needsVerification") !== true ||
       currentExpectation.get("generation") !== generation
-    ) return false;
+    ) return {salesVariance: false, tenderVariance: false};
     const expectedSales = safeNonNegativeNumber(currentExpectation.get("sales"));
     const expectedTransactions = safeInteger(currentExpectation.get("transactions"));
     const observedSales = shiftSnapshot.exists ?
@@ -765,7 +803,10 @@ async function verifyShiftExpectation(
       minorUnitsToMoney(salesVarianceMinor);
     const transactionVariance = valid ? observedTransactions - expectedTransactions : null;
     const matched = valid && salesVarianceMinor === 0 && transactionVariance === 0;
+    const tender = compareShiftTenders(currentExpectation, shiftSnapshot);
     transaction.set(verificationRef, {
+      tenderStatus: tender.status,
+      ...tender.figures,
       tenantId: job.tenantId,
       jobId: job.jobId,
       shiftId,
@@ -805,8 +846,143 @@ async function verifyShiftExpectation(
         createdAt: FieldValue.serverTimestamp(),
       }, {merge: true});
     }
-    return !matched;
+    if (tender.anomalyType === undefined) {
+      // **Deleted rather than left standing.** A shift whose late sales arrive
+      // and bring the two sides into agreement stops being a difference, and
+      // nobody should have to dismiss a record that is no longer true. The same
+      // holds where the comparison could not be made at all.
+      if (currentTenderAnomaly.exists) transaction.delete(tenderAnomalyRef);
+    } else {
+      // `resolution` is written only when the record is new or a figure has
+      // moved. An unchanged re-verify leaves it alone, so an owner's
+      // acknowledgement survives the next nightly run - while a difference that
+      // has actually changed is a new fact and correctly reopens.
+      const reopens = !currentTenderAnomaly.exists ||
+        tenderFiguresMoved(currentTenderAnomaly, tender.figures);
+      transaction.set(tenderAnomalyRef, {
+        tenantId: job.tenantId,
+        jobId: job.jobId,
+        shiftId,
+        businessDate: currentExpectation.get("businessDate") ?? null,
+        staffId: shiftSnapshot.exists ? shiftSnapshot.get("staffId") ?? null : null,
+        anomalyType: tender.anomalyType,
+        generation,
+        ...tender.figures,
+        ...(reopens ? {resolution: "open"} : {}),
+        mutatesShift: false,
+        updatedAt: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+    }
+    return {salesVariance: !matched, tenderVariance: tender.anomalyType !== undefined};
   });
+}
+
+/** The declared-versus-derived figures one verification records. */
+type TenderFigures = Record<string, number | null>;
+
+interface ShiftTenderComparison {
+  status: string;
+  /** The anomaly kind to record, or undefined to record none. */
+  anomalyType?: "shift_tender_variance" | "missing_tender_declaration";
+  figures: TenderFigures;
+}
+
+const TENDER_VARIANCE_FIELDS = [
+  "cashVarianceMinor",
+  "mpesaVarianceMinor",
+  "cardVarianceMinor",
+  "totalVarianceMinor",
+] as const;
+
+/**
+ * Compares what a cashier declared the till held against what its sales say.
+ *
+ * **Silence is the default, and there are three ways to earn it.** An
+ * expectation written before the split existed cannot be compared. A shift
+ * closed by a device holding none of its sales has no derived side worth
+ * comparing - `invalid_or_missing_shift` already says so, and a second record
+ * would be the same fact twice. And a shift closed before the rollout was
+ * finished was closed by a build with nowhere to type a declaration, so its
+ * absence says nothing about the shop.
+ *
+ * Everything after those is a real answer: a declaration that disagrees, or one
+ * that a current build should have recorded and did not.
+ */
+function compareShiftTenders(
+  expectation: DocumentSnapshot<DocumentData>,
+  shift: DocumentSnapshot<DocumentData>
+): ShiftTenderComparison {
+  const expectedCashMinor = safeInteger(expectation.get("expectedCashMinor"));
+  const expectedMpesaMinor = safeInteger(expectation.get("expectedMpesaMinor"));
+  const expectedCardMinor = safeInteger(expectation.get("expectedCardMinor"));
+  const expectedUnattributedMinor =
+    safeInteger(expectation.get("expectedUnattributedMinor"));
+  if (
+    expectedCashMinor === undefined || expectedMpesaMinor === undefined ||
+    expectedCardMinor === undefined || expectedUnattributedMinor === undefined
+  ) {
+    return {status: "no_expectation", figures: {}};
+  }
+  if (!shift.exists || shift.get("closedWithoutEvidence") === true) {
+    return {status: "unverifiable", figures: {}};
+  }
+  const declaredCashMinor = safeInteger(shift.get("declaredCashMinor"));
+  const declaredMpesaMinor = safeInteger(shift.get("declaredMpesaMinor"));
+  const declaredCardMinor = safeInteger(shift.get("declaredCardMinor"));
+  if (
+    declaredCashMinor === undefined || declaredMpesaMinor === undefined ||
+    declaredCardMinor === undefined
+  ) {
+    const endTime = shift.get("endTime");
+    const closedAt = endTime instanceof Timestamp ? endTime.toMillis() : undefined;
+    if (closedAt === undefined || closedAt < TENDER_DECLARATION_REQUIRED_FROM) {
+      return {status: "not_declared_legacy", figures: {}};
+    }
+    return {
+      status: "missing",
+      anomalyType: "missing_tender_declaration",
+      figures: {
+        expectedCashMinor,
+        expectedMpesaMinor,
+        expectedCardMinor,
+        expectedUnattributedMinor,
+      },
+    };
+  }
+  const declaredTotalMinor =
+    declaredCashMinor + declaredMpesaMinor + declaredCardMinor;
+  // The derived total includes what could not be attributed, so a shift whose
+  // sales name no method is short by exactly that rather than silently balanced.
+  const expectedTotalMinor = expectedCashMinor + expectedMpesaMinor +
+    expectedCardMinor + expectedUnattributedMinor;
+  const figures: TenderFigures = {
+    declaredCashMinor,
+    declaredMpesaMinor,
+    declaredCardMinor,
+    expectedCashMinor,
+    expectedMpesaMinor,
+    expectedCardMinor,
+    expectedUnattributedMinor,
+    cashVarianceMinor: declaredCashMinor - expectedCashMinor,
+    mpesaVarianceMinor: declaredMpesaMinor - expectedMpesaMinor,
+    cardVarianceMinor: declaredCardMinor - expectedCardMinor,
+    declaredTotalMinor,
+    expectedTotalMinor,
+    totalVarianceMinor: declaredTotalMinor - expectedTotalMinor,
+  };
+  const agrees = TENDER_VARIANCE_FIELDS.every((field) => figures[field] === 0);
+  return agrees ?
+    {status: "matched", figures} :
+    {status: "variance", anomalyType: "shift_tender_variance", figures};
+}
+
+/** Whether any recorded figure differs from the one already on the record. */
+function tenderFiguresMoved(
+  recorded: DocumentSnapshot<DocumentData>,
+  figures: TenderFigures
+): boolean {
+  return Object.entries(figures).some(([field, value]) => recorded.get(field) !== value);
 }
 
 export async function processShiftPage(
@@ -821,10 +997,13 @@ export async function processShiftPage(
     .get();
   let processed = 0;
   let varianceCount = 0;
+  let tenderVarianceCount = 0;
   for (const expectation of snapshot.docs) {
-    if (await verifyShiftExpectation(db, job, expectation)) varianceCount += 1;
+    const result = await verifyShiftExpectation(db, job, expectation);
+    if (result.salesVariance) varianceCount += 1;
+    if (result.tenderVariance) tenderVarianceCount += 1;
     processed += 1;
   }
   const remainder = await collection.where("needsVerification", "==", true).limit(1).get();
-  return {processed, varianceCount, hasMore: !remainder.empty};
+  return {processed, varianceCount, tenderVarianceCount, hasMore: !remainder.empty};
 }

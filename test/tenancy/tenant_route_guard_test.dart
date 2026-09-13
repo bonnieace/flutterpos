@@ -330,10 +330,77 @@ void main() {
     await tester.pump();
     expect(find.text('tenant-b:current'), findsOneWidget);
   });
+
+  testWidgets('a new loader for the same business keeps what is on screen', (
+    tester,
+  ) async {
+    final controller = TenantSessionController()
+      ..open(uid: 'user-a', membership: _membership('tenant-a'));
+    final second = Completer<String>();
+
+    await tester.pumpWidget(
+      _guardedApp(
+        controller: controller,
+        guard: _Requery(
+          controller: controller,
+          first: (_) async => 'page one',
+          second: (_) => second.future,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('page one'), findsOneWidget);
+
+    // The page asks a different question of the same business - the next page,
+    // another filter, a re-read after a write.
+    await tester.tap(find.byKey(const ValueKey('requery')));
+    await tester.pump();
+
+    // **The whole point.** Before 2026-09-04 this frame was a spinner over a
+    // list the device was still holding.
+    expect(find.text('page one'), findsOneWidget);
+    expect(find.byType(LoadingState), findsNothing);
+    expect(_freshness(tester).rereading, isTrue);
+
+    second.complete('page two');
+    await tester.pumpAndSettle();
+    expect(find.text('page two'), findsOneWidget);
+    expect(_freshness(tester).rereading, isFalse);
+  });
+
+  testWidgets('a different business blanks, whatever was on screen', (
+    tester,
+  ) async {
+    final controller = TenantSessionController()
+      ..open(uid: 'user-a', membership: _membership('tenant-a'));
+    final held = Completer<String>();
+
+    await tester.pumpWidget(
+      _guardedApp(
+        controller: controller,
+        guard: TenantRouteGuard<String>(
+          load: (session) => session.tenantId == 'tenant-a'
+              ? Future<String>.value("tenant-a's figures")
+              : held.future,
+          builder: (_, _, value) => Text(value),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text("tenant-a's figures"), findsOneWidget);
+
+    controller.open(uid: 'user-a', membership: _membership('tenant-b'));
+    await tester.pump();
+
+    // Not one frame of the previous business's data survives the switch. This
+    // is the case the retention above must never reach.
+    expect(find.text("tenant-a's figures"), findsNothing);
+  });
 }
 
-TenantSessionController _openController() => TenantSessionController()
-  ..open(uid: 'user-a', membership: _membership('tenant-a'));
+TenantSessionController _openController() =>
+    TenantSessionController()
+      ..open(uid: 'user-a', membership: _membership('tenant-a'));
 
 /// Prints the value beside where the guard says it came from, so one `find.text`
 /// asserts the whole state rather than three.
@@ -354,6 +421,48 @@ final class _Freshness extends StatelessWidget {
     return Text('$value $origin${stale ? ' stale' : ''}');
   }
 }
+
+/// A guard whose loader changes when its button is pressed, with the session
+/// left exactly as it was - the shape of a page turn, a filter, or the re-read
+/// a write asks for.
+final class _Requery extends StatefulWidget {
+  const _Requery({
+    required this.controller,
+    required this.first,
+    required this.second,
+  });
+
+  final TenantSessionController controller;
+  final TenantGuardedLoader<String> first;
+  final TenantGuardedLoader<String> second;
+
+  @override
+  State<_Requery> createState() => _RequeryState();
+}
+
+final class _RequeryState extends State<_Requery> {
+  bool _requeried = false;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: <Widget>[
+      TextButton(
+        key: const ValueKey('requery'),
+        onPressed: () => setState(() => _requeried = true),
+        child: const Text('Requery'),
+      ),
+      Expanded(
+        child: TenantRouteGuard<String>(
+          load: _requeried ? widget.second : widget.first,
+          builder: (_, _, value) => Text(value),
+        ),
+      ),
+    ],
+  );
+}
+
+TenantReadFreshness _freshness(WidgetTester tester) =>
+    tester.widget<TenantReadFreshness>(find.byType(TenantReadFreshness).first);
 
 Widget _guardedApp({
   required TenantSessionController controller,

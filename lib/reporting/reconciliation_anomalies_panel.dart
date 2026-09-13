@@ -307,7 +307,6 @@ final class _TenantReconciliationAnomalyPanelState
     final guardKey = '${_kind?.wireValue}:$_generation:$_pageIndex:$cursor';
     _composeLoaders(guardKey);
     return TenantRouteGuard<TenantReconciliationAnomalyPage>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantReconciliationAnomalyRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

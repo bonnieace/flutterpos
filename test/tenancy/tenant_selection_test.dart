@@ -64,7 +64,7 @@ void main() {
     );
     final rejected = _membership(
       'tenant-rejected',
-      tenantStatus: TenantStatus.rejected,
+      tenantStatus: TenantStatus.suspended,
       canAccess: false,
     );
 

@@ -62,7 +62,8 @@ final class PrintJobException implements Exception {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || other is PrintJobException && other.code == code;
+      identical(this, other) ||
+      other is PrintJobException && other.code == code;
 
   @override
   int get hashCode => code.hashCode;

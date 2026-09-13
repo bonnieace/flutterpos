@@ -207,7 +207,7 @@ void main() {
       'clears local state when the server already closed the shift',
       () async {
         await state.save(
-          _record(closeInProgress: true, countedCashMinor: 5000),
+          _record(closeInProgress: true, declaration: _declared(5000)),
         );
         server.shifts['tenants/tenant-a/shifts/shift-a'] = _document(
           overrides: <String, Object?>{'status': 'closed'},
@@ -246,7 +246,7 @@ void main() {
     });
 
     test('reports only local facts while offline', () async {
-      await state.save(_record(closeInProgress: true, countedCashMinor: 900));
+      await state.save(_record(closeInProgress: true, declaration: _declared(900)));
       final controller = _controller(sessions, state, server, online: false);
 
       final restored = await controller.restore(sessions.requireSession());
@@ -259,16 +259,16 @@ void main() {
       // what was typed.
       expect(restored.phase, TenantShiftPhase.open);
       expect(restored.errorCode, 'offline');
-      expect(restored.countedCashMinor, 900);
+      expect(restored.declaration?.cashMinor, 900);
       expect(server.reads, isEmpty);
       final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
       expect(record, isNotNull);
       expect(record!.closeInProgress, isFalse);
-      expect(record.countedCashMinor, 900);
+      expect(record.declaration?.cashMinor, 900);
     });
 
     test('a cash count does not survive a restart', () async {
-      await state.save(_record(closeInProgress: true, countedCashMinor: 900));
+      await state.save(_record(closeInProgress: true, declaration: _declared(900)));
       server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
       final controller = _controller(sessions, state, server);
 
@@ -280,7 +280,7 @@ void main() {
       expect(restored.phase, TenantShiftPhase.open);
       final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
       expect(record!.closeInProgress, isFalse);
-      expect(record.countedCashMinor, 900);
+      expect(record.declaration?.cashMinor, 900);
     });
 
     test('discards a canonical read that finished after a switch', () async {
@@ -327,7 +327,7 @@ void main() {
           TenantSwitchBlocker.unfinishedCashCountOrShiftClose,
         );
 
-        final closed = await controller.closeShift(countedCashMinor: 125000);
+        final closed = await controller.closeShift(declaration: _declared(125000));
         expect(closed.phase, TenantShiftPhase.none);
         expect(server.updated.single.$2['status'], 'closed');
         expect(server.updated.single.$2['closingCashMinor'], 125000);
@@ -358,22 +358,78 @@ void main() {
       final controller = _controller(sessions, state, server);
       await controller.openShift();
 
-      final result = await controller.closeShift(countedCashMinor: 100);
+      final result = await controller.closeShift(declaration: _declared(100));
 
       expect(result.errorCode, 'cash_count_not_started');
       expect(server.updated, isEmpty);
     });
 
-    test('refuses an unusable counted amount', () async {
+    test('an unusable amount cannot become a declaration at all', () {
+      // **The refusal moved from the controller into the type.** A close used
+      // to take a bare integer and answer `invalid_closing_cash` for a figure
+      // out of range; it now takes a declaration, which cannot be built from
+      // one. The check is the same check, made earlier and in one place.
+      expect(
+        ShiftTenderDeclaration.tryParse(cash: -1, mpesa: 0, card: 0),
+        isNull,
+      );
+      expect(
+        ShiftTenderDeclaration.tryParse(
+          cash: maximumShiftCashMinor + 1,
+          mpesa: 0,
+          card: 0,
+        ),
+        isNull,
+      );
+      // Three figures each inside the bound whose sum is not.
+      expect(
+        ShiftTenderDeclaration.tryParse(
+          cash: maximumShiftCashMinor,
+          mpesa: 1,
+          card: 0,
+        ),
+        isNull,
+      );
+    });
+
+    test('a declaration of nothing is a real answer, not a refusal', () async {
       final controller = _controller(sessions, state, server);
       await controller.openShift();
       await controller.startCashCount();
 
-      final result = await controller.closeShift(countedCashMinor: -1);
+      // A shift that took nothing still has to be closable, and an empty box
+      // on the sheet reaches here as a zero rather than as a fault.
+      final result = await controller.closeShift(
+        declaration: ShiftTenderDeclaration.zero,
+      );
 
-      expect(result.errorCode, 'invalid_closing_cash');
-      expect(result.phase, TenantShiftPhase.closing);
-      expect(server.updated, isEmpty);
+      expect(result.phase, TenantShiftPhase.none);
+      expect(result.errorCode, isNull);
+      expect(server.updated.single.$2['declaredCashMinor'], 0);
+      expect(server.updated.single.$2['declaredMpesaMinor'], 0);
+      expect(server.updated.single.$2['declaredCardMinor'], 0);
+    });
+
+    test('the close carries all three declared figures', () async {
+      final controller = _controller(sessions, state, server);
+      await controller.openShift();
+      await controller.startCashCount();
+
+      final result = await controller.closeShift(
+        declaration: _declared(4200, mpesa: 15000, card: 900),
+      );
+
+      expect(result.phase, TenantShiftPhase.none);
+      final written = server.updated.single.$2;
+      expect(written['declaredCashMinor'], 4200);
+      expect(written['declaredMpesaMinor'], 15000);
+      expect(written['declaredCardMinor'], 900);
+      // The same money under the name every existing surface reads, so no
+      // reader can be shown two cash figures that disagree.
+      expect(written['closingCashMinor'], 4200);
+      expect(written['closingCash'], 42.0);
+      // Nothing on this path claims to have compared anything.
+      expect(written.containsKey('closedWithoutEvidence'), isFalse);
     });
 
     test('an unacknowledged close keeps blocking the switch', () async {
@@ -385,11 +441,18 @@ void main() {
         code: 'unavailable',
       );
 
-      final result = await controller.closeShift(countedCashMinor: 4200);
+      final result = await controller.closeShift(declaration: _declared(4200));
 
-      expect(result.phase, TenantShiftPhase.closing);
-      expect(result.errorCode, 'unavailable');
-      expect(result.countedCashMinor, 4200);
+      // **Recorded as closed rather than left mid-count.** The write may have
+      // landed; replaying it is a second `update` of the same fields, which
+      // changes nothing if it did. What must not happen is the till going on
+      // selling against a shift whose drawer has been counted.
+      expect(result.phase, TenantShiftPhase.closedPending);
+      expect(result.declaration?.cashMinor, 4200);
+      expect(
+        (await state.read(uid: 'user-a', tenantId: 'tenant-a'))!.closedAt,
+        isNotNull,
+      );
       expect(
         (await TenantShiftSwitchStateSource(
           state,
@@ -418,7 +481,7 @@ void main() {
         await controller.openShift();
         await controller.startCashCount();
 
-        final closed = await controller.closeShift(countedCashMinor: 125000);
+        final closed = await controller.closeShift(declaration: _declared(125000));
 
         expect(closed.phase, TenantShiftPhase.none);
         expect(ledger.requested, contains('shift-1'));
@@ -446,13 +509,13 @@ void main() {
       await controller.openShift();
       await controller.startCashCount();
 
-      final result = await controller.closeShift(countedCashMinor: 500);
+      final result = await controller.closeShift(declaration: _declared(500));
 
       // The device cannot describe the shift completely, so it keeps the
       // counted cash and the switch blocker instead of publishing a wrong sum.
       expect(result.errorCode, 'unsynchronized_shift_sales');
       expect(result.phase, TenantShiftPhase.closing);
-      expect(result.countedCashMinor, 500);
+      expect(result.declaration?.cashMinor, 500);
       expect(server.updated, isEmpty);
       expect(
         (await TenantShiftSwitchStateSource(
@@ -474,7 +537,7 @@ void main() {
       await controller.openShift();
       await controller.startCashCount();
 
-      final result = await controller.closeShift(countedCashMinor: 500);
+      final result = await controller.closeShift(declaration: _declared(500));
 
       expect(result.phase, TenantShiftPhase.unavailable);
       expect(result.errorCode, 'malformed_local_sale');
@@ -580,7 +643,51 @@ void main() {
       expect(result.phase, TenantShiftPhase.none);
       expect(result.errorCode, 'shift_open_on_earlier_install');
       expect(result.otherDeviceShiftOpen, isTrue);
+      expect(result.otherDeviceShiftId, 'shift-before');
       expect(server.created, isEmpty);
+    });
+
+    test('prefers a shift this till itself opened', () async {
+      // A cashier who works two tills can have an open shift on each. The one
+      // *this* phone left behind is the one it can speak for, and a bare count
+      // of what was found would have offered neither.
+      server.shifts['tenants/tenant-a/shifts/shift-before'] = _document(
+        overrides: <String, Object?>{
+          'shiftId': 'shift-before',
+          'deviceId': 'dev-0123456789abcdef01234567deadbeef',
+        },
+      );
+      server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = _document(
+        overrides: <String, Object?>{
+          'shiftId': 'shift-elsewhere',
+          'deviceId': 'dev-ffffffffffffffffffffffffffffffff',
+        },
+      );
+      final controller = _controller(sessions, state, server);
+
+      final result = await controller.openShift();
+
+      expect(result.errorCode, 'shift_open_on_earlier_install');
+      expect(result.otherDeviceShiftId, 'shift-before');
+    });
+
+    test('offers nothing where two tills of this phone are open', () async {
+      // Two installs of this same phone, both with a shift open. Neither can be
+      // singled out, and closing the wrong one is worse than closing none.
+      for (final install in <String>['deadbeef', 'feedface']) {
+        server.shifts['tenants/tenant-a/shifts/shift-$install'] = _document(
+          overrides: <String, Object?>{
+            'shiftId': 'shift-$install',
+            'deviceId': 'dev-0123456789abcdef01234567$install',
+          },
+        );
+      }
+      final controller = _controller(sessions, state, server);
+
+      final result = await controller.openShift();
+
+      expect(result.errorCode, 'shift_open_on_earlier_install');
+      expect(result.otherDeviceShiftId, isNull);
     });
 
     test('fails closed on two open shifts for one device', () async {
@@ -730,14 +837,71 @@ void main() {
     });
   });
 
-  group('closing needs a connection', () {
-    test('an offline close says so and keeps the count', () async {
-      await state.save(_record(closeInProgress: true, countedCashMinor: 900));
+  group('closing with no connection', () {
+    test('an offline close is recorded and stops the till selling', () async {
+      await state.save(_record(closeInProgress: true, declaration: _declared(900)));
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
       final controller = _controller(sessions, state, server, online: false);
 
-      final closed = await controller.closeShift(countedCashMinor: 900);
+      final closed = await controller.closeShift(declaration: _declared(900));
 
-      expect(closed.errorCode, 'close_needs_connection');
+      // **Refused outright until 2026-09-05**, which left a shop that had
+      // counted its cash holding an open shift it could not finish - and the
+      // till still selling against it. What makes this safe is the
+      // `sales.isComplete` check above it, which reads this device's own
+      // outbox: a shift with any unsent sale still cannot close.
+      expect(closed.phase, TenantShiftPhase.closedPending);
+      expect(closed.declaration?.cashMinor, 900);
+      final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+      expect(record!.closedAt, isNotNull);
+      // Nothing was sent, so the shift is still open on the server.
+      expect(server.updated, isEmpty);
+    });
+
+    test('the close sends itself on the next restore', () async {
+      await state.save(_record(closeInProgress: true, declaration: _declared(900)));
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      await _controller(
+        sessions,
+        state,
+        server,
+        online: false,
+      ).closeShift(declaration: _declared(900));
+
+      final restored = await _controller(
+        sessions,
+        state,
+        server,
+      ).restore(sessions.requireSession());
+
+      expect(server.updated, hasLength(1));
+      expect(server.updated.single.$2['closingCashMinor'], 900);
+      // Confirmed, so the record goes and a new shift may be opened.
+      expect(restored.phase, TenantShiftPhase.none);
+      expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
+    });
+
+    test('a close that still cannot be sent stays closed here', () async {
+      await state.save(_record(closeInProgress: true, declaration: _declared(900)));
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      await _controller(
+        sessions,
+        state,
+        server,
+        online: false,
+      ).closeShift(declaration: _declared(900));
+      server.failUpdateWith = FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'unavailable',
+      );
+
+      final restored = await _controller(
+        sessions,
+        state,
+        server,
+      ).restore(sessions.requireSession());
+
+      expect(restored.phase, TenantShiftPhase.closedPending);
       expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNotNull);
     });
   });
@@ -834,6 +998,10 @@ Map<String, Object?> _document({Map<String, Object?>? overrides}) {
   return data;
 }
 
+/// A declaration carrying one figure, for the tests whose subject is the cash.
+ShiftTenderDeclaration _declared(int cash, {int mpesa = 0, int card = 0}) =>
+    ShiftTenderDeclaration.tryParse(cash: cash, mpesa: mpesa, card: card)!;
+
 TenantShiftLocalRecord _record({
   String uid = 'user-a',
   String tenantId = 'tenant-a',
@@ -841,6 +1009,7 @@ TenantShiftLocalRecord _record({
   bool serverConfirmedOpen = true,
   bool closeInProgress = false,
   int? countedCashMinor,
+  ShiftTenderDeclaration? declaration,
   DateTime? openedAt,
 }) => TenantShiftLocalRecord(
   uid: uid,
@@ -851,6 +1020,7 @@ TenantShiftLocalRecord _record({
   serverConfirmedOpen: serverConfirmedOpen,
   closeInProgress: closeInProgress,
   countedCashMinor: countedCashMinor,
+  declaration: declaration,
   updatedAt: DateTime.utc(2026, 7, 31, 9),
   openedAt: openedAt ?? DateTime.utc(2026, 7, 31, 9),
 );

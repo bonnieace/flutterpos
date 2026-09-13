@@ -4,6 +4,7 @@ export 'daily_metrics_panel.dart';
 export 'monthly_report.dart';
 export 'monthly_report_panel.dart';
 export 'net_profit.dart';
+export 'open_differences_controller.dart';
 export 'profit_report.dart';
 export 'profit_statement.dart';
 export 'reconciliation_actions.dart';

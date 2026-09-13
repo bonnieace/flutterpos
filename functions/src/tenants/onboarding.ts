@@ -31,20 +31,6 @@ const TENANT_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/;
 const TENANT_CURRENCY_PATTERN = /^[A-Z]{3}$/;
 const REQUEST_WINDOW_MILLISECONDS = 24 * 60 * 60 * 1000;
 
-/**
- * How long a self-serve request may trade before somebody has approved it.
- *
- * **Set once, here, and never moved.** A window that could be extended would be
- * a second way to grant access, reachable without the platform console and
- * without the audit trail `setTenantLifecycle` writes. Approval is the only way
- * out of it that adds time; everything else lets it run down.
- *
- * `firestore.rules` and `assertTenantMemberDocuments` both compare against the
- * instant this produces. Neither of them can compute it, which is why it is
- * written onto the tenant rather than derived from `createdAt` in two places.
- */
-const PROVISIONAL_WINDOW_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
-
 interface RequestTenantRequest {
   name?: unknown;
   slug?: unknown;
@@ -57,7 +43,7 @@ interface RequestTenantResponse {
   name: string;
   slug: string;
   currency: string;
-  status: "pending";
+  status: "active";
 }
 
 function normalizeTenantName(value: unknown): string {
@@ -130,7 +116,6 @@ function advisoryCounter(value: unknown): number {
 
 function throwLimitViolation(violation: TenantLimitViolation, limit: number): never {
   const messages: Record<TenantLimitViolation, string> = {
-    max_pending_tenants: "The pending tenant request limit has been reached.",
     max_requests_per_24_hours: "The tenant request rate limit has been reached.",
     max_owned_active_tenants: "The active owned tenant limit has been reached.",
   };
@@ -142,8 +127,6 @@ function configuredLimitForViolation(
   limits: ReturnType<typeof resolveTenantLimits>
 ): number {
   switch (violation) {
-  case "max_pending_tenants":
-    return limits.maxPendingTenantsPerUser;
   case "max_requests_per_24_hours":
     return limits.maxTenantRequestsPer24Hours;
   case "max_owned_active_tenants":
@@ -176,10 +159,6 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
     const requestWindowStart = Timestamp.fromMillis(
       requestedAt.toMillis() - REQUEST_WINDOW_MILLISECONDS
     );
-    const provisionalUntil = Timestamp.fromMillis(
-      requestedAt.toMillis() + PROVISIONAL_WINDOW_MILLISECONDS
-    );
-
     return runIdempotentFirestoreTransaction(db, {
       actorUid: auth.uid,
       operation: "requestTenant",
@@ -196,12 +175,6 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
       const limits = resolveTenantLimits(limitsSnapshot.exists ? limitsSnapshot.data() : undefined);
 
       // These canonical queries intentionally ignore all root counters and mirrors.
-      const pendingSnapshot = await transaction.get(
-        db.collection("tenants")
-          .where("ownerUid", "==", applicant.uid)
-          .where("status", "==", "pending")
-          .limit(Math.max(1, limits.maxPendingTenantsPerUser))
-      );
       const activeOwnedSnapshot = await transaction.get(
         db.collection("tenants")
           .where("ownerUid", "==", applicant.uid)
@@ -217,7 +190,6 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
       const slugSnapshot = await transaction.get(slugRef);
 
       const violation = findTenantLimitViolation({
-        pendingTenants: pendingSnapshot.size,
         requestsInLast24Hours: recentRequestSnapshot.size,
         ownedActiveTenants: activeOwnedSnapshot.size,
       }, limits);
@@ -252,13 +224,9 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
       transaction.create(tenantRef, {
         name,
         slug,
-        status: "pending",
+        status: "active",
         ownerUid: applicant.uid,
         requestedBy: applicant.uid,
-        // The provisional trading window. A client clock never sees this: it is
-        // computed from `Timestamp.now()` on the server and compared against
-        // `request.time` in the rules.
-        provisionalUntil,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -290,11 +258,7 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
         tenantSlug: slug,
         role: "owner",
         membershipStatus: "active",
-        tenantStatus: "pending",
-        // Mirrored so the app can tell a window that is still open from one
-        // that has shut without reading the tenant document first - the
-        // selector draws that difference before any tenant is opened.
-        provisionalUntil,
+        tenantStatus: "active",
         invitationStatus: "accepted",
         isOwner: true,
         createdAt: FieldValue.serverTimestamp(),
@@ -305,7 +269,8 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
       transaction.update(userRef, {
         membershipCount: advisoryCounter(applicant.user.membershipCount) + 1,
         ownedTenantCount: advisoryCounter(applicant.user.ownedTenantCount) + 1,
-        ownedActiveTenantCount: advisoryCounter(applicant.user.ownedActiveTenantCount),
+        ownedActiveTenantCount:
+          advisoryCounter(applicant.user.ownedActiveTenantCount) + 1,
         updatedAt: FieldValue.serverTimestamp(),
       });
       transaction.create(slugRef, {
@@ -318,8 +283,7 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
         tenantId: tenantRef.id,
         eventType: "tenant_requested",
         fromStatus: null,
-        toStatus: "pending",
-        provisionalUntil,
+        toStatus: "active",
         actorUid: applicant.uid,
         requestId,
         createdAt: FieldValue.serverTimestamp(),
@@ -353,8 +317,7 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
         name,
         slug,
         currency,
-        status: "pending",
-        provisionalUntil: provisionalUntil.toMillis(),
+        status: "active",
       };
     });
   }

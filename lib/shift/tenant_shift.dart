@@ -6,7 +6,13 @@ import '../checkout/checkout_receipt.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
+import 'shift_declaration.dart';
 import 'shift_sales_ledger.dart';
+
+// The bound moved to the declaration, which owns every money figure a close
+// records. Re-exported so the many callers that reach for it through this
+// library keep working.
+export 'shift_declaration.dart' show maximumShiftCashMinor;
 
 /// Raised when canonical shift state cannot be trusted for this session.
 final class TenantShiftException implements Exception {
@@ -72,6 +78,8 @@ final class TenantShift {
       startedAt: _optionalInstant(data, 'startTime'),
       endedAt: _optionalInstant(data, 'endTime'),
       closingCashMinor: _optionalNonNegativeInteger(data, 'closingCashMinor'),
+      declaration: _optionalDeclaration(data),
+      closedWithoutEvidence: _optionalTrueFlag(data, 'closedWithoutEvidence'),
     );
   }
 
@@ -85,6 +93,8 @@ final class TenantShift {
     required this.startedAt,
     required this.endedAt,
     required this.closingCashMinor,
+    required this.declaration,
+    required this.closedWithoutEvidence,
   });
 
   final String id;
@@ -96,6 +106,20 @@ final class TenantShift {
   final DateTime? startedAt;
   final DateTime? endedAt;
   final int? closingCashMinor;
+
+  /// What the cashier declared the till held, by payment method.
+  ///
+  /// Absent on every shift closed before the declaration existed, and on one
+  /// still open. Never partial: a document carrying some of the three is
+  /// refused rather than read as the rest being zero.
+  final ShiftTenderDeclaration? declaration;
+
+  /// Whether this shift was closed by a device that held none of its sales.
+  ///
+  /// Its zero summary describes what that device could prove, which is nothing
+  /// - not what the shift took. See
+  /// `TenantShiftRepository.buildRecoveryCloseIntent`.
+  final bool closedWithoutEvidence;
 
   bool get isOpen => status == TenantShiftStatus.open;
 }
@@ -145,6 +169,8 @@ final class TenantShiftCloseIntent {
     required this.closingCashMinor,
     required this.totalSalesMinor,
     required this.transactionCount,
+    this.declaration,
+    this.closedWithoutEvidence = false,
   });
 
   final String path;
@@ -153,6 +179,23 @@ final class TenantShiftCloseIntent {
   final int closingCashMinor;
   final int totalSalesMinor;
   final int transactionCount;
+
+  /// What the cashier said the till held, by payment method.
+  ///
+  /// **Null only for a replay of a close recorded by an earlier build.** A
+  /// device that counted its drawer offline before this shape existed holds a
+  /// record with a cash figure and nothing else, and that close must still be
+  /// sendable - refusing it would strand a closed shift on the device forever.
+  final ShiftTenderDeclaration? declaration;
+
+  /// Whether this close is being made by a device holding none of the shift's
+  /// sales, which is why its summary is zero.
+  ///
+  /// See `TenantShiftController.closeShiftWithoutEvidence`. The flag is what
+  /// stops a zero summary reading as a shift that took nothing: reconciliation
+  /// refuses to believe the figures rather than reporting a variance against
+  /// them.
+  final bool closedWithoutEvidence;
 
   Map<String, Object?> updateData() => <String, Object?>{
     'status': TenantShiftStatus.closed.wireValue,
@@ -163,6 +206,17 @@ final class TenantShiftCloseIntent {
     'totalSalesMinor': totalSalesMinor,
     'totalSales': totalSalesMinor / 100,
     'transactionCount': transactionCount,
+    // All three keys or none. `declaredCashMinor` restates `closingCashMinor`
+    // rather than replacing it, so no reader can be shown two cash figures that
+    // disagree, and every surface built on the old name keeps working.
+    if (declaration case final declared?) ...<String, Object?>{
+      'declaredCashMinor': declared.cashMinor,
+      'declaredMpesaMinor': declared.mpesaMinor,
+      'declaredCardMinor': declared.cardMinor,
+    },
+    // Written only when true. An ordinary close omits it, which is what lets
+    // the rules treat its presence as the whole of the claim.
+    if (closedWithoutEvidence) 'closedWithoutEvidence': true,
   };
 }
 
@@ -220,18 +274,18 @@ final class TenantShiftRepository extends TenantReadRepository {
     required TenantShift shift,
     required int closingCashMinor,
     required ShiftSalesSummary sales,
+    ShiftTenderDeclaration? declaration,
   }) {
-    if (shift.tenantId != session.tenantId) {
-      throw const TenantShiftException('cross_tenant_shift');
-    }
-    if (shift.staffId != session.uid) {
-      throw const TenantShiftException('foreign_shift');
-    }
-    if (!shift.isOpen) {
-      throw const TenantShiftException('shift_not_open');
-    }
+    _assertClosable(shift);
     if (closingCashMinor < 0 || closingCashMinor > maximumShiftCashMinor) {
       throw const TenantShiftException('invalid_closing_cash');
+    }
+    // **The same money, stated twice.** `closingCashMinor` is what every
+    // existing surface reads and `declaredCashMinor` is what reconciliation
+    // compares, so a close that let them differ would put two cash figures for
+    // one drawer into one document.
+    if (declaration != null && declaration.cashMinor != closingCashMinor) {
+      throw const TenantShiftException('declaration_disagrees_with_cash');
     }
     // An incomplete summary would understate the shift and guarantee a
     // reconciliation variance, so it can never become a closing summary.
@@ -251,7 +305,52 @@ final class TenantShiftRepository extends TenantReadRepository {
       closingCashMinor: closingCashMinor,
       totalSalesMinor: sales.totalMinor,
       transactionCount: sales.transactionCount,
+      declaration: declaration,
     );
+  }
+
+  /// Closes a shift this device holds none of the sales for.
+  ///
+  /// **The summary is zero because it is unknown, and the flag says so.** The
+  /// closing figures are built from local sale evidence, which only the
+  /// installation that opened the shift ever held - so a device recovering a
+  /// shift left open elsewhere has nothing to summarize and must not invent
+  /// one. `closedWithoutEvidence` is what stops the zeros being read as a shift
+  /// that took nothing: reconciliation refuses the figures outright rather than
+  /// reporting a variance against them.
+  ///
+  /// The declaration is still asked for and still recorded. It needs no sale
+  /// evidence - the person is standing at the drawer - and reconciliation
+  /// derives the other side of the comparison from the sales the server already
+  /// holds. So a recovery close says *more* than the dead end it replaces.
+  TenantShiftCloseIntent buildRecoveryCloseIntent({
+    required TenantShift shift,
+    required ShiftTenderDeclaration declaration,
+  }) {
+    _assertClosable(shift);
+    return TenantShiftCloseIntent._(
+      path: paths.shift(_validatedShiftId(shift.id)),
+      tenantId: session.tenantId,
+      shiftId: shift.id,
+      closingCashMinor: declaration.cashMinor,
+      totalSalesMinor: 0,
+      transactionCount: 0,
+      declaration: declaration,
+      closedWithoutEvidence: true,
+    );
+  }
+
+  /// The three facts that must hold before any close may be built.
+  void _assertClosable(TenantShift shift) {
+    if (shift.tenantId != session.tenantId) {
+      throw const TenantShiftException('cross_tenant_shift');
+    }
+    if (shift.staffId != session.uid) {
+      throw const TenantShiftException('foreign_shift');
+    }
+    if (!shift.isOpen) {
+      throw const TenantShiftException('shift_not_open');
+    }
   }
 
   /// Finds this cashier's open shifts in this business, bounded and ordered.
@@ -299,9 +398,6 @@ final class TenantShiftRepository extends TenantReadRepository {
     }
   }
 }
-
-/// The largest counted cash amount a close may record, in minor units.
-const int maximumShiftCashMinor = 1000000000000;
 
 enum TenantShiftWriteKind {
   /// The server acknowledged the write.
@@ -526,4 +622,41 @@ int? _optionalNonNegativeInteger(Map<String, Object?> data, String field) {
     throw const TenantShiftException('invalid_shift_document');
   }
   return value;
+}
+
+/// Decodes the declared tender triple, which is written all together or not.
+///
+/// A document carrying some of the three is refused rather than read with the
+/// missing ones as zero: that would report a figure nobody declared, on the
+/// surface a difference is settled from.
+ShiftTenderDeclaration? _optionalDeclaration(Map<String, Object?> data) {
+  const fields = <String>[
+    'declaredCashMinor',
+    'declaredMpesaMinor',
+    'declaredCardMinor',
+  ];
+  final present = fields.where((field) => data[field] != null).length;
+  if (present == 0) return null;
+  if (present != fields.length) {
+    throw const TenantShiftException('invalid_shift_document');
+  }
+  final declaration = ShiftTenderDeclaration.tryParse(
+    cash: _optionalNonNegativeInteger(data, fields[0])!,
+    mpesa: _optionalNonNegativeInteger(data, fields[1])!,
+    card: _optionalNonNegativeInteger(data, fields[2])!,
+  );
+  if (declaration == null) {
+    throw const TenantShiftException('invalid_shift_document');
+  }
+  return declaration;
+}
+
+/// Reads a flag that is only ever written `true`, so `false` is a defect.
+bool _optionalTrueFlag(Map<String, Object?> data, String field) {
+  final value = data[field];
+  if (value == null) return false;
+  if (value != true) {
+    throw const TenantShiftException('invalid_shift_document');
+  }
+  return true;
 }

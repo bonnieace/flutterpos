@@ -8,7 +8,10 @@ import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/fields.dart';
 import 'package:flutter_application_1/ui/skeleton.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/notices.dart';
 
 const _businessDate = '2026-08-24';
 const _deviceId = 'dev-0123456789abcdef0123456789abcdef';
@@ -451,6 +454,197 @@ void main() {
   // field and the date button are not merely present while the day is being
   // read, they are present *as themselves* rather than as placeholders. A
   // skeleton that swallowed them would satisfy every other test in this file.
+  group('what came back out of the day', () {
+    testWidgets('a sale returned in full leaves the list and the takings', (
+      tester,
+    ) async {
+      final reader = _SalesReader(
+        <TenantQueryDocumentSnapshot>[
+          _sale('co-2', sequence: 2, tender: 'cash'),
+          _sale('co-1', tender: 'cash'),
+        ],
+        // Both units of co-1's only line, so nothing is left of the sale.
+        returns: <TenantQueryDocumentSnapshot>[
+          _returnRecord('rt-1', saleId: 'co-1'),
+        ],
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pump(
+        tester,
+        reader,
+        width: 1024,
+        role: TenantRole.manager,
+        totalsCallable: _TotalsCallable(),
+      );
+
+      // The sale that came back is gone; the one that did not is not.
+      expect(find.byKey(const ValueKey('sales-record-co-1')), findsNothing);
+      expect(find.byKey(const ValueKey('sales-record-co-2')), findsOneWidget);
+      // 100.00 taken, 9.00 of it handed back - the sale's *total*, not its
+      // line subtotal, so the discount comes off the refund too.
+      expect(_text(tester, 'sales-report-revenue'), 'KES 91.00');
+      // Only a sale that came back in full stops being a transaction.
+      expect(_text(tester, 'sales-report-transactions'), '3');
+      // **The figure is netted and nothing explains it, by decision.** What
+      // came back is the Returns record's subject, not this card's.
+      expect(
+        find.byKey(const ValueKey('sales-report-returned')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a part return badges the sale and takes only its share', (
+      tester,
+    ) async {
+      final reader = _SalesReader(
+        <TenantQueryDocumentSnapshot>[_sale('co-1', tender: 'cash')],
+        // One of the two units.
+        returns: <TenantQueryDocumentSnapshot>[
+          _returnRecord('rt-1', saleId: 'co-1', quantity: 1),
+        ],
+      );
+
+      await _pump(
+        tester,
+        reader,
+        width: 1024,
+        role: TenantRole.manager,
+        totalsCallable: _TotalsCallable(),
+      );
+
+      expect(find.byKey(const ValueKey('sales-record-co-1')), findsOneWidget);
+      // 500 of a 1000 subtotal came back, and the sale was charged at 900, so
+      // the refund is 450 and 450 is what the shop still has.
+      expect(_text(tester, 'sales-total-co-1'), 'KES 4.50');
+      final badge = tester.widget<StatusBadge>(
+        find.byKey(const ValueKey('sales-returned-badge-co-1')),
+      );
+      expect(badge.label, 'Partly returned');
+      expect(badge.status, AppStatus.attention);
+      // The badge is the whole of what the card says about the return: the
+      // units and the money that came back live on the Returns screen. The
+      // returned amount happens to be 4.50 here as well as the net, so one
+      // occurrence is exactly the proof that the second figure is gone.
+      expect(find.text('KES 4.50'), findsOneWidget);
+      expect(_text(tester, 'sales-report-revenue'), 'KES 95.50');
+      // A partly returned sale is still a transaction that happened.
+      expect(_text(tester, 'sales-report-transactions'), '4');
+    });
+
+    testWidgets('a receipt looked up by number is shown however it ended', (
+      tester,
+    ) async {
+      final reader = _SalesReader(
+        <TenantQueryDocumentSnapshot>[_sale('co-1', tender: 'cash')],
+        returns: <TenantQueryDocumentSnapshot>[
+          _returnRecord('rt-1', saleId: 'co-1'),
+        ],
+      );
+
+      await _pump(tester, reader, width: 1024, role: TenantRole.manager);
+
+      // The day's list has dropped it.
+      expect(find.byKey(const ValueKey('sales-record-co-1')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('sales-report-all-returned')),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('sales-receipt-search')),
+        '0001',
+      );
+      await tester.tap(find.byKey(const ValueKey('sales-receipt-submit')));
+      await tester.pumpAndSettle();
+
+      // Somebody is holding the paper and asking what happened to it. The
+      // answer is the sale, marked, and not "no such receipt".
+      expect(find.byKey(const ValueKey('sales-record-co-1')), findsOneWidget);
+      expect(
+        tester
+            .widget<StatusBadge>(
+              find.byKey(const ValueKey('sales-returned-badge-co-1')),
+            )
+            .label,
+        'Returned',
+      );
+      expect(_text(tester, 'sales-total-co-1'), 'KES 0.00');
+    });
+  });
+
+  group('a second copy of a receipt', () {
+    testWidgets('management is offered one and a cashier is not', (
+      tester,
+    ) async {
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[_sale('co-1')]);
+      final reprinter = _Reprinter();
+
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.cashier,
+        reprinter: reprinter,
+      );
+      await tester.tap(find.byKey(const ValueKey('sales-actions-co-1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('sales-reprint-co-1')), findsNothing);
+      expect(find.byKey(const ValueKey('sales-returns-co-1')), findsOneWidget);
+    });
+
+    testWidgets('a manager reprints, and the sentence names the receipt', (
+      tester,
+    ) async {
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[_sale('co-1')]);
+      final reprinter = _Reprinter();
+
+      await _pump(
+        tester,
+        reader,
+        width: 1024,
+        role: TenantRole.manager,
+        reprinter: reprinter,
+      );
+      await tester.tap(find.byKey(const ValueKey('sales-actions-co-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('sales-reprint-co-1')));
+      await tester.pumpAndSettle();
+
+      expect(reprinter.sales.single.id, 'co-1');
+      expect(snackNotice(tester).message, 'Receipt #0001 reprinted.');
+      expect(snackNotice(tester).status, AppStatus.ok);
+    });
+
+    testWidgets('a refusal says nothing was printed, and why', (tester) async {
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[_sale('co-1')]);
+      final reprinter = _Reprinter(
+        const TenantReceiptReprintReport.refused(
+          TenantReceiptReprintCode.unavailable,
+        ),
+      );
+
+      await _pump(
+        tester,
+        reader,
+        width: 1024,
+        role: TenantRole.manager,
+        reprinter: reprinter,
+      );
+      await tester.tap(find.byKey(const ValueKey('sales-actions-co-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('sales-reprint-co-1')));
+      await tester.pumpAndSettle();
+
+      expect(
+        snackNotice(tester).message,
+        'Nothing was printed. A reprint is recorded on the server, so it must '
+        'be asked for online.',
+      );
+      expect(snackNotice(tester).status, AppStatus.problem);
+    });
+  });
+
   group('a day being read still offers everything it can already do', () {
     testWidgets('the receipt search and the date are real, not placeholders', (
       tester,
@@ -643,6 +837,7 @@ Future<void> _pump(
   required TenantRole role,
   int pageSize = 20,
   SalesTotalsCallable? totalsCallable,
+  TenantReceiptReprinter? reprinter,
 }) async {
   tester.view.physicalSize = Size(width, 2400);
   tester.view.devicePixelRatio = 1;
@@ -659,6 +854,7 @@ Future<void> _pump(
             reader: reader,
             reportReader: reader,
             totalsCallable: totalsCallable,
+            reprinter: reprinter,
             clock: () => DateTime.utc(2026, 8, 24, 12),
             pageSize: pageSize,
           ),
@@ -775,11 +971,60 @@ TenantQueryDocumentSnapshot _sale(
   );
 }
 
+/// One pending return against [saleId], on the sale's own trading day.
+TenantQueryDocumentSnapshot _returnRecord(
+  String id, {
+  required String saleId,
+  int quantity = 2,
+  String productId = 'product-1',
+  String businessDate = _businessDate,
+}) => TenantQueryDocumentSnapshot(
+  path: 'tenants/tenant-a/returns/$id',
+  data: <String, Object?>{
+    'returnId': id,
+    'tenantId': 'tenant-a',
+    'saleId': saleId,
+    'businessDate': businessDate,
+    'createdBy': 'user-a',
+    'status': 'pending',
+    'reason': 'Damaged bottle',
+    'itemsReturned': <Object?>[
+      <String, Object?>{'productId': productId, 'quantity': quantity},
+    ],
+    'createdAt': Timestamp.fromDate(DateTime.utc(2026, 8, 24, 10)),
+  },
+);
+
+/// Records every sale a reprint was asked for, and answers as told.
+final class _Reprinter implements TenantReceiptReprinter {
+  _Reprinter([this._report = const TenantReceiptReprintReport.printed()]);
+
+  final TenantReceiptReprintReport _report;
+  final List<TenantSale> sales = <TenantSale>[];
+
+  @override
+  Future<TenantReceiptReprintReport> reprint({
+    required TenantSession session,
+    required TenantSale sale,
+  }) async {
+    sales.add(sale);
+    return _report;
+  }
+}
+
+/// The string one keyed `Text` is drawing, wherever it sits.
+String _text(WidgetTester tester, String key) =>
+    tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
 final class _SalesReader
     implements TenantDataReader, TenantSalesHistoryQueryReader {
-  _SalesReader(this.sales);
+  _SalesReader(this.sales, {this.returns = const <TenantQueryDocumentSnapshot>[]});
 
   final List<TenantQueryDocumentSnapshot> sales;
+
+  /// The returns filed against those sales, which the day's list and the
+  /// takings band both net themselves against.
+  final List<TenantQueryDocumentSnapshot> returns;
   final List<TenantSalesHistoryQuery> salesQueries =
       <TenantSalesHistoryQuery>[];
   final List<TenantCollectionQuery> collectionQueries =
@@ -808,6 +1053,13 @@ final class _SalesReader
         data: _staffData(uid, role: role),
       );
     }
+    // A return is priced against the sale it came out of, which the offsets
+    // loader reads by exact path - `allow get` on sales is business-wide.
+    for (final sale in sales) {
+      if (sale.path == path) {
+        return TenantDocumentSnapshot(path: path, data: sale.data);
+      }
+    }
     return null;
   }
 
@@ -832,6 +1084,18 @@ final class _SalesReader
           data: _staffData('user-b', name: 'Baraka Cashier'),
         ),
       ].take(query.limit).toList();
+    }
+    if (query.collectionPath == 'tenants/tenant-a/returns') {
+      final matches =
+          returns
+              .where(
+                (snapshot) => query.equalityFilters.entries.every(
+                  (filter) => snapshot.data[filter.key] == filter.value,
+                ),
+              )
+              .toList()
+            ..sort((left, right) => right.path.compareTo(left.path));
+      return matches.take(query.limit).toList();
     }
     if (query.collectionPath == 'tenants/tenant-a/sales') {
       final matches =

@@ -20,12 +20,17 @@ final class CheckoutSaveSyncRequest {
 /// until the app was next restarted - and the shift could not be closed,
 /// because closing refuses while any sale is unsettled.
 ///
-/// Two streams, because they answer two different questions:
+/// Three streams, because they answer three different questions:
 ///
 /// * [syncRequests] asks the workers to run. The routing shell consumes it.
 /// * [evidenceChanges] says local checkout state may have moved, so a
 ///   read-only surface should re-read. A durable save fires both; the end of a
 ///   sync run fires only the second, since a run must not ask for another run.
+/// * [reconnects] says this device has a network again, and *only* that. The
+///   routing shell uses it to refresh a bootstrap it had to read from cache,
+///   which is what retires the offline card. It is separate from
+///   [syncRequests] because that one also fires for a saved sale and for a
+///   settings change, neither of which is evidence the radio came back.
 final class CheckoutSyncSignals {
   CheckoutSyncSignals();
 
@@ -33,12 +38,15 @@ final class CheckoutSyncSignals {
       StreamController<Object?>.broadcast();
   final StreamController<Object?> _evidenceChanges =
       StreamController<Object?>.broadcast();
+  final StreamController<Object?> _reconnects =
+      StreamController<Object?>.broadcast();
 
   /// Cached deliberately: the routing shell compares this stream by identity to
   /// decide whether to resubscribe, and a broadcast controller hands out a new
   /// stream object on every `.stream` read.
   late final Stream<Object?> syncRequests = _syncRequests.stream;
   late final Stream<Object?> evidenceChanges = _evidenceChanges.stream;
+  late final Stream<Object?> reconnects = _reconnects.stream;
 
   /// A sale is durable on this device. Submit it now, and re-read the evidence.
   void requestSyncAfterSave() {
@@ -48,7 +56,10 @@ final class CheckoutSyncSignals {
 
   /// Connectivity returned. Everything the composition root runs is justified,
   /// including refreshing derived data that could not be read while offline.
-  void requestSyncAfterReconnect() => _add(_syncRequests, null);
+  void requestSyncAfterReconnect() {
+    _add(_syncRequests, null);
+    _add(_reconnects, null);
+  }
 
   /// The business published different checkout settings, so what this device
   /// caches is stale.
@@ -74,6 +85,7 @@ final class CheckoutSyncSignals {
   Future<void> dispose() async {
     await _syncRequests.close();
     await _evidenceChanges.close();
+    await _reconnects.close();
   }
 
   void _add(StreamController<Object?> controller, Object? event) {

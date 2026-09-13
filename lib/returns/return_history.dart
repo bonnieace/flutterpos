@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../checkout/checkout_receipt.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
@@ -108,6 +109,8 @@ final class TenantReturn {
       id: returnId,
       tenantId: tenantId,
       saleId: _requiredDocumentId(data, 'saleId'),
+      businessDate: _optionalBusinessDate(data, 'businessDate'),
+      recordedOn: _optionalBusinessDate(data, 'recordedOn'),
       createdBy: _requiredDocumentId(data, 'createdBy'),
       reason: _requiredReason(data),
       status: _requiredStatus(data),
@@ -121,6 +124,8 @@ final class TenantReturn {
     required this.id,
     required this.tenantId,
     required this.saleId,
+    required this.businessDate,
+    required this.recordedOn,
     required this.createdBy,
     required this.reason,
     required this.status,
@@ -134,6 +139,24 @@ final class TenantReturn {
 
   /// The immutable sale this return reverses.
   final String saleId;
+
+  /// The day the reversal itself was taken, from the recording device.
+  ///
+  /// **Nullable for the same reason [businessDate] is**: the field was added on
+  /// 2026-09-06 and a return recorded before that carries no day at all. Such a
+  /// return is found under *All dates* and under no particular one.
+  final String? recordedOn;
+
+  /// The trading day of that sale, which the create rule binds to the sale's
+  /// own field.
+  ///
+  /// **Nullable, and it has to be**: the field was added on 2026-09-06, and a
+  /// return recorded before that carries no day at all. A read model that
+  /// refused one would take the whole returns history off every screen that
+  /// shows it, to gain a field only the day-scoped query needs - so an older
+  /// return is decoded and displayed exactly as it always was, and is simply
+  /// not found by [TenantReturnHistoryRepository.loadDayReturns].
+  final String? businessDate;
 
   /// The cashier who recorded the return. Rules bind it on create.
   final String createdBy;
@@ -249,10 +272,24 @@ final class TenantReturnHistoryRepository extends TenantReadRepository {
   ];
 
   /// Pages every return recorded by the selected business.
+  ///
+  /// [recordedOn] narrows to the day the reversal was taken and [status] to one
+  /// standing; both are exact-value filters, which is all the read boundary
+  /// offers and all these two controls need. Null means *every*.
   Future<TenantReturnPage> loadReturns({
     int pageSize = 20,
     String? cursor,
+    String? recordedOn,
+    TenantReturnStatus? status,
   }) async {
+    String? safeRecordedOn;
+    if (recordedOn != null) {
+      try {
+        safeRecordedOn = validateCheckoutBusinessDate(recordedOn);
+      } on ArgumentError {
+        throw const TenantReturnException('invalid_recorded_on');
+      }
+    }
     final page = await readCollectionPage(
       TenantCollection.returns,
       collectionReader: _collectionReader,
@@ -264,6 +301,8 @@ final class TenantReturnHistoryRepository extends TenantReadRepository {
       // rules, so that same identity is the honest scope/index anchor here.
       equalityFilters: <String, Object?>{
         TenantReadRepository.tenantIdField: session.tenantId,
+        if (safeRecordedOn != null) 'recordedOn': safeRecordedOn,
+        if (status != null) 'status': status.wireValue,
       },
     );
 
@@ -275,6 +314,63 @@ final class TenantReturnHistoryRepository extends TenantReadRepository {
       );
       if (record.tenantId != session.tenantId) {
         throw const TenantReturnException('cross_tenant_return');
+      }
+      // The query filters, but a transport that ignored either filter must not
+      // put a record under a day or a standing it does not have.
+      if (safeRecordedOn != null && record.recordedOn != safeRecordedOn) {
+        throw const TenantReturnException('return_recorded_on_mismatch');
+      }
+      if (status != null && record.status != status) {
+        throw const TenantReturnException('return_status_mismatch');
+      }
+      items.add(record);
+    }
+    return TenantReturnPage(
+      items: items,
+      nextCursor: page.nextCursor,
+      hasMore: page.hasMore,
+    );
+  }
+
+  /// Pages every return filed against a sale that traded on [businessDate].
+  ///
+  /// **The day is the *sale's*, not the day the reversal was recorded**, which
+  /// is what makes this the right read for netting a day's takings: a return
+  /// taken the following morning belongs to the day whose money it comes back
+  /// out of. See [TenantReturnCreateIntent.businessDate].
+  Future<TenantReturnPage> loadDayReturns({
+    required String businessDate,
+    int pageSize = 20,
+    String? cursor,
+  }) async {
+    final String safeBusinessDate;
+    try {
+      safeBusinessDate = validateCheckoutBusinessDate(businessDate);
+    } on ArgumentError {
+      throw const TenantReturnException('invalid_business_date');
+    }
+    final page = await readCollectionPage(
+      TenantCollection.returns,
+      collectionReader: _collectionReader,
+      pageSize: pageSize,
+      cursor: cursor,
+      descending: true,
+      equalityFilters: <String, Object?>{'businessDate': safeBusinessDate},
+    );
+
+    final items = <TenantReturn>[];
+    for (final snapshot in page.items) {
+      final record = TenantReturn.fromDocument(
+        path: snapshot.path,
+        data: snapshot.data,
+      );
+      if (record.tenantId != session.tenantId) {
+        throw const TenantReturnException('cross_tenant_return');
+      }
+      // The query filters by day, but a transport that ignored the filter must
+      // never net another day's takings down.
+      if (record.businessDate != safeBusinessDate) {
+        throw const TenantReturnException('return_business_date_mismatch');
       }
       items.add(record);
     }
@@ -327,6 +423,23 @@ final class TenantReturnHistoryRepository extends TenantReadRepository {
       nextCursor: page.nextCursor,
       hasMore: page.hasMore,
     );
+  }
+}
+
+/// The sale's trading day, where the return records one.
+///
+/// Anything present but not a valid business date is a refusal rather than a
+/// shrug: a malformed day would be filed against the wrong takings.
+String? _optionalBusinessDate(Map<String, Object?> data, String field) {
+  final value = data[field];
+  if (value == null) return null;
+  if (value is! String) {
+    throw const TenantReturnException('invalid_return_business_date');
+  }
+  try {
+    return validateCheckoutBusinessDate(value);
+  } on ArgumentError {
+    throw const TenantReturnException('invalid_return_business_date');
   }
 }
 

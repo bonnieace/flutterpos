@@ -1,5 +1,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../ui/status.dart';
+
 /// Narrow callable boundary for `getMyEmailDeliveryStatus`.
 ///
 /// It takes no input at all: the server answers about the caller's own address,
@@ -84,6 +86,21 @@ EmailDeliveryStatus parseEmailDeliveryStatus(Object? value) {
     'getMyEmailDeliveryStatus returned an unrecognised answer.',
   );
 }
+
+/// What every surface says about an address the server will not deliver to.
+///
+/// **One sentence, defined once.** Two surfaces wait on the same email - the
+/// signup wizard's verify step and the account verification panel - and a user
+/// who is told different things by them is being told the app does not know.
+/// It names no cause because the server reports none: four causes collapse to
+/// one answer at its boundary, and [emailDeliveryUnavailableSentinel] says why.
+///
+/// It leads with the fact that retrying cannot help, because retrying forever
+/// is precisely the behaviour it exists to stop.
+const AppNotice emailUndeliverableNotice = AppNotice.refused(
+  'This address cannot receive mail from us, so sending again will not help. '
+  'Check the address or contact support.',
+);
 
 /// Guarded client boundary over `getMyEmailDeliveryStatus`.
 final class EmailDeliveryStatusReader {

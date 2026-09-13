@@ -33,6 +33,7 @@ import {
   assertCanonicalTargetStaff,
   assertExactCanonicalOwner,
   auditData,
+  credentialBootstrapRequired,
   deliveryData,
   isPendingInvitationStatus,
   membershipMirrorData,
@@ -208,7 +209,7 @@ export const inviteStaff = onCall<InviteStaffRequest, Promise<InvitationMutation
     const requestId = requireRequestId(data.requestId);
     const db = getFirestore();
 
-    await preauthorizeTenantAdministrator(db, request, tenantId, {mode: "approved"});
+    await preauthorizeTenantAdministrator(db, request, tenantId);
     const secret = invitationHmacSecretValue();
     const deliveryId = operationDocumentId(auth.uid, "inviteStaff", tenantId, requestId);
     const operationInput = {email, name, phone, role};
@@ -248,8 +249,7 @@ export const inviteStaff = onCall<InviteStaffRequest, Promise<InvitationMutation
         request,
         tenantId,
         STAFF_MANAGEMENT_ROLES,
-        transaction,
-        {mode: "approved"}
+        transaction
       );
       const tenant = actorContext.tenant as StoredTenantRecord;
       const targetRootRef = db.collection("users").doc(targetIdentity.uid);
@@ -310,7 +310,7 @@ export const inviteStaff = onCall<InviteStaffRequest, Promise<InvitationMutation
         invitedEmail: targetIdentity.email,
         invitedBy: auth.uid,
         latestDeliveryId: deliveryId,
-        visibleAcceptanceAllowed: !targetIdentity.newlyCreated && targetIdentity.emailVerified,
+        credentialBootstrapRequired: credentialBootstrapRequired(targetIdentity),
         identityOwnedByInvitation: identityProvisioningOperationId !== undefined,
         identityProvisioningOperationId: identityProvisioningOperationId ?? null,
         updatedAt: FieldValue.serverTimestamp(),
@@ -367,7 +367,7 @@ export const resendStaffInvitation = onCall<
     const requestId = requireRequestId(data.requestId);
     const db = getFirestore();
 
-    await preauthorizeTenantAdministrator(db, request, tenantId, {mode: "approved"});
+    await preauthorizeTenantAdministrator(db, request, tenantId);
     const targetIdentity = await readAuthIdentity(targetUid);
     const recipient = bindRecipientPrivacy(
       targetIdentity.email,
@@ -392,7 +392,7 @@ export const resendStaffInvitation = onCall<
       input: {targetUid},
     }, async (transaction): Promise<InvitationMutationResponse> => {
       const actorContext = await requireTenantMember(
-        db, request, tenantId, STAFF_MANAGEMENT_ROLES, transaction, {mode: "approved"}
+        db, request, tenantId, STAFF_MANAGEMENT_ROLES, transaction
       );
       const tenant = actorContext.tenant as StoredTenantRecord;
       const targetRootRef = db.collection("users").doc(targetUid);
@@ -452,7 +452,10 @@ export const resendStaffInvitation = onCall<
         invitedEmail: targetIdentity.email,
         invitedBy: auth.uid,
         latestDeliveryId: deliveryId,
-        visibleAcceptanceAllowed: pending.invitation.visibleAcceptanceAllowed === true,
+        // Recomputed, not carried forward. The old flag was copied from the
+        // previous invitation, so an invitee who had since set a password kept
+        // being sent password-setup links for as long as anyone resent.
+        credentialBootstrapRequired: credentialBootstrapRequired(targetIdentity),
         updatedAt: FieldValue.serverTimestamp(),
       });
       transaction.create(
@@ -503,7 +506,7 @@ export const replacePendingStaffEmail = onCall<
     const db = getFirestore();
 
     const preliminaryContext =
-      await preauthorizeTenantAdministrator(db, request, tenantId, {mode: "approved"});
+      await preauthorizeTenantAdministrator(db, request, tenantId);
     const secret = invitationHmacSecretValue();
     const deliveryId = operationDocumentId(
       auth.uid,
@@ -565,7 +568,7 @@ export const replacePendingStaffEmail = onCall<
       replacementIdentity,
       async (transaction): Promise<InvitationMutationResponse> => {
       const actorContext = await requireTenantMember(
-        db, request, tenantId, STAFF_MANAGEMENT_ROLES, transaction, {mode: "approved"}
+        db, request, tenantId, STAFF_MANAGEMENT_ROLES, transaction
       );
       const tenant = actorContext.tenant as StoredTenantRecord;
       const tenantRef = db.collection("tenants").doc(tenantId);
@@ -683,8 +686,7 @@ export const replacePendingStaffEmail = onCall<
         invitedEmail: replacementIdentity.email,
         invitedBy: auth.uid,
         latestDeliveryId: deliveryId,
-        visibleAcceptanceAllowed: !replacementIdentity.newlyCreated &&
-          replacementIdentity.emailVerified,
+        credentialBootstrapRequired: credentialBootstrapRequired(replacementIdentity),
         identityOwnedByInvitation: identityProvisioningOperationId !== undefined,
         identityProvisioningOperationId: identityProvisioningOperationId ?? null,
         createdAt: FieldValue.serverTimestamp(),

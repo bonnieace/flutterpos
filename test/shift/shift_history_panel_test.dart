@@ -342,6 +342,11 @@ void main() {
     // the shift recorded rather than reading them again.
     expect(reader.queries.last.equalityFilters, <String, Object?>{
       'shiftId': 'shift-a',
+      // **The cashier attribution rides with the shift.** loadShiftSales
+      // filters on soldById too: Firestore permits a cashier's collection
+      // query only where the result set is provably their own, and
+      // management uses the same narrower shape.
+      'soldById': 'user-a',
     });
     expect(
       tester

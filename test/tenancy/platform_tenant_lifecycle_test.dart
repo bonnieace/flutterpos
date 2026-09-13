@@ -56,7 +56,7 @@ void main() {
       'rejects unsupported statuses, stale fields, and bad page sizes',
       () async {
         for (final document in [
-          _tenantDocument('tenant-a', status: 'pending'),
+          _tenantDocument('tenant-a', status: 'rejected'),
           _tenantDocument('tenant-a')..data.remove('updatedAt'),
           _tenantDocument('tenant-a')..data['ownerUid'] = 'bad/path',
         ]) {
@@ -193,14 +193,14 @@ void main() {
     test('maps reactivation capacity and invariant errors to safe text', () {
       expect(
         platformTenantLifecycleSafeError(
-          const PlatformTenantReviewCallableException('resource-exhausted'),
+          const PlatformTenantCallableException('resource-exhausted'),
           action: PlatformTenantLifecycleAction.reactivate,
         ),
         'The owner has reached the active business limit.',
       );
       expect(
         platformTenantLifecycleSafeError(
-          const PlatformTenantReviewCallableException('failed-precondition'),
+          const PlatformTenantCallableException('failed-precondition'),
           action: PlatformTenantLifecycleAction.suspend,
         ),
         contains('changed'),
@@ -338,7 +338,7 @@ Widget _formApp({
   required _LifecycleCallable callable,
   VoidCallback? onCancel,
   ValueChanged<PlatformTenantLifecycleResult>? onSuccess,
-  PlatformTenantReviewCurrentCheck? isCurrent,
+  PlatformTenantCurrentCheck? isCurrent,
 }) => MaterialApp(
   home: Scaffold(
     body: PlatformTenantLifecycleForm(
@@ -364,10 +364,10 @@ PlatformTenantLifecycleGateway _gateway(
   requestIdFactory: () => 'lifecycle-request-001',
 );
 
-PlatformReviewIdentity _identity({
+PlatformAdminIdentity _identity({
   RootRoutingProfile profile = _platformProfile,
   bool hasClaim = true,
-}) => PlatformReviewIdentity(
+}) => PlatformAdminIdentity(
   uid: 'platform-user',
   profile: profile,
   hasSuperAdminClaim: hasClaim,
@@ -484,7 +484,7 @@ final class _LifecycleCallable implements SetTenantLifecycleCallable {
     payloads.add(Map<String, Object?>.from(payload));
     if (failures > 0) {
       failures--;
-      throw const PlatformTenantReviewCallableException('unavailable');
+      throw const PlatformTenantCallableException('unavailable');
     }
     if (pending != null) return pending!.future;
     if (response != null) return response;

@@ -12,6 +12,7 @@
     "revoke-platform-admin": "npm run build && node lib/cli/revokePlatformAdmin.js",
     "backfill-product-search": "npm run build && node lib/cli/backfillProductSearch.js",
     "backfill-staff-search": "npm run build && node lib/cli/backfillStaffSearch.js",
+    "wipe-project": "npm run build && node lib/cli/wipeProject.js",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
   },

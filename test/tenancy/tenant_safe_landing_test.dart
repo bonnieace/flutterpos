@@ -161,10 +161,26 @@ void main() {
     final catalog = find.byKey(const ValueKey('inventory'));
     await _reveal(tester, account);
 
-    expect(
-      tester.getRect(account).top,
-      greaterThan(tester.getRect(catalog).top),
-    );
+    // **Reading order, not vertical position.** This harness supplies two
+    // destinations, so the grid lays them in one row and both tops are the
+    // same 113.0 - "last" is then to the right rather than below. Comparing
+    // only `top` asserted a row break the route never promised.
+    final accountAt = tester.getRect(account);
+    final catalogAt = tester.getRect(catalog);
+    if (accountAt.top == catalogAt.top) {
+      expect(
+        accountAt.left,
+        greaterThan(catalogAt.left),
+        reason: 'the account control shares the catalog row, so it must sit '
+            'to its right',
+      );
+    } else {
+      expect(
+        accountAt.top,
+        greaterThan(catalogAt.top),
+        reason: 'the account control must sit below the catalog',
+      );
+    }
   });
 
   testWidgets('the scrollable is given the whole body', (tester) async {
@@ -526,6 +542,14 @@ const ValueKey<String> _greetingKey = ValueKey<String>('home-greeting');
 Text _greeting(WidgetTester tester) =>
     tester.widget<Text>(find.byKey(_greetingKey));
 
+/// A fixed nine in the morning, so the salutation is not the wall clock.
+///
+/// **These tests are about the header shortening, not the time of day.** Four
+/// of them asserted *Good morning* against `DateTime.now()` and so passed only
+/// before noon; the greeting has a clock seam for exactly this, and defaulting
+/// it here makes every landing test deterministic rather than only the four.
+DateTime _nineInTheMorning() => DateTime(2026, 9, 10, 9);
+
 Future<void> _pumpLanding(
   WidgetTester tester, {
   required double panelHeight,
@@ -540,6 +564,7 @@ Future<void> _pumpLanding(
   TenantDataReader? reader,
   bool settle = true,
   Size size = _phone,
+  DateTime Function() clock = _nineInTheMorning,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -558,6 +583,7 @@ Future<void> _pumpLanding(
         child: TenantSafeLandingScreen(
           membership: membership,
           memberName: memberName,
+          clock: clock,
           reader: reader ?? _EmptyReader(),
           onSignOut: () async {},
           catalogManagementRoute: catalogManagementRoute,

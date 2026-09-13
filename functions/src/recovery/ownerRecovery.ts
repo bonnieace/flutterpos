@@ -9,10 +9,8 @@ import {staffSearchFields} from "../staff/search";
 const DOCUMENT_ID_PATTERN = /^[^/]{1,128}$/;
 const RECOVERABLE_CASE_STATUSES = new Set(["open", "approved"]);
 const KNOWN_TENANT_STATUSES = new Set<TenantStatus>([
-  "pending",
   "active",
   "suspended",
-  "rejected",
   "archived",
 ]);
 

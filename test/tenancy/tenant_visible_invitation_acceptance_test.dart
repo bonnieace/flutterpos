@@ -248,9 +248,11 @@ void main() {
     testWidgets('a permanently refused invitation is sent to the emailed link', (
       tester,
     ) async {
-      // Finding 3 from the 2026-08-08 Android run. The server decides
-      // `visibleAcceptanceAllowed` once, at invite time, so the old
-      // "Please try again." was advice that could never work.
+      // Finding 3 from the 2026-08-08 Android run, against a server that
+      // decided `visibleAcceptanceAllowed` once at invite time: the old
+      // "Please try again." was advice that could never work. Nothing emits
+      // this violation since 2026-09-08, and the sentence it maps to is at
+      // last true - the emailed link opens the app on the invitation.
       final callable = _AcceptCallable(
         handler: (_, _) => Future<Object?>.error(
           const InvitationAcceptanceException(

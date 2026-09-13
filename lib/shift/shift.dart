@@ -1,4 +1,5 @@
 export 'shift_controller.dart';
+export 'shift_declaration.dart';
 export 'shift_gate.dart';
 export 'shift_history.dart';
 export 'shift_history_panel.dart';

@@ -22,6 +22,8 @@
 /// avoid refusing.
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
 
 import 'checkout_print_configuration.dart';
@@ -94,6 +96,8 @@ final class CheckoutPrintDispatcher {
     required TenantConfiguredPrinter printer,
     String? businessName,
     String? servedBy,
+    Uint8List? logo,
+    String? slogan,
   }) async {
     if (!printer.canPrint) {
       return const CheckoutPrintResult.refused(
@@ -101,10 +105,21 @@ final class CheckoutPrintDispatcher {
       );
     }
     final configuration = printer.require();
-    final bytes = CheckoutReceiptBody(
-      profile: _profile,
-      configuration: configuration,
-    ).build(sale, businessName: businessName, servedBy: servedBy);
+    final bytes =
+        CheckoutReceiptBody(
+          profile: _profile,
+          configuration: configuration,
+        ).build(
+          sale,
+          businessName: businessName,
+          servedBy: servedBy,
+          // **Rastered into the durable bytes, not stored beside them.** A job is
+          // re-sent as it was built - see `retry` - so the logo a receipt printed
+          // with is the one it was created with, whatever the business publishes
+          // afterwards.
+          logo: logo,
+          slogan: slogan,
+        );
     final job = await _queue.enqueue(
       tenantId: sale.tenantId,
       receiptNumber: sale.receiptNumber,
@@ -129,12 +144,16 @@ final class CheckoutPrintDispatcher {
     required TenantConfiguredPrinter printer,
     String? businessName,
     String? servedBy,
+    Uint8List? logo,
+    String? slogan,
   }) async {
     final prepared = await enqueue(
       sale,
       printer: printer,
       businessName: businessName,
       servedBy: servedBy,
+      logo: logo,
+      slogan: slogan,
     );
     if (prepared.outcome == CheckoutPrintOutcome.refused) return prepared;
     final job = prepared.job!;
@@ -144,6 +163,84 @@ final class CheckoutPrintDispatcher {
       return CheckoutPrintResult.sent(job);
     }
     final ran = await _queue.run(job.receiptNumber, transport: _transport);
+    return ran.state == PrintJobState.printed
+        ? CheckoutPrintResult.sent(ran)
+        : CheckoutPrintResult.queued(
+            ran,
+            ran.attentionReason ?? PrinterTransportCode.unreachable,
+          );
+  }
+
+  /// An operator's deliberate second copy of a receipt.
+  ///
+  /// **Separate from [dispatch] and from [retry], because it is a different
+  /// act.** `dispatch` is the sale path and is idempotent per receipt - a job
+  /// that has already printed is left alone, which is why it can never produce
+  /// a duplicate. `retry` pushes a copy that was asked for once and never
+  /// arrived. This is the only path that produces a *second* piece of paper for
+  /// a receipt the customer already has one of, and `docs/printer_transport.md`
+  /// §7 requires it to be audited: [onReprint] is that audit, and it is awaited
+  /// **before** anything is queued or sent, so a reprint that was not recorded
+  /// never happens.
+  ///
+  /// **Three cases, and only two of them are reprints.**
+  ///
+  /// - No job at all, which is the ordinary case on the Sales Report: the
+  ///   receipt was rung up on another till, or this device's queue has been
+  ///   cleared since. The bytes are rebuilt from the sale and queued. It is
+  ///   still audited - a second copy is a second copy wherever the first one
+  ///   came out of.
+  /// - A `printed` job: the exact bytes that printed are re-queued through
+  ///   [HivePrintJobQueue.reprint], which is the one door past that terminal
+  ///   state. **Deliberately not rebuilt**, for the reason `retry` gives: a
+  ///   receipt reprinted after a price change must print what was *charged*.
+  /// - A job that has not printed yet: the first copy is still on its way, so
+  ///   this is a `retry` and not a reprint, and it writes no audit line.
+  Future<CheckoutPrintResult> reprint(
+    CheckoutReceiptSale sale, {
+    required TenantConfiguredPrinter printer,
+    required Future<void> Function() onReprint,
+    String? businessName,
+    String? servedBy,
+    Uint8List? logo,
+    String? slogan,
+  }) async {
+    if (!printer.canPrint) {
+      return const CheckoutPrintResult.refused(
+        PrinterTransportCode.notConfigured,
+      );
+    }
+    final existing = _queue.read(sale.receiptNumber);
+    if (existing != null && existing.state != PrintJobState.printed) {
+      return retry(sale.receiptNumber);
+    }
+    if (existing == null) {
+      await onReprint();
+      final configuration = printer.require();
+      final bytes =
+          CheckoutReceiptBody(
+            profile: _profile,
+            configuration: configuration,
+          ).build(
+            sale,
+            businessName: businessName,
+            servedBy: servedBy,
+            logo: logo,
+            slogan: slogan,
+          );
+      await _queue.enqueue(
+        tenantId: sale.tenantId,
+        receiptNumber: sale.receiptNumber,
+        endpoint: configuration.endpoint,
+        bytes: bytes,
+      );
+    } else {
+      await _queue.reprint(
+        sale.receiptNumber,
+        onReprint: (_) => onReprint(),
+      );
+    }
+    final ran = await _queue.run(sale.receiptNumber, transport: _transport);
     return ran.state == PrintJobState.printed
         ? CheckoutPrintResult.sent(ran)
         : CheckoutPrintResult.queued(

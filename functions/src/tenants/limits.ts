@@ -1,22 +1,18 @@
 export interface TenantLimits {
-  maxPendingTenantsPerUser: number;
   maxTenantRequestsPer24Hours: number;
   maxOwnedActiveTenantsPerUser: number;
 }
 
 export interface TenantLimitCounts {
-  pendingTenants: number;
   requestsInLast24Hours: number;
   ownedActiveTenants: number;
 }
 
 export type TenantLimitViolation =
-  | "max_pending_tenants"
   | "max_requests_per_24_hours"
   | "max_owned_active_tenants";
 
 export const DEFAULT_TENANT_LIMITS: Readonly<TenantLimits> = Object.freeze({
-  maxPendingTenantsPerUser: 3,
   maxTenantRequestsPer24Hours: 5,
   maxOwnedActiveTenantsPerUser: 25,
 });
@@ -36,10 +32,6 @@ export function resolveTenantLimits(raw: unknown): TenantLimits {
     raw as Record<string, unknown> :
     {};
   return {
-    maxPendingTenantsPerUser: configuredLimit(
-      config.maxPendingTenantsPerUser,
-      DEFAULT_TENANT_LIMITS.maxPendingTenantsPerUser
-    ),
     maxTenantRequestsPer24Hours: configuredLimit(
       config.maxTenantRequestsPer24Hours,
       DEFAULT_TENANT_LIMITS.maxTenantRequestsPer24Hours
@@ -55,9 +47,6 @@ export function findTenantLimitViolation(
   counts: TenantLimitCounts,
   limits: TenantLimits
 ): TenantLimitViolation | undefined {
-  if (counts.pendingTenants >= limits.maxPendingTenantsPerUser) {
-    return "max_pending_tenants";
-  }
   if (counts.requestsInLast24Hours >= limits.maxTenantRequestsPer24Hours) {
     return "max_requests_per_24_hours";
   }

@@ -36,6 +36,7 @@
 /// figure a record states also appears in its sentence.
 library;
 
+import '../checkout/checkout_tender.dart';
 import '../ui/status.dart';
 import 'reconciliation_anomalies.dart';
 import 'reconciliation_status.dart';
@@ -304,6 +305,18 @@ _DifferenceReading _reading(
           'needs, so no difference could be measured.',
     ),
   TenantReconciliationAnomalyKind.shiftVariance => _shiftVariance(anomaly),
+  TenantReconciliationAnomalyKind.shiftTenderVariance => _tenderVariance(
+    anomaly,
+  ),
+  TenantReconciliationAnomalyKind.missingTenderDeclaration =>
+    const _DifferenceReading(
+      sentence:
+          'This shift was closed without saying what the till held, so '
+          'nothing could be compared against its sales.',
+      explanation:
+          'This shift was closed without saying what the till held, so '
+          'nothing could be compared against its sales.',
+    ),
   TenantReconciliationAnomalyKind.other => const _DifferenceReading(
     sentence:
         'What this difference means is not something this version of the '
@@ -416,6 +429,80 @@ _DifferenceReading _shiftVariance(TenantReconciliationAnomaly anomaly) {
     ],
   );
 }
+
+/// The declaration, the sales it is measured against, and the gap - per method.
+///
+/// **Nine figures rather than three.** A difference on its own says how far out
+/// the till is and nothing about which side moved, and the person reading this
+/// is deciding whether to accept it. Grouped by method rather than by role, so
+/// each row reads as one question answered twice and then subtracted.
+_DifferenceReading _tenderVariance(TenantReconciliationAnomaly anomaly) {
+  final figures = <ReconciliationFigure>[];
+  final over = <String>[];
+  final short = <String>[];
+  for (final tender in CheckoutTender.values) {
+    final declared = anomaly.declaredMinor[tender]!;
+    final expected = anomaly.expectedMinor[tender]!;
+    final variance = anomaly.tenderVarianceMinor[tender]!;
+    figures.addAll(<ReconciliationFigure>[
+      ReconciliationFigure(
+        slug: '${tender.wireValue}-declared',
+        label: '${tender.label} declared',
+        value: _money(declared),
+      ),
+      ReconciliationFigure(
+        slug: '${tender.wireValue}-expected',
+        label: '${tender.label} from the sales',
+        value: _money(expected),
+      ),
+      ReconciliationFigure(
+        slug: '${tender.wireValue}-variance',
+        label: '${tender.label} difference',
+        value: _signedFigure(_major(variance)),
+        detail: _against(variance),
+      ),
+    ]);
+    if (variance > 0) over.add(tender.label);
+    if (variance < 0) short.add(tender.label);
+  }
+  final clauses = <String>[
+    if (over.isNotEmpty) '${_list(over)} came to more than the sales account '
+        'for',
+    if (short.isNotEmpty) '${_list(short)} came to less',
+  ];
+  return _DifferenceReading(
+    sentence: clauses.isEmpty
+        ? 'What was declared and what the sales account for disagree.'
+        : '${_capitalise(clauses.join(', and '))}.',
+    // **The unattributed figure is named, not quietly dropped.** It is inside
+    // the shift's takings but in none of the three above, so a reader adding
+    // them up would otherwise find the report short by exactly that much and
+    // conclude the wrong thing.
+    explanation: <String>[
+      'What the cashier said the till held disagrees with what its own sales '
+          'account for.',
+      if ((anomaly.expectedUnattributedMinor ?? 0) > 0)
+        'A further ${_money(anomaly.expectedUnattributedMinor!)} of this '
+            "shift's sales name no payment method this app recognises, so it "
+            'is in the shift total but in none of the three figures above.',
+      checkoutTenderDisclaimer,
+    ].join(' '),
+    figures: figures,
+  );
+}
+
+/// Minor units as money, unlabelled for the reason `_shiftVariance` records:
+/// this screen has no access to the business's currency code.
+String _money(int minorUnits) => _major(minorUnits).toStringAsFixed(2);
+
+num _major(int minorUnits) => minorUnits / 100;
+
+String _list(List<String> items) => items.length == 1
+    ? items.single
+    : '${items.sublist(0, items.length - 1).join(', ')} and ${items.last}';
+
+String _capitalise(String sentence) =>
+    sentence.isEmpty ? sentence : sentence[0].toUpperCase() + sentence.substring(1);
 
 String _signed(num value) {
   if (value == 0) return 'agrees';

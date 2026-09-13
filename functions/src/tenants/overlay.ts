@@ -10,10 +10,8 @@ import {
 
 const MEMBERSHIP_STATUS_VALUES = new Set<string>(["pending", "active", "inactive"]);
 const TENANT_STATUS_VALUES = new Set<string>([
-  "pending",
   "active",
   "suspended",
-  "rejected",
   "archived",
 ]);
 const INVITATION_STATUS_VALUES = new Set<string>([
@@ -37,7 +35,6 @@ export interface TenantMirrorRecord {
   joinedAt?: unknown;
   updatedAt?: unknown;
   mirrorVersion?: unknown;
-  provisionalUntil?: unknown;
 }
 
 export interface TenantListItem {
@@ -53,17 +50,6 @@ export interface TenantListItem {
   joinedAt: string | null;
   updatedAt: string | null;
   mirrorVersion: number;
-  /**
-   * When a self-serve request's provisional trading window shuts, ISO-8601, or
-   * null where there is no window.
-   *
-   * **Projected, not left to the client to find.** The app never reads the
-   * membership mirror or the tenant document to decide what a business may do -
-   * it reads this list. A window written onto both of those and omitted here is
-   * a window the app cannot see, which is exactly the defect this field closes:
-   * every provisional business drew a padlock.
-   */
-  provisionalUntil: string | null;
   canAccess: boolean;
   canonicalTenantExists: boolean;
   canonicalMembershipExists: boolean;
@@ -146,22 +132,10 @@ export function overlayCanonicalTenantState(
     membershipStatus(mirror.membershipStatus) ?? "inactive";
   const currentRole = canonicalRole ?? mirrorRole(mirror.role);
   const ownerInvariantValid = canonicalRole !== "owner" || tenant?.ownerUid === uid;
-  const provisionalUntil = isoTimestamp(
-    tenant?.provisionalUntil ?? mirror.provisionalUntil
-  );
-  // **A pending business inside its provisional window may trade**, which is
-  // what `tradingTenant` in `firestore.rules` and `tenantSatisfiesAccessMode`
-  // both already say. This third copy of the same question exists because the
-  // app asks it of this list rather than of either of those, and it answered
-  // "no" for every provisional business - a padlock on a shop that was entitled
-  // to sell.
-  const withinProvisionalWindow = currentTenantStatus === "pending" &&
-    provisionalUntil !== null &&
-    Date.parse(provisionalUntil) > Date.now();
   const canAccess = user?.globalStatus === "active" &&
     user.accountType === "tenant_user" &&
     canonicalTenantExists &&
-    (currentTenantStatus === "active" || withinProvisionalWindow) &&
+    currentTenantStatus === "active" &&
     canonicalMembershipExists &&
     currentMembershipStatus === "active" &&
     canonicalRole !== undefined &&
@@ -192,7 +166,6 @@ export function overlayCanonicalTenantState(
     updatedAt: isoTimestamp(staff?.updatedAt ?? tenant?.updatedAt ?? mirror.updatedAt),
     mirrorVersion: Number.isSafeInteger(mirror.mirrorVersion) &&
       (mirror.mirrorVersion as number) >= 0 ? mirror.mirrorVersion as number : 0,
-    provisionalUntil,
     canAccess,
     canonicalTenantExists,
     canonicalMembershipExists,

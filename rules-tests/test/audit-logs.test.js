@@ -60,7 +60,7 @@ function platformRecord(overrides = {}) {
   return {
     tenantId: "tenant-a",
     eventType: "tenant_lifecycle_changed",
-    fromStatus: "pending",
+    fromStatus: "suspended",
     toStatus: "active",
     actorType: "platform_admin",
     fanoutOperationId: "op-1",

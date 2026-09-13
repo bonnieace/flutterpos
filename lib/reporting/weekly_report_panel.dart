@@ -200,7 +200,6 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
         'w$_weekOffset:${_soldById ?? '-'}:${_categoryId ?? '-'}:$_generation';
     _composeLoaders(key);
     return TenantRouteGuard<WeeklyReportView>(
-      key: ValueKey(key),
       allowedRoles: TenantSalesTotalsGateway.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

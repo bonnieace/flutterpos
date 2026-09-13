@@ -54,6 +54,14 @@ function pendingReturn({
     returnId,
     tenantId: "tenant-a",
     saleId,
+    // The sale's own trading day, which the create rule reads off the sale
+    // document rather than believing. It is what lets a day's takings be netted
+    // by one query instead of one per sale on the page.
+    businessDate: BUSINESS_DATE,
+    // The day the reversal was taken, which is a different fact from the day
+    // the sale traded. Shape-checked only: binding it to `request.time` would
+    // refuse every return the offline queue replays a day later.
+    recordedOn: BUSINESS_DATE,
     createdBy,
     status: "pending",
     reason: "Customer returned a damaged bottle",
@@ -275,6 +283,15 @@ test("a return must be exactly the frozen create contract", async () => {
     "no-sale": { drop: ["saleId"] },
     "sale-does-not-exist": { saleId: "co-missing" },
     "empty-sale-id": { saleId: "" },
+    "no-business-date": { drop: ["businessDate"] },
+    "no-recorded-on": { drop: ["recordedOn"] },
+    "malformed-recorded-on": { recordedOn: "04-08-2026" },
+    "recorded-on-not-a-string": { recordedOn: 20260804 },
+    // A day the sale did not trade on would file the reversal against somebody
+    // else's takings.
+    "another-day": { businessDate: "2026-07-30" },
+    "malformed-business-date": { businessDate: "31-07-2026" },
+    "business-date-not-a-string": { businessDate: 20260731 },
     "client-chosen-instant": { createdAt: Timestamp.fromMillis(1785500000000) },
     "no-reason": { drop: ["reason"] },
     "short-reason": { reason: "ab" },

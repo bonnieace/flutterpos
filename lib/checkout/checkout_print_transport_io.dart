@@ -63,14 +63,13 @@ final class IoPrinterTransport implements PrinterTransport {
   }) => Socket.connect(host, port, timeout: timeout);
 
   @override
-  PrinterTransportCapability get capability =>
-      const PrinterTransportCapability(
-        kind: PrinterTransportKind.directTcp,
-        // The operator configures the printer itself here, so a setup screen
-        // shows the address field. On the Phase 2 bridge it does not.
-        endpointIsPrinter: true,
-        label: 'Direct network printing',
-      );
+  PrinterTransportCapability get capability => const PrinterTransportCapability(
+    kind: PrinterTransportKind.directTcp,
+    // The operator configures the printer itself here, so a setup screen
+    // shows the address field. On the Phase 2 bridge it does not.
+    endpointIsPrinter: true,
+    label: 'Direct network printing',
+  );
 
   /// Connects and closes without writing a byte.
   @override

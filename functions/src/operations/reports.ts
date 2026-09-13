@@ -57,12 +57,7 @@ export const getTenantSalesComparison = onCall<
   const soldById = optionalDocumentId(data.soldById, "soldById");
   const categoryId = optionalDocumentId(data.categoryId, "categoryId");
   const db = getFirestore();
-  // **"reading", not "trading".** This is the one callable that only reads, and
-  // a business whose provisional window has shut keeps sight of the week it
-  // traded - the same allowance `readableTenant` makes in the rules.
-  await requireTenantMember(
-    db, request, tenantId, REPORTING_ROLES, undefined, {mode: "reading"}
-  );
+  await requireTenantMember(db, request, tenantId, REPORTING_ROLES);
 
   let query: Query<DocumentData> = db.collection("tenants").doc(tenantId)
     .collection("sales")

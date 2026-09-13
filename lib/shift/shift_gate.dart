@@ -25,10 +25,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../reporting/reporting_currency.dart';
+import '../returns/return_actions.dart';
+import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
-import '../ui/routes.dart';
+import '../ui/illustration.dart';
+import '../ui/press.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -45,28 +49,56 @@ enum _ShiftExitChoice {
   endShift,
 }
 
+/// The two answers, with the words and the glyphs the old till used.
+///
+/// **Stepping away is first and it is the safe one**, which is both the old
+/// dialog's order and the product owner's direction of 2026-09-03: a cashier
+/// leaves the till far more often than they end a day, and the common answer
+/// was drawn as the quiet outlined button beside a mint *End shift*.
+extension on _ShiftExitChoice {
+  ({String label, String detail, IconData icon, AppStatus status}) get card =>
+      switch (this) {
+        _ShiftExitChoice.stepAway => (
+          label: 'Just stepping away',
+          detail: 'Keep the shift open and go back to the menu',
+          icon: Icons.pause_circle_outline,
+          status: AppStatus.ok,
+        ),
+        _ShiftExitChoice.endShift => (
+          label: 'Close shift',
+          detail: 'Count the cash and close out',
+          icon: Icons.stop_circle_outlined,
+          status: AppStatus.problem,
+        ),
+      };
+}
+
 /// Wraps the till so that selling is only possible inside an open shift.
 final class TenantShiftGate extends StatefulWidget {
   const TenantShiftGate({
     super.key,
     required this.controllerFactory,
-    required this.shiftManagerBuilder,
+    required this.currency,
     required this.child,
+    this.historyReader,
+    this.returnActions,
   });
 
-  /// Builds the controller against the live session, exactly as
-  /// [TenantShiftPanel] does - the gate and the panel must never hold two
-  /// different controllers for one session.
+  /// Builds the controller against the live session, exactly as the close
+  /// sheet does - the gate and the sheet must never hold two different
+  /// controllers for one session.
   final TenantShiftControllerFactory controllerFactory;
 
-  /// The surface that counts cash and closes the shift, opened by *End my
-  /// shift*.
-  ///
-  /// **Injected rather than built here** so the gate does not have to know
-  /// what a close needs - the composition root already assembles the shift
-  /// panel for exactly this, and duplicating that assembly is how the two come
-  /// to disagree about which reader or currency a close uses.
-  final WidgetBuilder shiftManagerBuilder;
+  /// What this business calls its money, so the count states amounts the way
+  /// every other surface in this app does rather than in raw minor units.
+  final TenantReportingCurrency currency;
+
+  /// Reaches the read-only shift history from inside the close sheet. The
+  /// route stays unreachable while it is absent.
+  final TenantDataReader? historyReader;
+
+  /// Passed through the history and sales routes to the returns route.
+  final TenantReturnActions? returnActions;
 
   /// The till.
   final Widget child;
@@ -82,6 +114,16 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
   /// Whether the blocking dialog is on screen, so a rebuild does not stack a
   /// second one on top of it.
   bool _gateUp = false;
+
+  /// Whether the counting sheet is up.
+  ///
+  /// **The gate must not raise its modal over it.** A close that settles turns
+  /// the phase to `none`, which is exactly what `_raiseGateIfNeeded` watches
+  /// for - so *Start your shift* was landing on top of the sheet's own report
+  /// of the close a person had just taken, and burying the control that
+  /// dismisses it. The gate waits until the sheet is gone; the shift is closed
+  /// either way, and nothing can be sold behind a modal sheet.
+  bool _closingUp = false;
 
   @override
   void didChangeDependencies() {
@@ -128,12 +170,21 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
   /// Puts the blocking dialog up when this session has no open shift.
   Future<void> _raiseGateIfNeeded() async {
     final shifts = _shifts;
-    if (!mounted || shifts == null || _gateUp) return;
+    if (!mounted || shifts == null || _gateUp || _closingUp) return;
     if (shifts.state.phase != TenantShiftPhase.none) return;
     _gateUp = true;
     await showAppDialog<void>(
       context,
-      builder: (dialogContext) => _ShiftGateDialog(shifts: shifts),
+      builder: (dialogContext) => _ShiftGateDialog(
+        shifts: shifts,
+        // **The way out of a shift this device cannot adopt.** Without it the
+        // refusal in this dialog is terminal: `Open shift` repeats it and names
+        // a device the cashier may well be holding, and the only remedy left is
+        // an edit to the database. The sheet already draws the declaration and
+        // the recovery close - see `_ShiftCount` - so this is the door to it
+        // rather than a second copy of it.
+        onCloseOrphanShift: _closeShift,
+      ),
     );
     if (!mounted) return;
     _gateUp = false;
@@ -172,7 +223,7 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
       case _ShiftExitChoice.stepAway:
         Navigator.of(context).pop();
       case _ShiftExitChoice.endShift:
-        await _openShiftManager();
+        await _closeShift();
         if (!mounted) return;
         // Back at the till: a closed shift means there is nothing left to sell
         // against, so the till leaves too rather than raising its own gate.
@@ -182,21 +233,35 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
     }
   }
 
-  /// Opens the surface that counts the cash and closes the shift.
+  /// Counts the cash and closes the shift, in one sheet over the till.
   ///
-  /// Shared by the exit dialog's *End my shift* and by the expired screen,
-  /// which has no other action.
-  Future<void> _openShiftManager() async {
-    final sessions = _sessions;
-    if (sessions == null || !mounted) return;
-    await Navigator.of(context).push(
-      AppPageRoute<void>(
-        builder: (routeContext) => TenantSessionScope(
-          controller: sessions,
-          child: Builder(builder: widget.shiftManagerBuilder),
-        ),
-      ),
-    );
+  /// **One tap from the choice above, and that is the 2026-09-03 change.**
+  /// This used to push a page titled *Close shift* whose whole content was a
+  /// button also labelled *Close shift*, which opened this sheet. Shared by
+  /// the exit dialog's *Close shift* and by the expired screen, which has no
+  /// other action.
+  Future<void> _closeShift() async {
+    final shifts = _shifts;
+    final session = _sessions?.session;
+    if (shifts == null || session == null || !mounted) return;
+    _closingUp = true;
+    try {
+      await showShiftCloseSheet(
+        context,
+        shifts: shifts,
+        session: session,
+        currency: widget.currency,
+        historyReader: widget.historyReader,
+        returnActions: widget.returnActions,
+      );
+    } finally {
+      _closingUp = false;
+    }
+    if (!mounted) return;
+    // The sheet is gone, so a shift it closed is now the gate's business
+    // again: an expired shift counted off leaves this device with none, and
+    // the modal asking for a new one is the next thing a cashier needs.
+    unawaited(_raiseGateIfNeeded());
   }
 
   /// A page for the gate's own states to be drawn on.
@@ -258,8 +323,8 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
         // **Past the cap: no sale, and only one way out.** The shift is real
         // and still owns this device's unsettled sales, so this is not the
         // *no shift* empty state - there is nothing to open, only something to
-        // close. Closing needs the server, which is stated rather than left
-        // for the person to discover on a dead button.
+        // close - and since 2026-09-05 that close can be made with no
+        // connection, so nothing here has to send anybody looking for one.
         TenantShiftPhase.expired => _surface(
           key: const ValueKey('shift-gate-expired'),
           ErrorState(
@@ -269,8 +334,8 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
                 'This shift has been open for more than a day, so it can no '
                 'longer take sales.',
             detail:
-                'Counting it off needs a connection, because the totals are '
-                'settled on the server.',
+                'Count it off to finish it. That works with no connection: '
+                'the count is saved here and reaches the server on its own.',
             stillTrue:
                 'Every sale you have already recorded is saved and will be '
                 'sent.',
@@ -279,7 +344,7 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
                 key: const ValueKey('shift-gate-close'),
                 label: 'Close shift',
                 tier: AppButtonTier.primary,
-                onPressed: _openShiftManager,
+                onPressed: _closeShift,
               ),
             ],
           ),
@@ -294,6 +359,23 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
           const EmptyState(
             title: 'No shift is open',
             hint: 'Open one to start selling.',
+            illustration: 'schedule.svg',
+          ),
+        ),
+        // **Counted and closed here; the server has not been told yet.** The
+        // till stops selling, exactly as it does at `none` - the figures for
+        // this shift are fixed, and a sale after them would be a variance the
+        // shop has to explain. What separates it from `none` is that there is
+        // nothing to open: this shift is still this device's to finish, and
+        // it finishes itself the moment there is a connection.
+        TenantShiftPhase.closedPending => _surface(
+          key: const ValueKey('shift-gate-closed-pending'),
+          const EmptyState(
+            title: 'Shift closed on this device',
+            hint:
+                'Its count is saved. It reaches the server on its own when '
+                'this device is back online, and a new shift can be opened '
+                'once it has.',
             illustration: 'schedule.svg',
           ),
         ),
@@ -314,9 +396,15 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
 
 /// The blocking *Start your shift* modal.
 final class _ShiftGateDialog extends StatefulWidget {
-  const _ShiftGateDialog({required this.shifts});
+  const _ShiftGateDialog({
+    required this.shifts,
+    required this.onCloseOrphanShift,
+  });
 
   final TenantShiftController shifts;
+
+  /// Opens the close sheet against a shift this install cannot adopt.
+  final Future<void> Function() onCloseOrphanShift;
 
   @override
   State<_ShiftGateDialog> createState() => _ShiftGateDialogState();
@@ -324,6 +412,29 @@ final class _ShiftGateDialog extends StatefulWidget {
 
 class _ShiftGateDialogState extends State<_ShiftGateDialog> {
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // **The dialog follows the controller, since 2026-09-05.** It used to read
+    // the state once and keep whatever it drew, so a refusal survived the thing
+    // it was refusing: closing the orphaned shift from here left *This shift is
+    // open on another device* on screen with `Open shift` still disabled, and
+    // the only way on was to leave the till and come back.
+    widget.shifts.addListener(_handleShiftChanged);
+  }
+
+  @override
+  void dispose() {
+    // Unsubscribed, never disposed: the controller is the session's and
+    // outlives this dialog.
+    widget.shifts.removeListener(_handleShiftChanged);
+    super.dispose();
+  }
+
+  void _handleShiftChanged() {
+    if (mounted) setState(() {});
+  }
 
   Future<void> _open() async {
     if (_busy) return;
@@ -349,9 +460,22 @@ class _ShiftGateDialogState extends State<_ShiftGateDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
+            // The same drawing the gate's own *No shift is open* state uses,
+            // at the mark's size rather than the scene's: a dialog is a
+            // question, and a 168-tall picture above it pushes the answer off
+            // a short phone.
+            const Center(
+              child: AppIllustration(
+                asset: 'schedule.svg',
+                size: EmptyState.markSize,
+                semanticLabel: 'A shift waiting to be opened',
+              ),
+            ),
+            SizedBox(height: tokens.spacing.s16),
             Text(
               'Every sale is recorded against a shift, so this till opens one '
               'before it can sell.',
+              textAlign: TextAlign.center,
               style: tokens.typography.bodyLarge.copyWith(
                 color: tokens.colors.text.secondary,
               ),
@@ -373,11 +497,27 @@ class _ShiftGateDialogState extends State<_ShiftGateDialog> {
             tier: AppButtonTier.secondary,
             onPressed: _busy ? null : () => Navigator.of(context).pop(),
           ),
+          // **Offered only where there is exactly one shift to close.** More
+          // than one and this device cannot tell which, so it says nothing
+          // rather than closing the wrong one.
+          if (widget.shifts.state.otherDeviceShiftId != null)
+            AppButton(
+              key: const ValueKey('shift-gate-close-orphan'),
+              label: 'Close that shift',
+              tier: AppButtonTier.secondary,
+              onPressed: _busy ? null : widget.onCloseOrphanShift,
+            ),
           AppButton(
             key: const ValueKey('shift-gate-open'),
             label: 'Open shift',
             tier: AppButtonTier.primary,
             loading: _busy,
+            // **Left enabled even while the refusal is up, deliberately.** It
+            // re-runs the discovery query, so it is also the only way to
+            // re-check a shift that has since been closed somewhere else -
+            // disabling it would trap a cashier whose colleague had already
+            // dealt with it. What was missing was never a way to ask again; it
+            // was a way to act on the answer, which is the control beside it.
             onPressed: _open,
           ),
         ],
@@ -386,40 +526,172 @@ class _ShiftGateDialogState extends State<_ShiftGateDialog> {
   }
 }
 
-/// The old till's two ways out.
+/// The old till's two ways out, in the old till's own layout.
+///
+/// **Copied from `lib/pos/pos.dart`'s `_handleExitToHub`** at the product
+/// owner's direction on 2026-09-03: *"we need it to feel like it did there for
+/// old customers who will be upgrading."* A badge, a title, a question, two
+/// tappable option cards and a way to change your mind - not two buttons on a
+/// row.
+///
+/// **It is also what makes stepping away dominant.** As an
+/// `AppActionRow` the pair had *End shift* as the mint primary on the right
+/// and the far more common *Step away* as the quiet outline beside it; and the
+/// two verb phrases did not fit a phone side by side, which is why the label
+/// had already been cut from *Just stepping away* on 2026-08-26. Full-width
+/// rows give the common answer the top of the dialog, its own colour, and its
+/// whole sentence back.
 final class _ShiftExitDialog extends StatelessWidget {
   const _ShiftExitDialog();
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final leaving = AppStatus.attention.role(tokens);
     return AppDialog(
-      title: 'Leaving the till',
-      content: Text(
-        'Your shift is still open. Keep it open if you are coming back, or '
-        'count the cash and close it now.',
-        style: tokens.typography.bodyLarge.copyWith(
-          color: tokens.colors.text.secondary,
-        ),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // The old dialog's circular glyph badge. `radius.pill` is for
+          // genuine circles, which this is.
+          Center(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: leaving.bg,
+                borderRadius: BorderRadius.circular(tokens.radius.pill),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(tokens.spacing.s16),
+                child: Icon(
+                  Icons.exit_to_app_rounded,
+                  size: AppButton.prominentIconSize,
+                  color: leaving.fg,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s16),
+          Text(
+            'Leaving the register',
+            textAlign: TextAlign.center,
+            style: tokens.typography.titleLarge.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s8),
+          Text(
+            'Your shift is still open. What would you like to do?',
+            textAlign: TextAlign.center,
+            style: tokens.density
+                .body(tokens.typography)
+                .copyWith(color: tokens.colors.text.secondary),
+          ),
+          SizedBox(height: tokens.spacing.s24),
+          const _ShiftExitOption(
+            key: ValueKey('shift-exit-step-away'),
+            choice: _ShiftExitChoice.stepAway,
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          const _ShiftExitOption(
+            key: ValueKey('shift-exit-end'),
+            choice: _ShiftExitChoice.endShift,
+          ),
+        ],
       ),
       actions: <Widget>[
+        // Answering nothing is an answer the old dialog offered and this one
+        // has to as well: `_handleExit` reads a null result as staying.
         AppButton(
-          key: const ValueKey('shift-exit-step-away'),
-          // Shortened from the old dialog's 'Just stepping away' on
-          // 2026-08-26: two verb phrases do not fit a phone's dialog side by
-          // side, and the pair was rendering ellipsised. The old till's own
-          // shape - two short answers on one row - is what this keeps.
-          label: 'Step away',
-          tier: AppButtonTier.secondary,
-          onPressed: () => Navigator.of(context).pop(_ShiftExitChoice.stepAway),
-        ),
-        AppButton(
-          key: const ValueKey('shift-exit-end'),
-          label: 'End shift',
-          tier: AppButtonTier.primary,
-          onPressed: () => Navigator.of(context).pop(_ShiftExitChoice.endShift),
+          key: const ValueKey('shift-exit-cancel'),
+          label: 'Cancel',
+          tier: AppButtonTier.tertiary,
+          expand: true,
+          onPressed: () => Navigator.of(context).pop(),
         ),
       ],
+    );
+  }
+}
+
+/// One of the two answers, as the old dialog drew it: a glyph in a tinted
+/// square, the answer, a line saying what it does, and a chevron.
+final class _ShiftExitOption extends StatelessWidget {
+  const _ShiftExitOption({super.key, required this.choice});
+
+  final _ShiftExitChoice choice;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final card = choice.card;
+    final role = card.status.role(tokens);
+    final radius = BorderRadius.circular(tokens.radius.md);
+    return Semantics(
+      button: true,
+      label: '${card.label}. ${card.detail}.',
+      excludeSemantics: true,
+      child: PressSurface(
+        borderRadius: radius,
+        fillWidth: true,
+        onPressed: () => Navigator.of(context).pop(choice),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: role.bg,
+            border: Border.all(color: role.border),
+            borderRadius: radius,
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(tokens.spacing.s16),
+            child: Row(
+              children: <Widget>[
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: role.border,
+                    borderRadius: radius,
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(tokens.spacing.s8),
+                    child: Icon(
+                      card.icon,
+                      size: AppButton.prominentIconSize,
+                      color: role.fg,
+                    ),
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        card.label,
+                        style: tokens.typography.labelMedium.copyWith(
+                          color: role.fg,
+                        ),
+                      ),
+                      SizedBox(height: tokens.spacing.s4),
+                      Text(
+                        card.detail,
+                        style: tokens.typography.caption.copyWith(
+                          color: tokens.colors.text.secondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s8),
+                Icon(
+                  Icons.chevron_right,
+                  size: AppButton.iconSize,
+                  color: role.fg,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -7,6 +7,7 @@ import '../checkout/checkout_receipt.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_switch.dart';
+import 'shift_declaration.dart';
 
 /// Raised when durable local shift state cannot be trusted.
 final class TenantShiftStateException implements Exception {
@@ -36,6 +37,8 @@ final class TenantShiftLocalRecord {
     required this.updatedAt,
     required this.openedAt,
     this.countedCashMinor,
+    this.declaration,
+    this.closedAt,
   });
 
   final String uid;
@@ -50,7 +53,38 @@ final class TenantShiftLocalRecord {
   /// Whether a cash count or close attempt is unfinished on this device.
   final bool closeInProgress;
 
+  /// When this device closed the shift, while the server has not confirmed it.
+  ///
+  /// **The close's own `serverConfirmedOpen`.** It is what lets a shift be
+  /// counted and closed with no network: the figures are fixed here, the till
+  /// stops selling against the shift, and `TenantShiftController` replays the
+  /// write on the next restore. Cleared by the record being cleared, which is
+  /// what a confirmed close does.
+  ///
+  /// It is deliberately *not* the shift's `endTime`. The server stamps that
+  /// when the write lands, exactly as it does for a close made online, so a
+  /// shift closed offline on Friday and synced on Monday is recorded as ending
+  /// on Monday. Recording the device's own clock as the end of a trading day
+  /// would be worse: it is unverifiable, and reconciliation is built on the
+  /// server's.
+  final DateTime? closedAt;
+
+  /// The cash figure a close recorded before the tender declaration existed.
+  ///
+  /// **Read-only legacy, and never turned into a [declaration].** A record left
+  /// by an earlier build holds one number; reading it as
+  /// `{cash: n, mpesa: 0, card: 0}` would invent two zeros the cashier never
+  /// typed and `TenantShiftController._replayUnsentClose` would then write them
+  /// to the server as a declaration. The replay sends the legacy shape instead.
   final int? countedCashMinor;
+
+  /// What the cashier declared the till held, by payment method.
+  ///
+  /// Durable for the same reason the cash figure was: a close recorded with no
+  /// network is replayed from this record, and the figures it carries are the
+  /// ones that were counted rather than ones recomputed later.
+  final ShiftTenderDeclaration? declaration;
+
   final DateTime updatedAt;
 
   /// When this shift was opened on this device.
@@ -66,8 +100,9 @@ final class TenantShiftLocalRecord {
   TenantShiftLocalRecord copyWith({
     bool? serverConfirmedOpen,
     bool? closeInProgress,
-    int? countedCashMinor,
-    bool clearCountedCash = false,
+    ShiftTenderDeclaration? declaration,
+    bool clearDeclaration = false,
+    DateTime? closedAt,
     DateTime? updatedAt,
   }) => TenantShiftLocalRecord(
     uid: uid,
@@ -78,9 +113,15 @@ final class TenantShiftLocalRecord {
     serverConfirmedOpen: serverConfirmedOpen ?? this.serverConfirmedOpen,
     closeInProgress: closeInProgress ?? this.closeInProgress,
     openedAt: openedAt,
-    countedCashMinor: clearCountedCash
-        ? null
-        : countedCashMinor ?? this.countedCashMinor,
+    // **Both figures clear together, because they are one fact.** An abandoned
+    // count that dropped the declaration but kept the legacy cash number would
+    // leave the record claiming a close was counted when nothing was.
+    countedCashMinor: clearDeclaration ? null : countedCashMinor,
+    declaration: clearDeclaration ? null : declaration ?? this.declaration,
+    // Never cleared through `copyWith`: a close this device has recorded is
+    // undone only by the record itself going, which is what a confirmed close
+    // does. There is no *un-close*.
+    closedAt: closedAt ?? this.closedAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
 
@@ -93,7 +134,17 @@ final class TenantShiftLocalRecord {
     'deviceId': deviceId,
     'serverConfirmedOpen': serverConfirmedOpen,
     'closeInProgress': closeInProgress,
+    // The legacy figure is preserved on a record that still carries one, so a
+    // close counted by the previous build survives this one's first save and
+    // can still be replayed. Nothing writes it fresh.
     if (countedCashMinor != null) 'countedCashMinor': countedCashMinor,
+    if (declaration case final declared?) ...<String, Object?>{
+      'declaredCashMinor': declared.cashMinor,
+      'declaredMpesaMinor': declared.mpesaMinor,
+      'declaredCardMinor': declared.cardMinor,
+    },
+    if (closedAt != null)
+      'closedAtMs': closedAt!.toUtc().millisecondsSinceEpoch,
     'updatedAtMs': updatedAt.toUtc().millisecondsSinceEpoch,
     'openedAtMs': openedAt.toUtc().millisecondsSinceEpoch,
   };
@@ -127,15 +178,22 @@ final class HiveTenantShiftState {
 
   /// The shape this writes.
   ///
-  /// **Reading still accepts [legacySchemaVersion], and must.** A version
+  /// **Reading still accepts every earlier shape, and must.** A version
   /// mismatch raises `malformed_shift_state`, which `TenantShiftController`
   /// turns into a till that refuses to open - so a bare bump would have shut
   /// every register that happened to hold an open shift at the moment it
-  /// updated. See [_parse].
-  static const schemaVersion = 2;
+  /// updated. See [readableSchemaVersions] and [_parse].
+  static const schemaVersion = 3;
 
   /// The shape before `openedAtMs` existed.
   static const legacySchemaVersion = 1;
+
+  /// Every shape [_parse] accepts.
+  ///
+  /// 1 predates `openedAtMs`; 2 carried a single `countedCashMinor`; 3 carries
+  /// the declared tender triple. A record is migrated on its next save, so the
+  /// set only ever has to cover shapes still sitting on a device.
+  static const readableSchemaVersions = <int>{legacySchemaVersion, 2, 3};
   static const encryptionKeyBytes = HiveCheckoutOutbox.encryptionKeyBytes;
 
   static final Map<String, Future<void>> _operationTails =
@@ -212,6 +270,16 @@ final class HiveTenantShiftState {
     return records;
   }
 
+  /// Whether this device holds no believed shift for anybody.
+  ///
+  /// **Asked by the device identity, before it rebinds itself.** Rebinding
+  /// changes the ID a sale carries, and the server requires a sale's ID to match
+  /// the shift's - so it is safe only while there is no shift to disagree with.
+  /// Keys are counted rather than parsed: a record too malformed to read is
+  /// still a record, and it must still say no.
+  Future<bool> get isEmpty async =>
+      !_box.keys.any((key) => key is String && key.contains(':'));
+
   Future<void> close() => _box.close();
 
   TenantShiftLocalRecord _parse(String key, Object? raw) {
@@ -229,13 +297,18 @@ final class HiveTenantShiftState {
     final countedCashMinor = map['countedCashMinor'];
     final updatedAtMs = map['updatedAtMs'];
     final openedAtMs = map['openedAtMs'];
+    final closedAtMs = map['closedAtMs'];
     final version = map['schemaVersion'];
-    // **Both versions are read; only the current one is written.** A record
-    // saved before `openedAtMs` existed is still a real open shift, and
-    // refusing it would close a till in the middle of a trading day purely
-    // because the app updated. Such a record is migrated on its next save.
-    if ((version != schemaVersion && version != legacySchemaVersion) ||
-        (version == schemaVersion && openedAtMs is! int) ||
+    // **Every shape is read; only the current one is written.** A record saved
+    // before `openedAtMs` existed is still a real open shift, and refusing it
+    // would close a till in the middle of a trading day purely because the app
+    // updated. Such a record is migrated on its next save.
+    //
+    // `openedAtMs` is required from version 2 on rather than at the current
+    // version alone: written the narrower way, each bump would silently stop
+    // requiring it of the shape that introduced it.
+    if (!readableSchemaVersions.contains(version) ||
+        ((version is int && version >= 2) && openedAtMs is! int) ||
         uid is! String ||
         tenantId is! String ||
         shiftId is! String ||
@@ -245,7 +318,8 @@ final class HiveTenantShiftState {
         closeInProgress is! bool ||
         updatedAtMs is! int ||
         (countedCashMinor != null &&
-            (countedCashMinor is! int || countedCashMinor < 0))) {
+            (countedCashMinor is! int || countedCashMinor < 0)) ||
+        (closedAtMs != null && closedAtMs is! int)) {
       throw const TenantShiftStateException('malformed_shift_state');
     }
     try {
@@ -259,6 +333,7 @@ final class HiveTenantShiftState {
       throw const TenantShiftStateException('malformed_shift_state');
     }
     return TenantShiftLocalRecord(
+      declaration: _parseDeclaration(map),
       uid: uid,
       tenantId: tenantId,
       shiftId: shiftId,
@@ -267,6 +342,11 @@ final class HiveTenantShiftState {
       serverConfirmedOpen: serverConfirmedOpen,
       closeInProgress: closeInProgress,
       countedCashMinor: countedCashMinor as int?,
+      // Absent on every record written before an offline close was possible,
+      // which reads correctly as "this shift was not closed here".
+      closedAt: closedAtMs is int
+          ? DateTime.fromMillisecondsSinceEpoch(closedAtMs, isUtc: true)
+          : null,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedAtMs, isUtc: true),
       // **A legacy record dates its opening to its last touch.** That is the
       // conservative reading: `updatedAt` is never earlier than the true
@@ -277,6 +357,34 @@ final class HiveTenantShiftState {
         isUtc: true,
       ),
     );
+  }
+
+  /// Reads the declared tender triple, which is stored all together or not.
+  ///
+  /// A partial triple is `malformed_shift_state` rather than a declaration with
+  /// zeros in it. This record is what an unsent close is replayed from, so a
+  /// figure invented here would be written to the server as one the cashier
+  /// declared.
+  static ShiftTenderDeclaration? _parseDeclaration(Map<Object?, Object?> map) {
+    const fields = <String>[
+      'declaredCashMinor',
+      'declaredMpesaMinor',
+      'declaredCardMinor',
+    ];
+    final values = fields.map((field) => map[field]).toList(growable: false);
+    if (values.every((value) => value == null)) return null;
+    if (values.any((value) => value is! int)) {
+      throw const TenantShiftStateException('malformed_shift_state');
+    }
+    final declaration = ShiftTenderDeclaration.tryParse(
+      cash: values[0]! as int,
+      mpesa: values[1]! as int,
+      card: values[2]! as int,
+    );
+    if (declaration == null) {
+      throw const TenantShiftStateException('malformed_shift_state');
+    }
+    return declaration;
   }
 
   Future<T> _serialized<T>(String key, Future<T> Function() action) async {

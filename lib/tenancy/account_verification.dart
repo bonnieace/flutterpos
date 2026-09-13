@@ -29,10 +29,7 @@ const AppNotice _requestAccepted = AppNotice.confirmed(
 /// an address the provider will not deliver to is the closest of the five: a
 /// state that will not resolve by trying again. It is deliberately not
 /// `attention`, which is *awaiting*, because nothing here is awaited.
-const AppNotice _undeliverable = AppNotice.refused(
-  'This address cannot receive mail from us, so sending again will not help. '
-  'Check the address or contact support.',
-);
+const AppNotice _undeliverable = emailUndeliverableNotice;
 
 /// Reloads the signed-in identity from the server and reports whether the
 /// address is now verified.
@@ -44,15 +41,85 @@ const AppNotice _undeliverable = AppNotice.refused(
 /// unverified forever.
 typedef AccountVerificationReload = Future<void> Function();
 
+/// Why a verification request was refused, for a host that can act on it.
+///
+/// **The server used to answer `failed-precondition` for two different
+/// things** - a sign-in older than its window, and a token whose address had
+/// moved underneath it - and the client could not tell them apart, so both got
+/// the sign-out sentence. They have opposite remedies: one needs a fresh
+/// authentication, the other needs nothing but a newer token. This is that
+/// distinction, made once, where every surface can read it.
+enum AccountVerificationRefusal {
+  /// The server will not act for this session until it is proved again.
+  ///
+  /// **No longer the five-minute rule.** That rule refused a resend once the
+  /// sign-in aged out and has been removed - it punished the person for a
+  /// threat the token-address comparison already held. What still raises this
+  /// is narrower: a token carrying no address at all, or an identity the server
+  /// cannot read. Re-authentication remains the only remedy, because only it
+  /// moves `auth_time`; refreshing the token does not.
+  staleSignIn,
+
+  /// The token predates a change to the account's address.
+  ///
+  /// A forced token refresh is the whole remedy. [AccountVerificationGateway]
+  /// takes it on itself when it is given the means.
+  staleSession,
+
+  notSignedIn,
+  accountInactive,
+  /// Another email was requested within the last minute.
+  throttled,
+
+  /// The day's ceiling of requests is spent.
+  throttledToday,
+
+  unknown,
+}
+
+/// Reads the refusal off whatever the boundary threw.
+AccountVerificationRefusal accountVerificationRefusalOf(Object error) {
+  if (error is! AccountVerificationCallableException) {
+    return AccountVerificationRefusal.unknown;
+  }
+  return switch (error.code) {
+    'failed-precondition' => AccountVerificationRefusal.staleSignIn,
+    'aborted' => AccountVerificationRefusal.staleSession,
+    'unauthenticated' => AccountVerificationRefusal.notSignedIn,
+    'permission-denied' => AccountVerificationRefusal.accountInactive,
+    'resource-exhausted' => error.reason == 'daily_cap'
+        ? AccountVerificationRefusal.throttledToday
+        : AccountVerificationRefusal.throttled,
+    _ => AccountVerificationRefusal.unknown,
+  };
+}
+
 /// Narrow callable boundary for `sendAccountVerification`.
 abstract interface class SendAccountVerificationCallable {
   Future<Object?> call(Map<String, Object?> payload);
 }
 
 final class AccountVerificationCallableException implements Exception {
-  const AccountVerificationCallableException(this.code);
+  const AccountVerificationCallableException(this.code, {this.details});
 
   final String code;
+
+  /// Whatever the server attached, unread except to tell two refusals apart.
+  ///
+  /// **The server's `resource-exhausted` means two different things** - a
+  /// minute's cooldown, and the day's ceiling - and they have different
+  /// remedies. Codes alone could not carry that, and guessing is how this
+  /// surface came to tell people to sign out when no sign-out was needed.
+  final Object? details;
+
+  /// The server's own reason tag, or null if it sent none.
+  String? get reason {
+    final value = details;
+    if (value is Map && value['reason'] is String) {
+      return value['reason'] as String;
+    }
+    return null;
+  }
 
   @override
   String toString() => 'AccountVerificationCallableException($code)';
@@ -75,7 +142,10 @@ final class FirebaseSendAccountVerificationCallable
           .call<Object?>(payload);
       return result.data;
     } on FirebaseFunctionsException catch (error) {
-      throw AccountVerificationCallableException(error.code);
+      throw AccountVerificationCallableException(
+        error.code,
+        details: error.details,
+      );
     }
   }
 }
@@ -152,13 +222,21 @@ final class AccountVerificationGateway {
     required AccountVerificationIdentity identity,
     required SendAccountVerificationCallable callable,
     AccountVerificationRequestIdFactory? requestIdFactory,
+    Future<void> Function()? refreshSession,
   }) : _identity = identity,
        _callable = callable,
-       _requestIdFactory = requestIdFactory ?? _secureVerificationRequestId;
+       _requestIdFactory = requestIdFactory ?? _secureVerificationRequestId,
+       _refreshSession = refreshSession;
 
   final AccountVerificationIdentity _identity;
   final SendAccountVerificationCallable _callable;
   final AccountVerificationRequestIdFactory _requestIdFactory;
+
+  /// Mints a newer ID token, or null in a host that cannot.
+  ///
+  /// Absent leaves [AccountVerificationRefusal.staleSession] for the caller to
+  /// report, which is what it did before this existed.
+  final Future<void> Function()? _refreshSession;
 
   AccountVerificationIntent createIntent() {
     if (!_identity.canSendVerification) {
@@ -180,10 +258,38 @@ final class AccountVerificationGateway {
     if (!_identity.canSendVerification || intent.uid != _identity.uid) {
       throw StateError('The verification intent belongs elsewhere.');
     }
-    final response = await _callable.call(<String, Object?>{
-      'requestId': intent.requestId,
-    });
-    return AccountVerificationResult.fromCallable(response);
+    final payload = <String, Object?>{'requestId': intent.requestId};
+    return AccountVerificationResult.fromCallable(
+      await _callOnceRetryingStaleSession(payload),
+    );
+  }
+
+  /// **Once, and only for the refusal a newer token cures.**
+  ///
+  /// The retry carries the *same* `requestId`, so the server reads it as the
+  /// replay of one intent: it neither sends a second message nor spends a
+  /// second slot of the resend cooldown. A refresh that itself fails reports
+  /// the original refusal rather than its own, because the address change is
+  /// the thing the person can be told about.
+  Future<Object?> _callOnceRetryingStaleSession(
+    Map<String, Object?> payload,
+  ) async {
+    final refresh = _refreshSession;
+    try {
+      return await _callable.call(payload);
+    } on AccountVerificationCallableException catch (error) {
+      if (refresh == null ||
+          accountVerificationRefusalOf(error) !=
+              AccountVerificationRefusal.staleSession) {
+        rethrow;
+      }
+      try {
+        await refresh();
+      } catch (_) {
+        throw error;
+      }
+      return await _callable.call(payload);
+    }
   }
 }
 
@@ -451,19 +557,31 @@ final class _AccountVerificationPanelState
 /// open a while. It is the one case worth naming precisely, because the user
 /// can act on it.
 String accountVerificationSafeError(Object error) {
-  if (error is AccountVerificationCallableException) {
-    return switch (error.code) {
-      'failed-precondition' =>
-        'For your security, sign out and sign in again, then request the '
-            'email within five minutes.',
-      'unauthenticated' => 'Sign in again to request a verification email.',
-      'permission-denied' => 'This account is not active. Contact support.',
-      'resource-exhausted' =>
-        'Too many requests. Wait a few minutes and try again.',
-      _ => 'The verification email could not be requested. Please try again.',
-    };
+  if (error is! AccountVerificationCallableException) {
+    return 'The verification email could not be requested. Please try again.';
   }
-  return 'The verification email could not be requested. Please try again.';
+  return switch (accountVerificationRefusalOf(error)) {
+    // The sentence a host that cannot re-authenticate is left with. One that
+    // can offers a password field instead and never reads this.
+    AccountVerificationRefusal.staleSignIn =>
+      'For your security, sign out and sign in again, then request the '
+          'email within five minutes.',
+    // Reached only where no refresh seam was supplied; the gateway cures this
+    // itself wherever one was.
+    AccountVerificationRefusal.staleSession =>
+      'Your address has just changed. Try again in a moment.',
+    AccountVerificationRefusal.notSignedIn =>
+      'Sign in again to request a verification email.',
+    AccountVerificationRefusal.accountInactive =>
+      'This account is not active. Contact support.',
+    AccountVerificationRefusal.throttled =>
+      'An email was requested moments ago. Wait a minute before asking again.',
+    AccountVerificationRefusal.throttledToday =>
+      'This account has asked for too many emails today. Try again tomorrow, '
+          'or check the address is right.',
+    AccountVerificationRefusal.unknown =>
+      'The verification email could not be requested. Please try again.',
+  };
 }
 
 String _secureVerificationRequestId() {

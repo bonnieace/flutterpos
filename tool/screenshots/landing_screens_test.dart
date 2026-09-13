@@ -17,8 +17,6 @@ import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/shift/shift.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/scaffold.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -114,19 +112,19 @@ void main() {
           source: const FakeEvidenceSource(
             CheckoutEvidenceSummary(savedOffline: 2, confirmed: 11),
           ),
+          alsoWaiting: () => printJobs.pending().jobs.length,
+          notificationsRoute: (_) => TenantNotificationsScreen(
+            evidenceSource: const FakeEvidenceSource(
+              CheckoutEvidenceSummary(savedOffline: 2, confirmed: 11),
+            ),
+            printQueue: printJobs,
+          ),
         ),
         checkoutRoute: (_) => TenantShiftGate(
           controllerFactory: shiftControllerFactory,
-          shiftManagerBuilder: (context) => AppScaffold(
-            title: 'Close shift',
-            contentWidth: AppContentWidth.records,
-            body: TenantShiftPanel(
-              currency: TenantReportingCurrency.unknown,
-              historyReader: reader,
-              returnActions: returnActions,
-              controllerFactory: shiftControllerFactory,
-            ),
-          ),
+          currency: TenantReportingCurrency.unknown,
+          historyReader: reader,
+          returnActions: returnActions,
           child: TenantCheckoutScreen(
             cache: FakeCatalogSource(),
             drafts: FakeDraftSink(),
@@ -140,16 +138,8 @@ void main() {
             TenantPrinterConfigurationScreen(reader: reader),
         printerConfigurationRoles:
             TenantPrinterConfigurationPublisher.allowedRoles,
-        printQueueRoute: () => TenantPrintQueueScreen(queue: printJobs),
-        printQueueStatus: () {
-          final listing = printJobs.pending();
-          return PrinterFailureNotice.queueDepth(
-            waiting: listing.jobs.length,
-            unreadable: listing.unreadable,
-          );
-        },
-        // The same listing as a figure, so the launcher tile's badge and its
-        // problem colour are in the captures rather than left to be imagined.
+        // The listing as a figure, so the top bar's badge and its problem
+        // colour are in the captures rather than left to be imagined.
         printQueueCount: () => printJobs.pending().jobs.length,
         catalogManagementRoute: (reader) =>
             TenantCatalogManagementScreen(reader: reader),
@@ -269,6 +259,73 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('start-checkout')));
       await tester.pumpAndSettle();
+    },
+  );
+
+  /// The two ways out of the till, in the layout the pre-multitenancy app
+  /// used.
+  ///
+  /// **Stepping away is the common answer and used to be the quiet one.** It
+  /// was the outlined half of a button pair, beside a mint *End shift*; it is
+  /// the first full-width row now, in the `ok` role, with *Close shift* under
+  /// it. Captured because the point of the change is what it looks like.
+  screenshotCase(
+    '12d-leaving-the-register',
+    build: () => landing(),
+    beforePump: () async {
+      await shiftState.save(_openShiftRecord());
+      shiftServer.shifts['tenants/$seedTenantId/shifts/shift-open'] =
+          _openShiftDocument();
+    },
+    afterPump: (tester) async {
+      await _enterTill(tester);
+      await _leaveTill(tester);
+    },
+  );
+
+  /// The count itself, which had no capture at all before 2026-09-03 - which
+  /// is part of why it drifted into a four-surface journey.
+  screenshotCase(
+    '12e-counting-the-drawer',
+    build: () => landing(),
+    beforePump: () async {
+      await shiftState.save(_openShiftRecord());
+      shiftServer.shifts['tenants/$seedTenantId/shifts/shift-open'] =
+          _openShiftDocument();
+    },
+    afterPump: (tester) async {
+      await _enterTill(tester);
+      await _leaveTill(tester);
+      await tester.tap(find.byKey(const ValueKey('shift-exit-end')));
+      await _frames(tester);
+    },
+  );
+
+  /// What a finished close says before the sheet goes.
+  ///
+  /// **The old app reported this in a snack bar over a screen that had already
+  /// changed.** A cashier who has just counted a drawer is owed the figures
+  /// they counted it against, on the surface they counted it on.
+  screenshotCase(
+    '12f-shift-closed',
+    build: () => landing(),
+    beforePump: () async {
+      await shiftState.save(_openShiftRecord());
+      shiftServer.shifts['tenants/$seedTenantId/shifts/shift-open'] =
+          _openShiftDocument();
+    },
+    afterPump: (tester) async {
+      await _enterTill(tester);
+      await _leaveTill(tester);
+      await tester.tap(find.byKey(const ValueKey('shift-exit-end')));
+      await _frames(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('counted-cash')),
+        '1250.00',
+      );
+      await _frames(tester);
+      await tester.tap(find.byKey(const ValueKey('close-shift-confirm')));
+      await _frames(tester);
     },
   );
 
@@ -450,4 +507,62 @@ void main() {
     ),
     viewports: responsiveViewports,
   );
+}
+
+/// Pumps a bounded number of frames.
+///
+/// **Not `pumpAndSettle`.** The counted-cash field takes focus as the sheet
+/// lands, and a blinking cursor schedules frames forever.
+Future<void> _frames(WidgetTester tester) async {
+  for (var frame = 0; frame < 12; frame++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
+/// Leaves the till the way a person does, which `PopScope` turns into the exit
+/// dialog rather than a pop.
+Future<void> _leaveTill(WidgetTester tester) async {
+  await tester.tap(find.byType(BackButton));
+  await tester.pumpAndSettle();
+}
+
+/// Enters the till from the home, at whichever width the case is rendering
+/// under - at 411 the launcher tile is below the fold.
+Future<void> _enterTill(WidgetTester tester) async {
+  await tester.ensureVisible(find.byKey(const ValueKey('start-checkout')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('start-checkout')));
+  await tester.pumpAndSettle();
+}
+
+/// A shift this device already has open, so the till draws rather than gating.
+TenantShiftLocalRecord _openShiftRecord() {
+  final openedAt = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+  return TenantShiftLocalRecord(
+    uid: ownerUid,
+    tenantId: seedTenantId,
+    shiftId: 'shift-open',
+    businessDate: checkoutBusinessDate(openedAt),
+    deviceId: seedDeviceId,
+    serverConfirmedOpen: true,
+    closeInProgress: false,
+    updatedAt: openedAt,
+    openedAt: openedAt,
+  );
+}
+
+/// The canonical shift behind it. `_settle` clears a confirmed record the
+/// server has no shift for, which would leave these captures on *Start your
+/// shift*.
+Map<String, Object?> _openShiftDocument() {
+  final openedAt = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+  return <String, Object?>{
+    'shiftId': 'shift-open',
+    'tenantId': seedTenantId,
+    'staffId': ownerUid,
+    'deviceId': seedDeviceId,
+    'businessDate': checkoutBusinessDate(openedAt),
+    'status': 'open',
+    'startTime': Timestamp.fromDate(openedAt),
+  };
 }

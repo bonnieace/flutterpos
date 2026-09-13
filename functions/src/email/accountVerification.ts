@@ -1,6 +1,11 @@
 import {Auth, getAuth, UserRecord} from "firebase-admin/auth";
 import {getFunctions} from "firebase-admin/functions";
-import {FieldValue, Firestore, getFirestore} from "firebase-admin/firestore";
+import {
+  FieldValue,
+  Firestore,
+  getFirestore,
+  Timestamp,
+} from "firebase-admin/firestore";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {onTaskDispatched} from "firebase-functions/v2/tasks";
 import {requireAuthenticatedUser} from "../core/authorization";
@@ -36,7 +41,31 @@ import {
 } from "./recipientHash";
 import {isEmailEligibleRoot} from "./rootEligibility";
 
-const RECENT_AUTH_SECONDS = 5 * 60;
+/**
+ * How long *Send again* waits between presses, and how many it allows a day.
+ *
+ * **These replace a five-minute recency rule that was in the wrong place.**
+ * `isRecentAuthTime` refused this call once the sign-in was over five minutes
+ * old, which cost a person mid-signup a full round trip through the sign-in
+ * screen - and it was doing that as the *only* brake on the button, because
+ * this host mints a fresh `requestId` per press and the Cloud Tasks
+ * deduplication that stops a retried *intent* resending does nothing to stop a
+ * genuine repeat.
+ *
+ * What the recency rule was defending is narrow: this call reads the address
+ * off the Auth record and refuses a token whose address disagrees, so a stolen
+ * session can only ever mail the account's own current inbox. It cannot
+ * redirect anything - and `changeSignupEmail`, which *can*, never had a
+ * recency rule at all. So the rule punished the legitimate user for a threat it
+ * barely reduced.
+ *
+ * A cooldown plus a daily ceiling bounds the same abuse by what it actually is
+ * - volume - and leaves somebody who has been reading the screen for six
+ * minutes able to press the button.
+ */
+const RESEND_COOLDOWN_MILLISECONDS = 60 * 1000;
+const RESEND_WINDOW_MILLISECONDS = 24 * 60 * 60 * 1000;
+const MAX_RESENDS_PER_WINDOW = 10;
 
 export interface AccountVerificationTask {
   deliveryId: string;
@@ -78,17 +107,6 @@ export interface AccountVerificationDependencies {
     safeCode: string,
     retryable: boolean
   ): Promise<void>;
-}
-
-export function isRecentAuthTime(
-  authTime: unknown,
-  nowMilliseconds = Date.now()
-): boolean {
-  if (typeof authTime !== "number" || !Number.isInteger(authTime) || authTime <= 0) {
-    return false;
-  }
-  const age = Math.floor(nowMilliseconds / 1000) - authTime;
-  return age >= 0 && age <= RECENT_AUTH_SECONDS;
 }
 
 export function validateAccountVerificationTask(value: unknown): AccountVerificationTask {
@@ -298,6 +316,100 @@ async function enqueueVerification(task: AccountVerificationTask): Promise<void>
 }
 
 /**
+ * Whether this press may send, given the presses already recorded.
+ *
+ * **A replay of the same `requestId` is not a second send.** A retried call -
+ * the same user intent reaching the server twice, which is exactly what the
+ * client does after refreshing a token left behind by an address change - must
+ * answer the way the first one did rather than be refused, and must not spend a
+ * second slot. That is the same contract `deliveryId` keeps downstream.
+ *
+ * [events] are the presses inside the day's window, newest first.
+ *
+ * Pure and exported so the rule can be asserted on its own, away from a
+ * transaction.
+ */
+export function resendThrottleVerdict(options: {
+  requestId: string;
+  events: ReadonlyArray<{
+    requestId: unknown;
+    requestedAtMilliseconds: number | undefined;
+  }>;
+  nowMilliseconds: number;
+}): "replay" | "allowed" | "too_soon" | "exhausted" {
+  if (options.events.some((event) => event.requestId === options.requestId)) {
+    return "replay";
+  }
+  if (options.events.length >= MAX_RESENDS_PER_WINDOW) return "exhausted";
+  const newest = options.events[0]?.requestedAtMilliseconds;
+  if (newest === undefined || !Number.isFinite(newest)) return "allowed";
+  const age = options.nowMilliseconds - newest;
+  // A record stamped in the future is a clock disagreeing with itself, and
+  // refusing on one would wedge the button until it caught up.
+  if (age < 0) return "allowed";
+  return age < RESEND_COOLDOWN_MILLISECONDS ? "too_soon" : "allowed";
+}
+
+/**
+ * Refuses a press the allowance does not cover, and records the one it does.
+ *
+ * The two refusals are told apart in `details.reason`, because "wait a minute"
+ * and "that is all for today" are different sentences and a client that could
+ * not distinguish them would have to guess - which is how this code came to
+ * tell people to sign out when no sign-out was needed.
+ */
+async function spendResendAllowance(uid: string, requestId: string): Promise<void> {
+  const db = getFirestore();
+  const eventsRef = db
+    .collection("users").doc(uid)
+    .collection("verification_request_events");
+  const now = Timestamp.now();
+  const windowStart = Timestamp.fromMillis(
+    now.toMillis() - RESEND_WINDOW_MILLISECONDS
+  );
+  await db.runTransaction(async (transaction) => {
+    // One ordered read serves all three questions: the newest press answers the
+    // cooldown, the count answers the ceiling, and the ids answer the replay.
+    const snapshot = await transaction.get(
+      eventsRef
+        .where("requestedAt", ">=", windowStart)
+        .orderBy("requestedAt", "desc")
+        .limit(MAX_RESENDS_PER_WINDOW)
+    );
+    const events = snapshot.docs.map((doc) => {
+      const requestedAt = doc.get("requestedAt");
+      return {
+        requestId: doc.get("requestId"),
+        requestedAtMilliseconds: requestedAt instanceof Timestamp
+          ? requestedAt.toMillis()
+          : undefined,
+      };
+    });
+    const verdict = resendThrottleVerdict({
+      requestId,
+      events,
+      nowMilliseconds: now.toMillis(),
+    });
+    if (verdict === "replay") return;
+    if (verdict === "too_soon") {
+      throw new HttpsError(
+        "resource-exhausted",
+        "Another verification email was requested moments ago.",
+        {reason: "cooldown"}
+      );
+    }
+    if (verdict === "exhausted") {
+      throw new HttpsError(
+        "resource-exhausted",
+        "This account has requested too many verification emails today.",
+        {reason: "daily_cap"}
+      );
+    }
+    transaction.create(eventsRef.doc(requestId), {requestId, requestedAt: now});
+  });
+}
+
+/**
  * Hashes the recipient, derives the delivery id, and enqueues one send.
  *
  * **Extracted because three callers now need the same recipe** and none of them
@@ -347,24 +459,39 @@ export async function enqueueAccountVerificationFor(options: {
  * The first message of an account's life is enqueued by `completeSelfSignup`
  * without anybody pressing anything; this is what the person presses when that
  * one did not arrive. Hence the guards it keeps and the helper above does not:
- * `isRecentAuthTime` bounds how long a stolen session can ask for mail, and the
- * token-email comparison refuses a session whose address has moved underneath
- * it.
+ * the token-email comparison refuses a session whose address has moved
+ * underneath it, and [spendResendAllowance] bounds how often the button works.
+ *
+ * **There is deliberately no recency rule here.** One used to refuse the call
+ * once the sign-in was over five minutes old; see the allowance constants for
+ * why it was the wrong defence in the wrong place. Nothing replaced its
+ * security value because the token-email comparison below already holds it:
+ * this call can only ever mail the address the Auth record currently carries.
  */
 export const sendAccountVerification = onCall<unknown, Promise<{accepted: true}>>(
   {secrets: [EMAIL_RECIPIENT_HMAC_KEYRING]},
   async (request: CallableRequest<unknown>) => {
     const caller = requireAuthenticatedUser(request, {allowUnverified: true});
-    if (!isRecentAuthTime(caller.token.auth_time)) {
-      throw new HttpsError("failed-precondition", "A recent sign-in is required.");
-    }
     const data = requireObject(request.data);
     const requestId = requireRequestId(data.requestId);
     const user = await getAuth().getUser(caller.uid);
     const current = verificationIdentity(user);
     const tokenEmail = normalizeEmail(caller.token.email);
-    if (!current || current.disabled || !tokenEmail || tokenEmail !== current.email) {
+    if (!current || current.disabled || !tokenEmail) {
       throw new HttpsError("failed-precondition", "A new sign-in is required.");
+    }
+    // **Not `failed-precondition`, which the client reads as a stale sign-in.**
+    // The address moved underneath a token that is otherwise perfectly fresh -
+    // `changeSignupEmail` writes Auth and the claim lags by up to an hour - so
+    // the remedy is a token refresh, not a re-authentication. Told apart here
+    // because the client cannot tell them apart afterwards, and answering
+    // "sign out and sign in again" to somebody who signed in a minute ago
+    // teaches a ritual that was never needed.
+    if (tokenEmail !== current.email) {
+      throw new HttpsError(
+        "aborted",
+        "This session predates an address change."
+      );
     }
     const rootSnapshot = await getFirestore().collection("users").doc(caller.uid).get();
     if (!isEmailEligibleRoot(
@@ -374,6 +501,7 @@ export const sendAccountVerification = onCall<unknown, Promise<{accepted: true}>
       throw new HttpsError("permission-denied", "This account is not active.");
     }
     if (current.emailVerified) return {accepted: true};
+    await spendResendAllowance(caller.uid, requestId);
     await enqueueAccountVerificationFor({
       uid: caller.uid,
       email: current.email,

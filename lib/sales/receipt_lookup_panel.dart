@@ -117,10 +117,11 @@ final class _TenantReceiptLookupPanelState
     _loaderKey = receipt;
     TenantGuardedLoader<TenantReceiptLookupResult> readWith(
       TenantDataReader reader,
-    ) => (session) => TenantReceiptLookupRepository(
-      session: session,
-      reader: reader,
-    ).findByReceipt(receipt);
+    ) =>
+        (session) => TenantReceiptLookupRepository(
+          session: session,
+          reader: reader,
+        ).findByReceipt(receipt);
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -184,6 +185,9 @@ final class _TenantReceiptLookupPanelState
         if (_submitted case final receipt?) ...[
           SizedBox(height: tokens.spacing.s24),
           TenantRouteGuard<TenantReceiptLookupResult>(
+            // Keyed deliberately: [TenantRouteGuard.load]'s one exception.
+            // A different receipt is a different record, and showing the
+            // previous one while this loads would state the wrong sale.
             key: ValueKey('receipt:$receipt'),
             allowedRoles: TenantReceiptLookupRepository.allowedRoles,
             load: _loaderFor(receipt),

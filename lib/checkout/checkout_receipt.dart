@@ -167,6 +167,18 @@ String validateCheckoutDeviceId(String deviceId) {
 
 typedef CheckoutReceiptClock = DateTime Function();
 
+/// Whether an identity minted before the platform could be asked may be rebound
+/// to this device now.
+///
+/// **It is a question about shifts, asked from the identity.** Rebinding
+/// replaces the durable half of the device ID, and a sale carries the ID of the
+/// till that rang it: a shift opened under the old ID would start refusing its
+/// own sales, because `validSaleShift` requires the two to agree. So the answer
+/// is yes only while this device holds no shift at all - which is exactly the
+/// state a till is in when it has just been reinstalled, and that is the till
+/// this exists for.
+typedef CheckoutIdentityRebindGuard = Future<bool> Function();
+
 /// Durable per-device receipt sequences and the installation identity.
 ///
 /// The box shares the checkout outbox encryption key on purpose: a counter and
@@ -182,6 +194,7 @@ final class HiveCheckoutReceiptCounters {
     this._clock,
     this._random,
     this._hardwareIdentity,
+    this._canRebind,
   );
 
   static const boxName = 'checkout-receipt-counters-v1';
@@ -200,6 +213,7 @@ final class HiveCheckoutReceiptCounters {
   final CheckoutReceiptClock _clock;
   final Random _random;
   final DeviceHardwareIdentity? _hardwareIdentity;
+  final CheckoutIdentityRebindGuard? _canRebind;
   Future<String>? _deviceId;
 
   static Future<HiveCheckoutReceiptCounters> open({
@@ -208,6 +222,7 @@ final class HiveCheckoutReceiptCounters {
     CheckoutReceiptClock? clock,
     Random? random,
     DeviceHardwareIdentity? hardwareIdentity,
+    CheckoutIdentityRebindGuard? canRebind,
   }) async {
     final key = await keyProvider.loadOrCreateKey();
     if (key.length != encryptionKeyBytes) {
@@ -223,6 +238,7 @@ final class HiveCheckoutReceiptCounters {
       clock ?? _utcNow,
       random ?? Random.secure(),
       hardwareIdentity,
+      canRebind,
     );
   }
 
@@ -232,11 +248,13 @@ final class HiveCheckoutReceiptCounters {
     CheckoutReceiptClock? clock,
     Random? random,
     DeviceHardwareIdentity? hardwareIdentity,
+    CheckoutIdentityRebindGuard? canRebind,
   }) => HiveCheckoutReceiptCounters._(
     box,
     clock ?? _utcNow,
     random ?? Random.secure(),
     hardwareIdentity,
+    canRebind,
   );
 
   /// Resolves the device identifier, creating it exactly once.
@@ -280,11 +298,22 @@ final class HiveCheckoutReceiptCounters {
         if (map['schemaVersion'] != schemaVersion || stored is! String) {
           throw const CheckoutReceiptException('malformed_device_identity');
         }
+        final String current;
         try {
-          return validateCheckoutDeviceId(stored);
+          current = validateCheckoutDeviceId(stored);
         } on ArgumentError {
           throw const CheckoutReceiptException('malformed_device_identity');
         }
+        // **An identity minted before the platform could be asked is bound to
+        // this device once, and only once.** Before 2026-09-03 the whole ID was
+        // random, so its durable half named nothing - and because a stored ID is
+        // returned without asking the platform again, such an install would keep
+        // that ID for the life of the phone. Every reinstall of it produces a
+        // stranger, and every shift it leaves open becomes uncloseable. The fix
+        // shipped only for installs that started from an empty box; this is how
+        // it reaches the ones that did not.
+        if (map['hardwareBound'] == true) return current;
+        return await _rebindStoredIdentity(current) ?? current;
       }
       final hardware = await _hardwareDigest();
       final deviceId =
@@ -303,6 +332,45 @@ final class HiveCheckoutReceiptCounters {
       });
       return deviceId;
     });
+  }
+
+  /// Replaces the meaningless half of a legacy identity, or answers null.
+  ///
+  /// **The installation half is kept, deliberately.** It is what stops a
+  /// rebound till reissuing receipt numbers: the daily counter lives in app data
+  /// and a fresh install starts it at one, so two installs sharing a whole ID
+  /// would issue the same number twice. Keeping this half means the rebound ID
+  /// is still unique to this installation while its durable half finally names
+  /// the phone.
+  ///
+  /// The receipt device code changes with it, which is safe *because* it does: a
+  /// receipt number is `RCP-<code>-<date>-<sequence>`, so a new code is a new
+  /// number space and nothing it issues can collide with a number already
+  /// printed. The counters standing behind the old code are left where they are,
+  /// unread from here on.
+  ///
+  /// Answers null - leaving the identity exactly as it was - whenever the
+  /// platform has nothing to offer, or whenever this device holds a shift. A
+  /// sale carries the ID of the till that rang it and `validSaleShift` requires
+  /// it to match the shift's, so rebinding under an open shift would leave a
+  /// till whose every sale is refused.
+  Future<String?> _rebindStoredIdentity(String current) async {
+    final guard = _canRebind;
+    if (guard == null || !await guard()) return null;
+    final hardware = await _hardwareDigest();
+    if (hardware == null) return null;
+    final install = current.substring(4 + checkoutDeviceHardwareDigits);
+    final rebound = validateCheckoutDeviceId('dev-$hardware$install');
+    await _box.put(deviceIdentityKey, <String, Object?>{
+      'schemaVersion': schemaVersion,
+      'deviceId': rebound,
+      'createdAtMs': _clock().toUtc().millisecondsSinceEpoch,
+      'hardwareBound': true,
+      // Kept so a person reading this box can tell a rebound identity from one
+      // minted here, and so the change is never silently attributed to a wipe.
+      'reboundFrom': current,
+    });
+    return rebound;
   }
 
   /// The durable half of a fresh ID, or null when there is nothing to bind to.

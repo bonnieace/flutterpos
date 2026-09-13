@@ -23,7 +23,6 @@ final class TenantMembership {
     required bool serverCanAccess,
     required bool canonicalTenantExists,
     required bool canonicalMembershipExists,
-    DateTime? provisionalUntil,
   }) {
     final normalizedTenantId = validateTenantId(tenantId);
     if (tenantName.trim().isEmpty) {
@@ -53,7 +52,6 @@ final class TenantMembership {
       role: role,
       membershipStatus: membershipStatus,
       tenantStatus: tenantStatus,
-      provisionalUntil: provisionalUntil?.toUtc(),
       invitationStatus: invitationStatus?.trim(),
       isOwner: isOwner,
       mirrorVersion: mirrorVersion,
@@ -73,7 +71,6 @@ final class TenantMembership {
     required this.role,
     required this.membershipStatus,
     required this.tenantStatus,
-    this.provisionalUntil,
     required this.invitationStatus,
     required this.isOwner,
     required this.mirrorVersion,
@@ -100,7 +97,6 @@ final class TenantMembership {
         createdAt: _optionalDateTime(json, 'createdAt'),
         joinedAt: _optionalDateTime(json, 'joinedAt'),
         updatedAt: _optionalDateTime(json, 'updatedAt'),
-        provisionalUntil: _optionalDateTime(json, 'provisionalUntil'),
         serverCanAccess: _requiredBool(json, 'canAccess'),
         canonicalTenantExists: _requiredBool(json, 'canonicalTenantExists'),
         canonicalMembershipExists: _requiredBool(
@@ -122,11 +118,6 @@ final class TenantMembership {
   final TenantRole role;
   final MembershipStatus membershipStatus;
   final TenantStatus tenantStatus;
-
-  /// When a self-serve request's provisional trading window shuts, mirrored
-  /// from the tenant so the selector can draw the difference between a window
-  /// that is still open and one that has shut before any business is opened.
-  final DateTime? provisionalUntil;
   final String? invitationStatus;
   final bool isOwner;
   final int mirrorVersion;
@@ -147,18 +138,10 @@ final class TenantMembership {
     serverCanAccess: serverCanAccess && ownerInvariantValid,
     canonicalTenantExists: canonicalTenantExists,
     canonicalMembershipExists: canonicalMembershipExists,
-    provisionalUntil: provisionalUntil,
   );
 
   bool canAccess({Iterable<TenantRole>? allowedRoles}) =>
       access.canAccess(allowedRoles: allowedRoles);
-
-  /// Whether this business may be opened at all, trading or read-only.
-  bool canRead({Iterable<TenantRole>? allowedRoles}) =>
-      access.canRead(allowedRoles: allowedRoles);
-
-  /// Where this business stands right now.
-  TenantStanding get standing => access.standingAt(DateTime.now().toUtc());
 
   bool get isAdministrativePrincipal => access.isAdministrativePrincipal;
 
@@ -169,8 +152,6 @@ final class TenantMembership {
     'role': role.toJson(),
     'membershipStatus': membershipStatus.toJson(),
     'tenantStatus': tenantStatus.toJson(),
-    if (provisionalUntil != null)
-      'provisionalUntil': provisionalUntil!.toUtc().toIso8601String(),
     if (invitationStatus != null) 'invitationStatus': invitationStatus,
     'isOwner': isOwner,
     'mirrorVersion': mirrorVersion,

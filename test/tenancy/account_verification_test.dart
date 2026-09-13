@@ -117,11 +117,46 @@ void main() {
         ),
         'This account is not active. Contact support.',
       );
+      // **A minute, because that is what the cooldown is.** The server's
+      // `RESEND_COOLDOWN_MILLISECONDS` is 60s; the old sentence said "wait a
+      // few minutes" and was written when nothing was actually throttling the
+      // button but the five-minute recency rule.
       expect(
         accountVerificationSafeError(
           const AccountVerificationCallableException('resource-exhausted'),
         ),
-        contains('Too many requests'),
+        contains('Wait a minute'),
+      );
+      // The refusal a token left behind by *Wrong address?* raises. It is told
+      // apart from a stale sign-in precisely so it does not say "sign out".
+      expect(
+        accountVerificationSafeError(
+          const AccountVerificationCallableException('aborted'),
+        ),
+        'Your address has just changed. Try again in a moment.',
+      );
+      // **The same code, two remedies.** The server spends a minute's cooldown
+      // and a day's ceiling from one `resource-exhausted`, and tells them apart
+      // in `details.reason`. Telling somebody to wait a minute when they must
+      // wait until tomorrow is the kind of confidently wrong sentence this
+      // whole surface was full of.
+      expect(
+        accountVerificationSafeError(
+          const AccountVerificationCallableException(
+            'resource-exhausted',
+            details: <String, Object?>{'reason': 'daily_cap'},
+          ),
+        ),
+        contains('too many emails today'),
+      );
+      expect(
+        accountVerificationRefusalOf(
+          const AccountVerificationCallableException(
+            'resource-exhausted',
+            details: <String, Object?>{'reason': 'cooldown'},
+          ),
+        ),
+        AccountVerificationRefusal.throttled,
       );
       for (final error in <Object>[
         const AccountVerificationCallableException('internal'),

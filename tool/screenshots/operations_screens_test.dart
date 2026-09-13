@@ -508,7 +508,15 @@ void main() {
       await tester.scrollUntilVisible(
         field,
         300,
-        scrollable: find.byType(Scrollable).first,
+        // **The categories route's own scrollable, by key.** It is a pushed
+        // route since 2026-09-04, so the catalog list underneath is still in
+        // the tree and `find.byType(Scrollable).first` reaches that one.
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('inventory-categories-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
         maxScrolls: 30,
       );
       // `scrollUntilVisible` stops when a widget is built rather than when it is
@@ -525,7 +533,7 @@ void main() {
         find.byKey(const ValueKey('catalog-management-confirm')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Close'));
+      await tester.pageBack();
       await tester.pumpAndSettle();
       // **The confirmation is a snack bar since 2026-08-26**, so this capture
       // no longer scrolls the route back to an inline notice near the top - it

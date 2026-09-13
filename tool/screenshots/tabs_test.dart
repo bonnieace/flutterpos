@@ -20,14 +20,14 @@ import 'harness.dart';
 void main() {
   screenshotCase(
     '95-apptabs-first-selected',
-    // The platform route's own four, verbatim.
+    // The platform route's own two, verbatim.
     build: () => const _Host(),
     fullPage: false,
   );
 
   screenshotCase(
-    '95-apptabs-third-selected',
-    build: () => const _Host(initialIndex: 2),
+    '95-apptabs-second-selected',
+    build: () => const _Host(initialIndex: 1),
     fullPage: false,
   );
 }
@@ -49,9 +49,7 @@ final class _Host extends StatelessWidget {
           children: <Widget>[
             AppTabs(
               tabs: <String>[
-                'Pending business reviews',
                 'Active & suspended',
-                'Rejected archive',
                 'Global user status',
               ],
             ),

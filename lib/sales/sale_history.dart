@@ -25,7 +25,7 @@ final class TenantSaleException implements Exception {
 /// The immutable category and cost snapshot is retained for device reporting.
 /// Whether profit may be displayed remains a role decision made by the report,
 /// not by this read model.
-final class TenantSaleLine {
+final class TenantSaleLine implements CheckoutReceiptLine {
   const TenantSaleLine._({
     required this.productId,
     required this.name,
@@ -38,10 +38,14 @@ final class TenantSaleLine {
   });
 
   final String productId;
+  @override
   final String name;
   final String? categoryId;
+  @override
   final int quantity;
+  @override
   final int unitPriceMinor;
+  @override
   final int lineTotalMinor;
   final int? unitCostMinor;
   final int? lineCostMinor;
@@ -53,7 +57,7 @@ final class TenantSaleLine {
 /// supported payload contract, and carry a receipt that this exact device,
 /// business date, and sequence would produce. A sale is immutable evidence, so
 /// anything that disagrees with itself is refused rather than displayed.
-final class TenantSale {
+final class TenantSale implements CheckoutReceiptSale {
   factory TenantSale.fromDocument({
     required String path,
     required Map<String, Object?> data,
@@ -161,12 +165,16 @@ final class TenantSale {
   }) : lines = List<TenantSaleLine>.unmodifiable(lines);
 
   final String id;
+  @override
   final String tenantId;
   final String soldById;
   final String shiftId;
   final String deviceId;
+  @override
   final String businessDate;
+  @override
   final String currency;
+  @override
   final String receiptNumber;
   final int receiptSequence;
   final String payloadHash;
@@ -178,14 +186,19 @@ final class TenantSale {
   ///
   /// It is the cashier's assertion and never a verified payment; surfaces that
   /// show it must carry [checkoutTenderDisclaimer].
+  @override
   final CheckoutTender? tender;
 
   /// The server instant, absent only while a local write is still pending.
   final DateTime? recordedAt;
 
+  @override
   final List<TenantSaleLine> lines;
+  @override
   final int subtotalMinor;
+  @override
   final int discountMinor;
+  @override
   final int totalMinor;
 }
 
@@ -250,6 +263,31 @@ final class TenantSaleHistoryRepository extends TenantReadRepository {
     TenantRole.admin,
     TenantRole.manager,
   ];
+
+  /// Reads one sale by its immutable ID, or null where there is none.
+  ///
+  /// **A direct read, which the Rules make business-wide** - `allow get` on
+  /// `sales` is `readingStaff`, unlike the `list` beside it that a cashier may
+  /// only run over their own. That is what lets a returns screen label a
+  /// colleague's sale without being shown that colleague's day.
+  Future<TenantSale?> readSale(String saleId) async {
+    final String safeSaleId;
+    try {
+      safeSaleId = validateTenantDocumentId(saleId, fieldName: 'saleId');
+    } on ArgumentError {
+      throw const TenantSaleException('invalid_sale_id');
+    }
+    final data = await readDocument(TenantCollection.sales, safeSaleId);
+    if (data == null) return null;
+    final sale = TenantSale.fromDocument(
+      path: paths.sale(safeSaleId),
+      data: data,
+    );
+    if (sale.tenantId != session.tenantId) {
+      throw const TenantSaleException('cross_tenant_sale');
+    }
+    return sale;
+  }
 
   /// Pages the sales recorded during one canonical shift.
   ///

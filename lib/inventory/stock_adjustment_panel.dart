@@ -341,7 +341,6 @@ final class _TenantProductStockPanelState
     final guardKey = '${widget.product.id}:$_pageIndex:$cursor';
     _composeLoaders(guardKey);
     return TenantRouteGuard<_StockView>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantProductStockRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
@@ -506,6 +505,7 @@ final class _TenantProductStockAdjustmentPanelState
         session: session,
         product: product,
         callable: callable,
+        queue: widget.actions?.adjustQueue,
         requestIdFactory: () => _requestId ??=
             (widget.requestIdFactory ?? secureStockAdjustmentRequestId)(),
       );
@@ -556,7 +556,6 @@ final class _TenantProductStockAdjustmentPanelState
     final guardKey = '${widget.product.id}:$_generation';
     _composeLoaders(guardKey);
     return TenantRouteGuard<TenantProduct>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantProductStockRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
@@ -609,6 +608,8 @@ String _resolutionNote(TenantReconciliationAnomaly anomaly) =>
       TenantReconciliationAnomalyKind.invalidSaleLines ||
       TenantReconciliationAnomalyKind.invalidOrMissingShift ||
       TenantReconciliationAnomalyKind.shiftVariance ||
+      TenantReconciliationAnomalyKind.shiftTenderVariance ||
+      TenantReconciliationAnomalyKind.missingTenderDeclaration ||
       TenantReconciliationAnomalyKind.other =>
         'Whether an adjustment resolves this is not something this version of '
             'the app can say.',

@@ -2,13 +2,17 @@
 ///
 /// **What every case here holds fixed is the ownership.** `main.dart` caches one
 /// `TenantShiftController` per session and hands the same instance to the gate
-/// and to the shift panel the gate pushes, so `sharedShiftControllerFactory` is
+/// and to the close sheet the gate opens, so `sharedShiftControllerFactory` is
 /// what these tests build with. Under a factory that mints one per call - which
 /// is what this suite's neighbours used to pass, and what the screenshot harness
 /// passed - none of these tests can fail, and the crash of 2026-08-27 walks
-/// straight through: `TenantShiftPanel` disposed the shared controller on the
-/// way out, and the next `addListener` threw *A TenantShiftController was used
+/// straight through: the shift panel disposed the shared controller on the way
+/// out, and the next `addListener` threw *A TenantShiftController was used
 /// after being disposed* over the whole route.
+///
+/// **The close is one tap from the exit dialog since 2026-09-03.** It used to
+/// push a page whose only content was a button that opened this sheet, so every
+/// case below lost a `close-shift` tap and a `_pop`.
 library;
 
 import 'dart:async';
@@ -20,8 +24,6 @@ import 'package:flutter_application_1/shift/shift.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/banner.dart';
 import 'package:flutter_application_1/ui/routes.dart';
-import 'package:flutter_application_1/ui/scaffold.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -111,10 +113,10 @@ void main() {
     await _enterTill(tester);
     expect(find.byKey(_till), findsOneWidget);
 
-    // Out through the exit dialog's *End shift*, which is what pushes the
-    // manager, then straight back out of it without closing anything.
-    await _openShiftManager(tester);
-    await _pop(tester);
+    // Out through the exit dialog's *Close shift*, which opens the counting
+    // sheet, then straight back out of it without closing anything.
+    await _openCloseSheet(tester);
+    await _tap(tester, const ValueKey('cancel-cash-count'));
 
     // Back at the till, and out to the home.
     expect(find.byKey(_till), findsOneWidget);
@@ -144,22 +146,22 @@ void main() {
       expect(find.byKey(const ValueKey('shift-gate-expired')), findsOneWidget);
       expect(find.byKey(_till), findsNothing);
 
-      // The expired screen pushes the manager, whose control opens the sheet
-      // with the count already running.
+      // The expired screen opens the sheet directly, with the count already
+      // running - there is nothing else to do with an expired shift.
       await _tap(tester, const ValueKey('shift-gate-close'));
-      await _tap(tester, const ValueKey('close-shift'));
-      await tester.enterText(find.byKey(const ValueKey('counted-cash')), '0');
+      await tester.enterText(find.byKey(const ValueKey('declared-cash')), '0');
       await _settle(tester);
       await _tap(tester, const ValueKey('close-shift-confirm'));
 
-      // The gate notices there is no shift and raises its modal over the
-      // manager - this is the "open a new shift" prompt in the same flow.
+      // The close reports on the surface it was taken on, and is dismissed
+      // deliberately rather than vanishing from under the person.
+      expect(find.byKey(const ValueKey('shift-close-heading')), findsOneWidget);
+      await _tap(tester, const ValueKey('shift-close-done'));
+
+      // The gate notices there is no shift and raises its modal - this is the
+      // "open a new shift" prompt in the same flow.
       expect(find.byKey(const ValueKey('shift-gate-open')), findsOneWidget);
       await _tap(tester, const ValueKey('shift-gate-open'));
-      expect(tester.takeException(), isNull);
-
-      // Leaving the manager returns to a till selling against the new shift.
-      await _pop(tester);
       expect(tester.takeException(), isNull);
       expect(find.byKey(_till), findsOneWidget);
       expect(server.created, hasLength(1));
@@ -170,6 +172,87 @@ void main() {
       );
     },
   );
+
+  testWidgets('an orphaned shift can be closed from the modal that refuses it', (
+    tester,
+  ) async {
+    // **The dead end this removes.** A shift opened by an installation this
+    // device no longer is cannot be adopted - the closing summary comes from
+    // local sale evidence, which that install took with it - and until now the
+    // refusal was all there was: `Open shift` repeated it, and the only remedy
+    // was an edit to the database. The control that resolves it lives in the
+    // close sheet, and this modal is the one surface that could open it.
+    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
+      overrides: <String, Object?>{
+        'shiftId': 'shift-elsewhere',
+        'deviceId': _deviceOther,
+      },
+    );
+
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+
+    expect(
+      find.text(
+        'This shift is open on another device. Close it there, or close it '
+        'from here without its sales.',
+      ),
+      findsOneWidget,
+    );
+    await _tap(tester, const ValueKey('shift-gate-close-orphan'));
+
+    // The same three boxes an ordinary close asks for: a declaration needs no
+    // sale evidence, and the server derives the other side of the comparison
+    // itself - so a recovery close records more than the refusal it replaces.
+    await tester.enterText(
+      find.byKey(const ValueKey('declared-cash')),
+      '250.00',
+    );
+    await _settle(tester);
+    await _tap(tester, const ValueKey('close-orphan-shift'));
+
+    // Zero totals under the marker, so reconciliation refuses the figures
+    // rather than reading them as a shift that took nothing.
+    final written = server.updated.single.$2;
+    expect(server.updated.single.$1, 'tenants/tenant-a/shifts/shift-elsewhere');
+    expect(written['closedWithoutEvidence'], isTrue);
+    expect(written['totalSalesMinor'], 0);
+    expect(written['transactionCount'], 0);
+    expect(written['declaredCashMinor'], 25000);
+  });
+
+  testWidgets('the modal stops refusing once the orphan is gone', (
+    tester,
+  ) async {
+    // The dialog used to read the controller once and keep whatever it drew, so
+    // a refusal outlived the thing it refused: the shift was closed and the
+    // modal still said it was open somewhere else.
+    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
+      overrides: <String, Object?>{
+        'shiftId': 'shift-elsewhere',
+        'deviceId': _deviceOther,
+      },
+    );
+
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    expect(
+      find.byKey(const ValueKey('shift-gate-close-orphan')),
+      findsOneWidget,
+    );
+
+    await _tap(tester, const ValueKey('shift-gate-close-orphan'));
+    await tester.enterText(find.byKey(const ValueKey('declared-cash')), '0');
+    await _settle(tester);
+    await _tap(tester, const ValueKey('close-orphan-shift'));
+    await _tap(tester, const ValueKey('shift-close-done'));
+
+    // The refusal and the control that answered it both go, and `Open shift`
+    // is what is left - which is the whole point of the journey.
+    expect(find.byKey(const ValueKey('shift-gate-close-orphan')), findsNothing);
+    expect(find.byKey(const ValueKey('shift-gate-error')), findsNothing);
+    expect(find.byKey(const ValueKey('shift-gate-open')), findsOneWidget);
+  });
 
   testWidgets('a refused open keeps the modal up and states the reason', (
     tester,
@@ -182,10 +265,35 @@ void main() {
     await _enterTill(tester);
     await _tap(tester, const ValueKey('shift-gate-open'));
 
+    // **The words, not just the callout.** This assertion came from the shift
+    // panel's suite on 2026-09-03: the card that used to carry it is gone, and
+    // the gate's modal is the only surface that reports a refused open.
     expect(find.byKey(const ValueKey('shift-gate-error')), findsOneWidget);
+    expect(
+      find.text(shiftErrorMessage('other_tenant_shift_open')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('shift-gate-open')), findsOneWidget);
     expect(find.byKey(_till), findsNothing);
     expect(server.created, isEmpty);
+  });
+
+  testWidgets('reports unavailable shift state without internal details', (
+    tester,
+  ) async {
+    // A record this build cannot read. Also from the panel's suite: the gate
+    // draws the only surface a cashier meets when the state is unreadable.
+    await box.put('user-a:tenant-a', <String, Object?>{'schemaVersion': 99});
+
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+
+    expect(
+      find.byKey(const ValueKey('shift-gate-unavailable')),
+      findsOneWidget,
+    );
+    expect(find.byKey(_till), findsNothing);
+    expect(find.textContaining('malformed_shift_state'), findsNothing);
   });
 
   testWidgets('two taps on the modal open one shift', (tester) async {
@@ -209,12 +317,9 @@ void main() {
 
     await _pumpHome(tester, state, server);
     await _enterTill(tester);
-    await _openShiftManager(tester);
-
     // Opening the sheet is what starts the count, so cancelling is the only
     // way back out of one without closing the shift.
-    await _tap(tester, const ValueKey('close-shift'));
-    expect(find.byKey(const ValueKey('counted-cash')), findsOneWidget);
+    await _openCloseSheet(tester);
     await _tap(tester, const ValueKey('cancel-cash-count'));
 
     final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
@@ -222,45 +327,46 @@ void main() {
     expect(record!.closeInProgress, isFalse);
     expect(server.updated, isEmpty);
 
-    // And the till is still in service on the way out.
-    await _pop(tester);
+    // And the till is still in service behind the sheet that just closed.
     expect(find.byKey(_till), findsOneWidget);
   });
 
-  testWidgets('a close refused for want of a connection keeps the shift', (
+  testWidgets('a close with no connection is recorded rather than refused', (
     tester,
   ) async {
     server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
     await state.save(shiftRecord());
 
-    // Online to read the shift, offline by the time the close is attempted -
-    // which is the shape of the failure, since closing is the one shift action
-    // that cannot be done from a remembered record.
+    // Online to read the shift, offline by the time the close is attempted.
     var online = true;
     await _pumpHome(tester, state, server, isOnline: () async => online);
     await _enterTill(tester);
-    await _openShiftManager(tester);
-    await _tap(tester, const ValueKey('close-shift'));
-    await tester.enterText(find.byKey(const ValueKey('counted-cash')), '0');
+    await _openCloseSheet(tester);
+    await tester.enterText(find.byKey(const ValueKey('declared-cash')), '0');
     await _settle(tester);
 
     online = false;
     await _tap(tester, const ValueKey('close-shift-confirm'));
+    await _settle(tester);
 
     expect(tester.takeException(), isNull);
-    expect(
-      tester.widget<ShiftBanner>(find.byType(ShiftBanner)).detail,
-      shiftErrorMessage('close_needs_connection'),
-    );
+    // **Refused outright until 2026-09-05.** A shop that had counted its cash
+    // was left holding an open shift it could not finish, with the till still
+    // selling against it. The count is kept here and sent on reconnect.
     expect(server.updated, isEmpty);
+    final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+    expect(record, isNotNull);
     expect(
-      await state.read(uid: 'user-a', tenantId: 'tenant-a'),
+      record!.closedAt,
       isNotNull,
-      reason: 'A close that never reached the server has closed nothing.',
+      reason: 'The close is a fact about this device now.',
     );
+    // The declaration, not a bare cash figure: all three methods were asked
+    // for and all three are what gets replayed.
+    expect(record.declaration, ShiftTenderDeclaration.zero);
   });
 
-  testWidgets('popping the shift manager while the close is in flight', (
+  testWidgets('popping the close sheet while the close is in flight', (
     tester,
   ) async {
     server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
@@ -268,14 +374,18 @@ void main() {
 
     await _pumpHome(tester, state, server);
     await _enterTill(tester);
-    await _openShiftManager(tester);
-    await _tap(tester, const ValueKey('close-shift'));
-    await tester.enterText(find.byKey(const ValueKey('counted-cash')), '0');
+    await _openCloseSheet(tester);
+    await tester.enterText(find.byKey(const ValueKey('declared-cash')), '0');
     await _settle(tester);
 
     // The write is held open, so the route can be torn down underneath it.
+    // Scrolled to first, like `_tap` does, but tapped by hand: this case has to
+    // pump exactly one frame and pop mid-flight, which settling would ruin.
+    final confirm = find.byKey(const ValueKey('close-shift-confirm'));
+    await tester.ensureVisible(confirm);
+    await _settle(tester);
     server.updateGate = Completer<void>();
-    await tester.tap(find.byKey(const ValueKey('close-shift-confirm')));
+    await tester.tap(confirm);
     await tester.pump();
     await _pop(tester);
     server.updateGate!.complete();
@@ -324,12 +434,22 @@ void main() {
   });
 }
 
-/// *End shift* out of the till, which is what pushes the close panel.
-Future<void> _openShiftManager(WidgetTester tester) async {
+/// *Close shift* out of the till, which opens the counting sheet directly.
+///
+/// **One tap, and that is the 2026-09-03 change.** This used to land on a
+/// pushed page titled *Close shift* holding a button also labelled *Close
+/// shift*; the sheet it opened is now what the choice opens.
+Future<void> _openCloseSheet(WidgetTester tester) async {
   await _leaveTill(tester);
   await _tap(tester, const ValueKey('shift-exit-end'));
-  expect(find.byKey(const ValueKey('close-shift')), findsOneWidget);
+  expect(find.byKey(const ValueKey('declared-cash')), findsOneWidget);
 }
+
+/// A second installation's identity, for the shift this one cannot adopt.
+///
+/// Its hardware half differs too, so the refusal is the plain
+/// `shift_open_on_other_device` rather than the softer earlier-install wording.
+const String _deviceOther = 'dev-ffffffffffffffffffffffffffffffff';
 
 const Key _home = ValueKey('gate-test-home');
 const Key _till = ValueKey('gate-test-till');
@@ -370,14 +490,7 @@ Future<TenantSessionController> _pumpHome(
                       controller: sessions,
                       child: TenantShiftGate(
                         controllerFactory: controllerFactory,
-                        shiftManagerBuilder: (context) => AppScaffold(
-                          title: 'Close shift',
-                          contentWidth: AppContentWidth.records,
-                          body: TenantShiftPanel(
-                            currency: TenantReportingCurrency.unknown,
-                            controllerFactory: controllerFactory,
-                          ),
-                        ),
+                        currency: TenantReportingCurrency.unknown,
                         child: const Scaffold(
                           key: _till,
                           body: Center(child: Text('Till')),
@@ -414,7 +527,14 @@ Future<void> _pop(WidgetTester tester) async {
 }
 
 Future<void> _tap(WidgetTester tester, Key key) async {
-  await tester.tap(find.byKey(key));
+  // **Scrolled into view first, since the close sheet grew three fields.** The
+  // declaration asks for cash, M-Pesa and card, which puts the sheet's own
+  // controls below an 800x600 test viewport - so a bare `tap` derived an offset
+  // outside the render tree and silently did nothing.
+  final finder = find.byKey(key);
+  await tester.ensureVisible(finder);
+  await _settle(tester);
+  await tester.tap(finder);
   await _settle(tester);
 }
 

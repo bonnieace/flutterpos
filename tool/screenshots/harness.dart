@@ -50,6 +50,8 @@ import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'image_http.dart';
+
 /// Where the PNGs land, relative to the repository root.
 const String screenshotDirectory = 'screenshots';
 
@@ -335,6 +337,10 @@ Future<void> captureScreen(
   // widget test body runs in a fake-async zone where a real future never
   // completes. `runAsync` is the only place this work can happen.
   await tester.runAsync(loadScreenshotFonts);
+  // Every `Image.network` in a capture answers with the drawn product picture,
+  // so a photograph appears where the app would draw one. See
+  // `loadScreenshotProductImages`.
+  await tester.runAsync(loadScreenshotProductImages);
   // The test binding suppresses shadows so goldens stay comparable across
   // engine revisions. These are pictures for a person, so the elevation the app
   // actually draws is what should be in them.
@@ -369,6 +375,12 @@ Future<void> captureScreen(
         ),
       ),
     );
+    // **Before the settle, not after it.** An unresolved picture draws a
+    // skeleton, and a skeleton sweeps on a repeating controller - so a screen
+    // with one photograph still in flight is a screen `pumpAndSettle` waits on
+    // for ever. Resolving first means the settle below has nothing left to
+    // wait for.
+    await _resolveImages(tester);
     if (settle) {
       await tester.pumpAndSettle();
     } else {
@@ -377,6 +389,9 @@ Future<void> captureScreen(
     }
     if (afterPump != null) {
       await afterPump(tester);
+      // Again: whatever `afterPump` opened may have brought pictures of its
+      // own - a cart sheet, a product form - that the first pass never saw.
+      await _resolveImages(tester);
       if (settle) await tester.pumpAndSettle();
     }
 
@@ -384,7 +399,45 @@ Future<void> captureScreen(
     if (fullPage) await _writeFullPage(tester, name: name, viewport: viewport);
   } finally {
     debugDisableShadows = shadowsDisabled;
+    // `debugNetworkImageHttpClientProvider` is a painting debug variable too,
+    // and the binding's assertion above covers it: the picture server is
+    // installed for the length of one capture and taken down with it.
+    debugNetworkImageHttpClientProvider = null;
   }
+}
+
+/// Fetches and decodes every picture on screen before the frame is written.
+///
+/// **A capture runs in fake async and decoding is real async.** Resolving an
+/// `ImageProvider` awaits the engine - the fetch, `ImmutableBuffer`, and
+/// `instantiateImageCodec` - and none of those futures complete under a clock
+/// the test controls, so a screen with photographs on it was rasterised with
+/// every one of them still in flight. What the harness wrote was the loading
+/// state, which is exactly the frame nobody wants a picture of.
+///
+/// `runAsync` steps outside that clock long enough to fill Flutter's image
+/// cache; the pump afterwards finds every provider already resolved and paints
+/// it synchronously.
+Future<void> _resolveImages(WidgetTester tester) async {
+  final images = find.byType(Image).evaluate().toList();
+  if (images.isEmpty) return;
+  await tester.runAsync(() async {
+    for (final element in images) {
+      final image = element.widget as Image;
+      // A picture that cannot be fetched is a state this app draws on purpose -
+      // the initials stand-in - so a failure here is not the harness's to
+      // report.
+      try {
+        await precacheImage(image.image, element);
+      } catch (_) {}
+    }
+  });
+  // **A bounded pump, not `pumpAndSettle`.** Half of these captures are taken
+  // with a field focused or a sheet on screen, and a blinking cursor schedules
+  // frames for ever - `pumpAndSettle` timed out on five of them the first time
+  // this ran. Two frames is what a resolved image needs to be painted.
+  await tester.pump();
+  await tester.pump();
 }
 
 /// Re-renders the screen tall enough to hold all of it, and writes that too.

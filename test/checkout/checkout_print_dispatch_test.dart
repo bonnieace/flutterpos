@@ -38,6 +38,117 @@ void main() {
         profile: profile,
       );
 
+  group('a second copy of a receipt', () {
+    test('one this device never printed is rebuilt, audited, and sent', () async {
+      final transport = _FakeTransport();
+      final audits = <String>[];
+
+      final result = await dispatcher(transport).reprint(
+        _sale(),
+        printer: _printer(),
+        onReprint: () async => audits.add('recorded'),
+      );
+
+      expect(result.outcome, CheckoutPrintOutcome.sent);
+      expect(audits, hasLength(1));
+      expect(transport.sends, hasLength(1));
+    });
+
+    test('a printed receipt is re-sent as the bytes that printed', () async {
+      final transport = _FakeTransport();
+      final subject = dispatcher(transport);
+      await subject.dispatch(_sale(), printer: _printer());
+      expect(transport.sends, hasLength(1));
+      final audits = <String>[];
+
+      final result = await subject.reprint(
+        _sale(),
+        printer: _printer(),
+        onReprint: () async => audits.add('recorded'),
+        // Deliberately a different heading. A receipt reprinted after the shop
+        // renamed itself must still print what was handed over.
+        businessName: 'A Different Name Entirely',
+      );
+
+      expect(result.outcome, CheckoutPrintOutcome.sent);
+      expect(audits, hasLength(1));
+      expect(transport.sends, hasLength(2));
+      expect(transport.sends[1], transport.sends[0]);
+    });
+
+    test('an audit that refuses prints nothing and queues nothing', () async {
+      final transport = _FakeTransport();
+      final subject = dispatcher(transport);
+
+      // The record is written before anything else happens, so a reprint that
+      // could not be recorded never happened.
+      await expectLater(
+        subject.reprint(
+          _sale(),
+          printer: _printer(),
+          onReprint: () async => throw const _AuditRefused(),
+        ),
+        throwsA(isA<_AuditRefused>()),
+      );
+
+      expect(transport.sends, isEmpty);
+      expect(queue.read(_sale().receiptNumber), isNull);
+    });
+
+    test('a refused audit cannot re-send a receipt that already printed', () async {
+      final transport = _FakeTransport();
+      final subject = dispatcher(transport);
+      await subject.dispatch(_sale(), printer: _printer());
+
+      await expectLater(
+        subject.reprint(
+          _sale(),
+          printer: _printer(),
+          onReprint: () async => throw const _AuditRefused(),
+        ),
+        throwsA(isA<_AuditRefused>()),
+      );
+
+      expect(transport.sends, hasLength(1));
+      expect(
+        queue.read(_sale().receiptNumber)!.state,
+        PrintJobState.printed,
+      );
+    });
+
+    test('a first copy still on its way is a retry, and is not audited', () async {
+      final transport = _FakeTransport();
+      final subject = dispatcher(transport);
+      // Queued but never sent: the customer has had no receipt at all yet.
+      await subject.enqueue(_sale(), printer: _printer());
+      final audits = <String>[];
+
+      final result = await subject.reprint(
+        _sale(),
+        printer: _printer(),
+        onReprint: () async => audits.add('recorded'),
+      );
+
+      expect(result.outcome, CheckoutPrintOutcome.sent);
+      expect(transport.sends, hasLength(1));
+      expect(audits, isEmpty);
+    });
+
+    test('a business with no printer is refused before it is audited', () async {
+      final audits = <String>[];
+
+      final result = await dispatcher(_FakeTransport()).reprint(
+        _sale(),
+        printer: const TenantConfiguredPrinter.absent(),
+        onReprint: () async => audits.add('recorded'),
+      );
+
+      expect(result.outcome, CheckoutPrintOutcome.refused);
+      expect(result.reasonCode, PrinterTransportCode.notConfigured);
+      expect(audits, isEmpty);
+    });
+  });
+
   group('a configured printer', () {
     test('local enqueue persists a job without touching transport', () async {
       final transport = _FakeTransport();
@@ -267,6 +378,11 @@ TenantConfiguredPrinter _printer({bool hasCutter = true}) =>
         hasCutter: hasCutter,
       ),
     );
+
+/// What the audit seam throws when the server will not record the reprint.
+final class _AuditRefused implements Exception {
+  const _AuditRefused();
+}
 
 final class _FakeTransport implements PrinterTransport {
   _FakeTransport({this.failWith});

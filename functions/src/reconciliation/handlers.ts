@@ -225,6 +225,7 @@ async function executeReconciliationTask(payload: ReconciliationTaskPayload): Pr
         phase: result.hasMore ? "shifts" : "finalize",
         shiftsProcessedDelta: result.processed,
         shiftVarianceDelta: result.varianceCount,
+        tenderVarianceDelta: result.tenderVarianceCount,
       });
     } else {
       continuation = await finalizeReconciliationJob(db, job);

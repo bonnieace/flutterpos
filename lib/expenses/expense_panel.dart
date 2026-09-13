@@ -258,7 +258,6 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
     );
     _composeLoaders(guardKey);
     return TenantRouteGuard<_ExpensesView>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantExpenseRepository.allowedRoles,
       load: _loader!,
       loadCached: _cachedLoader,

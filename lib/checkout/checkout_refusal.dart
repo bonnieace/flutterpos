@@ -44,17 +44,6 @@ final class CheckoutRefusal {
           'Try again in a moment.',
       cashierCanFix: true,
     ),
-    // The provisional trading window is about to shut and this device is still
-    // holding sales the server has not confirmed. Cashier-fixable: getting
-    // online clears it, which is exactly what the sentence asks for.
-    'provisional_window_closing' => const CheckoutRefusal._(
-      'provisional_window_closing',
-      'This business has not been approved yet and its trial ends within a '
-          'day. Sales already saved on this device have not reached the server, '
-          'and after the trial ends they never will. Get online so they can be '
-          'sent, then sell again.',
-      cashierCanFix: true,
-    ),
     'no_open_shift' => const CheckoutRefusal._(
       'no_open_shift',
       'Open a shift before selling.',
@@ -66,10 +55,22 @@ final class CheckoutRefusal {
           'that shift before selling here.',
       cashierCanFix: true,
     ),
+    // **Kept for a refusal nothing raises any more.** Binding stopped
+    // requiring a server-confirmed shift on 2026-09-05, because requiring one
+    // meant a till that opened its shift offline could not sell at all. A
+    // device still holding an old refusal in an outbox record must still be
+    // able to word it.
     'shift_not_confirmed' => const CheckoutRefusal._(
       'shift_not_confirmed',
       'The server has not confirmed your shift yet. Wait for it to confirm, '
           'then start the sale again.',
+      cashierCanFix: true,
+    ),
+    'shift_closed_pending' => const CheckoutRefusal._(
+      'shift_closed_pending',
+      'This shift is closed and its count is saved, so no new sale can be '
+          'recorded on it. It reaches the server on its own, and a new shift '
+          'can be opened once it has.',
       cashierCanFix: true,
     ),
     'shift_closing' => const CheckoutRefusal._(
@@ -211,7 +212,7 @@ final class CheckoutRefusal {
     _ => CheckoutRefusal._(
       code,
       'This sale could not be saved on this device. Try again, and ask for '
-          'help if it keeps happening.',
+      'help if it keeps happening.',
       cashierCanFix: false,
     ),
   };

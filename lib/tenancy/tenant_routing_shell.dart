@@ -24,11 +24,10 @@ import 'account_profile.dart';
 import 'account_verification.dart';
 import 'onboarding_flow.dart';
 import 'email_delivery_status.dart';
-import 'platform_tenant_review.dart';
+import 'invitation_link_source.dart';
+import 'platform_tenant_console.dart';
 import 'platform_tenant_lifecycle.dart';
-import 'platform_tenant_archival.dart';
 import 'platform_global_user_status.dart';
-import 'tenant_access.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
 import 'tenant_catalog.dart';
@@ -81,9 +80,12 @@ final class TenantRoutingShell extends StatefulWidget {
     required this.tenantSwitchOnlineCheck,
     this.tenantSessionRecoveryFactory,
     this.tenantRecoveryTriggers,
+    this.bootstrapRefreshRequests,
     this.isEmailVerified,
     this.invitationLink,
     this.invalidInvitationLink = false,
+    this.invitationArrivals,
+    this.onInvitationLinkSettled,
     this.acceptTenantInvitationCallable,
     this.invitationAcceptanceRequestIdFactory,
     this.acceptVisibleInvitationCallable,
@@ -93,6 +95,10 @@ final class TenantRoutingShell extends StatefulWidget {
     this.requestTenantCallable,
     this.tenantRequestIdFactory,
     this.sendAccountVerificationCallable,
+    this.refreshSession,
+    this.reauthenticate,
+    this.identityChanges,
+    this.resumeSession,
     this.completeSelfSignupCallable,
     this.changeSignupEmailCallable,
     this.accountProfileRequestIdFactory,
@@ -101,15 +107,14 @@ final class TenantRoutingShell extends StatefulWidget {
     this.accountVerificationRequestIdFactory,
     this.reloadIdentity,
     this.hasPlatformSuperAdminClaim,
-    this.platformPendingTenantDataSource,
     this.platformLifecycleTenantDataSource,
-    this.platformRejectedTenantDataSource,
     this.platformGlobalUserDataSource,
     this.setTenantLifecycleCallable,
     this.setGlobalUserStatusCallable,
     this.platformTenantReviewRequestIdFactory,
     this.tenantDataReader,
     this.tenantRouteBuilder,
+    this.reconnectSignals,
     this.checkoutRoute,
     this.checkoutConfigurationRoute,
     this.checkoutConfigurationRoles = const <TenantRole>[],
@@ -117,9 +122,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.brandingRoles = const <TenantRole>[],
     this.printerConfigurationRoute,
     this.printerConfigurationRoles = const <TenantRole>[],
-    this.printQueueRoute,
-    this.printQueueStatus,
     this.printQueueCount,
+    this.unresolvedDifferencesCount,
     this.catalogManagementRoute,
     this.catalogManagementRoles = const <TenantRole>[],
     this.memberName,
@@ -152,9 +156,60 @@ final class TenantRoutingShell extends StatefulWidget {
   final TenantSwitchOnlineCheck tenantSwitchOnlineCheck;
   final TenantSessionRecoveryFactory? tenantSessionRecoveryFactory;
   final Stream<Object?>? tenantRecoveryTriggers;
+
+  /// Something outside this shell changed what a bootstrap would return.
+  ///
+  /// **The composition root pushes a wizard above this shell, and that wizard
+  /// creates the tenant.** A fresh signup bootstraps to *no accessible tenant*
+  /// - correctly, there was none yet - and the shell has no way to learn that
+  /// the pushed flow has since created one: [authUidChanges] does not re-emit,
+  /// because the identity never changed, and [_handleAuthUid] returns early on
+  /// the same UID. Popping the wizard therefore revealed the shell still saying
+  /// *Almost there*, and only a relaunch put the person in their own business.
+  ///
+  /// This is that missing edge. It re-runs the bootstrap from scratch, exactly
+  /// as the shell's own copy of the wizard does when it finishes.
+  ///
+  /// **Not [tenantRecoveryTriggers].** That one asks the composition root to
+  /// re-run per-session background work and does nothing at all without an open
+  /// session, which is precisely the state this signal exists to leave.
+  final Stream<Object?>? bootstrapRefreshRequests;
   final bool Function(String uid)? isEmailVerified;
+
+  /// Mints a newer ID token, and proves the person again from their password.
+  ///
+  /// Both are forwarded to the onboarding flow this shell draws for an account
+  /// that is still signing up; see `OnboardingFlow.refreshSession` and
+  /// `OnboardingFlow.reauthenticate` for what each one is for.
+  final Future<void> Function()? refreshSession;
+  final Future<void> Function(String password)? reauthenticate;
+
+  /// Ticks when the signed-in identity changes, forwarded to the onboarding
+  /// flow so it can see a session end underneath it. See
+  /// `OnboardingFlow.identityChanges`.
+  final Stream<Object?>? identityChanges;
+
+  /// Exchanges a server-minted credential for a live session; forwarded to the
+  /// onboarding flow. See `OnboardingFlow.resumeSession`.
+  final Future<void> Function(String token)? resumeSession;
+  /// The invitation the app was launched on, if it was launched on one.
   final TenantInvitationLink? invitationLink;
   final bool invalidInvitationLink;
+
+  /// Invitations followed after launch, while this shell is already built.
+  ///
+  /// **A stream rather than a rebuild with a new [invitationLink].** The link is
+  /// an event on Android - the activity is `singleTop`, so a second tap on a
+  /// mailed link is delivered to the running app rather than starting it - and
+  /// the composition root has no reason to rebuild for one. It is the same
+  /// shape [authUidChanges] and [tenantRecoveryTriggers] already have.
+  final Stream<TenantInvitationArrival>? invitationArrivals;
+
+  /// The pending invitation was accepted, refused or dismissed.
+  ///
+  /// Lets the composition root stop saying an invitation is waiting; the sign-in
+  /// screen is the one surface that says so.
+  final VoidCallback? onInvitationLinkSettled;
   final AcceptTenantInvitationCallable? acceptTenantInvitationCallable;
   final TenantInvitationAcceptanceRequestIdFactory?
   invitationAcceptanceRequestIdFactory;
@@ -191,15 +246,27 @@ final class TenantRoutingShell extends StatefulWidget {
   final AccountVerificationReload? reloadIdentity;
 
   final Future<bool> Function(String uid)? hasPlatformSuperAdminClaim;
-  final PlatformPendingTenantDataSource? platformPendingTenantDataSource;
   final PlatformLifecycleTenantDataSource? platformLifecycleTenantDataSource;
-  final PlatformRejectedTenantDataSource? platformRejectedTenantDataSource;
   final PlatformGlobalUserDataSource? platformGlobalUserDataSource;
   final SetTenantLifecycleCallable? setTenantLifecycleCallable;
   final SetGlobalUserStatusCallable? setGlobalUserStatusCallable;
-  final PlatformTenantReviewRequestIdFactory?
+  final PlatformTenantRequestIdFactory?
   platformTenantReviewRequestIdFactory;
   final TenantDataReader? tenantDataReader;
+  /// Fires when this device has a network again.
+  ///
+  /// **What it is for is the offline card.** `TenantBootstrapResult.fromCache`
+  /// is decided once, at bootstrap, and nothing revisited it - so a device that
+  /// started up with no signal kept saying *Working from data saved on this
+  /// device* for the rest of the session, long after the signal came back. A
+  /// reconnect refreshes the bootstrap in place, which is what clears the flag
+  /// and with it the card.
+  ///
+  /// **Only while a cached bootstrap is on screen.** A live one has nothing to
+  /// correct, and refreshing on every connectivity event would put a directory
+  /// read behind every walk past a lift.
+  final Stream<Object?>? reconnectSignals;
+
   final TenantRouteBuilder? tenantRouteBuilder;
 
   /// Totals the home's comparison line is built from. See
@@ -264,26 +331,23 @@ final class TenantRoutingShell extends StatefulWidget {
   /// business owns is not an operational act.
   final List<TenantRole> printerConfigurationRoles;
 
-  /// Optional route onto this device's unsent receipts.
+  /// How many receipts this device has not printed.
   ///
-  /// **No role list, for the same reason [checkoutRoute] carries none.** The
-  /// queue is device-local, and the person who needs to know a receipt did not
-  /// come out is whoever is standing at the till.
-  final Widget Function()? printQueueRoute;
-
-  /// This device's queue depth, in words, for the destination card. §4.4: *"a
-  /// card states its own condition ... queue depth"*, and one that carries none
-  /// is a button. Null draws no line, which is the honest rendering when
-  /// nothing is waiting.
-  final String? Function()? printQueueStatus;
-
-  /// How many receipts are waiting, for the launcher tile's badge.
-  ///
-  /// **A figure beside the sentence, not instead of it.** A tile has room for
-  /// a number on its glyph and a menu row has room for *2 waiting to send*, so
-  /// both are read from the same listing. Null where the queue cannot be
-  /// listed at all, which is not the same as a queue that is empty.
+  /// **The badge on the top bar's glyph, since 2026-09-03.** It used to be the
+  /// count on an *Unprinted receipts* tile in the home's grid; the tile is gone
+  /// and the receipts live on the notifications page, so the figure joins
+  /// everything else that page is about. Null contributes nothing.
   final int? Function()? printQueueCount;
+
+  /// How many recorded reconciliation differences are still open, or null where
+  /// the figure is unknown - never counted, or unreadable for this role.
+  ///
+  /// Read the same way [printQueueCount] is: a plain getter, polled when the
+  /// home rebuilds, so the launcher never holds a subscription of its own. It
+  /// takes the session controller because the figure is per business, and the
+  /// count for one must never be drawn on another's home.
+  final int? Function(TenantSessionController sessions)?
+  unresolvedDifferencesCount;
 
   /// Optional guarded catalog-management route, injected for the same reason.
   ///
@@ -374,6 +438,9 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   final TenantSessionController _sessionController = TenantSessionController();
   StreamSubscription<String?>? _authSubscription;
   StreamSubscription<Object?>? _tenantRecoverySubscription;
+  StreamSubscription<Object?>? _reconnectSubscription;
+  StreamSubscription<Object?>? _bootstrapRefreshSubscription;
+  StreamSubscription<TenantInvitationArrival>? _invitationSubscription;
   _RoutingPhase _phase = _RoutingPhase.waitingForAuth;
   String? _uid;
   int _flowToken = 0;
@@ -382,10 +449,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   Object? _error;
   TenantInvitationLink? _pendingInvitationLink;
   bool _hasInvalidInvitationLink = false;
-  PlatformReviewIdentity? _platformIdentity;
-  PlatformPendingTenantDataSource? _defaultPlatformDataSource;
+  PlatformAdminIdentity? _platformIdentity;
   PlatformLifecycleTenantDataSource? _defaultPlatformLifecycleDataSource;
-  PlatformRejectedTenantDataSource? _defaultPlatformRejectedDataSource;
   PlatformGlobalUserDataSource? _defaultPlatformGlobalUserDataSource;
   SetTenantLifecycleCallable? _defaultTenantLifecycleCallable;
   SetGlobalUserStatusCallable? _defaultGlobalUserStatusCallable;
@@ -401,6 +466,38 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     _hasInvalidInvitationLink = widget.invalidInvitationLink;
     _subscribeToAuth();
     _subscribeToTenantRecoveryTriggers();
+    _subscribeToBootstrapRefreshRequests();
+    _subscribeToReconnects();
+    _subscribeToInvitationArrivals();
+  }
+
+  /// **Replaces whatever was pending, rather than queueing behind it.** Two
+  /// invitations cannot be accepted at once, and the one just tapped is the one
+  /// the person is looking at; the earlier one is still in their mailbox.
+  void _subscribeToInvitationArrivals() {
+    _invitationSubscription = widget.invitationArrivals?.listen(
+      (arrival) {
+        if (!mounted) return;
+        setState(() {
+          _pendingInvitationLink = arrival.link;
+          _hasInvalidInvitationLink = arrival.invalid;
+        });
+      },
+      onError: (Object _, StackTrace _) {},
+    );
+  }
+
+  void _subscribeToReconnects() {
+    _reconnectSubscription = widget.reconnectSignals?.listen((_) {
+      final uid = _uid;
+      if (!mounted ||
+          uid == null ||
+          _phase != _RoutingPhase.tenant ||
+          _bootstrapResult?.fromCache != true) {
+        return;
+      }
+      _startBootstrapRefresh(uid, _flowToken);
+    });
   }
 
   @override
@@ -416,12 +513,27 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       _authSubscription?.cancel();
       _subscribeToAuth();
     }
+    if (!identical(oldWidget.reconnectSignals, widget.reconnectSignals)) {
+      _reconnectSubscription?.cancel();
+      _subscribeToReconnects();
+    }
+    if (!identical(oldWidget.invitationArrivals, widget.invitationArrivals)) {
+      _invitationSubscription?.cancel();
+      _subscribeToInvitationArrivals();
+    }
     if (!identical(
       oldWidget.tenantRecoveryTriggers,
       widget.tenantRecoveryTriggers,
     )) {
       _tenantRecoverySubscription?.cancel();
       _subscribeToTenantRecoveryTriggers();
+    }
+    if (!identical(
+      oldWidget.bootstrapRefreshRequests,
+      widget.bootstrapRefreshRequests,
+    )) {
+      _bootstrapRefreshSubscription?.cancel();
+      _subscribeToBootstrapRefreshRequests();
     }
     if (!identical(
       oldWidget.tenantSessionRecoveryFactory,
@@ -460,6 +572,13 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   void _subscribeToTenantRecoveryTriggers() {
     _tenantRecoverySubscription = widget.tenantRecoveryTriggers?.listen(
       _triggerTenantRecovery,
+      onError: (Object _, StackTrace _) {},
+    );
+  }
+
+  void _subscribeToBootstrapRefreshRequests() {
+    _bootstrapRefreshSubscription = widget.bootstrapRefreshRequests?.listen(
+      (_) => _retry(),
       onError: (Object _, StackTrace _) {},
     );
   }
@@ -555,7 +674,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
             await (widget.hasPlatformSuperAdminClaim?.call(uid) ??
                 Future<bool>.value(false));
         if (!_isCurrent(uid, token)) return;
-        _platformIdentity = PlatformReviewIdentity(
+        _platformIdentity = PlatformAdminIdentity(
           uid: uid,
           profile: result.profile,
           hasSuperAdminClaim: hasClaim,
@@ -615,7 +734,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       final currentTenantId = _sessionController.session?.tenantId;
       final currentMatches = result.selection.visible.where(
         (membership) =>
-            membership.tenantId == currentTenantId && membership.canRead(),
+            membership.tenantId == currentTenantId && membership.canAccess(),
       );
       if (result.kind == TenantBootstrapKind.platform) {
         _sessionController.clear();
@@ -676,7 +795,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   void _selectTenant(TenantMembership membership) {
     final uid = _uid;
-    if (uid == null || !membership.canRead()) return;
+    if (uid == null || !membership.canAccess()) return;
     final token = ++_flowToken;
     unawaited(_openTenant(uid, membership.tenantId, token));
   }
@@ -702,6 +821,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   void _completeTokenInvitationAcceptance() {
     setState(() => _pendingInvitationLink = null);
+    widget.onInvitationLinkSettled?.call();
     _retry();
   }
 
@@ -710,6 +830,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       _pendingInvitationLink = null;
       _hasInvalidInvitationLink = false;
     });
+    widget.onInvitationLinkSettled?.call();
   }
 
   void _retry() {
@@ -770,6 +891,9 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     _bootstrapRefreshDebounce?.cancel();
     _authSubscription?.cancel();
     _tenantRecoverySubscription?.cancel();
+    _bootstrapRefreshSubscription?.cancel();
+    _reconnectSubscription?.cancel();
+    _invitationSubscription?.cancel();
     _sessionController.dispose();
     super.dispose();
   }
@@ -855,6 +979,11 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
           changeSignupEmailCallable: widget.changeSignupEmailCallable,
           sendAccountVerificationCallable:
               widget.sendAccountVerificationCallable,
+          refreshSession: widget.refreshSession,
+          reauthenticate: widget.reauthenticate,
+          identityChanges: widget.identityChanges,
+          resumeSession: widget.resumeSession,
+          emailDeliveryStatusCallable: widget.emailDeliveryStatusCallable,
           requestTenantCallable: widget.requestTenantCallable,
           accountProfileRequestIdFactory: widget.accountProfileRequestIdFactory,
           accountVerificationRequestIdFactory:
@@ -899,15 +1028,21 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
               (_phase == _RoutingPhase.selector ||
                   _phase == _RoutingPhase.noAccessibleTenant),
         ),
+        // **The offline card is under the page, not over it.** It sat above
+        // the app bar, which pushed the whole screen down and put a standing
+        // condition where a screen's own title belongs. It is a footnote about
+        // where the data came from, so it reads as one - and it is drawn only
+        // here, on the home, because every destination is a root-`Navigator`
+        // push that covers this shell entirely.
         _RoutingPhase.tenant => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            Expanded(child: _buildTenantRoute(context)),
             if (_bootstrapResult case TenantBootstrapResult(
               fromCache: true,
               cachedAt: final cachedAt,
             ))
               _OfflineBootstrapBanner(cachedAt: cachedAt),
-            Expanded(child: _buildTenantRoute(context)),
           ],
         ),
         _RoutingPhase.platform => _buildPlatformRoute(),
@@ -923,23 +1058,15 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   Widget _buildPlatformRoute() {
     final identity = _platformIdentity;
-    if (identity == null || !identity.canReview) {
+    if (identity == null || !identity.canAdminister) {
       return PlatformRouteUnavailable(onSignOut: _signOut);
     }
     return PlatformTenantManagementScreen(
       identity: identity,
-      pendingDataSource:
-          widget.platformPendingTenantDataSource ??
-          (_defaultPlatformDataSource ??=
-              FirebasePlatformPendingTenantDataSource()),
       lifecycleDataSource:
           widget.platformLifecycleTenantDataSource ??
           (_defaultPlatformLifecycleDataSource ??=
               FirebasePlatformLifecycleTenantDataSource()),
-      rejectedDataSource:
-          widget.platformRejectedTenantDataSource ??
-          (_defaultPlatformRejectedDataSource ??=
-              FirebasePlatformRejectedTenantDataSource()),
       globalUserDataSource:
           widget.platformGlobalUserDataSource ??
           (_defaultPlatformGlobalUserDataSource ??=
@@ -1079,9 +1206,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       brandingRoles: widget.brandingRoles,
       printerConfigurationRoute: widget.printerConfigurationRoute,
       printerConfigurationRoles: widget.printerConfigurationRoles,
-      printQueueRoute: widget.printQueueRoute,
-      printQueueStatus: widget.printQueueStatus,
       printQueueCount: widget.printQueueCount,
+      unresolvedDifferencesCount: widget.unresolvedDifferencesCount,
       catalogManagementRoute: widget.catalogManagementRoute,
       catalogManagementRoles: widget.catalogManagementRoles,
       pendingCheckoutPanel: widget.pendingCheckoutPanel,
@@ -1361,15 +1487,56 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
     // no behaviour and it is an improvement rather than a concession: at the
     // height where this first broke, the old layout had already crushed the
     // membership list to 56 pixels to make room for the form.
-    // **Verification is not asked for here any more.** This screen used to
-    // carry `AccountVerificationPanel`, because it was where an unverified
-    // identity got stuck - it could neither request a business nor accept an
-    // invitation, and nothing else would draw the card. `OnboardingFlow` owns
-    // that step now and the routing shell sends a membership-less account there
-    // instead, so the only people who reach this screen unverified are ones who
-    // already belong to a business and are choosing between businesses. Asking
-    // them to verify, on a list, would be asking about something else.
+    // **Verification is asked for here only when an invitation is waiting on
+    // it.** This screen used to carry `AccountVerificationPanel` unconditionally
+    // and then, when `OnboardingFlow` took the signup step over, not at all -
+    // on the reasoning that everybody left here already belongs to a business
+    // and is merely choosing between them.
+    //
+    // That reasoning has a hole, and somebody fell in it: an account that
+    // started signing up, never verified, and was then invited to a business
+    // has a visible membership, so the shell keeps it out of `OnboardingFlow` -
+    // and the one thing standing between it and the invitation is the
+    // verification this screen had stopped offering. The panel is back for
+    // exactly that case, which is why it is conditioned on an open invitation
+    // rather than on being unverified. Somebody who already has a business and
+    // is only picking one is still not asked about their address.
+    final verification = widget.verificationIdentity;
+    final invitationNeedsVerification =
+        verification != null &&
+        !verification.emailVerified &&
+        widget.onReloadIdentity != null &&
+        widget.memberships.any(
+          TenantVisibleInvitationAcceptanceGateway.awaitsAcceptance,
+        );
     final panels = <Widget>[
+      if (invitationNeedsVerification)
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            tokens.spacing.s20,
+            tokens.spacing.s20,
+            tokens.spacing.s20,
+            0,
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(tokens.spacing.s20),
+                child: AccountVerificationPanel(
+                  identity: verification,
+                  callable:
+                      widget.sendAccountVerificationCallable ??
+                      FirebaseSendAccountVerificationCallable(),
+                  deliveryStatusCallable: widget.emailDeliveryStatusCallable,
+                  onReload: widget.onReloadIdentity!,
+                  requestIdFactory: widget.accountVerificationRequestIdFactory,
+                  isCurrent: widget.isCurrent,
+                ),
+              ),
+            ),
+          ),
+        ),
       if (_requestingTenant && widget.requestIdentity != null)
         Padding(
           padding: EdgeInsets.fromLTRB(
@@ -1472,7 +1639,7 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
                               subtitle: Text(
                                 '${tenantRoleLabel(membership.role)} - ${status.label}',
                               ),
-                              trailing: membership.canRead()
+                              trailing: membership.canAccess()
                                   ? const Icon(Icons.chevron_right)
                                   : canAccept
                                   ? IconButton(
@@ -1488,12 +1655,8 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
                                       ),
                                     )
                                   : const Icon(Icons.lock_outline),
-                              // **`canRead`, not `canAccess`.** A request whose
-                              // provisional week ran out still opens: it holds
-                              // a week of real trading its owner needs to see,
-                              // and every write inside is refused on its own.
-                              enabled: membership.canRead() || canAccept,
-                              onTap: membership.canRead()
+                              enabled: membership.canAccess() || canAccept,
+                              onTap: membership.canAccess()
                                   ? () => widget.onOpen(membership)
                                   : canAccept
                                   ? () => _toggleAcceptance(membership)
@@ -1568,18 +1731,8 @@ final class _EmptyBusinessList extends StatelessWidget {
 
 enum TenantMembershipDisplayStatus {
   accessible('Accessible'),
-
-  /// A self-serve request inside its provisional window: trading, on a
-  /// deadline. Named for what it is rather than for the deadline, because the
-  /// row is a list of businesses and the countdown belongs on the business.
-  provisional('Trial'),
-
-  /// A request whose window has shut. Opens, and cannot be traded in.
-  lapsed('Read-only'),
-
   pending('Pending'),
   inactive('Inactive'),
-  rejected('Rejected'),
   suspended('Suspended'),
   archived('Archived'),
   unavailable('Unavailable');
@@ -1592,24 +1745,10 @@ enum TenantMembershipDisplayStatus {
 TenantMembershipDisplayStatus tenantMembershipDisplayStatus(
   TenantMembership membership,
 ) {
-  // Asked before `canAccess`, because a provisional business *can* trade and
-  // would otherwise read as plainly accessible - which is true and is not the
-  // thing somebody choosing a business needs to know about it.
-  switch (membership.standing) {
-    case TenantStanding.provisional:
-      return TenantMembershipDisplayStatus.provisional;
-    case TenantStanding.lapsed:
-      return TenantMembershipDisplayStatus.lapsed;
-    case TenantStanding.approved:
-    case TenantStanding.closed:
-      break;
-  }
   if (membership.canAccess()) return TenantMembershipDisplayStatus.accessible;
   return switch (membership.tenantStatus) {
-    TenantStatus.rejected => TenantMembershipDisplayStatus.rejected,
     TenantStatus.suspended => TenantMembershipDisplayStatus.suspended,
     TenantStatus.archived => TenantMembershipDisplayStatus.archived,
-    TenantStatus.pending => TenantMembershipDisplayStatus.pending,
     TenantStatus.active => switch (membership.membershipStatus) {
       MembershipStatus.pending => TenantMembershipDisplayStatus.pending,
       MembershipStatus.inactive => TenantMembershipDisplayStatus.inactive,
@@ -1847,6 +1986,7 @@ final class _LandingGreeting extends StatelessWidget {
     required this.businessName,
     this.trend,
     this.isOwnFigures = false,
+    this.clock,
   });
 
   final String? memberName;
@@ -1868,6 +2008,15 @@ final class _LandingGreeting extends StatelessWidget {
   /// and *Store performance* to an admin, and the distinction is real: the two
   /// sentences are about different money.
   final bool isOwnFigures;
+
+  /// The clock [greetingAt] is asked about, for tests that pin a band.
+  ///
+  /// **Absent means the real one.** [greetingAt] was written static and given
+  /// the time so a test could assert the boundaries, but nothing could reach
+  /// it through this widget: the salutation read `DateTime.now()` inside
+  /// `build`, so the four header tests hardcoded *Good morning* and passed
+  /// only before noon. This is the seam that comment always described.
+  final DateTime Function()? clock;
 
   /// The old screen's three bands, at its own boundaries.
   ///
@@ -1939,7 +2088,7 @@ final class _LandingGreeting extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final now = DateTime.now();
+    final now = (clock ?? DateTime.now)();
     final who = memberName?.trim();
     final salutation = greetingAt(now);
     final subject = who == null || who.isEmpty ? businessName : who;
@@ -2328,9 +2477,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.brandingRoles = const <TenantRole>[],
     this.printerConfigurationRoute,
     this.printerConfigurationRoles = const <TenantRole>[],
-    this.printQueueRoute,
-    this.printQueueStatus,
     this.printQueueCount,
+    this.unresolvedDifferencesCount,
     this.catalogManagementRoute,
     this.catalogManagementRoles = const <TenantRole>[],
     this.memberName,
@@ -2353,7 +2501,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.stockMovementFeedRoles = const <TenantRole>[],
     this.auditLogRoute,
     this.auditLogRoles = const <TenantRole>[],
+    this.clock,
   });
+
+  /// The clock the greeting's salutation reads. Absent means the real one.
+  final DateTime Function()? clock;
 
   /// Totals the greeting's comparison line is built from, supplied by the
   /// composition root. Absent, the home simply states no comparison - the
@@ -2401,15 +2553,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// The roles that route is offered to. Owner and administrator only.
   final List<TenantRole> printerConfigurationRoles;
 
-  /// Optional route onto this device's unsent receipts, carrying no role list.
-  final Widget Function()? printQueueRoute;
-
-  /// This device's queue depth, in words. See
-  /// `TenantRoutingShell.printQueueStatus`.
-  final String? Function()? printQueueStatus;
-
-  /// The same depth as a figure. See `TenantRoutingShell.printQueueCount`.
+  /// See `TenantRoutingShell.printQueueCount`.
   final int? Function()? printQueueCount;
+
+  /// See `TenantRoutingShell.unresolvedDifferencesCount`.
+  final int? Function(TenantSessionController sessions)?
+  unresolvedDifferencesCount;
 
   /// Optional guarded catalog-management route, supplied by the composition
   /// root. It is the one surface that can put a product in the catalog, which
@@ -2614,6 +2763,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     final destinations = _destinations(context);
     return AppScaffold(
       title: branding?.companyName ?? membership.tenantName,
+      // The name of the business is what says which business this is, so it is
+      // also the way to a different one. Null where there is nowhere to go,
+      // which draws the ordinary title with no affordance on it.
+      onTitlePressed: _canSwitchBusiness
+          ? () => _showBusinessSwitcher(context)
+          : null,
+      titleActionLabel: 'Change business',
       // §4.2's record row rather than its reading row: the grid wants the
       // wider measure, and 720 would narrow the page under the shift panel it
       // sits below.
@@ -2674,6 +2830,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 memberName: memberName,
                 businessName: branding?.companyName ?? membership.tenantName,
                 trend: overview.trend,
+                clock: clock,
                 // The figures come from `TenantDailyMetricsRepository`, whose
                 // allowed roles are the business-wide ones - so whenever there
                 // is a comparison to state at all, it is the store's. A
@@ -2811,14 +2968,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 : 'Some spending is not counted',
           ),
       ],
-      // **Receipts waiting is not a tile, and that is a measurement rather
-      // than a preference.** `printQueueStatus` answers a *sentence* -
-      // `2 waiting to send` - and a tile's value slot is a figure: the
-      // sentence set at the figure role was 300 pixels wide and forced the
-      // whole grid into one column. The count itself is not exposed, so there
-      // is no honest figure to put here. The queue keeps the toolbar badge it
-      // already had and its own row in the drawer, both of which carry the
-      // same sentence in a slot shaped for one.
+      // **Receipts waiting is not a figure tile either.** The count is on the
+      // top bar's badge, with everything else this device has not settled;
+      // repeating it in the grid of figures would be one fact in two places,
+      // one of which is a destination and one of which is a reading.
     ];
     if (tiles.isEmpty) return null;
     // **One bar around the figures, which is the old hub's shape.** Its
@@ -2885,6 +3038,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// only where that role was given a row that carries it, so a cashier's menu
   /// simply has no *Settings* heading rather than an empty one. The order
   /// below is what `tool/screenshots/home_navigation_test.dart` photographs.
+  /// The open-difference count for the business this screen is showing.
+  int? _openDifferences(BuildContext context) =>
+      unresolvedDifferencesCount?.call(TenantSessionScope.of(context));
+
   List<HomeDestination> _destinations(
     BuildContext context,
   ) => <HomeDestination>[
@@ -2955,33 +3112,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           );
         },
       ),
-    // In *Sales* rather than in *Settings*, and carrying no role list: a
-    // receipt that did not come out is discovered by whoever is standing
-    // at the counter, and the queue is this device's own. It sits under
-    // the receipt lookup because both are somebody asking what happened to
-    // a receipt - one that exists, and one that has not printed yet.
-    if (printQueueRoute != null)
-      HomeDestination(
-        destinationKey: const ValueKey('receipts-waiting'),
-        label: 'Unprinted receipts',
-        description: 'Receipts this device has not sent to the printer yet.',
-        group: 'Sales',
-        icon: Icons.receipt_long_outlined,
-        status: printQueueStatus?.call(),
-        // The figure for the tile's badge, beside the sentence for the row.
-        badgeCount: printQueueCount?.call(),
-        onPressed: () {
-          final controller = TenantSessionScope.of(context);
-          Navigator.of(context).push(
-            AppPageRoute<void>(
-              builder: (_) => TenantSessionScope(
-                controller: controller,
-                child: printQueueRoute!(),
-              ),
-            ),
-          );
-        },
-      ),
+    // **Unprinted receipts are not a destination, as of 2026-09-03.** A
+    // receipt that did not come out is one of the things this device still
+    // owes, not somewhere a shop goes to trade - so it sits on the
+    // notifications page behind the top bar's glyph, beside the sales that
+    // have not been sent, and the grid keeps only what a person opens the app
+    // to do.
     // One inventory destination for every active member. The route derives
     // write actions from the guarded live session.
     if (catalogManagementRoute != null)
@@ -3042,6 +3178,17 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             'Weekly sales, profit and best sellers, against the week before.',
         group: 'Reports',
         icon: Icons.insights_outlined,
+        // **The one figure on this page that is asking for something.** Nightly
+        // reconciliation records differences that nobody sees unless they go
+        // looking; this is the count of the ones still open, and the hub behind
+        // it says the same thing in a sentence - a number alone is not a
+        // status.
+        badgeCount: _openDifferences(context),
+        status: switch (_openDifferences(context)) {
+          null || 0 => null,
+          1 => '1 unresolved difference',
+          final count => '$count unresolved differences',
+        },
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3164,19 +3311,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // **The two account controls are last, and §4.4 says so by name.**
     // Neither of them is where a shop goes to trade; they are where a
     // person goes once, to change which business this is.
-    if (onSwitchTenant != null &&
-        switchCandidates.any(
-          (candidate) =>
-              candidate.canAccess() &&
-              candidate.tenantId != membership.tenantId,
-        ))
-      HomeDestination(
-        destinationKey: const ValueKey('change-business'),
-        label: 'Change business',
-        group: 'Business',
-        icon: Icons.swap_horiz,
-        onPressed: () => _showBusinessSwitcher(context),
-      ),
+    // **Changing business is on the business's own name, as of 2026-09-03.**
+    // It was a tile here; the name in the top bar is what a person looks at to
+    // find out which business they are in, so it is also where they reach to
+    // leave it. See `_canSwitchBusiness` and `AppScaffold.onTitlePressed`.
     if (isDefaultTenant)
       // The one disabled control on this route, and it is a state rather
       // than a refusal: this business already is the default, so there is
@@ -3196,6 +3334,18 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         onPressed: () => _showDefaultConfirmation(context),
       ),
   ];
+
+  /// Whether this person has another business to open.
+  ///
+  /// The same condition the deleted *Change business* tile carried: a switch
+  /// the composition root supplied, and at least one accessible candidate that
+  /// is not the one already open.
+  bool get _canSwitchBusiness =>
+      onSwitchTenant != null &&
+      switchCandidates.any(
+        (candidate) =>
+            candidate.canAccess() && candidate.tenantId != membership.tenantId,
+      );
 
   Future<void> _showDefaultConfirmation(BuildContext context) async {
     final controller = TenantSessionScope.read(context);
@@ -3411,7 +3561,7 @@ final class _OfflineBootstrapBanner extends StatelessWidget {
       key: const ValueKey('offline-bootstrap-banner'),
       color: role.bg,
       child: SafeArea(
-        bottom: false,
+        top: false,
         child: Padding(
           padding: EdgeInsets.symmetric(
             horizontal: tokens.spacing.s16,
@@ -3484,13 +3634,19 @@ final class TenantBootstrapFailure extends StatelessWidget {
               // record unreadable, and this is neither.
               status: AppStatus.attention,
               badgeLabel: 'Offline',
-              statement: 'This device cannot reach your business account.',
+              // **"Your account", not "your business account".** This screen is
+              // also where somebody mid-signup lands when the network is gone,
+              // and they have no business yet - naming one sends them looking
+              // for a fault in something that does not exist. The wording now
+              // holds for a shop that cannot be reached and for a setup that
+              // was never finished, which are the only two ways here.
+              statement: 'This device cannot reach your account.',
               detail:
                   'It has not been online with this account yet, so there is '
                   'nothing saved here to open.',
               stillTrue:
                   'You are still signed in. Connect once and this device will '
-                  'open on its own afterwards.',
+                  'pick up where you left off.',
               actions: <Widget>[
                 AppButton(
                   label: 'Retry',

@@ -76,11 +76,43 @@ final class CheckoutSaleFormatException implements Exception {
   String toString() => 'CheckoutSaleFormatException: $message';
 }
 
+/// The one line of a sale a receipt actually prints.
+///
+/// **Named so a receipt can be built from a recorded sale as well as from a
+/// checkout.** A reprint asked for from the Sales Report has a
+/// `TenantSale` - the immutable document - and no payload: the outbox record
+/// the payload was parsed from lives only on the device that rang the sale up,
+/// and is cleared when its checkout is confirmed. The two carry the same
+/// figures because one is written from the other, so the receipt formatter
+/// takes what it prints rather than which of them it came from.
+abstract interface class CheckoutReceiptLine {
+  String get name;
+  int get quantity;
+  int get unitPriceMinor;
+  int get lineTotalMinor;
+}
+
+/// Everything `CheckoutReceiptBody` prints, and nothing else.
+///
+/// Deliberately narrower than either implementation: a formatter that could
+/// reach a payload hash or a cashier UID would eventually print one.
+abstract interface class CheckoutReceiptSale {
+  String get tenantId;
+  String get receiptNumber;
+  String get businessDate;
+  String get currency;
+  CheckoutTender? get tender;
+  List<CheckoutReceiptLine> get lines;
+  int get subtotalMinor;
+  int get discountMinor;
+  int get totalMinor;
+}
+
 /// One immutable sale line captured when the checkout was saved offline.
 ///
 /// Monetary values are integer minor currency units so the payload hash stays
 /// deterministic. Major-unit numbers are derived only for the written document.
-final class CheckoutSaleLine {
+final class CheckoutSaleLine implements CheckoutReceiptLine {
   const CheckoutSaleLine._({
     required this.productId,
     required this.name,
@@ -93,10 +125,14 @@ final class CheckoutSaleLine {
   });
 
   final String productId;
+  @override
   final String name;
   final String? categoryId;
+  @override
   final int quantity;
+  @override
   final int unitPriceMinor;
+  @override
   final int lineTotalMinor;
   final int? unitCostMinor;
   final int? lineCostMinor;
@@ -168,7 +204,7 @@ final class CheckoutSaleSubmission {
 /// selected tenant, bounded positive integer quantities, unique tenant-local
 /// product IDs, and an internally consistent monetary snapshot before any
 /// Firestore write is attempted.
-final class CheckoutSalePayload {
+final class CheckoutSalePayload implements CheckoutReceiptSale {
   CheckoutSalePayload._({
     required this.uid,
     required this.tenantId,
@@ -194,9 +230,8 @@ final class CheckoutSalePayload {
   factory CheckoutSalePayload.fromOutboxRecord(
     CheckoutOutboxRecord record, {
     required TenantSession session,
-    DateTime? now,
   }) {
-    if (!session.canAccess(now: now)) {
+    if (!session.canAccess()) {
       throw const CheckoutSaleFormatException(
         'An active canonical session is required to parse a checkout.',
       );
@@ -216,7 +251,6 @@ final class CheckoutSalePayload {
       checkoutId: record.checkoutId,
       payload: record.payload,
       payloadHash: record.payloadHash,
-      now: now,
     );
   }
 
@@ -229,18 +263,8 @@ final class CheckoutSalePayload {
     required String checkoutId,
     required Map<String, Object?> payload,
     required String payloadHash,
-    /// The instant the session's standing is judged against.
-    ///
-    /// **Threaded rather than read from the wall clock**, because a provisional
-    /// trading window turned "is this session usable" into a question with a
-    /// time in it. The draft builder stamps a business date and a receipt
-    /// sequence from its own clock and must judge the session from the same one,
-    /// or it can refuse a sale the rest of the same method would have built.
-    /// Absent, this is the wall clock, which is what every production caller
-    /// wants and what every caller had before the window existed.
-    DateTime? now,
   }) {
-    if (!session.canAccess(now: now)) {
+    if (!session.canAccess()) {
       throw const CheckoutSaleFormatException(
         'An active canonical session is required to parse a checkout.',
       );
@@ -372,6 +396,7 @@ final class CheckoutSalePayload {
   }
 
   final String uid;
+  @override
   final String tenantId;
   final String checkoutId;
   final String payloadHash;
@@ -386,9 +411,12 @@ final class CheckoutSalePayload {
   ///
   /// See [CheckoutTender]: this is an assertion made at the till, and no
   /// payment was authorized, queried, or reconciled anywhere.
+  @override
   final CheckoutTender? tender;
 
+  @override
   final String currency;
+  @override
   final String businessDate;
   final int clientCreatedAtMs;
 
@@ -399,14 +427,19 @@ final class CheckoutSalePayload {
   final String deviceId;
 
   /// The customer-facing receipt, unique per device and business date.
+  @override
   final String receiptNumber;
 
   /// The device-local daily sequence embedded in [receiptNumber].
   final int receiptSequence;
 
+  @override
   final List<CheckoutSaleLine> lines;
+  @override
   final int subtotalMinor;
+  @override
   final int discountMinor;
+  @override
   final int totalMinor;
   final TenantPaths _paths;
 
@@ -464,7 +497,10 @@ final class CheckoutSalePayload {
 /// refused rather than recorded as an unknown payment. A v1 payload must not
 /// carry the key at all: it was hashed without one, and a v1 draft that grew a
 /// tender locally would be a payload nobody agreed to.
-CheckoutTender? _requiredTender(Map<String, Object?> payload, int schemaVersion) {
+CheckoutTender? _requiredTender(
+  Map<String, Object?> payload,
+  int schemaVersion,
+) {
   if (schemaVersion < checkoutSaleTenderSchemaVersion) {
     if (payload.containsKey('tender')) {
       throw const CheckoutSaleFormatException(

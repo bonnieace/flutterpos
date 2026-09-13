@@ -57,6 +57,8 @@ export interface StoredReconciliationJob {
   stockVarianceCount: number;
   shiftsProcessed: number;
   shiftVarianceCount: number;
+  /** Shifts whose declared takings disagree with what their sales derive. */
+  tenderVarianceCount: number;
   productCursor?: string;
   pendingProductId?: string;
   leaseToken?: string;
@@ -78,6 +80,7 @@ export interface JobAdvance {
   stockVarianceDelta?: number;
   shiftsProcessedDelta?: number;
   shiftVarianceDelta?: number;
+  tenderVarianceDelta?: number;
 }
 
 interface SaleMovement {
@@ -167,6 +170,7 @@ function parseJob(tenantId: string, jobId: string, data: DocumentData): StoredRe
     stockVarianceCount: nonNegativeInteger(data.stockVarianceCount),
     shiftsProcessed: nonNegativeInteger(data.shiftsProcessed),
     shiftVarianceCount: nonNegativeInteger(data.shiftVarianceCount),
+    tenderVarianceCount: nonNegativeInteger(data.tenderVarianceCount),
     ...(typeof data.productCursor === "string" ? {productCursor: data.productCursor} : {}),
     ...(typeof data.pendingProductId === "string" ? {
       pendingProductId: data.pendingProductId,
@@ -211,6 +215,7 @@ function initialJobData(input: {
     stockVarianceCount: 0,
     shiftsProcessed: 0,
     shiftVarianceCount: 0,
+    tenderVarianceCount: 0,
     nextAttemptAt: Timestamp.now(),
     authority: "canonical_tenant_data",
     mutatesStock: false,
@@ -349,6 +354,7 @@ export function saleTriggerJobFields(input: {
       stockVarianceCount: 0,
       shiftsProcessed: 0,
       shiftVarianceCount: 0,
+      tenderVarianceCount: 0,
       createdAt: FieldValue.serverTimestamp(),
     },
     update: {
@@ -582,6 +588,8 @@ export async function advanceReconciliationJob(
       stockVarianceCount: current.stockVarianceCount + (advance.stockVarianceDelta ?? 0),
       shiftsProcessed: current.shiftsProcessed + (advance.shiftsProcessedDelta ?? 0),
       shiftVarianceCount: current.shiftVarianceCount + (advance.shiftVarianceDelta ?? 0),
+      tenderVarianceCount:
+        current.tenderVarianceCount + (advance.tenderVarianceDelta ?? 0),
     };
     if (advance.productCursor !== undefined) {
       update.productCursor = advance.productCursor === null ? FieldValue.delete() : advance.productCursor;
@@ -596,12 +604,75 @@ export async function advanceReconciliationJob(
   });
 }
 
+/**
+ * How many anomaly documents the open-difference recount will look at.
+ *
+ * One page, and deliberately bounded: this runs once per completed job per
+ * tenant, and a business with more open differences than this has a problem no
+ * badge is going to summarise. Passing it sets `truncated`, which the surface
+ * reads as *at least this many* rather than pretending to an exact figure.
+ */
+const OPEN_DIFFERENCE_SCAN_LIMIT = 500;
+
+/**
+ * Recomputes the one document a launcher badge is read from.
+ *
+ * **A counter rather than a client-side count.** Anomaly documents are keyed by
+ * digest, so they cannot be ordered or counted from a client without listing
+ * them, and a home screen must not pay for a collection scan to decide whether
+ * to draw a badge.
+ *
+ * `shift_variance` records are de-duplicated by shift. `shiftAnomalyId` folds
+ * the aggregation generation into its id, so one shift that stays wrong across
+ * several runs holds several documents and nothing deletes the superseded ones
+ * - counting them all would report one problem many times. Deleting them during
+ * regeneration is the real fix and a larger change than this.
+ */
+export async function recomputeOpenDifferences(
+  db: Firestore,
+  tenantId: string,
+  jobId: string
+): Promise<void> {
+  const tenantRef = db.collection("tenants").doc(tenantId);
+  const snapshot = await tenantRef.collection("reconciliation_anomalies")
+    .orderBy(FieldPath.documentId())
+    .limit(OPEN_DIFFERENCE_SCAN_LIMIT + 1)
+    .get();
+  const truncated = snapshot.size > OPEN_DIFFERENCE_SCAN_LIMIT;
+  const byType: Record<string, number> = {};
+  const countedShifts = new Set<string>();
+  let openCount = 0;
+  for (const document of snapshot.docs.slice(0, OPEN_DIFFERENCE_SCAN_LIMIT)) {
+    if (document.get("resolution") === "acknowledged") continue;
+    const anomalyType = document.get("anomalyType");
+    if (typeof anomalyType !== "string") continue;
+    if (anomalyType === "shift_variance") {
+      const shiftId = document.get("shiftId");
+      if (typeof shiftId === "string") {
+        if (countedShifts.has(shiftId)) continue;
+        countedShifts.add(shiftId);
+      }
+    }
+    byType[anomalyType] = (byType[anomalyType] ?? 0) + 1;
+    openCount += 1;
+  }
+  await tenantRef.collection("reconciliation_summary").doc("open_differences").set({
+    tenantId,
+    jobId,
+    openCount,
+    truncated,
+    byType,
+    countedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, {merge: false});
+}
+
 export async function finalizeReconciliationJob(
   db: Firestore,
   job: ClaimedReconciliationJob
 ): Promise<ReconciliationTaskPayload | undefined> {
   const ref = jobRef(db, job.tenantId, job.jobId);
-  return db.runTransaction(async (transaction) => {
+  const continuation = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) throw new HttpsError("not-found", "Reconciliation job disappeared.");
     const current = parseJob(job.tenantId, job.jobId, snapshot.data() ?? {});
@@ -640,6 +711,16 @@ export async function finalizeReconciliationJob(
     });
     return undefined;
   });
+  // **After the transaction, and only for a run that actually finished.** The
+  // recount reads a page of anomalies, which has no business inflating a
+  // transaction that must not contend with the writers producing them. It is
+  // derived data: a torn or missed write self-heals on the next completed run,
+  // and the two callables that change the figure between runs adjust it
+  // themselves so a badge never waits for one.
+  if (continuation === undefined) {
+    await recomputeOpenDifferences(db, job.tenantId, job.jobId);
+  }
+  return continuation;
 }
 
 export async function recordReconciliationFailure(

@@ -113,8 +113,11 @@ final class _TenantShiftHistoryPanelState
     setState(() => _pageIndex--);
   }
 
-  @override
-  Widget build(BuildContext context) {
+  /// One loader pair per scope and page, memoised so an unrelated rebuild does
+  /// not restart the read. See [TenantRouteGuard.load].
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
+    _loaderKey = key;
     final cursor = _cursors[_pageIndex];
     TenantGuardedLoader<TenantNamedPage<TenantShiftHistoryPage>> readWith(
       TenantDataReader reader,
@@ -130,13 +133,24 @@ final class _TenantShiftHistoryPanelState
         ).resolve(page.items.map((entry) => entry.staffId)),
       );
     };
+    _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
+  }
+
+  String? _loaderKey;
+  TenantGuardedLoader<TenantNamedPage<TenantShiftHistoryPage>>? _loader;
+  TenantGuardedLoader<TenantNamedPage<TenantShiftHistoryPage>>? _loaderCached;
+
+  @override
+  Widget build(BuildContext context) {
+    // A new loader for a new scope or page, which is what stops an earlier
+    // page completing into the current one - the guard bumps its generation
+    // when this closure changes, and a late answer is discarded by it.
+    _composeLoaders('${_scope.name}:$_pageIndex:${_cursors[_pageIndex]}');
     return TenantRouteGuard<TenantNamedPage<TenantShiftHistoryPage>>(
-      // A new key restarts the guard for a new scope or page, so an earlier
-      // page can never complete into the current one.
-      key: ValueKey('${_scope.name}:$_pageIndex:$cursor'),
-      load: readWith(widget.reader),
-      loadCached: cache == null ? null : readWith(cache),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('shift-history-denied'),
         child: Text('Shift history is unavailable for this business.'),

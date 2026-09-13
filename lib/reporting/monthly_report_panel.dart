@@ -167,7 +167,6 @@ class _TenantMonthlyReportScreenState extends State<TenantMonthlyReportScreen> {
     _composeLoaders(key);
     final month = TenantReportMonth.at(_now(), offset: _monthOffset);
     return TenantRouteGuard<MonthlyReportView>(
-      key: ValueKey(key),
       allowedRoles: TenantSalesTotalsGateway.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

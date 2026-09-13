@@ -387,6 +387,16 @@ void main() {
     // Still refused without a reason.
     expect(pressable(tester, 'sale-returns-submit'), isFalse);
 
+    // **Through *Other*, which is the free-text fallback.** The list cannot
+    // name every way a bottle comes back, and a list that cannot say what
+    // happened makes people pick the nearest wrong entry.
+    await tester.tap(find.byKey(const ValueKey('sale-returns-reason-choice')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Other').last);
+    await tester.pumpAndSettle();
+    // Choosing *Other* is not itself a reason: the field behind it is still
+    // empty, so the control stays refused.
+    expect(pressable(tester, 'sale-returns-submit'), isFalse);
     await tester.enterText(
       find.byKey(const ValueKey('sale-returns-reason')),
       'Damaged bottle',
@@ -419,6 +429,44 @@ void main() {
     // sentence beside it is what keeps that honest: the return exists, and
     // nothing has moved until a manager verifies it.
     expect(snackNotice(tester).status, AppStatus.ok);
+  });
+
+  testWidgets('a queued return closes the sheet it was recorded in', (
+    tester,
+  ) async {
+    // **The result the product actually produces.** The composition root wires
+    // `QueuedTenantReturnWriter`, which makes every return durable on the device
+    // and replays it, so `queued` - never `committed` - is what this sheet sees
+    // on a phone. Gating the close on the notice's status left it open on every
+    // real return.
+    final writer = _Writer(const TenantReturnWriteResult.queued());
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
+
+    await _pumpSheet(tester, _controller(), reader, writer: writer);
+
+    await tester.tap(
+      find.byKey(const ValueKey('sale-returns-increase-product-1')),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-reason-choice')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Damaged or broken').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(writer.intents, hasLength(1));
+    expect(find.byKey(const ValueKey('sale-returns-form')), findsNothing);
+    // The sentence is unchanged and stays honest: the sheet closing is not a
+    // claim that anything reached the server.
+    expect(
+      snackNotice(tester).message,
+      startsWith('Saved on this device; waiting to sync.'),
+    );
+    expect(snackNotice(tester).status, AppStatus.info);
   });
 
   testWidgets('the quantity can never exceed what is available', (
@@ -460,11 +508,10 @@ void main() {
       find.byKey(const ValueKey('sale-returns-increase-product-1')),
     );
     await tester.pump();
-    await tester.enterText(
-      find.byKey(const ValueKey('sale-returns-reason')),
-      'Damaged bottle',
-    );
-    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-reason-choice')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Damaged or broken').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('sale-returns-submit')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('sale-returns-confirm')));
@@ -787,6 +834,83 @@ void main() {
     );
   });
 
+  testWidgets('the feed opens on today and on every standing', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _verified('ret-2'),
+        _pending('ret-1'),
+      ]);
+
+    await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
+
+    // **The default is a query, not a sieve.** The day reaches the read
+    // boundary as an exact filter; the standing is absent, because "every
+    // standing" is the absence of one rather than a third value.
+    final query = reader.queries.last;
+    expect(query.equalityFilters['recordedOn'], _businessDate);
+    expect(query.equalityFilters.containsKey('status'), isFalse);
+    expect(find.byKey(const ValueKey('return-feed-entry-ret-1')), findsOne);
+    expect(find.byKey(const ValueKey('return-feed-entry-ret-2')), findsOne);
+  });
+
+  testWidgets('the standing filter narrows to what is waiting', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _verified('ret-2'),
+        _pending('ret-1'),
+      ]);
+
+    await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
+    await tester.tap(
+      find.byKey(const ValueKey('return-feed-standing-filter')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pending').last);
+    await tester.pumpAndSettle();
+
+    expect(reader.queries.last.equalityFilters['status'], 'pending');
+    expect(find.byKey(const ValueKey('return-feed-entry-ret-1')), findsOne);
+    expect(find.byKey(const ValueKey('return-feed-entry-ret-2')), findsNothing);
+  });
+
+  testWidgets('All dates drops the day filter rather than guessing one', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-1'),
+      ]);
+
+    await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
+    await tester.tap(find.byKey(const ValueKey('return-feed-day-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('All dates').last);
+    await tester.pumpAndSettle();
+
+    // **The escape a return recorded before this field existed depends on.**
+    // Such a record carries no day, so a query that always named one would put
+    // the whole history before 2026-09-06 out of reach of its own screen.
+    expect(reader.queries.last.equalityFilters.containsKey('recordedOn'), isFalse);
+    expect(find.byKey(const ValueKey('return-feed-entry-ret-1')), findsOne);
+  });
+
+  testWidgets('a day with no returns says the filter matched nothing', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond(
+        'tenants/tenant-a/returns',
+        const <TenantQueryDocumentSnapshot>[],
+      );
+
+    await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
+
+    // Not "no returns yet": the business may have hundreds on another day, and
+    // a screen that says otherwise is lying about its own controls.
+    expect(find.byKey(const ValueKey('return-feed-no-matches')), findsOne);
+    expect(find.byKey(const ValueKey('return-feed-empty')), findsNothing);
+  });
+
   testWidgets('the home feed displays returns from every sale', (tester) async {
     final reader = _Reader()
       ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
@@ -804,12 +928,16 @@ void main() {
           .data,
       'co-9',
     );
+    // The day the screen opens on is part of the query; the standing is not,
+    // because "every standing" is the absence of a filter.
     expect(reader.queries.single.equalityFilters, <String, Object?>{
       'tenantId': 'tenant-a',
+      'recordedOn': _businessDate,
     });
   });
 }
 
+/// The screen opens on today and on every standing, and both narrow.
 Future<void> _pumpFeed(
   WidgetTester tester,
   TenantSessionController controller,
@@ -823,7 +951,12 @@ Future<void> _pumpFeed(
     MaterialApp(
       home: TenantSessionScope(
         controller: controller,
-        child: TenantReturnFeedScreen(reader: reader),
+        child: TenantReturnFeedScreen(
+          reader: reader,
+          // The day the fixtures were recorded on, so the screen opens on the
+          // filter's default and shows them.
+          clock: () => DateTime.utc(2026, 7, 31, 15),
+        ),
       ),
     ),
   );
@@ -1056,6 +1189,7 @@ TenantQueryDocumentSnapshot _pending(
     'returnId': returnId,
     'tenantId': tenantId,
     'saleId': 'co-1',
+    'recordedOn': _businessDate,
     'createdBy': 'user-a',
     'status': 'pending',
     'reason': 'Damaged bottle',

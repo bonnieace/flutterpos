@@ -1,3 +1,4 @@
+export 'checkout_branding_proof_page.dart';
 export 'checkout_cart_panel.dart';
 export 'checkout_catalog_cache.dart';
 export 'checkout_configuration.dart';
@@ -6,6 +7,7 @@ export 'checkout_configuration_writer.dart';
 export 'checkout_confirmation.dart';
 export 'checkout_draft.dart';
 export 'checkout_evidence.dart';
+export 'checkout_notifications_screen.dart';
 export 'checkout_outbox.dart';
 // The printing slice. `checkout_print_transport.dart` re-exports `_base` and is
 // the only one of the four transport files a caller names: the `_io` and

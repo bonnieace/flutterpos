@@ -1,11 +1,19 @@
 <!doctype html>
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#03110b">
 <title>Email verified — ChillTent</title>
 <link rel="stylesheet" href="/_style.css">
 <main>
   <p class="mark">ChillTent</p>
-  <div class="tick">&check;</div>
+  <div class="tick" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+         stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 12.5 L9.5 18 L20 6.5"/>
+    </svg>
+  </div>
+  <p class="eyebrow">Address confirmed</p>
   <h1>Your email address is verified</h1>
   <!--
     On a phone with the app installed this page is usually never seen: the
@@ -21,6 +29,10 @@
   <p class="lead">Switch back to the app — it carries on from here by itself.</p>
   <p>There is nothing left to press on this page, and signing in again is not
      necessary.</p>
-  <footer>Next in the app: <strong>tell us about your business</strong>, and
-     you can start selling.</footer>
+  <div class="notice">
+    <p class="notice-title">Next in the app</p>
+    <p>Tell us about your business, and you can start selling.</p>
+  </div>
+  <footer>Verification is a one-time step. This page will say the same thing if
+     you open the link again.</footer>
 </main>

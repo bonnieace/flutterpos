@@ -37,22 +37,30 @@ enum InvitationAcceptanceViolation {
   emailMismatch('email_mismatch'),
   invitationConsumed('invitation_consumed'),
 
-  /// Unreachable today, and mapped anyway.
+  /// The invitation's seven days have run out.
   ///
-  /// The server's own `mode === "visible" && emailVerified !== true` guard
-  /// throws before the policy function is ever consulted, so this token is
-  /// currently produced by nothing. It is modelled because the server declares
-  /// it, and dropping it here would make a later server change silently answer
-  /// the fallback.
+  /// Bound to both routes since 2026-09-08. It was the emailed link's own rule
+  /// and it is now the invitation's, so the lifetime the email states is the
+  /// lifetime accepting in the app has.
+  invitationExpired('invitation_expired'),
+
+  /// The one an invitee with an existing, never-verified account hits.
+  ///
+  /// Reachable since 2026-09-08. The server used to throw before consulting the
+  /// policy, so the client saw a bare `permission-denied` and had to guess out
+  /// loud; the policy names it now, and the business selector puts the
+  /// verification panel in front of anybody it applies to.
   emailUnverified('email_unverified'),
 
-  /// The one the device run hit.
+  /// Retired on the server 2026-09-08, still mapped.
   ///
-  /// `visibleAcceptanceAllowed` is decided once, at invite time, by
-  /// `!newlyCreated && emailVerified` in `functions/src/staff/issuance.ts`.
-  /// Nothing the user does afterwards changes it — verifying the address later
-  /// does not — so this refusal is permanent for this invitation and the only
-  /// way forward is the emailed link.
+  /// It came from `visibleAcceptanceAllowed`, decided once at invite time by
+  /// `!newlyCreated && emailVerified`, which was false for every invitee whose
+  /// account the invitation itself created and could never afterwards become
+  /// true. The sentence it produced sent people to the emailed link, and the
+  /// link's landing page sent them back here. Nothing emits it now - the
+  /// mapping is kept for an app talking to functions deployed before the fix,
+  /// where the advice is at least true, because the link does open the app.
   versionedProofRequired('versioned_proof_required');
 
   const InvitationAcceptanceViolation(this.wireValue);
@@ -117,12 +125,16 @@ InvitationAcceptanceViolation? invitationAcceptanceViolationFromDetails(
 ///
 /// > **Only a failure this app knows to be transient may invite a retry.**
 ///
-/// Every refusal the server's policy produces is permanent for the invitation
-/// it refused — a flag fixed at invite time, a consumed token, a cancelled
+/// Almost every refusal the server's policy produces is permanent for the
+/// invitation it refused — a consumed token, a lapsed lifetime, a cancelled
 /// invitation, a suspended business — so none of them says "try again", and
 /// each names the one thing that can actually move the user forward instead.
 /// Only an unreachable server and an exhausted rate limit do, because for those
 /// two a retry is the answer.
+///
+/// The exception is `email_unverified`, which is about the caller rather than
+/// the invitation and is fixed by verifying: it names where, and the invitation
+/// is still there afterwards.
 String invitationAcceptanceSafeError(
   Object error, {
   required InvitationAcceptanceMode mode,
@@ -136,8 +148,12 @@ String invitationAcceptanceSafeError(
         'This invitation has to be opened from the link in your invitation '
             'email, so it cannot be accepted here. Ask your administrator to '
             'send the invitation again if you no longer have that email.',
+      InvitationAcceptanceViolation.invitationExpired =>
+        'This invitation has expired. Ask your administrator to send you a '
+            'new one.',
       InvitationAcceptanceViolation.emailUnverified =>
-        'Verify your email address first, then accept this invitation.',
+        'Verify your email address first, then accept this invitation. The '
+            'card above this list sends the message that does it.',
       InvitationAcceptanceViolation.callerMismatch =>
         'This invitation was issued to a different account. Sign in as the '
             'invited account to accept it.',

@@ -10,6 +10,7 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_types.dart';
+import 'shift_declaration.dart';
 import 'shift_local_state.dart';
 import 'shift_sales_ledger.dart';
 import 'tenant_shift.dart';
@@ -27,6 +28,19 @@ enum TenantShiftPhase {
 
   /// A cash count or close is unfinished; tenant switching stays blocked.
   closing,
+
+  /// This device closed the shift and the server has not confirmed it yet.
+  ///
+  /// **Distinct from [closing] because the count is over.** A shift being
+  /// counted may still be sold against - the count can be abandoned - whereas
+  /// this one's figures are fixed, and a sale recorded after them would
+  /// guarantee a variance the shop would have to explain. So the till stops
+  /// selling here, exactly as it does at [none], while the shift itself is
+  /// still very much this device's to finish: the record survives, the tenant
+  /// switch stays blocked, and the next restore sends the close.
+  ///
+  /// Reachable only offline, or after a close whose outcome was uncertain.
+  closedPending,
 
   /// The shift has run past [TenantShiftController.maximumShiftDuration].
   ///
@@ -46,10 +60,11 @@ final class TenantShiftState {
   const TenantShiftState({
     required this.phase,
     this.shift,
-    this.countedCashMinor,
+    this.declaration,
     this.errorCode,
     this.otherTenantShiftOpen = false,
     this.otherDeviceShiftOpen = false,
+    this.otherDeviceShiftId,
     this.sales,
     this.shiftExpired = false,
   });
@@ -58,7 +73,10 @@ final class TenantShiftState {
 
   final TenantShiftPhase phase;
   final TenantShift? shift;
-  final int? countedCashMinor;
+
+  /// What the cashier declared the till held, once a close has recorded it.
+  final ShiftTenderDeclaration? declaration;
+
   final String? errorCode;
 
   /// Whether another business still holds an open shift on this device.
@@ -67,6 +85,16 @@ final class TenantShiftState {
   /// Whether this cashier's open shift in this business lives on another
   /// device. Opening a second shift is refused so the two can never diverge.
   final bool otherDeviceShiftOpen;
+
+  /// The canonical shift that refusal names, when there is exactly one.
+  ///
+  /// **It exists so the refusal is not a dead end.** The till cannot summarize
+  /// a shift whose sales it never held, but it can close one - see
+  /// [TenantShiftController.closeShiftWithoutEvidence] - and the surface
+  /// offering that needs to know which shift it would be closing. Null where no
+  /// such shift was found, or where more than one was: closing the wrong one is
+  /// worse than offering nothing.
+  final String? otherDeviceShiftId;
 
   /// What this device can prove about the sales recorded during the shift.
   final ShiftSalesSummary? sales;
@@ -80,7 +108,9 @@ final class TenantShiftState {
   final bool shiftExpired;
 
   bool get blocksTenantSwitch =>
-      phase == TenantShiftPhase.closing || phase == TenantShiftPhase.expired;
+      phase == TenantShiftPhase.closing ||
+      phase == TenantShiftPhase.closedPending ||
+      phase == TenantShiftPhase.expired;
 }
 
 typedef TenantShiftIdFactory = String Function();
@@ -132,11 +162,15 @@ final class TenantShiftController extends ChangeNotifier {
 
   /// How long one shift may run before it must be closed.
   ///
-  /// **Set by the product owner on 2026-08-26, and it is also what bounds
-  /// offline trading.** Closing needs canonical server data, so a device that
-  /// has been away from the network for a day reaches this and can neither
-  /// sell nor close until it reconnects. That is the intent rather than a side
-  /// effect: it is what stops a till drifting indefinitely on remembered state.
+  /// **Set by the product owner on 2026-08-26, and it is what bounds offline
+  /// trading.** A device that has been away from the network for a day reaches
+  /// this and stops selling. That is the intent rather than a side effect: it
+  /// is what stops a till drifting indefinitely on remembered state.
+  ///
+  /// **It no longer bounds *closing*.** Until 2026-09-05 a close needed the
+  /// server, so an expired shift on an offline device could neither sell nor
+  /// be finished - the till was simply stuck. A close is recorded locally and
+  /// replayed now, so the way out of this state is always available.
   static const maximumShiftDuration = Duration(hours: 24);
 
   TenantShiftState get state => _state;
@@ -152,6 +186,9 @@ final class TenantShiftController extends ChangeNotifier {
   /// [_settle] deletes the record the moment the server says otherwise.
   TenantShiftPhase _phaseOf(TenantShiftLocalRecord? record) {
     if (record == null) return TenantShiftPhase.none;
+    // First, and ahead of expiry: a shift that was closed here is closed,
+    // whatever the clock has done to it since.
+    if (record.closedAt != null) return TenantShiftPhase.closedPending;
     if (record.closeInProgress) return TenantShiftPhase.closing;
     if (_hasExpired(record)) return TenantShiftPhase.expired;
     return TenantShiftPhase.open;
@@ -187,7 +224,7 @@ final class TenantShiftController extends ChangeNotifier {
             captured,
             TenantShiftState(
               phase: _phaseOf(known),
-              countedCashMinor: known.countedCashMinor,
+              declaration: known.declaration,
               shiftExpired: _hasExpired(known),
               otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
               sales: await _displaySummary(captured, known.shiftId),
@@ -320,7 +357,7 @@ final class TenantShiftController extends ChangeNotifier {
         await _localState.save(
           record.copyWith(
             closeInProgress: true,
-            clearCountedCash: true,
+            clearDeclaration: true,
             updatedAt: _localState.now(),
           ),
         );
@@ -340,7 +377,7 @@ final class TenantShiftController extends ChangeNotifier {
         await _localState.save(
           record.copyWith(
             closeInProgress: false,
-            clearCountedCash: true,
+            clearDeclaration: true,
             updatedAt: _localState.now(),
           ),
         );
@@ -349,74 +386,213 @@ final class TenantShiftController extends ChangeNotifier {
 
   /// Completes the cash count and closes the canonical shift.
   ///
-  /// An unsettled close deliberately stays `closing`: the counted cash and the
-  /// blocked tenant switch both survive until a canonical read proves the
-  /// server accepted the close.
-  Future<TenantShiftState> closeShift({required int countedCashMinor}) =>
-      _run(_sessionController.session, (captured) async {
-        if (countedCashMinor < 0 || countedCashMinor > maximumShiftCashMinor) {
-          return _settle(captured, errorCode: 'invalid_closing_cash');
-        }
-        final record = await _localState.read(
-          uid: captured.uid,
-          tenantId: captured.tenantId,
-        );
-        if (record == null) {
-          return _settle(captured, errorCode: 'no_open_shift');
-        }
-        if (!record.closeInProgress) {
-          return _settle(captured, errorCode: 'cash_count_not_started');
-        }
-        await _localState.save(
-          record.copyWith(
-            countedCashMinor: countedCashMinor,
-            updatedAt: _localState.now(),
-          ),
-        );
+  /// An unsettled close becomes `closedPending` rather than staying `closing`:
+  /// the declared figures and the blocked tenant switch both survive until a
+  /// canonical read proves the server accepted it, and the till stops selling
+  /// against a shift whose drawer has already been counted.
+  ///
+  /// **No figure here is compared with anything.** The declaration is what the
+  /// cashier says the till holds, taken without showing them what is expected,
+  /// and a difference is never a reason to refuse a close - the shop would be
+  /// left holding an open shift over a discrepancy that closing is how you
+  /// report. Reconciliation makes the comparison later, from the sales the
+  /// server holds.
+  Future<TenantShiftState> closeShift({
+    required ShiftTenderDeclaration declaration,
+  }) => _run(_sessionController.session, (captured) async {
+      final record = await _localState.read(
+        uid: captured.uid,
+        tenantId: captured.tenantId,
+      );
+      if (record == null) {
+        return _settle(captured, errorCode: 'no_open_shift');
+      }
+      if (!record.closeInProgress) {
+        return _settle(captured, errorCode: 'cash_count_not_started');
+      }
+      // **Held, not just written.** Everything below works from this version:
+      // `record` was read before the declaration was saved onto it, and an
+      // unsent close built from that one would carry no figures - which
+      // `_replayUnsentClose` would then have to refuse.
+      final counted = record.copyWith(
+        declaration: declaration,
+        updatedAt: _localState.now(),
+      );
+      await _localState.save(counted);
 
-        // The closing summary must describe every sale of the shift. While a
-        // local sale is unconfirmed the device cannot prove the total, so the
-        // close waits instead of publishing a figure reconciliation will
-        // contradict.
-        final sales = await _salesLedger.summarize(
-          uid: captured.uid,
-          tenantId: captured.tenantId,
-          shiftId: record.shiftId,
-        );
-        if (!sales.isComplete) {
-          return _settle(captured, errorCode: 'unsynchronized_shift_sales');
-        }
-        if (!await _online()) {
-          // **Closing is the one shift action that genuinely needs the
-          // server**, so it says that rather than reporting a general offline
-          // note against a shift the till is otherwise still selling against.
-          return _offlineView(captured, errorCode: 'close_needs_connection');
-        }
-
-        final repository = TenantShiftRepository(
-          session: captured,
-          reader: _reader,
-        );
-        final shift = await repository.readShift(record.shiftId);
-        if (!_owns(captured)) return _staleView();
-        if (shift == null || !shift.isOpen) {
-          return _settle(captured, errorCode: 'shift_not_open');
-        }
-        final result = await _writer.closeShift(
-          repository.buildCloseIntent(
-            shift: shift,
-            closingCashMinor: countedCashMinor,
-            sales: sales,
-          ),
-        );
-        if (!_owns(captured)) return _staleView();
+      // The closing summary must describe every sale of the shift. While a
+      // local sale is unconfirmed the device cannot prove the total, so the
+      // close waits instead of publishing a figure reconciliation will
+      // contradict.
+      final sales = await _salesLedger.summarize(
+        uid: captured.uid,
+        tenantId: captured.tenantId,
+        shiftId: record.shiftId,
+      );
+      if (!sales.isComplete) {
+        return _settle(captured, errorCode: 'unsynchronized_shift_sales');
+      }
+      // **Closing no longer needs the server**, at the developer's direction
+      // on 2026-09-05. It used to refuse outright with
+      // `close_needs_connection`, which left a shop that had counted its cash
+      // holding an open shift it could not finish - and the till still
+      // selling against it, which is the state the refusal was trying to
+      // avoid in the first place.
+      //
+      // **What made that safe to change is the check above, not the network.**
+      // `sales.isComplete` is read from this device's own outbox: a shift
+      // with any unsent sale still cannot close, offline or on. So reaching
+      // this line offline means every sale of the shift is already on the
+      // server and its closing figures are provable. The write is the only
+      // thing missing, and a write is a thing this app knows how to carry.
+      final online = await _online();
+      final repository = TenantShiftRepository(
+        session: captured,
+        // Offline the canonical document is read from this device's copy.
+        // `Source.serverAndCache` blocks on a network the SDK still believes
+        // in, which on one bar of signal is a stall rather than a fallback.
+        reader: online ? _reader : (_reader.cached ?? _reader),
+      );
+      final TenantShift? shift;
+      try {
+        shift = await repository.readShift(record.shiftId);
+      } catch (_) {
+        // A cache with no copy of the shift cannot prove it is open, and a
+        // close must never be recorded against a shift this device cannot
+        // describe.
+        return _offlineView(captured, errorCode: 'close_needs_connection');
+      }
+      if (!_owns(captured)) return _staleView();
+      if (shift == null || !shift.isOpen) {
+        return online
+            ? _settle(captured, errorCode: 'shift_not_open')
+            : _offlineView(captured, errorCode: 'shift_not_open');
+      }
+      final intent = repository.buildCloseIntent(
+        shift: shift,
+        closingCashMinor: declaration.cashMinor,
+        sales: sales,
+        declaration: declaration,
+      );
+      final result = online
+          ? await _writer.closeShift(intent)
+          : const TenantShiftWriteResult.unavailable();
+      if (!_owns(captured)) return _staleView();
+      if (result.kind == TenantShiftWriteKind.committed) {
+        return _settle(captured);
+      }
+      if (result.kind == TenantShiftWriteKind.rejected) {
+        // The server refused this close on its own terms - a foreign shift,
+        // a shift already ended. Nothing was written and nothing should be
+        // remembered as written; the canonical read settles what is true.
         return _settle(
           captured,
-          errorCode: result.kind == TenantShiftWriteKind.committed
-              ? null
-              : result.reasonCode ?? 'shift_close_unconfirmed',
+          errorCode: result.reasonCode ?? 'shift_close_unconfirmed',
         );
-      });
+      }
+      // Unavailable or ambiguous. Either way the close is now a fact about
+      // this device: the count is over, the till stops selling against this
+      // shift, and `_replayUnsentClose` sends it on the next restore.
+      return _recordUnsentClose(captured, counted);
+    },
+  );
+
+  /// Closes a canonical open shift this device holds none of the sales for.
+  ///
+  /// **The way out of a shift opened on an installation that no longer
+  /// exists.** `_adoptDiscoveredShift` refuses such a shift and is right to:
+  /// the closing summary is built from local sale evidence, which only the
+  /// issuing install ever held. But refusing was all it did, so a cashier whose
+  /// device had been wiped met a till that would not open a shift, would not
+  /// close the old one, and named a device they were already holding. The only
+  /// remedy was an edit to the database.
+  ///
+  /// **It does not invent the summary; it declines to give one.** The close
+  /// writes zeros under `closedWithoutEvidence`, which reconciliation reads as
+  /// *do not believe these figures* rather than as a shift that took nothing.
+  /// The declaration is still asked for and still recorded - it needs no sale
+  /// evidence, and the server derives the other side of the comparison itself -
+  /// so this records more than the dead end it replaces.
+  ///
+  /// Online only. There is no durable record to replay from, and inventing one
+  /// would tell the till it may sell against a shift whose device id will make
+  /// the server refuse every sale.
+  Future<TenantShiftState> closeShiftWithoutEvidence({
+    required String shiftId,
+    required ShiftTenderDeclaration declaration,
+  }) => _run(_sessionController.session, (captured) async {
+    if (!await _online()) {
+      return _offlineView(captured, errorCode: 'orphan_close_needs_connection');
+    }
+    final repository = TenantShiftRepository(
+      session: captured,
+      reader: _reader,
+    );
+    final shifts = await repository.findOpenShifts(collectionReader: _reader);
+    if (!_owns(captured)) return _staleView();
+    // `findOpenShifts` already proves each shift belongs to this cashier in
+    // this business. What is left to prove is that exactly one of them is the
+    // one being closed, and that it is not this device's own - a shift with
+    // local evidence must go through `closeShift`, which can summarize it.
+    final matches = shifts
+        .where((shift) => shift.id == shiftId && shift.deviceId != _deviceId)
+        .toList(growable: false);
+    if (matches.isEmpty) {
+      return _settle(captured, errorCode: 'orphan_shift_not_found');
+    }
+    if (matches.length > 1) {
+      return _settle(captured, errorCode: 'orphan_shift_ambiguous');
+    }
+    final TenantShiftWriteResult result;
+    try {
+      result = await _writer.closeShift(
+        repository.buildRecoveryCloseIntent(
+          shift: matches.single,
+          declaration: declaration,
+        ),
+      );
+    } on TenantShiftException catch (error) {
+      return _settle(captured, errorCode: error.code);
+    }
+    if (!_owns(captured)) return _staleView();
+    // **No local record either way.** A committed close leaves nothing to
+    // remember, and a refused one must not leave the till believing it owns a
+    // shift it cannot sell against. The canonical read decides what is true.
+    return _settle(
+      captured,
+      errorCode: result.kind == TenantShiftWriteKind.committed
+          ? null
+          : result.reasonCode ?? 'shift_close_unconfirmed',
+    );
+  });
+
+  /// Remembers a close this device made but could not confirm.
+  ///
+  /// Ambiguity is recorded the same way as being offline, and deliberately: a
+  /// close whose outcome is unknown may have landed, and replaying it is a
+  /// second `update` of the same fields on the same document, which changes
+  /// nothing if it did.
+  Future<TenantShiftState> _recordUnsentClose(
+    TenantSession captured,
+    TenantShiftLocalRecord record,
+  ) async {
+    final closed = record.copyWith(
+      closedAt: _localState.now(),
+      updatedAt: _localState.now(),
+    );
+    await _localState.save(closed);
+    if (!_owns(captured)) return _staleView();
+    return _publish(
+      captured,
+      TenantShiftState(
+        phase: _phaseOf(closed),
+        declaration: closed.declaration,
+        shiftExpired: _hasExpired(closed),
+        otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
+        sales: await _displaySummary(captured, closed.shiftId),
+      ),
+    );
+  }
 
   /// Reads canonical state and reconciles the durable local record with it.
   Future<TenantShiftState> _settle(
@@ -457,6 +633,12 @@ final class TenantShiftController extends ChangeNotifier {
       return _replayUnsentOpen(captured, record, errorCode: errorCode);
     }
 
+    if (shift != null && shift.isOpen && record.closedAt != null) {
+      // **Closed here, still open there.** The close was made with no network
+      // or with an uncertain outcome; this is the reconnect that sends it.
+      return _replayUnsentClose(captured, record, shift, errorCode: errorCode);
+    }
+
     if (shift == null || !shift.isOpen) {
       // The server is authoritative: an absent or closed shift ends the local
       // record, including the counted cash that was blocking a switch.
@@ -487,7 +669,7 @@ final class TenantShiftController extends ChangeNotifier {
         // a remembered one - a shift running past the cap is over either way.
         phase: _phaseOf(record),
         shift: shift,
-        countedCashMinor: record.countedCashMinor,
+        declaration: record.declaration,
         shiftExpired: _hasExpired(record),
         errorCode: errorCode,
         otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
@@ -501,6 +683,109 @@ final class TenantShiftController extends ChangeNotifier {
         //
         // It costs one local outbox read and no network, which is what makes
         // it affordable on every settle.
+        sales: await _displaySummary(captured, record.shiftId),
+      ),
+    );
+  }
+
+  /// Sends a close that was recorded while this device had no network.
+  ///
+  /// **The figures are the ones that were counted, not new ones.** The cash is
+  /// read from the durable record and the sales are re-summarized from the
+  /// outbox, which cannot have changed: a shift that is closed here takes no
+  /// further sales, and `sales.isComplete` was already true when the count was
+  /// accepted. Re-summarizing rather than storing the totals keeps one source
+  /// for them.
+  ///
+  /// A refusal leaves the record exactly as it is, on the same grounds as
+  /// [_replayUnsentOpen]: the till is not selling against this shift either
+  /// way, and the next restore tries again.
+  Future<TenantShiftState> _replayUnsentClose(
+    TenantSession captured,
+    TenantShiftLocalRecord record,
+    TenantShift shift, {
+    String? errorCode,
+  }) async {
+    // **A record left by the previous build replays in its own shape.** It
+    // carries one cash figure and no declaration, and reading that as
+    // `{cash: n, mpesa: 0, card: 0}` would send two figures the cashier never
+    // declared to the surface a difference is settled from. So the cash goes
+    // and the declared keys are omitted, exactly as that build wrote them.
+    final declaration = record.declaration;
+    final countedCashMinor = declaration?.cashMinor ?? record.countedCashMinor;
+    if (countedCashMinor == null) {
+      // A closed record with no figures at all cannot be turned into a close.
+      // It should not exist - `closeShift` writes them with the close - so this
+      // fails closed rather than inventing one.
+      return _publish(
+        captured,
+        TenantShiftState(
+          phase: _phaseOf(record),
+          shift: shift,
+          shiftExpired: _hasExpired(record),
+          errorCode: errorCode ?? 'invalid_closing_cash',
+          otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
+          sales: await _displaySummary(captured, record.shiftId),
+        ),
+      );
+    }
+    final sales = await _salesLedger.summarize(
+      uid: captured.uid,
+      tenantId: captured.tenantId,
+      shiftId: record.shiftId,
+    );
+    if (!_owns(captured)) return _staleView();
+    final TenantShiftWriteResult result;
+    try {
+      result = await _writer.closeShift(
+        TenantShiftRepository(
+          session: captured,
+          reader: _reader,
+        ).buildCloseIntent(
+          shift: shift,
+          closingCashMinor: countedCashMinor,
+          sales: sales,
+          declaration: declaration,
+        ),
+      );
+    } on TenantShiftException catch (error) {
+      return _publish(
+        captured,
+        TenantShiftState(
+          phase: _phaseOf(record),
+          shift: shift,
+          declaration: declaration,
+          shiftExpired: _hasExpired(record),
+          errorCode: errorCode ?? error.code,
+          otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
+          sales: await _displaySummary(captured, record.shiftId),
+        ),
+      );
+    }
+    if (!_owns(captured)) return _staleView();
+    if (result.kind == TenantShiftWriteKind.committed) {
+      // Confirmed by the write rather than by another canonical read, for the
+      // reason [_replayUnsentOpen] gives: a replica that has not caught up
+      // must not be able to answer "still open" and undo this.
+      await _localState.clear(uid: captured.uid, tenantId: captured.tenantId);
+      return _publish(
+        captured,
+        TenantShiftState(
+          phase: TenantShiftPhase.none,
+          errorCode: errorCode,
+          otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
+        ),
+      );
+    }
+    return _publish(
+      captured,
+      TenantShiftState(
+        phase: _phaseOf(record),
+        shift: shift,
+        declaration: declaration,
+        shiftExpired: _hasExpired(record),
+        errorCode: errorCode ?? result.reasonCode ?? 'shift_close_unconfirmed',
+        otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
         sales: await _displaySummary(captured, record.shiftId),
       ),
     );
@@ -534,7 +819,7 @@ final class TenantShiftController extends ChangeNotifier {
         captured,
         TenantShiftState(
           phase: _phaseOf(record),
-          countedCashMinor: record.countedCashMinor,
+          declaration: record.declaration,
           shiftExpired: _hasExpired(record),
           // The caller's reason wins where it has one: *a shift is already
           // open on this device* answers what the person just tried to do,
@@ -558,7 +843,7 @@ final class TenantShiftController extends ChangeNotifier {
       captured,
       TenantShiftState(
         phase: _phaseOf(confirmed),
-        countedCashMinor: confirmed.countedCashMinor,
+        declaration: confirmed.declaration,
         shiftExpired: _hasExpired(confirmed),
         errorCode: errorCode,
         otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
@@ -567,27 +852,20 @@ final class TenantShiftController extends ChangeNotifier {
     );
   }
 
-  /// Whether one of [shifts] was opened by a previous installation *here*.
+  /// Whether [shift] was opened by an installation of this app on this till.
   ///
   /// Compares the durable half of the device IDs - see
   /// [checkoutDeviceHardwareDigest] - which is equal across a reinstall of the
   /// same till and unequal between two tills. A stored ID that predates that
   /// split, or one written by a device whose platform offered nothing durable,
   /// simply never matches, which is the answer this had before.
-  bool _openedByAnEarlierInstall(List<TenantShift> shifts) {
-    final String here;
+  bool _openedHere(TenantShift shift) {
     try {
-      here = checkoutDeviceHardwareDigest(_deviceId);
+      return checkoutDeviceHardwareDigest(shift.deviceId) ==
+          checkoutDeviceHardwareDigest(_deviceId);
     } on ArgumentError {
       return false;
     }
-    return shifts.any((shift) {
-      try {
-        return checkoutDeviceHardwareDigest(shift.deviceId) == here;
-      } on ArgumentError {
-        return false;
-      }
-    });
   }
 
   /// Adopts this cashier's canonical open shift instead of opening a duplicate.
@@ -607,9 +885,19 @@ final class TenantShiftController extends ChangeNotifier {
     if (!_owns(captured)) return _staleView();
     if (shifts.isEmpty) return null;
 
+    // **Adoption needs the whole ID, and that is not pedantry.** The closing
+    // summary is built from this installation's outbox, so only the install
+    // that rang the sales can produce it - a match on the durable half alone
+    // would adopt a shift whose evidence died with the app data it was wiped
+    // with, and the till would then sell against a shift the server refuses
+    // every sale for, because `validSaleShift` compares the two IDs in full.
     final local = shifts
         .where((shift) => shift.deviceId == _deviceId)
         .toList(growable: false);
+    // The durable half is what answers the *other* question: not "can this
+    // install settle the shift" but "is this the same physical till". That one
+    // decides what the refusal says and which shift it offers to close.
+    final mine = shifts.where(_openedHere).toList(growable: false);
     if (local.isEmpty) {
       return _publish(
         captured,
@@ -621,10 +909,29 @@ final class TenantShiftController extends ChangeNotifier {
           // device they are already holding. The refusal is the same - the
           // closing summary comes from local sale evidence, which that
           // installation took with it - but the sentence has to be true.
-          errorCode: _openedByAnEarlierInstall(shifts)
+          errorCode: mine.isNotEmpty
               ? 'shift_open_on_earlier_install'
               : 'shift_open_on_other_device',
           otherDeviceShiftOpen: true,
+          // **Named so the refusal has a way out.** Until this carried an id
+          // the state was terminal: the till reported a shift it could not
+          // adopt, the open control repeated the refusal, and the only remedy
+          // was an edit to the database. One shift can be closed from here
+          // without its sales - see [closeShiftWithoutEvidence].
+          //
+          // **This device's own past installs are preferred over a bare count.**
+          // A cashier who works two tills can have an open shift on each; the
+          // one *this* phone left behind is the one it can speak for, and
+          // offering it is better than offering nothing because a colleague's
+          // till happens to be open too. Where that does not single one out, a
+          // lone discovered shift still does - and where neither does, this
+          // stays null, because closing the wrong shift is worse than closing
+          // none.
+          otherDeviceShiftId: mine.length == 1
+              ? mine.single.id
+              : shifts.length == 1
+              ? shifts.single.id
+              : null,
           otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
         ),
       );
@@ -682,7 +989,7 @@ final class TenantShiftController extends ChangeNotifier {
       captured,
       TenantShiftState(
         phase: phase,
-        countedCashMinor: record?.countedCashMinor,
+        declaration: record?.declaration,
         shiftExpired: record != null && _hasExpired(record),
         // The expiry is the more specific truth, and the one the person has to
         // act on: being offline is why they cannot close it, not why they must.
@@ -883,10 +1190,26 @@ final class TenantShiftController extends ChangeNotifier {
 /// unsettled shift on this device. Owners, admins, and managers may still
 /// inspect and transact in another business.
 ///
-/// The shift must already be server-confirmed. A shift the server has not
-/// acknowledged might not exist, and a sale bound to it could never be
-/// reconciled, so the checkout is refused instead. Unreadable local state
-/// raises, which the draft service turns into a refusal.
+/// **A shift this device opened binds sales whether or not the server has
+/// acknowledged it yet.** Until 2026-09-05 an unconfirmed shift refused every
+/// checkout with `shift_not_confirmed`, which meant a till that opened its
+/// shift with no network could not record a single sale - the one thing the
+/// whole offline path exists to allow. A shopkeeper who lost signal before
+/// opening was simply shut for the day.
+///
+/// **Nothing about reconciliation needed that refusal.** The shift ID is
+/// generated on this device and kept for the life of the shift, and
+/// `TenantShiftController._replayUnsentOpen` sends the open under that same ID
+/// on the next restore - it says so itself: *"Sales already in the outbox name
+/// it, and the closing summary is built by matching them."* So the sales and
+/// the shift meet at the server under one ID whichever arrives first, and the
+/// closing summary is built by matching them locally either way.
+///
+/// What still refuses is a shift that is *finished* on this device - closing,
+/// or closed and waiting to send - because its figures are settled and a later
+/// sale would contradict them.
+///
+/// Unreadable local state raises, which the draft service turns into a refusal.
 final class TenantShiftCheckoutBinder implements CheckoutShiftBinder {
   const TenantShiftCheckoutBinder(this._state);
 
@@ -907,8 +1230,11 @@ final class TenantShiftCheckoutBinder implements CheckoutShiftBinder {
       return const CheckoutShiftBinding.refused('no_open_shift');
     }
     final record = current.single;
-    if (!record.serverConfirmedOpen) {
-      return const CheckoutShiftBinding.refused('shift_not_confirmed');
+    // Closed here and waiting to send: the count is over and its figures are
+    // fixed, so this refuses ahead of `closeInProgress` and for a stronger
+    // reason - a count in progress can still be abandoned, and this cannot.
+    if (record.closedAt != null) {
+      return const CheckoutShiftBinding.refused('shift_closed_pending');
     }
     if (record.closeInProgress) {
       return const CheckoutShiftBinding.refused('shift_closing');

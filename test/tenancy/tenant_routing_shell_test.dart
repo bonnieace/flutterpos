@@ -100,6 +100,147 @@ void main() {
     },
   );
 
+  testWidgets('the offline card sits under the page, not over it', (
+    tester,
+  ) async {
+    // **Moved on 2026-09-03.** It was the first thing in the column, above the
+    // app bar, so a standing condition pushed every screen down and sat where
+    // the business's own name belongs.
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a')],
+      localTenantId: 'tenant-a',
+      profileFuture: Completer<RootRoutingProfile>().future,
+      rootCache: _MemoryRootCache(
+        CachedRootRoutingProfile(
+          profile: _activeProfile,
+          cachedAt: DateTime.utc(2026, 8, 30, 9),
+        ),
+      ),
+      directoryCache: _MemoryDirectoryCache(
+        CachedTenantDirectory(
+          memberships: [_membership('tenant-a')],
+          cachedAt: DateTime.utc(2026, 8, 30, 9),
+        ),
+      ),
+    );
+    await fixture.pump(tester);
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    final card = find.byKey(const ValueKey('offline-bootstrap-banner'));
+    expect(card, findsOneWidget);
+    expect(
+      tester.getRect(card).top,
+      greaterThan(tester.getRect(find.text('Business tenant-a')).bottom),
+      reason: 'the card is a footnote about the data, not a header over it',
+    );
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('the offline card clears once the device is back on a network', (
+    tester,
+  ) async {
+    // `fromCache` was decided once at bootstrap and never revisited, so a
+    // device that started up with no signal said *Working from data saved on
+    // this device* for the rest of the session.
+    final reconnects = StreamController<Object?>.broadcast();
+    addTearDown(reconnects.close);
+    final liveProfile = Completer<RootRoutingProfile>();
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a')],
+      localTenantId: 'tenant-a',
+      profileFuture: liveProfile.future,
+      reconnectSignals: reconnects.stream,
+      rootCache: _MemoryRootCache(
+        CachedRootRoutingProfile(
+          profile: _activeProfile,
+          cachedAt: DateTime.utc(2026, 8, 30, 9),
+        ),
+      ),
+      directoryCache: _MemoryDirectoryCache(
+        CachedTenantDirectory(
+          memberships: [_membership('tenant-a')],
+          cachedAt: DateTime.utc(2026, 8, 30, 9),
+        ),
+      ),
+    );
+    await fixture.pump(tester);
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    final card = find.byKey(const ValueKey('offline-bootstrap-banner'));
+    expect(card, findsOneWidget);
+
+    // The radio comes back, and the refresh the reconnect asks for is what
+    // replaces the cached bootstrap with a live one.
+    liveProfile.complete(_activeProfile);
+    reconnects.add(null);
+    await _pumpRouting(tester);
+
+    expect(card, findsNothing);
+    expect(find.text('Business tenant-a'), findsOneWidget);
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('the offline card belongs to the home and to nothing else', (
+    tester,
+  ) async {
+    // **The arrangement is what guarantees it, so the arrangement is what is
+    // asserted.** The card is drawn by the shell, and the shell is
+    // `MaterialApp.home` - every destination is a push on the root
+    // `Navigator`, which sits above it. A pushed page therefore covers the
+    // card completely, and no destination carries one of its own.
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a')],
+      localTenantId: 'tenant-a',
+      profileFuture: Completer<RootRoutingProfile>().future,
+      rootCache: _MemoryRootCache(
+        CachedRootRoutingProfile(
+          profile: _activeProfile,
+          cachedAt: DateTime.utc(2026, 8, 30, 9),
+        ),
+      ),
+      directoryCache: _MemoryDirectoryCache(
+        CachedTenantDirectory(
+          memberships: [_membership('tenant-a')],
+          cachedAt: DateTime.utc(2026, 8, 30, 9),
+        ),
+      ),
+    );
+    await fixture.pump(tester);
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    expect(find.byKey(const ValueKey('offline-bootstrap-banner')), findsOne);
+
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    unawaited(
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Center(child: Text('Pushed'))),
+        ),
+      ),
+    );
+    await _pumpRouting(tester);
+
+    expect(find.text('Pushed'), findsOneWidget);
+    // Still exactly one, and it belongs to the shell rather than to the page:
+    // no destination carries a card of its own, so the one on screen is the
+    // home's and the pushed route is drawn over it.
+    final banner = find.byKey(const ValueKey('offline-bootstrap-banner'));
+    expect(banner, findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.ancestor(
+          of: find.text('Pushed'),
+          matching: find.byType(Scaffold),
+        ),
+        matching: banner,
+      ),
+      findsNothing,
+    );
+    await fixture.dispose(tester);
+  });
+
   testWidgets(
     'refreshes the routing profile only after making a tenant default',
     (tester) async {
@@ -249,7 +390,7 @@ void main() {
       expect(find.text('Business tenant-a'), findsOneWidget);
       expect(reader.tenantARequest, isNotNull);
       await openLandingDrawer(tester);
-      await tester.tap(find.byKey(const ValueKey('change-business')));
+      await tester.tap(find.byKey(const ValueKey('screen-title-action')));
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
       await _pumpRouting(tester);
@@ -369,7 +510,7 @@ void main() {
     await _pumpRouting(tester);
 
     await openLandingDrawer(tester);
-    await tester.tap(find.byKey(const ValueKey('change-business')));
+    await tester.tap(find.byKey(const ValueKey('screen-title-action')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
     await _pumpRouting(tester);
@@ -399,7 +540,7 @@ void main() {
     await _pumpRouting(tester);
 
     await openLandingDrawer(tester);
-    await tester.tap(find.byKey(const ValueKey('change-business')));
+    await tester.tap(find.byKey(const ValueKey('screen-title-action')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
     await _pumpRouting(tester);
@@ -427,7 +568,7 @@ void main() {
     await _pumpRouting(tester);
 
     await openLandingDrawer(tester);
-    await tester.tap(find.byKey(const ValueKey('change-business')));
+    await tester.tap(find.byKey(const ValueKey('screen-title-action')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
     await _pumpRouting(tester);
@@ -466,6 +607,68 @@ void main() {
     expect(find.byKey(const ValueKey('onboarding-account-step')), findsOneWidget);
     expect(find.byKey(const ValueKey('account-verification')), findsNothing);
     expect(find.byKey(const ValueKey('show-tenant-request')), findsNothing);
+    await fixture.dispose(tester);
+  });
+
+  testWidgets(
+    'a business created above the shell is opened without a relaunch',
+    (tester) async {
+      // **The bug behind *Almost there* after opening for business.** The
+      // sign-in screen pushes its own copy of the wizard over this shell, so
+      // when that copy creates the tenant the shell knows nothing about it:
+      // the Auth UID never changed, `_handleAuthUid` returns early on the same
+      // one, and popping the wizard revealed the shell exactly as it resolved
+      // before the tenant existed. Only a relaunch fixed it, which is how the
+      // remote state was proved right all along.
+      final memberships = <TenantMembership>[];
+      final refreshes = StreamController<Object?>.broadcast();
+      addTearDown(refreshes.close);
+      final fixture = _ShellFixture(
+        memberships: memberships,
+        sendAccountVerificationCallable: _ShellVerificationCallable(),
+        reloadIdentity: () async {},
+        bootstrapRefreshRequests: refreshes.stream,
+      );
+      await fixture.pump(tester);
+
+      fixture.auth.add('user-a');
+      await _pumpRouting(tester);
+      expect(find.byKey(const ValueKey('routing-onboarding')), findsOneWidget);
+      expect(find.text('Business tenant-a'), findsNothing);
+
+      // What the pushed wizard's `requestTenant` did on the server, and could
+      // not tell this shell about.
+      memberships.add(_membership('tenant-a'));
+      refreshes.add(const TenantBusinessCreatedRefreshRequest());
+      await _pumpRouting(tester);
+
+      expect(find.text('Business tenant-a'), findsOneWidget);
+      expect(find.byKey(const ValueKey('routing-onboarding')), findsNothing);
+      await fixture.dispose(tester);
+    },
+  );
+
+  testWidgets('a refresh request before any identity does nothing', (
+    tester,
+  ) async {
+    // The signal is a broadcast stream the composition root owns for the life
+    // of the app, so it outlives every sign-in. Asking with nobody signed in
+    // must not bootstrap a null UID.
+    final refreshes = StreamController<Object?>.broadcast();
+    addTearDown(refreshes.close);
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a')],
+      bootstrapRefreshRequests: refreshes.stream,
+    );
+    await fixture.pump(tester);
+
+    refreshes.add(const TenantBusinessCreatedRefreshRequest());
+    await _pumpRouting(tester);
+    expect(fixture.gateway.rootCalls, 0);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    expect(find.text('Business tenant-a'), findsOneWidget);
     await fixture.dispose(tester);
   });
 
@@ -532,7 +735,7 @@ void main() {
   });
 
   testWidgets(
-    'creates a pending business from onboarding without opening it',
+    'creates an active business from onboarding without opening it',
     (tester) async {
       late final _ShellFixture fixture;
       final callable = _ShellRequestCallable((name, slug) {
@@ -540,8 +743,6 @@ void main() {
           _membership(
             'tenant-requested',
             membershipStatus: MembershipStatus.active,
-            tenantStatus: TenantStatus.pending,
-            canAccess: false,
           ),
         );
       });
@@ -568,14 +769,9 @@ void main() {
       // The step scrolls, so a tap at a control's centre would otherwise land
       // on whatever is painted at that point instead.
       await tester.ensureVisible(
-        find.byKey(const ValueKey('tenant-request-review')),
+        find.byKey(const ValueKey('tenant-request-submit')),
       );
-      await tester.tap(find.byKey(const ValueKey('tenant-request-review')));
-      await tester.pump();
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('tenant-request-confirm')),
-      );
-      await tester.tap(find.byKey(const ValueKey('tenant-request-confirm')));
+      await tester.tap(find.byKey(const ValueKey('tenant-request-submit')));
       await _pumpRouting(tester);
 
       final payload = callable.payloads.single;
@@ -586,10 +782,10 @@ void main() {
       // business - so a new till can price a sale before anybody opens
       // Settings.
       expect(payload['currency'], 'TZS');
-      // The slug is derived from the name and the clock, and this route injects
-      // no clock - so its shape is what can be asserted, not its value. The
-      // exact derivation is pinned in `tenant_request_test.dart`.
-      expect(payload['slug'], matches(RegExp(r'^new-business-\d{8}-\d{4}$')));
+      // The slug is the name plus a random suffix, so its shape is what can be
+      // asserted, not its value. The exact derivation is pinned in
+      // `tenant_request_test.dart`.
+      expect(payload['slug'], matches(RegExp(r'^new-business-[0-9a-f]{6}$')));
       expect(payload.keys.toSet(), <String>{
         'name',
         'slug',
@@ -605,12 +801,14 @@ void main() {
       );
       expect(fixture.openedController, isNull);
 
+      // **And it opens.** A business is active from the moment it is created,
+      // so the till is available immediately rather than after somebody has
+      // approved the request - which is the whole of what this change was for.
       await tester.tap(find.byKey(const ValueKey('onboarding-open-business')));
       await _pumpRouting(tester);
 
       expect(find.text('Business tenant-requested'), findsOneWidget);
-      expect(find.text('Administrator - Pending'), findsOneWidget);
-      expect(fixture.openedController, isNull);
+      expect(fixture.openedController, isNotNull);
       await fixture.dispose(tester);
     },
   );
@@ -659,7 +857,7 @@ void main() {
       find.text('Platform administrator access is not available.'),
       findsOneWidget,
     );
-    expect(deniedSource.pageCalls, 0);
+    expect(deniedSource.lifecycleCalls, 0);
     await denied.dispose(tester);
 
     final allowedSource = _ShellPlatformDataSource();
@@ -675,17 +873,9 @@ void main() {
     await allowed.pump(tester);
     allowed.auth.add('platform-user');
     await _pumpRouting(tester);
-    expect(find.text('Pending business reviews'), findsOneWidget);
-    expect(find.text('Routing Review Business'), findsOneWidget);
-    expect(allowedSource.pageCalls, 1);
-    await tester.tap(find.text('Active & suspended'));
-    await tester.pumpAndSettle();
+    expect(find.text('Active & suspended'), findsOneWidget);
     expect(find.text('Routing Active Business'), findsOneWidget);
     expect(allowedSource.lifecycleCalls, 1);
-    await tester.tap(find.text('Rejected archive'));
-    await tester.pumpAndSettle();
-    expect(find.text('Routing Rejected Business'), findsOneWidget);
-    expect(allowedSource.archivalCalls, 1);
     await tester.tap(find.text('Global user status'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -713,11 +903,6 @@ void main() {
           canAccess: false,
         ),
         _membership(
-          'rejected',
-          tenantStatus: TenantStatus.rejected,
-          canAccess: false,
-        ),
-        _membership(
           'suspended',
           tenantStatus: TenantStatus.suspended,
           canAccess: false,
@@ -736,10 +921,9 @@ void main() {
 
     expect(find.text('Administrator - Pending'), findsOneWidget);
     expect(find.text('Administrator - Inactive'), findsOneWidget);
-    expect(find.text('Administrator - Rejected'), findsOneWidget);
     expect(find.text('Administrator - Suspended'), findsOneWidget);
     expect(find.text('Administrator - Archived'), findsOneWidget);
-    expect(find.byIcon(Icons.lock_outline), findsNWidgets(5));
+    expect(find.byIcon(Icons.lock_outline), findsNWidgets(4));
     await fixture.dispose(tester);
   });
 
@@ -783,6 +967,141 @@ void main() {
     });
     expect(fixture.gateway.listCalls, 2);
     expect(find.text('Choose a business'), findsOneWidget);
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('an invitation followed while the app is up reaches the shell', (
+    tester,
+  ) async {
+    // The arrival Android delivers to a running `singleTop` activity. Before
+    // the launch link had anywhere to arrive at all this was unreachable, and
+    // the only invitation the shell could see was one passed at construction.
+    final fixture = _ShellFixture(
+      memberships: [
+        _membership(
+          'tenant-a',
+          membershipStatus: MembershipStatus.pending,
+          canAccess: false,
+          invitationStatus: 'sent',
+        ),
+      ],
+      acceptTenantInvitationCallable: _TokenAcceptCallable(),
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    expect(find.text('Business invitation'), findsNothing);
+
+    fixture.invitations.add(
+      TenantInvitationArrival.valid(_tokenInvitationLink()),
+    );
+    await _pumpRouting(tester);
+
+    expect(find.text('Business invitation'), findsOneWidget);
+    expect(
+      find.text('Accept invitation to Business tenant-a?'),
+      findsOneWidget,
+    );
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('a malformed arrival says so rather than being dropped', (
+    tester,
+  ) async {
+    final fixture = _ShellFixture(memberships: [_membership('tenant-a')]);
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    fixture.invitations.add(const TenantInvitationArrival.invalid());
+    await _pumpRouting(tester);
+
+    expect(
+      find.textContaining('This invitation link is invalid or incomplete.'),
+      findsOneWidget,
+    );
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('dismissing an invitation reports it settled', (tester) async {
+    // What stops the sign-in screen saying an invitation is waiting once it is
+    // not. The composition root owns that sentence and cannot see this state.
+    final fixture = _ShellFixture(
+      memberships: [
+        _membership(
+          'tenant-a',
+          membershipStatus: MembershipStatus.pending,
+          canAccess: false,
+          invitationStatus: 'sent',
+        ),
+      ],
+      invitationLink: _tokenInvitationLink(),
+      acceptTenantInvitationCallable: _TokenAcceptCallable(),
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    expect(fixture.settled, 0);
+
+    await tester.tap(find.text('Not now'));
+    await _pumpRouting(tester);
+
+    expect(fixture.settled, 1);
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('an unverified invitee is offered verification on the list', (
+    tester,
+  ) async {
+    // The second lockout, and the narrower one: an account that started signing
+    // up and never verified has a visible membership the moment it is invited,
+    // so the shell keeps it out of `OnboardingFlow` - and the selector had
+    // stopped offering the verification its invitation is waiting on.
+    final fixture = _ShellFixture(
+      memberships: [
+        _membership(
+          'tenant-a',
+          membershipStatus: MembershipStatus.pending,
+          canAccess: false,
+          invitationStatus: 'sent',
+        ),
+      ],
+      profile: _signedUpProfile,
+      emailVerified: false,
+      sendAccountVerificationCallable: _ShellVerificationCallable(),
+      reloadIdentity: () async {},
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    expect(find.byKey(const ValueKey('account-verification')), findsOneWidget);
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('somebody merely choosing between businesses is not asked', (
+    tester,
+  ) async {
+    // The reason the panel is conditioned on an open invitation rather than on
+    // an unverified address: this account has nothing waiting on verification,
+    // and a card about their email would be about something else.
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a'), _membership('tenant-b')],
+      profile: _signedUpProfile,
+      emailVerified: false,
+      reloadIdentity: () async {},
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    expect(find.text('Choose a business'), findsOneWidget);
+    expect(find.byKey(const ValueKey('account-verification')), findsNothing);
     await fixture.dispose(tester);
   });
 
@@ -895,8 +1214,10 @@ final class _ShellFixture {
     this.tenantDataReader,
     this.tenantSessionRecoveryFactory,
     this.tenantRecoveryTriggers,
+    this.bootstrapRefreshRequests,
     this.pendingCheckoutPanel,
     this.checkoutRoute,
+    this.reconnectSignals,
     String? failSelectionWriteFor,
     RootRoutingProfileCache rootCache = const NullRootRoutingProfileCache(),
     TenantDirectoryCache directoryCache = const NullTenantDirectoryCache(),
@@ -919,6 +1240,14 @@ final class _ShellFixture {
   }
 
   final StreamController<String?> auth = StreamController<String?>();
+
+  /// Invitations followed while the app is already up, which is what an App
+  /// Link delivers to a running activity.
+  final StreamController<TenantInvitationArrival> invitations =
+      StreamController<TenantInvitationArrival>.broadcast();
+
+  /// How often the shell reported the pending invitation done with.
+  int settled = 0;
   final _FakeGateway gateway;
   final _MemorySelectionStore store;
   final TenantInvitationLink? invitationLink;
@@ -936,8 +1265,10 @@ final class _ShellFixture {
   final TenantDataReader? tenantDataReader;
   final TenantSessionRecoveryFactory? tenantSessionRecoveryFactory;
   final Stream<Object?>? tenantRecoveryTriggers;
+  final Stream<Object?>? bootstrapRefreshRequests;
   final Widget? pendingCheckoutPanel;
   final Widget Function(TenantSessionController sessions)? checkoutRoute;
+  final Stream<Object?>? reconnectSignals;
   late final TenantBootstrapService service;
   TenantSessionController? openedController;
 
@@ -951,10 +1282,13 @@ final class _ShellFixture {
         tenantSwitchOnlineCheck: tenantSwitchOnlineCheck ?? (() async => true),
         tenantSessionRecoveryFactory: tenantSessionRecoveryFactory,
         tenantRecoveryTriggers: tenantRecoveryTriggers,
+        bootstrapRefreshRequests: bootstrapRefreshRequests,
         signOut: () async => auth.add(null),
         signedOut: const Scaffold(body: Center(child: Text('Signed out'))),
         isEmailVerified: (_) => emailVerified,
         invitationLink: invitationLink,
+        invitationArrivals: invitations.stream,
+        onInvitationLinkSettled: () => settled++,
         acceptTenantInvitationCallable: acceptTenantInvitationCallable,
         invitationAcceptanceRequestIdFactory: () => 'routing-accept-request',
         setDefaultTenantCallable: setDefaultTenantCallable,
@@ -965,9 +1299,7 @@ final class _ShellFixture {
         accountVerificationRequestIdFactory: () => 'routing-verify-request',
         reloadIdentity: reloadIdentity,
         hasPlatformSuperAdminClaim: (_) async => platformClaim,
-        platformPendingTenantDataSource: platformDataSource,
         platformLifecycleTenantDataSource: platformDataSource,
-        platformRejectedTenantDataSource: platformDataSource,
         platformGlobalUserDataSource: platformDataSource,
         setTenantLifecycleCallable: _ShellLifecycleCallable(),
         setGlobalUserStatusCallable: _ShellGlobalStatusCallable(),
@@ -977,6 +1309,7 @@ final class _ShellFixture {
             : null,
         pendingCheckoutPanel: pendingCheckoutPanel,
         checkoutRoute: checkoutRoute,
+        reconnectSignals: reconnectSignals,
         tenantRouteBuilder: useDefaultRoute
             ? null
             : (context, controller, membership) {
@@ -989,6 +1322,7 @@ final class _ShellFixture {
 
   Future<void> dispose(WidgetTester tester) async {
     await auth.close();
+    await invitations.close();
     await tester.pumpWidget(const SizedBox());
   }
 }
@@ -1105,48 +1439,18 @@ final class _ShellRequestCallable implements RequestTenantCallable {
       'name': name,
       'slug': slug,
       'currency': payload['currency']! as String,
-      'status': 'pending',
-      // The provisional trading window the server opens for a self-serve
-      // request. 2026-09-05 09:00 UTC.
-      'provisionalUntil': 1788339600000,
+      'status': 'active',
     };
   }
 }
 
 final class _ShellPlatformDataSource
-    implements
-        PlatformPendingTenantDataSource,
-        PlatformLifecycleTenantDataSource,
-        PlatformRejectedTenantDataSource,
-        PlatformGlobalUserDataSource {
-  int pageCalls = 0;
+    implements PlatformLifecycleTenantDataSource, PlatformGlobalUserDataSource {
   int lifecycleCalls = 0;
-  int archivalCalls = 0;
   int globalUserStaffCalls = 0;
 
   @override
   Future<void> prepareExactReview(String uid) async {}
-
-  @override
-  Future<List<PlatformTenantDocument>> loadPendingTenantDocuments({
-    required int limit,
-    PlatformPendingTenantCursor? cursor,
-  }) async {
-    pageCalls++;
-    if (cursor != null) return const [];
-    return [
-      PlatformTenantDocument(
-        id: 'routing-review-tenant',
-        data: {
-          'name': 'Routing Review Business',
-          'slug': 'routing-review-tenant',
-          'ownerUid': 'routing-review-owner',
-          'status': 'pending',
-          'createdAt': DateTime.utc(2026, 7, 30),
-        },
-      ),
-    ];
-  }
 
   @override
   Future<PlatformTenantDocument?> loadRootUser(String uid) async =>
@@ -1205,33 +1509,13 @@ final class _ShellPlatformDataSource
     ];
   }
 
-  @override
-  Future<List<PlatformTenantDocument>> loadRejectedTenantDocuments({
-    required int limit,
-    PlatformRejectedTenantCursor? cursor,
-  }) async {
-    archivalCalls++;
-    if (cursor != null) return const [];
-    return [
-      PlatformTenantDocument(
-        id: 'routing-rejected-tenant',
-        data: {
-          'name': 'Routing Rejected Business',
-          'slug': 'routing-rejected-tenant',
-          'ownerUid': 'routing-review-owner',
-          'status': 'rejected',
-          'updatedAt': DateTime.utc(2026, 7, 30),
-        },
-      ),
-    ];
-  }
 }
 
 final class _ShellLifecycleCallable implements SetTenantLifecycleCallable {
   @override
   Future<Object?> call(Map<String, Object?> payload) async => {
     'tenantId': payload['tenantId'],
-    'previousStatus': 'pending',
+    'previousStatus': 'active',
     'status': payload['status'],
     'fanoutOperationId': 'routing-fanout-operation',
   };

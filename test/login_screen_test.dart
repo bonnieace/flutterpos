@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_application_1/login_screen.dart';
@@ -29,11 +30,24 @@ PlatformException _channelFailure() => PlatformException(
   message: 'Unable to establish connection on channel: "$_signInChannel".',
 );
 
+/// A readable invitation link, built the way the intake would parse one.
+///
+/// The shape matters only in that it parses; what this file is about is which
+/// of two sentences the screen draws for a readable one versus a broken one.
+TenantInvitationLink _link() => TenantInvitationLink.fromUriIfPresent(
+  Uri.parse(
+    'https://pos.example.test/staff/invitation?tenantId=tenant-a&uid=user-a'
+    '&invitationVersion=4&invitationToken=${'a' * 43}',
+  ),
+)!;
+
 const String _unknownFailure =
     'Sign-in could not be completed. Try again, and contact support if it '
     'keeps happening.';
 
 void main() {
+  group('the invitation notice', _invitationNoticeTests);
+
   testWidgets('an empty password is refused without being sent', (
     tester,
   ) async {
@@ -327,15 +341,25 @@ void main() {
     expect(signIn.attempts.single.remember, isTrue);
   });
 
-  testWidgets('the remember choice reaches the boundary', (tester) async {
+  // **The remember checkbox is web-only, so this suite cannot tap it.**
+  // `kIsWeb` is a compile-time constant and these tests run on the VM, so the
+  // control is absent here by the same mechanism it is absent on a phone. What
+  // is asserted instead is the native shape: no checkbox, the boundary still
+  // told `true`, and the reset link still where it was - it shares the row, and
+  // hiding the row would have taken it too. See `_rememberRow`.
+  testWidgets('no remember checkbox off the web, and the reset link stays', (
+    tester,
+  ) async {
     final signIn = _SignIn();
     await _pump(tester, signIn);
 
-    await tester.tap(find.byType(Checkbox));
-    await tester.pump();
+    expect(find.byType(Checkbox), findsNothing);
+    expect(find.text('Remember me'), findsNothing);
+    expect(find.byKey(const ValueKey('login-go-reset')), findsOneWidget);
+
     await _signInAs(tester, 'owner@example.com', 'correct horse');
 
-    expect(signIn.attempts.single.remember, isFalse);
+    expect(signIn.attempts.single.remember, isTrue);
   });
 
   testWidgets('a sign-in in flight is not started twice', (tester) async {
@@ -694,6 +718,88 @@ final double _keypadFloor = PosKeyboard.minimumWidth(AppTokens.dark) * 2;
 ///
 /// Tall enough that the desktop branch's two panes both lay out; the narrow
 /// branch is the one `_pump` above already covers for every other test here.
+/// The sentence a signed-out invitee needs, and the reason it exists.
+///
+/// Following an invitation link on a phone that has the app opens the app, and
+/// an invitee who has just set their password is signed out - so a working link
+/// produces this screen. Without the notice it produces it with nothing on it
+/// about the invitation that opened it, which reads exactly like the link
+/// failing.
+void _invitationNoticeTests() {
+  testWidgets('says so when an invitation is waiting on a sign-in', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _SignIn(),
+      invitationArrival: ValueNotifier(
+        TenantInvitationArrival.valid(_link()),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('login-invitation-waiting')),
+      findsOneWidget,
+    );
+    expect(find.text(invitationWaitingMessage), findsOneWidget);
+  });
+
+  testWidgets('a link that could not be read says that instead', (
+    tester,
+  ) async {
+    // **The one reader who could not be told.** `TenantRoutingShell` draws this
+    // sentence for a signed-in person, but that route needs a uid and a
+    // bootstrap result - so the signed-out invitee holding the broken link was
+    // the only one it could never reach. Until 2026-09-12 they were told an
+    // invitation was waiting and that a business would be offered next, and
+    // neither was true; an invitee sets their password by following the link,
+    // so a failed one leaves an account with no password to sign in with.
+    await _pump(
+      tester,
+      _SignIn(),
+      invitationArrival: ValueNotifier(
+        const TenantInvitationArrival.invalid(),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('login-invitation-invalid')),
+      findsOneWidget,
+    );
+    expect(find.text(invitationLinkInvalidMessage), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('login-invitation-waiting')),
+      findsNothing,
+      reason: 'nothing is waiting - the link could not be read',
+    );
+  });
+
+  testWidgets('says nothing on an ordinary sign-in', (tester) async {
+    await _pump(tester, _SignIn());
+
+    expect(find.byKey(const ValueKey('login-invitation-waiting')), findsNothing);
+    expect(find.byKey(const ValueKey('login-invitation-invalid')), findsNothing);
+  });
+
+  testWidgets('stops saying it the moment the invitation is settled', (
+    tester,
+  ) async {
+    final arrival = ValueNotifier<TenantInvitationArrival?>(
+      TenantInvitationArrival.valid(_link()),
+    );
+    await _pump(tester, _SignIn(), invitationArrival: arrival);
+    expect(
+      find.byKey(const ValueKey('login-invitation-waiting')),
+      findsOneWidget,
+    );
+
+    arrival.value = null;
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('login-invitation-waiting')), findsNothing);
+  });
+}
+
 Future<void> _pumpAt(WidgetTester tester, double width) async {
   tester.view.physicalSize = Size(width, 1000);
   tester.view.devicePixelRatio = 1;
@@ -713,6 +819,7 @@ Future<void> _pump(
   WidgetTester tester,
   EmailPasswordSignIn? signIn, {
   ThemeData? theme,
+  ValueListenable<TenantInvitationArrival?>? invitationArrival,
 }) async {
   // Narrow enough for the screen's own single-column branch, tall enough that
   // nothing needs scrolling into view before it can be tapped.
@@ -724,7 +831,10 @@ Future<void> _pump(
   await tester.pumpWidget(
     MaterialApp(
       theme: theme,
-      home: LoginScreen(signIn: signIn),
+      home: LoginScreen(
+        signIn: signIn,
+        invitationArrival: invitationArrival,
+      ),
     ),
   );
   await tester.pump();

@@ -114,6 +114,61 @@ String accountProfileInputDefectMessage(AccountProfileInputDefect defect) =>
         'Use at most $maximumAccountNameLength characters.',
     };
 
+/// An address that moved, and the session offered to outlive the move.
+final class AccountAddressChange {
+  const AccountAddressChange({required this.email, this.sessionToken});
+
+  /// The address the account now holds, as the server normalized it.
+  final String email;
+
+  /// A single-use credential for the same account, or null if none was minted.
+  final String? sessionToken;
+}
+
+/// One attempt at naming the account, and its stable idempotency key.
+///
+/// **The key travels with the input it was minted for.** The server records a
+/// hash of the payload against the key, and refuses a replay whose input has
+/// moved - so a key reused for a different name is a refusal rather than an
+/// edit. Carrying both on one object is what makes that unreachable from here:
+/// there is no way to send this key with anything but these values.
+final class AccountSignupIntent {
+  const AccountSignupIntent._({
+    required this.displayName,
+    required this.phone,
+    required this.requestId,
+  });
+
+  /// Trimmed here rather than at the callable, so what the key was minted for
+  /// and what is sent are the same string.
+  final String displayName;
+  final String phone;
+  final String requestId;
+}
+
+/// One attempt at moving the address, and its stable idempotency key.
+///
+/// Same reasoning as [AccountSignupIntent]. The address is the whole of the
+/// input, so comparing it is how a caller knows whether it may reuse the key.
+final class AccountAddressChangeIntent {
+  const AccountAddressChangeIntent._({
+    required this.email,
+    required this.requestId,
+  });
+
+  final String email;
+  final String requestId;
+}
+
+/// The shape every request ID in this app is checked against before it is sent.
+///
+/// Declared per file rather than shared, as `tenant_request.dart` and the staff
+/// surfaces declare it: an invalid key is a defect in whatever was injected, and
+/// it is worth catching here rather than at the server.
+final RegExp _accountProfileRequestIdPattern = RegExp(
+  r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$',
+);
+
 /// What the client sends and what it gets back, as one guarded round trip.
 final class AccountProfileGateway {
   AccountProfileGateway({
@@ -128,16 +183,51 @@ final class AccountProfileGateway {
   final ChangeSignupEmailCallable _changeEmail;
   final AccountProfileRequestIdFactory _requestIdFactory;
 
-  /// Names the account and records the phone. The server sends the first
-  /// verification email as part of this call; nothing here asks for it.
-  Future<void> completeSignup({
+  /// Mints one key for one attempt at naming the account.
+  ///
+  /// **Called once per attempt, never per call.** Minting inside [completeSignup]
+  /// is what made a retry a second logical operation: the server is idempotent by
+  /// request ID, and a fresh ID every time is the one input that defeats it. The
+  /// caller holds what this returns for as long as the attempt lasts. See
+  /// `_OnboardingFlowState._signupIntentFor`.
+  AccountSignupIntent createSignupIntent({
     required String displayName,
     required String phone,
-  }) async {
+  }) {
+    final requestId = _requestIdFactory();
+    if (!_accountProfileRequestIdPattern.hasMatch(requestId)) {
+      throw StateError('The account profile request ID is invalid.');
+    }
+    return AccountSignupIntent._(
+      displayName: displayName.trim(),
+      phone: phone,
+      requestId: requestId,
+    );
+  }
+
+  /// Mints one key for one attempt at moving the address.
+  ///
+  /// The same reasoning as [createSignupIntent], and the failure it cures is
+  /// worse: a retry under a fresh key is refused by the address the previous
+  /// attempt already set.
+  AccountAddressChangeIntent createAddressChangeIntent(String email) {
+    final requestId = _requestIdFactory();
+    if (!_accountProfileRequestIdPattern.hasMatch(requestId)) {
+      throw StateError('The account profile request ID is invalid.');
+    }
+    return AccountAddressChangeIntent._(
+      email: email.trim(),
+      requestId: requestId,
+    );
+  }
+
+  /// Names the account and records the phone. The server sends the first
+  /// verification email as part of this call; nothing here asks for it.
+  Future<void> completeSignup(AccountSignupIntent intent) async {
     final response = await _complete.call(<String, Object?>{
-      'displayName': displayName.trim(),
-      'phone': phone,
-      'requestId': _requestIdFactory(),
+      'displayName': intent.displayName,
+      'phone': intent.phone,
+      'requestId': intent.requestId,
     });
     if (response is! Map ||
         response['displayName'] is! String ||
@@ -147,15 +237,37 @@ final class AccountProfileGateway {
   }
 
   /// Moves an unverified signup's address, and sends the link to the new one.
-  Future<String> changeEmail(String email) async {
+  ///
+  /// **[AccountAddressChange.sessionToken] is how the session survives this.**
+  /// Rewriting the Auth email rebinds the password credential, so the refresh
+  /// token on the device stops working and the SDK signs out moments later. The
+  /// server mints a replacement the client can exchange before that happens.
+  /// Absent means it could not: the address still moved, and the session is
+  /// still about to end.
+  ///
+  /// **A replay is how an ambiguous attempt recovers.** Sending [intent] again
+  /// after a lost response reaches `changeSignupEmail`'s recorded result rather
+  /// than its "that is already your address" guard, and the reply carries a
+  /// freshly minted session token - which is exactly what the lost response took
+  /// with it.
+  Future<AccountAddressChange> changeEmail(
+    AccountAddressChangeIntent intent,
+  ) async {
     final response = await _changeEmail.call(<String, Object?>{
-      'email': email.trim(),
-      'requestId': _requestIdFactory(),
+      'email': intent.email,
+      'requestId': intent.requestId,
     });
     if (response is! Map || response['email'] is! String) {
       throw const FormatException('changeSignupEmail returned an invalid result.');
     }
-    return response['email']! as String;
+    final token = response['sessionToken'];
+    return AccountAddressChange(
+      email: response['email']! as String,
+      // Read defensively rather than asserted: a server that could not mint one
+      // sends no field at all, and that is a documented outcome rather than a
+      // malformed reply.
+      sessionToken: token is String && token.isNotEmpty ? token : null,
+    );
   }
 }
 

@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/theme.dart';
+import 'package:flutter_application_1/ui/fields.dart';
 import 'package:flutter_application_1/ui/sheet.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+final TextEditingController _counted = TextEditingController();
+
 void main() {
+  tearDownAll(_counted.dispose);
+
   group('AppSheet', () {
     testWidgets('rests at more than one position, which is §2.4s point', (
       tester,
@@ -103,6 +108,56 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(seen, 0);
+    });
+
+    testWidgets('keeps the field a person is typing into alive', (
+      tester,
+    ) async {
+      // Reported on a device on 2026-09-03: nothing could be typed into a
+      // sheet. The wrapper above the sheet returned two structurally different
+      // trees, so crossing zero on `viewInsets.bottom` re-inflated the whole
+      // subtree - and a field disposed the instant it takes focus drops its
+      // `EditableText`'s platform input connection, which dismisses the very
+      // keyboard whose arrival destroyed it.
+      //
+      // The two cases above pass either way: they assert the sheet's rect and
+      // re-find `DraggableScrollableSheet` by type, which resolves the
+      // freshly-inflated replacement just as happily as the survivor. This one
+      // holds the `State` and the `FocusNode` across the change.
+      await _pump(
+        tester,
+        content: (context) =>
+            AppTextField(label: 'Counted cash', controller: _counted),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      final before = tester.state(find.byType(DraggableScrollableSheet));
+      await tester.tap(find.byType(EditableText));
+      await tester.pumpAndSettle();
+      final focus = tester.widget<EditableText>(find.byType(EditableText))
+          .focusNode;
+      expect(focus.hasFocus, isTrue);
+
+      // The keyboard arriving is what used to take the field down with it.
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.state(find.byType(DraggableScrollableSheet)),
+        same(before),
+        reason: 'the sheet was re-inflated, taking every field with it',
+      );
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).focusNode,
+        same(focus),
+      );
+      expect(focus.hasFocus, isTrue);
+
+      await tester.enterText(find.byType(EditableText), '1250.50');
+      await tester.pump();
+      expect(_counted.text, '1250.50');
     });
 
     testWidgets('is drawn on §2.1 and §2.3 rather than on Material', (

@@ -60,7 +60,6 @@ void main() {
     const deviceOnlyGuards = <String>{
       'lib/checkout/checkout_cart_panel.dart',
       'lib/checkout/checkout_evidence.dart',
-      'lib/shift/shift_panel.dart',
     };
 
     final guarded = <String>[];

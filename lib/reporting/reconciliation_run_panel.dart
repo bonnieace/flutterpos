@@ -150,7 +150,6 @@ final class _TenantReconciliationRunPanelState
 
   @override
   Widget build(BuildContext context) => TenantRouteGuard<_RunView>(
-    key: ValueKey(widget.jobId),
     allowedRoles: TenantReconciliationStatusRepository.allowedRoles,
     load: _loaderFor(widget.jobId),
     loadCached: _cachedLoaderFor(widget.jobId),

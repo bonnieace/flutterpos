@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
-import 'package:flutter_application_1/ui/states.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -82,9 +81,13 @@ void main() {
   ) async {
     await _pump(tester, queue);
 
+    // **One line, not an `EmptyState`, since 2026-09-04.** The queue is a
+    // section of the notifications page rather than a screen of its own, and a
+    // 168-pixel drawing for an empty section pushed the counts beside it most
+    // of a screen down. The page draws one picture, for the case where nothing
+    // at all is waiting.
     expect(find.byKey(const ValueKey('print-queue-empty')), findsOne);
-    expect(find.byType(EmptyState), findsOne);
-    expect(find.text('No receipts are waiting'), findsOne);
+    expect(find.text('No receipts are waiting.'), findsOne);
   });
 
   testWidgets('a failed receipt is listed with the transports own sentence', (
@@ -123,7 +126,9 @@ void main() {
 
     await _pump(tester, queue);
 
-    expect(find.text('192.168.1.50:9100'), findsOne);
+    // A footnote under the receipt rather than a labelled attribute row, and
+    // it carries the attempt count with it.
+    expect(find.textContaining('192.168.1.50:9100'), findsOne);
   });
 
   group('sending again', () {

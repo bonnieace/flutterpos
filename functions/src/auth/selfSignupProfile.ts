@@ -5,10 +5,14 @@ import {
   getFirestore,
   Timestamp,
 } from "firebase-admin/firestore";
+import {logger} from "firebase-functions";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 
 import {requireAuthenticatedUser} from "../core/authorization";
-import {runIdempotentFirestoreTransaction} from "../core/idempotency";
+import {
+  lookupIdempotentResult,
+  runIdempotentFirestoreTransaction,
+} from "../core/idempotency";
 import {RootUserRecord} from "../core/model";
 import {requireObject, requireRequestId, requireString} from "../core/validation";
 import {enqueueAccountVerificationFor} from "../email/accountVerification";
@@ -240,9 +244,46 @@ interface ChangeSignupEmailRequest {
  * `processAccountVerificationTask` re-reads the Auth record before sending and
  * aborts when the target address has moved, so nothing needs to chase it.
  */
+/**
+ * A fresh session for the account whose address just moved, or undefined.
+ *
+ * **The address change ends the caller's session, and this is what replaces
+ * it.** Rewriting the Auth email rebinds the password credential, so the
+ * refresh token the device holds stops working and the SDK signs out moments
+ * later - observed three times on a device on 2026-09-11. A custom token
+ * authenticates by uid rather than by email and password, so it sidesteps that
+ * entirely: the client exchanges it and never lapses.
+ *
+ * Minting nothing new is granted here. The caller was already authenticated as
+ * this uid to reach this line, so a token for their own account gives them
+ * nothing they did not have a moment ago.
+ *
+ * **It can never fail the change.** By the time this runs the address has moved,
+ * the mirror is written and the mail is queued; throwing now would report a
+ * failure for work that succeeded. So the failure is logged with enough detail
+ * to tell a fixable cause from a transient one - a missing
+ * `iam.serviceAccounts.signBlob` permission on the runtime service account is
+ * the usual first answer, and that is configuration rather than an edge case -
+ * and the caller is handed no token, which the client reads as "the session is
+ * about to end, say so".
+ */
+async function mintSessionToken(uid: string): Promise<string | undefined> {
+  try {
+    return await getAuth().createCustomToken(uid);
+  } catch (error) {
+    const failure = error as {code?: unknown; message?: unknown};
+    logger.error("changeSignupEmail could not mint a replacement session", {
+      uid,
+      code: typeof failure.code === "string" ? failure.code : "unknown",
+      message: typeof failure.message === "string" ? failure.message : "unknown",
+    });
+    return undefined;
+  }
+}
+
 export const changeSignupEmail = onCall<
   ChangeSignupEmailRequest,
-  Promise<{email: string}>
+  Promise<{email: string; sessionToken?: string}>
 >(
   {secrets: [EMAIL_RECIPIENT_HMAC_KEYRING]},
   async (request: CallableRequest<ChangeSignupEmailRequest>) => {
@@ -257,7 +298,32 @@ export const changeSignupEmail = onCall<
     const data = requireObject(request.data);
     const requestId = requireRequestId(data.requestId);
     const email = normalizeSignupEmail(data.email);
-    if (email === normalizeEmail(caller.identity.email)) {
+
+    // **The guard below refuses this function's own completed work.**
+    // `caller.identity` is the live Auth record, so once a change has landed the
+    // account's address *is* the requested one - and a retry of an attempt whose
+    // response went missing reads as "that is already your address". The person
+    // is told the change failed and then told it is forbidden, while the
+    // verification link is already on its way to it.
+    //
+    // The peek is what tells the two apart: a completed record under this exact
+    // request id and input means this is a replay, and the guard has nothing to
+    // refuse. Anybody genuinely asking for the address they already hold has no
+    // such record and is still refused.
+    //
+    // **Deliberately not an early return.** Falling through re-runs the work
+    // below, and every step of it is idempotent: `updateUser` and the mirror
+    // `set` repair a change that stopped halfway, the enqueue deduplicates on a
+    // task id derived from this same request id, and `mintSessionToken` issues
+    // the replacement credential the lost response took with it. Returning here
+    // would skip all four.
+    const replayed = await lookupIdempotentResult<{email: string}, {email: string}>(db, {
+      actorUid: caller.uid,
+      operation: "changeSignupEmail",
+      requestId,
+      input: {email},
+    });
+    if (replayed === undefined && email === normalizeEmail(caller.identity.email)) {
       throw new HttpsError("failed-precondition", "That is already this account's address.");
     }
 
@@ -316,6 +382,6 @@ export const changeSignupEmail = onCall<
       requestId,
       requestAuthTime: caller.authTime,
     });
-    return {email};
+    return {email, sessionToken: await mintSessionToken(caller.uid)};
   }
 );

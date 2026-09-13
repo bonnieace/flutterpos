@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../checkout/checkout_catalog_cache.dart';
 import '../checkout/checkout_draft.dart';
 import '../checkout/checkout_outbox.dart';
+import '../checkout/checkout_print_transport_base.dart';
 import '../checkout/checkout_receipt.dart';
 import '../checkout/checkout_tender.dart';
 import '../reporting/reporting_currency.dart';
@@ -13,6 +15,7 @@ import '../reporting/sales_totals.dart';
 import '../reporting/sales_totals_session_context.dart';
 import '../returns/return_actions.dart';
 import '../returns/return_history_panel.dart';
+import '../returns/return_offsets.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -26,10 +29,14 @@ import '../ui/scaffold.dart';
 import '../ui/rolling_number.dart';
 import '../ui/skeleton.dart';
 import '../ui/states.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../inventory/product_visual.dart';
 import 'receipt_lookup.dart';
 import 'sale_history.dart';
+import 'sale_line_products.dart';
+import 'sale_reprint.dart';
 
 /// One tenant-safe Sales destination for daily browsing, lookup, and returns.
 final class TenantSalesReportScreen extends StatelessWidget {
@@ -39,7 +46,9 @@ final class TenantSalesReportScreen extends StatelessWidget {
     this.reportReader,
     this.totalsCallable,
     this.returnActions,
+    this.reprinter,
     this.checkoutOutbox,
+    this.catalog,
     this.clock,
   });
 
@@ -47,7 +56,17 @@ final class TenantSalesReportScreen extends StatelessWidget {
   final TenantSalesHistoryQueryReader? reportReader;
   final SalesTotalsCallable? totalsCallable;
   final TenantReturnActions? returnActions;
+
+  /// A second copy of a receipt, audited. Absent, the sale menu offers none -
+  /// see [TenantReceiptReprinter].
+  final TenantReceiptReprinter? reprinter;
+
   final HiveCheckoutOutbox? checkoutOutbox;
+
+  /// The offline catalog the item rows take their photographs from. Absent,
+  /// every row draws its glyph - see [SaleLineProducts].
+  final CheckoutCatalogSource? catalog;
+
   final DateTime Function()? clock;
 
   @override
@@ -60,7 +79,9 @@ final class TenantSalesReportScreen extends StatelessWidget {
       reportReader: reportReader,
       totalsCallable: totalsCallable,
       returnActions: returnActions,
+      reprinter: reprinter,
       checkoutOutbox: checkoutOutbox,
+      catalog: catalog,
       clock: clock,
     ),
   );
@@ -74,7 +95,9 @@ final class TenantSalesReportPanel extends StatefulWidget {
     this.reportReader,
     this.totalsCallable,
     this.returnActions,
+    this.reprinter,
     this.checkoutOutbox,
+    this.catalog,
     this.clock,
     this.pageSize = 20,
     this.staffPageSize = 50,
@@ -84,7 +107,15 @@ final class TenantSalesReportPanel extends StatefulWidget {
   final TenantSalesHistoryQueryReader? reportReader;
   final SalesTotalsCallable? totalsCallable;
   final TenantReturnActions? returnActions;
+
+  /// A second copy of a receipt, audited. Absent, the sale menu offers none.
+  final TenantReceiptReprinter? reprinter;
+
   final HiveCheckoutOutbox? checkoutOutbox;
+
+  /// The offline catalog the item rows take their photographs from.
+  final CheckoutCatalogSource? catalog;
+
   final DateTime Function()? clock;
   final int pageSize;
   final int staffPageSize;
@@ -124,6 +155,15 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   /// What the totals band is waiting on, per guard key.
   final Map<String, _TotalsBandController> _bands =
       <String, _TotalsBandController>{};
+
+  /// The day's returns, per session, day and reader. See [_dayReturnsFor].
+  final Map<String, Future<TenantDayReturns>> _dayReturns =
+      <String, Future<TenantDayReturns>>{};
+
+  /// One reprint at a time. Two taps on one card are two pieces of paper and
+  /// two audit lines, and the second is almost always the first tap repeated
+  /// because nothing had happened yet.
+  bool _reprinting = false;
   @override
   void initState() {
     super.initState();
@@ -293,6 +333,16 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
         session: session,
         reader: reader,
       ).resolve(page.items.map((sale) => sale.soldById));
+      // **Read with the day rather than beside it.** A sale that has been
+      // returned in full leaves this list, so the list cannot be drawn at all
+      // until the returns have answered - drawing it first would put a sale on
+      // screen for a frame and then take it away again, which on a screen about
+      // money reads as the report changing its mind.
+      final returns = await _dayReturnsFor(
+        session,
+        reader: reader,
+        businessDate: businessDate,
+      );
       return _SalesReportView(
         page: page,
         businessDate: businessDate,
@@ -300,6 +350,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
         management: management,
         context: context,
         names: <String, String>{...context.staff.names, ...resolved},
+        returns: returns,
       );
     };
   }
@@ -361,6 +412,11 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
               return _TotalsBandData(
                 outcome: _SalesTotalsOutcome(value: totals),
                 currency: context.currency,
+                returns: (await _dayReturnsFor(
+                  session,
+                  reader: cache,
+                  businessDate: businessDate,
+                )).scopedTo(chosenStaffId),
               );
             }();
       final callable = widget.totalsCallable;
@@ -381,6 +437,14 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
                 callable: callable,
                 clock: widget.clock,
               );
+              // Narrowed by the same colleague the takings were: the shop's
+              // whole day of returns taken off one cashier's figure would be
+              // nobody's number.
+              final returns = (await _dayReturnsFor(
+                session,
+                reader: widget.reader,
+                businessDate: businessDate,
+              )).scopedTo(appliedStaffId);
               return _TotalsBandData(
                 outcome: await _totalsFor(
                   session,
@@ -390,10 +454,36 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
                   ),
                 ),
                 currency: context.currency,
+                returns: returns,
               );
             }();
       return _TotalsBandController(local: local, server: server);
     });
+  }
+
+  /// The day's returns for [session], read at most once however many regions
+  /// ask.
+  ///
+  /// Memoised exactly as [_contextFor] is, and for the same reason: the day's
+  /// sales and the day's takings fork from here and would otherwise each pay
+  /// for their own copy of the same query. Keyed by reader as well, because the
+  /// cache-only fork is a different answer about the same day rather than the
+  /// same one.
+  Future<TenantDayReturns> _dayReturnsFor(
+    TenantSession session, {
+    required TenantDataReader reader,
+    required String businessDate,
+  }) {
+    final key =
+        '${session.uid}:${session.tenantId}:${session.epoch}:$businessDate:'
+        '${identityHashCode(reader)}';
+    return _dayReturns.putIfAbsent(
+      key,
+      () => TenantDayReturnsLoader(
+        session: session,
+        reader: reader,
+      ).load(businessDate),
+    );
   }
 
   /// The context for [session], read at most once however many regions ask.
@@ -497,17 +587,72 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   /// Opens the return sheet over this list.
   ///
   /// **A sheet rather than a pushed route since 2026-08-26.** It captures its
-  /// own session scope and reports its own answer, so there is nothing left to
-  /// do here but name the sale.
+  /// own session scope and reports its own answer, so naming the sale is
+  /// almost all there is to do here.
+  ///
+  /// **The almost is the day, and it is the second half of the 2026-09-06
+  /// report.** A return changes what this page says - a sale returned in full
+  /// leaves the list and every figure in the band comes down - and nothing used
+  /// to ask the page to look again, so the sale the customer had just handed
+  /// back sat there with its money still counted. A settled return re-reads the
+  /// day; an abandoned sheet costs nothing.
   void _openReturns(BuildContext context, TenantSale sale) {
-    unawaited(
-      openTenantSaleReturnSheet(
+    unawaited(() async {
+      final answer = await openTenantSaleReturnSheet(
         context,
         reader: widget.reader,
         request: TenantSaleReturnsRequest(sale: sale),
         actions: widget.returnActions,
-      ),
-    );
+      );
+      if (answer != null && mounted) _refreshDay();
+    }());
+  }
+
+  /// The reprint action for [session], or null where there is not one.
+  ///
+  /// Two gates, and they are different questions. The reprinter is absent on a
+  /// build with no printer composition at all; the role check is the one the
+  /// callable enforces, asked here so a cashier is not offered a control that
+  /// would refuse them - §2.1's rule that an action a person cannot take is not
+  /// drawn.
+  ValueChanged<TenantSale>? _reprintAction(TenantSession session) {
+    if (widget.reprinter == null) return null;
+    if (!session.canAccess(allowedRoles: tenantReceiptReprintRoles)) return null;
+    return (sale) => unawaited(_reprint(session, sale));
+  }
+
+  /// Puts a second copy of one receipt on paper, and says what happened.
+  ///
+  /// **Nothing on this page changes**, which is what separates a reprint from
+  /// every other action here: it writes an audit line and some bytes to a
+  /// printer, and the day's sales and takings are exactly what they were. So
+  /// there is no re-read, only a sentence.
+  Future<void> _reprint(TenantSession session, TenantSale sale) async {
+    final reprinter = widget.reprinter;
+    if (reprinter == null || _reprinting) return;
+    setState(() => _reprinting = true);
+    try {
+      final report = await reprinter.reprint(session: session, sale: sale);
+      if (!mounted) return;
+      showAppSnackBar(context, _reprintNotice(sale, report));
+    } finally {
+      if (mounted) setState(() => _reprinting = false);
+    }
+  }
+
+  /// Reads the selected day again, returns and takings included.
+  ///
+  /// The band controllers are deliberately *not* cleared: they are keyed by the
+  /// guard key, which carries the generation this bumps, so the next build
+  /// composes a new one and the old is disposed with the panel. Disposing one
+  /// here would pull it out from under the `AnimatedBuilder` still listening to
+  /// it.
+  void _refreshDay() {
+    setState(() {
+      _dayReturns.clear();
+      _totals.clear();
+      _resetPages();
+    });
   }
 
   @override
@@ -521,8 +666,11 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
     final scoped = TenantSessionScope.of(context).session;
     final band = scoped == null ? null : _totalsBandFor(key, scoped);
     _composeHistoryLoaders(key);
-    return TenantRouteGuard<_SalesReportView>(
-      key: ValueKey(key),
+    // **The catalog is read once around the guard rather than once per card.**
+    // The day's sales and a receipt lookup draw the same rows, and a page turn
+    // rebuilds them all; a lookup that started at the row would read the box
+    // again for every line on the page.
+    final report = TenantRouteGuard<_SalesReportView>(
       allowedRoles: TenantSaleHistoryRepository.reportRoles,
       load: _historyLoader!,
       loadCached: _historyLoaderCached,
@@ -558,6 +706,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           onPrevious: null,
           onNext: null,
           onOpenReturns: (sale) => _openReturns(context, sale),
+          onReprint: _reprintAction(session),
         ),
         // No session in scope at all is the guard's own `denied` case arriving
         // a frame early. Drawing nothing is what it draws.
@@ -591,6 +740,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           onPrevious: null,
           onNext: null,
           onOpenReturns: (sale) => _openReturns(context, sale),
+          onReprint: _reprintAction(session),
         ),
         null => const SizedBox.shrink(),
       },
@@ -598,6 +748,11 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
         final ending = _submittedEnding;
         final Widget? receiptResult = ending == null
             ? null
+            // **Keyed, unlike the report guard above it.** This is the one
+            // shape [TenantRouteGuard.load] names as an exception: its
+            // subject changes within one instance, so holding the previous
+            // receipt on screen while the next one is looked up would state
+            // the wrong sale rather than merely be a moment behind.
             : TenantRouteGuard<TenantReceiptEndingLookupResult>(
                 key: ValueKey(
                   'sales-receipt:${view.businessDate}:$ending:'
@@ -622,9 +777,11 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
                 ),
                 builder: (context, session, result) => _ReceiptSearchResult(
                   result: result,
+                  returns: view.returns,
                   names: view.names,
                   selfUid: session.uid,
                   onOpenReturns: (sale) => _openReturns(context, sale),
+                  onReprint: _reprintAction(session),
                 ),
               );
         return _SalesReportContents(
@@ -642,11 +799,17 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           onSubmitReceipt: _submitReceipt,
           onPickDate: _pickBusinessDate,
           onStaffChanged: _setStaff,
+          onReprint: _reprintAction(session),
           onPrevious: _pageIndex == 0 ? null : _previous,
           onNext: view.page.hasMore ? () => _next(view.page.nextCursor) : null,
           onOpenReturns: (sale) => _openReturns(context, sale),
         );
       },
+    );
+    return SaleLineProducts(
+      catalog: widget.catalog,
+      session: scoped,
+      child: report,
     );
   }
 }
@@ -666,6 +829,7 @@ final class _SalesReportView {
     required this.management,
     required this.context,
     required this.names,
+    required this.returns,
   });
 
   final TenantSalePage page;
@@ -674,17 +838,29 @@ final class _SalesReportView {
   final bool management;
   final SalesTotalsSessionContext context;
   final Map<String, String> names;
+
+  /// What the day's returns have taken back out of it, read once and shared
+  /// with the takings band. See [TenantDayReturns].
+  final TenantDayReturns returns;
 }
 
 /// What the totals band draws once its own read lands.
 final class _TotalsBandData {
-  const _TotalsBandData({required this.outcome, required this.currency});
+  const _TotalsBandData({
+    required this.outcome,
+    required this.currency,
+    required this.returns,
+  });
 
   final _SalesTotalsOutcome outcome;
 
   /// Read with the band rather than taken from the day, because the band is
   /// the only region on this page that states money.
   final TenantReportingCurrency currency;
+
+  /// What came back out of the day these takings are for, already narrowed to
+  /// whoever [outcome] reports on.
+  final TenantDayReturns returns;
 }
 
 /// The report, whether or not the day's sales have arrived yet.
@@ -723,6 +899,7 @@ final class _SalesReportContents extends StatelessWidget {
     required this.onPrevious,
     required this.onNext,
     required this.onOpenReturns,
+    required this.onReprint,
   });
 
   final TenantSession session;
@@ -760,6 +937,9 @@ final class _SalesReportContents extends StatelessWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final ValueChanged<TenantSale> onOpenReturns;
+
+  /// Null where this member may not reprint, or this build has no printer.
+  final ValueChanged<TenantSale>? onReprint;
 
   @override
   Widget build(BuildContext context) {
@@ -811,10 +991,16 @@ final class _SalesReportContents extends StatelessWidget {
           if (view case final loaded?)
             _SalesPresentation(
               sales: loaded.page.items,
+              returns: loaded.returns,
+              // The day's list is a list of what the shop sold and still has
+              // the money for. A sale returned in full belongs to the returns
+              // record, not here.
+              hideFullyReturned: true,
               names: loaded.names,
               selfUid: session.uid,
               filtered: loaded.appliedStaffId != null,
               onOpenReturns: onOpenReturns,
+              onReprint: onReprint,
             )
           else
             const _SaleCardsSkeleton(key: ValueKey('sales-report-skeleton')),
@@ -1225,6 +1411,7 @@ final class _TotalsBand extends StatelessWidget {
         outcome: data.outcome,
         currency: data.currency,
         businessDate: businessDate,
+        returns: data.returns,
       );
     },
   );
@@ -1273,11 +1460,25 @@ final class _ManagementSalesSummary extends StatelessWidget {
     required this.outcome,
     required this.currency,
     required this.businessDate,
+    required this.returns,
   });
 
   final _SalesTotalsOutcome outcome;
   final TenantReportingCurrency currency;
   final String businessDate;
+
+  /// What came back out of this day, already narrowed to whoever [outcome]
+  /// reports on.
+  ///
+  /// **Netted here rather than in the decoder, and that is deliberate.**
+  /// [TenantSalesTotals] is the server's answer and checks itself against its
+  /// own tender split; taking money off it there would leave a decoded object
+  /// that no longer describes what the server said. What the returns change is
+  /// the figure a person is shown, so the deduction lives where the figure is
+  /// drawn - and the count comes down only for the sales that came back in
+  /// *full*, because a partly returned sale is still a transaction that
+  /// happened.
+  final TenantDayReturns returns;
 
   @override
   Widget build(BuildContext context) {
@@ -1292,12 +1493,16 @@ final class _ManagementSalesSummary extends StatelessWidget {
         message: _totalsFailureMessage(outcome.error!),
       );
     }
+    final returnedMinor = returns.returnedMinor;
+    final netSales = _nonNegative(totals.sales - returnedMinor / 100);
+    final netTransactions = (totals.transactions - returns.fullyReturnedSales)
+        .clamp(0, totals.transactions);
     final breakdown = totals.tenderBreakdown;
     final paymentRows = breakdown == null
         ? const <_PaymentSummaryEntry>[]
         : <_PaymentSummaryEntry>[
             for (final entry in breakdown.recorded.entries)
-              if (!entry.value.isEmpty)
+              if (!_netTender(entry.key, entry.value).isEmpty)
                 _PaymentSummaryEntry(
                   label: entry.key.label,
                   icon: switch (entry.key) {
@@ -1305,14 +1510,20 @@ final class _ManagementSalesSummary extends StatelessWidget {
                     CheckoutTender.mpesa => Icons.phone_android_outlined,
                     CheckoutTender.card => Icons.credit_card_outlined,
                   },
-                  totals: entry.value,
+                  totals: _netTender(entry.key, entry.value),
                 ),
-            if (!breakdown.unrecorded.isEmpty)
+            // A schema v1 sale recorded no tender, so the money that comes back
+            // out of one comes off this row rather than off a payment method it
+            // never named.
+            if (!_netTender(null, breakdown.unrecorded).isEmpty)
               _PaymentSummaryEntry(
                 label: 'Not recorded',
                 icon: Icons.history_outlined,
-                totals: breakdown.unrecorded,
+                totals: _netTender(null, breakdown.unrecorded),
               ),
+            // Nothing is ever netted off this one: a sale carrying a tender
+            // this app does not model is a sale `TenantSale` refuses to decode,
+            // so no return can be attributed to it.
             if (!breakdown.unrecognised.isEmpty)
               _PaymentSummaryEntry(
                 label: 'Unrecognised',
@@ -1382,7 +1593,7 @@ final class _ManagementSalesSummary extends StatelessWidget {
                       fit: BoxFit.scaleDown,
                       alignment: AlignmentDirectional.centerStart,
                       child: RollingNumber(
-                        value: currency.format(totals.sales),
+                        value: currency.format(netSales),
                         textKey: const ValueKey('sales-report-revenue'),
                         style: tokens.typography.numericHero.copyWith(
                           color: currency.isKnown
@@ -1415,7 +1626,7 @@ final class _ManagementSalesSummary extends StatelessWidget {
                   ),
                   SizedBox(height: tokens.spacing.s4),
                   RollingNumber(
-                    value: '${totals.transactions}',
+                    value: '$netTransactions',
                     textKey: const ValueKey('sales-report-transactions'),
                     style: tokens.typography.numericHero.copyWith(
                       color: tokens.colors.text.primary,
@@ -1444,7 +1655,7 @@ final class _ManagementSalesSummary extends StatelessWidget {
               if (index > 0) SizedBox(height: tokens.spacing.s12),
               _PaymentSummaryLine(
                 entry: paymentRows[index],
-                periodSales: totals.sales,
+                periodSales: netSales,
                 currency: currency,
               ),
             ],
@@ -1453,7 +1664,29 @@ final class _ManagementSalesSummary extends StatelessWidget {
       ),
     );
   }
+
+  /// One *Paid by* row with its day's returns taken back off it.
+  TenantSalesTenderTotals _netTender(
+    CheckoutTender? tender,
+    TenantSalesTenderTotals gross,
+  ) => TenantSalesTenderTotals(
+    sales: _nonNegative(
+      gross.sales - (returns.returnedMinorByTender[tender] ?? 0) / 100,
+    ),
+    transactions:
+        (gross.transactions - (returns.fullyReturnedByTender[tender] ?? 0))
+            .clamp(0, gross.transactions)
+            .toInt(),
+  );
 }
+
+/// **A figure this screen states is never below zero.** The takings come from a
+/// callable and the returns from Firestore, so the two can disagree for a
+/// moment - a return that has synced against a total read before it did - and
+/// "the shop took minus four hundred shillings today" is a sentence no report
+/// should ever print. The floor is the honest reading of that disagreement:
+/// everything this day took has come back.
+double _nonNegative(double value) => value < 0 ? 0 : value;
 
 final class _PaymentSummaryEntry {
   const _PaymentSummaryEntry({
@@ -1593,15 +1826,22 @@ String _totalsFailureMessage(Object error) {
 final class _ReceiptSearchResult extends StatelessWidget {
   const _ReceiptSearchResult({
     required this.result,
+    required this.returns,
     required this.names,
     required this.selfUid,
     required this.onOpenReturns,
+    required this.onReprint,
   });
 
   final TenantReceiptEndingLookupResult result;
+
+  /// The day's returns, so a receipt that was reversed says so.
+  final TenantDayReturns returns;
+
   final Map<String, String> names;
   final String selfUid;
   final ValueChanged<TenantSale> onOpenReturns;
+  final ValueChanged<TenantSale>? onReprint;
 
   @override
   Widget build(BuildContext context) {
@@ -1631,10 +1871,18 @@ final class _ReceiptSearchResult extends StatelessWidget {
         ],
         _SalesPresentation(
           sales: result.matches,
+          returns: returns,
+          // **A receipt looked up by its number is always shown, returned or
+          // not.** Somebody has the paper in their hand and is asking this
+          // screen what happened to it; answering "no such receipt" because it
+          // came back would be the screen refusing the only question it was
+          // asked.
+          hideFullyReturned: false,
           names: names,
           selfUid: selfUid,
           filtered: true,
           onOpenReturns: onOpenReturns,
+          onReprint: onReprint,
         ),
       ],
     );
@@ -1644,33 +1892,69 @@ final class _ReceiptSearchResult extends StatelessWidget {
 final class _SalesPresentation extends StatelessWidget {
   const _SalesPresentation({
     required this.sales,
+    required this.returns,
+    required this.hideFullyReturned,
     required this.names,
     required this.selfUid,
     required this.filtered,
     required this.onOpenReturns,
+    required this.onReprint,
   });
 
   final List<TenantSale> sales;
+
+  /// What came back out of these sales. [TenantDayReturns.none] where nothing
+  /// did, or where the caller has no returns read of its own.
+  final TenantDayReturns returns;
+
+  /// Whether a sale every unit of which has been returned is dropped rather
+  /// than drawn. The day's list drops it; a receipt lookup does not.
+  final bool hideFullyReturned;
+
   final Map<String, String> names;
   final String selfUid;
   final bool filtered;
   final ValueChanged<TenantSale> onOpenReturns;
 
+  /// Null where this member may not reprint, or this build has no printer.
+  final ValueChanged<TenantSale>? onReprint;
+
   @override
   Widget build(BuildContext context) {
-    if (sales.isEmpty) {
+    final shown = hideFullyReturned
+        ? sales.where((sale) => !returns.covers(sale)).toList(growable: false)
+        : sales;
+    if (shown.isEmpty) {
+      // **Three empty days, not two.** A day that traded and had every sale
+      // returned is a different fact from a day that never traded, and telling
+      // a shop owner "no sales yet" about a morning they served customers
+      // through would read as the report having lost them.
+      final allReturned = sales.isNotEmpty;
       return EmptyState(
         key: ValueKey(
-          filtered ? 'sales-report-no-matches' : 'sales-report-empty',
+          allReturned
+              ? 'sales-report-all-returned'
+              : filtered
+              ? 'sales-report-no-matches'
+              : 'sales-report-empty',
         ),
-        title: filtered ? 'No matching sales' : 'No sales yet',
-        hint: filtered
+        title: allReturned
+            ? 'Every sale was returned'
+            : filtered
+            ? 'No matching sales'
+            : 'No sales yet',
+        hint: allReturned
+            ? 'Every sale recorded on this date has been returned in full. '
+                  'The returns themselves are on the Returns screen.'
+            : filtered
             ? 'Try another date or staff member.'
             : 'Transactions recorded on this date will appear here.',
         // A filter that matched nothing and a day that had nothing are
         // different facts, and section 7 already gives them different words.
         // They get different drawings for the same reason.
-        illustration: filtered ? 'file-search.svg' : 'no-data.svg',
+        illustration: filtered || allReturned
+            ? 'file-search.svg'
+            : 'no-data.svg',
       );
     }
     final tokens = AppTokens.componentOf(context);
@@ -1678,13 +1962,15 @@ final class _SalesPresentation extends StatelessWidget {
       key: const ValueKey('sales-report-cards'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        for (final sale in sales)
+        for (final sale in shown)
           Padding(
             padding: EdgeInsets.only(bottom: tokens.spacing.s8),
             child: _SaleCard(
               sale: sale,
+              offset: returns.offsetFor(sale),
               staffLabel: _staffLabel(sale),
               onOpenReturns: () => onOpenReturns(sale),
+              onReprint: onReprint == null ? null : () => onReprint!(sale),
             ),
           ),
       ],
@@ -1698,17 +1984,31 @@ final class _SalesPresentation extends StatelessWidget {
 final class _SaleCard extends StatelessWidget {
   const _SaleCard({
     required this.sale,
+    required this.offset,
     required this.staffLabel,
     required this.onOpenReturns,
+    required this.onReprint,
   });
 
   final TenantSale sale;
+
+  /// What has come back out of this sale, or null where nothing has.
+  ///
+  /// A card is only ever drawn with a *partial* offset on the day's list - a
+  /// sale returned in full has left it - but a receipt lookup draws whatever it
+  /// was asked for, so a full one is stated rather than assumed away.
+  final TenantSaleReturnOffset? offset;
+
   final String staffLabel;
   final VoidCallback onOpenReturns;
+
+  /// Null where this member may not reprint, or this build has no printer.
+  final VoidCallback? onReprint;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final returned = offset;
     return AppCard(
       key: ValueKey('sales-record-${sale.id}'),
       padding: EdgeInsets.zero,
@@ -1763,15 +2063,25 @@ final class _SaleCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: tokens.spacing.s8),
+                // **What the shop still has, not what it rang up.** The gross
+                // is not lost: it is the sale's line rows, immediately below,
+                // and what came off it is named in the footer.
                 Text(
-                  _saleMoney(sale),
+                  _saleMoney(
+                    sale,
+                    sale.totalMinor - (returned?.returnedMinor ?? 0),
+                  ),
                   key: ValueKey('sales-total-${sale.id}'),
                   style: tokens.typography.numericBody.copyWith(
                     color: tokens.colors.text.money,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                _SaleMenu(sale: sale, onOpenReturns: onOpenReturns),
+                _SaleMenu(
+                  sale: sale,
+                  onOpenReturns: onOpenReturns,
+                  onReprint: onReprint,
+                ),
               ],
             ),
           ),
@@ -1792,9 +2102,29 @@ final class _SaleCard extends StatelessWidget {
             child: Wrap(
               spacing: tokens.spacing.s16,
               runSpacing: tokens.spacing.s8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: <Widget>[
                 _SaleMeta(icon: Icons.person_outline, label: staffLabel),
                 _SaleMeta(icon: Icons.payments_outlined, label: _tender(sale)),
+                // §9: the standing is a word as well as a colour, and it is
+                // *all* this card says about the return.
+                //
+                // **What came back is not stated here, and that is the product
+                // owner's call of 2026-09-06**: a returned unit stopped being
+                // part of this sale the moment it came back, so its quantity
+                // and its money belong to the Returns record rather than beside
+                // the sale's own immutable lines. The badge stays because
+                // without it the header's netted figure and the line rows below
+                // it disagree with nothing to explain them.
+                if (returned != null)
+                  StatusBadge(
+                    key: ValueKey('sales-returned-badge-${sale.id}'),
+                    status: AppStatus.attention,
+                    icon: Icons.assignment_return_outlined,
+                    label: returned.isFullyReturned
+                        ? 'Returned'
+                        : 'Partly returned',
+                  ),
               ],
             ),
           ),
@@ -1818,6 +2148,12 @@ final class _SaleItemRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    // **The product this line sold, when this device still holds it.** The
+    // line records the name and the price it went out at and nothing else - a
+    // sale is evidence and does not change when the catalog does - so the
+    // picture is looked up rather than read off the sale. A product that is
+    // not cached, or has since been deleted, keeps the glyph.
+    final product = SaleLineProducts.of(context, line.productId);
     return Padding(
       key: ValueKey('sales-item-${sale.id}-$index'),
       padding: EdgeInsets.symmetric(
@@ -1826,19 +2162,28 @@ final class _SaleItemRow extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: tokens.colors.surface.overlay,
-              borderRadius: BorderRadius.circular(tokens.radius.md),
-            ),
-            child: SizedBox.square(
-              dimension: 40,
-              child: Icon(
-                Icons.inventory_2_outlined,
-                size: 20,
-                color: tokens.colors.text.tertiary,
-              ),
-            ),
+          SizedBox.square(
+            dimension: tokens.spacing.s40,
+            child: product == null
+                ? DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: tokens.colors.surface.overlay,
+                      borderRadius: BorderRadius.circular(tokens.radius.md),
+                    ),
+                    child: Icon(
+                      Icons.inventory_2_outlined,
+                      size: tokens.spacing.s20,
+                      color: tokens.colors.text.tertiary,
+                    ),
+                  )
+                // The till's own treatment, at the till's own radius: a
+                // photograph that fills its box, and the product's initials
+                // where there is no photograph. See `TenantProductVisual`.
+                : TenantProductVisual(
+                    key: ValueKey('sales-item-image-${sale.id}-$index'),
+                    product: product,
+                    semanticLabel: '${line.name} product image',
+                  ),
           ),
           SizedBox(width: tokens.spacing.s12),
           Expanded(
@@ -1908,30 +2253,77 @@ final class _SaleMeta extends StatelessWidget {
   }
 }
 
+/// The sale card's overflow menu.
+///
+/// **The surface is drawn from the token layer rather than left to Material,
+/// and the edge is the point.** Depth in this app is a surface step and never a
+/// drop shadow - see [AppSurfaceRoles] - and the step from a card to a menu is
+/// one tone: `surface.raised` is `#0D1F16` and `surface.overlay` is `#132A1F`.
+/// Material's default menu paints that step and nothing else, so a menu opened
+/// over a sale card had no findable edge and read as part of the card behind it,
+/// which is the defect reported on 2026-09-06. `borderStrong` is the hairline
+/// that separates them: it is lighter than the `cardEdge` every card already
+/// wears, so the menu reads as the layer in front rather than as another card.
+/// What a sale card's menu offers.
+enum _SaleAction { returns, reprint }
+
 final class _SaleMenu extends StatelessWidget {
-  const _SaleMenu({required this.sale, required this.onOpenReturns});
+  const _SaleMenu({
+    required this.sale,
+    required this.onOpenReturns,
+    required this.onReprint,
+  });
 
   final TenantSale sale;
   final VoidCallback onOpenReturns;
+  final VoidCallback? onReprint;
 
   @override
-  Widget build(BuildContext context) => PopupMenuButton<int>(
-    key: ValueKey('sales-actions-${sale.id}'),
-    tooltip: 'Actions for receipt ${sale.receiptNumber}',
-    icon: const Icon(Icons.more_vert),
-    onSelected: (_) => onOpenReturns(),
-    itemBuilder: (context) => <PopupMenuEntry<int>>[
-      PopupMenuItem<int>(
-        key: ValueKey('sales-returns-${sale.id}'),
-        value: 0,
-        height: 48,
-        child: const _SaleMenuLabel(
-          icon: Icons.assignment_return_outlined,
-          label: 'Return',
-        ),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return PopupMenuButton<_SaleAction>(
+      key: ValueKey('sales-actions-${sale.id}'),
+      tooltip: 'Actions for receipt ${sale.receiptNumber}',
+      icon: Icon(Icons.more_vert, color: tokens.colors.text.secondary),
+      color: tokens.colors.surface.overlay,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+        side: BorderSide(color: tokens.colors.surface.borderStrong),
       ),
-    ],
-  );
+      // §9's target, whatever the label inside it comes out as.
+      constraints: BoxConstraints(
+        minHeight: tokens.density.minimumTapTarget.height,
+      ),
+      onSelected: (action) => switch (action) {
+        _SaleAction.returns => onOpenReturns(),
+        _SaleAction.reprint => onReprint?.call(),
+      },
+      itemBuilder: (context) => <PopupMenuEntry<_SaleAction>>[
+        PopupMenuItem<_SaleAction>(
+          key: ValueKey('sales-returns-${sale.id}'),
+          value: _SaleAction.returns,
+          height: tokens.density.minimumTapTarget.height,
+          child: const _SaleMenuLabel(
+            icon: Icons.assignment_return_outlined,
+            label: 'Return',
+          ),
+        ),
+        // Absent rather than disabled where this member may not reprint: a
+        // greyed control invites the question "why not", and the answer is a
+        // role this screen has no room to explain.
+        if (onReprint != null)
+          PopupMenuItem<_SaleAction>(
+            key: ValueKey('sales-reprint-${sale.id}'),
+            value: _SaleAction.reprint,
+            height: tokens.density.minimumTapTarget.height,
+            child: const _SaleMenuLabel(
+              icon: Icons.print_outlined,
+              label: 'Reprint receipt',
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 final class _SaleMenuLabel extends StatelessWidget {
@@ -1948,17 +2340,69 @@ final class _SaleMenuLabel extends StatelessWidget {
         Icon(icon, size: 20, color: tokens.colors.text.secondary),
         SizedBox(width: tokens.spacing.s12),
         Expanded(
-          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.typography.labelLarge.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
         ),
       ],
     );
   }
 }
 
+/// What a reprint says for itself.
+///
+/// **`queued` is `info` and not `ok`.** The audit line exists and the bytes are
+/// durable, which is genuinely different from a refusal - but no paper has come
+/// out, and on a screen where somebody is waiting to hand a customer a receipt,
+/// a green tick that means "eventually" is the wrong claim.
+AppNotice _reprintNotice(TenantSale sale, TenantReceiptReprintReport report) {
+  final receipt = '#${sale.receiptSequence.toString().padLeft(checkoutReceiptSequenceDigits, '0')}';
+  return switch (report.outcome) {
+    TenantReceiptReprintOutcome.printed => AppNotice.confirmed(
+      'Receipt $receipt reprinted.',
+    ),
+    TenantReceiptReprintOutcome.queued => AppNotice.offline(
+      'Receipt $receipt is recorded and waiting for the printer. '
+      '${_reprintReason(report.reasonCode)}',
+    ),
+    TenantReceiptReprintOutcome.refused => AppNotice.refused(
+      'Nothing was printed. ${_reprintReason(report.reasonCode)}',
+    ),
+  };
+}
+
+String _reprintReason(String? code) => switch (code) {
+  PrinterTransportCode.notConfigured =>
+    'This business has no printer configured.',
+  PrinterTransportCode.unreachable => 'The printer could not be reached.',
+  PrinterTransportCode.connectTimeout => 'The printer did not answer in time.',
+  PrinterTransportCode.writeTimeout =>
+    'The printer stopped part-way through; check the paper and the cover.',
+  PrinterTransportCode.unsupported => 'This device cannot print.',
+  PrinterTransportCode.bridgeUnreachable ||
+  PrinterTransportCode.bridgeRejected ||
+  PrinterTransportCode.bridgeUnauthorized =>
+    'The print bridge refused the receipt.',
+  TenantReceiptReprintCode.forbidden =>
+    'Only an owner, administrator, or manager may reprint a receipt.',
+  TenantReceiptReprintCode.notFound =>
+    'That sale is not in this business, or its receipt number has changed.',
+  TenantReceiptReprintCode.serviceMissing =>
+    'Reprinting is not switched on for this business yet.',
+  TenantReceiptReprintCode.unavailable =>
+    'A reprint is recorded on the server, so it must be asked for online.',
+  _ => 'The receipt could not be reprinted.',
+};
+
 String _tender(TenantSale sale) => sale.tender?.label ?? 'Not recorded';
 
-String _saleMoney(TenantSale sale) =>
-    '${sale.currency} ${_money(sale.totalMinor)}';
+String _saleMoney(TenantSale sale, int minorUnits) =>
+    '${sale.currency} ${_money(minorUnits)}';
 
 String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
 

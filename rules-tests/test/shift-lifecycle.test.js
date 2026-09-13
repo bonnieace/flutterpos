@@ -4,6 +4,7 @@ import { assertFails, assertSucceeds } from "@firebase/rules-unit-testing";
 import {
   Timestamp,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   serverTimestamp,
@@ -95,6 +96,12 @@ function closeShift(firestore, { shiftId = "shift-a", overrides = {} } = {}) {
     totalSalesMinor: 98750,
     totalSales: 987.5,
     transactionCount: 3,
+    // The blind tender declaration, all three or none. `declaredCashMinor`
+    // restates `closingCashMinor` rather than replacing it, so no reader can be
+    // shown two cash figures for one drawer that disagree.
+    declaredCashMinor: 125000,
+    declaredMpesaMinor: 34050,
+    declaredCardMinor: 0,
     endTime: serverTimestamp(),
     ...overrides,
   });
@@ -135,6 +142,70 @@ test("a cashier opens and closes exactly one server-timed shift", async () => {
   if (closed.totalSales !== 987.5 || closed.transactionCount !== 3) {
     throw new Error("The closed shift carries no sale-derived summary.");
   }
+  if (closed.declaredMpesaMinor !== 34050 || closed.declaredCardMinor !== 0) {
+    throw new Error("The closed shift carries no tender declaration.");
+  }
+  if (closed.declaredCashMinor !== closed.closingCashMinor) {
+    throw new Error("One drawer was recorded as two disagreeing cash figures.");
+  }
+});
+
+test("a close made by a build that cannot declare is still accepted", async () => {
+  // **The back-compat guarantee, for one release.** Making the declaration
+  // mandatory now would deny the close to every un-updated device in the field
+  // - including the replay of a close one of them recorded offline, which the
+  // controller would then retry forever with no way out. The server treats a
+  // close made after the rollout with no declaration as a difference of its own,
+  // so omission is caught without shutting a till.
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+  await assertSucceeds(openShift(firestore));
+
+  await assertSucceeds(
+    closeShift(firestore, {
+      overrides: {
+        declaredCashMinor: deleteField(),
+        declaredMpesaMinor: deleteField(),
+        declaredCardMinor: deleteField(),
+      },
+    }),
+  );
+
+  const closed = await storedShift("shift-a");
+  if (closed.status !== "closed" || closed.closingCashMinor !== 125000) {
+    throw new Error("A close with no declaration was refused.");
+  }
+});
+
+test("a device holding none of a shift's sales may still close it", async () => {
+  // The way out of a shift left open by an installation that no longer exists.
+  // The summary is zero because it is unknown, and `closedWithoutEvidence` is
+  // what stops the zeros being read as a shift that took nothing: the verifier
+  // refuses the figures outright rather than reporting a variance against them.
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+  await assertSucceeds(openShift(firestore));
+
+  await assertSucceeds(
+    closeShift(firestore, {
+      overrides: {
+        closedWithoutEvidence: true,
+        totalSalesMinor: 0,
+        totalSales: 0,
+        transactionCount: 0,
+      },
+    }),
+  );
+
+  const closed = await storedShift("shift-a");
+  if (closed.closedWithoutEvidence !== true || closed.transactionCount !== 0) {
+    throw new Error("A recovery close was not recorded as unverifiable.");
+  }
+  // The declaration is still taken: it needs no sale evidence, and the server
+  // derives the other side of the comparison itself.
+  if (closed.declaredMpesaMinor !== 34050) {
+    throw new Error("A recovery close dropped the declaration.");
+  }
 });
 
 test("an empty shift may close with a zero summary", async () => {
@@ -150,6 +221,11 @@ test("an empty shift may close with a zero summary", async () => {
         transactionCount: 0,
         closingCashMinor: 0,
         closingCash: 0,
+        // A declaration of nothing is a real answer a till may give, and the
+        // cash it declares still has to be the cash it records.
+        declaredCashMinor: 0,
+        declaredMpesaMinor: 0,
+        declaredCardMinor: 0,
       },
     }),
   );
@@ -303,6 +379,22 @@ test("closing may not rewrite the shift envelope or skip the count", async () =>
       "sales-without-transactions",
       { transactionCount: 0, totalSalesMinor: 500, totalSales: 5 },
     ],
+    // The declaration is all three or none: two methods declared and one absent
+    // would present the missing one as zero to every reader downstream.
+    ["partial-declaration", { declaredMpesaMinor: null, declaredCardMinor: null }],
+    ["one-missing-method", { declaredCardMinor: null }],
+    // The same money under two names must never disagree.
+    ["declared-cash-disagrees", { declaredCashMinor: 120000 }],
+    ["negative-declared-mpesa", { declaredMpesaMinor: -1 }],
+    ["string-declared-card", { declaredCardMinor: "0" }],
+    ["fractional-declared-cash", { declaredCashMinor: 125000.5, closingCashMinor: 125000.5 }],
+    ["oversize-declared-mpesa", { declaredMpesaMinor: 1000000000001 }],
+    ["oversize-cash", { closingCashMinor: 1000000000001, declaredCashMinor: 1000000000001 }],
+    // The recovery marker is never written false, and it forces the summary to
+    // zero - which reconciliation is told not to believe rather than reading as
+    // a shift that took nothing.
+    ["evidence-flag-false", { closedWithoutEvidence: false }],
+    ["evidence-flag-with-sales", { closedWithoutEvidence: true }],
   ];
 
   for (const [name, overrides] of denied) {

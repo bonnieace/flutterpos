@@ -78,6 +78,14 @@ void main() {
         // can reach changes stock, a shift, or a sale.
         TenantCollection.reconciliationAnomalies:
             'tenants/tenant-a/reconciliation_anomalies',
+        // How many of those differences are still open, in one document the
+        // server recomputes at the end of every completed run. Added
+        // deliberately so a launcher can badge a figure without listing the
+        // collection above to count it - those documents are keyed by digest
+        // and can be neither ordered nor counted cheaply. Read-only to every
+        // client.
+        TenantCollection.reconciliationSummary:
+            'tenants/tenant-a/reconciliation_summary',
         // The immutable trail of every closed shift whose summary was
         // corrected. Added deliberately as part of the guarded correction
         // trail; `amendShiftSummary` is the only writer, it only ever appends,

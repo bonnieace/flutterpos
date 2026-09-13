@@ -18,11 +18,13 @@ library;
 
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'keyboard_controller.dart';
 import 'keyboard_scope.dart';
+import 'tenancy/invitation_link_source.dart' show TenantInvitationArrival;
 import 'tenancy/password_reset.dart';
 import 'tenancy/sign_in.dart';
 import 'ui/buttons.dart';
@@ -51,6 +53,7 @@ class LoginScreen extends StatefulWidget {
     this.signIn,
     this.createAccountRoute,
     this.passwordReset,
+    this.invitationArrival,
   });
 
   /// The boundary this screen signs in through.
@@ -75,6 +78,27 @@ class LoginScreen extends StatefulWidget {
 
   /// The boundary this screen asks for reset emails through.
   final RequestPasswordResetCallable? passwordReset;
+
+  /// The emailed staff invitation this app was opened by, if it was.
+  ///
+  /// **Why this screen says anything at all.** Following an invitation link on a
+  /// phone with the app installed opens the app, and an invitee who has just set
+  /// their password is signed out - so what a working link produces is this
+  /// screen, with nothing on it about the invitation that opened it. The
+  /// acceptance itself is waiting behind the sign-in and appears the moment it
+  /// succeeds; this is the sentence that says so.
+  ///
+  /// **A link that could not be read says so instead.** This was a
+  /// `ValueListenable<bool>` until 2026-09-12, which could not tell the two
+  /// apart - so a malformed link produced *your invitation is waiting* and a
+  /// promise that a business would be offered next, to somebody for whom
+  /// neither was true. Worse, an invitee sets their password *by following the
+  /// link*: one that failed leaves an account with no password, and this screen
+  /// was telling them to sign in with it.
+  ///
+  /// Null, or a null value, draws nothing - which is every host that cannot be
+  /// reached by a link.
+  final ValueListenable<TenantInvitationArrival?>? invitationArrival;
 
   /// Whether the keypad is drawn beside the form at [screenWidth].
   ///
@@ -447,6 +471,30 @@ class _LoginScreenState extends State<LoginScreen> {
                   color: tokens.colors.text.secondary,
                 ),
               ),
+              if (widget.invitationArrival case final arrival?) ...<Widget>[
+                SizedBox(height: tokens.spacing.s24),
+                ValueListenableBuilder<TenantInvitationArrival?>(
+                  valueListenable: arrival,
+                  builder: (context, value, child) => switch (value) {
+                    null => const SizedBox.shrink(),
+                    // **A refusal, not information.** The link was followed and
+                    // cannot be acted on; §2.1's `info` is for a state nothing
+                    // is wrong with, and something is.
+                    final a when a.invalid => Callout(
+                      key: const ValueKey('login-invitation-invalid'),
+                      status: AppNotice.refused(
+                        invitationLinkInvalidMessage,
+                      ).status,
+                      message: invitationLinkInvalidMessage,
+                    ),
+                    _ => Callout(
+                      key: const ValueKey('login-invitation-waiting'),
+                      status: AppStatus.info,
+                      message: invitationWaitingMessage,
+                    ),
+                  },
+                ),
+              ],
               SizedBox(height: tokens.spacing.s40),
               _PillField(
                 key: const ValueKey('login-email'),
@@ -615,37 +663,66 @@ class _LoginScreenState extends State<LoginScreen> {
   /// about - and it used to be stacked below the button with "Create an
   /// account", which put "I cannot get into my account" and "I do not have one"
   /// in the same list as though they were the same kind of answer.
+  /// **The checkbox is web-only, because the choice it offers is.**
+  /// Firebase persistence selects between browser storage tiers - local storage
+  /// against session storage, whose difference is a tab closing. Android has no
+  /// tab, its process is killed and restored whenever the OS needs the memory,
+  /// and the native SDK answers `setPersistence` with `UnimplementedError` for
+  /// exactly that reason: there is nothing there to choose between. See
+  /// `FirebaseEmailPasswordSignIn.call`, which catches it and must.
+  ///
+  /// So the control did nothing on every phone this app ships to, while
+  /// promising a cashier on a shared till that closing the app would end their
+  /// session. *Sign out* is the control that actually does that, and the
+  /// routing shell offers it on every route. Showing a second one that does not
+  /// is worse than showing none.
+  ///
+  /// Making it work on native would mean signing out on a cold start, and
+  /// Android cannot tell "the person closed it" from "the OS reclaimed it" -
+  /// so it would eventually sign a cashier out mid-shift, and signing back in
+  /// needs a network this app is otherwise built to do without.
+  ///
+  /// [rememberMe] stays `true` on native and is still passed to the boundary.
+  /// It maps to `Persistence.LOCAL`, which is what those platforms do anyway.
   Widget _rememberRow(AppTokens tokens) => SizedBox(
     height: tokens.density.minimumTapTarget.height,
     child: Row(
       children: <Widget>[
-        Checkbox(
-          value: rememberMe,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-          activeColor: tokens.colors.action.primary.container,
-          onChanged: (value) {
-            setState(() {
-              rememberMe = value ?? true;
-            });
-          },
-        ),
-        SizedBox(width: tokens.spacing.s12),
+        if (kIsWeb) ...<Widget>[
+          Checkbox(
+            value: rememberMe,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            activeColor: tokens.colors.action.primary.container,
+            onChanged: (value) {
+              setState(() {
+                rememberMe = value ?? true;
+              });
+            },
+          ),
+          SizedBox(width: tokens.spacing.s12),
+        ],
         // **`Expanded` and no `Spacer`.** With both, the label and the spacer
         // each took a flex share of the free space and "Remember me" ellipsised
         // to "Remember ..." on a 360dp handset with room to spare beside it.
         // The label takes the whole gap instead and gives only when there is
         // genuinely not enough - the link never shrinks, because shrinking a
         // target is what hard rule 4 forbids.
+        //
+        // Without the label there is nothing to take the gap, so the same
+        // `Expanded` holds it open and the link keeps the end of the row it has
+        // always had rather than sliding under the password field.
         Expanded(
-          child: Text(
-            'Remember me',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: tokens.typography.bodyMedium.copyWith(
-              color: tokens.colors.text.secondary,
-            ),
-          ),
+          child: kIsWeb
+              ? Text(
+                  'Remember me',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: tokens.typography.bodyMedium.copyWith(
+                    color: tokens.colors.text.secondary,
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
         _InlineLink(
           key: const ValueKey('login-go-reset'),
@@ -955,6 +1032,26 @@ final class _GlassPane extends StatelessWidget {
     );
   }
 }
+
+/// What the sign-in screen says when a staff invitation brought somebody here.
+///
+/// It names the address rather than the business: the link carries a tenant id
+/// and a proof, not a name, and this app does not put an identifier nobody
+/// recognises in front of a reader. The business is named on the acceptance
+/// screen, which reaches it through the membership the invitation created.
+const String invitationWaitingMessage =
+    'Your invitation is waiting. Sign in with the email address it was sent '
+    'to, and the business will be offered on the next screen.';
+
+/// What this screen says when the link that opened the app could not be read.
+///
+/// **The same sentence `TenantRoutingShell` draws for a signed-in reader**, and
+/// deliberately the same one: two wordings for one fact is how they come to
+/// disagree. It names the only thing that will work, because nothing this
+/// person can do to the link will fix it.
+const String invitationLinkInvalidMessage =
+    'This invitation link is invalid or incomplete. Ask whoever invited you to '
+    'send it again.';
 
 /// Which §2.1 status a sign-in failure is drawn as.
 ///

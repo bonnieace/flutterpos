@@ -105,6 +105,75 @@ void main() {
       );
     });
 
+    test('a record written by the previous build still reads', () async {
+      // **The half of a schema bump that can shut a till.** A version mismatch
+      // raises `malformed_shift_state`, which the controller turns into a
+      // register that refuses to open a shift - so version 2, which carried one
+      // `countedCashMinor` and no declared triple, has to keep reading rather
+      // than merely keep existing.
+      await box.put('user-a:tenant-a', <String, Object?>{
+        'schemaVersion': 2,
+        'uid': 'user-a',
+        'tenantId': 'tenant-a',
+        'shiftId': 'shift-a',
+        'businessDate': _businessDate,
+        'deviceId': _deviceA,
+        'serverConfirmedOpen': true,
+        'closeInProgress': true,
+        'countedCashMinor': 125000,
+        'updatedAtMs': 100,
+        'openedAtMs': 100,
+      });
+
+      final restored = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+
+      expect(restored, isNotNull);
+      expect(restored!.countedCashMinor, 125000);
+      // **Not turned into a declaration.** Reading it as one would invent two
+      // zeros the cashier never typed, and the replay would write them to the
+      // server as figures they declared.
+      expect(restored.declaration, isNull);
+    });
+
+    test('the declared triple round-trips through the box', () async {
+      final declaration = ShiftTenderDeclaration.tryParse(
+        cash: 125000,
+        mpesa: 34050,
+        card: 900,
+      )!;
+      await state.save(
+        _record(closeInProgress: true, declaration: declaration),
+      );
+      await state.close();
+
+      box = await _openBox();
+      state = HiveTenantShiftState.fromBox(box);
+      final restored = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+
+      expect(restored!.declaration, declaration);
+      expect(restored.countedCashMinor, isNull);
+    });
+
+    test('abandoning a count clears both figures together', () async {
+      final saved = await state.save(
+        _record(
+          closeInProgress: true,
+          countedCashMinor: 900,
+          declaration: ShiftTenderDeclaration.zero,
+        ),
+      );
+
+      final cancelled = saved.copyWith(
+        closeInProgress: false,
+        clearDeclaration: true,
+      );
+
+      // One fact, so one clear. A record that dropped the declaration and kept
+      // the legacy figure would claim a close had been counted when none had.
+      expect(cancelled.declaration, isNull);
+      expect(cancelled.countedCashMinor, isNull);
+    });
+
     test('raises on malformed durable state instead of failing open', () async {
       final valid = <String, Object?>{
         'schemaVersion': HiveTenantShiftState.schemaVersion,
@@ -144,6 +213,22 @@ void main() {
             (record) => record..['serverConfirmedOpen'] = 'yes',
             (record) => record..['closeInProgress'] = 1,
             (record) => record..['countedCashMinor'] = -5,
+            // A partial declared triple is refused rather than read with the
+            // missing methods as zero. This record is what an unsent close is
+            // replayed from, so a figure invented here reaches the server as
+            // one the cashier declared.
+            (record) => record..['declaredCashMinor'] = 100,
+            (record) => record
+              ..['declaredCashMinor'] = 100
+              ..['declaredMpesaMinor'] = 200,
+            (record) => record
+              ..['declaredCashMinor'] = -1
+              ..['declaredMpesaMinor'] = 0
+              ..['declaredCardMinor'] = 0,
+            (record) => record
+              ..['declaredCashMinor'] = '100'
+              ..['declaredMpesaMinor'] = 0
+              ..['declaredCardMinor'] = 0,
             (record) => record..remove('updatedAtMs'),
             // A record claiming the current version must carry the field the
             // current version added.
@@ -243,6 +328,7 @@ TenantShiftLocalRecord _record({
   bool serverConfirmedOpen = true,
   bool closeInProgress = false,
   int? countedCashMinor,
+  ShiftTenderDeclaration? declaration,
   DateTime? openedAt,
 }) => TenantShiftLocalRecord(
   uid: uid,
@@ -253,6 +339,7 @@ TenantShiftLocalRecord _record({
   serverConfirmedOpen: serverConfirmedOpen,
   closeInProgress: closeInProgress,
   countedCashMinor: countedCashMinor,
+  declaration: declaration,
   updatedAt: DateTime.utc(2026, 7, 31, 9),
   openedAt: openedAt ?? DateTime.utc(2026, 7, 31, 9),
 );

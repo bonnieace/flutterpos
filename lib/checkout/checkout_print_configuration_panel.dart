@@ -300,7 +300,6 @@ final class _TenantPrinterConfigurationPanelState
     final guardKey = 'printer-configuration:$_generation';
     _composeLoaders(guardKey);
     return TenantRouteGuard<TenantConfiguredPrinter>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

@@ -160,8 +160,11 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
     setState(() => _pageIndex--);
   }
 
-  @override
-  Widget build(BuildContext context) {
+  /// One loader pair per page and request, memoised so an unrelated rebuild
+  /// does not restart the read. See [TenantRouteGuard.load].
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
+    _loaderKey = key;
     final cursor = _cursors[_pageIndex];
     final request = widget.request;
     TenantGuardedLoader<TenantNamedPage<TenantSalePage>> readWith(
@@ -190,11 +193,22 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
         ).resolve(page.items.map((sale) => sale.soldById)),
       );
     };
+    _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
+  }
+
+  String? _loaderKey;
+  TenantGuardedLoader<TenantNamedPage<TenantSalePage>>? _loader;
+  TenantGuardedLoader<TenantNamedPage<TenantSalePage>>? _loaderCached;
+
+  @override
+  Widget build(BuildContext context) {
+    final request = widget.request;
+    _composeLoaders('${request.key}:$_pageIndex:${_cursors[_pageIndex]}');
     return TenantRouteGuard<TenantNamedPage<TenantSalePage>>(
-      key: ValueKey('${request.key}:$_pageIndex:$cursor'),
-      load: readWith(widget.reader),
-      loadCached: cache == null ? null : readWith(cache),
+      load: _loader!,
+      loadCached: _loaderCached,
       // **The page itself, with placeholders where the sales will be.** It used
       // to take the guard's default full-page spinner, which replaced the
       // heading and the pagination along with the records - so a person waiting
@@ -321,9 +335,7 @@ final class _SaleHistoryContents extends StatelessWidget {
           // §4.3's responsive contract.
           RecordList(
             identityLabel: 'Sale',
-            items: <RecordItem>[
-              for (final sale in loaded.items) _record(sale),
-            ],
+            items: <RecordItem>[for (final sale in loaded.items) _record(sale)],
             // §7's Empty pattern. No action: a sale is rung up at the till
             // rather than from its own history, so there is nothing here for a
             // person to press that would end the emptiness.
@@ -440,7 +452,11 @@ final class _SaleHistoryContents extends StatelessWidget {
     ],
     provenance: _recordedAtLabel(
       sale,
-      tenantStaffLabel(sale.soldById, names: staffNames, selfUid: selfUid ?? ''),
+      tenantStaffLabel(
+        sale.soldById,
+        names: staffNames,
+        selfUid: selfUid ?? '',
+      ),
     ),
     provenanceKey: ValueKey('sale-history-recorded-at-${sale.id}'),
     actions: <RecordAction>[

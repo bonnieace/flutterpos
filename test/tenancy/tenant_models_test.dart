@@ -113,9 +113,7 @@ void main() {
         _activeAccess(canonicalMembershipExists: false),
         _activeAccess(membershipStatus: MembershipStatus.pending),
         _activeAccess(membershipStatus: MembershipStatus.inactive),
-        _activeAccess(tenantStatus: TenantStatus.pending),
         _activeAccess(tenantStatus: TenantStatus.suspended),
-        _activeAccess(tenantStatus: TenantStatus.rejected),
         _activeAccess(tenantStatus: TenantStatus.archived),
       ];
 

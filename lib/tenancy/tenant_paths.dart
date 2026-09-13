@@ -37,6 +37,12 @@ enum TenantCollection {
   /// writers, and nothing here changes stock or a shift.
   reconciliationAnomalies('reconciliation_anomalies'),
 
+  /// One document, recomputed by every completed reconciliation run: how many
+  /// recorded differences are still open. It exists so a launcher can carry a
+  /// badge without listing [reconciliationAnomalies] to count it - those are
+  /// keyed by digest, so they can be neither ordered nor counted cheaply.
+  reconciliationSummary('reconciliation_summary'),
+
   /// The immutable trail of every closed shift whose summary was corrected.
   /// `amendShiftSummary` is the only writer, and it appends only: a client can
   /// never create, amend, or erase one. Each record states what the shift said
@@ -96,6 +102,7 @@ final class TenantPaths {
     TenantCollection.reconciliationJobs,
     TenantCollection.reconciliationDirtyDays,
     TenantCollection.reconciliationAnomalies,
+    TenantCollection.reconciliationSummary,
     TenantCollection.shiftAmendments,
     TenantCollection.expenses,
   ];

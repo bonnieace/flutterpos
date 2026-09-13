@@ -28,12 +28,14 @@ import {
   hasActiveEmailSuppression,
   RecipientPrivacyBinding,
 } from "../email/suppressionLookup";
+import {staffInvitationEmail} from "../email/templates";
 import {
   createInvitationProof,
   INVITATION_LIFETIME_MILLISECONDS,
   verifyInvitationProof,
 } from "./invitationProof";
 import {STAFF_INVITATION_HMAC_SECRET, invitationHmacSecretValue} from "./secret";
+import {storedCredentialBootstrapRequired} from "./shared";
 import {
   StoredInvitationRecord,
   StoredStaffRecord,
@@ -288,7 +290,7 @@ export async function dispatchInvitationDelivery(
       invitationToken: proof.token,
       invitationPath: delivery.invitationPath,
       dispatchAttempt,
-      credentialBootstrapRequired: invitation.visibleAcceptanceAllowed !== true,
+      credentialBootstrapRequired: storedCredentialBootstrapRequired(invitation),
     };
     transaction.update(invitationRef, {
       invitationVersion,
@@ -354,15 +356,6 @@ export async function dispatchInvitationDelivery(
   }
 }
 
-function htmlEscape(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function invitationActionUrl(task: InvitationDeliveryTask, baseUrl: string): string {
   if (!/^https:\/\//i.test(baseUrl)) {
     throw new Error("STAFF_INVITATION_ACTION_BASE_URL must be an HTTPS URL.");
@@ -413,6 +406,12 @@ async function sendWithBrevo(task: InvitationDeliveryTask): Promise<string> {
   } catch {
     throw new EmailProviderError("credential_link_unavailable", true);
   }
+  // The copy differs by whether the link sets a password on the way through,
+  // which is the same flag `invitationDeliveryLink` just branched on.
+  const rendered = staffInvitationEmail(
+    actionUrl,
+    task.credentialBootstrapRequired
+  );
   let response: Response;
   try {
     response = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -428,10 +427,9 @@ async function sendWithBrevo(task: InvitationDeliveryTask): Promise<string> {
           name: STAFF_INVITATION_SENDER_NAME.value(),
         },
         to: [{email: task.invitedEmail}],
-        subject: "You have been invited to a business workspace",
-        textContent: `Open this secure invitation link: ${actionUrl}`,
-        htmlContent: `<p>You have been invited to a business workspace.</p>` +
-          `<p><a href="${htmlEscape(actionUrl)}">Accept invitation</a></p>`,
+        subject: rendered.subject,
+        textContent: rendered.text,
+        htmlContent: rendered.html,
         headers: {
           "Idempotency-Key": `${task.deliveryId}-${task.dispatchAttempt}`,
           "X-Mailin-Track-Clicks": "0",

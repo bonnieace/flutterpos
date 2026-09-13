@@ -278,67 +278,16 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     });
   }
 
-  /// How close to the end of a provisional window is too close to sell offline.
-  ///
-  /// **The hazard this exists for.** A provisional window shuts at a timestamp,
-  /// silently, possibly mid-shift and possibly while the device is offline. A
-  /// sale saved to the outbox before that instant and submitted after it is
-  /// refused by the server for good - the rules will not take a write for a
-  /// lapsed tenant - so it is money taken, a receipt printed and handed over,
-  /// and no record anywhere. Suspension never had this problem: it is a
-  /// deliberate act at a known moment, not a deadline that arrives on its own.
-  ///
-  /// So near the end, the till stops taking sales it cannot immediately prove
-  /// were sent. It is a refusal at the start of a sale, before anything is
-  /// written and before a customer has been told a price.
-  static const Duration provisionalSellingCutoff = Duration(hours: 24);
-
-  /// Refuses a new sale that this device might not get to the server in time.
-  ///
-  /// Only in the last [provisionalSellingCutoff] of a provisional window, and
-  /// only while something is still unsent: a device that is up to date can sell
-  /// right up to the deadline, because each of those sales goes straight out.
-  Future<void> _refuseNearProvisionalExpiry(TenantSession captured) async {
-    final until = captured.provisionalUntil;
-    if (until == null) return;
-    if (captured.access.standingAt(_clock().toUtc()) !=
-        TenantStanding.provisional) {
-      // Approved businesses have no deadline, and a lapsed one was already
-      // refused by the `canAccess` check above.
-      return;
-    }
-    if (until.difference(_clock().toUtc()) > provisionalSellingCutoff) return;
-    final records = await _outbox.recordsForSession(
-      uid: captured.uid,
-      tenantId: captured.tenantId,
-    );
-    final unsent = records.any(
-      (record) =>
-          record.state == CheckoutOutboxState.savedOffline ||
-          record.state == CheckoutOutboxState.submitting ||
-          record.state == CheckoutOutboxState.awaitingConfirmation ||
-          record.state == CheckoutOutboxState.needsAttention,
-    );
-    if (unsent) {
-      throw const CheckoutDraftException('provisional_window_closing');
-    }
-  }
-
   Future<CheckoutOutboxRecord> _createDraft(
     CheckoutDraftRequest request,
     TenantSession? captured,
   ) async {
-    // Judged against this service's own clock, not the wall clock: everything
-    // else here - the business date, the receipt sequence, the window check
-    // below - is stamped from `_clock`, and a session judged from a different
-    // one could refuse a sale the rest of this method would have accepted.
-    if (captured == null || !captured.canAccess(now: _clock().toUtc())) {
+    if (captured == null || !captured.canAccess()) {
       throw const CheckoutDraftException('no_selected_session');
     }
     if (!_owns(captured)) {
       throw const CheckoutDraftException('session_changed');
     }
-    await _refuseNearProvisionalExpiry(captured);
     final attribution = await _boundShift(captured);
 
     final lines = _validatedLines(request.lines);
@@ -454,7 +403,6 @@ final class CheckoutDraftService implements CheckoutDraftSink {
         checkoutId: checkoutId,
         payload: payload,
         payloadHash: checkoutPayloadHash(payload),
-        now: _clock().toUtc(),
       );
     } on CheckoutSaleFormatException {
       throw const CheckoutDraftException('draft_contract_violation');

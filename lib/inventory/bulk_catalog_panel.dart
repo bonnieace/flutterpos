@@ -510,7 +510,6 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
     final guardKey = 'bulk-catalog:$_generation:$_pageIndex';
     _composeLoaders(guardKey);
     return TenantRouteGuard<_CatalogView>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantBulkCatalogRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

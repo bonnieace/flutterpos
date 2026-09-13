@@ -33,7 +33,10 @@
 /// `PrinterFailureNotice.sent`.
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
+import 'package:image/image.dart' as img;
 
 import 'checkout_print_configuration.dart';
 import 'checkout_sale.dart';
@@ -175,9 +178,139 @@ abstract final class ReceiptWords {
   ///
   /// It measures the fixed words only. A product name or a shop name is the
   /// shopkeeper's and may be any length; those wrap by design.
-  static bool get longestLineFits => all.every(
-    (word) => word.length <= PrinterPaperWidth.columns32.columns,
+  static bool get longestLineFits =>
+      all.every((word) => word.length <= PrinterPaperWidth.columns32.columns);
+}
+
+/// The width a printed logo is reduced to, in dots.
+///
+/// **Divisible by eight, which is not a nicety.** `Generator._toRasterFormat`
+/// pads a width that is not, and its padding path recomputes the row stride
+/// wrongly - so a mark 190 dots wide prints as a smear. 192 is half of the 58mm
+/// roll's 384 dots and a third of the 80mm roll's 576, so it is a mark rather
+/// than a banner on either.
+const int receiptLogoWidthDots = 192;
+
+/// The tallest a printed logo may be, so a portrait mark cannot push the name
+/// off the top of the paper.
+const int receiptLogoMaximumHeightDots = 192;
+
+/// [logo] as dots a thermal head can print, or null where there is nothing to
+/// draw - no bytes, or bytes no decoder recognises.
+///
+/// **Flattened onto white before anything else, and that is the bug this
+/// function exists to hold in one place.** `Generator._toRasterFormat` inverts
+/// the image and reads the colour channels only; a transparent pixel is
+/// transparent *black*, so a cut-out logo - which is exactly what the business
+/// details screen's *Remove background* produces - inverts to white-on-black
+/// and prints as a solid black rectangle with the mark punched out of it.
+/// Compositing onto white first is what makes transparency mean paper.
+///
+/// **Greyscale then Floyd-Steinberg.** A thermal head prints a dot or it does
+/// not, and a flat threshold turns anything with shading in it into a blot;
+/// dithering is what keeps a gradient legible at 203dpi.
+img.Image? receiptLogoMark(Uint8List? logo) {
+  if (logo == null || logo.isEmpty) return null;
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(logo);
+  } on Object {
+    return null;
+  }
+  if (decoded == null) return null;
+  // The width is what is fixed and the height follows it: a logo is fitted to
+  // the roll, never stretched to it.
+  var sized = img.copyResize(
+    decoded,
+    width: receiptLogoWidthDots,
+    interpolation: img.Interpolation.average,
   );
+  if (sized.height > receiptLogoMaximumHeightDots) {
+    final tall = img.copyResize(
+      decoded,
+      height: receiptLogoMaximumHeightDots,
+      interpolation: img.Interpolation.average,
+    );
+    // Padded back out to a multiple of eight, for the reason above, and centred
+    // rather than widened to fill the roll.
+    sized = img.copyExpandCanvas(
+      tall,
+      newWidth: (tall.width + 7) ~/ 8 * 8,
+      newHeight: tall.height,
+      position: img.ExpandCanvasPosition.center,
+      backgroundColor: img.ColorRgb8(255, 255, 255),
+    );
+  }
+  final paper = img.Image(width: sized.width, height: sized.height)
+    ..clear(img.ColorRgb8(255, 255, 255));
+  img.compositeImage(paper, sized);
+  final mark = _flattened(img.ditherImage(img.grayscale(paper)));
+  // **A picture whose ink is white prints its shape instead of nothing.** A
+  // logo drawn light-on-dark and then cut out is all subject and no ink: every
+  // pixel that survives is pale, so a faithful rendering is a blank strip of
+  // paper. What the shopkeeper means by that picture is the shape, and the
+  // shape is exactly what the alpha channel holds.
+  if (_inkCoverage(mark) >= _blankMarkCoverage) return mark;
+  final shape = _alphaAsInk(sized);
+  return shape == null || _inkCoverage(shape) < _blankMarkCoverage
+      ? mark
+      : shape;
+}
+
+/// Below this share of fired dots a mark is a blank strip of paper.
+const double _blankMarkCoverage = 0.01;
+
+/// [dithered] as plain 8-bit RGB, with no palette behind it.
+///
+/// **This is the bug that printed a logo inside a black rectangle**, found on a
+/// device on 2026-09-05. `img.ditherImage` answers with a *palette* image, and
+/// `Generator._toRasterFormat` - which greyscales, inverts and then reads the
+/// red channel out of `getBytes` - does not survive one: the ground came back
+/// as every dot fired and the subject as none, so a black silhouette on white
+/// paper printed as a white silhouette in a black block. Flattening the palette
+/// into ordinary pixels is what makes the package see the picture that is
+/// actually there.
+img.Image _flattened(img.Image dithered) {
+  final flat = img.Image(
+    width: dithered.width,
+    height: dithered.height,
+    numChannels: 3,
+  );
+  for (var y = 0; y < dithered.height; y++) {
+    for (var x = 0; x < dithered.width; x++) {
+      final value = dithered.getPixel(x, y).luminance < 128 ? 0 : 255;
+      flat.setPixelRgb(x, y, value, value, value);
+    }
+  }
+  return flat;
+}
+
+/// [source]'s opaque pixels as ink, or null where it has no alpha to read.
+img.Image? _alphaAsInk(img.Image source) {
+  if (source.numChannels < 4) return null;
+  final flat = img.Image(
+    width: source.width,
+    height: source.height,
+    numChannels: 3,
+  );
+  for (var y = 0; y < source.height; y++) {
+    for (var x = 0; x < source.width; x++) {
+      final value = source.getPixel(x, y).a >= 128 ? 0 : 255;
+      flat.setPixelRgb(x, y, value, value, value);
+    }
+  }
+  return flat;
+}
+
+/// The share of [mark] that will fire a dot.
+double _inkCoverage(img.Image mark) {
+  var ink = 0;
+  for (var y = 0; y < mark.height; y++) {
+    for (var x = 0; x < mark.width; x++) {
+      if (mark.getPixel(x, y).luminance < 128) ink++;
+    }
+  }
+  return ink / (mark.width * mark.height);
 }
 
 /// The two rolls, as the generator's own paper sizes.
@@ -220,9 +353,11 @@ final class CheckoutReceiptBody {
   /// branding exactly as the home's title is — this class does not read
   /// documents.
   List<int> build(
-    CheckoutSalePayload sale, {
+    CheckoutReceiptSale sale, {
     String? businessName,
     String? servedBy,
+    Uint8List? logo,
+    String? slogan,
   }) {
     final generator = Generator(
       paperSizeFor(configuration.paperWidth),
@@ -234,7 +369,7 @@ final class CheckoutReceiptBody {
       // this one command is the difference between a shop's own name printing
       // and printing as mojibake.
       ...generator.setGlobalCodeTable(codePage),
-      ..._heading(generator, businessName),
+      ..._heading(generator, businessName, slogan, logo),
       ..._provenance(generator, sale, servedBy),
       ..._lines(generator, sale),
       ..._totals(generator, sale),
@@ -315,31 +450,66 @@ final class CheckoutReceiptBody {
   /// is built the same way and a rule cannot disagree with the rows it separates.
   List<int> _rule(Generator generator) => generator.text('-' * _columns);
 
-  List<int> _heading(Generator generator, String? businessName) => <int>[
-    ...generator.text(
-      // Centred by padding at double width, so the name sits over the middle of
-      // the paper rather than wherever the printer decides `ESC a 1` means when
-      // an absolute position has also been set on the same line.
-      _centred(
-        ReceiptText.forPrinter(
-          businessName?.trim().isNotEmpty ?? false
-              ? businessName!.trim()
-              : ReceiptWords.unnamedBusiness,
+  /// The mark, the name, the slogan, and the rule that closes them off.
+  ///
+  /// **The blank lines are the whole of the spacing and they are deliberate.**
+  /// `GS v 0` advances the paper by exactly the height of the image and stops,
+  /// so without one the first row of dots in the name sits against the last row
+  /// of the logo; and the rule under the heading had the same problem against a
+  /// double-height name. One empty line above and below the block is what a
+  /// heading needs to read as a heading rather than as the top of a list.
+  ///
+  /// A receipt with no logo and no slogan prints what it always printed, plus
+  /// the line under the name.
+  List<int> _heading(
+    Generator generator,
+    String? businessName,
+    String? slogan,
+    Uint8List? logo,
+  ) {
+    final line = slogan?.trim();
+    return <int>[
+      // **The mark above the name, when the business has published one.** It is
+      // the first thing on the paper for the same reason it is the first thing
+      // on the business details screen: it is what a customer recognises
+      // without reading.
+      if (receiptLogoMark(logo) case final mark?) ...<int>[
+        ...generator.imageRaster(mark),
+        ...generator.emptyLines(1),
+      ],
+      ...generator.text(
+        // Centred by padding at double width, so the name sits over the middle
+        // of the paper rather than wherever the printer decides `ESC a 1` means
+        // when an absolute position has also been set on the same line.
+        _centred(
+          ReceiptText.forPrinter(
+            businessName?.trim().isNotEmpty ?? false
+                ? businessName!.trim()
+                : ReceiptWords.unnamedBusiness,
+          ),
+          scale: 2,
         ),
-        scale: 2,
+        styles: const PosStyles(
+          bold: true,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+        ),
       ),
-      styles: const PosStyles(
-        bold: true,
-        height: PosTextSize.size2,
-        width: PosTextSize.size2,
-      ),
-    ),
-    ..._rule(generator),
-  ];
+      // **The slogan, which the business details screen has promised since it
+      // was written** - *one line under the name on a receipt* - and which no
+      // receipt has ever carried. It is at ordinary size under a double-height
+      // name, which is what makes the two read as a heading and a subtitle
+      // rather than as two headings.
+      if (line != null && line.isNotEmpty)
+        ...generator.text(_centred(ReceiptText.forPrinter(line))),
+      ...generator.emptyLines(1),
+      ..._rule(generator),
+    ];
+  }
 
   List<int> _provenance(
     Generator generator,
-    CheckoutSalePayload sale,
+    CheckoutReceiptSale sale,
     String? servedBy,
   ) => <int>[
     // The receipt number is the thing a person quotes on the phone, so it is
@@ -393,7 +563,7 @@ final class CheckoutReceiptBody {
   /// it stood: it claimed a 32-column line would cut the name "to about twelve
   /// characters", where the real budget is 21 - and `2 x Maize flour 2kg` is
   /// nineteen. The common case always fitted.
-  List<int> _lines(Generator generator, CheckoutSalePayload sale) {
+  List<int> _lines(Generator generator, CheckoutReceiptSale sale) {
     final bytes = <int>[];
     for (final line in sale.lines) {
       final description = ReceiptText.forPrinter(
@@ -467,7 +637,7 @@ final class CheckoutReceiptBody {
     return rows.isEmpty ? <String>[''] : rows;
   }
 
-  List<int> _totals(Generator generator, CheckoutSalePayload sale) => <int>[
+  List<int> _totals(Generator generator, CheckoutReceiptSale sale) => <int>[
     ..._amount(generator, ReceiptWords.subtotalLabel, sale, sale.subtotalMinor),
     // **A discount line only where there was a discount.** A permanent
     // `Discount  KES 0.00` teaches a customer to ignore the line, which is
@@ -491,7 +661,7 @@ final class CheckoutReceiptBody {
     ..._rule(generator),
   ];
 
-  List<int> _footer(Generator generator, CheckoutSalePayload sale) => <int>[
+  List<int> _footer(Generator generator, CheckoutReceiptSale sale) => <int>[
     ...generator.text(
       _pair(ReceiptWords.paidByLabel, ReceiptWords.tender(sale.tender)),
     ),
@@ -503,7 +673,7 @@ final class CheckoutReceiptBody {
   List<int> _amount(
     Generator generator,
     String label,
-    CheckoutSalePayload sale,
+    CheckoutReceiptSale sale,
     int minor, {
     PosStyles styles = const PosStyles(),
   }) => generator.text(

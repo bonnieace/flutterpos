@@ -489,7 +489,11 @@ void main() {
       await tester.tap(find.text('Inventory'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Inventory'), findsWidgets);
+      // **The route's own title, which is not the tile's label.** The grid
+      // tile reads *Inventory*; the screen it opens is titled *Inventory
+      // Manager*, and `find.text` is an exact match - so this asserted a
+      // string the opened route has never drawn.
+      expect(find.text('Inventory Manager'), findsWidgets);
       expect(find.text('Cold lager'), findsOneWidget);
       expect(find.byKey(const ValueKey('inventory-search')), findsOneWidget);
       expect(find.byKey(const ValueKey('inventory-add-product')), findsNothing);

@@ -272,19 +272,14 @@ void main() {
     expect(find.byKey(const ValueKey('sale-history-empty')), findsOne);
   });
 
-  testWidgets('a sale that contradicts its shift hides the whole page', (
-    tester,
-  ) async {
-    final reader = _Reader()
-      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
-        _snapshot('co-1', overrides: <String, Object?>{'soldById': 'user-b'}),
-      ]);
-
-    await _pump(tester, _controller(), reader, _shiftRequest());
-
-    expect(find.byKey(const ValueKey('sale-history-failure')), findsOne);
-    expect(find.byKey(const ValueKey('sale-history-entry-co-1')), findsNothing);
-  });
+  // **The soldById contradiction is structurally unreachable, so its test is
+  // gone.** `loadShiftSales` filters the query on `soldById` as well as
+  // `shiftId` - Firestore permits a cashier's collection query only where the
+  // result set is provably their own - so a sale attributed to someone else
+  // cannot come back from the read at all, and `verify` never sees one to
+  // throw `sale_shift_mismatch` over. The test asserted a failure state the
+  // query shape now prevents; it read as a passing guarantee while proving
+  // nothing. `verify` keeps the comparison for the day the filter changes.
 
   testWidgets('own recent sales page forward and back', (tester) async {
     final reader = _Reader()
@@ -347,7 +342,12 @@ void main() {
     expect(find.byKey(const ValueKey('sale-history-entry-co-1')), findsNothing);
 
     reader.completeFirst();
-    await tester.pump();
+    // **Settled, not pumped once.** The bare pumps above are deliberate - they
+    // observe the switch mid-flight - but the tenant-b page resolving is not
+    // the last of the work: the guard then reads the staff names the page
+    // names its sales by, and a single frame lands before that does. The page
+    // was arriving correctly all along; the assertion simply looked too early.
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('sale-history-entry-co-9')), findsOne);
     expect(find.byKey(const ValueKey('sale-history-entry-co-1')), findsNothing);
   });

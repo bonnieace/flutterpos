@@ -158,7 +158,6 @@ final class _TenantShiftAmendmentPanelState
     final guardKey = '$_shiftId:$_pageIndex:$cursor';
     _composeLoaders(guardKey);
     return TenantRouteGuard<TenantShiftAmendmentRecordPage>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantShiftAmendmentFeedRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

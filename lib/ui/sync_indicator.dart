@@ -51,7 +51,7 @@ final class SyncIndicator extends StatelessWidget {
     required this.waiting,
     required this.onOpen,
     this.needsAttention = false,
-    this.icon = Icons.upload_outlined,
+    this.icon = Icons.notifications_outlined,
     this.subject = 'Checkouts on this device',
   });
 
@@ -62,8 +62,14 @@ final class SyncIndicator extends StatelessWidget {
 
   final VoidCallback onOpen;
 
-  /// Whether anything in the queue needs a person. Turns the badge
-  /// `status.problem`.
+  /// Whether anything in the queue needs a person.
+  ///
+  /// **It says so in the label rather than in the tint, since 2026-09-04.**
+  /// The badge is red at every standing now - a sixteen-pixel disc in a
+  /// toolbar cannot carry the difference between *moving* and *stuck*, and
+  /// §9 does not allow that difference to be carried by colour anyway. A
+  /// person using a screen reader is told it; everyone else is told it by the
+  /// page the badge opens.
   final bool needsAttention;
 
   final IconData icon;
@@ -75,15 +81,14 @@ final class SyncIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final role = (needsAttention ? AppStatus.problem : AppStatus.info).role(
-      tokens,
-    );
     final radius = BorderRadius.circular(tokens.radius.md);
     return Semantics(
       button: true,
-      label: waiting == 0
-          ? '$subject: none waiting'
-          : '$subject: $waiting waiting',
+      label: switch ((waiting, needsAttention)) {
+        (0, _) => '$subject: none waiting',
+        (final count, true) => '$subject: $count waiting, some need you',
+        (final count, false) => '$subject: $count waiting',
+      },
       excludeSemantics: true,
       child: PressSurface(
         borderRadius: radius,
@@ -109,16 +114,19 @@ final class SyncIndicator extends StatelessWidget {
             alignment: Alignment.center,
             clipBehavior: Clip.none,
             children: <Widget>[
+              // **A plain bell, whatever is waiting.** The badge beside it is
+              // the signal, and tinting the glyph as well made a toolbar with
+              // one thing in it read as an alert.
               Icon(
                 icon,
                 size: Callout.glyphSize,
-                color: waiting == 0 ? tokens.colors.text.secondary : role.fg,
+                color: tokens.colors.text.secondary,
               ),
               if (waiting > 0)
                 Positioned(
                   top: tokens.spacing.s4,
                   right: 0,
-                  child: _Badge(count: waiting, role: role),
+                  child: _Badge(count: waiting),
                 ),
             ],
           ),
@@ -128,29 +136,54 @@ final class SyncIndicator extends StatelessWidget {
   }
 }
 
+/// The count over the bell: a red disc, at any standing.
+///
+/// **Red rather than the standing's own colour, at the developer's direction
+/// on 2026-09-04.** It took `status.info` for work that was merely moving and
+/// `status.problem` for work that needed somebody, which is a distinction two
+/// tints cannot carry on a sixteen-pixel disc in a toolbar. What the badge is
+/// for is *there is something here*, and that is one thing. Which of it needs
+/// a person is the page's job to say, and it says it in words.
+///
+/// **A disc rather than a pill** until the count needs two digits: a minimum
+/// square of `space.16` with the figure centred, so one waiting item is round
+/// and nine is the same round. Past ninety-nine it says `99+`, because a
+/// three-figure badge covers the glyph it is sitting on.
 final class _Badge extends StatelessWidget {
-  const _Badge({required this.count, required this.role});
+  const _Badge({required this.count});
 
   final int count;
-  final AppStatusRole role;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final role = AppStatus.problem.role(tokens);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: role.fg,
         borderRadius: BorderRadius.circular(tokens.radius.pill),
+        // The ring is the toolbar's own ground, so the disc reads as sitting
+        // over the glyph rather than merging into it.
         border: Border.all(color: tokens.colors.surface.base, width: 2),
       ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s4),
-        child: Text(
-          '$count',
-          // §2.2's `numeric.body`, tabular, so a two-digit badge does not jitter
-          // as the queue drains.
-          style: tokens.typography.numericBody.copyWith(
-            color: tokens.colors.surface.base,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: tokens.spacing.s16,
+          minHeight: tokens.spacing.s16,
+        ),
+        child: Center(
+          widthFactor: 1,
+          heightFactor: 1,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s4),
+            child: Text(
+              count > 99 ? '99+' : '$count',
+              // §2.2's `numeric.body`, tabular, so a two-digit badge does not
+              // jitter as the queue drains.
+              style: tokens.typography.numericBody.copyWith(
+                color: tokens.colors.surface.base,
+              ),
+            ),
           ),
         ),
       ),
@@ -158,22 +191,56 @@ final class _Badge extends StatelessWidget {
   }
 }
 
-/// What the button opens: every count, with the one that is not zero drawn as a
-/// status and the rest as plain rows.
+/// Every count, as a grid of figures rather than a list of rows.
+///
+/// **It was twelve `label ....... 0` rows until 2026-09-04**, which is the
+/// shape §5.1 was replacing when it named "five-line offline queue list" - and
+/// twelve of them on a page of their own is that shape again, longer. §7 says
+/// where the counts go: *"the checkout queue counts belong in a `StatRow`, not
+/// a five-line list."* This is that, at the size a count of two belongs at: the
+/// figure is the loud part, the label is underneath it, and only the cells that
+/// are not zero take a status container.
+///
+/// **Every state is still named, including the zeroes.** A real run once
+/// reported this panel showing "Saved offline: 0" and seemingly nothing else
+/// while a record was present; the five - now twelve - are siblings, so any
+/// record at all renders all of them and an absent line can never be confused
+/// with a zero. A grid makes that affordable in a way a list did not.
 final class SyncQueuePanel extends StatelessWidget {
   const SyncQueuePanel({
     super.key,
-    required this.title,
+    this.title,
     required this.entries,
-    required this.onClose,
+    this.onClose,
     this.emptyMessage,
     this.explanation,
-    this.icon = Icons.upload_outlined,
+    this.icon = Icons.notifications_outlined,
   });
 
-  final String title;
+  /// The card's own heading.
+  ///
+  /// **Null where the page already said it.** On the notifications route the
+  /// section band above this carries the words, and a card repeating them one
+  /// line lower is the duplication §7 forbids.
+  final String? title;
+
   final List<SyncQueueEntry> entries;
-  final VoidCallback onClose;
+
+  /// The width one count cell is laid out at.
+  ///
+  /// Named for the reason `EmptyState.markSize` is: `design.md` states no cell
+  /// width. 104 fits the longest label this panel carries - *Awaiting change
+  /// confirmation* - on three lines at `caption`, and gives three columns at
+  /// 411 and more above it.
+  static const double cellWidth = 104;
+
+  /// Dismisses the panel, where it is something that can be dismissed.
+  ///
+  /// **Null where the panel *is* the page.** It hung under a button in the top
+  /// bar until 2026-09-03 and closing it was the only way back; on the
+  /// notifications route the way back is the route's own, and a second `Close`
+  /// beside the title would be a control that undoes nothing.
+  final VoidCallback? onClose;
 
   /// Said instead of the counts when every one of them is zero.
   ///
@@ -204,28 +271,31 @@ final class SyncQueuePanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Row(
-              children: <Widget>[
-                // The same glyph as the button that opened it, which is what
-                // makes the panel read as that button's rather than as a page.
-                Icon(
-                  icon,
-                  size: Callout.glyphSize,
-                  color: tokens.colors.status.info.fg,
-                ),
-                SizedBox(width: tokens.spacing.s12),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: tokens.typography.titleMedium.copyWith(
-                      color: tokens.colors.text.primary,
+            if (title case final heading?) ...<Widget>[
+              Row(
+                children: <Widget>[
+                  // The same glyph as the button that opened it, which is what
+                  // makes the panel read as that button's rather than as a
+                  // page.
+                  Icon(
+                    icon,
+                    size: Callout.glyphSize,
+                    color: tokens.colors.status.info.fg,
+                  ),
+                  SizedBox(width: tokens.spacing.s12),
+                  Expanded(
+                    child: Text(
+                      heading,
+                      style: tokens.typography.titleMedium.copyWith(
+                        color: tokens.colors.text.primary,
+                      ),
                     ),
                   ),
-                ),
-                _CloseControl(onClose: onClose),
-              ],
-            ),
-            SizedBox(height: tokens.spacing.s12),
+                  if (onClose case final close?) _CloseControl(onClose: close),
+                ],
+              ),
+              SizedBox(height: tokens.spacing.s12),
+            ],
             if (emptyMessage case final sentence?)
               Text(
                 sentence,
@@ -234,10 +304,13 @@ final class SyncQueuePanel extends StatelessWidget {
                     .copyWith(color: tokens.colors.text.secondary),
               )
             else
-              for (final entry in entries) ...<Widget>[
-                _Row(entry: entry),
-                SizedBox(height: tokens.spacing.s8),
-              ],
+              Wrap(
+                spacing: tokens.spacing.s8,
+                runSpacing: tokens.spacing.s8,
+                children: <Widget>[
+                  for (final entry in entries) _Cell(entry: entry),
+                ],
+              ),
             if (explanation case final prose?) ...<Widget>[
               SizedBox(height: tokens.spacing.s4),
               prose,
@@ -281,9 +354,14 @@ final class _CloseControl extends StatelessWidget {
   }
 }
 
-/// One count. A status row where it has one, a plain row where it does not.
-final class _Row extends StatelessWidget {
-  const _Row({required this.entry});
+/// One count: the figure, then what it is.
+///
+/// **A status cell wears a container and a plain one does not**, which is the
+/// rule the row it replaced already kept: a panel where every cell is tinted is
+/// a panel with no signal in it. Exactly the cells that are not zero are the
+/// ones worth looking at, and they are the ones that are painted.
+final class _Cell extends StatelessWidget {
+  const _Cell({required this.entry});
 
   final SyncQueueEntry entry;
 
@@ -292,48 +370,58 @@ final class _Row extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final standing = entry.status;
     final role = standing?.role(tokens);
-    final label = Text(
-      entry.label,
-      style:
-          (standing == null
-                  ? tokens.density.body(tokens.typography)
-                  : tokens.typography.labelLarge)
-              .copyWith(color: role?.fg ?? tokens.colors.text.secondary),
-    );
-    final count = Text(
-      '${entry.count}',
-      style: tokens.typography.numericBody.copyWith(
-        color: role?.fg ?? tokens.colors.text.primary,
-      ),
-    );
-    final row = Row(
-      children: <Widget>[
-        if (standing != null) ...<Widget>[
-          Icon(
-            standing.defaultIcon,
-            size: StatusBadge.iconSize,
-            color: role!.fg,
+    return SizedBox(
+      width: SyncQueuePanel.cellWidth,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: role?.bg ?? tokens.colors.surface.sunken,
+          border: Border.all(
+            color: role?.border ?? tokens.colors.surface.borderSubtle,
           ),
-          SizedBox(width: tokens.spacing.s8),
-        ],
-        Expanded(child: label),
-        SizedBox(width: tokens.spacing.s12),
-        count,
-      ],
-    );
-    if (standing == null) return row;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: role!.bg,
-        border: Border.all(color: role.border),
-        borderRadius: BorderRadius.circular(tokens.radius.sm),
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: tokens.spacing.s12,
-          vertical: tokens.spacing.s8,
+          borderRadius: BorderRadius.circular(tokens.radius.md),
         ),
-        child: row,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: tokens.spacing.s12,
+            vertical: tokens.spacing.s12,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  Text(
+                    '${entry.count}',
+                    // §2.2's `numeric.compact`, which is the role a figure
+                    // this size takes: tabular, so a column of them lines up.
+                    style: tokens.typography.numericCompact.copyWith(
+                      color: role?.fg ?? tokens.colors.text.primary,
+                    ),
+                  ),
+                  if (standing != null) ...<Widget>[
+                    const Spacer(),
+                    // §9: the tint is never the only carrier. The glyph says
+                    // the same thing, and the label below says it in words.
+                    Icon(
+                      standing.defaultIcon,
+                      size: StatusBadge.iconSize,
+                      color: role!.fg,
+                    ),
+                  ],
+                ],
+              ),
+              SizedBox(height: tokens.spacing.s4),
+              Text(
+                entry.label,
+                style: tokens.typography.caption.copyWith(
+                  color: role?.fg ?? tokens.colors.text.secondary,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

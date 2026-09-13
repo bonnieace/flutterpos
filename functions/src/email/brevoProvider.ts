@@ -4,6 +4,12 @@ import {
   ProviderEmailMessage,
   ProviderSendResult,
 } from "./contracts";
+import {
+  accountVerificationEmail,
+  passwordResetEmail,
+  platformAlertEmail,
+  RenderedEmail,
+} from "./templates";
 
 export interface BrevoProviderConfiguration {
   apiKey: string;
@@ -23,65 +29,61 @@ function requireProviderConfiguration(config: BrevoProviderConfiguration): void 
   }
 }
 
+/**
+ * Picks the template and, for an alert, sanitises the two fields it is allowed
+ * to print.
+ *
+ * The alert type is re-validated here rather than trusted from the caller:
+ * anything that is not a short snake_case token is replaced with the generic
+ * one, so a value that reached this far by another route cannot become markup
+ * or leak a phrase somebody wrote elsewhere.
+ */
+function renderTemplate(message: ProviderEmailMessage): RenderedEmail {
+  if (message.template === "password_reset") {
+    return passwordResetEmail(message.actionUrl);
+  }
+  if (message.template === "account_verification") {
+    return accountVerificationEmail(message.actionUrl);
+  }
+  const alertType = /^[a-z0-9_]{1,64}$/.test(
+    message.redactedContext?.alertType ?? ""
+  ) ? message.redactedContext?.alertType : undefined;
+  const severity = message.redactedContext?.severity === "critical" ?
+    "critical" : "attention";
+  return platformAlertEmail(
+    message.actionUrl,
+    severity,
+    alertType ?? "operator_action_required"
+  );
+}
+
+function providerTag(message: ProviderEmailMessage): string {
+  if (message.template === "password_reset") return "password-reset";
+  if (message.template === "account_verification") return "account-verification";
+  return "platform-alert";
+}
+
 function messageBody(
   message: ProviderEmailMessage,
   config: BrevoProviderConfiguration
 ): Record<string, unknown> {
-  let subject: string;
-  let textContent: string;
-  let htmlContent: string;
-  let tag: string;
-  if (message.template === "password_reset") {
-    subject = "Reset your ChillTent password";
-    textContent = `Use this secure link to reset your password: ${message.actionUrl}`;
-    htmlContent = "<p>Use the secure password-reset link sent with this message.</p>" +
-      `<p><a href="${htmlEscape(message.actionUrl)}">Reset password</a></p>`;
-    tag = "password-reset";
-  } else if (message.template === "account_verification") {
-    subject = "Verify your ChillTent account";
-    textContent = `Use this secure link to verify your account: ${message.actionUrl}`;
-    htmlContent = "<p>Use the secure verification link sent with this message.</p>" +
-      `<p><a href="${htmlEscape(message.actionUrl)}">Verify account</a></p>`;
-    tag = "account-verification";
-  } else {
-    const alertType = /^[a-z0-9_]{1,64}$/.test(
-      message.redactedContext?.alertType ?? ""
-    ) ? message.redactedContext?.alertType : "operator_action_required";
-    const severity = message.redactedContext?.severity === "critical" ?
-      "critical" : "attention";
-    subject = "ChillTent platform operator action required";
-    textContent = `A ${severity} platform alert (${alertType}) requires review. ` +
-      `Open the operator dashboard: ${message.actionUrl}`;
-    htmlContent = `<p>A ${htmlEscape(severity)} platform alert ` +
-      `(${htmlEscape(alertType ?? "operator_action_required")}) requires review.</p>` +
-      `<p><a href="${htmlEscape(message.actionUrl)}">Open operator dashboard</a></p>`;
-    tag = "platform-alert";
-  }
+  const rendered = renderTemplate(message);
   return {
     sender: {
       email: config.senderAddress,
       name: config.senderName,
     },
     to: [{email: message.recipient}],
-    subject,
-    textContent,
-    htmlContent,
+    subject: rendered.subject,
+    textContent: rendered.text,
+    htmlContent: rendered.html,
     headers: {
       "Idempotency-Key": message.deliveryId,
       "X-Mailin-Track-Clicks": "0",
       "X-Mailin-Track-Opens": "0",
     },
-    tags: [tag],
+    tags: [providerTag(message)],
   };
-}
-
-function htmlEscape(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function retryableHttpStatus(status: number): boolean {

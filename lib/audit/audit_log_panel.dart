@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/fields.dart';
 import '../ui/pagination.dart';
-import '../ui/record_list.dart';
+import '../ui/states.dart';
 import '../ui/scaffold.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -168,7 +168,6 @@ final class _TenantAuditLogPanelState extends State<TenantAuditLogPanel> {
     final guardKey = '${_eventType?.wireValue}:$_pageIndex:$cursor';
     _composeLoaders(guardKey);
     return TenantRouteGuard<_AuditView>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantAuditLogRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
@@ -218,25 +217,13 @@ final class _AuditLogContents extends StatelessWidget {
       key: const ValueKey('audit-log'),
       padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
-        // §7's "Title appears once": the `AppScaffold` above says `Activity log`,
-        // and this said the same thing at greater length directly under it.
-        SizedBox(height: tokens.spacing.s4),
-        Text(
-          key: const ValueKey('audit-log-scope'),
-          page.isEventScoped
-              ? 'Every "${page.eventType!.label}" event recorded for this '
-                    'business. Other events are not listed on this page.'
-              : 'Every event this business recorded, including the ones the '
-                    'platform caused. Individual sales are not events and are '
-                    'not listed here.',
-        ),
-        SizedBox(height: tokens.spacing.s4),
-        const Text(
-          'The log is permanent and cannot be edited from this app. It is '
-          'listed by record ID, which is not time order; each entry states when '
-          'it was recorded.',
-        ),
-        SizedBox(height: tokens.spacing.s16),
+        // **The two paragraphs are gone, 2026-09-04.** They said the log holds
+        // every event, that sales are not events, that it cannot be edited and
+        // that it is ordered by record ID - four sentences a person read once
+        // and then scrolled past for the rest of the product's life, standing
+        // between the title and the thing they came to read. What survives of
+        // them is the one fact that changes what a row means: which events are
+        // on the page, and that is the control below rather than prose.
         AppSelect<TenantAuditEventType?>(
           key: const ValueKey('audit-log-filter'),
           value: page.eventType,
@@ -255,24 +242,38 @@ final class _AuditLogContents extends StatelessWidget {
           ],
           onChanged: onSelectEvent,
         ),
-        SizedBox(height: tokens.spacing.s16),
-        // §4.3's responsive contract: stacked cards on a phone, two-column cards
-        // on a tablet, and a table on a desktop window - which this route never
-        // had before step 6, and which is the form an activity log is most
-        // legible in. Nothing about what an event says has changed; only what
-        // shape it is said in.
-        RecordList(
-          identityLabel: 'Event',
-          items: <RecordItem>[for (final record in page.items) _record(record)],
-          empty: Text(
+        SizedBox(height: tokens.spacing.s24),
+        if (page.items.isEmpty)
+          EmptyState(
             key: const ValueKey('audit-log-empty'),
-            page.isEventScoped
-                ? 'No "${page.eventType!.label}" event has been recorded for '
-                      'this business.'
-                : 'No event has been recorded for this business.',
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s16),
+            title: page.isEventScoped
+                ? 'No "${page.eventType!.label}" event yet'
+                : 'Nothing has been recorded yet',
+            hint: 'An event appears here when somebody changes the business, '
+                'its staff, or its stock.',
+            illustration: 'file-search.svg',
+          )
+        else
+          // **One rail, no day headings.** Grouping by day was the obvious
+          // thing to reach for and it was wrong here: the query pages by
+          // record ID, so a page arrives with 09-02 above 08-31 above 09-03,
+          // and a screen that drew a heading per run would show four headings
+          // for four events and imply an order the data does not carry. Each
+          // row states its own instant instead, which is the honest unit.
+          for (final record in page.items)
+            _Event(
+              record: record,
+              actor: _actorLabel(record),
+              target: record.targetUid == null
+                  ? null
+                  : tenantStaffLabel(
+                      record.targetUid!,
+                      names: view.names,
+                      selfUid: selfUid,
+                    ),
+              last: identical(record, page.items.last),
+            ),
+        SizedBox(height: tokens.spacing.s24),
         Pagination(
           pageNumber: pageIndex + 1,
           previousKey: const ValueKey('audit-log-previous'),
@@ -280,61 +281,20 @@ final class _AuditLogContents extends StatelessWidget {
           onPrevious: pageIndex > 0 ? onPreviousPage : null,
           onNext: page.hasMore ? onNextPage : null,
         ),
+        SizedBox(height: tokens.spacing.s16),
+        // The one sentence of the two paragraphs worth keeping, at the foot
+        // where a footnote goes: a page ordered by record ID is not a page
+        // ordered by time, and every row carries its own instant because of it.
+        Text(
+          key: const ValueKey('audit-log-scope'),
+          'Permanent, and listed by record rather than by time.',
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
+        ),
       ],
     );
   }
-
-  /// One event as §5.2's five rows.
-  ///
-  /// **Only a critical event carries a status, and an ordinary one carries
-  /// none.** §2.1's five statuses each mean exactly one thing and "an event was
-  /// recorded" is not among them, so a badge on every row would be a badge that
-  /// says nothing - which is the drift §1 describes, arriving by a different
-  /// door. It is also what this screen already meant: the warning triangle was
-  /// drawn for `isCritical` and the ordinary glyph was a decoration beside every
-  /// other row.
-  ///
-  /// The record ID is deliberately not shown. It was never on this card, and
-  /// §2.2's `mono` role - the one for "strings a person compares character by
-  /// character" - names no family until the `Inter` / Roboto question is
-  /// answered.
-  RecordItem _record(TenantAuditRecord record) => RecordItem(
-    id: record.id,
-    recordKey: ValueKey('audit-log-entry-${record.id}'),
-    title: _eventLabel(record),
-    titleKey: ValueKey('audit-log-event-${record.id}'),
-    status: record.isCritical
-        ? RecordStatus(
-            status: AppStatus.problem,
-            label: 'Critical',
-            icon: Icons.warning_amber_outlined,
-            semanticLabel: 'Critical event',
-          )
-        : null,
-    attributes: <RecordAttribute>[
-      if (record.fromStatus != null || record.toStatus != null)
-        RecordAttribute(
-          label: 'Change',
-          value:
-              '${record.fromStatus ?? 'unknown'} to '
-              '${record.toStatus ?? 'unknown'}',
-          valueKey: ValueKey('audit-log-status-${record.id}'),
-        ),
-      if (record.targetUid case final targetUid?)
-        RecordAttribute(
-          label: 'About',
-          value: tenantStaffLabel(
-            targetUid,
-            names: view.names,
-            selfUid: selfUid,
-          ),
-          valueKey: ValueKey('audit-log-target-${record.id}'),
-          flex: 2,
-        ),
-    ],
-    provenance: _recordedLabel(record, _actorLabel(record)),
-    provenanceKey: ValueKey('audit-log-recorded-${record.id}'),
-  );
 
   /// The platform acts on a business without being a member of it, so those
   /// events are attributed to the platform rather than to a missing colleague.
@@ -364,4 +324,188 @@ String _instant(DateTime value) {
   String pad(int part) => part.toString().padLeft(2, '0');
   return '${utc.year}-${pad(utc.month)}-${pad(utc.day)} '
       '${pad(utc.hour)}:${pad(utc.minute)} UTC';
+}
+
+/// One event, on the rail.
+///
+/// **A timeline rather than a record card.** Each event was a card with the
+/// event as a title, a `CHANGE  pending to active` attribute pair under a
+/// hairline, and a provenance line - three blocks and two rules for a row that
+/// says one thing happened once. The rail carries the sequence, the glyph
+/// carries the kind, and the sentence carries the rest.
+final class _Event extends StatelessWidget {
+  const _Event({
+    required this.record,
+    required this.actor,
+    required this.target,
+    required this.last,
+  });
+
+  final TenantAuditRecord record;
+
+  /// Who caused it, already resolved to a name.
+  final String actor;
+
+  /// Who it was about, where it was about somebody.
+  final String? target;
+
+  /// Whether the rail stops here. The line joins an event to the next one, so
+  /// the last of a day has nothing below it to join to.
+  final bool last;
+
+  /// The kind of thing that happened, as a glyph.
+  ///
+  /// **Grouped rather than one per event.** Twenty distinct glyphs is twenty
+  /// things to learn; four families - the business, its people, its stock, and
+  /// its books - is the shape of the trail itself, and an unmodelled event
+  /// falls to the generic mark rather than being hidden.
+  IconData get _glyph => switch (record.type) {
+    TenantAuditEventType.tenantRequested ||
+    TenantAuditEventType.tenantLifecycleChanged => Icons.storefront_outlined,
+    TenantAuditEventType.ownerRecovered ||
+    TenantAuditEventType.tenantOwnerUnavailable ||
+    TenantAuditEventType.noActiveAdministrator ||
+    TenantAuditEventType.staffInvited ||
+    TenantAuditEventType.staffInvitationResent ||
+    TenantAuditEventType.pendingStaffEmailReplaced ||
+    TenantAuditEventType.tenantInvitationCancelled ||
+    TenantAuditEventType.tenantInvitationAccepted ||
+    TenantAuditEventType.visibleTenantInvitationAccepted ||
+    TenantAuditEventType.staffUpdated ||
+    TenantAuditEventType.staffStatusSet => Icons.people_outline,
+    TenantAuditEventType.stockAdjusted ||
+    TenantAuditEventType.returnVerifiedStockRestored => Icons.inventory_2_outlined,
+    TenantAuditEventType.tenantReconciliationRequested =>
+      Icons.fact_check_outlined,
+    null => Icons.circle_outlined,
+  };
+
+  /// What changed, in one line, or null where the event says it all.
+  String? get _change {
+    if (record.fromStatus == null && record.toStatus == null) return null;
+    return '${record.fromStatus ?? 'unknown'} to ${record.toStatus ?? 'unknown'}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    // **Only a critical event carries a status.** §2.1's five statuses each
+    // mean exactly one thing and "an event was recorded" is not among them, so
+    // a colour on every row would be a colour that says nothing.
+    final role = record.isCritical ? tokens.colors.status.problem : null;
+    final rail = record.isCritical
+        ? role!.fg
+        : tokens.colors.surface.borderStrong;
+    return IntrinsicHeight(
+      key: ValueKey('audit-log-entry-${record.id}'),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Column(
+            children: <Widget>[
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: role?.bg ?? tokens.colors.surface.raised,
+                  border: Border.all(color: rail),
+                  borderRadius: BorderRadius.circular(tokens.radius.pill),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(tokens.spacing.s8),
+                  child: Icon(
+                    _glyph,
+                    size: StatusBadge.iconSize,
+                    color: role?.fg ?? tokens.colors.text.secondary,
+                  ),
+                ),
+              ),
+              // The line that makes a list of rows a sequence. It stops at the
+              // last event of a day, because there is nothing under it to join.
+              if (!last)
+                Expanded(
+                  child: Center(
+                    child: SizedBox(
+                      width: _railWidth,
+                      child: ColoredBox(
+                        color: tokens.colors.surface.cardEdge,
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: tokens.spacing.s20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          _eventLabel(record),
+                          key: ValueKey('audit-log-event-${record.id}'),
+                          // The event is the loudest thing on its row; what
+                          // it was about is the line under it, not beside it.
+                          style: tokens.typography.titleMedium.copyWith(
+                            color: role?.fg ?? tokens.colors.text.primary,
+                          ),
+                        ),
+                      ),
+                      if (record.isCritical) ...<Widget>[
+                        SizedBox(width: tokens.spacing.s8),
+                        const StatusBadge(
+                          status: AppStatus.problem,
+                          label: 'Critical',
+                          icon: Icons.warning_amber_outlined,
+                          semanticLabel: 'Critical event',
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (_change case final change?) ...<Widget>[
+                    SizedBox(height: tokens.spacing.s4),
+                    Text(
+                      change,
+                      key: ValueKey('audit-log-status-${record.id}'),
+                      style: tokens.typography.bodyMedium.copyWith(
+                        color: tokens.colors.text.secondary,
+                      ),
+                    ),
+                  ],
+                  if (target case final about?) ...<Widget>[
+                    SizedBox(height: tokens.spacing.s4),
+                    Text(
+                      about,
+                      key: ValueKey('audit-log-target-${record.id}'),
+                      style: tokens.typography.bodyMedium.copyWith(
+                        color: tokens.colors.text.secondary,
+                      ),
+                    ),
+                  ],
+                  SizedBox(height: tokens.spacing.s4),
+                  Text(
+                    _recordedLabel(record, actor),
+                    key: ValueKey('audit-log-recorded-${record.id}'),
+                    style: tokens.typography.caption.copyWith(
+                      color: tokens.colors.text.tertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The rail's own width.
+  ///
+  /// Named for the reason `EmptyState.markSize` is: `design.md` states no rule
+  /// width, and 1 is the width every other hairline in this app is drawn at.
+  static const double _railWidth = 1;
 }

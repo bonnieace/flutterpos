@@ -200,11 +200,39 @@ void main() {
     );
   });
 
-  test('refuses a shift the server has not confirmed', () async {
+  test('sells against a shift the server has not confirmed yet', () async {
     await shiftState.save(
       _record(deviceId: deviceId, serverConfirmedOpen: false),
     );
 
+    // **The offline till's whole reason for existing.** A shift opened with no
+    // network is never server-confirmed, so requiring confirmation here shut
+    // the till for the length of the outage. The sale names the same shift ID
+    // the replayed open will carry, so the two meet at the server whichever
+    // lands first.
+    final saved = await _service(
+      sessions,
+      cache,
+      outbox,
+      receipts,
+      shiftState,
+      clock,
+    ).createDraft(_request());
+
+    expect(saved.payload['shiftId'], 'shift-a');
+  });
+
+  test('refuses a checkout on a shift closed here and not yet sent', () async {
+    await shiftState.save(
+      _record(
+        deviceId: deviceId,
+        closeInProgress: true,
+        closedAt: DateTime.utc(2026, 9, 5, 18),
+      ),
+    );
+
+    // The count is over and its figures are fixed. A sale after them would be
+    // a variance the shop has to explain.
     await expectLater(
       _service(
         sessions,
@@ -214,7 +242,7 @@ void main() {
         shiftState,
         clock,
       ).createDraft(_request()),
-      throwsA(_draftCode('shift_not_confirmed')),
+      throwsA(_draftCode('shift_closed_pending')),
     );
   });
 
@@ -350,6 +378,7 @@ TenantShiftLocalRecord _record({
   String businessDate = _businessDate,
   bool serverConfirmedOpen = true,
   bool closeInProgress = false,
+  DateTime? closedAt,
   DateTime? openedAt,
 }) => TenantShiftLocalRecord(
   uid: uid,
@@ -359,6 +388,7 @@ TenantShiftLocalRecord _record({
   deviceId: deviceId,
   serverConfirmedOpen: serverConfirmedOpen,
   closeInProgress: closeInProgress,
+  closedAt: closedAt,
   updatedAt: DateTime.utc(2026, 7, 31, 9),
   openedAt: openedAt ?? DateTime.utc(2026, 7, 31, 9),
 );

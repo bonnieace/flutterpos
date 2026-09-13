@@ -19,35 +19,32 @@ function expectHttpsCode(expectedCode: string, callback: () => unknown): void {
   );
 }
 
-test("tenant lifecycle permits approval, suspension, reactivation, and archival", () => {
-  assert.doesNotThrow(() => assertTenantLifecycleTransition("pending", "active"));
-  assert.doesNotThrow(() => assertTenantLifecycleTransition("pending", "rejected"));
+test("tenant lifecycle permits suspension, reactivation, and archival", () => {
   assert.doesNotThrow(() => assertTenantLifecycleTransition("active", "suspended"));
   assert.doesNotThrow(() => assertTenantLifecycleTransition("suspended", "active"));
   assert.doesNotThrow(() => assertTenantLifecycleTransition("active", "archived"));
-  assert.doesNotThrow(() => assertTenantLifecycleTransition("rejected", "archived"));
+  assert.doesNotThrow(() => assertTenantLifecycleTransition("suspended", "archived"));
 });
 
-test("tenant lifecycle rejects no-ops, reopening rejected tenants, and archived changes", () => {
+test("tenant lifecycle rejects no-ops and any change to an archived tenant", () => {
   expectHttpsCode("failed-precondition", () =>
     assertTenantLifecycleTransition("active", "active")
   );
   expectHttpsCode("failed-precondition", () =>
-    assertTenantLifecycleTransition("rejected", "active")
+    assertTenantLifecycleTransition("suspended", "suspended")
   );
   expectHttpsCode("failed-precondition", () =>
     assertTenantLifecycleTransition("archived", "active")
   );
   expectHttpsCode("failed-precondition", () =>
-    assertTenantLifecycleTransition("suspended", "pending")
+    assertTenantLifecycleTransition("archived", "suspended")
   );
 });
 
-test("approval and reactivation are the only capacity-checked transitions", () => {
-  assert.equal(isTenantActivation("pending", "active"), true);
+test("reactivation is the only capacity-checked transition", () => {
   assert.equal(isTenantActivation("suspended", "active"), true);
   assert.equal(isTenantActivation("active", "suspended"), false);
-  assert.equal(isTenantActivation("pending", "rejected"), false);
+  assert.equal(isTenantActivation("active", "archived"), false);
 });
 
 test("active-owned capacity fails closed at the configured limit", () => {
@@ -164,14 +161,7 @@ test("archival removes owned and active-owned advisory counts without underflow"
   });
   assert.deepEqual(lifecycleOwnerCounterUpdates(
     {ownedTenantCount: 1, ownedActiveTenantCount: 0},
-    "rejected",
-    "archived"
-  ), {
-    ownedTenantCount: 0,
-  });
-  assert.deepEqual(lifecycleOwnerCounterUpdates(
-    {ownedTenantCount: 0, ownedActiveTenantCount: 0},
-    "pending",
+    "suspended",
     "archived"
   ), {
     ownedTenantCount: 0,

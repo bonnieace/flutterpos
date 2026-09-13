@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,6 +104,134 @@ void main() {
       expect(anomaly.shiftId, 'shift-a');
       expect(anomaly.salesVariance, -12.5);
       expect(anomaly.transactionVariance, 2);
+    });
+
+    test('a tender variance carries all nine figures and its context', () {
+      final anomaly = TenantReconciliationAnomaly.fromDocument(
+        path: 'tenants/tenant-a/reconciliation_anomalies/tender_abc',
+        data: _tenderAnomaly(),
+      );
+
+      expect(anomaly.kind, TenantReconciliationAnomalyKind.shiftTenderVariance);
+      expect(anomaly.isTenderAnomaly, isTrue);
+      expect(anomaly.isShiftAnomaly, isTrue);
+      expect(anomaly.declaredMinor[CheckoutTender.cash], 120000);
+      expect(anomaly.expectedMinor[CheckoutTender.card], 900);
+      expect(anomaly.tenderVarianceMinor[CheckoutTender.cash], -5000);
+      expect(anomaly.tenderVarianceMinor[CheckoutTender.mpesa], 0);
+      // Money the sales could not attribute is carried rather than dropped, so
+      // three expected figures that do not sum to the shift can say why.
+      expect(anomaly.expectedUnattributedMinor, 3000);
+      expect(anomaly.businessDate, '2026-08-01');
+      expect(anomaly.staffId, 'user-a');
+      expect(anomaly.resolution, TenantReconciliationResolution.open);
+    });
+
+    test('a declared figure larger than a count still decodes', () {
+      // The bound on a money figure is a thousand times the bound on a count of
+      // things, and decoding one through the other refused a large but
+      // perfectly legitimate declaration as a malformed record.
+      final anomaly = TenantReconciliationAnomaly.fromDocument(
+        path: 'tenants/tenant-a/reconciliation_anomalies/tender_abc',
+        data: _tenderAnomaly(
+          overrides: <String, Object?>{
+            'declaredCashMinor': 1000000000000,
+            'expectedCashMinor': 0,
+            'cashVarianceMinor': 1000000000000,
+          },
+        ),
+      );
+
+      expect(anomaly.declaredMinor[CheckoutTender.cash], 1000000000000);
+    });
+
+    test('a tender variance that cannot explain itself is refused', () {
+      for (final override in <Map<String, Object?>>[
+        // A difference that is not declared minus expected.
+        <String, Object?>{'cashVarianceMinor': -4000},
+        // A figure the writer always records together with the rest.
+        <String, Object?>{'declaredCardMinor': null},
+        <String, Object?>{'expectedMpesaMinor': null},
+        // Written only when the declaration did not match, so one that agrees
+        // on all three contradicts its own writer.
+        <String, Object?>{
+          'declaredCashMinor': 125000,
+          'declaredCardMinor': 900,
+          'cashVarianceMinor': 0,
+          'cardVarianceMinor': 0,
+        },
+      ]) {
+        expect(
+          () => TenantReconciliationAnomaly.fromDocument(
+            path: 'tenants/tenant-a/reconciliation_anomalies/tender_abc',
+            data: _tenderAnomaly(overrides: override),
+          ),
+          throwsA(
+            isA<TenantReconciliationException>().having(
+              (error) => error.code,
+              'code',
+              'inconsistent_anomaly',
+            ),
+          ),
+          reason: override.keys.join(','),
+        );
+      }
+    });
+
+    test('a missing declaration states nothing it could not have compared', () {
+      final anomaly = TenantReconciliationAnomaly.fromDocument(
+        path: 'tenants/tenant-a/reconciliation_anomalies/tender_abc',
+        data: _tenderAnomaly(
+          overrides: <String, Object?>{
+            'anomalyType': 'missing_tender_declaration',
+            'declaredCashMinor': null,
+            'declaredMpesaMinor': null,
+            'declaredCardMinor': null,
+            'cashVarianceMinor': null,
+            'mpesaVarianceMinor': null,
+            'cardVarianceMinor': null,
+          },
+        ),
+      );
+
+      expect(
+        anomaly.kind,
+        TenantReconciliationAnomalyKind.missingTenderDeclaration,
+      );
+      expect(anomaly.declaredMinor[CheckoutTender.cash], isNull);
+      // The expected side survives: it is what the shift should have declared.
+      expect(anomaly.expectedMinor[CheckoutTender.cash], 125000);
+
+      // Figures on it would be a comparison the writer could not have made.
+      expect(
+        () => TenantReconciliationAnomaly.fromDocument(
+          path: 'tenants/tenant-a/reconciliation_anomalies/tender_abc',
+          data: _tenderAnomaly(
+            overrides: <String, Object?>{
+              'anomalyType': 'missing_tender_declaration',
+              'declaredMpesaMinor': null,
+              'declaredCardMinor': null,
+              'mpesaVarianceMinor': null,
+              'cardVarianceMinor': null,
+            },
+          ),
+        ),
+        throwsA(isA<TenantReconciliationException>()),
+      );
+    });
+
+    test('an unknown resolution is carried as unsettled, never as settled', () {
+      // Over-reporting an open difference is recoverable; hiding one is not.
+      final anomaly = TenantReconciliationAnomaly.fromDocument(
+        path: 'tenants/tenant-a/reconciliation_anomalies/tender_abc',
+        data: _tenderAnomaly(
+          overrides: <String, Object?>{'resolution': 'deferred'},
+        ),
+      );
+
+      expect(anomaly.resolution, TenantReconciliationResolution.other);
+      expect(anomaly.resolution.isOpen, isTrue);
+      expect(TenantReconciliationResolution.acknowledged.isOpen, isFalse);
     });
 
     test('a shift whose totals could not be read carries neither figure', () {
@@ -221,7 +350,7 @@ void main() {
         expect(values.add(kind.wireValue), isTrue, reason: kind.name);
         expect(TenantReconciliationAnomalyKind.parse(kind.wireValue), kind);
       }
-      expect(values, hasLength(7));
+      expect(values, hasLength(9));
     });
   });
 
@@ -452,6 +581,33 @@ Map<String, Object?> _shiftAnomaly({
   'anomalyType': 'shift_variance',
   'salesVariance': -12.5,
   'transactionVariance': 2,
+  'mutatesShift': false,
+  'createdAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 30)),
+  'updatedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 31)),
+}, overrides);
+
+/// A tender variance whose three differences each explain themselves.
+Map<String, Object?> _tenderAnomaly({
+  String tenantId = 'tenant-a',
+  Map<String, Object?>? overrides,
+}) => _document(<String, Object?>{
+  'tenantId': tenantId,
+  'shiftId': 'shift-a',
+  'jobId': 'rj_abc',
+  'businessDate': '2026-08-01',
+  'staffId': 'user-a',
+  'anomalyType': 'shift_tender_variance',
+  'declaredCashMinor': 120000,
+  'declaredMpesaMinor': 34050,
+  'declaredCardMinor': 0,
+  'expectedCashMinor': 125000,
+  'expectedMpesaMinor': 34050,
+  'expectedCardMinor': 900,
+  'expectedUnattributedMinor': 3000,
+  'cashVarianceMinor': -5000,
+  'mpesaVarianceMinor': 0,
+  'cardVarianceMinor': -900,
+  'resolution': 'open',
   'mutatesShift': false,
   'createdAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 30)),
   'updatedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 31)),

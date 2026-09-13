@@ -65,6 +65,17 @@ final class SecureCheckoutOutboxEncryptionKeyProvider
   /// reviewed or discarded independently without ever risking sale evidence.
   static const tenantMutationStorageKey = 'tenant-mutation-outbox-aes-key-v1';
 
+  /// Versioned secure-storage name of the staged product image key.
+  ///
+  /// **Its own key on the print queue's grounds.** A staged photograph is the
+  /// one thing in this app that has no second copy - it came off the phone's
+  /// camera roll and has not reached Storage yet - so it is worth encrypting,
+  /// and it is also megabytes of a shop's own pictures rather than evidence of
+  /// a sale. Losing this key costs the photographs, which a shopkeeper can
+  /// retake; sharing the outbox's would tie them to the record of a sale.
+  static const productImageDraftStorageKey =
+      'tenant-product-image-drafts-aes-key-v1';
+
   final CheckoutOutboxSecureValueStore _storage;
   final Random _random;
   final String _storageKey;

@@ -186,6 +186,28 @@ final class TenantStockAdjustmentResult {
     required this.quantityDelta,
   });
 
+  /// The adjustment as it will stand, from what the product holds and what this
+  /// intent moves.
+  ///
+  /// **No server has seen it.** [adjustmentId] is null because only the server
+  /// writes the `stock_adjustments` record whose ID that is, and the arithmetic
+  /// is this device's rather than the server's answer.
+  ///
+  /// The ledger lags this by design and the caller must say so: a device cannot
+  /// write `stock_adjustments` or `stock_movements` - both are server-write-only
+  /// - so the *quantity* moves immediately everywhere the product is drawn while
+  /// its ledger entry appears only once the queue drains.
+  factory TenantStockAdjustmentResult.queued({
+    required TenantStockAdjustmentIntent intent,
+    required int previousQuantity,
+  }) => TenantStockAdjustmentResult._(
+    adjustmentId: null,
+    productId: intent.productId,
+    previousQuantity: previousQuantity,
+    quantity: previousQuantity + intent.quantityDelta,
+    quantityDelta: intent.quantityDelta,
+  );
+
   factory TenantStockAdjustmentResult.fromCallable(
     Object? value, {
     required TenantStockAdjustmentIntent intent,
@@ -219,8 +241,10 @@ final class TenantStockAdjustmentResult {
   }
 
   /// The immutable `stock_adjustments` record, which is also the ID of the
-  /// `stock_movements` entry appended below the product.
-  final String adjustmentId;
+  /// `stock_movements` entry appended below the product. Null while the
+  /// adjustment is still only on this device: the server writes that record,
+  /// and a locally invented ID would name nothing.
+  final String? adjustmentId;
   final String productId;
   final int previousQuantity;
 
@@ -230,6 +254,19 @@ final class TenantStockAdjustmentResult {
 }
 
 typedef TenantStockAdjustmentRequestIdFactory = String Function();
+
+/// Where an adjustment is parked until this device can send it.
+///
+/// A function rather than the durable store, so `lib/inventory` keeps depending
+/// on `lib/tenancy` and not the other way round. The composition root supplies a
+/// closure that enqueues and asks the worker to run.
+typedef TenantStockAdjustmentQueue =
+    Future<void> Function({
+      required String tenantId,
+      required String productId,
+      required String requestId,
+      required Map<String, Object?> payload,
+    });
 
 /// Session- and product-bound gateway with no tenant or product input surface.
 ///
@@ -241,9 +278,11 @@ final class TenantStockAdjustmentGateway {
     required TenantProduct product,
     required AdjustStockCallable callable,
     TenantStockAdjustmentRequestIdFactory? requestIdFactory,
+    TenantStockAdjustmentQueue? queue,
   }) : _session = session,
        _product = product,
        _callable = callable,
+       _queue = queue,
        _requestIdFactory = requestIdFactory ?? secureStockAdjustmentRequestId;
 
   /// Adjusting stock is management-only, which is exactly what the callable
@@ -258,6 +297,7 @@ final class TenantStockAdjustmentGateway {
   final TenantSession _session;
   final TenantProduct _product;
   final AdjustStockCallable _callable;
+  final TenantStockAdjustmentQueue? _queue;
   final TenantStockAdjustmentRequestIdFactory _requestIdFactory;
 
   static bool canAdjustInSession(TenantSession session) =>
@@ -318,6 +358,26 @@ final class TenantStockAdjustmentGateway {
     _requireAuthorizedSession();
     if (intent.productId != _product.id) {
       throw StateError('The adjustment intent belongs to another product.');
+    }
+    final queue = _queue;
+    if (queue != null) {
+      await queue(
+        tenantId: _session.tenantId,
+        productId: intent.productId,
+        requestId: intent.requestId,
+        payload: <String, Object?>{
+          'tenantId': _session.tenantId,
+          'productId': intent.productId,
+          'quantityDelta': intent.quantityDelta,
+          'type': intent.type.wireValue,
+          'reason': intent.reason,
+          'requestId': intent.requestId,
+        },
+      );
+      return TenantStockAdjustmentResult.queued(
+        intent: intent,
+        previousQuantity: _product.quantity,
+      );
     }
     final Object? response;
     try {

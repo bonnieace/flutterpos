@@ -57,6 +57,49 @@ export function buildIdempotencyIdentity(
 }
 
 /**
+ * Answers whether this exact request has already been completed, without running it.
+ *
+ * **For a guard that would otherwise refuse a replay of its own work.** A caller
+ * whose preconditions read state it mutates cannot reach
+ * `runIdempotentFirestoreTransaction`'s replay branch: the guard throws first.
+ * `changeSignupEmail` is the case - it refuses an address that is already the
+ * account's, which after a successful-but-unacknowledged run is the address it
+ * just set. Peeking first lets such a guard stand down for a replay and refuse
+ * everybody else.
+ *
+ * **Advisory, not authoritative.** This reads outside any transaction, so it may
+ * miss a record that `runIdempotentFirestoreTransaction` then finds; the
+ * transaction remains the only thing that decides what is recorded. Callers are
+ * expected to use it to *skip a guard*, never to return early - the work after
+ * the transaction is what repairs a half-applied change.
+ *
+ * Returns undefined when there is no record, when the stored input differs, or
+ * when the record is not complete. A differing input is deliberately not an error
+ * here: the transaction raises `already-exists` for it, and raising it twice in
+ * two places is how the two come to disagree.
+ */
+export async function lookupIdempotentResult<TInput, TResult>(
+  db: Firestore,
+  options: IdempotentTransactionOptions<TInput>
+): Promise<TResult | undefined> {
+  const identity = buildIdempotencyIdentity(
+    options.actorUid,
+    options.operation,
+    options.tenantId,
+    options.requestId
+  );
+  const snapshot = await db
+    .collection("operation_idempotency")
+    .doc(identity.documentId)
+    .get();
+  if (!snapshot.exists) return undefined;
+  const existing = snapshot.data() as IdempotencyRecord<TResult>;
+  if (existing.status !== "completed") return undefined;
+  if (existing.inputHash !== fingerprintPayload(options.input)) return undefined;
+  return existing.result;
+}
+
+/**
  * Runs Firestore-only work and stores its response in the same transaction.
  * The callback must not perform Auth, HTTP, task-queue, or other external side effects.
  */

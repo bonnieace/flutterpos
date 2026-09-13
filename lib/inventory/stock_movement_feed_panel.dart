@@ -167,8 +167,9 @@ final class _TenantStockMovementFeedPanelState
     _loaderKey = key;
     final source = _source;
     final cursor = _cursors[_pageIndex];
-    TenantGuardedLoader<_MovementFeedView> readWith(TenantDocumentReader reader) =>
-        (session) async {
+    TenantGuardedLoader<_MovementFeedView> readWith(
+      TenantDocumentReader reader,
+    ) => (session) async {
       final repository = TenantStockMovementFeedRepository(
         session: session,
         reader: reader,
@@ -204,7 +205,6 @@ final class _TenantStockMovementFeedPanelState
     final guardKey = '${_source?.wireValue}:$_pageIndex:$cursor';
     _composeLoaders(guardKey);
     return TenantRouteGuard<_MovementFeedView>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantStockMovementFeedRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

@@ -16,7 +16,43 @@ enum TenantPendingMutationKind {
   pendingReturnCreate,
   brandingMerge,
   printerConfigurationMerge,
+
+  /// Bringing a product into the catalog. A plain Firestore `set`, which is
+  /// what `allow create` on `products` already admits for these roles - the
+  /// queue replays the same write a moment later, so `firestore.rules` is
+  /// untouched by any of this.
+  productCreate,
+
+  /// Taking a product out of it. A plain `delete`, on the same terms.
+  productRetire,
+
+  categoryCreate,
+  categoryRename,
+
+  /// Correcting a product's descriptive fields. **Not a Firestore write**, and
+  /// it never can be: `allow update` on `products` permits a strictly
+  /// decreasing quantity and nothing else, so a price edit goes through
+  /// `updateProduct` and the Admin SDK. The queue carries it as a callable
+  /// payload, which is safe to replay because the payload names a `requestId`
+  /// the server keeps an idempotency record against.
+  productCorrect,
+
+  /// Moving stock. A callable for the same reason - `stock_adjustments` and
+  /// `stock_movements` are server-write-only, so a device cannot give an
+  /// adjustment its ledger entry. Replay-safe on its own `requestId`.
+  stockAdjust,
 }
+
+/// Whether the queue reaches this kind through the Admin SDK rather than
+/// through a document write.
+///
+/// It is the one distinction that changes what a queued record means offline: a
+/// document write is applied by Firestore's own cache the moment it is
+/// submitted, whereas a callable does nothing at all until the device can reach
+/// the server. Both are durable here; only the second is invisible to Firestore.
+bool tenantMutationIsCallable(TenantPendingMutationKind kind) =>
+    kind == TenantPendingMutationKind.productCorrect ||
+    kind == TenantPendingMutationKind.stockAdjust;
 
 enum TenantPendingMutationState {
   queued,
@@ -366,6 +402,44 @@ final class TenantPendingMutationStore {
     }
   }
 
+  /// Withdraws a mutation that has not been sent.
+  ///
+  /// **This is what an *Undo* is made of, and why the offer has to expire.** A
+  /// record still in [TenantPendingMutationState.queued] exists only on this
+  /// device; deleting it un-does the change completely, with nothing to
+  /// reconcile. One that has reached `submitting` may already be on the server,
+  /// and a device that cannot tell has no business claiming it took the change
+  /// back — so this refuses rather than guesses, and the caller withdraws the
+  /// offer instead of showing one that would lie.
+  ///
+  /// Returns whether anything was withdrawn. A record that has already been
+  /// confirmed, rejected, or purged is not an error: the answer to "is this
+  /// still undoable" is simply no.
+  Future<bool> cancel({
+    required String uid,
+    required String tenantId,
+    required String operationId,
+  }) async {
+    final key = tenantPendingMutationStorageKey(
+      uid: uid,
+      tenantId: tenantId,
+      operationId: operationId,
+    );
+    return _serialized(key, () async {
+      final raw = _box.get(key);
+      if (raw == null) return false;
+      final record = _parseRecord(key, raw);
+      if (record.state != TenantPendingMutationState.queued) return false;
+      // A lease outlives the state it was taken under only if a worker died
+      // mid-submission, and that submission may have landed. Treat any lease
+      // still in the record as a submission that happened.
+      if (record.leaseOwner != null) return false;
+      await _box.delete(key);
+      _changes.add(null);
+      return true;
+    });
+  }
+
   /// Removes retained failure evidence only after a person has reviewed it.
   Future<void> acknowledge({
     required String uid,
@@ -633,16 +707,15 @@ final class TenantPendingMutationOverlayReader
     final uid = _currentUid();
     if (identity == null || uid == null) return canonical;
     final records = await _active(uid, identity);
-    var data = canonical == null
-        ? <String, Object?>{}
-        : <String, Object?>{...canonical.data};
-    var present = canonical != null;
+    Map<String, Object?>? data = canonical?.data;
+    var touched = false;
     for (final record in records) {
       if (record.targetPath != path) continue;
-      data.addAll(record.payload);
-      present = true;
+      data = _projected(record, data);
+      touched = true;
     }
-    return present ? TenantDocumentSnapshot(path: path, data: data) : null;
+    if (!touched) return canonical;
+    return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
   }
 
   @override
@@ -654,25 +727,22 @@ final class TenantPendingMutationOverlayReader
     final uid = _currentUid();
     if (identity == null || uid == null) return canonical;
     final records = await _active(uid, identity);
-    final byPath = <String, Map<String, Object?>>{
+    final byPath = <String, Map<String, Object?>?>{
       for (final item in canonical) item.path: <String, Object?>{...item.data},
     };
     for (final record in records) {
       if (!record.targetPath.startsWith('${query.collectionPath}/')) continue;
-      final data = byPath.putIfAbsent(
-        record.targetPath,
-        () => <String, Object?>{},
-      );
-      data.addAll(record.payload);
-      if (record.kind == TenantPendingMutationKind.expenseCreate ||
-          record.kind == TenantPendingMutationKind.pendingReturnCreate) {
-        data.putIfAbsent('createdAt', () => record.createdAt);
-      } else if (record.kind == TenantPendingMutationKind.expenseVoid) {
-        data.putIfAbsent('voidedAt', () => record.createdAt);
-      }
+      // A retire of a product this page never held is not an entry to add and
+      // then hide; `containsKey` keeps a tombstone from inventing one.
+      final present = byPath.containsKey(record.targetPath);
+      final projected = _projected(record, byPath[record.targetPath]);
+      if (projected == null && !present) continue;
+      byPath[record.targetPath] = projected;
     }
     final items = <TenantQueryDocumentSnapshot>[];
     for (final entry in byPath.entries) {
+      final data = entry.value;
+      if (data == null) continue;
       final id = entry.key.split('/').last;
       final cursor = query.startAfterDocumentId;
       if (cursor != null &&
@@ -682,13 +752,11 @@ final class TenantPendingMutationOverlayReader
         continue;
       }
       if (!query.equalityFilters.entries.every(
-        (filter) => entry.value[filter.key] == filter.value,
+        (filter) => data[filter.key] == filter.value,
       )) {
         continue;
       }
-      items.add(
-        TenantQueryDocumentSnapshot(path: entry.key, data: entry.value),
-      );
+      items.add(TenantQueryDocumentSnapshot(path: entry.key, data: data));
     }
     items.sort((left, right) {
       final order = left.path
@@ -722,15 +790,144 @@ final class TenantPendingMutationOverlayReader
     return base.queryTenantStaff(query);
   }
 
+  /// **The catalog is read through here, not through [getCollectionPage].**
+  /// `TenantCatalogRepository` prefers a search reader whenever one exists and
+  /// this class is one, so a product added a second ago would be invisible on
+  /// the very screen that added it if this method only forwarded.
   @override
   Future<List<TenantQueryDocumentSnapshot>> searchTenantProducts(
     TenantProductSearchQuery query,
-  ) {
+  ) async {
     final Object base = _base;
     if (base is! TenantProductSearchReader) {
       throw StateError('Product search is unavailable.');
     }
-    return base.searchTenantProducts(query);
+    final canonical = await base.searchTenantProducts(query);
+    final identity = _tenantFromPath(query.collectionPath);
+    final uid = _currentUid();
+    if (identity == null || uid == null) return canonical;
+    final records = <TenantPendingMutationRecord>[
+      for (final record in await _active(uid, identity))
+        if (record.targetPath.startsWith('${query.collectionPath}/')) record,
+    ];
+    if (records.isEmpty) return canonical;
+
+    final byPath = <String, Map<String, Object?>?>{
+      for (final item in canonical) item.path: <String, Object?>{...item.data},
+    };
+    for (final record in records) {
+      final present = byPath.containsKey(record.targetPath);
+      final projected = _projected(record, byPath[record.targetPath]);
+      if (projected == null && !present) continue;
+      byPath[record.targetPath] = projected;
+    }
+
+    final items = <TenantQueryDocumentSnapshot>[];
+    for (final entry in byPath.entries) {
+      final data = entry.value;
+      if (data == null) continue;
+      if (query.searchPrefix case final prefix?) {
+        final prefixes = data['searchPrefixes'];
+        if (prefixes is! List || !prefixes.contains(prefix)) continue;
+      }
+      if (query.categoryId case final categoryId?) {
+        if (data['categoryId'] != categoryId) continue;
+      }
+      final quantity = data['quantity'];
+      switch (query.stock) {
+        case TenantProductStockFilter.all:
+          break;
+        case TenantProductStockFilter.aboveZero:
+          if (quantity is! num || quantity <= 0) continue;
+        case TenantProductStockFilter.atOrBelowZero:
+          if (quantity is! num || quantity > 0) continue;
+      }
+      items.add(TenantQueryDocumentSnapshot(path: entry.key, data: data));
+    }
+
+    // The same ordering the transport applies, so a locally added product does
+    // not jump to the top of a page it does not belong at the top of: by stock
+    // first when the page is filtered by it, then by search name, then by ID.
+    final ordered = query.stock == TenantProductStockFilter.all;
+    items.sort((left, right) {
+      if (!ordered) {
+        final quantity = _compareValues(
+          left.data['quantity'],
+          right.data['quantity'],
+        );
+        if (quantity != 0) return quantity;
+      }
+      final name = _compareValues(
+        left.data['searchName'],
+        right.data['searchName'],
+      );
+      if (name != 0) return name;
+      return left.path.split('/').last.compareTo(right.path.split('/').last);
+    });
+
+    if (query.startAfter case final cursor?) {
+      final at = items.indexWhere(
+        (item) => item.path.split('/').last == cursor.documentId,
+      );
+      if (at >= 0) items.removeRange(0, at + 1);
+    }
+    return items.take(query.limit).toList(growable: false);
+  }
+
+  /// What one queued record does to the document it names.
+  ///
+  /// A null return is a tombstone — the document is gone as far as this device
+  /// is concerned — and a null argument means it was never there.
+  ///
+  /// **Two kinds do not overlay their own payload.** A callable's payload is
+  /// addressed to the server's vocabulary rather than to the document's, so
+  /// `productCorrect` is translated field by field and `stockAdjust` is applied
+  /// as an increment against whatever the document currently holds. Everything
+  /// else writes the document directly and can be merged as it stands.
+  Map<String, Object?>? _projected(
+    TenantPendingMutationRecord record,
+    Map<String, Object?>? canonical,
+  ) {
+    switch (record.kind) {
+      case TenantPendingMutationKind.productRetire:
+        return null;
+      case TenantPendingMutationKind.productCorrect:
+        if (canonical == null) return null;
+        return _correctedProduct(canonical, record.payload);
+      case TenantPendingMutationKind.stockAdjust:
+        if (canonical == null) return null;
+        final held = canonical['quantity'];
+        final delta = record.payload['quantityDelta'];
+        if (held is! num || delta is! num) return canonical;
+        return <String, Object?>{...canonical, 'quantity': held + delta};
+      case TenantPendingMutationKind.expenseCreate:
+      case TenantPendingMutationKind.pendingReturnCreate:
+        return <String, Object?>{
+          if (canonical != null) ...canonical,
+          ...record.payload,
+          'createdAt': canonical?['createdAt'] ?? record.createdAt,
+        };
+      case TenantPendingMutationKind.expenseVoid:
+        return <String, Object?>{
+          if (canonical != null) ...canonical,
+          ...record.payload,
+          'voidedAt': canonical?['voidedAt'] ?? record.createdAt,
+        };
+      case TenantPendingMutationKind.productCreate:
+      case TenantPendingMutationKind.categoryCreate:
+        return <String, Object?>{
+          if (canonical != null) ...canonical,
+          ...record.payload,
+          'createdAt': canonical?['createdAt'] ?? record.createdAt,
+        };
+      case TenantPendingMutationKind.categoryRename:
+      case TenantPendingMutationKind.brandingMerge:
+      case TenantPendingMutationKind.printerConfigurationMerge:
+        return <String, Object?>{
+          if (canonical != null) ...canonical,
+          ...record.payload,
+        };
+    }
   }
 
   @override
@@ -757,6 +954,64 @@ final class TenantPendingMutationOverlayReader
           record.state == TenantPendingMutationState.awaitingConfirmation)
         record,
   ];
+}
+
+/// One correction, translated from what `updateProduct` reads into what the
+/// product document holds.
+///
+/// **The two vocabularies differ in three places**, and each is a decision:
+/// the callable takes `sku` where the document stores `SKU`; `cost` and `image`
+/// carry an explicit null to mean *remove this*, which here has to be an absent
+/// key rather than a null value, because a stored null is a value the strict
+/// read model would have to have an opinion about; and `tenantId`, `productId`
+/// and `requestId` address the call rather than the product, so they are
+/// dropped.
+///
+/// **The search index is deliberately not recomputed.** A corrected name shows
+/// immediately everywhere the product is drawn, but stays findable under its
+/// old spelling until the server answers. Rebuilding `searchPrefixes` here
+/// would mean keeping a second copy of the server's tokenizer in step with it
+/// forever, and being wrong about that is worse than a name that is briefly
+/// searchable both ways.
+Map<String, Object?> _correctedProduct(
+  Map<String, Object?> canonical,
+  Map<String, Object?> payload,
+) {
+  final result = <String, Object?>{...canonical};
+  for (final entry in payload.entries) {
+    switch (entry.key) {
+      case 'tenantId':
+      case 'productId':
+      case 'requestId':
+        continue;
+      case 'sku':
+        if (entry.value != null) result['SKU'] = entry.value;
+      case 'cost':
+      case 'image':
+        if (entry.value == null) {
+          result.remove(entry.key);
+        } else {
+          result[entry.key] = entry.value;
+        }
+      default:
+        if (entry.value != null) result[entry.key] = entry.value;
+    }
+  }
+  return result;
+}
+
+/// Orders two stored values the way the transport's `orderBy` would.
+///
+/// Only the two types the product ordering actually uses are compared; anything
+/// else sorts equal rather than throwing, because a document this device cannot
+/// order is still a document it must not drop from the page.
+int _compareValues(Object? left, Object? right) {
+  if (left == null && right == null) return 0;
+  if (left == null) return 1;
+  if (right == null) return -1;
+  if (left is num && right is num) return left.compareTo(right);
+  if (left is String && right is String) return left.compareTo(right);
+  return 0;
 }
 
 bool _isConfiguration(TenantPendingMutationRecord record) =>
@@ -793,6 +1048,16 @@ void _requireTarget(
     TenantPendingMutationKind.pendingReturnCreate => 'returns',
     TenantPendingMutationKind.brandingMerge ||
     TenantPendingMutationKind.printerConfigurationMerge => 'configuration',
+    // A correction and an adjustment both name the product they are about,
+    // even though neither reaches it as a document write. The path is what the
+    // overlay draws against and what confirmation reads back, so it is held to
+    // the same tenant scoping as everything else here.
+    TenantPendingMutationKind.productCreate ||
+    TenantPendingMutationKind.productRetire ||
+    TenantPendingMutationKind.productCorrect ||
+    TenantPendingMutationKind.stockAdjust => 'products',
+    TenantPendingMutationKind.categoryCreate ||
+    TenantPendingMutationKind.categoryRename => 'categories',
   };
   if (collection != expected) {
     throw const TenantPendingMutationException('invalid_target');

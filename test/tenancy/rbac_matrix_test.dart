@@ -37,6 +37,7 @@ import 'dart:io' show Directory, File;
 import 'package:flutter_application_1/audit/audit_log.dart';
 import 'package:flutter_application_1/checkout/checkout_configuration.dart';
 import 'package:flutter_application_1/checkout/checkout_print_configuration.dart';
+import 'package:flutter_application_1/expenses/expense_repository.dart';
 import 'package:flutter_application_1/inventory/bulk_catalog.dart';
 import 'package:flutter_application_1/inventory/catalog_management.dart';
 import 'package:flutter_application_1/inventory/stock_adjustment.dart';
@@ -53,10 +54,14 @@ import 'package:flutter_application_1/reporting/shift_amendment.dart';
 import 'package:flutter_application_1/reporting/shift_amendment_feed.dart';
 import 'package:flutter_application_1/returns/return_request.dart';
 import 'package:flutter_application_1/returns/return_verification.dart';
+import 'package:flutter_application_1/returns/return_history.dart';
 import 'package:flutter_application_1/sales/receipt_lookup.dart';
+import 'package:flutter_application_1/sales/sale_history.dart';
 import 'package:flutter_application_1/shift/shift_history.dart';
 import 'package:flutter_application_1/tenancy/tenant_staff_directory.dart';
 import 'package:flutter_application_1/tenancy/tenant_staff_invitation.dart';
+import 'package:flutter_application_1/tenancy/tenant_branding_writer.dart';
+import 'package:flutter_application_1/tenancy/tenant_setup_checklist.dart';
 import 'package:flutter_application_1/tenancy/tenant_staff_invitation_cancellation.dart';
 import 'package:flutter_application_1/tenancy/tenant_staff_invitation_email_replacement.dart';
 import 'package:flutter_application_1/tenancy/tenant_staff_invitation_resend.dart';
@@ -242,6 +247,56 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
     expected: TenantReturnVerificationGateway.allowedRoles,
     row: 'Verify return and restore stock: management verification.',
   ),
+  // **The seven below were unregistered until 2026-09-10.** Each is a guard
+  // that grew after the matrix was last derived, which is the failure the
+  // source scan exists to catch: they satisfied every other assertion here
+  // while appearing in no row at all. The roles are the app's three ordinary
+  // shapes - owner/admin, the management three, every active member - and the
+  // one worth a second look is expenses, which excludes manager where most
+  // owner/admin capabilities do too.
+  //
+  // | Record and read expenses | Full | Full | No | No |
+  'TenantExpenseRepository.allowedRoles': (
+    expected: TenantExpenseRepository.allowedRoles,
+    row: 'Expenses: owner/administrator only, like the other money settings.',
+  ),
+  // | Business details and logo | Full | Full | No | No |
+  'TenantBrandingPublisher.allowedRoles': (
+    expected: TenantBrandingPublisher.allowedRoles,
+    row: 'Publish business details: owner/administrator, as the receipt '
+        'header it writes is business-wide.',
+  ),
+  // | Setup checklist | Full | Full | No | No |
+  'TenantSetupChecklist.allowedRoles': (
+    expected: TenantSetupChecklist.allowedRoles,
+    row: 'Setup checklist: owner/administrator, being the list of things only '
+        'they can finish.',
+  ),
+  // | Receipt lookup, management scope | Full | Full | Full | No |
+  //
+  // **The scope, not the route.** `allowedRoles` above opens receipt lookup to
+  // every active member; this is the wider read a manager gets, the same
+  // split `TenantShiftHistoryRepository.managementRoles` makes.
+  'TenantReceiptLookupRepository.managementRoles': (
+    expected: TenantReceiptLookupRepository.managementRoles,
+    row: 'Receipt lookup management scope: reading beyond your own receipts.',
+  ),
+  // | Sale history report | Full | Full | Full | Full |
+  'TenantSaleHistoryRepository.reportRoles': (
+    expected: TenantSaleHistoryRepository.reportRoles,
+    row: 'Sale history report: every active member, over their own sales.',
+  ),
+  // | Sale history report, management scope | Full | Full | Full | No |
+  'TenantSaleHistoryRepository.managementReportRoles': (
+    expected: TenantSaleHistoryRepository.managementReportRoles,
+    row: 'Sale history management scope: reading the sales of another '
+        'member.',
+  ),
+  // | Return history | Full | Full | Full | Full |
+  'TenantReturnHistoryRepository.allowedRoles': (
+    expected: TenantReturnHistoryRepository.allowedRoles,
+    row: 'Return history: every active member, as recording one is.',
+  ),
 };
 
 /// What each guard should hold, written out rather than read off the guard.
@@ -285,6 +340,17 @@ const Map<String, List<TenantRole>> _fromTheMatrix = <String, List<TenantRole>>{
   'TenantPrinterConfigurationPublisher.allowedRoles': <TenantRole>[_o, _a],
   'TenantAuditLogRepository.allowedRoles': <TenantRole>[_o, _a],
   'TenantReturnVerificationGateway.allowedRoles': _management,
+  // **The seven registered on 2026-09-10, authored from the roles the
+  // developer approved rather than read off the guard.** Each grew after the
+  // matrix was last derived and appeared in no row, which is the failure the
+  // source scan exists to catch.
+  'TenantExpenseRepository.allowedRoles': <TenantRole>[_o, _a],
+  'TenantBrandingPublisher.allowedRoles': <TenantRole>[_o, _a],
+  'TenantSetupChecklist.allowedRoles': <TenantRole>[_o, _a],
+  'TenantReceiptLookupRepository.managementRoles': _management,
+  'TenantSaleHistoryRepository.reportRoles': <TenantRole>[_o, _a, _m, _c],
+  'TenantSaleHistoryRepository.managementReportRoles': _management,
+  'TenantReturnHistoryRepository.allowedRoles': <TenantRole>[_o, _a, _m, _c],
 };
 
 /// Why this file does not assert which routes a role is offered.

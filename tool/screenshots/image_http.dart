@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:io' as io;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+
+import 'package:flutter/painting.dart';
 
 /// Draws a deterministic product photograph used by the screenshot catalog.
 Future<Uint8List> screenshotProductImage() async {
@@ -50,4 +54,135 @@ Future<Uint8List> screenshotProductImage() async {
     throw StateError('Could not encode screenshot product image.');
   }
   return data.buffer.asUint8List();
+}
+
+/// Answers every `NetworkImage` in a capture with [screenshotProductImage].
+///
+/// **Without this the catalog is a grid of initials.** `NetworkImage` reaches
+/// for a real socket, which a widget test answers with a 400 - so every
+/// photograph in every capture fell back to its stand-in, and the one thing the
+/// pictures were supposed to show could not be seen in them. The inventory
+/// route worked around it by injecting a `MemoryImage` through
+/// `productVisualBuilder`; the till has no such seam, and adding one to the
+/// sale path so that a screenshot could be taken would be the test shaping the
+/// app.
+///
+/// **`debugNetworkImageHttpClientProvider` rather than `HttpOverrides`.**
+/// `NetworkImage` holds one `HttpClient` in a static field, built the first
+/// time any image is fetched and never rebuilt - so an override installed
+/// afterwards is an override it never asks. This hook is the seam Flutter
+/// provides for exactly that, and it is the one `flutter_test` documents.
+///
+/// It answers nothing but image bytes: a capture that reached the network for
+/// anything else gets a picture and fails loudly rather than quietly talking to
+/// a server.
+Future<void> loadScreenshotProductImages() async {
+  final bytes = _bytes ??= await screenshotProductImage();
+  debugNetworkImageHttpClientProvider = () => _ImageHttpClient(bytes);
+}
+
+Uint8List? _bytes;
+
+final class _ImageHttpClient implements io.HttpClient {
+  _ImageHttpClient(this.bytes);
+
+  final Uint8List bytes;
+
+  @override
+  Future<io.HttpClientRequest> getUrl(Uri url) async =>
+      _ImageHttpRequest(url, bytes);
+
+  @override
+  Future<io.HttpClientRequest> openUrl(String method, Uri url) async =>
+      _ImageHttpRequest(url, bytes);
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('The screenshot harness serves images only.');
+}
+
+final class _ImageHttpRequest implements io.HttpClientRequest {
+  _ImageHttpRequest(this.uri, this.bytes);
+
+  @override
+  final Uri uri;
+
+  final Uint8List bytes;
+
+  @override
+  final io.HttpHeaders headers = _ImageHttpHeaders();
+
+  @override
+  Future<io.HttpClientResponse> close() async => _ImageHttpResponse(bytes);
+
+  @override
+  noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('The screenshot harness serves images only.');
+}
+
+final class _ImageHttpResponse extends Stream<List<int>>
+    implements io.HttpClientResponse {
+  _ImageHttpResponse(this.bytes);
+
+  final Uint8List bytes;
+
+  @override
+  int get statusCode => io.HttpStatus.ok;
+
+  @override
+  int get contentLength => bytes.length;
+
+  @override
+  io.HttpClientResponseCompressionState get compressionState =>
+      io.HttpClientResponseCompressionState.notCompressed;
+
+  @override
+  final io.HttpHeaders headers = _ImageHttpHeaders();
+
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int> event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => Stream<List<int>>.value(bytes).listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
+  @override
+  noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('The screenshot harness serves images only.');
+}
+
+final class _ImageHttpHeaders implements io.HttpHeaders {
+  @override
+  List<String>? operator [](String name) => null;
+
+  @override
+  String? value(String name) => null;
+
+  @override
+  void add(String name, Object value, {bool preserveHeaderCase = false}) {}
+
+  @override
+  void set(String name, Object value, {bool preserveHeaderCase = false}) {}
+
+  @override
+  void removeAll(String name) {}
+
+  @override
+  int get contentLength => -1;
+
+  @override
+  set contentLength(int value) {}
+
+  @override
+  noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('The screenshot harness serves images only.');
 }

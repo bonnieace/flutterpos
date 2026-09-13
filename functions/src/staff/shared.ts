@@ -14,7 +14,6 @@ import {
 import {CallableRequest, HttpsError} from "firebase-functions/v2/https";
 import {
   requireTenantMember,
-  TenantAccessOptions,
 } from "../core/authorization";
 import {buildIdempotencyIdentity} from "../core/idempotency";
 import {
@@ -143,12 +142,9 @@ export async function readAuthIdentity(uid: string): Promise<AuthIdentity> {
 export async function preauthorizeTenantAdministrator<T>(
   db: Firestore,
   request: CallableRequest<T>,
-  tenantId: string,
-  options?: TenantAccessOptions
+  tenantId: string
 ): Promise<TenantAuthorizationContext> {
-  return requireTenantMember(
-    db, request, tenantId, STAFF_MANAGEMENT_ROLES, undefined, options
-  );
+  return requireTenantMember(db, request, tenantId, STAFF_MANAGEMENT_ROLES);
 }
 
 export function prepareTargetRoot(
@@ -431,6 +427,41 @@ export async function assertExactCanonicalOwner(
       "The tenant must have exactly one active canonical owner."
     );
   }
+}
+
+/**
+ * Whether this invitation's email must set a password on the way through.
+ *
+ * **The one thing the old `visibleAcceptanceAllowed` flag was actually good
+ * for.** It decided both the email's wording and, wrongly, whether the invitee
+ * could ever accept in the app; the second use is gone and this is the first,
+ * under a name that says what it decides.
+ *
+ * An identity the invite itself created has no password, and an unverified one
+ * has not shown anybody it can read its own mail. The credential-bootstrap link
+ * settles both at once: Firebase marks the address verified when the password
+ * is set, and the link continues to the invitation afterwards.
+ */
+export function credentialBootstrapRequired(identity: AuthIdentity): boolean {
+  return identity.newlyCreated || !identity.emailVerified;
+}
+
+/**
+ * The same answer, read back off an invitation that has already been written.
+ *
+ * The field is `credentialBootstrapRequired` from 2026-09-08. Before it, the
+ * answer was carried by `visibleAcceptanceAllowed`, which was its exact
+ * negation - so an invitation issued before the rename is read correctly rather
+ * than defaulting, and nobody mid-flight is sent the wrong email.
+ */
+export function storedCredentialBootstrapRequired(invitation: {
+  credentialBootstrapRequired?: unknown;
+  visibleAcceptanceAllowed?: unknown;
+}): boolean {
+  if (typeof invitation.credentialBootstrapRequired === "boolean") {
+    return invitation.credentialBootstrapRequired;
+  }
+  return invitation.visibleAcceptanceAllowed !== true;
 }
 
 export function isPendingInvitationStatus(value: unknown): boolean {

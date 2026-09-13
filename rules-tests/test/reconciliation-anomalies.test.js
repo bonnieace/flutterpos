@@ -280,6 +280,57 @@ test("another business's differences stay unreachable", async () => {
   await assertFails(getDoc(doc(firestore, anomalyPath("tenant-b", "stock_ccc"))));
 });
 
+test("the open-difference count is read by management and written by nobody", async () => {
+  // One document, recomputed by every completed run, so a launcher can badge a
+  // figure without listing the differences to count them - those are keyed by
+  // digest and can be neither ordered nor counted cheaply from a client.
+  const summaryPath = (tenantId) =>
+    `tenants/${tenantId}/reconciliation_summary/open_differences`;
+
+  await seedDocuments(testEnvironment, {
+    ...activeTenantDocuments({ uid: "cashier-a", role: "cashier" }),
+    ...Object.fromEntries(
+      [
+        ["manager-a", "manager"],
+        ["admin-a", "admin"],
+        ["owner-a", "owner"],
+      ].flatMap(([uid, role]) => [
+        [
+          `users/${uid}`,
+          { accountType: "tenant_user", globalStatus: "active", membershipCount: 1 },
+        ],
+        [`tenants/tenant-a/staff/${uid}`, { uid, role, status: "active" }],
+      ]),
+    ),
+    [summaryPath("tenant-a")]: {
+      tenantId: "tenant-a",
+      jobId: "rj_abc",
+      openCount: 3,
+      truncated: false,
+      byType: { shift_tender_variance: 2, stock_variance: 1 },
+      countedAt: Timestamp.fromDate(new Date("2026-08-01T02:30:00Z")),
+    },
+  });
+
+  // The same set that reads the differences it counts.
+  for (const uid of ["owner-a", "admin-a", "manager-a"]) {
+    const firestore = authenticatedFirestore(testEnvironment, uid);
+    await assertSucceeds(getDoc(doc(firestore, summaryPath("tenant-a"))));
+  }
+
+  const cashier = authenticatedFirestore(testEnvironment, "cashier-a");
+  await assertFails(getDoc(doc(cashier, summaryPath("tenant-a"))));
+
+  // A client that could write here could report a shop's books clean.
+  for (const uid of ["owner-a", "admin-a", "manager-a", "cashier-a"]) {
+    const firestore = authenticatedFirestore(testEnvironment, uid);
+    await assertFails(
+      setDoc(doc(firestore, summaryPath("tenant-a")), { openCount: 0 }, { merge: true }),
+    );
+    await assertFails(deleteDoc(doc(firestore, summaryPath("tenant-a"))));
+  }
+});
+
 test("no client may invent, amend, or erase a difference", async () => {
   // A client that could write here could invent a discrepancy, or erase the
   // only record of a real one.

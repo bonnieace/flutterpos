@@ -12,19 +12,21 @@ const ELIGIBLE = {
   membershipInvitationStatus: "pending",
   invitationStatus: "sent",
   invitationConsumed: false,
+  invitationExpired: false,
   emailVerified: true,
-  visibleAcceptanceAllowed: true,
 };
 
-test("an existing verified user can accept a visible pending invitation", () => {
+// The tokenless assertion here is the whole of the fix. This state - a verified
+// invitee on a pending invitation - was refused forever when the account had
+// been created by the invite, because `visibleAcceptanceAllowed` remembered how
+// the account came to exist. Nothing in the state distinguishes the two invitees
+// any more, because acceptance is about who can read the mail now.
+test("a verified invitee can accept by either route", () => {
   assert.equal(invitationAcceptanceViolation("visible", ELIGIBLE), undefined);
+  assert.equal(invitationAcceptanceViolation("token", ELIGIBLE), undefined);
 });
 
-test("new or initially unverified identities require versioned proof", () => {
-  assert.equal(invitationAcceptanceViolation("visible", {
-    ...ELIGIBLE,
-    visibleAcceptanceAllowed: false,
-  }), "versioned_proof_required");
+test("the tokenless route still requires a verified address", () => {
   assert.equal(invitationAcceptanceViolation("visible", {
     ...ELIGIBLE,
     emailVerified: false,
@@ -32,8 +34,13 @@ test("new or initially unverified identities require versioned proof", () => {
   assert.equal(invitationAcceptanceViolation("token", {
     ...ELIGIBLE,
     emailVerified: false,
-    visibleAcceptanceAllowed: false,
   }), undefined);
+});
+
+test("the seven days the email promises now bind both routes", () => {
+  const expired = {...ELIGIBLE, invitationExpired: true};
+  assert.equal(invitationAcceptanceViolation("token", expired), "invitation_expired");
+  assert.equal(invitationAcceptanceViolation("visible", expired), "invitation_expired");
 });
 
 test("consuming either route closes both token and tokenless acceptance", () => {

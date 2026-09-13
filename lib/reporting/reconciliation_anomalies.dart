@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
@@ -49,6 +50,24 @@ enum TenantReconciliationAnomalyKind {
   /// A shift's closing summary and the sales recorded against it disagree.
   shiftVariance('shift_variance', 'Shift totals do not match its sales'),
 
+  /// What a cashier declared the till held disagrees with what its sales say.
+  ///
+  /// **Distinct from [shiftVariance], which is a bookkeeping fault.** That one
+  /// says a shift's recorded total does not match its own sales, and
+  /// `amendShiftSummary` corrects it to the figure the sales prove. This one
+  /// says a person counted the drawer and got a different answer, and there is
+  /// no figure to correct it to - only a difference to look into and accept.
+  shiftTenderVariance(
+    'shift_tender_variance',
+    'Declared takings do not match its sales',
+  ),
+
+  /// A shift was closed without saying what the till held.
+  missingTenderDeclaration(
+    'missing_tender_declaration',
+    'No declared takings were recorded',
+  ),
+
   /// Any kind this client does not model. It carries no wire value; a surface
   /// shows the recorded value verbatim rather than hiding a real difference,
   /// and it cannot be filtered for.
@@ -62,6 +81,42 @@ enum TenantReconciliationAnomalyKind {
   static TenantReconciliationAnomalyKind parse(String value) {
     for (final kind in values) {
       if (kind != other && kind.wireValue == value) return kind;
+    }
+    return other;
+  }
+}
+
+/// Whether a recorded difference has been accepted by somebody.
+///
+/// **Acceptance is not correction.** `amendShiftSummary` fixes a figure that
+/// was wrong; this records that a figure was right and a person looked at it
+/// anyway. So the record and every number on it survive being acknowledged -
+/// only the count a badge is drawn from moves.
+enum TenantReconciliationResolution {
+  /// Nobody has settled it, which is also what an older record with no
+  /// `resolution` field at all means.
+  open('open'),
+
+  /// An owner or administrator has seen it and accepts it.
+  acknowledged('acknowledged'),
+
+  /// A state this client does not model, carried rather than guessed at. It is
+  /// counted as unsettled: over-reporting an open difference is recoverable and
+  /// hiding one is not.
+  other('');
+
+  const TenantReconciliationResolution(this.wireValue);
+
+  final String wireValue;
+
+  bool get isOpen => this != acknowledged;
+
+  static TenantReconciliationResolution parse(Object? value) {
+    if (value == null) return open;
+    for (final resolution in values) {
+      if (resolution != other && resolution.wireValue == value) {
+        return resolution;
+      }
     }
     return other;
   }
@@ -95,6 +150,13 @@ final class TenantReconciliationAnomaly {
     required this.quantityVariance,
     required this.salesVariance,
     required this.transactionVariance,
+    required this.declaredMinor,
+    required this.expectedMinor,
+    required this.tenderVarianceMinor,
+    required this.expectedUnattributedMinor,
+    required this.businessDate,
+    required this.staffId,
+    required this.resolution,
     required this.recordedAt,
     required this.updatedAt,
   });
@@ -135,6 +197,12 @@ final class TenantReconciliationAnomaly {
     final quantityVariance = _optionalQuantity(data, 'variance');
     final salesVariance = _optionalNumber(data, 'salesVariance');
     final transactionVariance = _optionalQuantity(data, 'transactionVariance');
+    final declared = _tenderFigures(data, 'declared');
+    final expected = _tenderFigures(data, 'expected');
+    final variances = <CheckoutTender, int?>{
+      for (final tender in CheckoutTender.values)
+        tender: _optionalMinorUnits(data, _varianceField(tender)),
+    };
 
     _assertDescribesItself(
       kind: kind,
@@ -147,6 +215,9 @@ final class TenantReconciliationAnomaly {
       quantityVariance: quantityVariance,
       salesVariance: salesVariance,
       transactionVariance: transactionVariance,
+      declared: declared,
+      expected: expected,
+      variances: variances,
     );
 
     return TenantReconciliationAnomaly._(
@@ -164,6 +235,18 @@ final class TenantReconciliationAnomaly {
       quantityVariance: quantityVariance,
       salesVariance: salesVariance,
       transactionVariance: transactionVariance,
+      declaredMinor: declared,
+      expectedMinor: expected,
+      tenderVarianceMinor: variances,
+      expectedUnattributedMinor: _optionalMinorUnits(
+        data,
+        'expectedUnattributedMinor',
+      ),
+      businessDate: data['businessDate'] is String
+          ? data['businessDate']! as String
+          : null,
+      staffId: _optionalDocumentId(data, 'staffId'),
+      resolution: TenantReconciliationResolution.parse(data['resolution']),
       // `createdAt` degrades rather than failing the page closed, exactly as it
       // does on the activity log: a record without a time still proves the
       // difference was found and says what it was, and denying a manager the
@@ -172,6 +255,24 @@ final class TenantReconciliationAnomaly {
       updatedAt: _optionalInstant(data, 'updatedAt'),
     );
   }
+
+  /// The three per-method figures written under one prefix, or nulls.
+  static Map<CheckoutTender, int?> _tenderFigures(
+    Map<String, Object?> data,
+    String prefix,
+  ) => <CheckoutTender, int?>{
+    for (final tender in CheckoutTender.values)
+      tender: _optionalMinorUnits(data, _tenderField(prefix, tender)),
+  };
+
+  /// `declaredCashMinor`, `expectedMpesaMinor`, and the rest.
+  static String _tenderField(String prefix, CheckoutTender tender) {
+    final name = tender.wireValue;
+    return '$prefix${name[0].toUpperCase()}${name.substring(1)}Minor';
+  }
+
+  static String _varianceField(CheckoutTender tender) =>
+      '${tender.wireValue}VarianceMinor';
 
   final String id;
   final String tenantId;
@@ -203,6 +304,37 @@ final class TenantReconciliationAnomaly {
   final num? salesVariance;
   final int? transactionVariance;
 
+  /// What the cashier said the till held, by method, in minor units.
+  ///
+  /// Present together on a tender variance and nowhere else - a
+  /// `missing_tender_declaration` carries none of them, because there was
+  /// nothing to record.
+  final Map<CheckoutTender, int?> declaredMinor;
+
+  /// What this shift's own sales say it took, by method, in minor units.
+  final Map<CheckoutTender, int?> expectedMinor;
+
+  /// Declared minus expected, by method. Signed: a negative figure is money the
+  /// sales account for and the drawer does not.
+  final Map<CheckoutTender, int?> tenderVarianceMinor;
+
+  /// Takings the sales could not attribute to any method this app models.
+  ///
+  /// **Stated rather than dropped.** It is inside the shift's total but in none
+  /// of the three expected figures, so a report that left it out would show
+  /// three numbers that do not add up to the shift and look short by exactly
+  /// this much.
+  final int? expectedUnattributedMinor;
+
+  /// The trading day the difference belongs to, where the writer recorded one.
+  final String? businessDate;
+
+  /// The cashier whose shift it is, where the writer recorded one.
+  final String? staffId;
+
+  /// Whether somebody has accepted this difference.
+  final TenantReconciliationResolution resolution;
+
   final DateTime? recordedAt;
   final DateTime? updatedAt;
 
@@ -215,7 +347,13 @@ final class TenantReconciliationAnomaly {
   /// True while the record describes a shift whose totals were compared.
   bool get isShiftAnomaly =>
       kind == TenantReconciliationAnomalyKind.invalidOrMissingShift ||
-      kind == TenantReconciliationAnomalyKind.shiftVariance;
+      kind == TenantReconciliationAnomalyKind.shiftVariance ||
+      isTenderAnomaly;
+
+  /// True while the record is about what a cashier declared the till held.
+  bool get isTenderAnomaly =>
+      kind == TenantReconciliationAnomalyKind.shiftTenderVariance ||
+      kind == TenantReconciliationAnomalyKind.missingTenderDeclaration;
 
   static void _assertDescribesItself({
     required TenantReconciliationAnomalyKind kind,
@@ -228,6 +366,9 @@ final class TenantReconciliationAnomaly {
     required int? quantityVariance,
     required num? salesVariance,
     required int? transactionVariance,
+    required Map<CheckoutTender, int?> declared,
+    required Map<CheckoutTender, int?> expected,
+    required Map<CheckoutTender, int?> variances,
   }) {
     switch (kind) {
       // `jobs.ts` writes this only when `invalidLineCount > 0`, and always
@@ -281,6 +422,36 @@ final class TenantReconciliationAnomaly {
         // It is written only when the comparison did not match, so a shift
         // variance of nothing at all contradicts its own writer.
         if (salesVariance == 0 && transactionVariance == 0) {
+          throw const TenantReconciliationException('inconsistent_anomaly');
+        }
+      // The verifier computes these only when all three declared and all three
+      // expected figures could be read, and each variance is exactly
+      // `declared - expected`. A record that cannot explain its own difference
+      // is refused, which is the rule the three stock kinds are held to.
+      case TenantReconciliationAnomalyKind.shiftTenderVariance:
+        if (shiftId == null) {
+          throw const TenantReconciliationException('inconsistent_anomaly');
+        }
+        for (final tender in CheckoutTender.values) {
+          final declaredFigure = declared[tender];
+          final expectedFigure = expected[tender];
+          if (declaredFigure == null ||
+              expectedFigure == null ||
+              variances[tender] != declaredFigure - expectedFigure) {
+            throw const TenantReconciliationException('inconsistent_anomaly');
+          }
+        }
+        // Written only when the declaration did not match, so one that agrees
+        // on all three contradicts its own writer.
+        if (variances.values.every((variance) => variance == 0)) {
+          throw const TenantReconciliationException('inconsistent_anomaly');
+        }
+      // Nothing was declared, so there is nothing to state. Figures here would
+      // be a comparison the writer could not have made.
+      case TenantReconciliationAnomalyKind.missingTenderDeclaration:
+        if (shiftId == null ||
+            declared.values.any((figure) => figure != null) ||
+            variances.values.any((variance) => variance != null)) {
           throw const TenantReconciliationException('inconsistent_anomaly');
         }
       // A kind this client does not model is carried verbatim: a server deploy
@@ -520,4 +691,26 @@ DateTime? _optionalInstant(Map<String, Object?> data, String field) {
   throw const TenantReconciliationException('invalid_anomaly_field');
 }
 
+/// Reads one money figure recorded in minor units.
+///
+/// **Bounded separately from [_optionalQuantity], and it has to be.** That one
+/// bounds a count of things at a billion; a declared amount is a count of the
+/// smallest coin and runs to a thousand times further, so decoding money
+/// through it would refuse a large but perfectly legitimate declaration as a
+/// malformed record. Signed, because a variance carries its direction.
+int? _optionalMinorUnits(Map<String, Object?> data, String field) {
+  final value = data[field];
+  if (value == null) return null;
+  if (value is! int || value.abs() > _maximumMinorUnits) {
+    throw const TenantReconciliationException('invalid_anomaly_field');
+  }
+  return value;
+}
+
 const int _maximumCount = 1000000000;
+
+/// The widest money figure an anomaly may carry, in minor units.
+///
+/// Matches the cap a close is held to, so anything the till could record here
+/// decodes and anything larger is a defect rather than a large shop.
+const int _maximumMinorUnits = 1000000000000;

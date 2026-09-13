@@ -54,6 +54,7 @@ test("a new bucket's job is created without any delete sentinel", () => {
     "stockVarianceCount",
     "shiftsProcessed",
     "shiftVarianceCount",
+    "tenderVarianceCount",
   ]) {
     assert.equal(create[counter], 0, counter);
   }
@@ -498,8 +499,14 @@ test("a finished job is unqueued from both routes that could redispatch it", asy
   // The other route is the queue itself redelivering the task that finished it.
   assert.equal(await claimReconciliationJob(db.asFirestore(), FIRST_TASK), undefined);
   assert.equal(storedJob(db).attemptCount, 1);
-  // Finishing a job is a job-state change and nothing else.
-  assert.deepEqual(db.writtenPaths(), [jobPath()]);
+  // Finishing a job is a job-state change plus exactly one derived figure: the
+  // open-difference count a launcher badge is read from. It is recomputed here
+  // rather than counted by a client, because anomaly documents are keyed by
+  // digest and cannot be counted without listing them.
+  assert.deepEqual(db.writtenPaths(), [
+    jobPath(),
+    "tenants/tenant-a/reconciliation_summary/open_differences",
+  ]);
 });
 
 /**

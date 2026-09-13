@@ -59,6 +59,12 @@ void main() {
   });
 
   group('pending evidence panel', () {
+    // **The counts and the badge are two widgets since 2026-09-03.** The badge
+    // is the top bar's glyph and no longer drops a panel underneath itself; it
+    // opens the notifications route, where the counts are one section and the
+    // unprinted receipts are the other. So the cases about what is *read* pump
+    // `CheckoutLocalWorkPanel` directly, and the ones about the glyph pump the
+    // glyph.
     testWidgets('renders read-only counts for the live session', (
       tester,
     ) async {
@@ -75,11 +81,13 @@ void main() {
         ),
       );
 
-      expect(await _count(tester, 'Saved offline'), 2);
-      expect(await _count(tester, 'Submitting'), 1);
-      expect(await _count(tester, 'Awaiting confirmation'), 3);
-      expect(await _count(tester, 'Needs attention'), 1);
-      expect(await _count(tester, 'Confirmed'), 4);
+      expect(await _count(tester, 'Saved here, waiting to send'), 2);
+      expect(await _count(tester, 'Sending now'), 1);
+      expect(await _count(tester, 'Sent, waiting for the server'), 3);
+      expect(await _count(tester, 'Sales that need you'), 1);
+      // **Confirmed is not drawn at all.** Four sales that have gone through
+      // are the absence of news, and this page is the news.
+      expect(find.text('4'), findsNothing);
       expect(find.byType(TextButton), findsNothing);
       expect(find.byType(ElevatedButton), findsNothing);
       expect(find.byType(IconButton), findsNothing);
@@ -88,13 +96,11 @@ void main() {
     testWidgets('states plainly when no checkout is stored', (tester) async {
       await _pumpPanel(tester, const _FakeSource(CheckoutEvidenceSummary()));
 
-      // **The badge is absent, which is the statement.** §5.1's rule is that a
-      // device holding nothing draws no count, so the sentence moved into the
-      // readout a person opens to ask.
+      // **Not five zeroes.** §5.1's rule is that a device holding nothing
+      // draws no count at all, so the readout says it in a sentence.
       expect(find.text('0'), findsNothing);
-      await _open(tester);
       expect(
-        find.text('No local work is stored on this device.'),
+        find.text('Nothing on this device is waiting to be sent.'),
         findsOneWidget,
       );
     });
@@ -147,14 +153,12 @@ void main() {
       ]);
       await _pumpPanel(tester, source, refreshSignals: signals.stream);
 
-      // Nothing stored yet, so no badge - and the sentence lives in the panel.
+      // Nothing stored yet, so the sentence rather than a row of zeroes.
       expect(find.text('2'), findsNothing);
-      await _open(tester);
       expect(
-        find.text('No local work is stored on this device.'),
+        find.text('Nothing on this device is waiting to be sent.'),
         findsOneWidget,
       );
-      await _open(tester);
 
       signals.add(null);
       // One frame delivers the signal, one restarts the guarded read, and one
@@ -164,7 +168,7 @@ void main() {
       await tester.pump();
 
       expect(source.calls, 2);
-      expect(await _count(tester, 'Saved offline'), 2);
+      expect(await _count(tester, 'Saved here, waiting to send'), 2);
     });
 
     testWidgets('an unrelated rebuild does not re-read', (tester) async {
@@ -180,28 +184,29 @@ void main() {
       await tester.pump();
 
       expect(source.calls, 1);
-      expect(await _count(tester, 'Saved offline'), 1);
+      expect(await _count(tester, 'Saved here, waiting to send'), 1);
     });
 
-    testWidgets('every state is named even when its count is zero', (
+    testWidgets('a record on its own is stated, and the zeroes are not', (
       tester,
     ) async {
-      // A real run reported this panel showing "Saved offline: 0" and seemingly
-      // nothing else while a record was present. There is no such state: the
-      // five lines are siblings, so any record at all renders all five. Pinned
-      // here so an omission can never become the explanation for that report.
+      // A real run reported this panel showing "Saved offline: 0" and
+      // seemingly nothing else while a record was present. The answer was to
+      // draw all twelve states including the empty ones; **since 2026-09-04 it
+      // is the opposite** - the empty ones are not drawn, so the one state
+      // that holds something is the only thing on the band and cannot be lost
+      // among noughts. Either way the failure that report describes is
+      // impossible; this pins the current half of it.
       await _pumpPanel(
         tester,
         const _FakeSource(CheckoutEvidenceSummary(awaitingConfirmation: 1)),
       );
 
-      expect(await _count(tester, 'Saved offline'), 0);
-      expect(await _count(tester, 'Submitting'), 0);
-      expect(await _count(tester, 'Awaiting confirmation'), 1);
-      expect(await _count(tester, 'Needs attention'), 0);
-      expect(await _count(tester, 'Confirmed'), 0);
+      expect(await _count(tester, 'Sent, waiting for the server'), 1);
+      expect(find.text('0'), findsNothing);
+      expect(find.text('Saved here, waiting to send'), findsNothing);
       expect(
-        find.text('No local work is stored on this device.'),
+        find.text('Nothing on this device is waiting to be sent.'),
         findsNothing,
       );
     });
@@ -223,7 +228,7 @@ void main() {
       source.complete(const CheckoutEvidenceSummary(savedOffline: 1));
       await tester.pump();
       await tester.pump();
-      expect(await _count(tester, 'Saved offline'), 1);
+      expect(await _count(tester, 'Saved here, waiting to send'), 1);
 
       signals.add(null);
       await tester.pump();
@@ -232,7 +237,7 @@ void main() {
       // Mid-refresh: the counts are still there, and the panel says they may be
       // stale rather than leaving that to be inferred.
       expect(source.calls, 2);
-      expect(await _count(tester, 'Saved offline'), 1);
+      expect(await _count(tester, 'Saved here, waiting to send'), 1);
       expect(
         find.byKey(const ValueKey('pending-checkout-evidence-rereading')),
         findsOne,
@@ -242,7 +247,7 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(await _count(tester, 'Saved offline'), 3);
+      expect(await _count(tester, 'Saved here, waiting to send'), 3);
       expect(
         find.byKey(const ValueKey('pending-checkout-evidence-rereading')),
         findsNothing,
@@ -264,7 +269,7 @@ void main() {
       source.complete(const CheckoutEvidenceSummary(savedOffline: 1));
       await tester.pump();
       await tester.pump();
-      expect(await _count(tester, 'Saved offline'), 1);
+      expect(await _count(tester, 'Saved here, waiting to send'), 1);
 
       controller.open(uid: 'user-a', membership: _membership('tenant-b'));
       await tester.pump();
@@ -272,14 +277,53 @@ void main() {
       // The second read is outstanding, so nothing may be shown at all.
       expect(source.calls, 2);
       expect(
-        find.byKey(const ValueKey('pending-checkout-evidence')),
+        find.byKey(const ValueKey('pending-checkout-evidence-panel')),
         findsNothing,
       );
 
-      source.complete(const CheckoutEvidenceSummary(confirmed: 7));
+      source.complete(const CheckoutEvidenceSummary(savedOffline: 7));
       await tester.pump();
       await tester.pump();
-      expect(await _count(tester, 'Confirmed'), 7);
+      expect(await _count(tester, 'Saved here, waiting to send'), 7);
+    });
+
+    testWidgets('the glyph counts the receipts that never printed too', (
+      tester,
+    ) async {
+      // **The badge is about everything this device still owes.** Unprinted
+      // receipts came off the home's grid on 2026-09-03, so the count that
+      // carried them has to land somewhere - and this is the one place that
+      // says how much has not gone through.
+      final sessions = TenantSessionController()
+        ..open(uid: 'user-a', membership: _membership('tenant-a'));
+      addTearDown(sessions.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TenantSessionScope(
+            controller: sessions,
+            child: Scaffold(
+              body: CheckoutPendingEvidencePanel(
+                source: const _FakeSource(
+                  CheckoutEvidenceSummary(savedOffline: 2, confirmed: 9),
+                ),
+                alsoWaiting: () => 3,
+                notificationsRoute: (_) =>
+                    const Scaffold(body: Text('Notifications')),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // Two saved offline and three unprinted. The nine confirmed are not
+      // news and are deliberately not in it.
+      expect(find.text('5'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('pending-checkout-evidence')));
+      await tester.pumpAndSettle();
+      expect(find.text('Notifications'), findsOneWidget);
     });
 
     testWidgets('a signal after disposal reads nothing', (tester) async {
@@ -314,10 +358,19 @@ Future<void> _pumpPanel(
     MaterialApp(
       home: TenantSessionScope(
         controller: sessions,
+        // **The scope reads and the panel draws, since 2026-09-04.** The
+        // notifications page needs the same summary for its own headline, so
+        // the read moved up and this pair is what it composes.
         child: Scaffold(
-          body: CheckoutPendingEvidencePanel(
+          body: CheckoutEvidenceScope(
             source: source,
             refreshSignals: refreshSignals,
+            builder: (context, summary, {required rereading, onAcknowledge}) =>
+                CheckoutLocalWorkPanel(
+                  summary: summary,
+                  rereading: rereading,
+                  onAcknowledge: onAcknowledge,
+                ),
           ),
         ),
       ),
@@ -420,18 +473,20 @@ TenantMembership _membership(String tenantId) => TenantMembership(
   canonicalMembershipExists: true,
 );
 
-/// Opens the queue panel if it is not already open, and reads one count.
+/// Reads one count out of the readout.
 ///
-/// **The five counts moved behind the badge in §11 step 7**, which is §5.1's
-/// own "Replaces" column for this widget - "five-line offline queue list" - and
-/// §7's instruction that the counts belong in a readout rather than on the
-/// page. Nothing about what is *read* changed; where it is drawn did.
+/// **The counts moved behind the badge in §11 step 7 and out again on
+/// 2026-09-03**, onto the notifications route the badge opens. They are on
+/// screen as soon as this panel is, so there is nothing to open first.
 Future<int> _count(WidgetTester tester, String label) async {
-  final panel = find.byKey(const ValueKey('pending-checkout-evidence-panel'));
-  if (panel.evaluate().isEmpty) {
-    await tester.tap(find.byKey(const ValueKey('pending-checkout-evidence')));
-    await tester.pump();
-  }
+  // **The cell, not the row.** Each count is a figure over its own label in a
+  // bordered box since 2026-09-04, where it used to be `label ....... 2` on one
+  // line. The box is the smallest thing holding both, so it is what this reads
+  // out of.
+  // **The row, not a cell.** Each outstanding state is a glyph, a figure and
+  // a sentence on one line since 2026-09-04, where it was briefly a figure
+  // over a label in a bordered box. The `Row` is the smallest thing holding
+  // both parts, so it is what this reads out of.
   final row = find.ancestor(of: find.text(label), matching: find.byType(Row));
   final counts = find
       .descendant(of: row.first, matching: find.byType(Text))
@@ -440,10 +495,4 @@ Future<int> _count(WidgetTester tester, String label) async {
       .whereType<String>()
       .where((s) => int.tryParse(s) != null);
   return int.parse(counts.single);
-}
-
-/// Opens the queue panel.
-Future<void> _open(WidgetTester tester) async {
-  await tester.tap(find.byKey(const ValueKey('pending-checkout-evidence')));
-  await tester.pump();
 }

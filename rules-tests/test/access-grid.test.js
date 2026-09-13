@@ -43,26 +43,25 @@ import {
 } from "./support.js";
 
 const ACTIVE_TENANT = "tenant-a";
-const LAPSED_TENANT = "tenant-p";
+const DARK_TENANT = "tenant-s";
 const FOREIGN_TENANT = "tenant-b";
 
 /**
  * The callers.
  *
- * `lapsedManager` and `lapsedCashier` are the reason this list is not just the
- * four roles. They belong to a business whose provisional window has shut:
- * `readableTenant` still admits them and `tradingTenant` does not, so they
- * separate every read rule from every write rule in one stroke. A write rule
- * that was widened by accident shows up here as a lapsed member who can
- * suddenly write.
+ * `darkManager` and `darkCashier` are the reason this list is not just the four
+ * roles. Their membership is impeccable and their business is suspended, so
+ * every cell they appear in proves the rule asked `tradingTenant` rather than
+ * membership alone. A gate that was widened by accident shows up here as a
+ * member of a dark business who can suddenly read or write.
  */
 const PRINCIPALS = [
   { name: "owner", uid: "grid-owner", role: "owner", tenant: ACTIVE_TENANT },
   { name: "admin", uid: "grid-admin", role: "admin", tenant: ACTIVE_TENANT },
   { name: "manager", uid: "grid-manager", role: "manager", tenant: ACTIVE_TENANT },
   { name: "cashier", uid: "grid-cashier", role: "cashier", tenant: ACTIVE_TENANT },
-  { name: "lapsedManager", uid: "grid-lapsed-manager", role: "manager", tenant: LAPSED_TENANT },
-  { name: "lapsedCashier", uid: "grid-lapsed-cashier", role: "cashier", tenant: LAPSED_TENANT },
+  { name: "darkManager", uid: "grid-dark-manager", role: "manager", tenant: DARK_TENANT },
+  { name: "darkCashier", uid: "grid-dark-cashier", role: "cashier", tenant: DARK_TENANT },
   { name: "suspendedCashier", uid: "grid-suspended", role: "cashier", tenant: ACTIVE_TENANT },
   { name: "outsider", uid: "grid-outsider", role: "owner", tenant: ACTIVE_TENANT },
   { name: "anonymous", uid: null, role: null, tenant: ACTIVE_TENANT },
@@ -71,18 +70,8 @@ const PRINCIPALS = [
 
 const BY_NAME = new Map(PRINCIPALS.map((principal) => [principal.name, principal]));
 
-/** Members whose standing survives `readingStaff` — active staff of a readable tenant. */
-const READING = [
-  "owner",
-  "admin",
-  "manager",
-  "cashier",
-  "lapsedManager",
-  "lapsedCashier",
-];
-
-/** Members whose standing survives `activeStaff` — the same, minus the lapsed. */
-const TRADING = ["owner", "admin", "manager", "cashier"];
+/** Members whose standing survives `activeStaff` — active staff of an active tenant. */
+const MEMBERS = ["owner", "admin", "manager", "cashier"];
 
 const NONE = [];
 const PLATFORM = ["platformAdmin"];
@@ -91,14 +80,9 @@ function roleOf(name) {
   return BY_NAME.get(name).role;
 }
 
-/** Mirrors `hasReadingRole(tenantId, roles)`. */
-function readingRoles(roles) {
-  return READING.filter((name) => roles.includes(roleOf(name)));
-}
-
 /** Mirrors `hasTenantRole(tenantId, roles)`. */
-function tradingRoles(roles) {
-  return TRADING.filter((name) => roles.includes(roleOf(name)));
+function memberRoles(roles) {
+  return MEMBERS.filter((name) => roles.includes(roleOf(name)));
 }
 
 const SERVER_WRITTEN = {
@@ -137,7 +121,7 @@ const COLLECTIONS = [
     docId: () => "",
     seed: {},
     ops: {
-      get: { allow: [...READING, ...PLATFORM] },
+      get: { allow: [...MEMBERS, ...PLATFORM] },
       list: {
         allow: NONE,
         skip: PRINCIPALS.map((principal) => principal.name),
@@ -154,8 +138,8 @@ const COLLECTIONS = [
     docId: () => "grid-colleague",
     seed: { uid: "grid-colleague", role: "cashier", status: "active" },
     ops: {
-      get: { allow: [...readingRoles(["owner", "admin", "manager"]), ...PLATFORM] },
-      list: { allow: [...readingRoles(["owner", "admin", "manager"]), ...PLATFORM] },
+      get: { allow: [...memberRoles(["owner", "admin", "manager"]), ...PLATFORM] },
+      list: { allow: [...memberRoles(["owner", "admin", "manager"]), ...PLATFORM] },
       ...SERVER_WRITTEN,
     },
   },
@@ -178,11 +162,11 @@ const COLLECTIONS = [
     createPayload: () => ({ productId: "grid-new", name: "New", quantity: 4, price: 100 }),
     updatePayload: () => ({ quantity: 9, updatedAt: serverTimestamp() }),
     ops: {
-      get: { allow: READING },
-      list: { allow: READING },
-      create: { allow: tradingRoles(["owner", "admin", "manager"]) },
-      update: { allow: TRADING },
-      delete: { allow: tradingRoles(["owner", "admin"]) },
+      get: { allow: MEMBERS },
+      list: { allow: MEMBERS },
+      create: { allow: memberRoles(["owner", "admin", "manager"]) },
+      update: { allow: MEMBERS },
+      delete: { allow: memberRoles(["owner", "admin"]) },
     },
   },
   {
@@ -191,8 +175,8 @@ const COLLECTIONS = [
     docId: (principal) => slug(principal),
     seed: { movementId: "grid", delta: -1, reason: "sale" },
     ops: {
-      get: { allow: readingRoles(["owner", "admin", "manager"]) },
-      list: { allow: readingRoles(["owner", "admin", "manager"]) },
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
       ...SERVER_WRITTEN,
     },
   },
@@ -204,11 +188,11 @@ const COLLECTIONS = [
     createPayload: () => ({ name: "New category" }),
     updatePayload: () => ({ name: "Renamed" }),
     ops: {
-      get: { allow: READING },
-      list: { allow: READING },
-      create: { allow: tradingRoles(["owner", "admin", "manager"]) },
-      update: { allow: tradingRoles(["owner", "admin", "manager"]) },
-      delete: { allow: tradingRoles(["owner", "admin", "manager"]) },
+      get: { allow: MEMBERS },
+      list: { allow: MEMBERS },
+      create: { allow: memberRoles(["owner", "admin", "manager"]) },
+      update: { allow: memberRoles(["owner", "admin", "manager"]) },
+      delete: { allow: memberRoles(["owner", "admin", "manager"]) },
     },
   },
   {
@@ -217,16 +201,16 @@ const COLLECTIONS = [
     docId: (principal) => slug(principal),
     seed: { saleId: "grid", staffId: "grid-colleague", total: 100 },
     ops: {
-      get: { allow: READING },
+      get: { allow: MEMBERS },
       list: {
-        allow: readingRoles(["owner", "admin", "manager"]),
-        skip: ["cashier", "lapsedCashier"],
+        allow: memberRoles(["owner", "admin", "manager"]),
+        skip: ["cashier"],
         reason:
           "a cashier's list is admitted only when scoped to its own uid; sale-history covers the scoped query",
       },
       create: {
         allow: NONE,
-        skip: TRADING,
+        skip: MEMBERS,
         reason:
           "the sale envelope is validated field by field; checkout-submission covers a valid create",
       },
@@ -247,17 +231,17 @@ const COLLECTIONS = [
       businessDate: "2026-08-27",
     },
     ops: {
-      get: { allow: readingRoles(["owner", "admin", "manager"]) },
-      list: { allow: readingRoles(["owner", "admin", "manager"]) },
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
       create: {
         allow: NONE,
-        skip: TRADING,
+        skip: MEMBERS,
         reason:
           "shift opening is validated against device and business date; shift-lifecycle covers a valid create",
       },
       update: {
         allow: NONE,
-        skip: TRADING,
+        skip: MEMBERS,
         reason:
           "shift closing is validated against counted cash; shift-lifecycle covers a valid update",
       },
@@ -270,11 +254,11 @@ const COLLECTIONS = [
     docId: (principal) => slug(principal),
     seed: { returnId: "grid", saleId: "grid", status: "pending" },
     ops: {
-      get: { allow: READING },
-      list: { allow: READING },
+      get: { allow: MEMBERS },
+      list: { allow: MEMBERS },
       create: {
         allow: NONE,
-        skip: TRADING,
+        skip: MEMBERS,
         reason:
           "a return is validated against the sale it refunds; tenant-returns covers a valid create",
       },
@@ -288,17 +272,17 @@ const COLLECTIONS = [
     docId: (principal) => `2026-08-27-${slug(principal)}`,
     seed: { expenseId: "grid", businessDate: "2026-08-27", category: "rent", amountMinor: 1000 },
     ops: {
-      get: { allow: readingRoles(["owner", "admin"]) },
-      list: { allow: readingRoles(["owner", "admin"]) },
+      get: { allow: memberRoles(["owner", "admin"]) },
+      list: { allow: memberRoles(["owner", "admin"]) },
       create: {
         allow: NONE,
-        skip: tradingRoles(["owner", "admin"]),
+        skip: memberRoles(["owner", "admin"]),
         reason:
           "the expense envelope is validated field by field; tenant-expenses covers a valid create",
       },
       update: {
         allow: NONE,
-        skip: tradingRoles(["owner", "admin"]),
+        skip: memberRoles(["owner", "admin"]),
         reason:
           "an expense correction is validated field by field; tenant-expenses covers a valid update",
       },
@@ -313,11 +297,11 @@ const COLLECTIONS = [
     createPayload: () => ({ value: 2 }),
     updatePayload: () => ({ value: 3 }),
     ops: {
-      get: { allow: READING },
-      list: { allow: READING },
-      create: { allow: tradingRoles(["owner", "admin"]) },
-      update: { allow: tradingRoles(["owner", "admin"]) },
-      delete: { allow: tradingRoles(["owner", "admin"]) },
+      get: { allow: MEMBERS },
+      list: { allow: MEMBERS },
+      create: { allow: memberRoles(["owner", "admin"]) },
+      update: { allow: memberRoles(["owner", "admin"]) },
+      delete: { allow: memberRoles(["owner", "admin"]) },
     },
   },
   {
@@ -326,8 +310,8 @@ const COLLECTIONS = [
     docId: (principal) => slug(principal),
     seed: { plan: "grid", status: "active" },
     ops: {
-      get: { allow: [...READING, ...PLATFORM] },
-      list: { allow: [...READING, ...PLATFORM] },
+      get: { allow: [...MEMBERS, ...PLATFORM] },
+      list: { allow: [...MEMBERS, ...PLATFORM] },
       ...SERVER_WRITTEN,
     },
   },
@@ -337,8 +321,8 @@ const COLLECTIONS = [
     docId: dateId,
     seed: { revenueMinor: 12345, saleCount: 7 },
     ops: {
-      get: { allow: readingRoles(["owner", "admin", "manager"]) },
-      list: { allow: readingRoles(["owner", "admin", "manager"]) },
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
       ...SERVER_WRITTEN,
     },
   },
@@ -348,8 +332,8 @@ const COLLECTIONS = [
     docId: (principal) => slug(principal),
     seed: { adjustmentId: "grid", delta: -2, reason: "damage" },
     ops: {
-      get: { allow: readingRoles(["owner", "admin", "manager"]) },
-      list: { allow: readingRoles(["owner", "admin", "manager"]) },
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
       ...SERVER_WRITTEN,
     },
   },
@@ -359,8 +343,8 @@ const COLLECTIONS = [
     docId: (principal) => slug(principal),
     seed: { jobId: "grid", status: "complete" },
     ops: {
-      get: { allow: readingRoles(["owner", "admin", "manager"]) },
-      list: { allow: readingRoles(["owner", "admin", "manager"]) },
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
       ...SERVER_WRITTEN,
     },
   },
@@ -370,8 +354,8 @@ const COLLECTIONS = [
     docId: dateId,
     seed: { businessDate: "2026-08-27", dirty: true },
     ops: {
-      get: { allow: readingRoles(["owner", "admin", "manager"]) },
-      list: { allow: readingRoles(["owner", "admin", "manager"]) },
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
       ...SERVER_WRITTEN,
     },
   },
@@ -381,8 +365,8 @@ const COLLECTIONS = [
     docId: (principal) => slug(principal),
     seed: { anomalyId: "grid", kind: "missing_sale" },
     ops: {
-      get: { allow: readingRoles(["owner", "admin", "manager"]) },
-      list: { allow: readingRoles(["owner", "admin", "manager"]) },
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
       ...SERVER_WRITTEN,
     },
   },
@@ -392,8 +376,8 @@ const COLLECTIONS = [
     docId: (principal) => slug(principal),
     seed: { amendmentId: "grid", shiftId: "grid" },
     ops: {
-      get: { allow: readingRoles(["owner", "admin", "manager"]) },
-      list: { allow: readingRoles(["owner", "admin", "manager"]) },
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
       ...SERVER_WRITTEN,
     },
   },
@@ -403,8 +387,8 @@ const COLLECTIONS = [
     docId: (principal) => slug(principal),
     seed: { action: "grid", actorUid: "grid-colleague" },
     ops: {
-      get: { allow: [...readingRoles(["owner", "admin"]), ...PLATFORM] },
-      list: { allow: [...readingRoles(["owner", "admin"]), ...PLATFORM] },
+      get: { allow: [...memberRoles(["owner", "admin"]), ...PLATFORM] },
+      list: { allow: [...memberRoles(["owner", "admin"]), ...PLATFORM] },
       ...SERVER_WRITTEN,
     },
   },
@@ -444,11 +428,9 @@ function collectionPath(entry, principal) {
 /**
  * The world every cell is evaluated against.
  *
- * Three businesses, because the lapsed callers need a tenant whose status is
- * `pending` at the same moment the active callers need one that is `active`,
- * and a caller cannot be a member of a business that is both. `tenant-p` has
- * no `provisionalUntil` at all, which is exactly the pre-window pending record
- * `tradingTenant` is written to read as lapsed rather than as trading.
+ * Three businesses, because the dark callers need a tenant whose status is
+ * `suspended` at the same moment the active callers need one that is `active`,
+ * and a caller cannot be a member of a business that is both.
  */
 function world() {
   const documents = {
@@ -456,14 +438,14 @@ function world() {
     "users/grid-admin": { accountType: "tenant_user", globalStatus: "active", membershipCount: 1 },
     "users/grid-manager": { accountType: "tenant_user", globalStatus: "active", membershipCount: 1 },
     "users/grid-cashier": { accountType: "tenant_user", globalStatus: "active", membershipCount: 1 },
-    "users/grid-lapsed-manager": { accountType: "tenant_user", globalStatus: "active", membershipCount: 1 },
-    "users/grid-lapsed-cashier": { accountType: "tenant_user", globalStatus: "active", membershipCount: 1 },
+    "users/grid-dark-manager": { accountType: "tenant_user", globalStatus: "active", membershipCount: 1 },
+    "users/grid-dark-cashier": { accountType: "tenant_user", globalStatus: "active", membershipCount: 1 },
     "users/grid-suspended": { accountType: "tenant_user", globalStatus: "active", membershipCount: 1 },
     "users/grid-outsider": { accountType: "tenant_user", globalStatus: "active", membershipCount: 1 },
     "users/grid-platform": { accountType: "platform_admin", globalStatus: "active" },
 
     [`tenants/${ACTIVE_TENANT}`]: { name: ACTIVE_TENANT, ownerUid: "grid-owner", status: "active" },
-    [`tenants/${LAPSED_TENANT}`]: { name: LAPSED_TENANT, ownerUid: "grid-lapsed-owner", status: "pending" },
+    [`tenants/${DARK_TENANT}`]: { name: DARK_TENANT, ownerUid: "grid-dark-owner", status: "suspended" },
     [`tenants/${FOREIGN_TENANT}`]: { name: FOREIGN_TENANT, ownerUid: "grid-outsider", status: "active" },
 
     [`tenants/${ACTIVE_TENANT}/staff/grid-owner`]: { uid: "grid-owner", role: "owner", status: "active" },
@@ -471,8 +453,8 @@ function world() {
     [`tenants/${ACTIVE_TENANT}/staff/grid-manager`]: { uid: "grid-manager", role: "manager", status: "active" },
     [`tenants/${ACTIVE_TENANT}/staff/grid-cashier`]: { uid: "grid-cashier", role: "cashier", status: "active" },
     [`tenants/${ACTIVE_TENANT}/staff/grid-suspended`]: { uid: "grid-suspended", role: "cashier", status: "suspended" },
-    [`tenants/${LAPSED_TENANT}/staff/grid-lapsed-manager`]: { uid: "grid-lapsed-manager", role: "manager", status: "active" },
-    [`tenants/${LAPSED_TENANT}/staff/grid-lapsed-cashier`]: { uid: "grid-lapsed-cashier", role: "cashier", status: "active" },
+    [`tenants/${DARK_TENANT}/staff/grid-dark-manager`]: { uid: "grid-dark-manager", role: "manager", status: "active" },
+    [`tenants/${DARK_TENANT}/staff/grid-dark-cashier`]: { uid: "grid-dark-cashier", role: "cashier", status: "active" },
     [`tenants/${FOREIGN_TENANT}/staff/grid-outsider`]: { uid: "grid-outsider", role: "owner", status: "active" },
   };
 

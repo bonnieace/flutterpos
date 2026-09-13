@@ -216,7 +216,6 @@ final class _TenantCheckoutConfigurationPanelState
     final guardKey = 'checkout-configuration:$_generation';
     _composeLoaders(guardKey);
     return TenantRouteGuard<TenantPublishedCheckoutConfiguration>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

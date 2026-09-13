@@ -348,6 +348,9 @@ final class TenantReconciliationRun {
       stockVarianceCount: _requiredCount(data, 'stockVarianceCount'),
       shiftsProcessed: _requiredCount(data, 'shiftsProcessed'),
       shiftVarianceCount: _requiredCount(data, 'shiftVarianceCount'),
+      // Absent on every run recorded before the declaration existed, which
+      // reads correctly as none found rather than as an unreadable run.
+      tenderVarianceCount: _optionalCount(data, 'tenderVarianceCount') ?? 0,
       lastErrorCode: lastErrorCode,
       completedAt: completedAt,
       lastFailedAt: _optionalInstant(data, 'lastFailedAt'),
@@ -376,6 +379,7 @@ final class TenantReconciliationRun {
     required this.stockVarianceCount,
     required this.shiftsProcessed,
     required this.shiftVarianceCount,
+    required this.tenderVarianceCount,
     required this.lastErrorCode,
     required this.completedAt,
     required this.lastFailedAt,
@@ -426,6 +430,9 @@ final class TenantReconciliationRun {
   /// Shifts whose closing summary disagreed with the sales recorded against it.
   final int shiftVarianceCount;
 
+  /// Shifts whose declared takings disagree with what their sales derive.
+  final int tenderVarianceCount;
+
   /// The error code the last failure recorded, kept exactly as the server wrote
   /// it. It is a server code rather than a sentence, and it is shown as one.
   final String? lastErrorCode;
@@ -436,7 +443,10 @@ final class TenantReconciliationRun {
 
   bool get isOutstanding => status.isOutstanding;
 
-  bool get hasVariances => stockVarianceCount > 0 || shiftVarianceCount > 0;
+  bool get hasVariances =>
+      stockVarianceCount > 0 ||
+      shiftVarianceCount > 0 ||
+      tenderVarianceCount > 0;
 }
 
 /// One bounded page of the runs queued for one business day.
@@ -517,6 +527,91 @@ final class TenantReconciliationDay {
 /// Every path is derived from the session's [TenantPaths] and the exact-child,
 /// uniqueness, page-size, and ordering proofs of [TenantReadRepository] still
 /// apply. No caller can supply a collection path, an ordering, or a raw filter.
+/// How many recorded differences this business has not settled.
+///
+/// **A counter, because the records themselves cannot be counted cheaply.**
+/// Anomaly documents are addressed by a digest of what they are about, so the
+/// collection has no order and no index; a launcher that wanted a number from
+/// it would have to list it on every entry. The server recomputes this in the
+/// finalize phase of every completed run, and the two callables that settle a
+/// difference adjust it so the figure moves when a person acts rather than at
+/// the next nightly sweep.
+final class TenantReconciliationOpenDifferences {
+  const TenantReconciliationOpenDifferences._({
+    required this.tenantId,
+    required this.openCount,
+    required this.truncated,
+    required this.byType,
+    required this.countedAt,
+  });
+
+  /// The one document this lives at. It is a single figure about the business,
+  /// so there is nothing to address it by.
+  static const String documentId = 'open_differences';
+
+  factory TenantReconciliationOpenDifferences.fromDocument({
+    required String path,
+    required Map<String, Object?> data,
+  }) {
+    final segments = path.split('/');
+    if (segments.length != 4 ||
+        segments[0] != 'tenants' ||
+        segments[2] != TenantCollection.reconciliationSummary.segment ||
+        segments[3] != documentId) {
+      throw const TenantReconciliationException('invalid_summary_path');
+    }
+    final String tenantId;
+    try {
+      tenantId = validateTenantId(segments[1]);
+    } on ArgumentError {
+      throw const TenantReconciliationException('invalid_summary_path');
+    }
+    if (data['tenantId'] != tenantId) {
+      throw const TenantReconciliationException('summary_identity_mismatch');
+    }
+    final byType = <String, int>{};
+    if (data['byType'] case final Map<Object?, Object?> counts) {
+      for (final entry in counts.entries) {
+        final kind = entry.key;
+        final count = entry.value;
+        if (kind is! String || count is! int || count < 0) {
+          throw const TenantReconciliationException(
+            'invalid_reconciliation_field',
+          );
+        }
+        byType[kind] = count;
+      }
+    }
+    return TenantReconciliationOpenDifferences._(
+      tenantId: tenantId,
+      // **Clamped, not refused.** The recount is the authority and the two
+      // callables only nudge it, so a decrement that races a recount can leave
+      // this briefly below zero. That is a stale figure rather than a corrupt
+      // one, and it repairs itself on the next completed run.
+      openCount: _requiredCount(data, 'openCount').clamp(0, _maximumCount),
+      truncated: data['truncated'] == true,
+      byType: Map<String, int>.unmodifiable(byType),
+      countedAt: _optionalInstant(data, 'countedAt'),
+    );
+  }
+
+  final String tenantId;
+
+  /// How many were open when this was counted.
+  final int openCount;
+
+  /// Whether the scan stopped before the end of the collection, so [openCount]
+  /// is *at least* this rather than exactly it.
+  final bool truncated;
+
+  /// The same figure broken down by kind, for a surface that can use it.
+  final Map<String, int> byType;
+
+  final DateTime? countedAt;
+
+  bool get hasOpenDifferences => openCount > 0;
+}
+
 final class TenantReconciliationStatusRepository extends TenantReadRepository {
   TenantReconciliationStatusRepository({
     required super.session,
@@ -612,6 +707,32 @@ final class TenantReconciliationStatusRepository extends TenantReadRepository {
     } on ArgumentError {
       throw const TenantReconciliationException('invalid_business_date');
     }
+  }
+
+  /// How many recorded differences are still open, or null if never counted.
+  ///
+  /// **One document, read by exact path.** The differences themselves are keyed
+  /// by digest, so counting them from here would mean listing the collection -
+  /// which a launcher deciding whether to draw a badge must not pay for. The
+  /// server recomputes this at the end of every completed run.
+  ///
+  /// Null means no run has ever finished for this business, which reads as *no
+  /// differences have been recorded* rather than as zero. A screen must be able
+  /// to tell those apart: one is a clean shop and the other is an unanswered
+  /// question.
+  Future<TenantReconciliationOpenDifferences?> readOpenDifferences() async {
+    final data = await readDocument(
+      TenantCollection.reconciliationSummary,
+      TenantReconciliationOpenDifferences.documentId,
+    );
+    if (data == null) return null;
+    return TenantReconciliationOpenDifferences.fromDocument(
+      path: paths.documentPath(
+        TenantCollection.reconciliationSummary,
+        TenantReconciliationOpenDifferences.documentId,
+      ),
+      data: data,
+    );
   }
 
   Future<TenantReconciliationIntake?> _readIntake(String businessDate) async {

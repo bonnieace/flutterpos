@@ -439,6 +439,121 @@ void main() {
       );
     });
   });
+  group('rebinding a legacy identity', () {
+    /// An identity as the build before 2026-09-03 wrote one: random all the way
+    /// through, so its durable half names nothing and never will.
+    const legacy = 'dev-0123456789abcdef0123456789abcdef';
+
+    Future<void> seedLegacy() => box.put(
+      HiveCheckoutReceiptCounters.deviceIdentityKey,
+      <String, Object?>{
+        'schemaVersion': HiveCheckoutReceiptCounters.schemaVersion,
+        'deviceId': legacy,
+        'createdAtMs': 0,
+      },
+    );
+
+    test('binds it to this device and keeps the installation half', () async {
+      await seedLegacy();
+
+      final rebound = await _counters(
+        box,
+        hardware: const _Hardware('android-id-a'),
+        canRebind: true,
+      ).resolveDeviceId();
+
+      expect(rebound, isNot(legacy));
+      // The durable half now digests the platform's answer, so the next
+      // reinstall of this till produces an ID this one is recognisable in.
+      expect(
+        checkoutDeviceHardwareDigest(rebound),
+        deriveCheckoutDeviceHardwareDigest('android-id-a'),
+      );
+      // **The installation half is untouched.** It is what stops a rebound till
+      // reissuing receipt numbers: the daily counter starts at one on a fresh
+      // install, so two installs sharing a whole ID would print one number
+      // twice.
+      expect(
+        rebound.substring(4 + checkoutDeviceHardwareDigits),
+        legacy.substring(4 + checkoutDeviceHardwareDigits),
+      );
+      // The receipt device code moves with it, which is what makes the change
+      // safe rather than what makes it dangerous: a number is
+      // `RCP-<code>-<date>-<sequence>`, so a new code is a new number space.
+      expect(
+        checkoutReceiptDeviceCode(rebound),
+        isNot(checkoutReceiptDeviceCode(legacy)),
+      );
+    });
+
+    test('rebinds once, and then leaves the identity alone', () async {
+      await seedLegacy();
+      final first = await _counters(
+        box,
+        hardware: const _Hardware('android-id-a'),
+        canRebind: true,
+      ).resolveDeviceId();
+
+      // A later launch, against the box the first one left behind.
+      final second = await _counters(
+        box,
+        hardware: const _Hardware('android-id-b'),
+        canRebind: true,
+      ).resolveDeviceId();
+
+      // A bound identity is never asked again, so a platform that starts
+      // answering differently - a re-signed build, a second Android user -
+      // cannot move a till that already has one.
+      expect(second, first);
+    });
+
+    test('refuses while this device holds a shift', () async {
+      await seedLegacy();
+
+      // A sale carries the ID of the till that rang it and the server requires
+      // it to match the shift's, so rebinding under an open shift would leave a
+      // till whose every sale is refused.
+      expect(
+        await _counters(
+          box,
+          hardware: const _Hardware('android-id-a'),
+        ).resolveDeviceId(),
+        legacy,
+      );
+    });
+
+    test('leaves it alone when the platform has nothing to offer', () async {
+      await seedLegacy();
+
+      // Random replacing random is churn: it would change the receipt device
+      // code and buy nothing.
+      expect(
+        await _counters(
+          box,
+          hardware: const _Hardware(null),
+          canRebind: true,
+        ).resolveDeviceId(),
+        legacy,
+      );
+    });
+
+    test('an identity minted with the platform is never rebound', () async {
+      final minted = await _counters(
+        box,
+        hardware: const _Hardware('android-id-a'),
+        canRebind: true,
+      ).resolveDeviceId();
+
+      final again = await _counters(
+        box,
+        hardware: const _Hardware('android-id-b'),
+        canRebind: true,
+      ).resolveDeviceId();
+
+      expect(again, minted);
+    });
+  });
+
 }
 
 const String _deviceId = 'dev-0123456789abcdef0123456789abcdef';
@@ -456,11 +571,13 @@ HiveCheckoutReceiptCounters _counters(
   Box<dynamic> box, {
   int seed = 11,
   DeviceHardwareIdentity? hardware,
+  bool canRebind = false,
 }) => HiveCheckoutReceiptCounters.fromBox(
   box,
   clock: _clock,
   random: Random(seed),
   hardwareIdentity: hardware,
+  canRebind: () async => canRebind,
 );
 
 /// What the platform answers, including when it answers nothing.

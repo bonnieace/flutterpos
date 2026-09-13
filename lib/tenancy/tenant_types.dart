@@ -74,10 +74,8 @@ enum MembershipStatus {
 
 /// A tenant's lifecycle state.
 enum TenantStatus {
-  pending('pending'),
   active('active'),
   suspended('suspended'),
-  rejected('rejected'),
   archived('archived');
 
   const TenantStatus(this.wireValue);
@@ -86,10 +84,8 @@ enum TenantStatus {
 
   static TenantStatus fromJson(Object? value) {
     return switch (value) {
-      'pending' => TenantStatus.pending,
       'active' => TenantStatus.active,
       'suspended' => TenantStatus.suspended,
-      'rejected' => TenantStatus.rejected,
       'archived' => TenantStatus.archived,
       _ => throw FormatException('Invalid tenant status: $value'),
     };

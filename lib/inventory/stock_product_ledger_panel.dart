@@ -128,24 +128,24 @@ final class _TenantProductLedgerPanelState
     final cursor = _cursors[_pageIndex];
     TenantGuardedLoader<_LedgerView> readWith(TenantDataReader reader) =>
         (session) async {
-      final ledger =
-          await TenantProductStockRepository(
-            session: session,
-            reader: reader,
-          ).loadLedger(
-            productId: widget.productId,
-            pageSize: widget.pageSize,
-            cursor: cursor,
+          final ledger =
+              await TenantProductStockRepository(
+                session: session,
+                reader: reader,
+              ).loadLedger(
+                productId: widget.productId,
+                pageSize: widget.pageSize,
+                cursor: cursor,
+              );
+          // A sale movement records no actor: nightly reconciliation writes it.
+          return _LedgerView(
+            ledger: ledger,
+            names: await _resolverFor(session).resolve(<String>[
+              for (final movement in ledger.movements.items)
+                if (movement.actorUid case final actorUid?) actorUid,
+            ]),
           );
-      // A sale movement records no actor: nightly reconciliation writes it.
-      return _LedgerView(
-        ledger: ledger,
-        names: await _resolverFor(session).resolve(<String>[
-          for (final movement in ledger.movements.items)
-            if (movement.actorUid case final actorUid?) actorUid,
-        ]),
-      );
-    };
+        };
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -156,7 +156,6 @@ final class _TenantProductLedgerPanelState
     final guardKey = '${widget.productId}:$_pageIndex:${_cursors[_pageIndex]}';
     _composeLoaders(guardKey);
     return TenantRouteGuard<_LedgerView>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantProductStockRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

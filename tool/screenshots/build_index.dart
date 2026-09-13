@@ -34,12 +34,8 @@ const Map<String, String> captions = <String, String>{
   '07-invalid-invitation-link': 'A malformed or incomplete invitation link.',
   '08-cannot-open-your-account':
       'Bootstrap failed. Retry and sign out are the only two ways out.',
-  '09a-platform-pending-reviews':
-      'Platform administration: businesses waiting to be approved or rejected.',
   '09b-platform-active-and-suspended':
       'Platform administration: suspending or reactivating a live business.',
-  '09c-platform-rejected-archive':
-      'Platform administration: the rejected archive.',
   '09d-platform-global-user-status':
       'Platform administration: one exact UID at a time. There is deliberately '
       'no user search and no bulk action.',

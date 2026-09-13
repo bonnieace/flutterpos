@@ -39,6 +39,8 @@ final class TenantReturnJournalScreen extends StatelessWidget {
     super.key,
     required this.record,
     this.staffNames = const <String, String>{},
+    this.productNames = const <String, String>{},
+    this.receipt,
     this.selfUid,
     this.onVerify,
   });
@@ -47,6 +49,19 @@ final class TenantReturnJournalScreen extends StatelessWidget {
 
   /// Canonical staff names, for the two people this page names.
   final Map<String, String> staffNames;
+
+  /// What the **sale** called each returned product, by product ID.
+  ///
+  /// The caller resolves these because it has already read the sale. A return
+  /// recorded before returns carried a product name has none of its own, and
+  /// *RETURNED INVENTORY* listing document IDs was the defect the product owner
+  /// reported on this page.
+  final Map<String, String> productNames;
+
+  /// The sale's receipt, as the sales list prints it. Null where the calling
+  /// surface could not read the sale, in which case the ID is all there is.
+  final String? receipt;
+
   final String? selfUid;
 
   /// Offered only where the calling surface has already decided this session
@@ -58,10 +73,16 @@ final class TenantReturnJournalScreen extends StatelessWidget {
   Widget build(BuildContext context) => AppScaffold(
     contentWidth: AppContentWidth.reading,
     title: 'View return',
-    subtitle: 'Sale ${record.saleId}',
+    // The receipt a person can match against the paper in their hand, and the
+    // document ID only when there is nothing better.
+    subtitle: receipt == null
+        ? 'Sale ${record.saleId}'
+        : 'Receipt $receipt',
     body: _ReturnJournal(
       record: record,
       staffNames: staffNames,
+      productNames: productNames,
+      receipt: receipt,
       selfUid: selfUid,
       onVerify: onVerify,
     ),
@@ -72,12 +93,16 @@ final class _ReturnJournal extends StatelessWidget {
   const _ReturnJournal({
     required this.record,
     required this.staffNames,
+    required this.productNames,
+    required this.receipt,
     required this.selfUid,
     required this.onVerify,
   });
 
   final TenantReturn record;
   final Map<String, String> staffNames;
+  final Map<String, String> productNames;
+  final String? receipt;
   final String? selfUid;
   final VoidCallback? onVerify;
 
@@ -94,7 +119,7 @@ final class _ReturnJournal extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _Masthead(record: record, tokens: tokens),
+          _Masthead(record: record, receipt: receipt, tokens: tokens),
           SizedBox(height: tokens.spacing.s32),
           _PullQuote(reason: record.reason, tokens: tokens),
           SizedBox(height: tokens.spacing.s32),
@@ -154,7 +179,9 @@ final class _ReturnJournal extends StatelessWidget {
               SizedBox(width: tokens.spacing.s8),
               Expanded(
                 child: Text(
-                  line.productName ?? line.productId,
+                  line.productName ??
+                      productNames[line.productId] ??
+                      line.productId,
                   style: tokens.typography.bodyLarge.copyWith(
                     color: tokens.colors.text.primary,
                     fontWeight: FontWeight.w700,
@@ -217,9 +244,20 @@ final class _ReturnJournal extends StatelessWidget {
 
 /// The sale this return came off, and where it stands.
 final class _Masthead extends StatelessWidget {
-  const _Masthead({required this.record, required this.tokens});
+  const _Masthead({
+    required this.record,
+    required this.receipt,
+    required this.tokens,
+  });
 
   final TenantReturn record;
+
+  /// The sale's receipt. **The document ID is the fallback, not the
+  /// headline**: `co-1788637383703-3358bf…` is not something anybody can match
+  /// against the paper in their hand, and it was what this block printed until
+  /// 2026-09-06.
+  final String? receipt;
+
   final AppTokens tokens;
 
   @override
@@ -238,7 +276,7 @@ final class _Masthead extends StatelessWidget {
             children: <Widget>[
               _Eyebrow('SALE', tokens: tokens),
               Text(
-                record.saleId,
+                receipt ?? record.saleId,
                 key: const ValueKey('return-journal-sale'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

@@ -184,36 +184,51 @@ final class _TenantDailySummaryPanelState
     }
   }
 
+  /// One loader pair per generation, memoised so an unrelated rebuild does not
+  /// restart the read. See [TenantRouteGuard.load] for why this shape is what
+  /// lets the guard keep the figures on screen while it refreshes them.
+  void _composeLoaders(int key) {
+    if (key == _loaderKey && _loader != null) return;
+    _loaderKey = key;
+    TenantGuardedLoader<_DailySummaryView> readWith(
+      TenantDocumentReader reader,
+    ) => (session) async {
+      final days = await TenantDailyMetricsRepository(
+        session: session,
+        reader: reader,
+        clock: widget.clock,
+      ).loadRecentDays(days: widget.days);
+      return _DailySummaryView(
+        days: days,
+        // Read after the figures, and never allowed to fail them: a label
+        // is not the reason this route exists.
+        currency: await TenantReportingCurrency.read(
+          session: session,
+          reader: reader,
+        ),
+        // **One read for the whole span, sliced per day below.** The span
+        // is taken from the days that came back rather than from the
+        // clock, so it can only ever cover dates this page is showing.
+        expenses: await _readExpenses(session, days),
+      );
+    };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
+  }
+
+  int? _loaderKey;
+  TenantGuardedLoader<_DailySummaryView>? _loader;
+  TenantGuardedLoader<_DailySummaryView>? _loaderCached;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    TenantGuardedLoader<_DailySummaryView> readWith(TenantDocumentReader reader) =>
-        (session) async {
-          final days = await TenantDailyMetricsRepository(
-            session: session,
-            reader: reader,
-            clock: widget.clock,
-          ).loadRecentDays(days: widget.days);
-          return _DailySummaryView(
-            days: days,
-            // Read after the figures, and never allowed to fail them: a label
-            // is not the reason this route exists.
-            currency: await TenantReportingCurrency.read(
-              session: session,
-              reader: reader,
-            ),
-            // **One read for the whole span, sliced per day below.** The span
-            // is taken from the days that came back rather than from the
-            // clock, so it can only ever cover dates this page is showing.
-            expenses: await _readExpenses(session, days),
-          );
-        };
-    final cache = widget.reader.cached;
+    _composeLoaders(_generation);
     return TenantRouteGuard<_DailySummaryView>(
-      key: ValueKey(_generation),
       allowedRoles: TenantDailyMetricsRepository.allowedRoles,
-      load: readWith(widget.reader),
-      loadCached: cache == null ? null : readWith(cache),
+      load: _loader!,
+      loadCached: _loaderCached,
       denied: const Center(
         key: ValueKey('daily-summary-denied'),
         child: Text('The daily summary is available to managers and owners.'),

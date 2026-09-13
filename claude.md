@@ -66,13 +66,33 @@ a device.
 
 ## Device runs
 
+**Device testing goes against SIT from 2026-09-04, until the developer says otherwise.** That is
+the deployed dev/SIT project `multitenant-pos-b8326` - real catalog, real Storage images, real
+shifts - and it is what a report of "tested on a device" means from here on. Build it with no
+`--dart-define` at all: the emulator switch is compile-time, so its absence is the whole of the
+configuration.
+
 ```
-dart run tool/lan_debug_build.dart          # reads this machine's IP, syncs the cleartext
+GRADLE_USER_HOME=D:/gradle-home flutter build apk --debug
 adb install -r --no-streaming build/app/outputs/flutter-apk/app-debug.apk
 ```
 
+Say which backend a device run used, every time. The two builds produce the same file name and
+look identical on the phone, and a result read against the wrong one is worse than no result.
+
+**The local Firebase suite, when the developer asks for it:**
+
+```
+dart run tool/lan_debug_build.dart          # reads this machine's IP, syncs the cleartext
+```
+
 The emulator host and the cleartext allowlist are compiled into the APK, so a DHCP lease change
-means a rebuild. `GRADLE_USER_HOME=D:\gradle-home` on this machine, or the build fills `C:`.
+means a rebuild. It is also worth checking the emulators are actually up before installing: the
+app cannot tell a closed port from a refused login, and Android drops the socket on-device so
+nothing appears in any log.
+
+`GRADLE_USER_HOME=D:/gradle-home` on this machine, or the build fills `C:` - forward slashes, or
+Git Bash resolves it to a stale cache inside `android/`.
 
 ## Reporting
 

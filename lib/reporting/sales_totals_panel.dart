@@ -276,7 +276,6 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
         '$_generation';
     _composeLoaders(guardKey);
     return TenantRouteGuard<SalesTotalsView>(
-      key: ValueKey(guardKey),
       allowedRoles: TenantSalesTotalsGateway.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,

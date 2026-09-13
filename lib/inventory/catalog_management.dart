@@ -376,6 +376,18 @@ final class TenantProductUpdateIntent {
 
 typedef TenantCatalogRequestIdFactory = String Function();
 
+/// Withdraws a queued catalog change, answering whether it was still there to
+/// withdraw.
+///
+/// **False is a real answer, not a failure.** A change that has left this device
+/// cannot be taken back by it, and the surface offering *Undo* has to be able
+/// to say so instead of claiming a reversal that did not happen.
+typedef TenantCatalogUndo =
+    Future<bool> Function({
+      required String tenantId,
+      required String operationId,
+    });
+
 /// Guarded intent boundary for changing one business's catalog.
 ///
 /// This is deliberately separate from [TenantCatalogRepository]: every active
@@ -825,6 +837,16 @@ enum TenantCatalogWriteKind {
   /// The server acknowledged the write.
   committed,
 
+  /// The change is durable on this device and has not reached the server yet.
+  ///
+  /// **Not a lesser kind of success.** It is what a queued catalog write
+  /// returns every time, online included: the record is in encrypted local
+  /// storage, the overlay is already drawing it, and
+  /// `TenantPendingMutationWorker` carries it from there. What it does not
+  /// claim is a server acknowledgement, because none has been waited for -
+  /// waiting for one is the whole cost this replaced.
+  queued,
+
   /// The server refused the write; a canonical re-read decides what exists.
   rejected,
 
@@ -836,10 +858,20 @@ enum TenantCatalogWriteKind {
 }
 
 final class TenantCatalogWriteResult {
-  const TenantCatalogWriteResult._(this.kind, [this.reasonCode]);
+  const TenantCatalogWriteResult._(this.kind, [this.reasonCode])
+    : operationId = null;
 
   const TenantCatalogWriteResult.committed()
     : this._(TenantCatalogWriteKind.committed);
+
+  /// A durable local record, named so the caller can offer to withdraw it.
+  ///
+  /// [operationId] is how an *Undo* finds the record again. The writer derives
+  /// it and the panel only carries it back, so no surface has to know how a
+  /// queued catalog change is keyed.
+  const TenantCatalogWriteResult.queued(this.operationId)
+    : kind = TenantCatalogWriteKind.queued,
+      reasonCode = null;
 
   const TenantCatalogWriteResult.rejected(String reasonCode)
     : this._(TenantCatalogWriteKind.rejected, reasonCode);
@@ -852,6 +884,9 @@ final class TenantCatalogWriteResult {
 
   final TenantCatalogWriteKind kind;
   final String? reasonCode;
+
+  /// Set only on [TenantCatalogWriteResult.queued]. See that constructor.
+  final String? operationId;
 }
 
 /// The narrow write boundary used to change a catalog.
@@ -1185,6 +1220,60 @@ final class TenantProductUpdateResult {
     required this.imageUrl,
   });
 
+  /// The correction as it will stand, projected from what the product holds and
+  /// what this intent moves.
+  ///
+  /// **No server has seen it, and the result says so.** [queued] is what
+  /// separates this from [TenantProductUpdateResult.fromCallable]: there is no
+  /// `updateId`, because only the server issues one, and every figure here is
+  /// this device's arithmetic rather than the server's answer. It is the truth
+  /// about what the catalog now shows, which is what a notice needs to state.
+  ///
+  /// The consistency checks `fromCallable` performs have no counterpart and
+  /// need none - it is checking a *response* against the request, and here
+  /// there is no second party to disagree.
+  factory TenantProductUpdateResult.queued({
+    required TenantProductUpdateIntent intent,
+    required TenantProduct previous,
+  }) {
+    // The price this correction leaves behind, in the units a sale line
+    // records. A stored price no device can convert is the `productUnreadable`
+    // case, which `buildUpdateIntent` already refuses before any of this - so
+    // reaching it here means the product changed underneath the form, and
+    // refusing again is the same answer for the same reason.
+    final priceMinor =
+        intent.priceMinor ?? checkoutMinorUnitsFromMajor(previous.price);
+    if (priceMinor == null) {
+      throw const TenantProductUpdateException(
+        TenantProductUpdateFailure.productUnreadable,
+      );
+    }
+    return TenantProductUpdateResult._(
+      updateId: null,
+      productId: intent.productId,
+      changedFields: List<TenantProductField>.unmodifiable(intent.fields),
+      name: intent.name ?? previous.name,
+      sku: intent.sku ?? previous.sku,
+      price: priceMinor / 100,
+      priceMinor: priceMinor,
+      cost: intent.clearsCost
+          ? null
+          : intent.costMinor == null
+          ? previous.cost
+          : intent.costMinor! / 100,
+      costMinor: intent.clearsCost
+          ? null
+          : intent.costMinor ??
+                (previous.cost == null
+                    ? null
+                    : checkoutMinorUnitsFromMajor(previous.cost!)),
+      categoryId: intent.categoryId ?? previous.categoryId,
+      imageUrl: intent.clearsImage
+          ? null
+          : intent.imageUrl ?? previous.imageUrl,
+    );
+  }
+
   factory TenantProductUpdateResult.fromCallable(
     Object? value, {
     required TenantProductUpdateIntent intent,
@@ -1290,7 +1379,11 @@ final class TenantProductUpdateResult {
   /// The `audit_logs` entry recording the before and after of every field that
   /// moved. A price is money, and this is the record that answers "this was 450
   /// last week, who made it 45?".
-  final String updateId;
+  /// The server's own identifier for this correction, or null while the
+  /// correction is still only on this device. A queued correction has no
+  /// `updateId` because nothing has issued one yet, and inventing a local
+  /// stand-in would put a number in an audit trail that names nothing.
+  final String? updateId;
 
   final String productId;
 
@@ -1361,15 +1454,32 @@ Uri? _optionalCallableImage(Object? value) {
 ///
 /// The business comes from one captured live session and the product from one
 /// already-decoded catalog record, so no caller can name either.
+/// Where a correction is parked until this device can send it.
+///
+/// **A function rather than the queue itself**, so this file keeps its existing
+/// import direction: `lib/inventory` depends on `lib/tenancy`, and the durable
+/// store lives there. The composition root supplies a closure that enqueues and
+/// asks the worker to run; nothing here knows what Hive is.
+typedef TenantProductUpdateQueue =
+    Future<void> Function({
+      required String tenantId,
+      required String productId,
+      required String requestId,
+      required Map<String, Object?> payload,
+    });
+
 final class TenantProductUpdateGateway {
   const TenantProductUpdateGateway({
     required TenantSession session,
     required UpdateProductCallable callable,
+    TenantProductUpdateQueue? queue,
   }) : _session = session,
-       _callable = callable;
+       _callable = callable,
+       _queue = queue;
 
   final TenantSession _session;
   final UpdateProductCallable _callable;
+  final TenantProductUpdateQueue? _queue;
 
   /// Correcting a description is an operational act, matching the server's
   /// `PRODUCT_UPDATE_ROLES`. Money is narrower and is enforced when the intent
@@ -1381,12 +1491,36 @@ final class TenantProductUpdateGateway {
   /// Submits [intent]; one intent keeps one request ID across a retry, so the
   /// server's own idempotency record settles a repeated attempt rather than
   /// auditing the same correction twice.
+  ///
+  /// **With a queue wired, nothing here waits for the server.** The correction
+  /// becomes a durable record, the overlay draws it over the product at once,
+  /// and the worker carries it. The authorization check above still runs first
+  /// and still refuses locally - queueing a correction this session may not
+  /// make would only be a slower way to be told no.
+  ///
+  /// [previous] is what the product held when the form opened, and is required
+  /// for the queued path because a result has to state the whole product rather
+  /// than only the fields that moved.
   Future<TenantProductUpdateResult> submit(
-    TenantProductUpdateIntent intent,
-  ) async {
+    TenantProductUpdateIntent intent, {
+    TenantProduct? previous,
+  }) async {
     if (!canUpdateInSession(_session) || intent.tenantId != _session.tenantId) {
       throw const TenantProductUpdateException(
         TenantProductUpdateFailure.forbidden,
+      );
+    }
+    final queue = _queue;
+    if (queue != null && previous != null) {
+      await queue(
+        tenantId: intent.tenantId,
+        productId: intent.productId,
+        requestId: intent.requestId,
+        payload: intent.payload(),
+      );
+      return TenantProductUpdateResult.queued(
+        intent: intent,
+        previous: previous,
       );
     }
     final Object? response;

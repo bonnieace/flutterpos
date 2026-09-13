@@ -92,12 +92,9 @@ async function acceptInvitation(
   if (currentAuthUser.disabled || !currentEmail) {
     throw new HttpsError("permission-denied", "The current identity cannot accept invitations.");
   }
-  if (mode === "visible" && currentAuthUser.emailVerified !== true) {
-    throw new HttpsError(
-      "permission-denied",
-      "A verified email is required for visible invitation acceptance."
-    );
-  }
+  // Verification is not refused here any more. It is still required on the
+  // tokenless route, but `invitationAcceptanceViolation` is what refuses it, so
+  // the caller is told which of the several things it could be went wrong.
   const db = getFirestore();
   const operation = mode === "token" ?
     "acceptTenantInvitation" :
@@ -164,8 +161,13 @@ async function acceptInvitation(
         invitation.invitationStatus : "",
       invitationConsumed: invitation.invitationTokenUsedAt !== null &&
         invitation.invitationTokenUsedAt !== undefined,
+      // Present but past, rather than merely absent: an invitation whose first
+      // delivery has not gone out yet has no expiry written and has promised
+      // nobody anything.
+      invitationExpired: invitation.invitationExpiresAt !== null &&
+        invitation.invitationExpiresAt !== undefined &&
+        !isUnexpiredTimestamp(invitation.invitationExpiresAt, now),
       emailVerified: currentAuthUser.emailVerified === true,
-      visibleAcceptanceAllowed: invitation.visibleAcceptanceAllowed === true,
     });
     if (acceptanceViolation) {
       throw new HttpsError("permission-denied", "The invitation cannot be accepted.", {
@@ -177,7 +179,6 @@ async function acceptInvitation(
       if (
         invitation.invitationVersion !== input.invitationVersion ||
         typeof invitation.invitationTokenHash !== "string" ||
-        !isUnexpiredTimestamp(invitation.invitationExpiresAt, now) ||
         !secret ||
         !verifyInvitationProof({
           tenantId: input.tenantId,

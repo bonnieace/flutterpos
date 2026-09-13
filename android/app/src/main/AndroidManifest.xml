@@ -67,6 +67,33 @@
                       android:host="swahilipro.com"
                       android:path="/auth/verified"/>
             </intent-filter>
+            <!--
+              **The staff invitation, which is parsed rather than ignored.**
+              Unlike the filter above, this URL carries the whole of the thing:
+              the tenant, the invited uid, the invitation version and an HMAC
+              proof. `MainActivity` hands it to Dart over `pos/launch-link` and
+              `TenantRoutingShell` accepts the invitation with it.
+
+              Until 2026-09-08 this filter did not exist, so the emailed link
+              opened a browser and landed on `public/staff/invitation.html`,
+              which told the reader to accept in the app - and the app, for the
+              same invitees, told them to use the link in the email. Neither
+              statement was reachable from the other.
+
+              A device without the app installed still follows the URL to that
+              page, which is now written as the fallback it always was.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="multitenant-pos-b8326.web.app"
+                      android:path="/staff/invitation"/>
+                <data android:scheme="https"
+                      android:host="swahilipro.com"
+                      android:path="/staff/invitation"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

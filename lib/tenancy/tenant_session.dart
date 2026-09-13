@@ -17,12 +17,7 @@ final class TenantSession {
     if (uid.trim().isEmpty) {
       throw ArgumentError.value(uid, 'uid', 'Cannot be empty.');
     }
-    // **`canRead`, not `canAccess`, since the provisional window landed.** A
-    // request whose window has shut may still open its own business to look at
-    // the week it traded; what it may not do is write, and that is `canAccess`'s
-    // question rather than this one. A session it could not hold at all would
-    // be a full lockout wearing read-only's name.
-    if (!access.canRead()) {
+    if (!access.canAccess()) {
       throw StateError('A tenant session requires canonical access.');
     }
     if (epoch < 0) {
@@ -72,23 +67,9 @@ final class TenantSession {
 
   bool ownsEpoch(int capturedEpoch) => epoch == capturedEpoch;
 
-  /// Whether this session may write. See [TenantAccess.canAccess].
-  ///
-  /// [now] is for a caller that holds its own clock - the checkout does, and a
-  /// service that judged the window against the wall clock while stamping
-  /// records from an injected one would disagree with itself.
-  bool canAccess({Iterable<TenantRole>? allowedRoles, DateTime? now}) =>
-      access.canAccess(allowedRoles: allowedRoles, now: now);
-
-  /// Whether this session may read. See [TenantAccess.canRead].
-  bool canRead({Iterable<TenantRole>? allowedRoles, DateTime? now}) =>
-      access.canRead(allowedRoles: allowedRoles, now: now);
-
-  /// Where this business stands right now.
-  TenantStanding get standing => access.standingAt(DateTime.now().toUtc());
-
-  /// Whether this business is trading on a deadline, and when it runs out.
-  DateTime? get provisionalUntil => access.provisionalUntil;
+  /// Whether this session may act. See [TenantAccess.canAccess].
+  bool canAccess({Iterable<TenantRole>? allowedRoles}) =>
+      access.canAccess(allowedRoles: allowedRoles);
 
   TenantSession copyWith({TenantAccess? access, int? epoch}) => TenantSession(
     uid: uid,

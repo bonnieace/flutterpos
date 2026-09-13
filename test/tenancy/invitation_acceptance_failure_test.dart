@@ -32,6 +32,11 @@ void main() {
       // The wire values are the server's `InvitationAcceptanceViolation` union
       // in `functions/src/staff/acceptancePolicy.ts`. A token drifting here
       // makes a refusal fall silently through to the fallback sentence.
+      //
+      // `versioned_proof_required` is the one entry the server no longer
+      // declares. It is kept because functions and installed apps are deployed
+      // on different days, and an app talking to the previous deployment must
+      // still render the refusal it gets.
       expect(
         InvitationAcceptanceViolation.values.map((v) => v.wireValue).toSet(),
         {
@@ -41,6 +46,7 @@ void main() {
           'invitation_not_pending',
           'email_mismatch',
           'invitation_consumed',
+          'invitation_expired',
           'email_unverified',
           'versioned_proof_required',
         },
@@ -109,9 +115,9 @@ void main() {
 
   group('invitation acceptance safe error', () {
     test('sends a permanently refused acceptance to the emailed link', () {
-      // Finding 3 from the Android run, and the whole point of the chunk.
-      // `visibleAcceptanceAllowed` is fixed at invite time, so no retry can
-      // ever change this answer.
+      // Only a server deployed before 2026-09-08 answers this way. The advice
+      // is now true where it was not: the emailed link opens the app on the
+      // invitation, so a reader sent to it arrives somewhere.
       for (final mode in InvitationAcceptanceMode.values) {
         final message = invitationAcceptanceSafeError(
           const InvitationAcceptanceException(

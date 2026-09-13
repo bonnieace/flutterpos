@@ -390,8 +390,16 @@ final class _TenantInvitationAcceptanceFormState
           ),
         ],
         SizedBox(height: tokens.spacing.s16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        // **A `Wrap`, not a `Row`, since 2026-09-08.** Two intrinsic-width
+        // buttons and a gap do not fit a 360dp phone, and this row overflowed
+        // by 19 logical pixels the first time a device ever reached this
+        // screen - which took until the emailed link could open the app,
+        // because before that nothing on a phone could draw it. The buttons
+        // take a second line rather than a stripe of yellow.
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: tokens.spacing.s8,
+          runSpacing: tokens.spacing.s8,
           children: [
             AppButton(
               key: const ValueKey('accept-token-invitation-cancel'),
@@ -399,7 +407,6 @@ final class _TenantInvitationAcceptanceFormState
               tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
             ),
-            SizedBox(width: tokens.spacing.s8),
             AppButton(
               key: const ValueKey('accept-token-invitation-confirm'),
               label: 'Accept invitation',

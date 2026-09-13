@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 
+import '../checkout/checkout_draft.dart';
 import '../checkout/checkout_sale.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_id.dart';
@@ -44,11 +45,17 @@ final class TenantReturnableSale {
   TenantReturnableSale._({
     required this.saleId,
     required this.receiptNumber,
+    required this.businessDate,
     required List<TenantReturnableLine> lines,
   }) : lines = List<TenantReturnableLine>.unmodifiable(lines);
 
   final String saleId;
   final String receiptNumber;
+
+  /// The trading day of the sale being reversed, carried so the return can
+  /// record it. See [TenantReturnCreateIntent.businessDate].
+  final String businessDate;
+
   final List<TenantReturnableLine> lines;
 
   Iterable<TenantReturnableLine> get returnable =>
@@ -61,10 +68,23 @@ final class TenantReturnableSale {
 final class TenantReturnRequestLine {
   const TenantReturnRequestLine._({
     required this.productId,
+    required this.name,
     required this.quantity,
   });
 
   final String productId;
+
+  /// The product's name as the **sale** recorded it.
+  ///
+  /// **Written onto the return, and the 2026-09-06 defect was that it was
+  /// not.** Stock is restored by ID and the name is only ever a label - but it
+  /// is the label every returns screen shows, and with nothing written there
+  /// `TenantReturnLine.productName` was always null and every screen fell back
+  /// to the raw document ID. Taken from the sale rather than the catalog for
+  /// the reason the receipt is: it is what the customer was sold, whatever the
+  /// catalog has been renamed to since.
+  final String name;
+
   final int quantity;
 }
 
@@ -80,6 +100,8 @@ final class TenantReturnCreateIntent {
     required this.returnId,
     required this.tenantId,
     required this.saleId,
+    required this.businessDate,
+    required this.recordedOn,
     required this.createdBy,
     required this.reason,
     required this.lines,
@@ -89,6 +111,29 @@ final class TenantReturnCreateIntent {
   final String returnId;
   final String tenantId;
   final String saleId;
+
+  /// The trading day of the sale this reverses - **not** the day the reversal
+  /// was recorded.
+  ///
+  /// The two differ whenever a customer comes back the next morning, and it is
+  /// the sale's day that a day's takings are netted against. It is copied from
+  /// the immutable sale and the create rule binds it to that same document, so
+  /// no device can file a reversal against a day its sale did not happen on.
+  final String businessDate;
+
+  /// The day this reversal was taken, from the recording device's clock.
+  ///
+  /// **A different fact from [businessDate], and the returns list is filtered
+  /// by this one**: a customer who brings Monday's goods back on Friday makes a
+  /// Friday return against a Monday sale, and both screens want their own day.
+  ///
+  /// The server's `createdAt` remains the authority for *when* - it is what
+  /// every screen displays - and this is only what the filter groups by. The
+  /// create rule checks its shape and deliberately does not bind it to
+  /// `request.time`; see the rule for why the offline queue makes that
+  /// impossible.
+  final String recordedOn;
+
   final String createdBy;
   final String reason;
   final List<TenantReturnRequestLine> lines;
@@ -101,6 +146,8 @@ final class TenantReturnCreateIntent {
     'returnId': returnId,
     'tenantId': tenantId,
     'saleId': saleId,
+    'businessDate': businessDate,
+    'recordedOn': recordedOn,
     'createdBy': createdBy,
     'status': TenantReturnStatus.pending.wireValue,
     'reason': reason,
@@ -110,6 +157,9 @@ final class TenantReturnCreateIntent {
           // The create contract requires `productId`. The read model also
           // tolerates the server's `itemId` alias; a write never uses it.
           'productId': line.productId,
+          // `validSaleLine` checks `productId` and `quantity` and forbids no
+          // other key, so this needs no rule change and none was made.
+          'productName': line.name,
           'quantity': line.quantity,
         },
     ],
@@ -205,6 +255,7 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
     return TenantReturnableSale._(
       saleId: sale.id,
       receiptNumber: sale.receiptNumber,
+      businessDate: sale.businessDate,
       lines: <TenantReturnableLine>[
         for (final line in sale.lines)
           TenantReturnableLine._(
@@ -228,6 +279,10 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
     required Map<String, int> quantities,
     required String reason,
     required String requestId,
+
+    /// The instant the recording day is taken from. Absent, the wall clock,
+    /// which is what every production caller wants.
+    DateTime? now,
   }) {
     if (!session.canAccess(allowedRoles: allowedRoles)) {
       throw const TenantReturnException('return_forbidden');
@@ -239,6 +294,9 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
     final remaining = <String, int>{
       for (final line in returnable.lines)
         line.productId: line.remainingQuantity,
+    };
+    final names = <String, String>{
+      for (final line in returnable.lines) line.productId: line.name,
     };
 
     final lines = <TenantReturnRequestLine>[];
@@ -255,7 +313,11 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
         throw const TenantReturnException('return_exceeds_sale');
       }
       lines.add(
-        TenantReturnRequestLine._(productId: entry.key, quantity: quantity),
+        TenantReturnRequestLine._(
+          productId: entry.key,
+          name: names[entry.key]!,
+          quantity: quantity,
+        ),
       );
     }
     if (lines.isEmpty || lines.length > maximumCheckoutSaleLines) {
@@ -274,6 +336,8 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
       returnId: returnId,
       tenantId: session.tenantId,
       saleId: returnable.saleId,
+      businessDate: returnable.businessDate,
+      recordedOn: checkoutBusinessDate((now ?? DateTime.now()).toUtc()),
       createdBy: session.uid,
       reason: safeReason,
       lines: lines,
@@ -469,5 +533,29 @@ String _normalizedReason(String value) {
 
 const int minimumReturnReasonLength = 3;
 const int maximumReturnReasonLength = 500;
+
+/// The reasons a return is usually recorded for.
+///
+/// **Offered rather than typed, on the product owner's call of 2026-09-06.** A
+/// free-text box on the one control every return passes through gives a
+/// business whose returns read `damaged`, `Damaged`, `dmgd` and `broken
+/// bottle` - four spellings of one fact, none of which can be counted. A short
+/// closed list is what makes the reason answerable a month later.
+///
+/// **Closed, but not the only way through**: the form keeps a free-text field
+/// behind an *Other* option, because a list that cannot say what happened
+/// makes people pick the nearest wrong entry, which is worse than a typed
+/// sentence.
+///
+/// Every entry is at least [minimumReturnReasonLength] characters and well
+/// inside [maximumReturnReasonLength], so a chosen reason meets exactly the
+/// bounds a typed one does and the rules see no difference between them.
+const List<String> commonTenantReturnReasons = <String>[
+  'Spoiled or expired',
+  'Damaged or broken',
+  'Wrong item given',
+  'Customer changed their mind',
+  'Faulty or not working',
+];
 
 final RegExp _requestIdPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$');

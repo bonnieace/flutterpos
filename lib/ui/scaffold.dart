@@ -63,7 +63,9 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'buttons.dart';
 import 'home_navigation.dart';
+import 'press.dart';
 import 'tokens.dart';
 
 /// A screen's title, its optional subtitle, and its optional primary action.
@@ -257,7 +259,14 @@ final class AppScaffold extends StatelessWidget {
     this.toolbarTitle,
     this.automaticallyImplyLeading = true,
     this.navigation = const <HomeDestination>[],
-  });
+    this.onTitlePressed,
+    this.titleActionLabel,
+  }) : assert(
+         onTitlePressed == null || titleActionLabel != null,
+         'A title that is a control has to say what it opens: a chevron is '
+         'not a word, and §9 does not let a control announce itself by its '
+         'glyph.',
+       );
 
   /// The screen's name. See [PageHeader.title].
   final String title;
@@ -309,6 +318,27 @@ final class AppScaffold extends StatelessWidget {
 
   /// Forwarded to [AppBar.automaticallyImplyLeading] unchanged.
   final bool automaticallyImplyLeading;
+
+  /// Makes the screen's own name the control that changes what it names.
+  ///
+  /// **One call site, and it is the home.** The title there is the business's
+  /// name, which is the fact a person checks to find out which business they
+  /// are in - so it is also where they reach to leave it. It carried a
+  /// *Change business* tile in the grid until 2026-09-03, three screens of
+  /// scrolling below the name it was about.
+  ///
+  /// Null everywhere else, which draws the plain title this frame has always
+  /// drawn: a title that is sometimes a button and looks identical either way
+  /// is worse than one that is never a button, which is the rule `ShiftBanner`
+  /// states for the same reason.
+  final VoidCallback? onTitlePressed;
+
+  /// What pressing the title does, for a screen reader.
+  ///
+  /// **Required in practice**, since a chevron is not a word: §9 does not let
+  /// a control announce itself by its glyph. Asserted rather than defaulted so
+  /// a second call site has to say what its own title opens.
+  final String? titleActionLabel;
 
   /// §4.4's navigation destinations, drawn as a persistent side menu at
   /// `expanded` and as nothing at all below it, where the page's own cards
@@ -373,6 +403,15 @@ final class AppScaffold extends StatelessWidget {
   /// a test can ask the question rather than asserting a pixel height and
   /// hoping the two agree.
   static const double toolbarHeightWithSubtitle = 68;
+
+  /// Whether `AppBar` will draw something in its leading slot.
+  ///
+  /// The same three things `AppBar` itself asks: whether it may imply one at
+  /// all, whether the `Scaffold` has a drawer for a hamburger to open, and
+  /// whether there is a route beneath this one for a back arrow to pop.
+  bool _hasLeading(BuildContext context, bool hasDrawer) =>
+      automaticallyImplyLeading &&
+      (hasDrawer || (ModalRoute.of(context)?.canPop ?? false));
 
   @override
   Widget build(BuildContext context) {
@@ -450,11 +489,13 @@ final class AppScaffold extends StatelessWidget {
         : HomeNavigation.showsMenu(screenWidth)
         ? _NavigationColumn(destinations: navigation, tokens: tokens)
         : null;
+    final hasDrawer =
+        navigation.isNotEmpty && !HomeNavigation.showsMenu(screenWidth);
     return Scaffold(
       backgroundColor: tokens.colors.surface.base,
-      drawer: navigation.isEmpty || HomeNavigation.showsMenu(screenWidth)
-          ? null
-          : _NavigationDrawer(destinations: navigation, tokens: tokens),
+      drawer: hasDrawer
+          ? _NavigationDrawer(destinations: navigation, tokens: tokens)
+          : null,
       appBar: AppBar(
         automaticallyImplyLeading: automaticallyImplyLeading,
         // **Taller when there is a subtitle**, which is the export's own
@@ -463,42 +504,28 @@ final class AppScaffold extends StatelessWidget {
         // shift, which receipt - and it is the kind of fact a person needs
         // before they read a single row.
         toolbarHeight: subtitle == null ? null : toolbarHeightWithSubtitle,
-        // **No middle spacing, which is 32 logical pixels of a 360 bar.**
-        // `NavigationToolbar` reserves 16 on each side of the title by
-        // default; between a hamburger, a sync glyph and a way out there are
-        // 144 pixels of control on this route already, and the 32 was the
-        // difference between `Dev Corner Shop` and `Dev Corner S…` on a real
-        // handset. The leading control's own 48 square is the gap.
-        titleSpacing: 0,
+        // **No middle spacing where a leading control supplies the gap, and
+        // the ordinary inset where none does.** `NavigationToolbar` reserves
+        // 16 on each side of the title by default; between a hamburger, a
+        // reload glyph and a way out there are 144 pixels of control on a
+        // pushed route already, and the 32 was the difference between
+        // `Dev Corner Shop` and `Dev Corner S…` on a real handset.
+        //
+        // **The sentence that justified it was "the leading control's own 48
+        // square is the gap", and on the home there is no leading control.**
+        // It has no drawer and nothing to pop, so the business's name was
+        // printed hard against the edge of the screen. Reported on a device on
+        // 2026-09-03.
+        titleSpacing: _hasLeading(context, hasDrawer) ? 0 : tokens.spacing.s16,
         // `section-title`, which is the role the export's own header uses and
         // the largest §2.2 has that fits a toolbar. Never wrapped: a title on
         // two lines in a 56-high bar pushes the page down for a word, so a
         // long one ellipsises.
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Semantics(
-              header: true,
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: tokens.typography.titleLarge.copyWith(
-                  color: tokens.colors.text.primary,
-                ),
-              ),
-            ),
-            if (subtitle case final line?)
-              Text(
-                line,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: tokens.typography.bodyMedium.copyWith(
-                  color: tokens.colors.text.secondary,
-                ),
-              ),
-          ],
+        title: _Title(
+          title: title,
+          subtitle: subtitle,
+          onPressed: onTitlePressed,
+          actionLabel: titleActionLabel,
         ),
         // **The one action a page exists for goes at the trailing edge.** It
         // sat beside the title in the header block; the block is gone, and the
@@ -527,6 +554,94 @@ final class AppScaffold extends StatelessWidget {
                 Expanded(child: content),
               ],
             ),
+    );
+  }
+}
+
+/// The screen's name, and where it is also the way to a different one.
+///
+/// **The affordance is a chevron after the words, not a styling of them.** A
+/// title that changed colour or weight when it became pressable would be a
+/// second title role; a glyph beside it is an addition, and it is the one the
+/// platform's own switchers use.
+final class _Title extends StatelessWidget {
+  const _Title({
+    required this.title,
+    required this.subtitle,
+    required this.onPressed,
+    required this.actionLabel,
+  });
+
+  final String title;
+  final String? subtitle;
+  final VoidCallback? onPressed;
+  final String? actionLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    // `section-title`, which is the role the export's own header uses and the
+    // largest §2.2 has that fits a toolbar. Never wrapped: a title on two
+    // lines in a 56-high bar pushes the page down for a word, so a long one
+    // ellipsises.
+    final lines = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: tokens.typography.titleLarge.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
+        if (subtitle case final line?)
+          Text(
+            line,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.typography.bodyMedium.copyWith(
+              color: tokens.colors.text.secondary,
+            ),
+          ),
+      ],
+    );
+    final press = onPressed;
+    if (press == null) return Semantics(header: true, child: lines);
+    return Semantics(
+      header: true,
+      button: true,
+      label: '$title. $actionLabel.',
+      excludeSemantics: true,
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: PressSurface(
+          // Named so a test can address the control rather than the words in
+          // it: the label is the business's name and changes per fixture.
+          key: const ValueKey('screen-title-action'),
+          borderRadius: BorderRadius.circular(tokens.radius.md),
+          onPressed: press,
+          excludeSemantics: true,
+          child: Padding(
+            // Only on the trailing side: the leading edge is already inset by
+            // the toolbar, and padding it again would undo that.
+            padding: EdgeInsetsDirectional.only(end: tokens.spacing.s8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Flexible(child: lines),
+                SizedBox(width: tokens.spacing.s4),
+                Icon(
+                  Icons.expand_more,
+                  size: AppButton.iconSize,
+                  color: tokens.colors.text.secondary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

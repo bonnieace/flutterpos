@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AccountVerificationDependencies,
-  isRecentAuthTime,
   processAccountVerificationTask,
+  resendThrottleVerdict,
 } from "./accountVerification";
 import {hashRecipient, parseRecipientHmacKeyring} from "./recipientHash";
 
@@ -74,12 +74,58 @@ function dependencies(identity: {
   };
 }
 
-test("account verification requires authentication no older than five minutes", () => {
-  const now = Date.UTC(2026, 6, 29, 12, 0, 0);
-  const seconds = Math.floor(now / 1000);
-  assert.equal(isRecentAuthTime(seconds - 300, now), true);
-  assert.equal(isRecentAuthTime(seconds - 301, now), false);
-  assert.equal(isRecentAuthTime(seconds + 1, now), false);
+test("the resend allowance bounds volume, and a replay costs nothing", () => {
+  // **What replaced the five-minute recency rule.** That rule refused the call
+  // once the sign-in aged out, which cost a person mid-signup a round trip
+  // through the sign-in screen - while being the only brake on the button,
+  // because this host mints a fresh requestId per press and the Cloud Tasks
+  // deduplication that stops a retried *intent* does nothing about a repeat.
+  // A cooldown plus a ceiling bounds the abuse by what it actually is.
+  const now = Date.UTC(2026, 8, 11, 9, 0, 0);
+  const event = (id: string, agoMilliseconds: number) => ({
+    requestId: id,
+    requestedAtMilliseconds: now - agoMilliseconds,
+  });
+  const verdict = (
+    events: ReadonlyArray<{requestId: unknown; requestedAtMilliseconds: number | undefined}>,
+    requestId = "verify-new"
+  ) => resendThrottleVerdict({requestId, events, nowMilliseconds: now});
+
+  // The first press of an account's life.
+  assert.equal(verdict([]), "allowed");
+
+  // The same intent arriving twice - what the client does after refreshing a
+  // token left behind by an address change. Neither refused nor charged.
+  assert.equal(
+    verdict([event("verify-new", 1_000)], "verify-new"),
+    "replay"
+  );
+
+  // A different intent, inside the minute and just outside it.
+  assert.equal(verdict([event("verify-first", 59_999)]), "too_soon");
+  assert.equal(verdict([event("verify-first", 60_000)]), "allowed");
+
+  // The day's ceiling, which the cooldown alone would never reach.
+  const spent = Array.from({length: 10}, (_, index) =>
+    event(`verify-${index}`, 3_600_000 + index));
+  assert.equal(verdict(spent), "exhausted");
+  assert.equal(verdict(spent.slice(0, 9)), "allowed");
+
+  // A replay is recognised even once the ceiling is reached, so a retry of an
+  // already-charged intent is never refused by the ceiling it paid for.
+  assert.equal(verdict(spent, "verify-3"), "replay");
+
+  // A record stamped in the future is a clock disagreeing with itself; refusing
+  // on one would wedge the button until it caught up.
+  assert.equal(verdict([event("verify-first", -5_000)]), "allowed");
+
+  // A row whose timestamp did not survive its round trip must not be read as
+  // "just now" - it still counts toward the ceiling, but cannot start a
+  // cooldown it has no time for.
+  assert.equal(
+    verdict([{requestId: "verify-first", requestedAtMilliseconds: undefined}]),
+    "allowed"
+  );
 });
 
 test("verification worker rechecks the current Auth email and verification state", async () => {

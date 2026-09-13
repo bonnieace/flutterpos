@@ -100,7 +100,6 @@ final class TenantRequestResult {
     required this.name,
     required this.slug,
     required this.currency,
-    required this.provisionalUntil,
   });
 
   factory TenantRequestResult.fromCallable(
@@ -109,14 +108,7 @@ final class TenantRequestResult {
     required String expectedSlug,
     required String expectedCurrency,
   }) {
-    const keys = {
-      'tenantId',
-      'name',
-      'slug',
-      'currency',
-      'status',
-      'provisionalUntil',
-    };
+    const keys = {'tenantId', 'name', 'slug', 'currency', 'status'};
     if (value is! Map || value.length != keys.length) {
       throw const FormatException(
         'requestTenant response must contain the expected fields.',
@@ -136,18 +128,9 @@ final class TenantRequestResult {
         data['name'] is! String ||
         data['slug'] is! String ||
         data['currency'] is! String ||
-        data['status'] != 'pending' ||
-        data['provisionalUntil'] is! int) {
+        data['status'] != 'active') {
       throw const FormatException('requestTenant returned an invalid result.');
     }
-    // The instant the provisional trading window shuts, as the server computed
-    // it. Read here so the confirmation can say how long there is without a
-    // second round trip; the canonical copy lives on the tenant document and on
-    // the membership mirror, and both are what every later screen reads.
-    final provisionalUntil = DateTime.fromMillisecondsSinceEpoch(
-      data['provisionalUntil']! as int,
-      isUtc: true,
-    );
     late final String tenantId;
     late final String name;
     late final String slug;
@@ -170,7 +153,6 @@ final class TenantRequestResult {
       name: name,
       slug: slug,
       currency: currency,
-      provisionalUntil: provisionalUntil,
     );
   }
 
@@ -183,12 +165,7 @@ final class TenantRequestResult {
   /// before anybody has opened Settings.
   final String currency;
 
-  /// When the provisional trading window shuts, in UTC.
-  ///
-  /// A self-serve request may trade until this instant and may only be read
-  /// after it. Approval before then replaces the question entirely.
-  final DateTime provisionalUntil;
-  TenantStatus get status => TenantStatus.pending;
+  TenantStatus get status => TenantStatus.active;
 }
 
 final class TenantRequestGateway {
@@ -269,11 +246,9 @@ final class TenantRequestForm extends StatefulWidget {
     this.heading = 'Request a business',
     this.description = 'New businesses remain pending until platform review.',
     this.pillSubmit = false,
-    this.reviewLabel = 'Review request',
-    this.submitLabel = 'Submit request',
+    this.submitLabel = 'Request business',
     this.requestIdFactory,
     this.isCurrent,
-    this.clock,
   });
 
   final TenantRequestIdentity identity;
@@ -305,14 +280,12 @@ final class TenantRequestForm extends StatefulWidget {
   /// about the name is now the name field's own helper, which is where a fact
   /// about one field belongs.
   final String? description;
-  final String reviewLabel;
+  /// The one action this form has. There was a *Review* step before it until
+  /// 2026-09-12; see [_TenantRequestFormState._submit].
   final String submitLabel;
   final TenantRequestIdFactory? requestIdFactory;
   final TenantRequestCurrentCheck? isCurrent;
 
-  /// What the derived slug's timestamp is read from. Injected so a test can
-  /// assert an exact slug rather than one that changes every minute.
-  final DateTime Function()? clock;
 
   @override
   State<TenantRequestForm> createState() => _TenantRequestFormState();
@@ -324,7 +297,6 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
   final _otherCurrencyController = TextEditingController();
   String _currencySelection = tenantRequestCurrencies.first;
   TenantRequestIntent? _intent;
-  bool _confirming = false;
   bool _submitting = false;
   String? _safeError;
 
@@ -367,18 +339,50 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
   }
 
   void _fieldChanged(String _) {
-    if (_intent == null && !_confirming && _safeError == null) return;
+    if (_intent == null && _safeError == null) return;
     setState(_resetIntent);
   }
 
+  /// Drops the held intent, so the next submission is a new attempt.
+  ///
+  /// **Edited input is a different request.** The server records a hash of the
+  /// payload against the idempotency key and refuses a replay whose input has
+  /// moved, so a key kept across an edit turns the edit into a refusal. This is
+  /// what `_fieldChanged` and the currency picker call.
   void _resetIntent() {
     _intent = null;
-    _confirming = false;
     _submitting = false;
     _safeError = null;
   }
 
-  void _review() {
+  /// Mints the intent for these values, or returns the one already held.
+  ///
+  /// **Held across retries, dropped on an edit.** The key and the values it was
+  /// minted for must travel together: a retry of the same attempt has to reach
+  /// the server's recorded result rather than a second operation, and an edited
+  /// form must not inherit the previous key. `_resetIntent` is the other half.
+  TenantRequestIntent? _intentFor() {
+    final existing = _intent;
+    if (existing != null && existing.uid == widget.identity.uid) return existing;
+    try {
+      return _intent = _gateway().createIntent(
+        name: _nameController.text,
+        // Derived rather than asked for: see `deriveTenantRequestSlug`.
+        slug: deriveTenantRequestSlug(_nameController.text),
+        currency: _currency,
+      );
+    } catch (_) {
+      setState(() => _safeError = 'This business request is not valid.');
+      return null;
+    }
+  }
+
+  /// **One step since 2026-09-12.** This form used to mint the intent behind a
+  /// *Review* button and submit behind a second press, which put a confirmation
+  /// between a two-field form and its only action. Nothing on it is a one-way
+  /// door - the currency is editable afterwards from the checkout configuration
+  /// panel - so the step was asking somebody to check work they could undo.
+  Future<void> _submit() async {
     if (_submitting || !_isCurrent()) return;
     if (!_formKey.currentState!.validate()) return;
     // The free-text currency is outside the `Form`, because it is only
@@ -387,30 +391,7 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
       setState(() {});
       return;
     }
-    try {
-      final gateway = _gateway();
-      final intent = gateway.createIntent(
-        name: _nameController.text,
-        // Derived rather than asked for: see `deriveTenantRequestSlug`.
-        slug: deriveTenantRequestSlug(
-          _nameController.text,
-          (widget.clock ?? DateTime.now)().toUtc(),
-        ),
-        currency: _currency,
-      );
-      setState(() {
-        _intent = intent;
-        _confirming = true;
-        _safeError = null;
-      });
-    } catch (_) {
-      setState(() => _safeError = 'This business request is not valid.');
-    }
-  }
-
-  Future<void> _submit() async {
-    if (_submitting || !_isCurrent()) return;
-    final intent = _intent;
+    final intent = _intentFor();
     if (intent == null || intent.uid != widget.identity.uid) return;
     final submittedUid = widget.identity.uid;
     setState(() {
@@ -521,14 +502,6 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
             ),
           ],
 
-          if (_confirming && _intent != null) ...[
-            SizedBox(height: tokens.spacing.s16),
-            Text(
-              'Submit ${_intent!.name} (${_intent!.slug}), trading in '
-              '${_intent!.currency}, for platform review?',
-              key: const ValueKey('tenant-request-confirmation'),
-            ),
-          ],
           if (_safeError != null) ...[
             SizedBox(height: tokens.spacing.s12),
             Callout(
@@ -547,28 +520,19 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
           // screen behind it to cancel to - a right-aligned button was a
           // label-width box floating in a stretched column, while every other
           // step of that flow had a full-width primary.
-          if (!_confirming && widget.onCancel == null)
+          if (widget.onCancel == null)
             _submitButton(expand: true)
           else
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                if (_confirming || widget.onCancel != null) ...[
-                  AppButton(
-                    key: const ValueKey('tenant-request-cancel'),
-                    label: _confirming ? 'Back' : 'Cancel',
-                    tier: AppButtonTier.tertiary,
-                    onPressed: _submitting
-                        ? null
-                        : _confirming
-                        ? () => setState(() {
-                            _confirming = false;
-                            _safeError = null;
-                          })
-                        : widget.onCancel,
-                  ),
-                  SizedBox(width: tokens.spacing.s8),
-                ],
+                AppButton(
+                  key: const ValueKey('tenant-request-cancel'),
+                  label: 'Cancel',
+                  tier: AppButtonTier.tertiary,
+                  onPressed: _submitting ? null : widget.onCancel,
+                ),
+                SizedBox(width: tokens.spacing.s8),
                 _submitButton(),
               ],
             ),
@@ -579,16 +543,14 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
 
   /// The form's primary, in the two widths it is drawn at.
   Widget _submitButton({bool expand = false}) => AppButton(
-    key: ValueKey(
-      _confirming ? 'tenant-request-confirm' : 'tenant-request-review',
-    ),
-    label: _confirming ? widget.submitLabel : widget.reviewLabel,
+    key: const ValueKey('tenant-request-submit'),
+    label: widget.submitLabel,
     pill: widget.pillSubmit,
     expand: expand,
     icon: Icons.add_business_outlined,
     tier: AppButtonTier.primary,
     loading: _submitting,
-    onPressed: _confirming ? _submit : _review,
+    onPressed: _submit,
   );
 }
 
@@ -656,26 +618,34 @@ String normalizeTenantRequestSlug(String value) {
 /// The longest slug the server will accept.
 const int maximumTenantSlugLength = 48;
 
-/// `chilltent-20260830-1645` - the name, then when it was asked for.
+/// `chilltent-a3f9c2` - the name, then enough randomness to make it unique.
 ///
 /// **The slug stopped being a question on 2026-08-30.** It was a second field
 /// asking somebody who wants to open a shop to invent a URL-safe identifier and
 /// then explaining, in a helper line, what "lower-case letters, numbers and
 /// single hyphens" means. Nothing in the app shows a slug to anybody afterwards
 /// - it exists so `tenant_slugs/{slug}` can reserve a name - and the one thing
-/// it must be is unique, which a person guessing is *worse* at than a clock is.
-/// The failure it produced was the worst kind: `already-exists`, after the
-/// form had been filled in, for a name somebody else had taken.
+/// it must be is unique, which a person guessing is worse at than this is.
 ///
-/// **The timestamp is what makes it unique, so it is not optional.** Two shops
-/// called "Chilltent" a minute apart get different slugs; the same shop
-/// requested twice in the same minute does not, and that collision is the one
-/// the server's `already-exists` still exists to catch.
+/// **The suffix was a minute stamp until 2026-09-12, and randomness beats it on
+/// both counts the stamp was chosen for.** Two shops of the same name a minute
+/// apart got different slugs, but two registering within the same minute
+/// collided - and `already-exists` after a filled-in form is the worst failure
+/// this screen has. Six hex characters is about sixteen million, so a collision
+/// stops being something a person can hit by naming their shop the obvious
+/// thing. It is also *shorter* than `-20260830-1645`, which frees seven more
+/// characters for the name inside the 48-character cap - the very thing minute
+/// precision was chosen to protect.
 ///
-/// Minute precision rather than seconds: it is long enough to be unique in
-/// practice and short enough to leave the name room inside 48 characters.
-String deriveTenantRequestSlug(String name, DateTime nowUtc) {
-  final stamp = _slugStamp(nowUtc);
+/// Nothing ever read the stamp back; it was write-only. Two shops may now share
+/// a name, which is what a person would expect of shop names.
+///
+/// **The name is kept in front of the suffix** even though nobody is shown it,
+/// because support reads these in Firestore and a bare id names nothing.
+///
+/// [suffix] is injected only so a test can assert an exact slug.
+String deriveTenantRequestSlug(String name, {String Function()? suffix}) {
+  final stamp = (suffix ?? _secureSlugSuffix)();
   // Everything that is not a letter or a digit becomes one hyphen, which folds
   // spaces, apostrophes and ampersands alike. `&` in "Bob & Sons" is not worth
   // a rule of its own.
@@ -695,17 +665,28 @@ String deriveTenantRequestSlug(String name, DateTime nowUtc) {
   return '$base-$stamp';
 }
 
-String _slugStamp(DateTime nowUtc) {
-  final t = nowUtc.toUtc();
-  String two(int value) => value.toString().padLeft(2, '0');
-  return '${t.year}${two(t.month)}${two(t.day)}-${two(t.hour)}${two(t.minute)}';
+/// Six hex characters from a cryptographic source.
+///
+/// Secure rather than `Random()` for the reason the request ids are: a slug is
+/// reserved in a collection anybody may attempt to write to, and a predictable
+/// one is a name somebody else can take first.
+String _secureSlugSuffix() {
+  final random = Random.secure();
+  return List<int>.generate(3, (_) => random.nextInt(256))
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
 }
 
 String tenantRequestSafeError(Object error) {
   if (error is TenantRequestCallableException) {
     return switch (error.code) {
+      // **Names the field this form actually has.** The slug is derived, not
+      // asked for - see `deriveTenantRequestSlug` - so telling somebody to
+      // choose another one sent them looking for a control that was removed on
+      // 2026-08-30. The name is what they can change, and changing it changes
+      // the slug.
       'already-exists' =>
-        'That business slug is already in use. Choose another slug.',
+        'That business name is already taken. Try a different name.',
       'resource-exhausted' =>
         'Your business request limit has been reached. Please try again later.',
       'failed-precondition' =>

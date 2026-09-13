@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/tokens.dart';
-import 'platform_tenant_review.dart';
+import 'platform_tenant_console.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
@@ -384,16 +384,16 @@ final class PlatformGlobalUserLookupResult {
 
 final class PlatformGlobalUserLookup {
   PlatformGlobalUserLookup({
-    required PlatformReviewIdentity identity,
+    required PlatformAdminIdentity identity,
     required PlatformGlobalUserDataSource dataSource,
   }) : _identity = identity,
        _dataSource = dataSource;
 
-  final PlatformReviewIdentity _identity;
+  final PlatformAdminIdentity _identity;
   final PlatformGlobalUserDataSource _dataSource;
 
   Future<PlatformGlobalUserLookupResult?> load(String rawUid) async {
-    if (!_identity.canReview) {
+    if (!_identity.canAdminister) {
       throw StateError('Platform user-status access is required.');
     }
     late final String uid;
@@ -722,26 +722,26 @@ final class PlatformGlobalUserStatusResult {
 
 final class PlatformGlobalUserStatusGateway {
   PlatformGlobalUserStatusGateway({
-    required PlatformReviewIdentity identity,
+    required PlatformAdminIdentity identity,
     required PlatformGlobalUserLookupResult target,
     required SetGlobalUserStatusCallable callable,
-    PlatformTenantReviewRequestIdFactory? requestIdFactory,
+    PlatformTenantRequestIdFactory? requestIdFactory,
   }) : _identity = identity,
        _target = target,
        _callable = callable,
        _requestIdFactory = requestIdFactory;
 
-  final PlatformReviewIdentity _identity;
+  final PlatformAdminIdentity _identity;
   final PlatformGlobalUserLookupResult _target;
   final SetGlobalUserStatusCallable _callable;
-  final PlatformTenantReviewRequestIdFactory? _requestIdFactory;
+  final PlatformTenantRequestIdFactory? _requestIdFactory;
 
   PlatformGlobalUserStatusIntent createIntent({
     required PlatformGlobalUserAction action,
     required String reason,
     String? confirmation,
   }) {
-    if (!_identity.canReview) {
+    if (!_identity.canAdminister) {
       throw StateError('Platform user-status access is required.');
     }
     final expectedStatus = action == PlatformGlobalUserAction.disable
@@ -760,8 +760,8 @@ final class PlatformGlobalUserStatusGateway {
         'Must exactly match the canonical UID.',
       );
     }
-    final requestId = (_requestIdFactory ?? securePlatformReviewRequestId)();
-    if (!platformReviewRequestIdPattern.hasMatch(requestId)) {
+    final requestId = (_requestIdFactory ?? securePlatformRequestId)();
+    if (!platformRequestIdPattern.hasMatch(requestId)) {
       throw StateError('The platform status request ID generator is invalid.');
     }
     return PlatformGlobalUserStatusIntent._(
@@ -781,7 +781,7 @@ final class PlatformGlobalUserStatusGateway {
   Future<PlatformGlobalUserStatusResult> submit(
     PlatformGlobalUserStatusIntent intent,
   ) async {
-    if (!_identity.canReview ||
+    if (!_identity.canAdminister ||
         intent.actorUid != _identity.uid ||
         intent.targetUid != _target.user.uid ||
         intent.recordStatus != _target.user.status ||
@@ -816,14 +816,14 @@ final class PlatformGlobalUserStatusForm extends StatefulWidget {
     this.isCurrent,
   });
 
-  final PlatformReviewIdentity identity;
+  final PlatformAdminIdentity identity;
   final PlatformGlobalUserLookupResult target;
   final PlatformGlobalUserAction action;
   final SetGlobalUserStatusCallable callable;
   final ValueChanged<PlatformGlobalUserStatusResult> onCompleted;
   final VoidCallback onCancel;
-  final PlatformTenantReviewRequestIdFactory? requestIdFactory;
-  final PlatformTenantReviewCurrentCheck? isCurrent;
+  final PlatformTenantRequestIdFactory? requestIdFactory;
+  final PlatformTenantCurrentCheck? isCurrent;
 
   @override
   State<PlatformGlobalUserStatusForm> createState() =>
@@ -842,7 +842,7 @@ final class _PlatformGlobalUserStatusFormState
   void didUpdateWidget(covariant PlatformGlobalUserStatusForm oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.identity.uid != widget.identity.uid ||
-        oldWidget.identity.canReview != widget.identity.canReview ||
+        oldWidget.identity.canAdminister != widget.identity.canAdminister ||
         oldWidget.target.user.uid != widget.target.user.uid ||
         oldWidget.target.user.status != widget.target.user.status ||
         oldWidget.target.user.updatedAt != widget.target.user.updatedAt ||
@@ -1003,12 +1003,12 @@ final class PlatformGlobalUserStatusScreen extends StatefulWidget {
     this.isCurrent,
   });
 
-  final PlatformReviewIdentity identity;
+  final PlatformAdminIdentity identity;
   final PlatformGlobalUserDataSource dataSource;
   final SetGlobalUserStatusCallable callable;
   final Future<void> Function() onCurrentOperatorAffected;
-  final PlatformTenantReviewRequestIdFactory? requestIdFactory;
-  final PlatformTenantReviewCurrentCheck? isCurrent;
+  final PlatformTenantRequestIdFactory? requestIdFactory;
+  final PlatformTenantCurrentCheck? isCurrent;
 
   @override
   State<PlatformGlobalUserStatusScreen> createState() =>
@@ -1028,7 +1028,7 @@ final class _PlatformGlobalUserStatusScreenState
   void didUpdateWidget(covariant PlatformGlobalUserStatusScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.identity.uid != widget.identity.uid ||
-        oldWidget.identity.canReview != widget.identity.canReview ||
+        oldWidget.identity.canAdminister != widget.identity.canAdminister ||
         !identical(oldWidget.dataSource, widget.dataSource)) {
       ++_lookupEpoch;
       _target = null;
@@ -1078,7 +1078,7 @@ final class _PlatformGlobalUserStatusScreenState
   bool _isCurrent(int epoch) =>
       mounted &&
       epoch == _lookupEpoch &&
-      widget.identity.canReview &&
+      widget.identity.canAdminister &&
       (widget.isCurrent?.call() ?? true);
 
   void _completed(PlatformGlobalUserStatusResult result, int epoch) {

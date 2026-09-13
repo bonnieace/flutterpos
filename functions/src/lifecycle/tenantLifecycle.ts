@@ -25,10 +25,8 @@ import {
 import {resolveTenantLimits} from "../tenants/limits";
 
 const TRANSITIONS: Readonly<Record<TenantStatus, readonly TenantStatus[]>> = {
-  pending: ["active", "rejected", "archived"],
   active: ["suspended", "archived"],
   suspended: ["active", "archived"],
-  rejected: ["archived"],
   archived: [],
 };
 

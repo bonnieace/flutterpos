@@ -5,7 +5,6 @@ import {
   isTenantRole,
   PlatformAuthorizationContext,
   RootUserRecord,
-  TenantAccessMode,
   TenantAuthorizationContext,
   TenantRecord,
   TenantRole,
@@ -110,35 +109,6 @@ export function assertVerifiedTenantApplicant(
   return user;
 }
 
-/** How the tenant's own standing is judged, and against what clock. */
-export interface TenantAccessOptions {
-  mode?: TenantAccessMode;
-  /** Milliseconds since the epoch. Injected so the window is testable. */
-  now?: number;
-}
-
-/**
- * Whether a tenant record satisfies [mode].
- *
- * **The window is judged here and in `firestore.rules`, and the two must
- * agree.** Rules compare `request.time` against `provisionalUntil`; this
- * compares the same field against the same instant. A `pending` tenant with no
- * `provisionalUntil` is lapsed, never permanently provisional - which is what
- * keeps every tenant written before this field existed behaving as it did.
- */
-export function tenantSatisfiesAccessMode(
-  tenant: TenantRecord,
-  mode: TenantAccessMode,
-  now: number
-): boolean {
-  if (tenant.status === "active") return true;
-  if (tenant.status !== "pending") return false;
-  if (mode === "approved") return false;
-  if (mode === "reading") return true;
-  const until = tenant.provisionalUntil;
-  return until !== undefined && now < until.toMillis();
-}
-
 export function assertTenantMemberDocuments(
   uid: string,
   tenantId: string,
@@ -146,19 +116,17 @@ export function assertTenantMemberDocuments(
   rawTenant: TenantRecord | undefined,
   rawStaff: CanonicalStaffRecord | undefined,
   allowedRoles?: readonly TenantRole[],
-  authTime?: unknown,
-  options?: TenantAccessOptions
+  authTime?: unknown
 ): TenantAuthorizationContext {
   const user = assertActiveRootUser(uid, rawUser, authTime);
   if (user.accountType !== "tenant_user") {
     throw new HttpsError("permission-denied", "Platform identities cannot access tenant data.");
   }
-  const mode = options?.mode ?? "trading";
-  if (!rawTenant || !tenantSatisfiesAccessMode(rawTenant, mode, options?.now ?? Date.now())) {
-    // Deliberately one sentence for every reason. Which of "not approved yet",
-    // "the trial has run out" and "rejected" applies is a fact about the
-    // business that the client reads from the tenant document it is allowed to
-    // read; repeating it here would be a second place for the two to disagree.
+  if (rawTenant?.status !== "active") {
+    // Deliberately one sentence for every reason. Which of "suspended" and
+    // "archived" applies is a fact about the business that the client reads
+    // from the tenant document it is allowed to read; repeating it here would
+    // be a second place for the two to disagree.
     throw new HttpsError("permission-denied", "This tenant is not active.");
   }
   if (!rawStaff || rawStaff.uid !== uid || rawStaff.status !== "active" || !isTenantRole(rawStaff.role)) {
@@ -222,8 +190,7 @@ export async function requireTenantMember<T>(
   request: CallableRequest<T>,
   tenantIdValue: unknown,
   allowedRoles?: readonly TenantRole[],
-  transaction?: Transaction,
-  options?: TenantAccessOptions
+  transaction?: Transaction
 ): Promise<TenantAuthorizationContext> {
   const auth = requireAuthenticatedUser(request, {allowUnverified: true});
   const tenantId = requireDocumentId(tenantIdValue, "tenantId");
@@ -241,8 +208,7 @@ export async function requireTenantMember<T>(
     tenantSnapshot.exists ? tenantSnapshot.data() as TenantRecord : undefined,
     staffSnapshot.exists ? staffSnapshot.data() as CanonicalStaffRecord : undefined,
     allowedRoles,
-    auth.token.auth_time,
-    options
+    auth.token.auth_time
   );
 }
 

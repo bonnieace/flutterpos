@@ -17,6 +17,7 @@ library;
 
 import 'dart:io';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
@@ -129,7 +130,7 @@ void main() {
       TenantPrinterConfigurationScreen(
         reader: FakeTenantReader.business(),
         writer: FakeConfigurationDocumentWriter(),
-        probe: const _RefusingTransport().probe,
+        testPrint: _refusePrint,
       ),
     ),
     viewports: responsiveViewports,
@@ -141,7 +142,7 @@ void main() {
       TenantPrinterConfigurationScreen(
         reader: FakeTenantReader.business(extraDocuments: _printer()),
         writer: FakeConfigurationDocumentWriter(),
-        probe: const _RefusingTransport().probe,
+        testPrint: _refusePrint,
       ),
     ),
     viewports: responsiveViewports,
@@ -171,7 +172,7 @@ void main() {
           extraDocuments: _printer(port: 'nine thousand one hundred'),
         ),
         writer: FakeConfigurationDocumentWriter(),
-        probe: const _RefusingTransport().probe,
+        testPrint: _refusePrint,
       ),
     ),
     viewports: responsiveViewports,
@@ -181,17 +182,20 @@ void main() {
   // The queue
   // -------------------------------------------------------------------------
 
+  // **The queue is a section of the notifications page since 2026-09-03**, not
+  // a screen of its own reached from the home's grid - so these capture it
+  // where a person now meets it, with the local work counts above it.
   screenshotCase(
     '37a-no-receipts-waiting',
-    build: () => inSession(TenantPrintQueueScreen(queue: empty)),
+    build: () => inSession(_notifications(empty)),
     viewports: responsiveViewports,
   );
 
   screenshotCase(
     '37b-receipts-waiting',
     build: () => inSession(
-      TenantPrintQueueScreen(
-        queue: waiting,
+      _notifications(
+        waiting,
         onRetry: (_) async => PrinterTransportCode.unreachable,
       ),
     ),
@@ -200,18 +204,64 @@ void main() {
 
   screenshotCase(
     '37c-receipts-waiting-read-only',
-    build: () => inSession(TenantPrintQueueScreen(queue: waiting)),
+    build: () => inSession(_notifications(waiting)),
+    viewports: responsiveViewports,
+  );
+
+  // **The other half of the page**, which the four receipt cases leave empty:
+  // every state a sale or a business change can be in, as figures.
+  screenshotCase(
+    '37e-sending-to-the-server',
+    build: () => inSession(
+      _notifications(
+        empty,
+        summary: const CheckoutEvidenceSummary(
+          savedOffline: 2,
+          submitting: 1,
+          awaitingConfirmation: 3,
+          needsAttention: 1,
+          confirmed: 11,
+          mutations: TenantMutationEvidenceSummary(queued: 1, confirmed: 4),
+        ),
+      ),
+    ),
     viewports: responsiveViewports,
   );
 
   screenshotCase(
     '37d-receipts-some-unreadable',
     build: () => inSession(
-      TenantPrintQueueScreen(
-        queue: unreadable,
+      _notifications(
+        unreadable,
         onRetry: (_) async => PrinterTransportCode.unreachable,
       ),
     ),
     viewports: responsiveViewports,
   );
 }
+
+/// The notifications page around one print queue.
+///
+/// The local work counts are empty unless a case asks for them: the receipt
+/// captures are about the receipts, and a second set of moving figures above
+/// them would make the differences between the four harder to see rather than
+/// easier.
+Widget _notifications(
+  HivePrintJobQueue queue, {
+  PrintJobRetry? onRetry,
+  CheckoutEvidenceSummary summary = const CheckoutEvidenceSummary(),
+}) => TenantNotificationsScreen(
+  evidenceSource: FakeEvidenceSource(summary),
+  printQueue: queue,
+  onRetryPrint: onRetry,
+);
+
+/// A *Test this printer* that always refuses.
+///
+/// **The parameter was renamed to `testPrint` and this fixture was not**, so
+/// `flutter test tool/screenshots` had not compiled this file for some time.
+/// The control needs the whole configuration rather than an endpoint - it
+/// prints the paper width and the cutter setting - which is why a transport's
+/// bare `probe` no longer fits it.
+Future<void> _refusePrint(TenantPrinterConfiguration configuration) async =>
+    throw const PrinterTransportException(PrinterTransportCode.unreachable);

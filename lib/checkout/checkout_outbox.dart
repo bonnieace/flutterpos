@@ -153,8 +153,7 @@ final class CheckoutOutboxRecord {
 String checkoutSessionStorageKey({
   required String uid,
   required String tenantId,
-}) =>
-    '${_validateKeySegment(uid, 'uid')}:${_validateOutboxTenantId(tenantId)}';
+}) => '${_validateKeySegment(uid, 'uid')}:${_validateOutboxTenantId(tenantId)}';
 
 String checkoutOutboxStorageKey({
   required String uid,

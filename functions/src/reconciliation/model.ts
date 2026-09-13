@@ -7,6 +7,7 @@ import {
   minorUnitsToMoney,
   moneyToMinorUnits,
   requireIsoDate,
+  saleTenderBucket,
 } from "../operations/domain";
 
 export const RECONCILIATION_JOB_PHASES = [
@@ -63,11 +64,35 @@ export interface DailyMetrics extends PeriodMetrics {
   shiftCount: number;
 }
 
+/**
+ * What one shift's sales say it took, split by how they were paid for.
+ *
+ * **Minor units, unlike every other figure on `ShiftAggregate`.** The cashier's
+ * declaration is recorded in minor units, and this is the side of the
+ * comparison that has a choice: carrying major units here would put a
+ * `moneyToMinorUnits` round-trip between the sales and the figure they are
+ * measured against, which is exactly the imprecision the sales check already
+ * inherits by reading `totalSales` rather than `totalSalesMinor`.
+ *
+ * `unattributed` folds `unrecorded` and `other` together. They are different
+ * facts about a sale - one predates the tender field, the other names a method
+ * this system does not model - but a drawer declaration has no box for either,
+ * so to this comparison they are one figure. It is carried rather than dropped
+ * so a split that does not sum to the shift total can say why.
+ */
+export interface ShiftTenderAggregate {
+  cashMinor: number;
+  mpesaMinor: number;
+  cardMinor: number;
+  unattributedMinor: number;
+}
+
 export interface ShiftAggregate {
   shiftId: string;
   businessDate: string;
   sales: number;
   transactions: number;
+  tenders: ShiftTenderAggregate;
 }
 
 export interface DailyAggregateResult {
@@ -119,6 +144,33 @@ export function shiftExpectationId(businessDate: string, shiftId: string): strin
 export function shiftAnomalyId(shiftId: string, generation: string): string {
   return `shift_${digest([shiftId, generation])}`;
 }
+
+/**
+ * The one `reconciliation_anomalies` document a shift's declaration is recorded
+ * at.
+ *
+ * **Deliberately not keyed by generation, unlike [shiftAnomalyId].** A
+ * declaration difference is a fact about one shift and one drawer, not about
+ * one aggregation pass, so re-verifying the same unresolved difference must
+ * update the record rather than mint a second one an owner would have to
+ * dismiss twice. It is also what lets the verifier delete the record outright
+ * once late sales bring the two sides into agreement.
+ */
+export function shiftTenderAnomalyId(shiftId: string): string {
+  return `tender_${digest([shiftId])}`;
+}
+
+/**
+ * The instant from which a close with no declaration is itself a difference.
+ *
+ * **Set to the planned end of the rollout, not to a deploy.** Before it, a
+ * shift closed by a build that cannot declare is silent; after it, one is
+ * `missing_tender_declaration`. Compared against the shift's `endTime`, which
+ * the rules pin to `request.time` and a device therefore cannot choose - and
+ * against the close rather than the business date, because a shift opened
+ * offline last week is declared by whoever closes it today.
+ */
+export const TENDER_DECLARATION_REQUIRED_FROM = Date.UTC(2026, 8, 26);
 
 export function reconciliationTaskId(payload: ReconciliationTaskPayload): string {
   return `rt_${digest([
@@ -247,6 +299,33 @@ export function isoWeekKey(dateValue: string): string {
   return `${date.getUTCFullYear()}-W${`${week}`.padStart(2, "0")}`;
 }
 
+/**
+ * Adds one sale's takings to the bucket its tender names.
+ *
+ * The bucket is chosen by `saleTenderBucket`, which is the same function the
+ * period-wide breakdown uses and the same rule the device's own ledger applies,
+ * so a sale can never land in one bucket here and another there.
+ */
+function addShiftTender(
+  tenders: ShiftTenderAggregate,
+  tender: unknown,
+  totalMinor: number
+): void {
+  switch (saleTenderBucket(tender)) {
+  case "cash":
+    tenders.cashMinor += totalMinor;
+    break;
+  case "mpesa":
+    tenders.mpesaMinor += totalMinor;
+    break;
+  case "card":
+    tenders.cardMinor += totalMinor;
+    break;
+  default:
+    tenders.unattributedMinor += totalMinor;
+  }
+}
+
 function finiteNonNegative(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
@@ -262,14 +341,21 @@ export function aggregateDailySales(
   for (const sale of sales) {
     const shiftId = typeof sale.shiftId === "string" ? sale.shiftId : undefined;
     if (!shiftId || !DOCUMENT_SEGMENT.test(shiftId)) continue;
-    const total = finiteNonNegative(sale.total) ?? finiteNonNegative(sale.totalAmount);
+    // `finiteNonNegative` answers 0 rather than undefined, so this was written
+    // as a `??` chain that could never reach its second arm: a sale carrying
+    // only `totalAmount` contributed nothing to its shift while `aggregateSales`
+    // counted it in full, and the daily metric and the per-shift expectation
+    // disagreed with no way to tell from either.
+    const total = finiteNonNegative(sale.total ?? sale.totalAmount);
     const current = shifts.get(shiftId) ?? {
       shiftId,
       businessDate,
       sales: 0,
       transactions: 0,
+      tenders: {cashMinor: 0, mpesaMinor: 0, cardMinor: 0, unattributedMinor: 0},
     };
-    const nextSalesMinor = moneyToMinorUnits(current.sales) + moneyToMinorUnits(total);
+    const totalMinor = moneyToMinorUnits(total);
+    const nextSalesMinor = moneyToMinorUnits(current.sales) + totalMinor;
     if (!Number.isSafeInteger(nextSalesMinor)) {
       throw new HttpsError(
         "failed-precondition",
@@ -278,6 +364,11 @@ export function aggregateDailySales(
     }
     current.sales = minorUnitsToMoney(nextSalesMinor);
     current.transactions += 1;
+    // **Bucketed here rather than by a second walk over the same sales.** A
+    // separate pass would produce buckets that merely agree with the total;
+    // adding the same validated figure in the same iteration makes them sum to
+    // it, which is what lets a declaration be compared method by method.
+    addShiftTender(current.tenders, sale.tender, totalMinor);
     shifts.set(shiftId, current);
     if (shifts.size > maximumShifts) {
       throw new HttpsError(

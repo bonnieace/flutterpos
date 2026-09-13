@@ -193,8 +193,16 @@ final class TenantVisibleInvitationAcceptanceGateway {
   static bool canAccept({
     required TenantVisibleInvitationIdentity identity,
     required TenantMembership membership,
-  }) {
-    if (!identity.canAcceptVisibleInvitation) return false;
+  }) =>
+      identity.canAcceptVisibleInvitation && awaitsAcceptance(membership);
+
+  /// The half of [canAccept] that is about the invitation rather than the
+  /// caller.
+  ///
+  /// Split out so a screen can tell "this invitation is open and it is only the
+  /// caller's unverified address in the way" from "there is nothing here to
+  /// accept". The first is worth offering to fix; the second is not.
+  static bool awaitsAcceptance(TenantMembership membership) {
     if (membership.isOwner || membership.role == TenantRole.owner) {
       return false;
     }
@@ -414,8 +422,15 @@ final class _TenantVisibleInvitationAcceptanceFormState
           ),
         ],
         SizedBox(height: tokens.spacing.s16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        // **A `Wrap`, not a `Row`, since 2026-09-08.** The same row as the
+        // token form's, which overflowed a 360dp phone by 19 logical pixels
+        // the first time a device reached it. This one is a word shorter and
+        // had not been caught doing it yet; two intrinsic-width buttons and a
+        // gap are what overflow, and both rows are made of those.
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: tokens.spacing.s8,
+          runSpacing: tokens.spacing.s8,
           children: [
             AppButton(
               key: const ValueKey('accept-visible-invitation-cancel'),
@@ -423,7 +438,6 @@ final class _TenantVisibleInvitationAcceptanceFormState
               tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
             ),
-            SizedBox(width: tokens.spacing.s8),
             AppButton(
               key: const ValueKey('accept-visible-invitation-confirm'),
               label: 'Accept invitation',

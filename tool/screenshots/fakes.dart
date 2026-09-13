@@ -1617,13 +1617,9 @@ final class FakeEmailDeliveryStatusCallable
 // Platform administration
 // ---------------------------------------------------------------------------
 
-/// One data source behind all four platform tabs.
+/// One data source behind both platform tabs.
 final class FakePlatformDataSource
-    implements
-        PlatformPendingTenantDataSource,
-        PlatformLifecycleTenantDataSource,
-        PlatformRejectedTenantDataSource,
-        PlatformGlobalUserDataSource {
+    implements PlatformLifecycleTenantDataSource, PlatformGlobalUserDataSource {
   static PlatformTenantDocument _tenant({
     required String id,
     required String name,
@@ -1653,26 +1649,6 @@ final class FakePlatformDataSource
   );
 
   @override
-  Future<List<PlatformTenantDocument>> loadPendingTenantDocuments({
-    required int limit,
-    PlatformPendingTenantCursor? cursor,
-  }) async => cursor != null
-      ? const <PlatformTenantDocument>[]
-      : <PlatformTenantDocument>[
-          _tenant(
-            id: 'kilimani-grocers',
-            name: 'Kilimani Grocers',
-            status: 'pending',
-          ),
-          _tenant(
-            id: 'ngong-road-kiosk',
-            name: 'Ngong Road Kiosk',
-            status: 'pending',
-            createdDay: 3,
-          ),
-        ];
-
-  @override
   Future<List<PlatformTenantDocument>> loadLifecycleTenantDocuments({
     required int limit,
     PlatformLifecycleTenantCursor? cursor,
@@ -1684,21 +1660,6 @@ final class FakePlatformDataSource
             id: 'westlands-mart',
             name: 'Westlands Mart',
             status: 'suspended',
-            createdDay: 2,
-          ),
-        ];
-
-  @override
-  Future<List<PlatformTenantDocument>> loadRejectedTenantDocuments({
-    required int limit,
-    PlatformRejectedTenantCursor? cursor,
-  }) async => cursor != null
-      ? const <PlatformTenantDocument>[]
-      : <PlatformTenantDocument>[
-          _tenant(
-            id: 'unverified-trader',
-            name: 'Unverified Trader',
-            status: 'rejected',
             createdDay: 2,
           ),
         ];

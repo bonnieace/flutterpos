@@ -425,7 +425,7 @@ Future<void> _completeDisableForm(WidgetTester tester) async {
 Future<Widget> _formApp({
   required _StatusCallable callable,
   ValueChanged<PlatformGlobalUserStatusResult>? onCompleted,
-  PlatformTenantReviewCurrentCheck? isCurrent,
+  PlatformTenantCurrentCheck? isCurrent,
 }) async => MaterialApp(
   home: Scaffold(
     body: PlatformGlobalUserStatusForm(
@@ -459,10 +459,10 @@ Future<PlatformGlobalUserLookupResult> _target({
   dataSource: _GlobalUserDataSource(status: status, day: day),
 ).load('target-user'))!;
 
-PlatformReviewIdentity _identity({
+PlatformAdminIdentity _identity({
   RootRoutingProfile profile = _platformProfile,
   bool hasClaim = true,
-}) => PlatformReviewIdentity(
+}) => PlatformAdminIdentity(
   uid: 'platform-user',
   profile: profile,
   hasSuperAdminClaim: hasClaim,

@@ -45,7 +45,12 @@ final class TenantSaleReturnsRequest {
 ///
 /// **A confirmed return closes the sheet and is announced over the sale
 /// list**; see [TenantSaleReturnsPanel.onCompleted] for why a refusal is not.
-Future<void> openTenantSaleReturnSheet(
+///
+/// Answers with the notice a settled return produced, and null where the sheet
+/// was abandoned or its outcome left the person still working on it. A caller
+/// that lists the sale reads this as *the day changed, read it again*; a caller
+/// that does not can ignore it exactly as they all did before.
+Future<AppNotice?> openTenantSaleReturnSheet(
   BuildContext context, {
   required TenantDataReader reader,
   required TenantSaleReturnsRequest request,
@@ -57,10 +62,14 @@ Future<void> openTenantSaleReturnSheet(
   final sessions = TenantSessionScope.read(context);
   final answer = await showAppSheet<AppNotice>(
     context,
-    // A line per sold product, a reason field and a pair of buttons. `half`
-    // puts the submit control under the fold on any sale of more than two or
-    // three lines.
-    initialDetent: AppSheetDetent.full,
+    // **Opens at `half` and is dragged to `full`, on the product owner's call
+    // of 2026-09-06.** It opened at `full` because a sale of more than two or
+    // three lines puts the submit control under the fold at `half` - which is
+    // true, and is what the drag is for. What `full` cost was the thing a sheet
+    // exists to keep: the sale underneath it. A person recording a return is
+    // checking the return against the receipt on screen, and a sheet that
+    // covers the whole page is a route that replaced it.
+    initialDetent: AppSheetDetent.half,
     builder: (sheetContext, controller) => TenantSessionScope(
       controller: sessions,
       child: TenantSaleReturnsPanel(
@@ -76,6 +85,7 @@ Future<void> openTenantSaleReturnSheet(
     ),
   );
   if (answer != null && context.mounted) showAppSnackBar(context, answer);
+  return answer;
 }
 
 /// One guarded view of a sale's returns and what may still be returned.
@@ -231,14 +241,12 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
       // request ID. A rejected or unattempted write left nothing behind, and
       // reusing its ID would deny an edited retry as a duplicate.
       if (result.kind != TenantReturnWriteKind.ambiguous) _requestId = null;
-      _answer(_resultNotice(result));
+      final settled = _settles(result.kind);
+      _answer(_resultNotice(result), settled: settled);
       // **The re-read is skipped when the sheet is closing.** `_answer` pops
-      // the route on a commit, and a `_reload` after it would start a guarded
-      // read against a deactivated element.
-      if (result.kind == TenantReturnWriteKind.committed &&
-          widget.onCompleted == null) {
-        _reload();
-      }
+      // the route on a settled outcome, and a `_reload` after it would start a
+      // guarded read against a deactivated element.
+      if (settled && widget.onCompleted == null) _reload();
     } on TenantReturnException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
@@ -248,14 +256,45 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     }
   }
 
+  /// Whether [kind] has taken this return off the form for good.
+  ///
+  /// **A queued return settles exactly as a committed one does, and that it did
+  /// not is the defect reported on 2026-09-06: the sheet never closed.** The
+  /// writer this app composes is `QueuedTenantReturnWriter` — every return a
+  /// device records goes to the durable mutation store and is replayed from
+  /// there — so [TenantReturnWriteKind.committed] is a result only the direct
+  /// Firestore writer ever produces, and in the product the settling branch was
+  /// unreachable. What the person came to do is finished either way: the units
+  /// and the reason are recorded, the overlay reader already draws the pending
+  /// return, and there is nothing left on the form to correct. Holding the sheet
+  /// open over it only invites the same return to be recorded twice.
+  ///
+  /// The three that do not settle each leave something to do here — a refusal
+  /// keeps the quantities and the reason so they can be fixed, an ambiguous
+  /// write has a re-read behind it, and an unattempted one has recorded nothing
+  /// at all.
+  static bool _settles(TenantReturnWriteKind kind) => switch (kind) {
+    TenantReturnWriteKind.committed || TenantReturnWriteKind.queued => true,
+    TenantReturnWriteKind.rejected ||
+    TenantReturnWriteKind.ambiguous ||
+    TenantReturnWriteKind.unavailable => false,
+  };
+
   /// Reports [notice] the way this panel was wired to, and nothing more.
   ///
-  /// A commit hands the sentence to [TenantSaleReturnsPanel.onCompleted] where
-  /// there is one; every other outcome, and every outcome at all where there is
-  /// not, is rendered in place.
-  void _answer(AppNotice notice) {
+  /// A settled outcome hands the sentence to
+  /// [TenantSaleReturnsPanel.onCompleted] where there is one; every other
+  /// outcome, and every outcome at all where there is not, is rendered in place.
+  ///
+  /// **[settled] rather than `notice.status`**, because the two are not the same
+  /// question. A queued return is `info` — nothing has reached the server, and
+  /// saying otherwise would be a false claim on a screen about money — while
+  /// still being the end of this form's work. Reading the sentence's colour to
+  /// decide whether the sheet closes tied one to the other, and the honest
+  /// sentence was what kept the sheet open.
+  void _answer(AppNotice notice, {bool settled = false}) {
     final completed = widget.onCompleted;
-    if (notice.status == AppStatus.ok && completed != null) {
+    if (settled && completed != null) {
       completed(notice);
       return;
     }
@@ -332,7 +371,6 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     final guardKey = '${request.key}:$_generation:$_pageIndex:$cursor';
     _composeLoaders(guardKey);
     return TenantRouteGuard<_ReturnsView>(
-      key: ValueKey(guardKey),
       load: _loader!,
       loadCached: _loaderCached,
       denied: const Center(
@@ -400,6 +438,7 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
           '${result.restoredProducts.length} '
           '${result.restoredProducts.length == 1 ? 'product' : 'products'}.',
         ),
+        settled: true,
       );
       _reload();
     } on TenantReturnVerificationException catch (error) {
@@ -621,17 +660,12 @@ final class _SaleReturnsContents extends StatelessWidget {
         // list is readable, and one action belongs to somebody else. The
         // refusal copy that already existed says this too, but only after an
         // attempt that a cashier can never make.
-        if (showHistory && !canVerify) ...[
-          SizedBox(height: tokens.spacing.s12),
-          const Callout(
-            key: ValueKey('sale-returns-verification-unavailable'),
-            status: AppStatus.info,
-            message:
-                'Anyone can record a return. Verifying one and restoring its '
-                'stock is an owner, administrator, or manager action, so a '
-                'return you record here waits for one of them.',
-          ),
-        ],
+        // **A footnote rather than an `info` container, 2026-09-04.** It is
+        // policy: nothing has failed, the whole list is readable, and the one
+        // action it explains is simply not drawn. Three sentences in a tinted
+        // box above the returns made the page look as though something were
+        // wrong with it. It moves to the foot, in one line, under the list it
+        // is about.
         if (showHistory) ...[
           SizedBox(height: tokens.spacing.s16),
           if (page.items.isNotEmpty) ...[
@@ -660,6 +694,17 @@ final class _SaleReturnsContents extends StatelessWidget {
             onPrevious: pageIndex > 0 ? onPreviousPage : null,
             onNext: page.hasMore ? onNextPage : null,
           ),
+          if (!canVerify) ...[
+            SizedBox(height: tokens.spacing.s12),
+            Text(
+              key: const ValueKey('sale-returns-verification-unavailable'),
+              'A return you record waits for an owner, administrator or '
+              'manager to verify it.',
+              style: tokens.typography.caption.copyWith(
+                color: tokens.colors.text.tertiary,
+              ),
+            ),
+          ],
         ],
         if (canRecord) ...[
           SizedBox(
@@ -828,14 +873,29 @@ final class _RecordReturnForm extends StatefulWidget {
 }
 
 final class _RecordReturnFormState extends State<_RecordReturnForm> {
+  /// The select's value for the free-text option.
+  ///
+  /// **Not a reason, and never written.** A bare `Other` would be
+  /// indistinguishable from somebody typing the word, so the sentinel is a
+  /// value no typed reason can be.
+  static const String _otherReason = '__other__';
+
+  /// The select's value for "nothing chosen yet".
+  static const String _noReason = '';
+
   final Map<String, int> _quantities = <String, int>{};
   final TextEditingController _reason = TextEditingController();
+  String _choice = _noReason;
 
   @override
   void dispose() {
     _reason.dispose();
     super.dispose();
   }
+
+  /// The reason this form would record, chosen or typed.
+  String get _resolvedReason =>
+      _choice == _otherReason ? _reason.text : _choice;
 
   int _quantityOf(String productId) => _quantities[productId] ?? 0;
 
@@ -851,7 +911,7 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
   bool get _canSubmit =>
       !widget.busy &&
       _selectedUnits > 0 &&
-      _reason.text.trim().length >= minimumReturnReasonLength;
+      _resolvedReason.trim().length >= minimumReturnReasonLength;
 
   Future<void> _confirm() async {
     final confirmed = await showConfirmDialog(
@@ -867,7 +927,7 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
       cancelKey: const ValueKey('sale-returns-cancel-confirm'),
     );
     if (!confirmed || !mounted) return;
-    widget.onRecord(Map<String, int>.unmodifiable(_quantities), _reason.text);
+    widget.onRecord(Map<String, int>.unmodifiable(_quantities), _resolvedReason);
   }
 
   @override
@@ -915,13 +975,50 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
             ),
           ),
         SizedBox(height: tokens.spacing.s12),
-        AppTextField(
-          key: const ValueKey('sale-returns-reason'),
-          controller: _reason,
-          maxLength: maximumReturnReasonLength,
-          onChanged: (_) => setState(() {}),
+        // **A short list, and a way past it.** See
+        // [commonTenantReturnReasons]: the list is what makes returns
+        // countable, and *Other* is what stops the list making somebody pick
+        // the nearest wrong entry.
+        AppSelect<String>(
+          key: const ValueKey('sale-returns-reason-choice'),
+          value: _choice,
           label: 'Reason for this return',
+          leading: Icons.assignment_return_outlined,
+          items: <AppSelectItem<String>>[
+            const AppSelectItem<String>(
+              key: ValueKey('sale-returns-reason-none'),
+              value: _noReason,
+              label: 'Choose a reason',
+            ),
+            for (final reason in commonTenantReturnReasons)
+              AppSelectItem<String>(
+                key: ValueKey('sale-returns-reason-option-$reason'),
+                value: reason,
+                label: reason,
+              ),
+            const AppSelectItem<String>(
+              key: ValueKey('sale-returns-reason-option-other'),
+              value: _otherReason,
+              label: 'Other',
+            ),
+          ],
+          onChanged: (value) =>
+              setState(() => _choice = value ?? _noReason),
         ),
+        // **Present only for *Other*, and it keeps what was typed.** The
+        // controller is not cleared when the choice moves off *Other*, so a
+        // person who opens the list to check the wording and comes back finds
+        // their sentence still there.
+        if (_choice == _otherReason) ...<Widget>[
+          SizedBox(height: tokens.spacing.s12),
+          AppTextField(
+            key: const ValueKey('sale-returns-reason'),
+            controller: _reason,
+            maxLength: maximumReturnReasonLength,
+            onChanged: (_) => setState(() {}),
+            label: 'Say what happened',
+          ),
+        ],
         SizedBox(height: tokens.spacing.s16),
         // Right-aligned with the primary last, for the reason the stock sheet's
         // pair gives: the control a right-handed thumb reaches is the one it

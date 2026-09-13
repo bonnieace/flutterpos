@@ -27,6 +27,24 @@ final class TenantRouteGuard<T> extends StatefulWidget {
     this.failure,
   });
 
+  /// The read this page is for.
+  ///
+  /// **Its identity is the question being asked, so memoise it.** The guard
+  /// re-reads whenever this closure is not the one it saw last frame, which is
+  /// what makes a filter change, a page turn and a post-write refresh work
+  /// without a key. A panel that builds a fresh closure on every `build` would
+  /// therefore re-read on every frame; the shape that avoids it is a
+  /// `_composeLoaders(key)` that rebuilds the pair only when its key moves, as
+  /// every paged panel in this app now has.
+  ///
+  /// **Do not put the filter in a `ValueKey` on this widget.** Until 2026-09-04
+  /// every panel did, which destroyed this `State` and threw away the value on
+  /// screen for a read that usually took a few hundred milliseconds - on the
+  /// routes with no `loading` frame, a full-page spinner over figures the
+  /// device was still holding. Keeping the key is right for one case only: a
+  /// guard whose *subject* changes within one instance, like a receipt lookup
+  /// where showing the previous receipt while the next one loads would be a
+  /// lie rather than a delay.
   final TenantGuardedLoader<T> load;
   final TenantGuardedBuilder<T> builder;
   final Iterable<TenantRole>? allowedRoles;
@@ -78,6 +96,15 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
   /// saying out loud.
   bool _stale = false;
 
+  /// Whether what is on screen is the answer to the *previous* question.
+  ///
+  /// Set while a retained value is being replaced - the next page is loading
+  /// over this one, a filter has changed, a write asked for a re-read. It is
+  /// not staleness: nothing has failed, and the figures shown were correct for
+  /// what was asked a moment ago. It exists so a page can say *working* without
+  /// taking its own contents away to say it.
+  bool _rereading = false;
+
   /// Whether [load] has produced a value.
   ///
   /// **The one flag that keeps the cache from overwriting the server.** Both
@@ -108,12 +135,30 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
       // before synchronizing so a new loader cannot start against the prior
       // controller's still-authorized session.
       _controller = TenantSessionScope.of(context);
+      final previous = _capturedSession;
       _capturedSession = null;
-      _synchronize();
+      // **A new loader for the same business keeps what is on screen.** This is
+      // the same page asking a different question of it - the next page, another
+      // filter, a re-read after a write - and until 2026-09-04 every one of
+      // those blanked the value and dropped back to the loading state, which on
+      // the nineteen routes that supply no frame meant a full-page spinner over
+      // figures the device was still holding. A *different business* is the
+      // opposite case and still blanks: none of the previous tenant's data may
+      // survive the switch for even one frame.
+      _synchronize(retain: previous != null && _sameSession(previous));
     }
   }
 
-  void _synchronize() {
+  /// Whether [previous] is the session the scope holds right now.
+  bool _sameSession(TenantSession previous) {
+    final current = _controller?.session;
+    return current != null &&
+        current.uid == previous.uid &&
+        current.tenantId == previous.tenantId &&
+        current.epoch == previous.epoch;
+  }
+
+  void _synchronize({bool retain = false}) {
     final controller = _controller!;
     TenantSession? next;
     try {
@@ -123,6 +168,7 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
       _capturedSession = null;
       _value = null;
       _error = null;
+      _rereading = false;
       _phase = _TenantGuardPhase.denied;
       return;
     }
@@ -137,12 +183,18 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
 
     final generation = ++_generation;
     _capturedSession = next;
-    _value = null;
+    // Retaining is only ever possible with something to retain; a first entry
+    // has nothing and takes the loading state as it always did.
+    final keeping = retain && _value != null;
+    if (!keeping) _value = null;
     _error = null;
-    _fromCache = false;
+    _fromCache = keeping && _fromCache;
     _stale = false;
+    _rereading = keeping;
+    // **`_hasServerValue` is cleared either way**, which is what lets the new
+    // read replace a retained value rather than lose the race to it.
     _hasServerValue = false;
-    _phase = _TenantGuardPhase.loading;
+    _phase = keeping ? _TenantGuardPhase.ready : _TenantGuardPhase.loading;
     unawaited(_load(next, generation));
     if (widget.loadCached != null) {
       unawaited(_loadFromCache(next, generation));
@@ -158,6 +210,7 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
         _hasServerValue = true;
         _fromCache = false;
         _stale = false;
+        _rereading = false;
         _error = null;
         _phase = _TenantGuardPhase.ready;
       });
@@ -169,6 +222,9 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
         // on screen did not stop being what this device holds. Blanking it to
         // announce the failure would take away the figures *and* the controls
         // over a network that may be back in three seconds.
+        // A retained value that the new read could not replace is stale in
+        // exactly the sense this flag means, so the re-read ends here too.
+        _rereading = false;
         if (_value != null) {
           _stale = true;
         } else {
@@ -195,6 +251,7 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
     setState(() {
       _value = value;
       _fromCache = true;
+      _rereading = false;
       // **Adopted even after the server has already refused**, which is the
       // case worth spelling out: the two reads race, and a network that fails
       // fast can lose to a disk that is busy. Landing on a failure page is not
@@ -216,7 +273,7 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
         // offered is each action's own question, asked with `canAccess`. So a
         // lapsed business opens its reports and finds no write controls on
         // them, rather than being told the page does not exist.
-        current.canRead(allowedRoles: widget.allowedRoles);
+        current.canAccess(allowedRoles: widget.allowedRoles);
   }
 
   // The three defaults below are `design.md` §5.1's `LoadingState` and
@@ -257,6 +314,7 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
     _TenantGuardPhase.ready => TenantReadFreshness(
       fromCache: _fromCache,
       stale: _stale,
+      rereading: _rereading,
       child: Builder(
         // A `Builder` so the page below reads the freshness this guard just
         // published rather than whatever was above the guard.
@@ -279,6 +337,7 @@ final class TenantReadFreshness extends InheritedWidget {
     super.key,
     required this.fromCache,
     required this.stale,
+    this.rereading = false,
     required super.child,
   });
 
@@ -290,11 +349,22 @@ final class TenantReadFreshness extends InheritedWidget {
   /// Never true on its own: it only qualifies a value that is already here.
   final bool stale;
 
+  /// Whether this is the answer to the question *before* the current one.
+  ///
+  /// True while a page that already had a value is loading its next one - the
+  /// next page, another filter, a re-read after a write. It is the flag that
+  /// lets a route say *working* without blanking itself to say it, which is
+  /// what it used to do. Never true beside [stale]: one means a read is in
+  /// flight, the other that one finished and failed.
+  final bool rereading;
+
   /// The freshness of the nearest guarded value, or null outside one.
   static TenantReadFreshness? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<TenantReadFreshness>();
 
   @override
   bool updateShouldNotify(TenantReadFreshness oldWidget) =>
-      oldWidget.fromCache != fromCache || oldWidget.stale != stale;
+      oldWidget.fromCache != fromCache ||
+      oldWidget.stale != stale ||
+      oldWidget.rereading != rereading;
 }

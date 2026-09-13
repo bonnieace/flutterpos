@@ -720,10 +720,7 @@ final class TenantDocumentGroupPage {
 abstract base class TenantReadRepository {
   TenantReadRepository({required this.session, required this.reader})
     : paths = TenantPaths(session.tenantId) {
-    // Reads, so `canRead`: a business whose provisional window has shut keeps
-    // sight of its own records. Every *write* boundary above this still asks
-    // `canAccess`, which is what stops a lapsed session adding to them.
-    if (!session.canRead()) {
+    if (!session.canAccess()) {
       throw StateError('A tenant repository requires a readable session.');
     }
   }

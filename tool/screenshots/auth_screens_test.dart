@@ -64,9 +64,7 @@ Widget _shell({
     setDefaultTenantCallable: callable,
     emailDeliveryStatusCallable: FakeEmailDeliveryStatusCallable(),
     hasPlatformSuperAdminClaim: (_) async => platformClaim,
-    platformPendingTenantDataSource: FakePlatformDataSource(),
     platformLifecycleTenantDataSource: FakePlatformDataSource(),
-    platformRejectedTenantDataSource: FakePlatformDataSource(),
     platformGlobalUserDataSource: FakePlatformDataSource(),
     setTenantLifecycleCallable: callable,
     setGlobalUserStatusCallable: callable,
@@ -258,26 +256,20 @@ void main() {
   );
 
   screenshotCase(
-    '09a-platform-pending-reviews',
+    '09b-platform-active-and-suspended',
     build: platform,
     viewports: responsiveViewports,
   );
 
-  // The other three tabs, each reached the way an operator reaches it. A tab is
-  // a screen here: they have different data sources, different callables, and
-  // different roles behind them.
-  for (final (name, label) in const <(String, String)>[
-    ('09b-platform-active-and-suspended', 'Active & suspended'),
-    ('09c-platform-rejected-archive', 'Rejected archive'),
-    ('09d-platform-global-user-status', 'Global user status'),
-  ]) {
-    screenshotCase(
-      name,
-      build: platform,
-      afterPump: (tester) async => tester.tap(find.text(label)),
-      viewports: responsiveViewports,
-    );
-  }
+  // The other tab, reached the way an operator reaches it. A tab is a screen
+  // here: they have different data sources, different callables, and different
+  // roles behind them.
+  screenshotCase(
+    '09d-platform-global-user-status',
+    build: platform,
+    afterPump: (tester) async => tester.tap(find.text('Global user status')),
+    viewports: responsiveViewports,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,8 +312,7 @@ final class _CaptureRequestTenant implements RequestTenantCallable {
     'name': payload['name'],
     'slug': payload['slug'],
     'currency': payload['currency'],
-    'status': 'pending',
-    'provisionalUntil': 1788339600000,
+    'status': 'active',
   };
 }
 
@@ -329,9 +320,15 @@ final class _CaptureRequestTenant implements RequestTenantCallable {
 /// given in one - with `screenshotTheme()` and the debug banner off - so a
 /// second one nested inside took `spiritTheme` instead of the capture theme and
 /// painted the checked-mode stripe across the corner of every onboarding frame.
-Widget _onboarding(OnboardingIdentity identity) => OnboardingFlow(
+Widget _onboarding(OnboardingIdentity identity, {bool reachable = true}) =>
+    OnboardingFlow(
   readIdentity: () => identity,
-  reloadIdentity: () async {},
+  // What the SDK does offline. The verify step's whole mechanism is this call
+  // on a timer, so a host that cannot make it is the one state the step has
+  // that nothing about the identity can produce.
+  reloadIdentity: () async {
+    if (!reachable) throw StateError('unreachable');
+  },
   onSignOut: () async {},
   onOpenBusiness: (_) {},
   completeSelfSignupCallable: const _CaptureComplete(),
@@ -383,6 +380,25 @@ void onboardingScreenshots() {
       await tester.ensureVisible(reveal);
       await tester.pump();
       await tester.tap(reveal);
+      await tester.pump();
+    },
+  );
+
+  // **The wait when it cannot check.** Hard rule 5: a component ships with the
+  // states it can be in, and this one is reachable by nothing the identity says
+  // - only by the watch failing three times running. Without a picture it is
+  // the state most likely to be drawn once and never looked at.
+  screenshotCase(
+    '11c-onboarding-verify-unreachable',
+    settle: false,
+    build: () => _onboarding(_namedIdentity, reachable: false),
+    afterPump: (tester) async {
+      // Three eager ticks, which is `onboardingRefreshFailuresBeforeNotice`.
+      // Pumped rather than settled: the watch reschedules itself, so there is
+      // no quiet frame to settle to.
+      for (var tick = 0; tick < onboardingRefreshFailuresBeforeNotice; tick++) {
+        await tester.pump(onboardingEagerPollInterval + const Duration(seconds: 1));
+      }
       await tester.pump();
     },
   );

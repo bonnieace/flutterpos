@@ -12,11 +12,13 @@ import {
   requireDiscoveryPayload,
   shiftAnomalyId,
   shiftExpectationId,
+  shiftTenderAnomalyId,
   stockCheckpointHash,
   stockComparisonOutcome,
   sweepRunId,
   trailingIsoDates,
 } from "./model";
+import {moneyToMinorUnits} from "../operations/domain";
 
 /** A comparison with nothing wrong with it, for one fact at a time to be varied. */
 const CLEAN_COMPARISON = {
@@ -133,6 +135,79 @@ test("daily aggregation retains transaction and shift expectations", () => {
   assert.equal(result.metrics.profit, 17);
   assert.equal(result.metrics.transactionCount, 2);
   assert.deepEqual(result.shifts.map((shift) => shift.shiftId), ["shift-a", "shift-b"]);
+});
+
+test("a sale carrying only totalAmount reaches its own shift", () => {
+  // `finiteNonNegative` answers 0 rather than undefined, so the `??` chain this
+  // was written as could never reach its second arm: a schema that names
+  // `totalAmount` counted in full towards the day and contributed *nothing* to
+  // its shift, and the daily metric and the per-shift expectation disagreed
+  // with no way to tell from either which was right.
+  const result = aggregateDailySales("2026-07-29", [{
+    totalAmount: 5,
+    shiftId: "shift-a",
+    tender: "cash",
+    items: [{quantity: 1, price: 5, buyingPrice: 2}],
+  }]);
+  assert.equal(result.metrics.sales, 5);
+  assert.equal(result.shifts[0].sales, 5);
+  assert.equal(result.shifts[0].tenders.cashMinor, 500);
+});
+
+test("a shift's tender buckets sum to exactly what the shift took", () => {
+  const result = aggregateDailySales("2026-07-29", [
+    {total: 20, shiftId: "shift-a", tender: "cash", items: []},
+    {total: 5, shiftId: "shift-a", tender: "mpesa", items: []},
+    {total: 2.5, shiftId: "shift-a", tender: "card", items: []},
+    // No tender at all: a sale written before the field existed.
+    {total: 1, shiftId: "shift-a", items: []},
+    // A method this system does not model, which is a data problem rather than
+    // history - but a drawer declaration has no box for either, so to this
+    // comparison the two are one figure.
+    {total: 1.5, shiftId: "shift-a", tender: "barter", items: []},
+  ]);
+
+  const [shift] = result.shifts;
+  assert.deepEqual(shift.tenders, {
+    cashMinor: 2000,
+    mpesaMinor: 500,
+    cardMinor: 250,
+    unattributedMinor: 250,
+  });
+  // Summing to the total is the property that lets a declaration be compared
+  // method by method - it is arithmetic rather than coincidence, because the
+  // buckets are filled from the same validated figure in the same pass.
+  const bucketTotal = shift.tenders.cashMinor + shift.tenders.mpesaMinor +
+    shift.tenders.cardMinor + shift.tenders.unattributedMinor;
+  assert.equal(bucketTotal, moneyToMinorUnits(shift.sales));
+});
+
+test("a shift's generation moves when only its split moves", () => {
+  // The fence the verifier is refused by. Two days with the same total and the
+  // same count but a different split are different expectations, and an
+  // in-flight verifier holding the older generation must not settle the newer.
+  const split = (tenders: readonly string[]) => aggregateDailySales(
+    "2026-07-29",
+    tenders.map((tender) => ({total: 5, shiftId: "shift-a", tender, items: []}))
+  ).shifts[0];
+
+  const cash = split(["cash", "cash"]);
+  const mixed = split(["cash", "mpesa"]);
+
+  assert.equal(cash.sales, mixed.sales);
+  assert.equal(cash.transactions, mixed.transactions);
+  assert.notDeepEqual(cash.tenders, mixed.tenders);
+});
+
+test("the tender anomaly id is about the shift, never the aggregation pass", () => {
+  // Unlike `shiftAnomalyId`, which folds a generation in. A declaration
+  // difference is a fact about one shift and one drawer, so re-verifying the
+  // same unresolved difference must update the record rather than mint a second
+  // one an owner would have to dismiss twice - and it is what lets the verifier
+  // delete the record outright once late sales bring the sides into agreement.
+  assert.equal(shiftTenderAnomalyId("shift-a"), shiftTenderAnomalyId("shift-a"));
+  assert.notEqual(shiftTenderAnomalyId("shift-a"), shiftTenderAnomalyId("shift-b"));
+  assert.notEqual(shiftAnomalyId("shift-a", "gen-1"), shiftAnomalyId("shift-a", "gen-2"));
 });
 
 test("daily aggregation refuses a date with more shifts than one transaction may write", () => {

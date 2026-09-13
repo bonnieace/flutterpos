@@ -238,9 +238,9 @@ void main() {
     // **Four entries since 2026-08-25**, when reading a product's stock and
     // correcting it became two routes rather than one screen with a form
     // appended under the ledger.
-    expect(find.text('View stock'), findsOneWidget);
+    expect(find.text('View item'), findsOneWidget);
     expect(find.text('Adjust stock'), findsOneWidget);
-    expect(find.text('Correct product'), findsOneWidget);
+    expect(find.text('Edit item'), findsOneWidget);
     expect(find.text('Retire product'), findsOneWidget);
     // Reading first, then the two that change something, destructive last.
     expect(tester.getCenter(view).dy, lessThan(tester.getCenter(adjust).dy));
@@ -389,7 +389,10 @@ void main() {
     expect(_enabled(tester, 'inventory-add-product'), isTrue);
     await tester.tap(find.byKey(const ValueKey('inventory-categories')));
     await tester.pumpAndSettle();
-    expect(find.text('No categories on this page.'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('inventory-categories-empty')),
+      findsOneWidget,
+    );
     expect(_enabled(tester, 'catalog-management-add-category'), isFalse);
   });
 
@@ -420,16 +423,15 @@ void main() {
     expect(find.textContaining('It can be renamed later'), findsOne);
     await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Close'));
+    // Categories are a route since 2026-09-04, so leaving is the back arrow
+    // rather than a Close button inside a dialog.
+    await tester.pageBack();
     await tester.pumpAndSettle();
 
     expect(writer.categories.single.name, 'Cold drinks');
     expect(writer.categories.single.path, startsWith('$_categoriesPath/'));
     expect(syncs, 1);
-    expect(
-      snackNotice(tester).message,
-      startsWith('Category added.'),
-    );
+    expect(snackNotice(tester).message, startsWith('Category added.'));
     // **This screen writes six different things and reported every outcome of
     // all six as the same black sentence in the same position.** The notice
     // carries which it is now.
@@ -492,17 +494,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The three things the confirmation has to say: where it is filed, that it
-    // arrives empty, and that none of it can be corrected afterwards.
-    expect(find.textContaining('filed under Bakery'), findsOne);
-    expect(find.textContaining('added holding no stock'), findsOne);
-    expect(
-      find.textContaining('Nothing in this app can change a name'),
-      findsOne,
-    );
-    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
-    await tester.pumpAndSettle();
-
+    // **No confirmation to read, since 2026-09-04.** The three things it used
+    // to say - where the product is filed, that it arrives empty, and what can
+    // be corrected afterwards - are stated where they are actionable: the
+    // category in the field that chose it, and the opening stock in the notice
+    // below, which is where a person is told what to do next.
     final intent = writer.products.single;
     expect(intent.name, 'Mandazi');
     expect(intent.sku, '6161100000026');
@@ -654,7 +650,6 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
     await tester.pumpAndSettle();
     await _review(tester);
-    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
     await tester.pumpAndSettle();
 
     expect(
@@ -676,12 +671,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Refused before anything is confirmed, so nothing is asked about a value
-    // this boundary would not have written.
-    expect(
-      find.byKey(const ValueKey('catalog-management-confirm')),
-      findsNothing,
-    );
+    // Refused locally, so the writer is never reached at all. The local
+    // refusal is the whole of what stands between a bad price and the catalog
+    // now that there is no confirmation step behind it.
     expect(writer.products, isEmpty);
     expect(
       snackNotice(tester).message,
@@ -689,27 +681,67 @@ void main() {
     );
   });
 
-  testWidgets('cancelling the confirmation writes nothing', (tester) async {
-    final writer = _Writer();
+  testWidgets('a queued product is written first and asked about after', (
+    tester,
+  ) async {
+    final writer = _Writer.answering(
+      const TenantCatalogWriteResult.queued('op-1'),
+    );
+    final undone = <String>[];
 
-    await _pump(tester, _controller(), _Reader.seeded(), writer: writer);
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: writer,
+      undo: ({required tenantId, required operationId}) async {
+        undone.add(operationId);
+        return true;
+      },
+    );
     await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
     await tester.tap(
       find.byKey(const ValueKey('catalog-management-add-product')),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('catalog-management-cancel')));
+
+    // The point of dropping the confirmation: nothing stands between the
+    // button and the record, and the offer to take it back comes afterwards.
+    expect(writer.products, hasLength(1));
+    await tester.tap(find.byKey(const ValueKey('catalog-management-undo')));
     await tester.pumpAndSettle();
 
-    expect(writer.products, isEmpty);
-    expect(
-      find.byType(AppSnackBar),
-      findsNothing,
+    expect(undone, <String>['op-1']);
+    expect(snackNotice(tester).message, 'Undone. Nothing was sent.');
+  });
+
+  testWidgets('a change already sent says so rather than claiming a reversal', (
+    tester,
+  ) async {
+    final writer = _Writer.answering(
+      const TenantCatalogWriteResult.queued('op-1'),
     );
-    // The typing survives a cancellation, because cancelling is not a mistake.
-    await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: writer,
+      // The record left this device between the notice and the press.
+      undo: ({required tenantId, required operationId}) async => false,
+    );
+    await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-add-product')),
+    );
     await tester.pumpAndSettle();
-    expect(_field(tester, 'catalog-management-product-name'), 'Mandazi');
+    await tester.tap(find.byKey(const ValueKey('catalog-management-undo')));
+    await tester.pumpAndSettle();
+
+    expect(
+      snackNotice(tester).message,
+      startsWith('This has already been sent'),
+    );
   });
 
   testWidgets('an unknown outcome keeps addressing the same document', (
@@ -725,10 +757,7 @@ void main() {
     await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
     await _confirmProduct(tester);
 
-    expect(
-      snackNotice(tester).message,
-      startsWith('The result is unknown.'),
-    );
+    expect(snackNotice(tester).message, startsWith('The result is unknown.'));
     await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
     await _confirmProduct(tester);
 
@@ -895,7 +924,10 @@ void main() {
     final retire = find.byKey(const ValueKey('catalog-management-retire-pd-1'));
     await tester.tap(retire);
     await tester.pumpAndSettle();
-    expect(find.textContaining('It still holds 40 in stock'), findsOne);
+    // The action is reachable, which is what this test is about. It goes
+    // straight through now rather than opening a dialog, so what proves the
+    // menu item works is the retire itself.
+    expect(find.textContaining('White bread loaf is retired'), findsOne);
   });
 
   testWidgets('an owner is offered the unit cost the manager is not', (
@@ -927,17 +959,11 @@ void main() {
     );
     await _tapProductAction(tester, 'pd-1', 'catalog-management-retire-pd-1');
 
-    // The ledger outlives the product, every sale line still names it, and it
-    // is never the way a mistake is corrected.
-    expect(find.textContaining('its stock ledger'), findsOne);
-    expect(find.textContaining('It still holds 40 in stock'), findsOne);
-    expect(
-      find.textContaining('This is not how a mistake is corrected'),
-      findsOne,
-    );
-    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
-    await tester.pumpAndSettle();
-
+    // **The retire happens, then says what survived it.** Until 2026-09-04
+    // these sentences were a confirmation asked beforehand; the facts they
+    // carry - that the ledger outlives the product and every sale line still
+    // names it - are true afterwards too, and are worth more in a notice a
+    // person reads than in a dialog they dismiss.
     expect(writer.retired.single.productId, 'pd-1');
     expect(writer.retired.single.quantity, 40);
     expect(syncs, 1);
@@ -957,17 +983,10 @@ void main() {
 
     await _pump(tester, _controller(), reader, writer: writer);
     await _tapProductAction(tester, 'pd-1', 'catalog-management-retire-pd-1');
-    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
     await tester.pumpAndSettle();
 
-    expect(
-      snackNotice(tester).message,
-      startsWith('Nothing was retired.'),
-    );
-    expect(
-      snackNotice(tester).status,
-      AppStatus.problem,
-    );
+    expect(snackNotice(tester).message, startsWith('Nothing was retired.'));
+    expect(snackNotice(tester).status, AppStatus.problem);
     // A proven refusal changed nothing, so there is nothing to re-read.
     expect(reader.pages.where((path) => path == _productsPath).length, 1);
   });
@@ -981,10 +1000,7 @@ void main() {
     await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
     await _confirmProduct(tester);
 
-    expect(
-      snackNotice(tester).message,
-      startsWith('This device is offline'),
-    );
+    expect(snackNotice(tester).message, startsWith('This device is offline'));
     // §2.1 gives `info` the words "offline, read-only, informational", so an
     // offline write is that row by name rather than by judgement.
     expect(snackNotice(tester).status, AppStatus.info);
@@ -1025,8 +1041,6 @@ void main() {
     await tester.tap(
       find.byKey(const ValueKey('catalog-management-add-product')),
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
     await tester.pump();
 
     controller.open(uid: 'owner-a', membership: _membership('tenant-b'));
@@ -1036,10 +1050,7 @@ void main() {
 
     // The write was authorized against a business that is no longer open, so
     // its result never reaches this screen.
-    expect(
-      find.byType(AppSnackBar),
-      findsNothing,
-    );
+    expect(find.byType(AppSnackBar), findsNothing);
   });
 
   testWidgets('an unreadable catalog is a stated failure', (tester) async {
@@ -1094,24 +1105,19 @@ void main() {
     );
     await _review(tester);
 
-    expect(find.textContaining('Unit price: was 65.00, now 70.00'), findsOne);
-    expect(
-      find.textContaining('Sales already recorded keep the price'),
-      findsOne,
-    );
-    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
-    await tester.pumpAndSettle();
-
+    // **The before and after are the form, not a second screen.** The field
+    // was prefilled with 65.00 and now reads 70.00, which is the comparison a
+    // confirmation dialog used to restate after the decision was made. What
+    // that dialog said about the consequence - that recorded sales keep the
+    // price they were sold at - is in the form's scope paragraph, asserted by
+    // `a correction states its consequences in the form`.
     expect(callable.payloads.single, <String, Object?>{
       'tenantId': 'tenant-a',
       'productId': 'pd-1',
       'requestId': 'catalog-test-request-0000',
       'price': 70.0,
     });
-    expect(
-      snackNotice(tester).message,
-      startsWith('Corrected: unit price.'),
-    );
+    expect(snackNotice(tester).message, startsWith('Corrected: unit price.'));
     // The catalog is re-read and the till is asked to re-read its own copy,
     // without which this device would keep selling at the old price.
     expect(reader.pages.where((path) => path == _productsPath).length, 2);
@@ -1158,7 +1164,6 @@ void main() {
       'Brown bread loaf',
     );
     await _review(tester);
-    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
     await tester.pumpAndSettle();
 
     expect(callable.payloads.single.containsKey('price'), isFalse);
@@ -1210,6 +1215,32 @@ void main() {
     expect(_field(tester, 'catalog-management-edit-name'), 'White bread loaf');
   });
 
+  testWidgets('a correction states its consequences in the form', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: _Callable(),
+    );
+    await _openCorrection(tester, 'pd-1');
+    await _open(tester, 'catalog-management-edit-scope-disclosure');
+
+    // **The confirmation dialog's sentences, where they can be acted on.**
+    // Until 2026-09-04 each of these was read on a second screen after the
+    // fields had been filled in, which is to say after the decision. They are
+    // beside the fields now, and this is what keeps them from being deleted
+    // along with the dialog.
+    final scope = _text(tester, 'catalog-management-edit-scope');
+    expect(scope, contains('recorded permanently against the product'));
+    expect(scope, contains('what each field held before'));
+    expect(scope, contains('keep the price they were sold at'));
+    expect(scope, contains('never changes a profit already reported'));
+    expect(scope, contains('the old one finding this product'));
+  });
+
   testWidgets('clearing a recorded cost is its own act, and sends null', (
     tester,
   ) async {
@@ -1235,17 +1266,12 @@ void main() {
     await tester.pump();
     await _review(tester);
 
-    expect(
-      find.textContaining('Unit cost: was 40.00, now not recorded'),
-      findsOne,
-    );
-    expect(
-      find.textContaining('never changes a profit already reported'),
-      findsOne,
-    );
-    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
-    await tester.pumpAndSettle();
-
+    // The before-and-after used to be restated in a confirmation dialog. The
+    // form shows both - the field held 40.00 and is now cleared - and what
+    // clearing a cost costs is stated in the form's own scope paragraph, which
+    // `a correction states the consequences where they are read` covers.
+    // What matters here is what reaches the wire.
+    //
     // The one field in this app where null on the wire means "remove this"
     // rather than "leave it alone".
     expect(callable.payloads.single.containsKey('cost'), isTrue);
@@ -1372,10 +1398,7 @@ void main() {
     );
     await _correct(tester, 'pd-1', name: 'Brown bread loaf');
 
-    expect(
-      snackNotice(tester).message,
-      startsWith('The result is unknown.'),
-    );
+    expect(snackNotice(tester).message, startsWith('The result is unknown.'));
     await _correct(tester, 'pd-1', name: 'Brown bread loaf');
 
     // A genuine retry answers off the server's own idempotency record. A fresh
@@ -1496,7 +1519,6 @@ void main() {
       'Brown bread loaf',
     );
     await _review(tester);
-    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
     await tester.pump();
 
     controller.open(uid: 'owner-a', membership: _membership('tenant-b'));
@@ -1504,10 +1526,7 @@ void main() {
     callable.complete();
     await tester.pumpAndSettle();
 
-    expect(
-      find.byType(AppSnackBar),
-      findsNothing,
-    );
+    expect(find.byType(AppSnackBar), findsNothing);
   });
 
   testWidgets(
@@ -1643,7 +1662,6 @@ void main() {
     expect((preview.image as MemoryImage).bytes, _twoPixelPng);
 
     await _review(tester);
-    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
     await tester.pumpAndSettle();
 
     expect(imageStore.uploaded.single, _twoPixelPng);
@@ -1727,6 +1745,8 @@ Future<void> _pump(
   double width = 1400,
   TenantProductSearchReader? productSearchReader,
   TenantProductImageStore? imageStore,
+  HiveTenantProductImageDrafts? imageDrafts,
+  TenantCatalogUndo? undo,
   TenantProductBackgroundRemover? backgroundRemover,
   TenantProductRouteBuilder? productStockRoute,
   TenantProductAdjustStockOpener? adjustStockRoute,
@@ -1751,6 +1771,8 @@ Future<void> _pump(
             requestIdFactory: _requestIds().call,
             productSearchReader: productSearchReader,
             imageStore: imageStore,
+            imageDrafts: imageDrafts,
+            undo: undo,
             backgroundRemover: backgroundRemover,
             productStockRoute: productStockRoute,
             adjustStockRoute: adjustStockRoute,
@@ -1820,7 +1842,6 @@ Future<void> _correct(
     name,
   );
   await _review(tester);
-  await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
   await tester.pumpAndSettle();
 }
 
@@ -1895,7 +1916,6 @@ Future<void> _confirmProduct(WidgetTester tester) async {
     find.byKey(const ValueKey('catalog-management-add-product')),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
   await tester.pumpAndSettle();
 }
 
@@ -2034,7 +2054,6 @@ Future<void> _correctCost(
     cost,
   );
   await _review(tester);
-  await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
   await tester.pumpAndSettle();
 }
 

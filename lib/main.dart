@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -28,8 +29,6 @@ import 'reporting/reporting.dart';
 import 'returns/returns.dart';
 import 'sales/sales.dart';
 import 'shift/shift.dart';
-import 'ui/scaffold.dart';
-import 'ui/tokens.dart';
 
 Future<void> main() async {
   await SentryFlutter.init(
@@ -127,18 +126,44 @@ Future<void> main() async {
               SecureCheckoutOutboxEncryptionKeyProvider.catalogCacheStorageKey,
         ),
       );
+      // Product photographs waiting for Storage. Its own box and its own key
+      // for the reasons `productImageDraftStorageKey` gives: these are
+      // megabytes of a shop's own pictures with no second copy anywhere, and
+      // they must not share a fate with the record of a sale.
+      final productImageDrafts = await HiveTenantProductImageDrafts.open(
+        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+          storage: secureValueStore,
+          storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+              .productImageDraftStorageKey,
+        ),
+      );
+      // Photographs this device has already downloaded, so a catalog draws on a
+      // cold start without fetching it all again and draws at all with no
+      // signal. Its own boxes, unencrypted and bounded - see
+      // `product_image_cache.dart` - and a failure to open one is a device that
+      // fetches every time rather than a device that will not start.
+      final tenantImageCache = await HiveTenantImageCache.open()
+          .then<HiveTenantImageCache?>(
+            (cache) => cache,
+            onError: (Object _) => null,
+          );
       // Receipt counters, shift state, and the outbox share one key: a sale,
       // the receipt numbering it draws from, and the shift it belongs to must
       // share exactly one fate.
-      final checkoutReceiptCounters = await HiveCheckoutReceiptCounters.open(
-        // The platform's own answer to "which device is this", so an identity
-        // minted after a reinstall still names the till it is running on.
-        hardwareIdentity: const MethodChannelDeviceHardwareIdentity(),
+      // **Shift state opens first, because the identity asks it a question.**
+      // An identity minted before the platform could be asked is rebound to this
+      // device on the next launch that holds no shift - and "holds no shift" is
+      // this box's answer to give.
+      final tenantShiftState = await HiveTenantShiftState.open(
         keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
           storage: secureValueStore,
         ),
       );
-      final tenantShiftState = await HiveTenantShiftState.open(
+      final checkoutReceiptCounters = await HiveCheckoutReceiptCounters.open(
+        // The platform's own answer to "which device is this", so an identity
+        // minted after a reinstall still names the till it is running on.
+        hardwareIdentity: const MethodChannelDeviceHardwareIdentity(),
+        canRebind: () => tenantShiftState.isEmpty,
         keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
           storage: secureValueStore,
         ),
@@ -170,6 +195,9 @@ Future<void> main() async {
       // server. Connectivity is piped into it here, once, rather than in
       // `build`, so the shell sees one stream for the life of the process.
       final checkoutSyncSignals = CheckoutSyncSignals();
+      // Lives as long as the app, like the sync signals above it, because the
+      // shell subscribes once and compares the stream by identity.
+      final bootstrapRefreshSignals = TenantBootstrapRefreshSignals();
       connectivity.onConnectivityChanged
           .where((result) => result != ConnectivityResult.none)
           .listen((_) => checkoutSyncSignals.requestSyncAfterReconnect());
@@ -215,13 +243,18 @@ Future<void> main() async {
         },
       );
 
-      TenantInvitationLink? invitationLink;
-      var invalidInvitationLink = false;
-      try {
-        invitationLink = TenantInvitationLink.fromUriIfPresent(Uri.base);
-      } on FormatException {
-        invalidInvitationLink = true;
-      }
+      // **Read before the first frame, and listened to afterwards.** An
+      // emailed invitation opens the app by App Link, and until 2026-09-08 this
+      // was a single read of `Uri.base` - which on Android is a directory, not
+      // the URL that launched anything, so no mailed invitation could ever be
+      // acted on. `InvitationLinkIntake` takes the launch link from the intent
+      // and keeps a stream for links followed while the app is already up.
+      final invitationIntake = InvitationLinkIntake(
+        kIsWeb
+            ? const UriBaseInvitationLinkSource()
+            : PlatformInvitationLinkSource(),
+      );
+      await invitationIntake.start();
 
       runApp(
         SentryWidget(
@@ -229,6 +262,8 @@ Future<void> main() async {
             bootstrapService: bootstrapService,
             checkoutOutbox: checkoutOutbox,
             tenantMutationStore: tenantMutationStore,
+            productImageDrafts: productImageDrafts,
+            tenantImageCache: tenantImageCache,
             checkoutCatalogCache: checkoutCatalogCache,
             checkoutReceiptCounters: checkoutReceiptCounters,
             checkoutPrintJobs: checkoutPrintJobs,
@@ -237,9 +272,9 @@ Future<void> main() async {
             tenantShiftState: tenantShiftState,
             deviceId: deviceId,
             connectivity: connectivity,
-            invitationLink: invitationLink,
-            invalidInvitationLink: invalidInvitationLink,
+            invitationIntake: invitationIntake,
             checkoutSyncSignals: checkoutSyncSignals,
+            bootstrapRefreshSignals: bootstrapRefreshSignals,
           ),
         ),
       );
@@ -249,37 +284,17 @@ Future<void> main() async {
 
 /// How many receipts this device is holding, or null when it cannot say.
 ///
-/// **Separate from [_printQueueStatus], which answers a sentence.** The home's
-/// launcher tile has room for a figure on its glyph and nothing else, and the
-/// drawer row beside it still wants the words - so both are read, from the same
-/// listing, and a queue that cannot be listed is a queue with no figure rather
-/// than a queue with none in it.
+/// **The badge on the top bar's glyph, since 2026-09-03.** It was the figure on
+/// an *Unprinted receipts* launcher tile, beside a sentence-shaped reading in
+/// the drawer; the tile and the sentence are both gone, and the receipts
+/// themselves are a section of the notifications page. A queue that cannot be
+/// listed is a queue with no figure rather than a queue with none in it.
 int? _printQueueCount(HivePrintJobQueue queue) {
   try {
     return queue.pending().jobs.length;
   } catch (_) {
     return null;
   }
-}
-
-/// This device's queue depth, in words, or null when there is nothing to say.
-///
-/// The wording is `PrinterFailureNotice.queueDepth`; what is here is the read,
-/// and the decision that a queue which cannot be listed is not a queue that is
-/// empty.
-String? _printQueueStatus(HivePrintJobQueue queue) {
-  final PrintJobListing listing;
-  try {
-    listing = queue.pending();
-  } catch (_) {
-    // A queue that cannot be listed is not a queue that is empty, but the home
-    // is not the surface to explain it on — the route itself states it.
-    return 'Could not be read';
-  }
-  return PrinterFailureNotice.queueDepth(
-    waiting: listing.jobs.length,
-    unreadable: listing.unreadable,
-  );
 }
 
 /// The shop's own name for the top of a receipt, or null.
@@ -289,19 +304,36 @@ String? _printQueueStatus(HivePrintJobQueue queue) {
 /// is absent, so anything that goes wrong reading it is swallowed here rather
 /// than propagating into the print hook, where it would be reported as
 /// `receipt_not_queued` and the paper would never come out.
-Future<String?> _receiptBusinessName(
+Future<TenantBranding?> _receiptBranding(
   TenantSession session,
   TenantDataReader reader,
 ) async {
   try {
-    final branding = await TenantBrandingRepository(
+    return await TenantBrandingRepository(
       session: session,
       reader: reader,
     ).load();
-    return branding?.companyName;
   } catch (_) {
     return null;
   }
+}
+
+/// How long a logo has to arrive before a receipt goes to paper without it.
+///
+/// **Much shorter than `fetchProductImage`'s own thirty seconds.** This runs
+/// between a committed sale and its receipt, and a mark at the top is not worth
+/// half a minute of a queue at the counter. The first sale after a logo is
+/// published may pay it; every one after that reads the picture off this device.
+const Duration _receiptLogoTimeout = Duration(seconds: 5);
+
+/// The published logo as bytes, from this device where it has them.
+///
+/// Null for every failure - no logo, no network, a picture that will not
+/// download - because a receipt without its mark is a receipt and a refused
+/// receipt is not.
+Future<Uint8List?> _receiptLogo(Uri? url, TenantImageCache? cache) async {
+  if (url == null) return null;
+  return loadTenantImageBytes(url, cache: cache, timeout: _receiptLogoTimeout);
 }
 
 /// The shift controller each session is already using, if it has one.
@@ -310,12 +342,23 @@ Future<String?> _receiptBusinessName(
 final Expando<TenantShiftController> _shiftControllers =
     Expando<TenantShiftController>();
 
+/// The open-difference counter each session is already using, if it has one.
+///
+/// Cached and weak for exactly the reasons `_shiftControllers` is: the home is
+/// rebuilt constantly, a fresh controller would re-read the count on every
+/// rebuild, and a strong map here would hold every session this process ever
+/// saw alive.
+final Expando<TenantOpenDifferencesController> _openDifferenceControllers =
+    Expando<TenantOpenDifferencesController>();
+
 class SpiritPOSApp extends StatelessWidget {
   const SpiritPOSApp({
     super.key,
     required this.bootstrapService,
     required this.checkoutOutbox,
     required this.tenantMutationStore,
+    required this.productImageDrafts,
+    required this.tenantImageCache,
     required this.checkoutCatalogCache,
     required this.checkoutReceiptCounters,
     required this.checkoutPrintJobs,
@@ -325,13 +368,23 @@ class SpiritPOSApp extends StatelessWidget {
     required this.deviceId,
     required this.connectivity,
     required this.checkoutSyncSignals,
-    this.invitationLink,
-    this.invalidInvitationLink = false,
+    required this.bootstrapRefreshSignals,
+    this.invitationIntake,
   });
 
   final TenantBootstrapService bootstrapService;
   final HiveCheckoutOutbox checkoutOutbox;
   final TenantPendingMutationStore tenantMutationStore;
+
+  /// Photographs chosen on this device that Storage has not taken yet. Read by
+  /// every surface that draws a product, through
+  /// [TenantProductImageDraftScope].
+  final HiveTenantProductImageDrafts productImageDrafts;
+
+  /// Photographs already published, kept on this device. Null where the boxes
+  /// would not open, which draws every picture from the network exactly as the
+  /// app did before the store existed.
+  final TenantImageCache? tenantImageCache;
   final HiveCheckoutCatalogCache checkoutCatalogCache;
   final HiveCheckoutReceiptCounters checkoutReceiptCounters;
 
@@ -346,8 +399,60 @@ class SpiritPOSApp extends StatelessWidget {
   final String deviceId;
   final Connectivity connectivity;
   final CheckoutSyncSignals checkoutSyncSignals;
-  final TenantInvitationLink? invitationLink;
-  final bool invalidInvitationLink;
+
+  /// How the account-creation wizard pushed over the routing shell tells it that
+  /// the business it resolved against no longer exists in the state it saw.
+  final TenantBootstrapRefreshSignals bootstrapRefreshSignals;
+  /// The emailed invitation the app was opened on, and the ones that arrive
+  /// later. Null in a host that no link can reach.
+  final InvitationLinkIntake? invitationIntake;
+
+  /// Mints a newer ID token for the signed-in identity.
+  ///
+  /// **Not a re-authentication.** A forced refresh picks up claims that have
+  /// moved on the server - the address, after `changeSignupEmail` - but it
+  /// leaves `auth_time` exactly where it was, which is why it cures one of the
+  /// two refusals `sendAccountVerification` can raise and not the other.
+  static Future<void> _refreshSession() async {
+    await FirebaseAuth.instance.currentUser?.getIdToken(true);
+  }
+
+  /// Proves the signed-in identity again from its password, in place.
+  ///
+  /// **This is the remedy that used to be a sign-out.** Re-authenticating moves
+  /// `auth_time`, which is the only thing the server's five-minute rule reads,
+  /// and it keeps the session - so the wizard pushed above the routing shell
+  /// survives it along with everything typed into it. The password arrives
+  /// from the field and is not stored anywhere by this.
+  static Future<void> _reauthenticate(String password) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) {
+      throw StateError('There is no signed-in address to confirm.');
+    }
+    await user.reauthenticateWithCredential(
+      EmailAuthProvider.credential(email: email, password: password),
+    );
+  }
+
+  /// Every change of signed-in identity, including to nobody.
+  ///
+  /// **Cached deliberately, and broadcast.** Two `OnboardingFlow`s can be
+  /// mounted at once - the wizard pushed over the routing shell and the shell's
+  /// own copy - so both must be able to listen, and the shell compares the
+  /// stream by identity to decide whether to resubscribe. A fresh
+  /// `authStateChanges()` per build would resubscribe forever.
+  static final Stream<Object?> _identityChanges =
+      FirebaseAuth.instance.authStateChanges().asBroadcastStream();
+
+  /// Trades a credential the server minted for a live session on this device.
+  ///
+  /// **The replacement for a session an address change is about to end.** A
+  /// custom token authenticates by uid, so it is unaffected by the password
+  /// credential being rebound underneath the old one.
+  static Future<void> _resumeSession(String token) async {
+    await FirebaseAuth.instance.signInWithCustomToken(token);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -384,19 +489,30 @@ class SpiritPOSApp extends StatelessWidget {
           session: session,
           reader: cacheReader,
         ).load().catchError((_) => const TenantConfiguredPrinter.absent()),
-        _receiptBusinessName(session, cacheReader),
+        _receiptBranding(session, cacheReader),
       ]);
       final sale = CheckoutSalePayload.fromOutboxRecord(
         record,
         session: session,
       );
+      final printer = reads[0]! as TenantConfiguredPrinter;
+      final branding = reads[1] as TenantBranding?;
       final result = await printDispatcher.enqueue(
         sale,
-        printer: reads[0]! as TenantConfiguredPrinter,
+        printer: printer,
         // The same value and the same fallback the home's title uses, so the
         // paper and the app name the business identically.
-        businessName: reads[1] as String?,
+        businessName: branding?.companyName,
         servedBy: FirebaseAuth.instance.currentUser?.displayName,
+        // Only where there is something to print on: a business with no printer
+        // configured refuses below, and fetching a picture for it would be a
+        // download nobody asked for.
+        logo: printer.canPrint
+            ? await _receiptLogo(branding?.logoUrl, tenantImageCache)
+            : null,
+        // The line the business details screen has always promised would print
+        // under the name.
+        slogan: branding?.slogan,
       );
       if (result.outcome == CheckoutPrintOutcome.refused) {
         return result.reasonCode;
@@ -406,6 +522,69 @@ class SpiritPOSApp extends StatelessWidget {
       return null;
     }
 
+    // **What a receipt's heading will now say, on paper.** Composed here with
+    // `printReceipt` because it needs the same two pieces this is the only
+    // place holding at once - the loaded ESC/POS profile and the platform
+    // transport - and the same cache-only read of where this business prints.
+    // A business with no printer refuses with `printer_not_configured`, which
+    // the screen swallows: it is not a fault, it is a shop without a printer.
+    Future<void> printBrandingProof({
+      required TenantSession session,
+      required String companyName,
+      String? slogan,
+      Uint8List? logo,
+    }) async {
+      final printer = await TenantPrinterConfigurationRepository(
+        session: session,
+        reader: tenantDataReader.cacheOnly,
+      ).load().catchError((_) => const TenantConfiguredPrinter.absent());
+      final configuration = printer.require();
+      await printerTransport.send(
+        configuration.endpoint,
+        CheckoutBrandingProofPage(
+          profile: printerCapabilityProfile,
+          configuration: configuration,
+        ).build(
+          at: DateTime.now(),
+          companyName: companyName,
+          slogan: slogan,
+          logo: logo,
+        ),
+      );
+    }
+
+    // **A second copy of a receipt, and the audit line that makes it
+    // answerable for.** Composed here for the same reason `printReceipt` is:
+    // this is the only place holding the durable queue, the transport, the
+    // loaded profile, the branding and the configured printer at once. The
+    // context reader is deliberately the same cache-only read the first copy
+    // used, so a reprint carries the heading the original did.
+    final receiptReprinter = CheckoutTenantReceiptReprinter(
+      dispatcher: printDispatcher,
+      callable: FirebaseRecordReceiptReprintCallable(),
+      readContext: (session) async {
+        final cacheReader = tenantDataReader.cacheOnly;
+        final reads = await Future.wait<Object?>(<Future<Object?>>[
+          TenantPrinterConfigurationRepository(
+            session: session,
+            reader: cacheReader,
+          ).load().catchError((_) => const TenantConfiguredPrinter.absent()),
+          _receiptBranding(session, cacheReader),
+        ]);
+        final printer = reads[0]! as TenantConfiguredPrinter;
+        final branding = reads[1] as TenantBranding?;
+        return TenantReceiptPrintContext(
+          printer: printer,
+          businessName: branding?.companyName,
+          servedBy: FirebaseAuth.instance.currentUser?.displayName,
+          logo: printer.canPrint
+              ? await _receiptLogo(branding?.logoUrl, tenantImageCache)
+              : null,
+          slogan: branding?.slogan,
+        );
+      },
+    );
+
     // Recording a pending return changes no stock and is open to every active
     // member; restoring it is management-only and runs through the callable, so
     // the two stay a deliberate two-person control. The same actions reach the
@@ -413,10 +592,7 @@ class SpiritPOSApp extends StatelessWidget {
     final returnActions = TenantReturnActions(
       writer: QueuedTenantReturnWriter(
         store: tenantMutationStore,
-        remote: FirebaseTenantReturnWriter(
-          firestore: FirebaseFirestore.instance,
-          isOnline: isOnline,
-        ),
+        onQueued: checkoutSyncSignals.requestSyncAfterSave,
       ),
       verifyCallable: FirebaseVerifyReturnCallable(),
     );
@@ -426,16 +602,60 @@ class SpiritPOSApp extends StatelessWidget {
     // there is nothing honest to show for one attempted with no connection.
     final expenseWriter = QueuedTenantExpenseWriter(
       store: tenantMutationStore,
-      remote: FirebaseTenantExpenseWriter(
-        firestore: FirebaseFirestore.instance,
-        isOnline: isOnline,
-      ),
+      onQueued: checkoutSyncSignals.requestSyncAfterSave,
     );
+    // **Where a callable-backed change waits.** Correcting a product and moving
+    // stock are the two catalog changes that are not document writes and never
+    // can be - `allow update` on `products` admits a strictly decreasing
+    // quantity and nothing else - so both go through the Admin SDK. Queueing
+    // them does not change that: the record holds the callable's own payload
+    // and `FirebaseTenantMutationGateway` makes the call when it drains.
+    //
+    // Replaying one is safe because the payload names a `requestId` the server
+    // keeps an idempotency record against, so a retry answers off that record
+    // rather than moving the same stock twice.
+    Future<void> queueCallableMutation({
+      required TenantPendingMutationKind kind,
+      required String prefix,
+      required String tenantId,
+      required String productId,
+      required String requestId,
+      required Map<String, Object?> payload,
+    }) async {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      await tenantMutationStore.enqueue(
+        uid: uid,
+        tenantId: tenantId,
+        // The request ID, not the product: one product may be corrected twice
+        // before either lands, and the second must not collide with the first.
+        operationId: '$prefix-$requestId',
+        kind: kind,
+        targetPath: TenantPaths(tenantId).product(productId),
+        payload: payload,
+      );
+      checkoutSyncSignals.requestSyncAfterCatalogChange();
+    }
+
     // The only path in the app that can set stock to an arbitrary figure.
     // It is management-only, which the callable itself enforces, and it is
     // reached one product at a time from the read-only catalog.
     final stockActions = TenantStockActions(
       adjustCallable: FirebaseAdjustStockCallable(),
+      adjustQueue:
+          ({
+            required tenantId,
+            required productId,
+            required requestId,
+            required payload,
+          }) => queueCallableMutation(
+            kind: TenantPendingMutationKind.stockAdjust,
+            prefix: 'stock-adjust',
+            tenantId: tenantId,
+            productId: productId,
+            requestId: requestId,
+            payload: payload,
+          ),
     );
     // The only two paths in the app that can ask the server to reconcile and to
     // correct a shift whose totals disagree with its sales. Both are owner- and
@@ -486,488 +706,670 @@ class SpiritPOSApp extends StatelessWidget {
       isOnline: isOnline,
     );
 
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: spiritTheme,
-      // `design.md` §2.4: bouncing scroll physics everywhere, on both
-      // platforms, and no Material overscroll glow. It belongs on the app
-      // rather than on each scrollable, because "everywhere" is not a rule
-      // three hundred list views can be trusted to remember.
-      scrollBehavior: const SpiritScrollBehavior(),
-      home: TenantRoutingShell(
-        // The home's greeting states how today compares with yesterday, and
-        // this is what it adds the two days up with. The same callable the
-        // sales totals route already uses.
-        salesTotalsCallable: salesTotalsCallable,
-        authUidChanges: FirebaseAuth.instance.authStateChanges().map(
-          (user) => user?.uid,
-        ),
-        isEmailVerified: (uid) {
-          final user = FirebaseAuth.instance.currentUser;
-          return user != null && user.uid == uid && user.emailVerified;
-        },
-        // `emailVerified` above is a claim inside the cached ID token, so it
-        // does not change when the user follows the link in their mailbox.
-        // Reloading is the only way the app can observe a verification it did
-        // not itself perform, which is what makes "I have verified" honest.
-        reloadIdentity: () async => FirebaseAuth.instance.currentUser?.reload(),
-        // The address the verify step names, read from Auth rather than from
-        // the root document - the document holds a mirror of it, and after a
-        // change in place the mirror is the half that can lag.
-        readEmail: () => FirebaseAuth.instance.currentUser?.email,
-        // Turns a silent non-delivery into a stated one. Without it a user
-        // whose address is suppressed sees the request accepted and taps send
-        // again indefinitely.
-        emailDeliveryStatusCallable: FirebaseEmailDeliveryStatusCallable(),
-        invitationLink: invitationLink,
-        invalidInvitationLink: invalidInvitationLink,
-        bootstrapService: bootstrapService,
-        tenantSwitchStateSources: safeLandingTenantSwitchStateSources(
-          checkoutStateSource: CheckoutOutboxTenantSwitchStateSource(
-            checkoutOutbox,
-          ),
-          pendingWritesStateSource: TenantPendingMutationSwitchStateSource(
-            tenantMutationStore,
-          ),
-          cashCloseStateSource: TenantShiftSwitchStateSource(tenantShiftState),
-        ),
-        tenantSwitchOnlineCheck: () async => isOnline(),
-        tenantSessionRecoveryFactory: (sessionController) {
-          final coordinator = CheckoutRecoveryCoordinator(
-            sessionController: sessionController,
-            outbox: checkoutOutbox,
-            confirmationGateway: FirebaseCheckoutConfirmationGateway(
-              firestore: FirebaseFirestore.instance,
-              isOnline: isOnline,
+    // The count behind the badge on *Reports*. Cached per session for the same
+    // reason the shift controller is: the home rebuilds constantly, and a fresh
+    // one would re-read the summary document every time it did.
+    TenantOpenDifferencesController openDifferencesFactory(
+      TenantSessionController sessions,
+    ) => _openDifferenceControllers[sessions] ??=
+        TenantOpenDifferencesController(
+          sessionController: sessions,
+          reader: tenantDataReader,
+        );
+
+    // **Above `MaterialApp`, so every route is inside it.** A staged photograph
+    // has to be drawable wherever a product is - the catalog, the till's
+    // picture band, a cart line - and each of those is a separate root
+    // navigator push. One scope at the top is the only placement that reaches
+    // all of them without every surface holding a subscription of its own.
+    return TenantProductImageDraftScope(
+      notifier: productImageDrafts,
+      // The published half of the same question, in the same place and for the
+      // same reason: every surface that draws a product is its own root
+      // navigator push, and one scope at the top reaches all of them.
+      child: TenantImageCacheScope(
+        cache: tenantImageCache,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: spiritTheme,
+          // `design.md` §2.4: bouncing scroll physics everywhere, on both
+          // platforms, and no Material overscroll glow. It belongs on the app
+          // rather than on each scrollable, because "everywhere" is not a rule
+          // three hundred list views can be trusted to remember.
+          scrollBehavior: const SpiritScrollBehavior(),
+          home: TenantRoutingShell(
+            // The home's greeting states how today compares with yesterday, and
+            // this is what it adds the two days up with. The same callable the
+            // sales totals route already uses.
+            salesTotalsCallable: salesTotalsCallable,
+            authUidChanges: FirebaseAuth.instance.authStateChanges().map(
+              (user) => user?.uid,
             ),
-          );
-          final submissionWorker = CheckoutSubmissionWorker(
-            sessionController: sessionController,
-            outbox: checkoutOutbox,
-            submissionGateway: FirebaseCheckoutSubmissionGateway(
-              firestore: FirebaseFirestore.instance,
-              isOnline: isOnline,
+            isEmailVerified: (uid) {
+              final user = FirebaseAuth.instance.currentUser;
+              return user != null && user.uid == uid && user.emailVerified;
+            },
+            // `emailVerified` above is a claim inside the cached ID token, so it
+            // does not change when the user follows the link in their mailbox.
+            // Reloading is the only way the app can observe a verification it did
+            // not itself perform, which is what the verify step's watch is: this
+            // call on a timer, and again on every app resume.
+            reloadIdentity: () async =>
+                FirebaseAuth.instance.currentUser?.reload(),
+            // The address the verify step names, read from Auth rather than from
+            // the root document - the document holds a mirror of it, and after a
+            // change in place the mirror is the half that can lag.
+            readEmail: () => FirebaseAuth.instance.currentUser?.email,
+            // Turns a silent non-delivery into a stated one. Without it a user
+            // whose address is suppressed sees the request accepted and taps send
+            // again indefinitely.
+            emailDeliveryStatusCallable: FirebaseEmailDeliveryStatusCallable(),
+            invitationLink: invitationIntake?.launchArrival?.link,
+            invalidInvitationLink:
+                invitationIntake?.launchArrival?.invalid ?? false,
+            invitationArrivals: invitationIntake?.arrivals,
+            onInvitationLinkSettled: invitationIntake?.settled,
+            bootstrapService: bootstrapService,
+            tenantSwitchStateSources: safeLandingTenantSwitchStateSources(
+              checkoutStateSource: CheckoutOutboxTenantSwitchStateSource(
+                checkoutOutbox,
+              ),
+              pendingWritesStateSource: TenantPendingMutationSwitchStateSource(
+                tenantMutationStore,
+              ),
+              cashCloseStateSource: TenantShiftSwitchStateSource(
+                tenantShiftState,
+              ),
             ),
-            isOnline: isOnline,
-          );
-          final catalogRefresher = CheckoutCatalogCacheRefresher(
-            sessionController: sessionController,
-            cache: checkoutCatalogCache,
-            reader: tenantDataReader,
-          );
-          final mutationWorker = TenantPendingMutationWorker(
-            store: tenantMutationStore,
-            submission: mutationGateway,
-            confirmation: mutationGateway,
-            workerId: deviceId,
-          );
-          // The order these run in is a tested contract, not a comment here.
-          final pass = CheckoutSyncPass(
-            recover: coordinator.recoverSelectedSession,
-            submit: submissionWorker.submitDueCheckouts,
-            refreshCatalog: catalogRefresher.refreshSelectedSession,
-            reportEvidenceChanged: checkoutSyncSignals.reportEvidenceChanged,
-          );
-          return (trigger) async {
-            // A sale saved at the till needs submitting and confirming; it does
-            // not need the whole product catalog re-read.
-            await Future.wait<void>(<Future<void>>[
-              pass.run(refreshDerivedData: trigger is! CheckoutSaveSyncRequest),
-              mutationWorker.run(sessionController.requireSession()),
-            ]);
-            return null;
-          };
-        },
-        tenantRecoveryTriggers: checkoutSyncSignals.syncRequests,
-        hasPlatformSuperAdminClaim: (uid) async {
-          final user = FirebaseAuth.instance.currentUser;
-          if (user == null || user.uid != uid) return false;
-          final token = await user.getIdTokenResult();
-          return token.claims?['platformRole'] == 'superAdmin';
-        },
-        tenantDataReader: tenantDataReader,
-        // **The hub, restored 2026-08-29.** This slot held the daily summary,
-        // then the weekly report from 2026-08-27 - and a slot that can only
-        // name one report is why the other five had no entrance. The old app
-        // reached its reports through a hub and this does again, so the daily
-        // summary keeps the reconciliation chain it always declared while the
-        // week sits beside it rather than in its place.
-        dailySummaryRoute: (reader) => TenantReportsHubScreen(
-          // The reconciled totals, and - one day at a time - why each day is in
-          // the state it is. The explanation is reached from the summary itself
-          // rather than from the hub, because that is where a manager already
-          // asks whether a day is reconciled.
-          dailySummaryRoute: () => TenantDailySummaryScreen(
-            reader: reader,
-            reconciliationRoute: (businessDate) =>
-                TenantReconciliationStatusScreen(
-                  reader: reader,
-                  businessDate: businessDate,
-                  actions: reconciliationActions,
+            tenantSwitchOnlineCheck: () async => isOnline(),
+            tenantSessionRecoveryFactory: (sessionController) {
+              final coordinator = CheckoutRecoveryCoordinator(
+                sessionController: sessionController,
+                outbox: checkoutOutbox,
+                confirmationGateway: FirebaseCheckoutConfirmationGateway(
+                  firestore: FirebaseFirestore.instance,
+                  isOnline: isOnline,
                 ),
-            reconciliationRoles:
-                TenantReconciliationStatusRepository.allowedRoles,
-            // Reached from the summary rather than the hub for the same reason:
-            // the summary is where somebody learns that today has no reconciled
-            // figures yet, and this is the answer to that.
-            salesTotalsRoute: () => TenantSalesTotalsScreen(
-              callable: salesTotalsCallable,
-              reader: reader,
-              checkoutOutbox: checkoutOutbox,
+              );
+              final submissionWorker = CheckoutSubmissionWorker(
+                sessionController: sessionController,
+                outbox: checkoutOutbox,
+                submissionGateway: FirebaseCheckoutSubmissionGateway(
+                  firestore: FirebaseFirestore.instance,
+                  isOnline: isOnline,
+                ),
+                isOnline: isOnline,
+              );
+              final catalogRefresher = CheckoutCatalogCacheRefresher(
+                sessionController: sessionController,
+                cache: checkoutCatalogCache,
+                reader: tenantDataReader,
+              );
+              final mutationWorker = TenantPendingMutationWorker(
+                store: tenantMutationStore,
+                submission: mutationGateway,
+                confirmation: mutationGateway,
+                workerId: deviceId,
+              );
+              // Photographs, carried on the same passes as everything else. The
+              // bytes never enter the mutation outbox - only the URL does, and
+              // only once Storage has taken them.
+              final imageWorker = TenantProductImageUploadWorker(
+                drafts: productImageDrafts,
+                store: FirebaseTenantProductImageStore(),
+                mutations: tenantMutationStore,
+                requestId: secureStockAdjustmentRequestId,
+                queue:
+                    ({
+                      required tenantId,
+                      required productId,
+                      required requestId,
+                      required payload,
+                    }) => queueCallableMutation(
+                      kind: TenantPendingMutationKind.productCorrect,
+                      prefix: 'product-image',
+                      tenantId: tenantId,
+                      productId: productId,
+                      requestId: requestId,
+                      payload: payload,
+                    ),
+              );
+              // The order these run in is a tested contract, not a comment here.
+              final pass = CheckoutSyncPass(
+                recover: coordinator.recoverSelectedSession,
+                submit: submissionWorker.submitDueCheckouts,
+                refreshCatalog: catalogRefresher.refreshSelectedSession,
+                reportEvidenceChanged:
+                    checkoutSyncSignals.reportEvidenceChanged,
+              );
+              return (trigger) async {
+                // A sale saved at the till needs submitting and confirming; it does
+                // not need the whole product catalog re-read.
+                final session = sessionController.requireSession();
+                await Future.wait<void>(<Future<void>>[
+                  pass.run(
+                    refreshDerivedData: trigger is! CheckoutSaveSyncRequest,
+                  ),
+                  // Sequential on purpose: a photograph waits for its product to
+                  // exist on the server, and the mutation worker is what puts it
+                  // there - so a create confirmed in this pass lets its picture
+                  // go in the same one rather than a pass later.
+                  mutationWorker
+                      .run(session)
+                      .then((_) => imageWorker.run(session)),
+                ]);
+                return null;
+              };
+            },
+            tenantRecoveryTriggers: checkoutSyncSignals.syncRequests,
+            bootstrapRefreshRequests: bootstrapRefreshSignals.requests,
+            refreshSession: _refreshSession,
+            reauthenticate: _reauthenticate,
+            identityChanges: _identityChanges,
+            resumeSession: _resumeSession,
+            // What retires the offline card: a bootstrap read from cache is
+            // refreshed in place once the radio is back, and `fromCache` goes with
+            // it. See `TenantRoutingShell.reconnectSignals`.
+            reconnectSignals: checkoutSyncSignals.reconnects,
+            hasPlatformSuperAdminClaim: (uid) async {
+              final user = FirebaseAuth.instance.currentUser;
+              if (user == null || user.uid != uid) return false;
+              final token = await user.getIdTokenResult();
+              return token.claims?['platformRole'] == 'superAdmin';
+            },
+            tenantDataReader: tenantDataReader,
+            // **The hub, restored 2026-08-29.** This slot held the daily summary,
+            // then the weekly report from 2026-08-27 - and a slot that can only
+            // name one report is why the other five had no entrance. The old app
+            // reached its reports through a hub and this does again, so the daily
+            // summary keeps the reconciliation chain it always declared while the
+            // week sits beside it rather than in its place.
+            dailySummaryRoute: (reader) => TenantReportsHubScreen(
+              // The reconciled totals, and - one day at a time - why each day is in
+              // the state it is. The explanation is reached from the summary itself
+              // rather than from the hub, because that is where a manager already
+              // asks whether a day is reconciled.
+              dailySummaryRoute: () => TenantDailySummaryScreen(
+                reader: reader,
+                reconciliationRoute: (businessDate) =>
+                    TenantReconciliationStatusScreen(
+                      reader: reader,
+                      businessDate: businessDate,
+                      actions: reconciliationActions,
+                    ),
+                reconciliationRoles:
+                    TenantReconciliationStatusRepository.allowedRoles,
+                // Reached from the summary rather than the hub for the same reason:
+                // the summary is where somebody learns that today has no reconciled
+                // figures yet, and this is the answer to that.
+                salesTotalsRoute: () => TenantSalesTotalsScreen(
+                  callable: salesTotalsCallable,
+                  reader: reader,
+                  checkoutOutbox: checkoutOutbox,
+                ),
+                salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
+              ),
+              dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
+              // **The old app's weekly Reports & Analytics page**: the
+              // week-against-week comparison is the reading this product did not
+              // otherwise have.
+              weeklyReportRoute: () => TenantWeeklyReportScreen(
+                reader: reader,
+                callable: salesTotalsCallable,
+                checkoutOutbox: checkoutOutbox,
+                // The sale-line roll-up behind *Top selling items* and *Recent
+                // transactions* needs the history reader, which the plain
+                // constructor cannot reach.
+                salesRepositoryFactory: (session) =>
+                    TenantSaleHistoryRepository(
+                      session: session,
+                      reader: reader,
+                      reportReader: tenantDataReader,
+                    ),
+              ),
+              weeklyReportRoles: TenantSalesTotalsGateway.allowedRoles,
+              // A calendar month, which nothing else in this product can name: every
+              // standing period ends today, so once August began nothing could be
+              // asked how July went. Two range requests rather than the weekly
+              // report's one-per-day, which a month cannot afford.
+              monthlyReportRoute: () => TenantMonthlyReportScreen(
+                reader: reader,
+                callable: salesTotalsCallable,
+                checkoutOutbox: checkoutOutbox,
+              ),
+              monthlyReportRoles: TenantSalesTotalsGateway.allowedRoles,
+              // The same screen the summary opens, reached directly as well: it is
+              // the only surface that can total *today*, and the summary it used to
+              // sit behind is normally blank for today by design.
+              salesTotalsRoute: () => TenantSalesTotalsScreen(
+                callable: salesTotalsCallable,
+                reader: reader,
+                checkoutOutbox: checkoutOutbox,
+              ),
+              salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
+              // **The one tap the badge on *Reports* needs.** These records were
+              // reachable only through the daily summary, then a run, then its
+              // differences - a route nobody walks unless they already know
+              // something is waiting at the end of it, which is precisely why a
+              // recorded difference could sit unread.
+              differencesRoute: () => TenantReconciliationAnomalyScreen(
+                reader: reader,
+                actions: reconciliationActions,
+              ),
+              differencesRoles:
+                  TenantReconciliationAnomalyRepository.allowedRoles,
+              openDifferenceCount: (sessions) =>
+                  openDifferencesFactory(sessions).openCount,
             ),
-            salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
-          ),
-          dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
-          // **The old app's weekly Reports & Analytics page**: the
-          // week-against-week comparison is the reading this product did not
-          // otherwise have.
-          weeklyReportRoute: () => TenantWeeklyReportScreen(
-            reader: reader,
-            callable: salesTotalsCallable,
-            checkoutOutbox: checkoutOutbox,
-            // The sale-line roll-up behind *Top selling items* and *Recent
-            // transactions* needs the history reader, which the plain
-            // constructor cannot reach.
-            salesRepositoryFactory: (session) => TenantSaleHistoryRepository(
-              session: session,
+            // The hub itself is offered to whoever may read any report on it. Every
+            // card then re-asks the question with its own domain's list, so a role
+            // that reaches the hub still sees only the reports it may read.
+            dailySummaryRoles: TenantSalesTotalsGateway.allowedRoles,
+            expensesRoute: (reader) =>
+                TenantExpensesScreen(reader: reader, writer: expenseWriter),
+            expensesRoles: TenantExpenseRepository.allowedRoles,
+            receiptLookupRoute: (reader) => TenantSalesReportScreen(
               reader: reader,
               reportReader: tenantDataReader,
+              totalsCallable: salesTotalsCallable,
+              checkoutOutbox: checkoutOutbox,
+              returnActions: returnActions,
+              reprinter: receiptReprinter,
+              // The same offline catalog the till prices against, so an item row
+              // can draw the product's photograph without a read of its own.
+              catalog: checkoutCatalogCache,
             ),
-          ),
-          weeklyReportRoles: TenantSalesTotalsGateway.allowedRoles,
-          // A calendar month, which nothing else in this product can name: every
-          // standing period ends today, so once August began nothing could be
-          // asked how July went. Two range requests rather than the weekly
-          // report's one-per-day, which a month cannot afford.
-          monthlyReportRoute: () => TenantMonthlyReportScreen(
-            reader: reader,
-            callable: salesTotalsCallable,
-            checkoutOutbox: checkoutOutbox,
-          ),
-          monthlyReportRoles: TenantSalesTotalsGateway.allowedRoles,
-          // The same screen the summary opens, reached directly as well: it is
-          // the only surface that can total *today*, and the summary it used to
-          // sit behind is normally blank for today by design.
-          salesTotalsRoute: () => TenantSalesTotalsScreen(
-            callable: salesTotalsCallable,
-            reader: reader,
-            checkoutOutbox: checkoutOutbox,
-          ),
-          salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
-        ),
-        // The hub itself is offered to whoever may read any report on it. Every
-        // card then re-asks the question with its own domain's list, so a role
-        // that reaches the hub still sees only the reports it may read.
-        dailySummaryRoles: TenantSalesTotalsGateway.allowedRoles,
-        expensesRoute: (reader) =>
-            TenantExpensesScreen(reader: reader, writer: expenseWriter),
-        expensesRoles: TenantExpenseRepository.allowedRoles,
-        receiptLookupRoute: (reader) => TenantSalesReportScreen(
-          reader: reader,
-          reportReader: tenantDataReader,
-          totalsCallable: salesTotalsCallable,
-          checkoutOutbox: checkoutOutbox,
-          returnActions: returnActions,
-        ),
-        receiptLookupRoles: TenantSaleHistoryRepository.reportRoles,
-        returnFeedRoute: (reader) =>
-            TenantReturnFeedScreen(reader: reader, actions: returnActions),
-        returnFeedRoles: TenantReturnHistoryRepository.allowedRoles,
-        productStockRoute: (reader, product) => TenantProductStockScreen(
-          reader: reader,
-          product: product,
-          actions: stockActions,
-        ),
-        productStockRoles: TenantProductStockRepository.allowedRoles,
-        // The business-wide record of every correction the callable above ever
-        // made. It is read-only: an adjustment cannot be undone, only followed
-        // by another one.
-        stockAdjustmentFeedRoute: (reader) =>
-            TenantStockAdjustmentFeedScreen(reader: reader),
-        stockAdjustmentFeedRoles:
-            TenantStockAdjustmentFeedRepository.allowedRoles,
-        // Everything that moved stock, of which the corrections above are only
-        // one source. It is the one read in the app that Firestore does not
-        // bound by a path prefix, so the collection-group boundary is injected
-        // explicitly rather than folded into the general tenant data reader.
-        stockMovementFeedRoute: (reader) => TenantStockMovementFeedScreen(
-          reader: reader,
-          groupReader: tenantDataReader,
-          // One product's whole ledger, entered from a row. Deliberately the
-          // path-bounded read rather than a `productId`-narrowed group page:
-          // both return the same documents in the same order to the same
-          // roles, and only this one survives the product being deleted
-          // without spending a composite index on the widest read in the app.
-          productLedgerRoute: (productId) =>
-              TenantProductLedgerScreen(reader: reader, productId: productId),
-        ),
-        stockMovementFeedRoles: TenantStockMovementFeedRepository.allowedRoles,
-        // The whole business's event trail: who was invited, deactivated, or
-        // recovered, and every lifecycle change the platform made. It is
-        // deliberately narrower than the stock surfaces above.
-        auditLogRoute: (reader) => TenantAuditLogScreen(reader: reader),
-        auditLogRoles: TenantAuditLogRepository.allowedRoles,
-        // The till, reachable for the first time. Everything below it already
-        // existed: the draft service refuses a checkout with no proven open
-        // shift, the submission worker and recovery coordinator above pick a
-        // saved draft up on their own, and neither is reachable from here.
-        //
-        // The service is built per navigation because it must bind to the live
-        // session controller. That is safe: receipt allocation and every outbox
-        // mutation serialize on locks held by the boxes themselves, not by this
-        // object, so two instances can never issue the same receipt number.
-        // **The shift is opened and closed at the till, not on the home.**
-        // Restored 2026-08-25 to where the pre-multitenancy app had it: the
-        // old `pos.dart` gated itself on entry and offered *stepping away* or
-        // *end my shift* on the way out. The gate wraps the till rather than
-        // living inside it, so the checkout screen still knows only how to
-        // sell.
-        checkoutRoute: (sessions) => TenantShiftGate(
-          controllerFactory: shiftControllerFactory,
-          // What *End shift* opens: the same panel the home used to carry,
-          // built here now that the till is its only host.
-          shiftManagerBuilder: (context) => AppScaffold(
-            title: 'Close shift',
-            contentWidth: AppContentWidth.records,
-            body: TenantShiftPanel(
+            receiptLookupRoles: TenantSaleHistoryRepository.reportRoles,
+            returnFeedRoute: (reader) =>
+                TenantReturnFeedScreen(reader: reader, actions: returnActions),
+            returnFeedRoles: TenantReturnHistoryRepository.allowedRoles,
+            productStockRoute: (reader, product) => TenantProductStockScreen(
+              reader: reader,
+              product: product,
+              actions: stockActions,
+            ),
+            productStockRoles: TenantProductStockRepository.allowedRoles,
+            // The business-wide record of every correction the callable above ever
+            // made. It is read-only: an adjustment cannot be undone, only followed
+            // by another one.
+            stockAdjustmentFeedRoute: (reader) =>
+                TenantStockAdjustmentFeedScreen(reader: reader),
+            stockAdjustmentFeedRoles:
+                TenantStockAdjustmentFeedRepository.allowedRoles,
+            // Everything that moved stock, of which the corrections above are only
+            // one source. It is the one read in the app that Firestore does not
+            // bound by a path prefix, so the collection-group boundary is injected
+            // explicitly rather than folded into the general tenant data reader.
+            stockMovementFeedRoute: (reader) => TenantStockMovementFeedScreen(
+              reader: reader,
+              groupReader: tenantDataReader,
+              // One product's whole ledger, entered from a row. Deliberately the
+              // path-bounded read rather than a `productId`-narrowed group page:
+              // both return the same documents in the same order to the same
+              // roles, and only this one survives the product being deleted
+              // without spending a composite index on the widest read in the app.
+              productLedgerRoute: (productId) => TenantProductLedgerScreen(
+                reader: reader,
+                productId: productId,
+              ),
+            ),
+            stockMovementFeedRoles:
+                TenantStockMovementFeedRepository.allowedRoles,
+            // The whole business's event trail: who was invited, deactivated, or
+            // recovered, and every lifecycle change the platform made. It is
+            // deliberately narrower than the stock surfaces above.
+            auditLogRoute: (reader) => TenantAuditLogScreen(reader: reader),
+            auditLogRoles: TenantAuditLogRepository.allowedRoles,
+            // The till, reachable for the first time. Everything below it already
+            // existed: the draft service refuses a checkout with no proven open
+            // shift, the submission worker and recovery coordinator above pick a
+            // saved draft up on their own, and neither is reachable from here.
+            //
+            // The service is built per navigation because it must bind to the live
+            // session controller. That is safe: receipt allocation and every outbox
+            // mutation serialize on locks held by the boxes themselves, not by this
+            // object, so two instances can never issue the same receipt number.
+            // **The shift is opened and closed at the till, not on the home.**
+            // Restored 2026-08-25 to where the pre-multitenancy app had it: the
+            // old `pos.dart` gated itself on entry and offered *stepping away* or
+            // *end my shift* on the way out. The gate wraps the till rather than
+            // living inside it, so the checkout screen still knows only how to
+            // sell.
+            checkoutRoute: (sessions) => TenantShiftGate(
+              controllerFactory: shiftControllerFactory,
+              // What *Close shift* needs, handed over directly. It used to be a
+              // whole pushed page built here; since 2026-09-03 the choice opens
+              // the counting sheet itself.
               currency: TenantReportingCurrency.unknown,
               historyReader: tenantDataReader,
               returnActions: returnActions,
-              controllerFactory: shiftControllerFactory,
-            ),
-          ),
-          child: TenantCheckoutScreen(
-            cache: checkoutCatalogCache,
-            // The decorator is what makes a saved sale reach the server while the
-            // till stays open. It is wrapped here rather than inside the screen so
-            // the screen still knows only how to save.
-            drafts: CheckoutSyncOnSaveDraftSink(
-              signals: checkoutSyncSignals,
-              delegate: CheckoutDraftService(
-                sessionController: sessions,
+              child: TenantCheckoutScreen(
                 cache: checkoutCatalogCache,
-                outbox: checkoutOutbox,
-                receipts: checkoutReceiptCounters,
-                // The frozen restriction that a cashier cannot open checkout in a
-                // second business while another still holds an open shift on this
-                // device is enforced here, not by the screen.
-                shiftBinder: TenantShiftCheckoutBinder(tenantShiftState),
-                // The seam that was built and never connected: without it a sale
-                // commits and no bytes are ever generated.
-                onSaved: printReceipt,
+                // The decorator is what makes a saved sale reach the server while the
+                // till stays open. It is wrapped here rather than inside the screen so
+                // the screen still knows only how to save.
+                drafts: CheckoutSyncOnSaveDraftSink(
+                  signals: checkoutSyncSignals,
+                  delegate: CheckoutDraftService(
+                    sessionController: sessions,
+                    cache: checkoutCatalogCache,
+                    outbox: checkoutOutbox,
+                    receipts: checkoutReceiptCounters,
+                    // The frozen restriction that a cashier cannot open checkout in a
+                    // second business while another still holds an open shift on this
+                    // device is enforced here, not by the screen.
+                    shiftBinder: TenantShiftCheckoutBinder(tenantShiftState),
+                    // The seam that was built and never connected: without it a sale
+                    // commits and no bytes are ever generated.
+                    onSaved: printReceipt,
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        // The one path in the app that publishes what a till prices in, and the
-        // one capability every other operational surface here already assumed:
-        // the catalog refresher refuses outright while no usable currency is
-        // published, so a business that never opens this route cannot sell at
-        // all. Owner and administrator only, which the Firestore rule for
-        // `configuration/{documentId}` enforces on its own.
-        //
-        // A commit asks for a full sync pass, because the catalog refresh is the
-        // only thing that re-reads the document: without it this device would
-        // keep pricing new sales with the code that was just replaced.
-        checkoutConfigurationRoute: (reader) =>
-            TenantCheckoutConfigurationScreen(
+            // The one path in the app that publishes what a till prices in, and the
+            // one capability every other operational surface here already assumed:
+            // the catalog refresher refuses outright while no usable currency is
+            // published, so a business that never opens this route cannot sell at
+            // all. Owner and administrator only, which the Firestore rule for
+            // `configuration/{documentId}` enforces on its own.
+            //
+            // A commit asks for a full sync pass, because the catalog refresh is the
+            // only thing that re-reads the document: without it this device would
+            // keep pricing new sales with the code that was just replaced.
+            checkoutConfigurationRoute: (reader) =>
+                TenantCheckoutConfigurationScreen(
+                  reader: reader,
+                  writer: FirebaseTenantCheckoutConfigurationWriter(
+                    firestore: FirebaseFirestore.instance,
+                    isOnline: isOnline,
+                  ),
+                  onPublished:
+                      checkoutSyncSignals.requestSyncAfterConfigurationChange,
+                ),
+            checkoutConfigurationRoles:
+                TenantCheckoutConfigurationPublisher.allowedRoles,
+            // Where this business prints. The last surface printing was missing:
+            // `docs/printer_transport.md` §6 forbids guessing an address, so until
+            // this has been used once every receipt queues with
+            // `printer_not_configured` and no paper comes out.
+            //
+            // `testPrint` puts a page on the roll against what is typed, before it
+            // is saved. The transport moves the bytes and `CheckoutPrinterTestPage`
+            // decides what they say; neither of them is the screen's business, so
+            // the screen is handed one function and no printer at all.
+            // The name and the receipt header, which nothing in this product could
+            // write until now: `TenantBrandingRepository` has always read
+            // `configuration/branding` and it was seeded by hand.
+            brandingRoute: (reader) => TenantBrandingScreen(
               reader: reader,
-              writer: FirebaseTenantCheckoutConfigurationWriter(
-                firestore: FirebaseFirestore.instance,
-                isOnline: isOnline,
+              writer: QueuedTenantConfigurationWriter(
+                store: tenantMutationStore,
+                cacheReader: reader.cached ?? reader,
+                currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                remote: FirebaseTenantConfigurationDocumentWriter(
+                  isOnline: isOnline,
+                ),
               ),
-              onPublished:
-                  checkoutSyncSignals.requestSyncAfterConfigurationChange,
+              // The logo's own prefix in Storage, gated in `storage.rules` to the
+              // two roles that may publish the document it goes in.
+              logoStore: FirebaseTenantBrandingLogoStore(),
+              // The catalog form's own cut-out, offered against a logo for the
+              // same reason it is offered against a product photograph: it is a
+              // picture off a phone either way. See `product_background_removal.dart`.
+              backgroundRemover: CallableTenantProductBackgroundRemover(
+                callable: FirebaseRemoveProductBackgroundCallable(),
+              ),
+              // What the receipt will now say, on the roll, the moment it is
+              // saved. Composed here because this is the only place holding the
+              // ESC/POS profile and the platform transport at once - the screen is
+              // handed one function and no printer at all.
+              printProof: printBrandingProof,
             ),
-        checkoutConfigurationRoles:
-            TenantCheckoutConfigurationPublisher.allowedRoles,
-        // Where this business prints. The last surface printing was missing:
-        // `docs/printer_transport.md` §6 forbids guessing an address, so until
-        // this has been used once every receipt queues with
-        // `printer_not_configured` and no paper comes out.
-        //
-        // `testPrint` puts a page on the roll against what is typed, before it
-        // is saved. The transport moves the bytes and `CheckoutPrinterTestPage`
-        // decides what they say; neither of them is the screen's business, so
-        // the screen is handed one function and no printer at all.
-        // The name and the receipt header, which nothing in this product could
-        // write until now: `TenantBrandingRepository` has always read
-        // `configuration/branding` and it was seeded by hand.
-        brandingRoute: (reader) => TenantBrandingScreen(
-          reader: reader,
-          writer: QueuedTenantConfigurationWriter(
-            store: tenantMutationStore,
-            cacheReader: reader.cached ?? reader,
-            currentUid: () => FirebaseAuth.instance.currentUser?.uid,
-            remote: FirebaseTenantConfigurationDocumentWriter(
-              isOnline: isOnline,
-            ),
-          ),
-        ),
-        brandingRoles: TenantBrandingPublisher.allowedRoles,
-        printerConfigurationRoute: (reader) => TenantPrinterConfigurationScreen(
-          reader: reader,
-          writer: QueuedTenantConfigurationWriter(
-            store: tenantMutationStore,
-            cacheReader: reader.cached ?? reader,
-            currentUid: () => FirebaseAuth.instance.currentUser?.uid,
-            remote: FirebaseTenantConfigurationDocumentWriter(
-              firestore: FirebaseFirestore.instance,
-              isOnline: isOnline,
-            ),
-          ),
-          testPrint: (configuration) => printerTransport.send(
-            configuration.endpoint,
-            CheckoutPrinterTestPage(
-              profile: printerCapabilityProfile,
-              configuration: configuration,
-            ).build(at: DateTime.now()),
-          ),
-        ),
-        printerConfigurationRoles:
-            TenantPrinterConfigurationPublisher.allowedRoles,
-        // This device's unsent receipts, and the one control that can move one:
-        // *Send again*. It rebuilds nothing — the bytes on the job are the ones
-        // the sale produced, so a receipt retried after a price change still
-        // prints what was charged.
-        printQueueRoute: () => TenantPrintQueueScreen(
-          queue: checkoutPrintJobs,
-          onRetry: (receiptNumber) async {
-            final result = await printDispatcher.retry(receiptNumber);
-            return result.outcome == CheckoutPrintOutcome.sent
-                ? null
-                : result.reasonCode;
-          },
-        ),
-        printQueueStatus: () => _printQueueStatus(checkoutPrintJobs),
-        printQueueCount: () => _printQueueCount(checkoutPrintJobs),
-        // The only path in the app that puts a product in the catalog, and the
-        // last capability every other operational surface here already assumed.
-        // Creating and retiring are direct Firestore writes, because the rules
-        // on `products` and `categories` already name exactly the roles this
-        // route is offered to: create is owner/admin/manager, delete is
-        // owner/admin.
-        //
-        // Correcting one is the exception and it is a callable. `allow update`
-        // on `products` permits a strictly decreasing quantity and nothing else
-        // - the checkout decrement - and widening it would trade the guarantee
-        // that no client can inflate stock for a price edit that records no
-        // actor, no previous value, and no reason. `updateProduct` writes
-        // through the Admin SDK instead, so that clause stays byte-identical.
-        //
-        // A committed change asks for a full sync pass, because the catalog
-        // refresh is the only thing that re-reads `products` and `categories`:
-        // without it this device could not sell a product that now exists,
-        // could still sell one that no longer does, and would keep pricing with
-        // a figure that has just been corrected.
-        catalogManagementRoute: (reader) => TenantCatalogManagementScreen(
-          reader: reader,
-          productSearchReader: tenantDataReader,
-          imageStore: FirebaseTenantProductImageStore(),
-          // *Remove background*, restored from the old catalog form. The key
-          // lives in the deployment's secret manager and the call is made by
-          // `removeProductBackground`; a deployment that never set the secret
-          // gets a callable that refuses with `failed-precondition`, which the
-          // form words as "not set up for this business" rather than as a
-          // fault. See `product_background_removal.dart`.
-          backgroundRemover: CallableTenantProductBackgroundRemover(
-            callable: FirebaseRemoveProductBackgroundCallable(),
-          ),
-          writer: FirebaseTenantCatalogWriter(
-            firestore: FirebaseFirestore.instance,
-            isOnline: isOnline,
-          ),
-          updateCallable: FirebaseUpdateProductCallable(),
-          // Both bulk halves are callables and neither could be anything else.
-          // A correction cannot be a client `WriteBatch` at all, for the reason
-          // above. An import could create products past the rules - `allow
-          // create` admits the same three roles - but no device can write the
-          // `stock_adjustments` record and `stock_movements` entry that give an
-          // opening quantity a recorded origin, because both collections are
-          // server-write-only. A device import would therefore leave stock with
-          // no ledger entry, which is the defect the previous app shipped.
-          bulkRoute: (context) => TenantBulkCatalogScreen(
-            reader: reader,
-            batchCallable: FirebaseUpdateProductsCallable(),
-            importCallable: FirebaseImportProductsCallable(),
-            onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
-          ),
-          onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
-          productStockRoute: (product) => TenantProductStockScreen(
-            reader: reader,
-            product: product,
-            actions: stockActions,
-          ),
-          // The correcting half. The composition root still owns the callable;
-          // what it hands over is the errand rather than a screen for the
-          // catalog to push, because the correction also owns its own dismissal
-          // and the sentence it leaves behind on the catalog.
-          adjustStockRoute: (context, product) =>
-              openTenantProductStockAdjustmentScreen(
-                context,
+            brandingRoles: TenantBrandingPublisher.allowedRoles,
+            printerConfigurationRoute: (reader) =>
+                TenantPrinterConfigurationScreen(
+                  reader: reader,
+                  writer: QueuedTenantConfigurationWriter(
+                    store: tenantMutationStore,
+                    cacheReader: reader.cached ?? reader,
+                    currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                    remote: FirebaseTenantConfigurationDocumentWriter(
+                      firestore: FirebaseFirestore.instance,
+                      isOnline: isOnline,
+                    ),
+                  ),
+                  testPrint: (configuration) => printerTransport.send(
+                    configuration.endpoint,
+                    CheckoutPrinterTestPage(
+                      profile: printerCapabilityProfile,
+                      configuration: configuration,
+                    ).build(at: DateTime.now()),
+                  ),
+                ),
+            printerConfigurationRoles:
+                TenantPrinterConfigurationPublisher.allowedRoles,
+            printQueueCount: () => _printQueueCount(checkoutPrintJobs),
+            // Nightly reconciliation has been recording differences that nobody
+            // sees unless they go looking for them. This is the count of the ones
+            // still open, badged on the route that opens them.
+            unresolvedDifferencesCount: (sessions) =>
+                openDifferencesFactory(sessions).openCount,
+            // The only path in the app that puts a product in the catalog, and the
+            // last capability every other operational surface here already assumed.
+            // Creating and retiring are direct Firestore writes, because the rules
+            // on `products` and `categories` already name exactly the roles this
+            // route is offered to: create is owner/admin/manager, delete is
+            // owner/admin.
+            //
+            // Correcting one is the exception and it is a callable. `allow update`
+            // on `products` permits a strictly decreasing quantity and nothing else
+            // - the checkout decrement - and widening it would trade the guarantee
+            // that no client can inflate stock for a price edit that records no
+            // actor, no previous value, and no reason. `updateProduct` writes
+            // through the Admin SDK instead, so that clause stays byte-identical.
+            //
+            // A committed change asks for a full sync pass, because the catalog
+            // refresh is the only thing that re-reads `products` and `categories`:
+            // without it this device could not sell a product that now exists,
+            // could still sell one that no longer does, and would keep pricing with
+            // a figure that has just been corrected.
+            catalogManagementRoute: (reader) => TenantCatalogManagementScreen(
+              reader: reader,
+              productSearchReader: tenantDataReader,
+              imageStore: FirebaseTenantProductImageStore(),
+              // *Remove background*, restored from the old catalog form. The key
+              // lives in the deployment's secret manager and the call is made by
+              // `removeProductBackground`; a deployment that never set the secret
+              // gets a callable that refuses with `failed-precondition`, which the
+              // form words as "not set up for this business" rather than as a
+              // fault. See `product_background_removal.dart`.
+              backgroundRemover: CallableTenantProductBackgroundRemover(
+                callable: FirebaseRemoveProductBackgroundCallable(),
+              ),
+              // **Durable-first since 2026-09-04, at the developer's direction.**
+              // These four remain the plain document writes described above - the
+              // queue replays exactly the `set`, `update` and `delete` the rules
+              // already admit, so nothing in `firestore.rules` moved. What changed
+              // is that the form no longer waits for the acknowledgement: adding a
+              // product used to hold the whole panel across a Storage upload, a
+              // download URL, a Firestore round trip and two catalog reads.
+              //
+              // `requestSyncAfterCatalogChange` rather than `requestSyncAfterSave`,
+              // because a catalog change is precisely the case that does need the
+              // full pass: the refresh is the only thing that re-reads `products`
+              // and `categories` into the till's offline cache.
+              writer: QueuedTenantCatalogWriter(
+                store: tenantMutationStore,
+                currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                onQueued: checkoutSyncSignals.requestSyncAfterCatalogChange,
+              ),
+              updateCallable: FirebaseUpdateProductCallable(),
+              updateQueue:
+                  ({
+                    required tenantId,
+                    required productId,
+                    required requestId,
+                    required payload,
+                  }) => queueCallableMutation(
+                    kind: TenantPendingMutationKind.productCorrect,
+                    prefix: 'product-correct',
+                    tenantId: tenantId,
+                    productId: productId,
+                    requestId: requestId,
+                    payload: payload,
+                  ),
+              // Both bulk halves are callables and neither could be anything else.
+              // A correction cannot be a client `WriteBatch` at all, for the reason
+              // above. An import could create products past the rules - `allow
+              // create` admits the same three roles - but no device can write the
+              // `stock_adjustments` record and `stock_movements` entry that give an
+              // opening quantity a recorded origin, because both collections are
+              // server-write-only. A device import would therefore leave stock with
+              // no ledger entry, which is the defect the previous app shipped.
+              bulkRoute: (context) => TenantBulkCatalogScreen(
+                reader: reader,
+                batchCallable: FirebaseUpdateProductsCallable(),
+                importCallable: FirebaseImportProductsCallable(),
+                onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
+              ),
+              onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
+              productStockRoute: (product) => TenantProductStockScreen(
                 reader: reader,
                 product: product,
                 actions: stockActions,
               ),
-          productStockRoles: TenantProductStockRepository.allowedRoles,
-          adjustmentFeedRoute: () =>
-              TenantStockAdjustmentFeedScreen(reader: reader),
-          adjustmentFeedRoles: TenantStockAdjustmentFeedRepository.allowedRoles,
-          movementFeedRoute: () => TenantStockMovementFeedScreen(
-            reader: reader,
-            groupReader: tenantDataReader,
-            productLedgerRoute: (productId) =>
-                TenantProductLedgerScreen(reader: reader, productId: productId),
-          ),
-          movementFeedRoles: TenantStockMovementFeedRepository.allowedRoles,
-        ),
-        catalogManagementRoles: TenantCatalogManagementRepository.allowedRoles,
-        pendingCheckoutPanel: CheckoutPendingEvidencePanel(
-          source: CombinedLocalWorkEvidenceSource(
-            checkouts: CheckoutOutboxEvidenceSource(checkoutOutbox),
-            mutations: tenantMutationStore,
-          ),
-          // Without this the counts are read once when the session opens, so a
-          // sale rang up moments earlier is reported as no sale at all.
-          refreshSignals: mergeLocalWorkEvidenceSignals(
-            checkoutSyncSignals.evidenceChanges,
-            tenantMutationStore.changes,
-          ),
-        ),
-        // §4.4 v0.7's top bar wants the signed-in member's name. Firebase has
-        // already loaded it, so this hands over state that exists rather than
-        // adding a read to the home - which is what kept the bar blocked for a
-        // day. It is frequently null: an identity created by an emailed
-        // invitation has no display name until somebody types one.
-        memberName: () => FirebaseAuth.instance.currentUser?.displayName,
-        signOut: FirebaseAuth.instance.signOut,
-        // **Signing up is a route this screen opens, not a mode inside it.**
-        // The wizard is pushed above the shell, so account creation - which
-        // signs the new identity in and makes the shell rebuild underneath -
-        // does not tear the flow down mid-way through it. It pops when the
-        // business is open, revealing a shell that has already routed there.
-        signedOut: LoginScreen(
-          createAccountRoute: (context) => OnboardingFlow(
-            readIdentity: () {
-              final user = FirebaseAuth.instance.currentUser;
-              return OnboardingIdentity(
-                uid: user?.uid,
-                email: user?.email,
-                emailVerified: user?.emailVerified ?? false,
-                // Deliberately not read from Firestore: a fresh signup has no
-                // root document to read until the blocking function has
-                // written one, and what this flow has just saved it already
-                // knows. See `OnboardingFlow._savedDisplayName`.
-                displayName: user?.displayName,
-                phone: null,
-              );
-            },
-            reloadIdentity: () async =>
-                FirebaseAuth.instance.currentUser?.reload(),
-            onSignOut: FirebaseAuth.instance.signOut,
-            // Popping reveals the routing shell, which re-bootstrapped when the
-            // business was created and has already opened it.
-            onOpenBusiness: (_) => Navigator.of(context).pop(),
+              // The correcting half. The composition root still owns the callable;
+              // what it hands over is the errand rather than a screen for the
+              // catalog to push, because the correction also owns its own dismissal
+              // and the sentence it leaves behind on the catalog.
+              adjustStockRoute: (context, product) =>
+                  openTenantProductStockAdjustmentScreen(
+                    context,
+                    reader: reader,
+                    product: product,
+                    actions: stockActions,
+                  ),
+              productStockRoles: TenantProductStockRepository.allowedRoles,
+              adjustmentFeedRoute: () =>
+                  TenantStockAdjustmentFeedScreen(reader: reader),
+              adjustmentFeedRoles:
+                  TenantStockAdjustmentFeedRepository.allowedRoles,
+              movementFeedRoute: () => TenantStockMovementFeedScreen(
+                reader: reader,
+                groupReader: tenantDataReader,
+                productLedgerRoute: (productId) => TenantProductLedgerScreen(
+                  reader: reader,
+                  productId: productId,
+                ),
+              ),
+              movementFeedRoles: TenantStockMovementFeedRepository.allowedRoles,
+            ),
+            catalogManagementRoles:
+                TenantCatalogManagementRepository.allowedRoles,
+            pendingCheckoutPanel: CheckoutPendingEvidencePanel(
+              source: CombinedLocalWorkEvidenceSource(
+                checkouts: CheckoutOutboxEvidenceSource(checkoutOutbox),
+                mutations: tenantMutationStore,
+              ),
+              // Without this the counts are read once when the session opens, so a
+              // sale rang up moments earlier is reported as no sale at all.
+              refreshSignals: mergeLocalWorkEvidenceSignals(
+                checkoutSyncSignals.evidenceChanges,
+                tenantMutationStore.changes,
+              ),
+              // The badge is about everything this device still owes, so it counts
+              // the receipts that never printed along with the sales that never
+              // sent. Both are on the page it opens.
+              alsoWaiting: () => _printQueueCount(checkoutPrintJobs) ?? 0,
+              // **This device's unsent receipts, and the one control that can move
+              // one: *Send again*.** It rebuilds nothing - the bytes on the job are
+              // the ones the sale produced, so a receipt retried after a price
+              // change still prints what was charged.
+              notificationsRoute: (context) => TenantNotificationsScreen(
+                evidenceSource: CombinedLocalWorkEvidenceSource(
+                  checkouts: CheckoutOutboxEvidenceSource(checkoutOutbox),
+                  mutations: tenantMutationStore,
+                ),
+                refreshSignals: mergeLocalWorkEvidenceSignals(
+                  checkoutSyncSignals.evidenceChanges,
+                  tenantMutationStore.changes,
+                ),
+                printQueue: checkoutPrintJobs,
+                onRetryPrint: (receiptNumber) async {
+                  final result = await printDispatcher.retry(receiptNumber);
+                  return result.outcome == CheckoutPrintOutcome.sent
+                      ? null
+                      : result.reasonCode;
+                },
+              ),
+            ),
+            // §4.4 v0.7's top bar wants the signed-in member's name. Firebase has
+            // already loaded it, so this hands over state that exists rather than
+            // adding a read to the home - which is what kept the bar blocked for a
+            // day. It is frequently null: an identity created by an emailed
+            // invitation has no display name until somebody types one.
+            memberName: () => FirebaseAuth.instance.currentUser?.displayName,
+            signOut: FirebaseAuth.instance.signOut,
+            // **Signing up is a route this screen opens, not a mode inside it.**
+            // The wizard is pushed above the shell, so account creation - which
+            // signs the new identity in and makes the shell rebuild underneath -
+            // does not tear the flow down mid-way through it. It pops when the
+            // business is open, revealing a shell that has already routed there.
+            signedOut: LoginScreen(
+              // A signed-out invitee who has just followed their link lands
+              // here, and this is where the app says why it opened.
+              invitationArrival: invitationIntake?.arrival,
+              createAccountRoute: (context) => OnboardingFlow(
+                readIdentity: () {
+                  final user = FirebaseAuth.instance.currentUser;
+                  return OnboardingIdentity(
+                    uid: user?.uid,
+                    email: user?.email,
+                    emailVerified: user?.emailVerified ?? false,
+                    // Deliberately not read from Firestore: a fresh signup has no
+                    // root document to read until the blocking function has
+                    // written one, and what this flow has just saved it already
+                    // knows. See `OnboardingFlow._savedDisplayName`.
+                    displayName: user?.displayName,
+                    phone: null,
+                  );
+                },
+                reloadIdentity: () async =>
+                    FirebaseAuth.instance.currentUser?.reload(),
+                // The wizard waits on the same mail the selector's panel does,
+                // so it gets the same way of finding out it will never arrive.
+                emailDeliveryStatusCallable:
+                    FirebaseEmailDeliveryStatusCallable(),
+                // **Signing out leaves, rather than staying put.** This
+                // wizard is pushed above the shell, so a bare `signOut` left it
+                // on screen over a sign-in screen it was hiding: the step it
+                // was showing was about an identity that no longer existed, and
+                // the way out was a back gesture nobody had been offered. The
+                // sign-out is awaited first so what the pop reveals is already
+                // the sign-in screen and not a frame of this flow's own
+                // resumption.
+                onSignOut: () async {
+                  final navigator = Navigator.of(context);
+                  await FirebaseAuth.instance.signOut();
+                  if (navigator.canPop()) navigator.pop();
+                },
+                refreshSession: _refreshSession,
+                reauthenticate: _reauthenticate,
+                identityChanges: _identityChanges,
+                resumeSession: _resumeSession,
+                // **Ask first, then pop.** This wizard sits above the shell, so
+                // the shell's last bootstrap ran before this business existed
+                // and resolved - correctly, at the time - to no accessible
+                // tenant. Popping alone therefore revealed *Almost there*, and
+                // only a relaunch put the owner in the shop they had just
+                // opened. The signal re-runs the bootstrap; the pop reveals it
+                // already running.
+                onOpenBusiness: (_) {
+                  bootstrapRefreshSignals.requestAfterBusinessCreated();
+                  Navigator.of(context).pop();
+                },
+              ),
+            ),
           ),
         ),
       ),

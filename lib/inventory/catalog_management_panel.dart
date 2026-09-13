@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_catalog.dart';
@@ -14,6 +13,10 @@ import '../ui/chips.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/pagination.dart';
+import '../ui/card.dart';
+import '../ui/press.dart';
+import '../ui/records.dart';
+import '../ui/states.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/skeleton.dart';
@@ -22,7 +25,11 @@ import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'catalog_management.dart';
 import 'product_background_removal.dart';
+import 'product_image_framing.dart';
+import 'product_image_framing_panel.dart';
+import 'product_image_picker.dart';
 import 'stock_adjustment.dart';
+import 'product_image_drafts.dart';
 import 'product_image_store.dart';
 import 'product_visual.dart';
 
@@ -47,11 +54,14 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
     required this.reader,
     this.writer,
     this.updateCallable,
+    this.updateQueue,
     this.bulkRoute,
     this.onChanged,
     this.requestIdFactory,
     this.productSearchReader,
     this.imageStore,
+    this.imageDrafts,
+    this.undo,
     this.backgroundRemover,
     this.productStockRoute,
     this.adjustStockRoute,
@@ -81,6 +91,25 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
   /// the same reason and with the same consequence: while it is absent, nothing
   /// on this route offers to correct anything.
   final UpdateProductCallable? updateCallable;
+
+  /// Where a correction waits until this device can send it.
+  ///
+  /// Present in the app and absent in most tests, which is the seam that lets a
+  /// test drive [updateCallable] directly. With it, the form answers from the
+  /// correction itself rather than from a round trip, and the overlay draws the
+  /// corrected product until the server confirms or refuses it.
+  final TenantProductUpdateQueue? updateQueue;
+
+  /// Where a chosen photograph waits until Storage can take it.
+  ///
+  /// Present in the app and absent in most tests, which is the seam that keeps
+  /// the inline upload path exercisable. With it, saving a product never waits
+  /// on Storage and can happen with no connection at all.
+  final HiveTenantProductImageDrafts? imageDrafts;
+
+  /// Withdraws a queued catalog change that has not been sent. See
+  /// [TenantCatalogManagementPanel.undo].
+  final TenantCatalogUndo? undo;
 
   /// Called after the server acknowledged a change, so the composition root can
   /// ask the sync pass to re-read what this device caches.
@@ -122,11 +151,14 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
       reader: reader,
       writer: writer,
       updateCallable: updateCallable,
+      updateQueue: updateQueue,
       bulkRoute: bulkRoute,
       onChanged: onChanged,
       requestIdFactory: requestIdFactory,
       productSearchReader: productSearchReader,
       imageStore: imageStore,
+      imageDrafts: imageDrafts,
+      undo: undo,
       backgroundRemover: backgroundRemover,
       productStockRoute: productStockRoute,
       adjustStockRoute: adjustStockRoute,
@@ -152,6 +184,7 @@ final class TenantCatalogManagementPanel extends StatefulWidget {
     required this.reader,
     this.writer,
     this.updateCallable,
+    this.updateQueue,
     this.bulkRoute,
     this.onChanged,
     this.requestIdFactory,
@@ -159,6 +192,8 @@ final class TenantCatalogManagementPanel extends StatefulWidget {
     this.categoryPageSize = 50,
     this.productSearchReader,
     this.imageStore,
+    this.imageDrafts,
+    this.undo,
     this.backgroundRemover,
     this.productStockRoute,
     this.adjustStockRoute,
@@ -173,6 +208,20 @@ final class TenantCatalogManagementPanel extends StatefulWidget {
   final TenantDataReader reader;
   final TenantCatalogWriter? writer;
   final UpdateProductCallable? updateCallable;
+  final TenantProductUpdateQueue? updateQueue;
+  final HiveTenantProductImageDrafts? imageDrafts;
+
+  /// Withdraws a queued catalog change that has not been sent.
+  ///
+  /// **This is what replaced the confirmation dialogs.** Adding, retiring and
+  /// correcting a product each used to open several paragraphs of prose before
+  /// anything happened; at the developer's direction on 2026-09-04 they go
+  /// straight through and the notice afterwards carries *Undo* instead. The
+  /// offer is honest only while the change is still queued, which is exactly
+  /// what [TenantPendingMutationStore.cancel] reports - so the answer decides
+  /// what the shopkeeper is told, and a change already on its way says so
+  /// rather than pretending to come back.
+  final TenantCatalogUndo? undo;
   final WidgetBuilder? bulkRoute;
   final VoidCallback? onChanged;
   final TenantCatalogRequestIdFactory? requestIdFactory;
@@ -226,7 +275,54 @@ final class _TenantCatalogManagementPanelState
   /// See `showAppSnackBar`: since 2026-09-03 every outcome goes there, and
   /// inline text is left to the one thing it is still right for - a field
   /// saying what is wrong with what was typed into it.
-  void _report(AppNotice notice) => showAppSnackBar(context, notice);
+  void _report(AppNotice notice, {Widget? action}) =>
+      showAppSnackBar(context, notice, action: action);
+
+  /// The *Undo* offered beside a queued change, or nothing.
+  ///
+  /// **Nothing when there is nothing to undo**: a change that was refused, or
+  /// went straight to the server, or a build with no queue wired. The offer
+  /// exists only for a record still sitting on this device.
+  Widget? _undoAction(
+    TenantSession session,
+    TenantCatalogWriteResult result, {
+    required String label,
+    required String productId,
+  }) {
+    final undo = widget.undo;
+    final operationId = result.operationId;
+    if (undo == null || operationId == null) return null;
+    return AppButton(
+      key: const ValueKey('catalog-management-undo'),
+      label: label,
+      icon: Icons.undo,
+      onPressed: () async {
+        final withdrawn = await undo(
+          tenantId: session.tenantId,
+          operationId: operationId,
+        );
+        if (!mounted) return;
+        if (withdrawn) {
+          await _discardStagedQuietly(session, productId);
+          if (!mounted) return;
+          _reload();
+          widget.onChanged?.call();
+          _report(const AppNotice.confirmed('Undone. Nothing was sent.'));
+          return;
+        }
+        // **Not a failure, and worded as the fact it is.** The change left this
+        // device between the notice appearing and the button being pressed, so
+        // there is no local record left to withdraw. Saying "undo failed" would
+        // describe the app; saying where the change is describes the shop.
+        _report(
+          const AppNotice.unknown(
+            'This has already been sent, so it cannot be taken back here. '
+            'Change it again from the list.',
+          ),
+        );
+      },
+    );
+  }
 
   Timer? _searchDebounce;
   String _searchPrefix = '';
@@ -445,28 +541,21 @@ final class _TenantCatalogManagementPanelState
     }
   }
 
+  /// **The picker itself is `chooseTenantImageFile`**, shared with the business
+  /// details screen since 2026-09-05: which extensions are offered, `withData`,
+  /// and the strict candidate validation are one decision, and a logo asks it
+  /// in exactly the same words. What stays here is where the refusal is drawn,
+  /// which this form answers with a snack bar and that one answers under its
+  /// own well.
   Future<TenantProductImageCandidate?> _chooseProductImage() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const <String>['jpg', 'jpeg', 'png', 'webp'],
-      withData: true,
-    );
-    if (!mounted || result == null) return null;
-    final file = result.files.single;
-    final bytes = file.bytes;
-    if (bytes == null) {
-      _report(
-        const AppNotice.refused(
-          'That image could not be read. Choose a JPEG, PNG, or WebP file.',
-        ),
-      );
-      return null;
-    }
-    try {
-      return TenantProductImageCandidate(bytes: bytes, fileName: file.name);
-    } on TenantProductImageException catch (error) {
-      _report(_imageNotice(error));
-      return null;
+    final chosen = await chooseTenantImageFile();
+    if (!mounted || chosen == null) return null;
+    switch (chosen) {
+      case TenantImageChoiceCandidate(:final candidate):
+        return candidate;
+      case TenantImageChoiceRefused(:final message):
+        _report(AppNotice.refused(message));
+        return null;
     }
   }
 
@@ -524,9 +613,8 @@ final class _TenantCatalogManagementPanelState
   }
 
   Future<void> _openCategories(TenantSession session) async {
-    await showAppDialog<void>(
-      context,
-      builder: (context) => _CategoriesDialog(
+    await _openProductFormRoute<void>(
+      form: () => _CategoriesScreen(
         session: session,
         reader: widget.reader,
         writer: widget.writer,
@@ -589,40 +677,39 @@ final class _TenantCatalogManagementPanelState
       _report(_refusalNotice(error.code));
       return;
     }
-    if (!await _confirmed(
-          title: 'Add "${intent.name}" to the catalog?',
-          body:
-              '${intent.name} is filed under ${intent.categoryName}, scanned as '
-              '${intent.sku}, and priced at ${_money(intent.priceMinor)} in the '
-              'currency this business publishes. '
-              '${intent.costMinor == null ? 'No unit cost is recorded, so its '
-                        'sales report no profit and are counted as missing cost data.' : 'It costs ${_money(intent.costMinor!)} a unit; every sale '
-                        'records that figure as it stands at the moment of the sale, '
-                        'so correcting it later never changes a profit already '
-                        'reported.'} '
-              'It is added holding no stock: '
-              'record the opening quantity from the product itself, so the '
-              'ledger says where those units came from.\n\n'
-              '${widget.updateCallable == null ? 'Nothing in this app can change a name, a code, or a price '
-                        'afterwards.' : 'A name, code, price, or unit cost can be corrected afterwards '
-                        'from this same list, and every correction is recorded.'} '
-              'Nothing makes a code unique either - if another '
-              'product already scans as ${intent.sku}, the till will refuse '
-              'that scan rather than pick one.',
-          action: 'Add product',
-        ) ||
-        !_stillCurrent(capturedKey)) {
-      return;
-    }
+    // **No confirmation, at the developer's direction on 2026-09-04.** What
+    // stood here was ten lines of prose about categories, codes, cost and
+    // stock, read after the form was filled in rather than while it was being
+    // filled in - so it was answered by reflex on every product a shop added.
+    // Those consequences are in the form itself now, beside the fields they
+    // are about, and the change is withdrawable from the notice afterwards.
+    if (!_stillCurrent(capturedKey)) return;
 
     setState(() {
       _busy = true;
     });
     TenantProductImageUpload? upload;
+    var staged = false;
     try {
       final candidate = _productImage;
+      final drafts = widget.imageDrafts;
       final store = widget.imageStore;
-      if (candidate != null && store != null) {
+      if (candidate != null && drafts != null) {
+        // **The photograph is held, not sent.** It is on screen from here on
+        // through `TenantProductImageDraftScope`, and
+        // `TenantProductImageUploadWorker` carries it to Storage once the
+        // product itself is on the server. Before 2026-09-04 this line was a
+        // `putData` of up to five megabytes followed by a `getDownloadURL`,
+        // both awaited, both ahead of the product being written at all - which
+        // is why adding a product offline was refused outright.
+        await drafts.stage(
+          tenantId: session.tenantId,
+          productId: intent.productId,
+          candidate: candidate,
+        );
+        staged = true;
+      } else if (candidate != null && store != null) {
+        // The inline path, kept for a build with no draft store wired.
         upload = await store.upload(
           tenantId: session.tenantId,
           productId: intent.productId,
@@ -640,22 +727,36 @@ final class _TenantCatalogManagementPanelState
         );
       }
       final result = await writer.createProduct(intent);
-      if (upload != null &&
-          result.kind != TenantCatalogWriteKind.committed &&
-          result.kind != TenantCatalogWriteKind.ambiguous) {
+      final kept =
+          result.kind == TenantCatalogWriteKind.committed ||
+          result.kind == TenantCatalogWriteKind.queued ||
+          result.kind == TenantCatalogWriteKind.ambiguous;
+      if (upload != null && !kept) {
         await _removeOwnedQuietly(
           session: session,
           productId: intent.productId,
           imageUrl: upload.url,
         );
       }
+      // A product that was refused has no photograph to keep waiting for it.
+      if (staged && !kept) {
+        await _discardStagedQuietly(session, intent.productId);
+      }
       if (!_stillCurrent(capturedKey)) return;
       if (result.kind != TenantCatalogWriteKind.ambiguous) {
         _productRequestId = null;
       }
-      _report(_productNotice(result));
+      _report(
+        _productNotice(result),
+        action: _undoAction(
+          session,
+          result,
+          label: 'Undo adding this',
+          productId: intent.productId,
+        ),
+      );
       if (result.kind != TenantCatalogWriteKind.rejected) _reload();
-      if (result.kind == TenantCatalogWriteKind.committed) {
+      if (kept) {
         _clearProductForm();
         widget.onChanged?.call();
       }
@@ -667,6 +768,7 @@ final class _TenantCatalogManagementPanelState
           imageUrl: upload.url,
         );
       }
+      if (staged) await _discardStagedQuietly(session, intent.productId);
       if (!_stillCurrent(capturedKey)) return;
       _report(_refusalNotice(error.code));
     } on TenantProductImageException catch (error) {
@@ -674,6 +776,25 @@ final class _TenantCatalogManagementPanelState
       _report(_imageNotice(error));
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Forgets a staged photograph whose product never made it.
+  ///
+  /// Best effort, on the same grounds as [_removeOwnedQuietly]: the product's
+  /// outcome is the fact worth reporting, and a draft left behind costs a
+  /// little disk and one upload attempt that will answer `not-found`.
+  Future<void> _discardStagedQuietly(
+    TenantSession session,
+    String productId,
+  ) async {
+    try {
+      await widget.imageDrafts?.discard(
+        tenantId: session.tenantId,
+        productId: productId,
+      );
+    } catch (_) {
+      // See above.
     }
   }
 
@@ -705,25 +826,10 @@ final class _TenantCatalogManagementPanelState
       _report(_refusalNotice(error.code));
       return;
     }
-    if (!await _confirmed(
-          title: 'Retire "${intent.name}"?',
-          body:
-              'It stops appearing in the catalog and at the till. Everything '
-              'already recorded keeps naming it: its stock ledger, every past '
-              'sale line, and every reported figure. Nothing is undone and no '
-              'money changes.\n\n'
-              'It still holds ${intent.quantity} in stock. Retiring moves that '
-              'nowhere and records no movement for it.\n\n'
-              'This is not how a mistake is corrected. A replacement product '
-              'gets its own identity, and this one keeps its whole history, so '
-              'adding one back does not repair a wrong name, code, or price.'
-              '${widget.updateCallable == null ? '' : ' Correct it instead, from the same list.'}',
-          action: 'Retire product',
-          destructive: true,
-        ) ||
-        !_stillCurrent(capturedKey)) {
-      return;
-    }
+    // Retiring goes straight through too, and is the change that most needed
+    // the undo: it is a delete. It is withdrawable for exactly as long as it
+    // has not been sent, and the notice says which of those two it is.
+    if (!_stillCurrent(capturedKey)) return;
 
     setState(() {
       _busy = true;
@@ -731,9 +837,18 @@ final class _TenantCatalogManagementPanelState
     try {
       final result = await writer.retireProduct(intent);
       if (!_stillCurrent(capturedKey)) return;
-      _report(_retireNotice(result, intent));
+      _report(
+        _retireNotice(result, intent),
+        action: _undoAction(
+          session,
+          result,
+          label: 'Undo retiring this',
+          productId: intent.productId,
+        ),
+      );
       if (result.kind != TenantCatalogWriteKind.rejected) _reload();
-      if (result.kind == TenantCatalogWriteKind.committed) {
+      if (result.kind == TenantCatalogWriteKind.committed ||
+          result.kind == TenantCatalogWriteKind.queued) {
         widget.onChanged?.call();
       }
     } on TenantCatalogManagementException catch (error) {
@@ -781,7 +896,25 @@ final class _TenantCatalogManagementPanelState
     if (draft == null || !_stillCurrent(capturedKey)) return;
 
     TenantProductImageUpload? stagedImage;
-    if (draft.image != null) {
+    // **A new photograph is held rather than uploaded, and it leaves the
+    // correction entirely.** The bytes go to the draft store, every surface
+    // draws them at once, and `TenantProductImageUploadWorker` files the
+    // resulting URL as its own correction once Storage has taken it. That is
+    // why `imageUrl` below is null on this path: this correction is about the
+    // fields a person typed, and the picture settles on its own.
+    var heldImage = false;
+    final imageDrafts = widget.imageDrafts;
+    if (draft.image != null && imageDrafts != null) {
+      setState(() {
+        _busy = true;
+      });
+      await imageDrafts.stage(
+        tenantId: session.tenantId,
+        productId: product.id,
+        candidate: draft.image!,
+      );
+      heldImage = true;
+    } else if (draft.image != null) {
       final store = widget.imageStore;
       if (store == null) return;
       setState(() {
@@ -818,6 +951,23 @@ final class _TenantCatalogManagementPanelState
         clearImage: draft.removeImage,
       );
     } on TenantCatalogManagementException catch (error) {
+      // **A new photograph on its own is not an unchanged correction.** With
+      // the picture out of the intent, changing only the picture leaves nothing
+      // for `updateProduct` to do - so `product_unchanged` here means the
+      // photograph *is* the change, and it is already saved.
+      if (error.code == 'product_unchanged' && heldImage) {
+        _forgetEditRequestId();
+        if (!_stillCurrent(capturedKey)) return;
+        setState(() => _busy = false);
+        _report(
+          const AppNotice.confirmed(
+            'Photograph saved. It is on this device now and uploads on its '
+            'own; every other device sees it once it has.',
+          ),
+        );
+        _reload();
+        return;
+      }
       if (stagedImage != null) {
         await _removeOwnedQuietly(
           session: session,
@@ -825,17 +975,23 @@ final class _TenantCatalogManagementPanelState
           imageUrl: stagedImage.url,
         );
       }
+      if (heldImage) await _discardStagedQuietly(session, product.id);
       _forgetEditRequestId();
+      // **Guarded, unlike every sibling in this method until 2026-09-04.** The
+      // awaits above this line - a Storage delete, a draft discard - can span a
+      // disposal, and `setState` on a dead element throws. Every other exit
+      // from this method already checked; this one did not.
+      if (!_stillCurrent(capturedKey)) return;
       setState(() => _busy = false);
       _report(_refusalNotice(error.code));
       return;
     }
-    if (!await _confirmed(
-          title: 'Correct "${product.name}"?',
-          body: _editConfirmation(intent),
-          action: 'Save correction',
-        ) ||
-        !_stillCurrent(capturedKey)) {
+    // The third confirmation, gone on the same grounds. A correction states
+    // every field that moves in the form the person is looking at, and
+    // `_editConfirmation` restated it on a second screen after they had already
+    // decided. Every correction is still recorded, with actor and previous
+    // value, which is what makes it safe to let it through.
+    if (!_stillCurrent(capturedKey)) {
       if (stagedImage != null) {
         await _removeOwnedQuietly(
           session: session,
@@ -843,6 +999,7 @@ final class _TenantCatalogManagementPanelState
           imageUrl: stagedImage.url,
         );
       }
+      if (heldImage) await _discardStagedQuietly(session, product.id);
       if (mounted) setState(() => _busy = false);
       return;
     }
@@ -854,7 +1011,8 @@ final class _TenantCatalogManagementPanelState
       final result = await TenantProductUpdateGateway(
         session: session,
         callable: callable,
-      ).submit(intent);
+        queue: widget.updateQueue,
+      ).submit(intent, previous: product);
       if ((stagedImage != null || draft.removeImage) &&
           product.imageUrl != null) {
         await _removeOwnedQuietly(
@@ -1015,7 +1173,14 @@ final class _TenantCatalogManagementPanelState
         '${_categoryFilter ?? ''}:${_stockFilter.name}';
     _composeLoaders(guardKey);
     return TenantRouteGuard<_CatalogView>(
-      key: ValueKey(guardKey),
+      // **Deliberately unkeyed since 2026-09-04.** A `ValueKey(guardKey)` here
+      // destroyed and rebuilt the guard's whole `State` on every page turn,
+      // filter change and post-write re-read, which threw away the catalog
+      // that was on screen and dropped the page back to placeholders. The
+      // guard notices a changed `load` on its own and keeps what it holds
+      // while the next answer arrives; `_composeLoaders` is what makes that
+      // safe, by memoising the closure so it changes identity exactly when
+      // this key does and not once per frame.
       allowedRoles: null,
       load: _loader!,
       loadCached: _loaderCached,
@@ -1025,7 +1190,20 @@ final class _TenantCatalogManagementPanelState
       // of an empty page - it says something is happening and nothing about
       // what, on the screen a shopkeeper opens most often and knows the shape
       // of best.
-      loading: _InventoryReading(hasBulk: widget.bulkRoute != null),
+      // **The page itself, with its list still arriving.** Until 2026-09-04
+      // this slot was a separate widget that drew placeholders for the whole
+      // screen; the developer asked for the controls to stop disappearing
+      // while the catalog reads, and the way to guarantee they never move
+      // between the two states is for there to be only one widget that lays
+      // them out. `_UnifiedInventoryContents` takes a null view now and draws
+      // the toolbar for real over a placeholder list.
+      //
+      // **The session is read from the scope rather than waited for.** The
+      // guard only hands one to `builder`, but the controller has it already,
+      // so the loading state can decide `canWrite` on exactly the same terms
+      // the loaded state does - which is what keeps a cashier from seeing
+      // *Add product* flash up and vanish.
+      loading: _contents(TenantSessionScope.of(context).session, null),
       denied: const Center(
         key: ValueKey('catalog-management-denied'),
         child: Text(
@@ -1036,30 +1214,46 @@ final class _TenantCatalogManagementPanelState
         key: ValueKey('catalog-management-failure'),
         child: Text('The catalog could not be read.'),
       ),
-      builder: (context, session, view) => _UnifiedInventoryContents(
+      builder: (context, session, view) => _contents(session, view),
+    );
+  }
+
+  /// The catalog page, in either state.
+  ///
+  /// [view] is null while the read is in flight. Every control below is
+  /// therefore drawn from what is knowable without it - the composition root's
+  /// wiring and the session's roles - and disabled until the data lands.
+  Widget _contents(TenantSession? session, _CatalogView? view) =>
+      _UnifiedInventoryContents(
         view: view,
-        busy: _busy,
+        // **Busy while reading**, which is what disables every control through
+        // the gating each of them already had. A search typed against a
+        // catalog that has not been read is a search with nothing to run on.
+        busy: _busy || view == null,
         canWrite:
             widget.writer != null &&
+            session != null &&
             session.canAccess(
               allowedRoles: TenantCatalogManagementRepository.allowedRoles,
             ),
         // Taken from the guarded session, never from the caller, so the action
         // disappears the moment the session stops allowing it.
-        canRetire: TenantCatalogManagementRepository.canRetireInSession(
-          session,
-        ),
+        canRetire:
+            session != null &&
+            TenantCatalogManagementRepository.canRetireInSession(session),
         // Correcting needs only the operational three the guard already
         // admitted, so what decides this is whether the build has the callable
         // at all. Which of the five fields the form then offers is decided
         // per session inside it.
         canEdit:
             widget.updateCallable != null &&
+            session != null &&
             session.canAccess(
               allowedRoles: TenantCatalogManagementRepository.allowedRoles,
             ),
         canView:
             widget.productStockRoute != null &&
+            session != null &&
             session.canAccess(allowedRoles: widget.productStockRoles),
         // **Narrower than `canView` on purpose.** Everyone the stock route
         // admits may read the ledger; only the roles the adjust callable
@@ -1067,11 +1261,12 @@ final class _TenantCatalogManagementPanelState
         // decides that rather than this surface.
         canAdjust:
             widget.adjustStockRoute != null &&
+            session != null &&
             session.canAccess(allowedRoles: widget.productStockRoles) &&
             TenantStockAdjustmentGateway.canAdjustInSession(session),
-        canViewCost: TenantCatalogManagementRepository.canRecordCostInSession(
-          session,
-        ),
+        canViewCost:
+            session != null &&
+            TenantCatalogManagementRepository.canRecordCostInSession(session),
         onBulk: widget.bulkRoute == null ? null : _openBulk,
         search: _search,
         searchPrefix: _searchPrefix,
@@ -1081,18 +1276,26 @@ final class _TenantCatalogManagementPanelState
         onSearchChanged: _onSearchChanged,
         onCategoryFilterChanged: _setCategoryFilter,
         onStockFilterChanged: _setStockFilter,
-        onOpenCategories: () => _openCategories(session),
-        onOpenAddProduct: () => _openAddProduct(session, view),
+        onOpenCategories: () {
+          if (session != null) _openCategories(session);
+        },
+        onOpenAddProduct: () {
+          if (session != null && view != null) _openAddProduct(session, view);
+        },
         onView: _openProduct,
         onAdjust: _adjustProduct,
-        onEdit: (product) => _edit(session, view, product),
-        onRetire: (product) => _retire(session, product),
-        onNextPage: () => _nextPage(view.products.nextCursor),
+        onEdit: (product) {
+          if (session != null && view != null) _edit(session, view, product);
+        },
+        onRetire: (product) {
+          if (session != null) _retire(session, product);
+        },
+        onNextPage: () {
+          if (view != null) _nextPage(view.products.nextCursor);
+        },
         onPreviousPage: _previousPage,
         productVisualBuilder: widget.productVisualBuilder,
-      ),
-    );
-  }
+      );
 }
 
 /// One guarded read of everything this route renders.
@@ -1134,7 +1337,9 @@ final class _UnifiedInventoryContents extends StatelessWidget {
     required this.productVisualBuilder,
   });
 
-  final _CatalogView view;
+  /// Null while the catalog is still being read, in which case the toolbar is
+  /// drawn for real and the list is drawn as placeholders.
+  final _CatalogView? view;
   final bool busy;
   final bool canWrite;
   final bool canRetire;
@@ -1191,7 +1396,7 @@ final class _UnifiedInventoryContents extends StatelessWidget {
       <_InventoryProductAction>[
         if (canView)
           _InventoryProductAction(
-            label: 'View stock',
+            label: 'View item',
             icon: Icons.visibility_outlined,
             key: ValueKey('inventory-view-${product.id}'),
             onPressed: busy ? null : () => onView(product),
@@ -1205,7 +1410,7 @@ final class _UnifiedInventoryContents extends StatelessWidget {
           ),
         if (canEdit)
           _InventoryProductAction(
-            label: 'Correct product',
+            label: 'Edit item',
             icon: Icons.edit_outlined,
             key: ValueKey('catalog-management-edit-${product.id}'),
             onPressed: busy ? null : () => onEdit(product),
@@ -1300,6 +1505,19 @@ final class _UnifiedInventoryContents extends StatelessWidget {
   Widget _filters(BuildContext context, {required bool compact}) {
     final tokens = AppTokens.componentOf(context);
     final category = categoryFilter ?? '';
+    final categories = view?.categories.items ?? const <TenantCategory>[];
+    // **A filter that is applied has to stay selectable while the page it
+    // filters is re-read.** The categories arrive with the products, so during
+    // a read the list is empty while `category` still names one - and a
+    // `DropdownButton` asserts outright that its value is among its items.
+    // This is the same "a category whose name this surface does not hold" case
+    // `tenantCategoryLabel` exists for, and it is answered the same way.
+    final unlisted =
+        category.isNotEmpty && !categories.any((item) => item.id == category);
+    final unlistedLabel = tenantCategoryLabel(
+      category,
+      names: tenantCategoryNames(categories),
+    );
     if (compact) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1307,6 +1525,7 @@ final class _UnifiedInventoryContents extends StatelessWidget {
           TextField(
             key: const ValueKey('inventory-search'),
             controller: search,
+            enabled: !busy,
             onChanged: onSearchChanged,
             style: tokens.typography.bodyMedium.copyWith(
               color: tokens.colors.text.primary,
@@ -1355,10 +1574,15 @@ final class _UnifiedInventoryContents extends StatelessWidget {
                       value: '',
                       child: Text('All categories'),
                     ),
-                    for (final item in view.categories.items)
+                    for (final item in categories)
                       DropdownMenuItem<String>(
                         value: item.id,
                         child: Text(item.name),
+                      ),
+                    if (unlisted)
+                      DropdownMenuItem<String>(
+                        value: category,
+                        child: Text(unlistedLabel),
                       ),
                   ],
                   onChanged: (value) => onCategoryFilterChanged(
@@ -1412,8 +1636,10 @@ final class _UnifiedInventoryContents extends StatelessWidget {
       value: category,
       items: <AppSelectItem<String>>[
         const AppSelectItem<String>(value: '', label: 'All categories'),
-        for (final item in view.categories.items)
+        for (final item in categories)
           AppSelectItem<String>(value: item.id, label: item.name),
+        if (unlisted)
+          AppSelectItem<String>(value: category, label: unlistedLabel),
       ],
       onChanged: (value) => onCategoryFilterChanged(
         value == null || value.isEmpty ? null : value,
@@ -1468,7 +1694,10 @@ final class _UnifiedInventoryContents extends StatelessWidget {
         : expanded
         ? tokens.spacing.s32
         : tokens.spacing.s24;
-    final categoryNames = tenantCategoryNames(view.categories.items);
+    final data = view;
+    final categoryNames = tenantCategoryNames(
+      data?.categories.items ?? const <TenantCategory>[],
+    );
     final empty = Text(
       key: ValueKey(
         _hasActiveQuery
@@ -1495,33 +1724,45 @@ final class _UnifiedInventoryContents extends StatelessWidget {
         SizedBox(height: tokens.spacing.s20),
         _filters(context, compact: !wide),
         SizedBox(height: tokens.spacing.s16),
-        _InventoryProductList(
-          products: view.products.items,
-          categoryNames: categoryNames,
-          showCost: canViewCost,
-          empty: empty,
-          actionsOf: _actions,
-          visualOf: _visual,
-        ),
-        SizedBox(height: tokens.spacing.s12),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('catalog-management-previous-page'),
-          pageKey: const ValueKey('catalog-management-page'),
-          nextKey: const ValueKey('catalog-management-next-page'),
-          onPrevious: pageIndex == 0 || busy ? null : onPreviousPage,
-          onNext: view.products.hasMore && !busy ? onNextPage : null,
-        ),
+        if (data == null)
+          // Only the records shimmer. Decision 35's rule, and now the whole of
+          // what this route applies it to.
+          _InventoryReading(wide: wide)
+        else ...<Widget>[
+          _InventoryProductList(
+            products: data.products.items,
+            categoryNames: categoryNames,
+            showCost: canViewCost,
+            empty: empty,
+            actionsOf: _actions,
+            visualOf: _visual,
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          Pagination(
+            pageNumber: pageIndex + 1,
+            previousKey: const ValueKey('catalog-management-previous-page'),
+            pageKey: const ValueKey('catalog-management-page'),
+            nextKey: const ValueKey('catalog-management-next-page'),
+            onPrevious: pageIndex == 0 || busy ? null : onPreviousPage,
+            onNext: data.products.hasMore && !busy ? onNextPage : null,
+          ),
+        ],
       ],
     );
   }
 }
 
-/// The catalog while it is still being read.
+/// The product list while it is still being read.
 ///
-/// **Shaped like the page that replaces it**, down to the filter row's own two
-/// heights and the product card's own three columns: the actions, the search
-/// and the filters at the top, then a bordered list of placeholder products.
+/// **The list and nothing else, since 2026-09-04.** This drew the whole page
+/// once - placeholder buttons, a placeholder search well, placeholder filters,
+/// then the records - and every one of those except the records was standing
+/// in for something that was never being read. The toolbar above is page
+/// state: its labels are fixed words and its values were decided before the
+/// read started, so `_UnifiedInventoryContents` draws it for real in both
+/// states and this fills only the part that is actually arriving. Nothing
+/// moves when the read lands, because nothing above the list was ever a
+/// placeholder.
 /// Decision 35's rule, and the labels inside each card - *Category*, *In
 /// stock*, *Price* - are drawn for real, because they are the same three words
 /// whatever the read returns.
@@ -1533,13 +1774,12 @@ final class _UnifiedInventoryContents extends StatelessWidget {
 /// failure than content that jumps up when a row it was never getting
 /// collapses. The read-only case loses one row's height when the page lands.
 final class _InventoryReading extends StatelessWidget {
-  const _InventoryReading({required this.hasBulk});
+  const _InventoryReading({required this.wide});
 
-  /// Whether this build wires the bulk route at all, which decides whether the
-  /// action header is one control over two or one row of two. It is a property
-  /// of the composition root rather than of the session, so unlike *may write*
-  /// it is known before the read.
-  final bool hasBulk;
+  /// Which form the list takes, decided by the page around it rather than
+  /// measured again here - two readings of one breakpoint is how a placeholder
+  /// ends up a different shape from the thing it stands in for.
+  final bool wide;
 
   /// Four placeholder products, which fills a phone without pretending to know
   /// how large the catalog is.
@@ -1553,173 +1793,28 @@ final class _InventoryReading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final width = MediaQuery.sizeOf(context).width;
-    // The same three decisions `_UnifiedInventoryContents.build` makes, read
-    // the same way, so nothing moves sideways when the read lands.
-    final wide = AppLayout.contract.isAtLeast(width, AppBreakpoint.medium);
-    final expanded = AppLayout.contract.isAtLeast(
-      width,
-      AppBreakpoint.expanded,
-    );
-    final horizontalPadding = !wide
-        ? tokens.spacing.s16
-        : expanded
-        ? tokens.spacing.s32
-        : tokens.spacing.s24;
     return SkeletonGroup(
       semanticLabel: 'Reading the products in this catalog.',
-      child: ListView(
+      child: Container(
         key: const ValueKey('inventory-reading'),
-        padding: EdgeInsets.fromLTRB(
-          horizontalPadding,
-          tokens.spacing.s8,
-          horizontalPadding,
-          tokens.spacing.s20,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: tokens.colors.surface.raised,
+          borderRadius: BorderRadius.circular(tokens.radius.md),
+          border: Border.all(color: tokens.colors.surface.borderSubtle),
         ),
-        children: <Widget>[
-          _actionHeader(context, compact: !wide),
-          SizedBox(height: tokens.spacing.s20),
-          _filters(context, compact: !wide),
-          SizedBox(height: tokens.spacing.s16),
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: tokens.colors.surface.raised,
-              borderRadius: BorderRadius.circular(tokens.radius.md),
-              border: Border.all(color: tokens.colors.surface.borderSubtle),
-            ),
-            child: wide
-                ? _table(context)
-                : Padding(
-                    padding: EdgeInsets.symmetric(vertical: tokens.spacing.s4),
-                    child: Column(
-                      children: <Widget>[
-                        for (var card = 0; card < _cards; card++)
-                          const _InventoryProductCardSkeleton(),
-                      ],
-                    ),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// One button-height block per control, in the arrangement the real header
-  /// takes at this width.
-  Widget _actionHeader(BuildContext context, {required bool compact}) {
-    final tokens = AppTokens.componentOf(context);
-    final control = SkeletonBlock(
-      height: AppButtonSize.lg.height,
-      radius: tokens.radius.md,
-    );
-    if (compact && hasBulk) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          control,
-          SizedBox(height: tokens.spacing.s12),
-          Row(
-            children: <Widget>[
-              Expanded(child: control),
-              SizedBox(width: tokens.spacing.s12),
-              Expanded(child: control),
-            ],
-          ),
-        ],
-      );
-    }
-    if (compact) {
-      return Row(
-        children: <Widget>[
-          Expanded(child: control),
-          SizedBox(width: tokens.spacing.s12),
-          Expanded(child: control),
-        ],
-      );
-    }
-    // Wide: the real row is right-aligned and each control is its own width,
-    // which a placeholder cannot know - so it draws them at the one width the
-    // scale does give it and keeps the alignment.
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: <Widget>[
-        for (var button = 0; button < (hasBulk ? 3 : 2); button++) ...<Widget>[
-          if (button > 0) SizedBox(width: tokens.spacing.s12),
-          SizedBox(width: tokens.spacing.s64 * 2, child: control),
-        ],
-      ],
-    );
-  }
-
-  Widget _filters(BuildContext context, {required bool compact}) {
-    final tokens = AppTokens.componentOf(context);
-    if (compact) {
-      // The compact search is a bare `TextField` with no label over it, so the
-      // placeholder is a block rather than a `SkeletonField`. Its height is
-      // §9's minimum target, which is what the field's own padding and prefix
-      // glyph resolve to within a pixel or two - the filter row beneath it is
-      // the one that carries a height worth being exact about, and that one is
-      // read from the control itself.
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          SkeletonBlock(
-            height: tokens.density.minimumTapTarget.height,
-            radius: tokens.radius.lg,
-          ),
-          SizedBox(height: tokens.spacing.s12),
-          Row(
-            children: <Widget>[
-              for (var filter = 0; filter < 2; filter++) ...<Widget>[
-                if (filter > 0) SizedBox(width: tokens.spacing.s8),
-                Expanded(
-                  child: SkeletonBlock(
-                    height: _LegacyInventorySelect.height,
-                    radius: tokens.radius.lg,
-                  ),
+        child: wide
+            ? _table(context)
+            : Padding(
+                padding: EdgeInsets.symmetric(vertical: tokens.spacing.s4),
+                child: Column(
+                  children: <Widget>[
+                    for (var card = 0; card < _cards; card++)
+                      const _InventoryProductCardSkeleton(),
+                  ],
                 ),
-              ],
-            ],
-          ),
-        ],
-      );
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        // The three controls exactly as they will be: an empty search well
-        // under its own helper line, and the two filters holding the
-        // everything-selected option they open on.
-        const Expanded(
-          child: SkeletonField(
-            label: 'Search products',
-            leading: Icons.qr_code_scanner_outlined,
-            helper: _UnifiedInventoryContents.searchHelper,
-          ),
-        ),
-        SizedBox(width: tokens.spacing.s12),
-        const SizedBox(
-          width: _UnifiedInventoryContents.categoryFilterWidth,
-          child: SkeletonField(
-            label: 'Category',
-            leading: Icons.category_outlined,
-            value: 'All categories',
-            trailing: Icons.arrow_drop_down,
-          ),
-        ),
-        SizedBox(width: tokens.spacing.s12),
-        const SizedBox(
-          width: _UnifiedInventoryContents.stockFilterWidth,
-          child: SkeletonField(
-            label: 'Stock',
-            leading: Icons.filter_alt_outlined,
-            value: 'All',
-            trailing: Icons.arrow_drop_down,
-          ),
-        ),
-      ],
+              ),
+      ),
     );
   }
 
@@ -2631,7 +2726,8 @@ final class _InventoryProductTableRow extends StatelessWidget {
 AppNotice _categoryNotice(
   TenantCatalogWriteResult result,
 ) => switch (result.kind) {
-  TenantCatalogWriteKind.committed => const AppNotice.confirmed(
+  TenantCatalogWriteKind.committed ||
+  TenantCatalogWriteKind.queued => const AppNotice.confirmed(
     'Category added. It can be chosen for a product straight away.',
   ),
   TenantCatalogWriteKind.rejected => const AppNotice.refused(
@@ -2651,7 +2747,8 @@ AppNotice _categoryNotice(
 
 AppNotice _categoryRenameNotice(TenantCatalogWriteResult result) =>
     switch (result.kind) {
-      TenantCatalogWriteKind.committed => const AppNotice.confirmed(
+      TenantCatalogWriteKind.committed ||
+      TenantCatalogWriteKind.queued => const AppNotice.confirmed(
         'Category renamed. Existing products remain filed under it.',
       ),
       TenantCatalogWriteKind.rejected => const AppNotice.refused(
@@ -2690,11 +2787,12 @@ AppNotice _imageNotice(TenantProductImageException error) =>
 
 AppNotice _productNotice(TenantCatalogWriteResult result) =>
     switch (result.kind) {
-      TenantCatalogWriteKind.committed => const AppNotice.confirmed(
+      TenantCatalogWriteKind.committed ||
+      TenantCatalogWriteKind.queued => const AppNotice.confirmed(
         'Product added, holding no stock. Record its opening quantity from the '
-        'product itself so the ledger says where those units came from. This '
-        'device re-reads the catalog on its next sync, and every other device '
-        'picks it up when it syncs.',
+        'product itself so the ledger says where those units came from. It is '
+        'on its way to the server now; every other device picks it up when it '
+        'syncs.',
       ),
       TenantCatalogWriteKind.rejected => const AppNotice.refused(
         'The product was refused and nothing was written. Only an owner, '
@@ -2716,7 +2814,8 @@ AppNotice _retireNotice(
   TenantCatalogWriteResult result,
   TenantProductRetireIntent intent,
 ) => switch (result.kind) {
-  TenantCatalogWriteKind.committed => AppNotice.confirmed(
+  TenantCatalogWriteKind.committed ||
+  TenantCatalogWriteKind.queued => AppNotice.confirmed(
     '${intent.name} is retired. Its stock ledger and every sale that already '
     'named it are untouched.',
   ),
@@ -2733,51 +2832,6 @@ AppNotice _retireNotice(
     'changed while online.',
   ),
 };
-
-/// States every field that moves, and the consequence of each kind of move.
-///
-/// The changes are listed before the consequences on purpose: an operator who
-/// mistyped a price and is about to correct it needs to see the before and the
-/// after side by side, which is the one thing a form full of prefilled fields
-/// cannot show them.
-String _editConfirmation(TenantProductUpdateIntent intent) {
-  bool moves(TenantProductField field) =>
-      intent.changes.any((change) => change.field == field);
-  final buffer = StringBuffer(
-    intent.changes.map((change) => '- $change').join('\n'),
-  );
-  buffer.write(
-    '\n\nThis is recorded permanently against the product, with who made it '
-    'and what each field held before. Nothing else about the product changes: '
-    'its stock is untouched, its identity stays the same, and every sale, '
-    'return, and reported figure already recorded still names it.',
-  );
-  if (moves(TenantProductField.price)) {
-    buffer.write(
-      '\n\nA new price applies to the next sale. Sales already recorded keep '
-      'the price they were sold at, so no figure already reported moves.',
-    );
-  }
-  if (moves(TenantProductField.cost)) {
-    buffer.write(
-      '\n\nEvery sale records what a unit cost at the moment of that sale, so '
-      'this prices the next sale and never changes a profit already reported.',
-    );
-  }
-  if (moves(TenantProductField.sku)) {
-    buffer.write(
-      '\n\nThe till matches a scan against the code, so the old one stops '
-      'finding this product. Nothing makes a code unique either - if another '
-      'product already scans as the new one, the till refuses that scan rather '
-      'than picking one.',
-    );
-  }
-  buffer.write(
-    '\n\nThis device re-reads the catalog on its next sync, and every other '
-    'device picks the correction up when it syncs.',
-  );
-  return buffer.toString();
-}
 
 AppNotice _updateNotice(TenantProductUpdateResult result) =>
     AppNotice.confirmed(_updateMessage(result));
@@ -3215,8 +3269,23 @@ final class _RenameCategoryDialogState extends State<_RenameCategoryDialog> {
   );
 }
 
-final class _CategoriesDialog extends StatefulWidget {
-  const _CategoriesDialog({
+/// The categories route: what the till groups by, and the only screen that
+/// changes it.
+///
+/// **A screen rather than the dialog it was, at the developer's direction on
+/// 2026-09-04.** The dialog put three identical full-width *Rename* buttons in
+/// a column with a paginator and a text field under them, on a scrim, at
+/// whatever height the content happened to reach - a control panel rather than
+/// a place. Categories are the spine of the catalog and of the till's filter
+/// row, and they deserve the treatment the catalog itself gets.
+///
+/// **Nothing about the flow changed with the layout.** The same page is read,
+/// the same rename dialog opens, the same confirmation guards the same write,
+/// and both controls keep the keys they had. What changed is that a category
+/// is drawn as a record now - a mark, a name, one affordance - instead of as a
+/// label beside a button competing with it for width.
+final class _CategoriesScreen extends StatefulWidget {
+  const _CategoriesScreen({
     required this.session,
     required this.reader,
     required this.writer,
@@ -3237,10 +3306,10 @@ final class _CategoriesDialog extends StatefulWidget {
   final Future<void> Function(TenantCategory category) onRename;
 
   @override
-  State<_CategoriesDialog> createState() => _CategoriesDialogState();
+  State<_CategoriesScreen> createState() => _CategoriesScreenState();
 }
 
-final class _CategoriesDialogState extends State<_CategoriesDialog> {
+final class _CategoriesScreenState extends State<_CategoriesScreen> {
   List<String?> _cursors = <String?>[null];
   int _page = 0;
   int _generation = 0;
@@ -3265,41 +3334,57 @@ final class _CategoriesDialogState extends State<_CategoriesDialog> {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return AppDialog(
+    return AppScaffold(
+      key: const ValueKey('inventory-categories-screen'),
       title: 'Categories',
-      content: FutureBuilder<TenantCatalogPage<TenantCategory>>(
+      subtitle: 'How the till groups what you sell.',
+      // A column of short names takes reading width, not a table's. §4.2.
+      contentWidth: AppContentWidth.reading,
+      body: FutureBuilder<TenantCatalogPage<TenantCategory>>(
         key: ValueKey('inventory-category-page-$_page-$_generation'),
         future: _load(),
         builder: (context, snapshot) {
           final page = snapshot.data;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
+          final reading = snapshot.connectionState != ConnectionState.done;
+          return ListView(
+            key: const ValueKey('inventory-categories-scroll'),
+            padding: EdgeInsets.fromLTRB(
+              tokens.spacing.s20,
+              tokens.spacing.s8,
+              tokens.spacing.s20,
+              tokens.spacing.s24,
+            ),
             children: <Widget>[
-              if (snapshot.connectionState != ConnectionState.done)
-                const Center(child: CircularProgressIndicator())
+              if (reading)
+                const LoadingState(message: 'Reading your categories')
               else if (snapshot.hasError)
-                const Text('Categories could not be read.')
+                const EmptyState(
+                  key: ValueKey('inventory-categories-unreadable'),
+                  title: 'Categories could not be read',
+                  hint: 'Check the connection, then open this again.',
+                  illustration: 'no-data.svg',
+                )
               else if (page == null || page.items.isEmpty)
-                const Text('No categories on this page.')
+                EmptyState(
+                  key: const ValueKey('inventory-categories-empty'),
+                  title: _page == 0
+                      ? 'No categories yet'
+                      : 'Nothing on this page',
+                  hint: _page == 0
+                      ? 'A category groups products in the catalog and filters '
+                            'them at the till.'
+                      : null,
+                  illustration: 'my-files.svg',
+                )
               else
-                for (final category in page.items) ...<Widget>[
-                  Row(
-                    children: <Widget>[
-                      Expanded(child: Text(category.name)),
-                      AppButton(
-                        key: ValueKey('inventory-rename-${category.id}'),
-                        label: 'Rename',
-                        icon: Icons.edit_outlined,
-                        onPressed: _working
-                            ? null
-                            : () => _run(() => widget.onRename(category)),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: tokens.spacing.s8),
-                ],
-              if (page != null) ...<Widget>[
+                _CategoryList(
+                  categories: page.items,
+                  onRename: _working
+                      ? null
+                      : (category) => _run(() => widget.onRename(category)),
+                ),
+              if (page != null && !reading) ...<Widget>[
+                SizedBox(height: tokens.spacing.s16),
                 Pagination(
                   pageNumber: _page + 1,
                   onPrevious: _page == 0 || _working
@@ -3317,35 +3402,202 @@ final class _CategoriesDialogState extends State<_CategoriesDialog> {
                 ),
               ],
               if (widget.writer != null) ...<Widget>[
-                SizedBox(height: tokens.spacing.s16),
-                AppTextField(
-                  key: const ValueKey('catalog-management-category-name'),
-                  controller: widget.name,
-                  maxLength: maximumCatalogNameLength,
-                  label: 'New category name',
-                  onChanged: (_) => setState(() {}),
-                ),
-                SizedBox(height: tokens.spacing.s8),
-                AppButton(
-                  key: const ValueKey('catalog-management-add-category'),
-                  label: 'Add category',
-                  icon: Icons.new_label_outlined,
-                  tier: AppButtonTier.primary,
-                  onPressed: _working || widget.name.text.trim().isEmpty
-                      ? null
-                      : () => _run(widget.onAdd),
+                SizedBox(height: tokens.spacing.s24),
+                _CategoryComposer(
+                  name: widget.name,
+                  busy: _working || widget.busy,
+                  onAdd: () => _run(widget.onAdd),
+                  onChanged: () => setState(() {}),
                 ),
               ],
+              SizedBox(height: tokens.spacing.s16),
+              // The one fact about this screen that is not visible on it, and
+              // the one somebody hunting for a delete control needs.
+              Text(
+                'Categories are renamed here, never deleted.',
+                key: const ValueKey('inventory-categories-scope'),
+                style: tokens.typography.caption.copyWith(
+                  color: tokens.colors.text.tertiary,
+                ),
+              ),
             ],
           );
         },
       ),
-      actions: <Widget>[
-        AppButton(
-          label: 'Close',
-          onPressed: _working ? null : () => Navigator.of(context).pop(),
+    );
+  }
+}
+
+/// The categories on this page, as one bordered surface rather than as a
+/// column of buttons.
+final class _CategoryList extends StatelessWidget {
+  const _CategoryList({required this.categories, required this.onRename});
+
+  final List<TenantCategory> categories;
+
+  /// Null while a write is in flight, which disables every row at once - a
+  /// second rename landing on top of the first is the state this prevents.
+  final ValueChanged<TenantCategory>? onRename;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final rename = onRename;
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (final (index, category) in categories.indexed)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                // A hairline between rows rather than a border around each:
+                // one list of categories, not a stack of cards.
+                border: index == 0
+                    ? null
+                    : Border(
+                        top: BorderSide(
+                          color: tokens.colors.surface.borderSubtle,
+                        ),
+                      ),
+              ),
+              child: _CategoryRow(
+                category: category,
+                onRename: rename == null ? null : () => rename(category),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _CategoryRow extends StatelessWidget {
+  const _CategoryRow({required this.category, required this.onRename});
+
+  final TenantCategory category;
+  final VoidCallback? onRename;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return PressSurface(
+      // The key the button carried, on the control that replaced it.
+      key: ValueKey('inventory-rename-${category.id}'),
+      borderRadius: BorderRadius.circular(tokens.radius.md),
+      onPressed: onRename,
+      // §9: a pencil is conventional but it is not a word, so the row itself
+      // says what pressing it does.
+      semanticLabel: 'Rename ${category.name}',
+      child: Padding(
+        padding: EdgeInsets.all(tokens.spacing.s12),
+        child: Row(
+          children: <Widget>[
+            _CategoryMark(name: category.name),
+            SizedBox(width: tokens.spacing.s12),
+            Expanded(
+              child: Text(
+                category.name,
+                style: tokens.typography.titleMedium.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+            ),
+            SizedBox(width: tokens.spacing.s8),
+            Icon(
+              Icons.edit_outlined,
+              size: AppButton.iconSize,
+              color: onRename == null
+                  ? tokens.colors.text.tertiary
+                  : tokens.colors.text.secondary,
+            ),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+}
+
+/// A category's initials, on the ground every picture-shaped thing uses.
+///
+/// A category has no image and never will. This is what gives its row the same
+/// left edge as a product's, so the two read as the same kind of thing.
+final class _CategoryMark extends StatelessWidget {
+  const _CategoryMark({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return SizedBox.square(
+      dimension: tokens.spacing.s40,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: tokens.colors.surface.overlay,
+          borderRadius: BorderRadius.circular(tokens.radius.md),
+        ),
+        child: Center(
+          child: Text(
+            TenantInitialsAvatar.initialsOf(name),
+            style: tokens.typography.labelMedium.copyWith(
+              color: tokens.colors.text.secondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Adding one: kept where it was in the order, given a surface of its own.
+final class _CategoryComposer extends StatelessWidget {
+  const _CategoryComposer({
+    required this.name,
+    required this.busy,
+    required this.onAdd,
+    required this.onChanged,
+  });
+
+  final TextEditingController name;
+  final bool busy;
+  final VoidCallback onAdd;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            'Add a category',
+            style: tokens.typography.labelEyebrow.copyWith(
+              color: tokens.colors.text.secondary,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          AppTextField(
+            key: const ValueKey('catalog-management-category-name'),
+            controller: name,
+            maxLength: maximumCatalogNameLength,
+            label: 'Category name',
+            onChanged: (_) => onChanged(),
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          AppButton(
+            key: const ValueKey('catalog-management-add-category'),
+            label: 'Add category',
+            icon: Icons.new_label_outlined,
+            tier: AppButtonTier.primary,
+            expand: true,
+            onPressed: busy || name.text.trim().isEmpty ? null : onAdd,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3523,10 +3775,29 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
           summary: 'How this is checked',
           child: Text(
             key: ValueKey('catalog-management-edit-scope'),
+            // **These four paragraphs were a confirmation dialog until
+            // 2026-09-04.** They are the same sentences, moved to where they
+            // can be read *while* the fields are being changed rather than on
+            // a second screen after the decision was made. A consequence read
+            // after the fact is a consequence answered by reflex.
             'Every field is filled in with what the product holds now. '
             'Change the ones that are wrong and save them together: a '
             'correction is checked against the whole product, so one that '
-            'leaves a different field unreadable is refused outright.',
+            'leaves a different field unreadable is refused outright.\n\n'
+            'Every correction is recorded permanently against the product, '
+            'with who made it and what each field held before. Nothing else '
+            'about the product changes: its stock is untouched, its identity '
+            'stays the same, and every sale, return, and reported figure '
+            'already recorded still names it.\n\n'
+            'A new price applies to the next sale, and sales already recorded '
+            'keep the price they were sold at. A unit cost works the same way: '
+            'every sale records what a unit cost at the moment of that sale, '
+            'so correcting it prices the next sale and never changes a profit '
+            'already reported.\n\n'
+            'The till matches a scan against the code, so changing it stops '
+            'the old one finding this product. Nothing makes a code unique '
+            'either - if another product already scans as the new one, the '
+            'till refuses that scan rather than picking one.',
           ),
         ),
         SizedBox(height: tokens.spacing.s12),
@@ -3649,7 +3920,7 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
     return _CatalogProductFormScreen(
       screenKey: const ValueKey('catalog-management-edit-screen'),
       scrollKey: const ValueKey('catalog-management-edit-scroll'),
-      title: 'Correct product',
+      title: 'Edit item',
       subtitle: widget.product.name,
       form: form,
       actions: <Widget>[
@@ -3739,7 +4010,13 @@ final class _ProductImageWell extends StatefulWidget {
 
 final class _ProductImageWellState extends State<_ProductImageWell> {
   bool _busy = false;
+
+  /// Separate from [_busy] so the framing button can carry its own spinner:
+  /// the two actions take different amounts of time for different reasons, and
+  /// one shared flag would put the wand's spinner on a download.
+  bool _fetching = false;
   TenantBackgroundRemovalFailure? _failure;
+  String? _fetchFailure;
 
   /// Whether the product's saved photograph is still what would be shown.
   bool get _showsSavedImage =>
@@ -3768,6 +4045,61 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
     if (!mounted || candidate == null) return;
     setState(() => _failure = null);
     widget.onImageChanged(candidate);
+  }
+
+  /// Whether there is a photograph to frame - chosen here or already saved.
+  bool get _canFrame => widget.image != null || _savedImageUrl != null;
+
+  Uri? get _savedImageUrl => _showsSavedImage ? widget.product?.imageUrl : null;
+
+  /// Opens the framing editor, downloading the saved photograph first if that
+  /// is the one on display.
+  ///
+  /// **The cut-out button's rule does not apply here**, and the difference is
+  /// worth naming because the two controls sit side by side. A cut-out is a
+  /// paid call against a photograph somebody just chose; framing is a local
+  /// redraw, and refusing to do it to a saved picture would mean re-picking a
+  /// file off the phone to move a bottle two centimetres left. So this one
+  /// fetches. The download is the same request that drew the picture on the
+  /// page behind this form, and it is the only network call in the well - the
+  /// two states it can fail in are reported in place.
+  Future<void> _frame() async {
+    if (_busy || _fetching) return;
+    final chosen = widget.image;
+    final TenantProductImageCandidate candidate;
+    if (chosen != null) {
+      candidate = chosen;
+    } else {
+      final url = _savedImageUrl;
+      if (url == null) return;
+      setState(() {
+        _fetching = true;
+        _fetchFailure = null;
+      });
+      try {
+        candidate = await fetchProductImage(url);
+      } on TenantProductImageException catch (error) {
+        if (!mounted) return;
+        setState(() {
+          _fetching = false;
+          _fetchFailure = error.code == 'image_unreachable'
+              ? 'That photograph could not be downloaded. Check the '
+                    'connection and try again.'
+              : 'That photograph could not be read well enough to move it. '
+                    'Replace the image instead.';
+        });
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _fetching = false);
+    }
+    final framed = await showProductFramingEditor(context, image: candidate);
+    if (!mounted || framed == null) return;
+    setState(() {
+      _failure = null;
+      _fetchFailure = null;
+    });
+    widget.onImageChanged(framed);
   }
 
   Future<void> _removeBackground() async {
@@ -3866,6 +4198,34 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
             ),
           ],
         ),
+        SizedBox(height: tokens.spacing.s8),
+        // **Its own row rather than a fourth control beside the others.** The
+        // action row above is already a label and two 48-pixel squares, and a
+        // phone at 411 leaves *Replace image* about 200 for its own label;
+        // taking another 56 out of that is what makes a button read
+        // "Replace i…". This also gives the action a name, which a crop glyph
+        // on its own does not have - §9 again.
+        //
+        // Drawn always and disabled without a chosen photograph, which is the
+        // distinction `_offersRemoval` draws: framing needs no service and no
+        // particular role, so it is always available and sometimes not right
+        // now, and that is what a disabled control says.
+        AppButton(
+          key: const ValueKey('inventory-frame-image'),
+          label: 'Position and zoom',
+          icon: Icons.crop,
+          expand: true,
+          loading: _fetching,
+          onPressed: _busy || _fetching || !_canFrame ? null : _frame,
+        ),
+        if (_fetchFailure case final failure?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s12),
+          Callout(
+            key: const ValueKey('inventory-frame-image-failed'),
+            status: AppStatus.problem,
+            message: failure,
+          ),
+        ],
         if (_failure case final failure?) ...<Widget>[
           SizedBox(height: tokens.spacing.s12),
           Callout(
@@ -3901,6 +4261,12 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
 
 /// What the well shows: the photograph chosen here, the one already saved, or
 /// the fact that there is neither.
+///
+/// **The first two must be framed identically.** A person chooses a picture,
+/// sees it here, and saves; if the saved branch drew it differently the act of
+/// saving would appear to have changed their photograph. So the `cover` below
+/// and `TenantProductVisual`'s are one decision in two places - change either
+/// and change both.
 final class _ProductImagePreview extends StatelessWidget {
   const _ProductImagePreview({required this.image, required this.product});
 

@@ -554,8 +554,11 @@ final class TenantCatalogPanel extends StatelessWidget {
   /// The catalog read, over whichever reader it is handed.
   static TenantGuardedLoader<TenantCatalogSnapshot> _readWith(
     TenantDataReader reader,
-  ) => (session) =>
-      TenantCatalogRepository(session: session, reader: reader).loadInitial();
+  ) =>
+      (session) => TenantCatalogRepository(
+        session: session,
+        reader: reader,
+      ).loadInitial();
 
   @override
   Widget build(BuildContext context) => TenantRouteGuard<TenantCatalogSnapshot>(
@@ -745,7 +748,7 @@ final class _CatalogContents extends StatelessWidget {
     actions: <RecordAction>[
       if (productStockRoute != null)
         RecordAction(
-          label: 'View stock',
+          label: 'View item',
           // Not `catalog-product-stock-`, which is the "In stock" attribute's
           // own value key. One prefix with two owners, and what caught it was
           // the role test asserting this action is *absent* for a cashier: it

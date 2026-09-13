@@ -8,9 +8,8 @@ import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tabs.dart';
 import '../ui/tokens.dart';
-import 'platform_tenant_archival.dart';
 import 'platform_global_user_status.dart';
-import 'platform_tenant_review.dart';
+import 'platform_tenant_console.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
 import 'tenant_types.dart';
@@ -167,19 +166,19 @@ final class PlatformLifecycleTenantPage {
 
 final class PlatformLifecycleTenantQueue {
   PlatformLifecycleTenantQueue({
-    required PlatformReviewIdentity identity,
+    required PlatformAdminIdentity identity,
     required PlatformLifecycleTenantDataSource dataSource,
   }) : _identity = identity,
        _dataSource = dataSource;
 
-  final PlatformReviewIdentity _identity;
+  final PlatformAdminIdentity _identity;
   final PlatformLifecycleTenantDataSource _dataSource;
 
   Future<PlatformLifecycleTenantPage> load({
     int pageSize = 20,
     PlatformLifecycleTenantCursor? cursor,
   }) async {
-    if (!_identity.canReview) {
+    if (!_identity.canAdminister) {
       throw StateError('Platform lifecycle access is required.');
     }
     if (pageSize < 1 || pageSize > 50) {
@@ -332,25 +331,25 @@ final class PlatformTenantLifecycleResult {
 
 final class PlatformTenantLifecycleGateway {
   PlatformTenantLifecycleGateway({
-    required PlatformReviewIdentity identity,
+    required PlatformAdminIdentity identity,
     required PlatformLifecycleTenant tenant,
     required SetTenantLifecycleCallable callable,
-    PlatformTenantReviewRequestIdFactory? requestIdFactory,
+    PlatformTenantRequestIdFactory? requestIdFactory,
   }) : _identity = identity,
        _tenant = tenant,
        _callable = callable,
        _requestIdFactory = requestIdFactory;
 
-  final PlatformReviewIdentity _identity;
+  final PlatformAdminIdentity _identity;
   final PlatformLifecycleTenant _tenant;
   final SetTenantLifecycleCallable _callable;
-  final PlatformTenantReviewRequestIdFactory? _requestIdFactory;
+  final PlatformTenantRequestIdFactory? _requestIdFactory;
 
   PlatformTenantLifecycleIntent createIntent({
     required PlatformTenantLifecycleAction action,
     String? reason,
   }) {
-    if (!_identity.canReview) {
+    if (!_identity.canAdminister) {
       throw StateError('Platform lifecycle access is required.');
     }
     if (_tenant.status != action.currentStatus) {
@@ -359,8 +358,8 @@ final class PlatformTenantLifecycleGateway {
     final normalizedReason = action == PlatformTenantLifecycleAction.suspend
         ? normalizeTenantSuspensionReason(reason ?? '')
         : null;
-    final requestId = (_requestIdFactory ?? securePlatformReviewRequestId)();
-    if (!platformReviewRequestIdPattern.hasMatch(requestId)) {
+    final requestId = (_requestIdFactory ?? securePlatformRequestId)();
+    if (!platformRequestIdPattern.hasMatch(requestId)) {
       throw StateError('The platform review request ID generator is invalid.');
     }
     return PlatformTenantLifecycleIntent._(
@@ -377,7 +376,7 @@ final class PlatformTenantLifecycleGateway {
   Future<PlatformTenantLifecycleResult> submit(
     PlatformTenantLifecycleIntent intent,
   ) async {
-    if (!_identity.canReview ||
+    if (!_identity.canAdminister ||
         intent.actorUid != _identity.uid ||
         intent.tenantId != _tenant.tenantId ||
         intent.recordStatus != _tenant.status ||
@@ -408,14 +407,14 @@ final class PlatformTenantLifecycleForm extends StatefulWidget {
     this.isCurrent,
   });
 
-  final PlatformReviewIdentity identity;
+  final PlatformAdminIdentity identity;
   final PlatformLifecycleTenant tenant;
   final PlatformTenantLifecycleAction action;
   final SetTenantLifecycleCallable callable;
   final ValueChanged<PlatformTenantLifecycleResult> onSuccess;
   final VoidCallback onCancel;
-  final PlatformTenantReviewRequestIdFactory? requestIdFactory;
-  final PlatformTenantReviewCurrentCheck? isCurrent;
+  final PlatformTenantRequestIdFactory? requestIdFactory;
+  final PlatformTenantCurrentCheck? isCurrent;
 
   @override
   State<PlatformTenantLifecycleForm> createState() =>
@@ -514,7 +513,7 @@ final class _PlatformTenantLifecycleFormState
   }
 
   bool _isStillCurrent(
-    PlatformReviewIdentity identity,
+    PlatformAdminIdentity identity,
     PlatformLifecycleTenant tenant,
     PlatformTenantLifecycleAction action,
   ) =>
@@ -526,7 +525,7 @@ final class _PlatformTenantLifecycleFormState
       _isCurrent();
 
   bool _isCurrent() =>
-      widget.identity.canReview && (widget.isCurrent?.call() ?? true);
+      widget.identity.canAdminister && (widget.isCurrent?.call() ?? true);
 
   @override
   Widget build(BuildContext context) {
@@ -619,11 +618,11 @@ final class PlatformLifecycleTenantScreen extends StatefulWidget {
     this.pageSize = 20,
   });
 
-  final PlatformReviewIdentity identity;
+  final PlatformAdminIdentity identity;
   final PlatformLifecycleTenantDataSource dataSource;
   final SetTenantLifecycleCallable callable;
-  final PlatformTenantReviewRequestIdFactory? requestIdFactory;
-  final PlatformTenantReviewCurrentCheck? isCurrent;
+  final PlatformTenantRequestIdFactory? requestIdFactory;
+  final PlatformTenantCurrentCheck? isCurrent;
   final int pageSize;
 
   @override
@@ -635,9 +634,7 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
   const PlatformTenantManagementScreen({
     super.key,
     required this.identity,
-    required this.pendingDataSource,
     required this.lifecycleDataSource,
-    required this.rejectedDataSource,
     required this.globalUserDataSource,
     required this.callable,
     required this.globalUserCallable,
@@ -646,20 +643,18 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
     this.isCurrent,
   });
 
-  final PlatformReviewIdentity identity;
-  final PlatformPendingTenantDataSource pendingDataSource;
+  final PlatformAdminIdentity identity;
   final PlatformLifecycleTenantDataSource lifecycleDataSource;
-  final PlatformRejectedTenantDataSource rejectedDataSource;
   final PlatformGlobalUserDataSource globalUserDataSource;
   final SetTenantLifecycleCallable callable;
   final SetGlobalUserStatusCallable globalUserCallable;
   final Future<void> Function() onSignOut;
-  final PlatformTenantReviewRequestIdFactory? requestIdFactory;
-  final PlatformTenantReviewCurrentCheck? isCurrent;
+  final PlatformTenantRequestIdFactory? requestIdFactory;
+  final PlatformTenantCurrentCheck? isCurrent;
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: 4,
+    length: 2,
     child: AppScaffold(
       // **`Platform operations`, and the old title was the defect.** Phase 09's
       // first criterion is that the platform shell is visually and semantically
@@ -705,43 +700,25 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
               title: 'Platform operator',
               message:
                   'Signed in as ${identity.uid} with the platform superAdmin '
-                  'claim. This console admits and archives whole businesses '
+                  'claim. This console suspends and archives whole businesses '
                   'and disables accounts across all of them. It is not a '
                   'membership of any business and grants none.',
             ),
           ),
           // §5.1's `AppTabs`, which is where the type roles, the indicator and
-          // §9's 48dp height now live. The four labels are unchanged.
+          // §9's 48dp height now live.
           const AppTabs(
             tabs: <String>[
-              'Pending business reviews',
               'Active & suspended',
-              'Rejected archive',
               'Global user status',
             ],
           ),
           Expanded(
             child: TabBarView(
               children: [
-                PlatformPendingTenantReviewScreen(
-                  identity: identity,
-                  dataSource: pendingDataSource,
-                  callable: callable,
-                  requestIdFactory: requestIdFactory,
-                  isCurrent: isCurrent,
-                  onSignOut: onSignOut,
-                  embedded: true,
-                ),
                 PlatformLifecycleTenantScreen(
                   identity: identity,
                   dataSource: lifecycleDataSource,
-                  callable: callable,
-                  requestIdFactory: requestIdFactory,
-                  isCurrent: isCurrent,
-                ),
-                PlatformRejectedTenantScreen(
-                  identity: identity,
-                  dataSource: rejectedDataSource,
                   callable: callable,
                   requestIdFactory: requestIdFactory,
                   isCurrent: isCurrent,
@@ -783,7 +760,7 @@ final class _PlatformLifecycleTenantScreenState
   void didUpdateWidget(covariant PlatformLifecycleTenantScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.identity.uid != widget.identity.uid ||
-        oldWidget.identity.canReview != widget.identity.canReview ||
+        oldWidget.identity.canAdminister != widget.identity.canAdminister ||
         !identical(oldWidget.dataSource, widget.dataSource)) {
       _reload();
     }
@@ -839,7 +816,7 @@ final class _PlatformLifecycleTenantScreenState
   bool _isCurrent(int epoch) =>
       mounted &&
       epoch == _queueEpoch &&
-      widget.identity.canReview &&
+      widget.identity.canAdminister &&
       (widget.isCurrent?.call() ?? true);
 
   void _change(PlatformLifecycleTenant tenant) {
@@ -987,7 +964,7 @@ String platformTenantLifecycleSafeError(
   Object error, {
   required PlatformTenantLifecycleAction action,
 }) {
-  if (error is PlatformTenantReviewCallableException) {
+  if (error is PlatformTenantCallableException) {
     return switch (error.code) {
       'resource-exhausted' =>
         'The owner has reached the active business limit.',

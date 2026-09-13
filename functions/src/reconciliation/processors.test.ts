@@ -4,7 +4,14 @@ import {DocumentData, Timestamp} from "firebase-admin/firestore";
 import {HttpsError} from "firebase-functions/v2/https";
 import {FakeFirestore, FakeTransaction} from "../testing/fakeFirestore";
 import {ClaimedReconciliationJob} from "./jobs";
-import {digest, shiftAnomalyId, shiftExpectationId, trailingIsoDates} from "./model";
+import {
+  digest,
+  shiftAnomalyId,
+  shiftExpectationId,
+  shiftTenderAnomalyId,
+  trailingIsoDates,
+  TENDER_DECLARATION_REQUIRED_FROM,
+} from "./model";
 import {
   initializeFullReconciliationWindow,
   processMetricsPage,
@@ -71,6 +78,7 @@ function claimedJob(
     stockVarianceCount: 0,
     shiftsProcessed: 0,
     shiftVarianceCount: 0,
+    tenderVarianceCount: 0,
     leaseToken: LEASE,
     ...overrides,
   };
@@ -1032,7 +1040,8 @@ function seedClosedShift(
   db: FakeFirestore,
   shiftId: string,
   totalSales: number,
-  transactionCount: number
+  transactionCount: number,
+  extra: DocumentData = {}
 ): void {
   db.seed(`tenants/${TENANT}/shifts/${shiftId}`, {
     tenantId: TENANT,
@@ -1041,7 +1050,36 @@ function seedClosedShift(
     businessDate: LOCAL_DATE,
     totalSales,
     transactionCount,
+    ...extra,
   });
+}
+
+/** The four expected-tender fields, which an expectation carries all or none of. */
+function tenderExpectation(
+  cashMinor: number,
+  mpesaMinor = 0,
+  cardMinor = 0,
+  unattributedMinor = 0
+): DocumentData {
+  return {
+    expectedCashMinor: cashMinor,
+    expectedMpesaMinor: mpesaMinor,
+    expectedCardMinor: cardMinor,
+    expectedUnattributedMinor: unattributedMinor,
+    tenderExpectationVersion: 1,
+  };
+}
+
+/** A close made after the rollout, so an absent declaration is itself a fault. */
+function declaredAt(millis: number): DocumentData {
+  return {endTime: Timestamp.fromMillis(millis)};
+}
+
+const AFTER_CUTOFF = TENDER_DECLARATION_REQUIRED_FROM + 86_400_000;
+const BEFORE_CUTOFF = TENDER_DECLARATION_REQUIRED_FROM - 86_400_000;
+
+function tenderAnomalyPath(shiftId: string): string {
+  return `tenants/${TENANT}/reconciliation_anomalies/${shiftTenderAnomalyId(shiftId)}`;
 }
 
 function verificationPath(expectationId: string): string {
@@ -1062,7 +1100,7 @@ test("a shift phase with nothing awaiting verification writes nothing", async ()
 
   assert.deepEqual(
     await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
-    {processed: 0, varianceCount: 0, hasMore: false}
+    {processed: 0, varianceCount: 0, tenderVarianceCount: 0, hasMore: false}
   );
   assert.deepEqual(db.writes, []);
 });
@@ -1080,7 +1118,7 @@ test("the shift page is bounded at fifty expectations and reports the remainder"
 
   assert.deepEqual(
     await processShiftPage(db.asFirestore(), job),
-    {processed: 50, varianceCount: 0, hasMore: true}
+    {processed: 50, varianceCount: 0, tenderVarianceCount: 0, hasMore: true}
   );
   assert.equal(
     stored(db, `tenants/${TENANT}/shift_expectations/${ids[49]}`).needsVerification,
@@ -1093,7 +1131,7 @@ test("the shift page is bounded at fifty expectations and reports the remainder"
 
   assert.deepEqual(
     await processShiftPage(db.asFirestore(), job),
-    {processed: 2, varianceCount: 0, hasMore: false}
+    {processed: 2, varianceCount: 0, tenderVarianceCount: 0, hasMore: false}
   );
 });
 
@@ -1110,7 +1148,7 @@ test("a variance and an unreadable shift are both counted and both recorded", as
 
   assert.deepEqual(
     await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
-    {processed: 3, varianceCount: 2, hasMore: false}
+    {processed: 3, varianceCount: 2, tenderVarianceCount: 0, hasMore: false}
   );
 
   assert.equal(stored(db, verificationPath("exp_matched")).status, "matched");
@@ -1151,6 +1189,258 @@ test("a variance and an unreadable shift are both counted and both recorded", as
   );
 });
 
+
+// ---------------------------------------------------------------------------
+// The blind tender declaration
+// ---------------------------------------------------------------------------
+
+test("a declaration that disagrees with the sales is recorded once, with both sides", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_tender", {
+    shiftId: "shift-01",
+    sales: 300,
+    transactions: 3,
+    ...tenderExpectation(25000, 5000, 0),
+  });
+  // The drawer is 50.00 short on cash and 9.00 over on card. Sales and count
+  // agree, so this is a difference the sales check could never have found.
+  seedClosedShift(db, "shift-01", 300, 3, {
+    ...declaredAt(AFTER_CUTOFF),
+    declaredCashMinor: 20000,
+    declaredMpesaMinor: 5000,
+    declaredCardMinor: 900,
+  });
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
+    {processed: 1, varianceCount: 0, tenderVarianceCount: 1, hasMore: false}
+  );
+
+  const verification = stored(db, verificationPath("exp_tender"));
+  assert.equal(verification.status, "matched");
+  assert.equal(verification.tenderStatus, "variance");
+
+  const anomaly = stored(db, tenderAnomalyPath("shift-01"));
+  assert.equal(anomaly.anomalyType, "shift_tender_variance");
+  assert.equal(anomaly.cashVarianceMinor, -5000);
+  assert.equal(anomaly.mpesaVarianceMinor, 0);
+  assert.equal(anomaly.cardVarianceMinor, 900);
+  assert.equal(anomaly.resolution, "open");
+  assert.equal(anomaly.mutatesShift, false);
+  // Which day and whose shift, which this collection could not say before.
+  assert.equal(anomaly.businessDate, LOCAL_DATE);
+});
+
+test("a declaration that agrees deletes a difference that no longer holds", async () => {
+  const db = firestoreWithClaimedJob();
+  db.seed(tenderAnomalyPath("shift-01"), {
+    tenantId: TENANT,
+    shiftId: "shift-01",
+    anomalyType: "shift_tender_variance",
+    cashVarianceMinor: -5000,
+  });
+  seedExpectation(db, "exp_tender", {
+    shiftId: "shift-01",
+    sales: 200,
+    transactions: 2,
+    ...tenderExpectation(20000),
+  });
+  seedClosedShift(db, "shift-01", 200, 2, {
+    ...declaredAt(AFTER_CUTOFF),
+    declaredCashMinor: 20000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  // **Self-healing.** A shift whose late sales arrive and reconcile the
+  // difference away stops being one, and nobody should have to dismiss a record
+  // that is no longer true.
+  await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"}));
+
+  assert.equal(stored(db, verificationPath("exp_tender")).tenderStatus, "matched");
+  assert.deepEqual(db.ids(`tenants/${TENANT}/reconciliation_anomalies`), []);
+});
+
+test("an acknowledged difference survives a re-verify that changes nothing", async () => {
+  const db = firestoreWithClaimedJob();
+  db.seed(tenderAnomalyPath("shift-01"), {
+    tenantId: TENANT,
+    shiftId: "shift-01",
+    anomalyType: "shift_tender_variance",
+    declaredCashMinor: 20000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+    expectedCashMinor: 25000,
+    expectedMpesaMinor: 0,
+    expectedCardMinor: 0,
+    expectedUnattributedMinor: 0,
+    cashVarianceMinor: -5000,
+    mpesaVarianceMinor: 0,
+    cardVarianceMinor: 0,
+    declaredTotalMinor: 20000,
+    expectedTotalMinor: 25000,
+    totalVarianceMinor: -5000,
+    resolution: "acknowledged",
+  });
+  seedExpectation(db, "exp_tender", {
+    shiftId: "shift-01",
+    sales: 250,
+    transactions: 2,
+    ...tenderExpectation(25000),
+  });
+  seedClosedShift(db, "shift-01", 250, 2, {
+    ...declaredAt(AFTER_CUTOFF),
+    declaredCashMinor: 20000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"}));
+
+  // An owner accepted this difference; the nightly sweep must not reopen it
+  // just for running again. A figure that actually moves is a new fact and does.
+  assert.equal(stored(db, tenderAnomalyPath("shift-01")).resolution, "acknowledged");
+});
+
+test("a difference whose figures move is reopened", async () => {
+  const db = firestoreWithClaimedJob();
+  db.seed(tenderAnomalyPath("shift-01"), {
+    tenantId: TENANT,
+    shiftId: "shift-01",
+    anomalyType: "shift_tender_variance",
+    cashVarianceMinor: -5000,
+    resolution: "acknowledged",
+  });
+  seedExpectation(db, "exp_tender", {
+    shiftId: "shift-01",
+    sales: 400,
+    transactions: 3,
+    ...tenderExpectation(40000),
+  });
+  seedClosedShift(db, "shift-01", 400, 3, {
+    ...declaredAt(AFTER_CUTOFF),
+    declaredCashMinor: 20000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"}));
+
+  assert.equal(stored(db, tenderAnomalyPath("shift-01")).resolution, "open");
+  assert.equal(stored(db, tenderAnomalyPath("shift-01")).cashVarianceMinor, -20000);
+});
+
+test("a shift closed before the rollout is never asked for a declaration", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_legacy", {
+    shiftId: "shift-01",
+    sales: 100,
+    transactions: 1,
+    ...tenderExpectation(10000),
+  });
+  seedClosedShift(db, "shift-01", 100, 1, declaredAt(BEFORE_CUTOFF));
+  db.clearWrites();
+
+  // **The migration guarantee, proved rather than argued.** The build that
+  // closed this shift had nowhere to type a declaration, so its absence says
+  // nothing about the shop and must raise nothing.
+  assert.deepEqual(
+    await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
+    {processed: 1, varianceCount: 0, tenderVarianceCount: 0, hasMore: false}
+  );
+  assert.equal(
+    stored(db, verificationPath("exp_legacy")).tenderStatus,
+    "not_declared_legacy"
+  );
+  assert.deepEqual(db.ids(`tenants/${TENANT}/reconciliation_anomalies`), []);
+});
+
+test("a shift closed after the rollout with no declaration is itself a difference", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_missing_declaration", {
+    shiftId: "shift-01",
+    sales: 100,
+    transactions: 1,
+    ...tenderExpectation(10000),
+  });
+  seedClosedShift(db, "shift-01", 100, 1, declaredAt(AFTER_CUTOFF));
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
+    {processed: 1, varianceCount: 0, tenderVarianceCount: 1, hasMore: false}
+  );
+
+  const anomaly = stored(db, tenderAnomalyPath("shift-01"));
+  assert.equal(anomaly.anomalyType, "missing_tender_declaration");
+  // Nothing was declared, so there is nothing to state. Figures here would be a
+  // comparison this writer could not have made.
+  assert.equal(anomaly.declaredCashMinor, undefined);
+  assert.equal(anomaly.cashVarianceMinor, undefined);
+  assert.equal(anomaly.expectedCashMinor, 10000);
+});
+
+test("an expectation written before the split compares nothing", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_pre_deploy", {shiftId: "shift-01", sales: 100, transactions: 1});
+  seedClosedShift(db, "shift-01", 100, 1, {
+    ...declaredAt(AFTER_CUTOFF),
+    declaredCashMinor: 1,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  // A day is only ever compared once it has been regenerated, and regeneration
+  // always produces the expected figures. Nothing historical is retro-flagged.
+  await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"}));
+
+  assert.equal(
+    stored(db, verificationPath("exp_pre_deploy")).tenderStatus,
+    "no_expectation"
+  );
+  assert.deepEqual(db.ids(`tenants/${TENANT}/reconciliation_anomalies`), []);
+});
+
+test("a recovery close is refused rather than compared", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_recovery", {
+    shiftId: "shift-01",
+    sales: 100,
+    transactions: 1,
+    ...tenderExpectation(10000),
+  });
+  // Closed by a device holding none of the shift's sales: the zero summary
+  // describes what that device could prove, not what the shift took.
+  seedClosedShift(db, "shift-01", 0, 0, {
+    ...declaredAt(AFTER_CUTOFF),
+    closedWithoutEvidence: true,
+    declaredCashMinor: 9900,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"}));
+
+  // The sales check already reports it as unbelievable; a tender difference
+  // measured against figures nobody trusts would be the same fact twice.
+  assert.equal(stored(db, verificationPath("exp_recovery")).status, "variance");
+  assert.equal(stored(db, verificationPath("exp_recovery")).tenderStatus, "unverifiable");
+  assert.equal(db.ids(`tenants/${TENANT}/reconciliation_anomalies`).length, 1);
+  assert.equal(
+    stored(
+      db,
+      `tenants/${TENANT}/reconciliation_anomalies/${shiftAnomalyId("shift-01", "generation-one")}`
+    ).anomalyType,
+    "shift_variance"
+  );
+});
+
 test("an expectation that does not name a shift is quarantined, not verified", async () => {
   // It cannot address a shift document, so there is nothing to compare it with
   // and no anomaly that could name what went wrong with a shift.
@@ -1165,7 +1455,7 @@ test("an expectation that does not name a shift is quarantined, not verified", a
 
     assert.deepEqual(
       await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
-      {processed: 1, varianceCount: 1, hasMore: false},
+      {processed: 1, varianceCount: 1, tenderVarianceCount: 0, hasMore: false},
       `${shiftId}`
     );
 
@@ -1194,7 +1484,7 @@ test("an expectation whose generation moved is left alone rather than settled", 
 
   assert.deepEqual(
     await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
-    {processed: 1, varianceCount: 0, hasMore: true}
+    {processed: 1, varianceCount: 0, tenderVarianceCount: 0, hasMore: true}
   );
 
   const expectation = stored(db, path);

@@ -136,24 +136,40 @@ Future<T?> showAppSheet<T>(
 /// when `resizeToAvoidBottomInset` consumes it: it has been spent here, and a
 /// descendant that padded by it again would leave a second keyboard's worth of
 /// empty space above the real one.
+///
+/// **The shape of this tree never changes, and that is the whole of the
+/// 2026-09-03 fix.** The first version of this returned `child` unchanged while
+/// there was no keyboard and a `Padding` once there was one, so the moment
+/// `viewInsets.bottom` crossed zero the child's `runtimeType` changed,
+/// `Widget.canUpdate` refused, and Flutter deactivated and re-inflated the
+/// entire sheet - the `DraggableScrollableSheet`, the list, and every field in
+/// it. A field disposed the instant it is focused takes its `FocusNode` and its
+/// `EditableText`'s platform input connection with it, so the keyboard rose,
+/// the subtree died, the keyboard fell, and the sheet snapped back to its
+/// opening detent. Nothing could be typed into a sheet at all.
+///
+/// It is the same defect `AppFieldWell` already carries a paragraph about - see
+/// `fields.dart`, "a field that changed the shape of the tree above its
+/// `TextField` the instant it was focused would re-parent that `TextField` ...
+/// and drop the platform input connection" - one layer further up. The cure is
+/// the same one: emit the wrapper unconditionally and let it be a no-op. A
+/// `Padding` of zero pads nothing and a `removeViewInsets` over an inset that
+/// is already zero removes nothing, so a sheet with no keyboard in front of it
+/// renders exactly as it did before.
 final class _AboveTheKeyboard extends StatelessWidget {
   const _AboveTheKeyboard({required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
-    if (keyboard <= 0) return child;
-    return Padding(
-      padding: EdgeInsets.only(bottom: keyboard),
-      child: MediaQuery.removeViewInsets(
-        context: context,
-        removeBottom: true,
-        child: child,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: MediaQuery.removeViewInsets(
+      context: context,
+      removeBottom: true,
+      child: child,
+    ),
+  );
 }
 
 /// A band that fills the top of a sheet, under its own corners.

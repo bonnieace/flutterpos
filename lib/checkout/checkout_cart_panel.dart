@@ -44,6 +44,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../inventory/product_visual.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -53,7 +54,6 @@ import '../ui/dialogs.dart';
 import '../ui/snackbar.dart';
 import '../ui/fields.dart';
 import '../ui/press.dart';
-import '../ui/records.dart';
 import '../ui/rolling_number.dart';
 import '../ui/scaffold.dart';
 import '../ui/sheet.dart';
@@ -119,13 +119,21 @@ const double _wideProductTileHeight = 128;
 /// their `height` multipliers say - which is exactly why this is not arithmetic
 /// in a comment. It is also the strict case: a widget test draws in the test
 /// font, which is square and wraps sooner than either shipped face.
-const double _compactProductTileHeight = 210;
+/// **246 since 2026-09-04**, which is 210 plus the 36 the picture band grew
+/// by. A photograph is drawn whole rather than cropped now - see
+/// `TenantProductVisual` - and a whole bottle in a band twice as wide as it is
+/// tall is a bottle two centimetres high. The band is nearly square instead,
+/// which is the shape a product photograph is taken in.
+const double _compactProductTileHeight = 246;
 
 /// The height of the picture band across the top of a compact tile.
 ///
-/// Named for the same reason as the three figures above. It is the browse
-/// render's own `h-24`.
-const double _productThumbnailBandHeight = 96;
+/// Named for the same reason as the three figures above. It was the browse
+/// render's own `h-24`; **132 since 2026-09-04**, when the picture stopped
+/// being cropped to fill it. At 411 the grid gives a tile about 182 wide, so
+/// this is very nearly a square - which is the shape a product photograph is
+/// taken in, and the only one a cut-out on transparency reads at.
+const double _productThumbnailBandHeight = 132;
 
 /// The side of the picture square on a cart line, asked for on 2026-08-23.
 ///
@@ -1965,7 +1973,11 @@ final class _ProductTile extends StatelessWidget {
         backgroundColor: tokens.colors.action.primary.container,
         textColor: tokens.colors.action.primary.label,
         label: Text('$quantityInCart'),
-        child: _ProductThumbnail(product: product),
+        child: SizedBox(
+          height: _productThumbnailBandHeight,
+          width: double.infinity,
+          child: TenantProductVisual(product: product),
+        ),
       ),
       Expanded(
         child: Padding(
@@ -2081,78 +2093,6 @@ final class _ProductTile extends StatelessWidget {
         SizedBox(width: tokens.spacing.s4),
         Flexible(child: figure),
       ],
-    );
-  }
-}
-
-/// The picture band across the top of a compact product tile, or a stand-in.
-///
-/// **Nothing in this app can put a picture here yet, and that is deliberate
-/// rather than missing.** `TenantProduct` reads an optional HTTPS `image`, so a
-/// product that has one is drawn with it - but `importProducts` refuses an
-/// `image` column outright and `updateProduct` refuses the field as an unknown
-/// key, so the only way one exists today is an operator writing it directly.
-/// The stand-in is therefore the case that renders, and it is drawn as a
-/// deliberate mark rather than as a broken-image glyph: an initial on the
-/// surface's own tint, which is what the record cards elsewhere do for a person
-/// with no photograph.
-///
-/// **It is a full-width band as of Phase 03, where it was a 52-pixel square.**
-/// The browse render's `h-24` picture area is the first thing on its card, and
-/// a square beside a name is the arrangement that render replaced. It has one
-/// caller: the compact tile. The till card has no picture at all.
-final class _ProductThumbnail extends StatelessWidget {
-  const _ProductThumbnail({required this.product, this.side});
-
-  final TenantProduct product;
-
-  /// A square of this side, rather than the tile's full-width band.
-  ///
-  /// The cart line wants the same picture at a size a row can hold; the grid
-  /// tile wants a band across its top. One widget draws both so a product
-  /// without a photograph falls back to the same initials in both places.
-  final double? side;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = product.imageUrl;
-    return SizedBox(
-      height: side ?? _productThumbnailBandHeight,
-      width: side ?? double.infinity,
-      child: url == null
-          ? _placeholder(context)
-          : Image.network(
-              url.toString(),
-              fit: BoxFit.cover,
-              // A product whose picture cannot be fetched still has to be
-              // sellable, so a failed load falls back rather than throwing a
-              // broken glyph into the middle of the till.
-              errorBuilder: (context, _, _) => _placeholder(context),
-              loadingBuilder: (context, child, progress) =>
-                  progress == null ? child : _placeholder(context),
-            ),
-    );
-  }
-
-  Widget _placeholder(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    // §2.1's `overlay` is the step above a card, which is what a stand-in for a
-    // photograph on a raised tile should be.
-    return Container(
-      color: tokens.colors.surface.overlay,
-      alignment: Alignment.center,
-      child: Text(
-        TenantInitialsAvatar.initialsOf(product.name),
-        // A band four times the height of the square it replaced holds a
-        // heading rather than a card title; §2.2's `title.lg` is the section
-        // role and the largest one that is not a screen title. A cart-line
-        // square is a card title's worth of space, so it takes `title.md`.
-        style:
-            (side == null
-                    ? tokens.typography.titleLarge
-                    : tokens.typography.titleMedium)
-                .copyWith(color: tokens.colors.text.secondary),
-      ),
     );
   }
 }
@@ -2351,13 +2291,11 @@ final class _CartLine extends StatelessWidget {
                   // so in words rather than reserving a hole where a picture
                   // would be.
                   if (resolved != null) ...<Widget>[
-                    ClipRRect(
+                    SizedBox(
                       key: ValueKey('checkout-line-image-$productId'),
-                      borderRadius: BorderRadius.circular(tokens.radius.sm),
-                      child: _ProductThumbnail(
-                        product: resolved,
-                        side: _cartLineThumbnailSide,
-                      ),
+                      height: _cartLineThumbnailSide,
+                      width: _cartLineThumbnailSide,
+                      child: TenantProductVisual(product: resolved),
                     ),
                     SizedBox(width: tokens.spacing.s8),
                   ],

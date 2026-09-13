@@ -83,6 +83,9 @@ final class TenantReportsHubScreen extends StatelessWidget {
     this.monthlyReportRoles = const <TenantRole>[],
     this.salesTotalsRoute,
     this.salesTotalsRoles = const <TenantRole>[],
+    this.differencesRoute,
+    this.differencesRoles = const <TenantRole>[],
+    this.openDifferenceCount,
   });
 
   /// The reconciled figures for recent business days, and the entrance to the
@@ -112,10 +115,30 @@ final class TenantReportsHubScreen extends StatelessWidget {
   final TenantReportRouteBuilder? salesTotalsRoute;
   final List<TenantRole> salesTotalsRoles;
 
+  /// Every difference reconciliation recorded and could not resolve.
+  ///
+  /// **A card of its own, because the badge on the home has to lead somewhere
+  /// in one tap.** These records were reachable only three screens down - the
+  /// daily summary, then a run, then its differences - which is a route nobody
+  /// walks unless they already know there is something at the end of it. That
+  /// is the whole reason a recorded difference could sit unread.
+  final TenantReportRouteBuilder? differencesRoute;
+  final List<TenantRole> differencesRoles;
+
+  /// How many are still open, or null where the figure is unknown.
+  ///
+  /// It becomes the card's own sentence. §9: the badge on the home is a
+  /// figure, and a figure alone is not a status.
+  ///
+  /// Takes the session controller because the figure is per business, and the
+  /// hub is rebuilt on a switch precisely so one business's reading can never
+  /// be drawn under another's name.
+  final int? Function(TenantSessionController sessions)? openDifferenceCount;
+
   /// The cards, in the order a shop asks the questions rather than the order
   /// the code grew in: the settled figures first, then the two periods, then
   /// the live takings and how they were paid.
-  List<_HubEntry> _entries() => <_HubEntry>[
+  List<_HubEntry> _entries(TenantSessionController sessions) => <_HubEntry>[
     _HubEntry(
       key: 'report-daily-summary',
       label: 'Daily summary',
@@ -152,6 +175,28 @@ final class TenantReportsHubScreen extends StatelessWidget {
       route: salesTotalsRoute,
       roles: salesTotalsRoles,
     ),
+    _HubEntry(
+      key: 'report-differences',
+      label: 'Differences',
+      description: switch (openDifferenceCount?.call(sessions)) {
+        null =>
+          'Everything nightly reconciliation found and could not resolve, '
+              'including shifts whose declared takings disagree with their '
+              'sales.',
+        0 =>
+          'Nothing is outstanding. This is where a shift whose declared '
+              'takings disagree with its sales would be listed.',
+        1 =>
+          '1 unresolved difference, including any shift whose declared '
+              'takings disagree with its sales.',
+        final count =>
+          '$count unresolved differences, including any shift whose declared '
+              'takings disagree with its sales.',
+      },
+      icon: Icons.rule_outlined,
+      route: differencesRoute,
+      roles: differencesRoles,
+    ),
   ];
 
   @override
@@ -166,7 +211,7 @@ final class TenantReportsHubScreen extends StatelessWidget {
     final destinations = session == null
         ? const <HomeDestination>[]
         : <HomeDestination>[
-            for (final entry in _entries())
+            for (final entry in _entries(controller))
               if (entry.route != null &&
                   session.canAccess(allowedRoles: entry.roles))
                 HomeDestination(

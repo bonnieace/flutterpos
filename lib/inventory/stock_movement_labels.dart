@@ -132,7 +132,10 @@ RecordItem stockMovementRecord(
   attributes: <RecordAttribute>[
     RecordAttribute(
       label: stockBeforeAndAfterLabel,
-      value: stockFiguresValue(movement.previousQuantity, movement.quantityAfter),
+      value: stockFiguresValue(
+        movement.previousQuantity,
+        movement.quantityAfter,
+      ),
       valueKey: ValueKey<String>('$keyPrefix-figures-$rowKey'),
     ),
     if (movement.adjustmentType case final adjustmentType?)

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/audit/audit.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/fields.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/text.dart';
@@ -16,9 +17,12 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
+    // **The two paragraphs above the trail went on 2026-09-04.** What is left
+    // is one footnote, and the fact it carries - a page ordered by record
+    // rather than by time - is the one that changes what a row means.
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('audit-log-scope'))).data,
-      startsWith('Every event this business recorded'),
+      'Permanent, and listed by record rather than by time.',
     );
     expect(
       tester
@@ -28,17 +32,16 @@ void main() {
     );
     // The invited colleague is named beside the authoritative UID.
     //
-    // The word "About" left this string in step 6: it is the *label* of a
-    // `RecordAttribute` now, which is what the table draws as a column header
-    // and the card draws as the key half of a key-value line. The value is the
-    // colleague, which is what it always meant.
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('audit-log-target-aud_001')))
           .data,
       'Amina (cashier-a)',
     );
-    expect(find.text('About'), findsOne);
+    // **No `About` label any more.** It was the key half of a key-value line
+    // in a record card; the timeline states who an event was about on its own
+    // line, under the event, where a label naming the obvious is noise.
+    expect(find.text('About'), findsNothing);
     // The signed-in admin caused this one, so the row says so rather than
     // repeating their own UID back at them.
     expect(
@@ -66,10 +69,8 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
-    expect(
-      tester.widget<Text>(find.byKey(const ValueKey('audit-log-empty'))).data,
-      'No event has been recorded for this business.',
-    );
+    expect(find.byKey(const ValueKey('audit-log-empty')), findsOne);
+    expect(find.text('Nothing has been recorded yet'), findsOne);
   });
 
   testWidgets('an unmodelled event is shown as itself', (tester) async {
@@ -116,9 +117,13 @@ void main() {
     // pages from the start rather than from a position the new query never
     // established.
     expect(reader.queries.last.startAfterDocumentId, isNull);
+    // The narrowing is visible in the control that caused it rather than in a
+    // paragraph restating it.
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('audit-log-scope'))).data,
-      startsWith('Every "${TenantAuditEventType.staffStatusSet.label}" event'),
+      tester.widget<AppSelect<TenantAuditEventType?>>(
+        find.byKey(const ValueKey('audit-log-filter')),
+      ).value,
+      TenantAuditEventType.staffStatusSet,
     );
     expect(find.byKey(const ValueKey('audit-log-entry-aud_003')), findsOne);
     expect(find.byKey(const ValueKey('audit-log-entry-aud_001')), findsNothing);
@@ -284,9 +289,16 @@ void main() {
 
       await openLandingDrawer(tester);
       expect(find.byKey(const ValueKey('view-audit-log')), findsNothing);
-      // The catalog is still offered, so the absence is the role boundary and
-      // not a screen that failed to build.
-      expect(find.text('View read-only catalog'), findsOneWidget);
+      // The inventory destination is still offered, so the absence is the role
+      // boundary and not a screen that failed to build.
+      //
+      // **By key, and with the route supplied.** This read
+      // `find.text('View read-only catalog')` - a label that has not been in
+      // `lib/` for some time - and the harness never passed a catalog route,
+      // so the control asserted the presence of a tile the screen was never
+      // given the means to build. The key is what the sibling line above
+      // already uses.
+      expect(find.byKey(const ValueKey('inventory')), findsOne);
       // **No *audit* query, rather than no query at all.** The landing route
       // reads this member's own recent sales for its activity list as of
       // 2026-08-23, so `isEmpty` would now be asserting that the home does not
@@ -342,6 +354,11 @@ Future<void> _pumpLanding(
               ? (reader) => TenantAuditLogScreen(reader: reader)
               : null,
           auditLogRoles: TenantAuditLogRepository.allowedRoles,
+          // The control the role-boundary test measures against: a destination
+          // every active member gets, so its presence isolates the audit log's
+          // own gate from a screen that simply did not build.
+          catalogManagementRoute: (reader) =>
+              const SizedBox(key: ValueKey('catalog-route')),
         ),
       ),
     ),

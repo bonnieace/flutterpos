@@ -109,24 +109,46 @@ void main() {
       expect(intent.saleId, 'co-1');
       expect(intent.createdBy, 'user-a');
       expect(intent.requestedUnits, 3);
+      // Copied off the immutable sale, not off a clock: it is the day the sale
+      // traded, which is the day the money comes back out of.
+      expect(intent.businessDate, _businessDate);
       final data = intent.documentData();
       expect(data.keys.toSet(), <String>{
         'returnId',
         'tenantId',
         'saleId',
+        'businessDate',
+        'recordedOn',
         'createdBy',
         'status',
         'reason',
         'itemsReturned',
       });
       expect(data['status'], 'pending');
+      // Two different days, and the difference is the point: the sale traded on
+      // one, the customer came back on the other.
+      expect(data['businessDate'], _businessDate);
+      expect(data['recordedOn'], '2026-08-04');
       expect(data['returnId'], intent.returnId);
       // The server-owned instant is added by the writer, never by the intent.
       expect(data.containsKey('createdAt'), isFalse);
       // Ordered by product, so an identical request is byte-identical.
+      //
+      // **The name is written beside the ID**, taken from the sale rather than
+      // the catalog, so no returns screen ever has to show a document ID for
+      // want of a label. `validSaleLine` checks `productId` and `quantity` and
+      // forbids no other key, so this is inside the rule as it stands.
       expect(data['itemsReturned'], <Object?>[
-        <String, Object?>{'productId': 'product-1', 'quantity': 2},
-        <String, Object?>{'productId': 'product-2', 'quantity': 1},
+        <String, Object?>{
+          'productId': 'product-1',
+          'productName': 'Tusker',
+          'quantity': 2,
+        },
+        <String, Object?>{
+          'productId': 'product-2',
+          'productName': 'Water',
+          'quantity': 1,
+        },
       ]);
     });
 
@@ -346,6 +368,9 @@ TenantReturnCreateIntent _intent(
     quantities: quantities,
     reason: reason,
     requestId: requestId,
+    // Fixed, so the recording day is a fact this test states rather than
+    // whatever day it happens to run on.
+    now: DateTime.utc(2026, 8, 4, 9),
   );
 }
 

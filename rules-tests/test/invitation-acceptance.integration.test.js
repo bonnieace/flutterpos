@@ -118,7 +118,7 @@ test("acceptTenantInvitation consumes a real versioned proof", async () => {
   const fixture = await seedPendingInvitation({
     suffix: "token",
     emailVerified: false,
-    visibleAcceptanceAllowed: false,
+    credentialBootstrapRequired: true,
     tokenByte: 0x11,
   });
   const idToken = await signIn(fixture.email);
@@ -138,7 +138,7 @@ test("acceptVisibleTenantInvitation returns the same five-field contract", async
   const fixture = await seedPendingInvitation({
     suffix: "visible",
     emailVerified: true,
-    visibleAcceptanceAllowed: true,
+    credentialBootstrapRequired: false,
     tokenByte: 0x22,
   });
   const idToken = await signIn(fixture.email);
@@ -149,6 +149,35 @@ test("acceptVisibleTenantInvitation returns the same five-field contract", async
     {
       tenantId: fixture.tenantId,
       requestId: "visible-emulator-request-1",
+    },
+  );
+
+  assertAcceptedResponse(response, fixture);
+  await assertAcceptedDocuments(fixture, "visible");
+});
+
+test("acceptVisibleTenantInvitation admits an identity the invitation created", async () => {
+  // The lockout, end to end. This is the document shape of a new hire: an Auth
+  // account the invitation itself created, sent a credential-bootstrap link,
+  // who has since followed it - so the password is set and Firebase has marked
+  // the address verified. Until 2026-09-08 the stored `visibleAcceptanceAllowed`
+  // was false for exactly this person and no amount of verifying changed it, so
+  // this call answered `versioned_proof_required` and the emailed link it named
+  // opened a page telling them to come back here.
+  const fixture = await seedPendingInvitation({
+    suffix: "bootstrapped",
+    emailVerified: true,
+    credentialBootstrapRequired: true,
+    tokenByte: 0x33,
+  });
+  const idToken = await signIn(fixture.email);
+
+  const response = await callFunction(
+    "acceptVisibleTenantInvitation",
+    idToken,
+    {
+      tenantId: fixture.tenantId,
+      requestId: "bootstrapped-emulator-request-1",
     },
   );
 
@@ -178,7 +207,7 @@ test("setDefaultTenant updates the authenticated user's routing profile", async 
   assert.ok(root.get("updatedAt") instanceof Timestamp);
 });
 
-test("requestTenant creates a pending canonical tenant and routing mirror", async () => {
+test("requestTenant creates an active canonical tenant and routing mirror", async () => {
   const fixture = await seedTenantApplicant("request");
   const idToken = await signIn(fixture.email);
 
@@ -196,7 +225,7 @@ test("requestTenant creates a pending canonical tenant and routing mirror", asyn
   ]);
   assert.equal(response.name, "Chilltent Emulator");
   assert.equal(response.slug, "chilltent-emulator");
-  assert.equal(response.status, "pending");
+  assert.equal(response.status, "active");
   assert.equal(typeof response.tenantId, "string");
 
   const [tenant, staff, mirror, slug, root] = await Promise.all([
@@ -208,78 +237,21 @@ test("requestTenant creates a pending canonical tenant and routing mirror", asyn
     firestore.doc("tenant_slugs/chilltent-emulator").get(),
     firestore.doc(`users/${fixture.uid}`).get(),
   ]);
-  assert.equal(tenant.get("status"), "pending");
+  assert.equal(tenant.get("status"), "active");
   assert.equal(tenant.get("ownerUid"), fixture.uid);
   assert.equal(staff.get("uid"), fixture.uid);
   assert.equal(staff.get("role"), "owner");
   assert.equal(staff.get("status"), "active");
-  assert.equal(mirror.get("tenantStatus"), "pending");
+  assert.equal(mirror.get("tenantStatus"), "active");
   assert.equal(mirror.get("membershipStatus"), "active");
   assert.equal(slug.get("tenantId"), response.tenantId);
   assert.equal(root.get("membershipCount"), 1);
   assert.equal(root.get("ownedTenantCount"), 1);
-  assert.equal(root.get("ownedActiveTenantCount"), 0);
-});
-
-test("setTenantLifecycle approves a pending tenant with an exact contract", async () => {
-  const fixture = await seedPendingTenantReview("approve");
-  const idToken = await signIn(fixture.platformEmail);
-
-  const response = await callFunction("setTenantLifecycle", idToken, {
-    tenantId: fixture.tenantId,
-    status: "active",
-    requestId: "lifecycle-approve-emulator-request-1",
-  });
-
-  assertLifecycleResponse(response, fixture.tenantId, "active");
-  const [tenant, mirror, owner, fanout] = await Promise.all([
-    firestore.doc(`tenants/${fixture.tenantId}`).get(),
-    firestore
-      .doc(`users/${fixture.ownerUid}/tenant_memberships/${fixture.tenantId}`)
-      .get(),
-    firestore.doc(`users/${fixture.ownerUid}`).get(),
-    firestore
-      .doc(
-        `tenants/${fixture.tenantId}/membership_fanout_jobs/` +
-          response.fanoutOperationId,
-      )
-      .get(),
-  ]);
-  assert.equal(tenant.get("status"), "active");
-  assert.equal(mirror.get("tenantStatus"), "active");
-  assert.equal(owner.get("ownedActiveTenantCount"), 1);
-  assert.equal(fanout.get("status"), "pending");
-  assert.equal(fanout.get("toStatus"), "active");
-});
-
-test("setTenantLifecycle rejects a pending tenant and records the reason", async () => {
-  const fixture = await seedPendingTenantReview("reject");
-  const idToken = await signIn(fixture.platformEmail);
-
-  const response = await callFunction("setTenantLifecycle", idToken, {
-    tenantId: fixture.tenantId,
-    status: "rejected",
-    reason: "Owner documentation could not be verified.",
-    requestId: "lifecycle-reject-emulator-request-1",
-  });
-
-  assertLifecycleResponse(response, fixture.tenantId, "rejected");
-  const [tenant, mirror, audit] = await Promise.all([
-    firestore.doc(`tenants/${fixture.tenantId}`).get(),
-    firestore
-      .doc(`users/${fixture.ownerUid}/tenant_memberships/${fixture.tenantId}`)
-      .get(),
-    firestore.doc(`platform_audit_logs/${response.fanoutOperationId}`).get(),
-  ]);
-  assert.equal(tenant.get("status"), "rejected");
-  assert.equal(mirror.get("tenantStatus"), "rejected");
-  assert.equal(audit.get("reason"), "Owner documentation could not be verified.");
-  assert.equal(audit.get("fromStatus"), "pending");
-  assert.equal(audit.get("toStatus"), "rejected");
+  assert.equal(root.get("ownedActiveTenantCount"), 1);
 });
 
 test("setTenantLifecycle suspends and reactivates an active tenant", async () => {
-  const fixture = await seedPendingTenantReview("manage", "active");
+  const fixture = await seedTenantForReview("manage", "active");
   const idToken = await signIn(fixture.platformEmail);
 
   const suspended = await callFunction("setTenantLifecycle", idToken, {
@@ -332,21 +304,21 @@ test("setTenantLifecycle suspends and reactivates an active tenant", async () =>
   assert.equal(audit.get("reason"), null);
 });
 
-test("setTenantLifecycle archives a rejected tenant with exact persisted state", async () => {
-  const fixture = await seedPendingTenantReview("archive", "rejected");
+test("setTenantLifecycle archives a suspended tenant with exact persisted state", async () => {
+  const fixture = await seedTenantForReview("archive", "suspended");
   const idToken = await signIn(fixture.platformEmail);
 
   const response = await callFunction("setTenantLifecycle", idToken, {
     tenantId: fixture.tenantId,
     status: "archived",
-    reason: "The rejected application is closed permanently.",
+    reason: "The suspended business is closed permanently.",
     requestId: "lifecycle-archive-emulator-request-1",
   });
   assertLifecycleResponse(
     response,
     fixture.tenantId,
     "archived",
-    "rejected",
+    "suspended",
   );
   const [tenant, mirror, owner, fanout, audit] = await Promise.all([
     firestore.doc(`tenants/${fixture.tenantId}`).get(),
@@ -367,10 +339,10 @@ test("setTenantLifecycle archives a rejected tenant with exact persisted state",
   assert.equal(owner.get("ownedTenantCount"), 0);
   assert.equal(owner.get("ownedActiveTenantCount"), 0);
   assert.equal(fanout.get("status"), "pending");
-  assert.equal(fanout.get("fromStatus"), "rejected");
+  assert.equal(fanout.get("fromStatus"), "suspended");
   assert.equal(fanout.get("toStatus"), "archived");
-  assert.equal(audit.get("reason"), "The rejected application is closed permanently.");
-  assert.equal(audit.get("fromStatus"), "rejected");
+  assert.equal(audit.get("reason"), "The suspended business is closed permanently.");
+  assert.equal(audit.get("fromStatus"), "suspended");
   assert.equal(audit.get("toStatus"), "archived");
 });
 
@@ -725,7 +697,7 @@ function requireEmulator(name) {
 async function seedPendingInvitation({
   suffix,
   emailVerified,
-  visibleAcceptanceAllowed,
+  credentialBootstrapRequired,
   tokenByte,
 }) {
   const uid = `user-${suffix}`;
@@ -831,7 +803,7 @@ async function seedPendingInvitation({
       invitedEmail: email,
       invitedBy: ownerUid,
       latestDeliveryId: `delivery-${suffix}`,
-      visibleAcceptanceAllowed,
+      credentialBootstrapRequired,
       createdAt: now,
       updatedAt: now,
     },
@@ -932,7 +904,7 @@ async function seedTenantApplicant(suffix) {
   return { uid, email };
 }
 
-async function seedPendingTenantReview(suffix, status = "pending") {
+async function seedTenantForReview(suffix, status = "active") {
   const platformUid = `platform-${suffix}`;
   const platformEmail = `${platformUid}@integration.example.test`;
   const ownerUid = `review-owner-${suffix}`;
@@ -1403,7 +1375,7 @@ function assertLifecycleResponse(
   response,
   tenantId,
   status,
-  previousStatus = "pending",
+  previousStatus = "active",
 ) {
   assert.deepEqual(Object.keys(response).sort(), [
     "fanoutOperationId",
