@@ -382,7 +382,7 @@ void main() {
       for (final role in <TenantRole>[TenantRole.owner, TenantRole.admin]) {
         await _pumpLanding(tester, role: role);
         expect(
-          find.byKey(const ValueKey('checkout-configuration')),
+          find.byKey(const ValueKey('settings')),
           findsOne,
           reason: role.name,
         );
@@ -396,7 +396,7 @@ void main() {
       for (final role in <TenantRole>[TenantRole.manager, TenantRole.cashier]) {
         await _pumpLanding(tester, role: role);
         expect(
-          find.byKey(const ValueKey('checkout-configuration')),
+          find.byKey(const ValueKey('settings')),
           findsNothing,
           reason: role.name,
         );
@@ -409,17 +409,14 @@ void main() {
     ) async {
       await _pumpLanding(tester, role: TenantRole.owner, supplyRoute: false);
 
-      expect(
-        find.byKey(const ValueKey('checkout-configuration')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('settings')), findsNothing);
     });
 
     testWidgets('it opens under the landing route\'s own session scope', (
       tester,
     ) async {
       await _pumpLanding(tester, role: TenantRole.owner);
-      await tester.tap(find.byKey(const ValueKey('checkout-configuration')));
+      await tester.tap(find.byKey(const ValueKey('settings')));
       await tester.pumpAndSettle();
 
       expect(find.text('Settings'), findsOne);
@@ -452,11 +449,26 @@ Future<void> _pumpLanding(
           membership: _membership('tenant-a', role: role),
           reader: reader,
           onSignOut: () async {},
-          checkoutConfigurationRoute: supplyRoute
-              ? (reader) => TenantCheckoutConfigurationScreen(reader: reader)
+          // **One tabbed Settings route since 2026-09-13**, where this was
+          // three separate rows. The checkout settings are a tab inside it, so
+          // what this group pins is that the *route* is offered to the same two
+          // roles and that opening it lands on the currency.
+          settingsRoute: supplyRoute
+              ? (reader, initialTabKey) => TenantSettingsScreen(
+                  initialTabKey: initialTabKey,
+                  tabs: <TenantSettingsTab>[
+                    TenantSettingsTab(
+                      tabKey: 'business-details',
+                      label: 'Business details',
+                      allowedRoles:
+                          TenantCheckoutConfigurationPublisher.allowedRoles,
+                      builder: (_) =>
+                          TenantCheckoutConfigurationPanel(reader: reader),
+                    ),
+                  ],
+                )
               : null,
-          checkoutConfigurationRoles:
-              TenantCheckoutConfigurationPublisher.allowedRoles,
+          settingsRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
         ),
       ),
     ),

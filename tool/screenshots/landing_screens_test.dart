@@ -130,14 +130,25 @@ void main() {
             drafts: FakeDraftSink(),
           ),
         ),
-        checkoutConfigurationRoute: (reader) =>
-            TenantCheckoutConfigurationScreen(reader: reader),
-        checkoutConfigurationRoles:
-            TenantCheckoutConfigurationPublisher.allowedRoles,
-        printerConfigurationRoute: (reader) =>
-            TenantPrinterConfigurationScreen(reader: reader),
-        printerConfigurationRoles:
-            TenantPrinterConfigurationPublisher.allowedRoles,
+        // One tabbed Settings route since 2026-09-13, where this harness used
+        // to supply two of the three separate ones.
+        settingsRoute: (reader) => TenantSettingsScreen(
+          tabs: <TenantSettingsTab>[
+            TenantSettingsTab(
+              tabKey: 'checkout',
+              label: 'Checkout',
+              allowedRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
+              builder: (_) => TenantCheckoutConfigurationPanel(reader: reader),
+            ),
+            TenantSettingsTab(
+              tabKey: 'printer',
+              label: 'Printer',
+              allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
+              builder: (_) => TenantPrinterConfigurationPanel(reader: reader),
+            ),
+          ],
+        ),
+        settingsRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
         // The listing as a figure, so the top bar's badge and its problem
         // colour are in the captures rather than left to be imagined.
         printQueueCount: () => printJobs.pending().jobs.length,

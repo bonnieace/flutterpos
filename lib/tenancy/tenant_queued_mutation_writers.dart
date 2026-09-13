@@ -24,6 +24,7 @@ library;
 import '../checkout/checkout_configuration_writer.dart';
 import '../expenses/expense_request.dart';
 import '../inventory/catalog_management.dart';
+import '../inventory/stock_take.dart';
 import '../returns/return_request.dart';
 import 'tenant_pending_mutation.dart';
 import 'tenant_repository.dart';
@@ -207,6 +208,49 @@ final class QueuedTenantCatalogWriter implements TenantCatalogWriter {
     );
     _onQueued?.call();
     return TenantCatalogWriteResult.queued(operationId);
+  }
+}
+
+/// Durable-first stock counting.
+///
+/// **Every page of one count is queued at once**, which is what lets submitting
+/// return immediately with no connection. They share a target path - the take -
+/// so the worker carries them in order, while a colleague's count on another
+/// device drains independently of them.
+final class QueuedTenantStockTakeWriter implements TenantStockTakeWriter {
+  const QueuedTenantStockTakeWriter({
+    required TenantPendingMutationStore store,
+    required TenantPendingMutationUidProvider currentUid,
+    TenantQueuedMutationSignal? onQueued,
+  }) : _store = store,
+       _currentUid = currentUid,
+       _onQueued = onQueued;
+
+  final TenantPendingMutationStore _store;
+  final TenantPendingMutationUidProvider _currentUid;
+  final TenantQueuedMutationSignal? _onQueued;
+
+  @override
+  Future<TenantStockTakeWriteResult> submitPage(
+    TenantStockTakePageIntent intent,
+  ) async {
+    final uid = _currentUid();
+    if (uid == null) {
+      // Nothing durable can be written without a session to scope its storage
+      // key to, and a count that is silently not queued is a count somebody
+      // believes they have handed in.
+      throw const TenantStockTakeException(TenantStockTakeFailure.forbidden);
+    }
+    await _store.enqueue(
+      uid: uid,
+      tenantId: intent.tenantId,
+      operationId: intent.operationId,
+      kind: TenantPendingMutationKind.stockTakePage,
+      targetPath: intent.path,
+      payload: intent.payload(),
+    );
+    _onQueued?.call();
+    return TenantStockTakeWriteResult.queued(intent.operationId);
   }
 }
 

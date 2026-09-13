@@ -1,6 +1,8 @@
 export {adjustStock} from "./stock";
 export {createProduct} from "./productCreate";
 export {setProductRetired} from "./productRetire";
+export {submitStockTake} from "./stockTake";
+export {applyStockTake} from "./stockTakeApply";
 export {removeProductBackground} from "./productBackground";
 export {recordReceiptReprint} from "./receipts";
 export {importProducts, updateProduct, updateProducts} from "./products";

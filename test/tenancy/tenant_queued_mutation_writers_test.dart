@@ -203,6 +203,112 @@ void main() {
     expect(page.single.data['quantity'], 40);
   });
 
+  test('every page of one count queues under the count, not the products', () async {
+    // **The property the ordering rests on.** The outbox drains one target path
+    // strictly in sequence and different paths concurrently, so pages sharing
+    // the take go up in order while a colleague's count on another device does
+    // not wait behind them.
+    final writer = QueuedTenantStockTakeWriter(
+      store: store,
+      currentUid: () => 'user-a',
+    );
+    final draft = _stockTakeDraft(lines: 3);
+
+    for (final page in tenantStockTakePages(draft, pageSize: 2)) {
+      await writer.submitPage(page);
+    }
+
+    final records = await store.recordsForSession(
+      uid: 'user-a',
+      tenantId: 'tenant-a',
+    );
+    expect(records, hasLength(2));
+    expect(
+      records.map((record) => record.targetPath).toSet(),
+      <String>{'tenants/tenant-a/stock_takes/${draft.takeId}'},
+    );
+    expect(records.map((record) => record.operationId).toSet(), hasLength(2));
+    for (final record in records) {
+      expect(record.kind, TenantPendingMutationKind.stockTakePage);
+    }
+    // Only the last page says the count is complete.
+    final finals = records
+        .map((record) => record.payload['isFinalPage'])
+        .toList();
+    expect(finals.where((value) => value == true), hasLength(1));
+  });
+
+  test('two counts queue independently of one another', () async {
+    final writer = QueuedTenantStockTakeWriter(
+      store: store,
+      currentUid: () => 'user-a',
+    );
+
+    await writer.submitPage(
+      tenantStockTakePages(_stockTakeDraft(takeSuffix: 'a')).single,
+    );
+    await writer.submitPage(
+      tenantStockTakePages(_stockTakeDraft(takeSuffix: 'b')).single,
+    );
+
+    final records = await store.recordsForSession(
+      uid: 'user-a',
+      tenantId: 'tenant-a',
+    );
+    expect(records, hasLength(2));
+    expect(
+      records.map((record) => record.targetPath).toSet(),
+      hasLength(2),
+      reason: 'one path each, so neither waits on the other',
+    );
+  });
+
+  test('a queued count is drawn as still on its way', () async {
+    // The counter's own list must show the take from the moment it is handed
+    // in, marked for what it is: the lines are still in the queue behind it.
+    final writer = QueuedTenantStockTakeWriter(
+      store: store,
+      currentUid: () => 'user-a',
+    );
+    final draft = _stockTakeDraft();
+    await writer.submitPage(tenantStockTakePages(draft).single);
+
+    final page = await _overlay(store).getCollectionPage(
+      TenantCollectionQuery.forTesting(
+        collectionPath: 'tenants/tenant-a/stock_takes',
+        limit: 20,
+      ),
+    );
+
+    expect(page, hasLength(1));
+    expect(page.single.data['status'], 'submitting');
+    expect(page.single.data['counterUid'], 'user-a');
+    expect(page.single.data['businessDate'], '2026-09-13');
+    expect(page.single.data['productsInScope'], 9);
+    // The counted figures are not projected: they belong to the lines under the
+    // take, and the only surface that reads those is a review of counts that
+    // have arrived.
+    expect(page.single.data.containsKey('lines'), isFalse);
+  });
+
+  test('a count queued with no session throws rather than vanishing', () async {
+    final writer = QueuedTenantStockTakeWriter(
+      store: store,
+      currentUid: () => null,
+    );
+
+    expect(
+      () => writer.submitPage(tenantStockTakePages(_stockTakeDraft()).single),
+      throwsA(
+        isA<TenantStockTakeException>().having(
+          (error) => error.failure,
+          'failure',
+          TenantStockTakeFailure.forbidden,
+        ),
+      ),
+    );
+  });
+
   test(
     'a rejected mutation stops being drawn, which is the reversal',
     () async {
@@ -273,6 +379,29 @@ void main() {
 }
 
 const String _productId = 'req-000000000000000000000000000000';
+
+TenantStockTakeDraft _stockTakeDraft({int lines = 1, String takeSuffix = 'a'}) =>
+    TenantStockTakeDraft(
+      takeId: tenantStockTakeId(
+        tenantId: 'tenant-a',
+        counterUid: 'user-a',
+        requestId: 'stocktake-$takeSuffix',
+        businessDate: '2026-09-13',
+      ),
+      tenantId: 'tenant-a',
+      businessDate: '2026-09-13',
+      scope: const TenantStockTakeEverything(),
+      productsInScope: 9,
+      startedAt: DateTime.utc(2026, 9, 13, 6),
+      counts: <String, TenantStockTakeCount>{
+        for (var i = 0; i < lines; i++)
+          'pd-$i': TenantStockTakeCount(
+            counted: i,
+            seenQuantity: i + 1,
+            countedAt: DateTime.utc(2026, 9, 13, 7),
+          ),
+      },
+    );
 
 TenantPendingMutationOverlayReader _overlay(
   TenantPendingMutationStore store, {

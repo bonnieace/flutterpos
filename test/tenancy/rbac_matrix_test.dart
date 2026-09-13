@@ -44,6 +44,9 @@ import 'package:flutter_application_1/inventory/stock_adjustment.dart';
 import 'package:flutter_application_1/inventory/stock_adjustment_feed.dart';
 import 'package:flutter_application_1/inventory/stock_movement_feed.dart';
 import 'package:flutter_application_1/inventory/stock_movements.dart';
+import 'package:flutter_application_1/inventory/stock_take.dart';
+import 'package:flutter_application_1/inventory/stock_take_review.dart';
+import 'package:flutter_application_1/inventory/stock_take_schedule.dart';
 import 'package:flutter_application_1/reporting/daily_metrics.dart';
 import 'package:flutter_application_1/reporting/profit_report.dart';
 import 'package:flutter_application_1/reporting/reconciliation_anomalies.dart';
@@ -144,6 +147,30 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
   'TenantStockMovementFeedRepository.allowedRoles': (
     expected: TenantStockMovementFeedRepository.allowedRoles,
     row: 'View stock movement feed, including the collection-group read.',
+  ),
+  // | Take a stock count | Full | Full | Full | Full |
+  //
+  // **The one inventory capability a cashier has**, and the reason it is safe
+  // is that it writes no quantity: a count is an observation, and accepting it
+  // is the separate row below.
+  'TenantStockTakeGateway.allowedRoles': (
+    expected: TenantStockTakeGateway.allowedRoles,
+    row: 'Take a stock count: every active member, because it moves no stock.',
+  ),
+  // | Read a stock count's lines | Full | Full | Full | No |
+  // | Accept a stock count | Full | Full | Full | No |
+  'TenantStockTakeReviewRepository.allowedRoles': (
+    expected: TenantStockTakeReviewRepository.allowedRoles,
+    row: "Read a stock count's lines, and accept it.",
+  ),
+  // | Set the counting schedule | Full | Full | No | No |
+  'TenantStockTakeScheduleRepository.writeRoles': (
+    expected: TenantStockTakeScheduleRepository.writeRoles,
+    row: 'Set the counting schedule.',
+  ),
+  'TenantStockTakeSchedulePublisher.allowedRoles': (
+    expected: TenantStockTakeSchedulePublisher.allowedRoles,
+    row: 'Set the counting schedule, from the settings tab that publishes it.',
   ),
   // | Daily summary | Full | Full | Full | No |
   'TenantDailyMetricsRepository.allowedRoles': (
@@ -317,6 +344,12 @@ const Map<String, List<TenantRole>> _fromTheMatrix = <String, List<TenantRole>>{
   'TenantStockAdjustmentGateway.allowedRoles': _management,
   'TenantStockAdjustmentFeedRepository.allowedRoles': _management,
   'TenantStockMovementFeedRepository.allowedRoles': _management,
+  // Every active member, which is the widest list in the inventory surface and
+  // the whole point of the feature: counting moves no stock.
+  'TenantStockTakeGateway.allowedRoles': <TenantRole>[_o, _a, _m, _c],
+  'TenantStockTakeReviewRepository.allowedRoles': _management,
+  'TenantStockTakeScheduleRepository.writeRoles': <TenantRole>[_o, _a],
+  'TenantStockTakeSchedulePublisher.allowedRoles': <TenantRole>[_o, _a],
   'TenantDailyMetricsRepository.allowedRoles': _management,
   'TenantSalesTotalsGateway.allowedRoles': _management,
   'TenantReconciliationStatusRepository.allowedRoles': _management,

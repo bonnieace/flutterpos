@@ -162,6 +162,16 @@ final class FirebaseTenantMutationGateway
           await _call('updateProduct', record.payload);
         case TenantPendingMutationKind.stockAdjust:
           await _call('adjustStock', record.payload);
+        // **A callable, and the one here a cashier may reach.** A count writes
+        // nothing a client could write for itself - `stock_takes` is server-only
+        // like the ledger it will be read against - and it moves no stock, which
+        // is what makes opening it to every active member safe.
+        //
+        // The payload is the whole request, page included, so nothing is derived
+        // here. The server keys its idempotency record on the take and the page
+        // number, both already in it, so re-sending a page is free.
+        case TenantPendingMutationKind.stockTakePage:
+          await _call('submitStockTake', record.payload);
       }
       return const TenantMutationSubmissionResult(
         TenantMutationSubmissionOutcome.committed,

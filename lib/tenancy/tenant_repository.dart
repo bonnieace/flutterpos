@@ -793,6 +793,28 @@ abstract base class TenantReadRepository {
   /// reported the same way every other refusal here is - as a failed future,
   /// never as a synchronous throw an awaiting caller would have to guard
   /// separately.
+  /// Pages one stock take's lines, proved to be children of that take.
+  ///
+  /// The same shape as [readProductSubcollectionPage] and for the same reason:
+  /// a subcollection is reachable only through a named enum, so no caller can
+  /// hand this a path of its own devising.
+  Future<TenantDocumentPage> readStockTakeSubcollectionPage(
+    TenantStockTakeSubcollection subcollection, {
+    required String takeId,
+    required TenantCollectionReader collectionReader,
+    int pageSize = 20,
+    String? cursor,
+    bool descending = false,
+    Map<String, Object?> equalityFilters = const <String, Object?>{},
+  }) async => _readPage(
+    paths.stockTakeSubcollectionPath(takeId, subcollection),
+    collectionReader: collectionReader,
+    pageSize: pageSize,
+    cursor: cursor,
+    descending: descending,
+    equalityFilters: equalityFilters,
+  );
+
   Future<TenantDocumentPage> readProductSubcollectionPage(
     TenantProductSubcollection subcollection, {
     required String productId,

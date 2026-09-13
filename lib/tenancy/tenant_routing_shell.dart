@@ -116,15 +116,16 @@ final class TenantRoutingShell extends StatefulWidget {
     this.tenantRouteBuilder,
     this.reconnectSignals,
     this.checkoutRoute,
-    this.checkoutConfigurationRoute,
-    this.checkoutConfigurationRoles = const <TenantRole>[],
-    this.brandingRoute,
-    this.brandingRoles = const <TenantRole>[],
-    this.printerConfigurationRoute,
-    this.printerConfigurationRoles = const <TenantRole>[],
+    this.settingsRoute,
+    this.settingsRoles = const <TenantRole>[],
+    this.printerSettingsRoles = const <TenantRole>[],
     this.printQueueCount,
     this.unresolvedDifferencesCount,
     this.catalogManagementRoute,
+    this.stockTakeRoute,
+    this.stockTakeRoles = const <TenantRole>[],
+    this.stockTakeReviewRoute,
+    this.stockTakeReviewRoles = const <TenantRole>[],
     this.catalogManagementRoles = const <TenantRole>[],
     this.memberName,
     this.salesTotalsCallable,
@@ -303,33 +304,30 @@ final class TenantRoutingShell extends StatefulWidget {
   /// was started in.
   final Widget Function(TenantSessionController sessions)? checkoutRoute;
 
-  /// Optional guarded checkout settings route, injected for the same reason.
+  /// Opens the guarded settings screen, which holds the business's settings as
+  /// tabs rather than as separate routes.
   ///
-  /// It is the only surface that publishes what a till prices in, and until it
-  /// has been used once the till above it cannot sell at all.
-  final Widget Function(TenantDataReader reader)? checkoutConfigurationRoute;
+  /// **One route where there were three.** What a price means, what the business
+  /// is called and what it prints on are three settings and one subject, and two
+  /// of them are things a newly approved business must set before it can trade
+  /// at all: until a currency is published the till cannot sell, and until a
+  /// printer is named every receipt queues unprinted.
+  final Widget Function(TenantDataReader reader, String? initialTabKey)?
+  settingsRoute;
 
-  /// The roles that route is offered to, decided by the checkout domain. It is
-  /// deliberately narrower than the roles that may sell.
-  final List<TenantRole> checkoutConfigurationRoles;
+  /// The roles that route is offered to. Owner and administrator, which is what
+  /// `configuration/{documentId}` admits for writing and therefore what every
+  /// tab inside it enforces for itself.
+  final List<TenantRole> settingsRoles;
 
-  /// Opens the guarded screen a business names itself on.
-  final Widget Function(TenantDataReader reader)? brandingRoute;
-
-  /// The roles that route is offered to, decided by the tenancy domain.
-  final List<TenantRole> brandingRoles;
-
-  /// Optional guarded printer settings route, injected for the same reason.
+  /// Who is offered the *Printer* shortcut beside *Settings*.
   ///
-  /// It is the only surface that can say where this business prints, and
-  /// `docs/printer_transport.md` §6 forbids guessing an address — so until it
-  /// has been used once, every receipt queues with `printer_not_configured`.
-  final Widget Function(TenantDataReader reader)? printerConfigurationRoute;
-
-  /// The roles that route is offered to, decided by the checkout domain. Owner
-  /// and administrator: a manager runs a till, but deciding what hardware the
-  /// business owns is not an operational act.
-  final List<TenantRole> printerConfigurationRoles;
+  /// **A second door onto one room, not a second room.** It opens the same
+  /// `settingsRoute` at its printer tab, so the panel, its guard and its role
+  /// list are the tab's and this decides only who is shown the shortcut.
+  /// Setting a printer is the one setting an administrator does standing at
+  /// the counter with a roll of paper, which is why it keeps a tile of its own.
+  final List<TenantRole> printerSettingsRoles;
 
   /// How many receipts this device has not printed.
   ///
@@ -354,6 +352,21 @@ final class TenantRoutingShell extends StatefulWidget {
   /// It is the only surface that puts a product in the catalog, and every other
   /// operational route in this app already assumed one was there.
   final Widget Function(TenantDataReader reader)? catalogManagementRoute;
+
+  /// Counting the shelf. Offered to every active member, which no other
+  /// inventory route is: a count moves no stock, so the person best placed
+  /// to take one need not be trusted to correct one.
+  final Widget Function(TenantDataReader reader)? stockTakeRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> stockTakeRoles;
+
+  /// Reading the counts that have been handed in, and accepting one.
+  /// Owner, administrator and manager - accepting a count moves stock.
+  final Widget Function(TenantDataReader reader)? stockTakeReviewRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> stockTakeReviewRoles;
 
   /// The roles that route is offered to, decided by the inventory domain.
   /// Retiring is narrower still and is decided inside the route itself.
@@ -1200,15 +1213,16 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       memberName: widget.memberName?.call(),
       salesTotalsCallable: widget.salesTotalsCallable,
       checkoutRoute: widget.checkoutRoute,
-      checkoutConfigurationRoute: widget.checkoutConfigurationRoute,
-      checkoutConfigurationRoles: widget.checkoutConfigurationRoles,
-      brandingRoute: widget.brandingRoute,
-      brandingRoles: widget.brandingRoles,
-      printerConfigurationRoute: widget.printerConfigurationRoute,
-      printerConfigurationRoles: widget.printerConfigurationRoles,
+      settingsRoute: widget.settingsRoute,
+      settingsRoles: widget.settingsRoles,
+      printerSettingsRoles: widget.printerSettingsRoles,
       printQueueCount: widget.printQueueCount,
       unresolvedDifferencesCount: widget.unresolvedDifferencesCount,
       catalogManagementRoute: widget.catalogManagementRoute,
+      stockTakeRoute: widget.stockTakeRoute,
+      stockTakeRoles: widget.stockTakeRoles,
+      stockTakeReviewRoute: widget.stockTakeReviewRoute,
+      stockTakeReviewRoles: widget.stockTakeReviewRoles,
       catalogManagementRoles: widget.catalogManagementRoles,
       pendingCheckoutPanel: widget.pendingCheckoutPanel,
       shiftPanel: widget.shiftPanel,
@@ -2471,15 +2485,16 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.switchCandidates = const [],
     this.onSwitchTenant,
     this.checkoutRoute,
-    this.checkoutConfigurationRoute,
-    this.checkoutConfigurationRoles = const <TenantRole>[],
-    this.brandingRoute,
-    this.brandingRoles = const <TenantRole>[],
-    this.printerConfigurationRoute,
-    this.printerConfigurationRoles = const <TenantRole>[],
+    this.settingsRoute,
+    this.settingsRoles = const <TenantRole>[],
+    this.printerSettingsRoles = const <TenantRole>[],
     this.printQueueCount,
     this.unresolvedDifferencesCount,
     this.catalogManagementRoute,
+    this.stockTakeRoute,
+    this.stockTakeRoles = const <TenantRole>[],
+    this.stockTakeReviewRoute,
+    this.stockTakeReviewRoles = const <TenantRole>[],
     this.catalogManagementRoles = const <TenantRole>[],
     this.memberName,
     this.pendingCheckoutPanel,
@@ -2531,27 +2546,22 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// Optional guarded checkout settings route, supplied by the composition root.
   ///
-  /// It is the one surface that publishes what a till prices in. The till beside
-  /// it refuses to sell until this has been used once, which is why the two are
-  /// offered from the same screen.
-  final Widget Function(TenantDataReader reader)? checkoutConfigurationRoute;
+  /// See `TenantRoutingShell.settingsRoute`.
+  final Widget Function(TenantDataReader reader, String? initialTabKey)?
+  settingsRoute;
 
-  /// The roles that route is offered to, decided by the checkout domain. It is
-  /// deliberately narrower than the roles that may sell.
-  final List<TenantRole> checkoutConfigurationRoles;
+  /// The roles that route is offered to. Owner and administrator, which is what
+  /// `configuration/{documentId}` admits for writing.
+  final List<TenantRole> settingsRoles;
 
-  /// Opens the guarded screen a business names itself on.
-  final Widget Function(TenantDataReader reader)? brandingRoute;
-
-  /// The roles that route is offered to, decided by the tenancy domain.
-  final List<TenantRole> brandingRoles;
-
-  /// Optional guarded printer settings route, supplied by the composition root.
-  /// See `TenantRoutingShell.printerConfigurationRoute`.
-  final Widget Function(TenantDataReader reader)? printerConfigurationRoute;
-
-  /// The roles that route is offered to. Owner and administrator only.
-  final List<TenantRole> printerConfigurationRoles;
+  /// Who is offered the *Printer* shortcut beside *Settings*.
+  ///
+  /// **A second door onto one room, not a second room.** It opens the same
+  /// `settingsRoute` at its printer tab, so the panel, its guard and its role
+  /// list are the tab's and this decides only who is shown the shortcut.
+  /// Setting a printer is the one setting an administrator does standing at
+  /// the counter with a roll of paper, which is why it keeps a tile of its own.
+  final List<TenantRole> printerSettingsRoles;
 
   /// See `TenantRoutingShell.printQueueCount`.
   final int? Function()? printQueueCount;
@@ -2564,6 +2574,21 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// root. It is the one surface that can put a product in the catalog, which
   /// is what every other operational route on this screen already assumed.
   final Widget Function(TenantDataReader reader)? catalogManagementRoute;
+
+  /// Counting the shelf. Offered to every active member, which no other
+  /// inventory route is: a count moves no stock, so the person best placed
+  /// to take one need not be trusted to correct one.
+  final Widget Function(TenantDataReader reader)? stockTakeRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> stockTakeRoles;
+
+  /// Reading the counts that have been handed in, and accepting one.
+  /// Owner, administrator and manager - accepting a count moves stock.
+  final Widget Function(TenantDataReader reader)? stockTakeReviewRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> stockTakeReviewRoles;
 
   /// The roles that route is offered to, decided by the inventory domain.
   final List<TenantRole> catalogManagementRoles;
@@ -3139,6 +3164,65 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           );
         },
       ),
+    // The other end of the same feature: what the counts said, and the one
+    // control that turns a count into a correction. Narrower than taking one,
+    // because accepting a count moves stock and taking one does not.
+    if (stockTakeReviewRoute != null &&
+        membership.role.canAccess(stockTakeReviewRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('stock-take-review'),
+        label: 'Stock counts',
+        description: 'Review what was counted and correct the stock from it.',
+        group: 'Inventory',
+        icon: Icons.rule_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: stockTakeReviewRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    // **Beside Inventory, and open to everybody it is beside.** Counting is
+    // the one thing on this menu a cashier may do to the catalog, because it
+    // does nothing to the catalog: the numbers land as an observation and
+    // somebody with the standing to move stock decides what follows from them.
+    //
+    // **Only where the count cannot be started from the record of counts.**
+    // Anybody who can open *Stock counts* starts one with the button on it, so
+    // showing both here put the act and its record side by side on a menu that
+    // was already twelve tiles long. A cashier reaches no such screen - the
+    // lines carry the expected figure a count is blind to - so for them this
+    // tile is the only door and it stays.
+    if (stockTakeRoute != null &&
+        membership.role.canAccess(stockTakeRoles) &&
+        !membership.role.canAccess(stockTakeReviewRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('stock-take'),
+        // **A verb, because the row beside it is a noun.** *Stock count* and
+        // *Stock counts* sat next to each other on this menu and differed by one
+        // letter, which is not a distinction anybody should have to notice. This
+        // one is the act; the other is the record of it.
+        label: 'Count stock',
+        description: 'Count what is on the shelf and hand the figures in.',
+        group: 'Inventory',
+        icon: Icons.fact_check_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: stockTakeRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
     // Beside Reports, because it is the other half of the same question. A
     // report says what came in and what the stock cost; this says what else
     // went out, and the two together are the only way the profit on those
@@ -3201,15 +3285,22 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           );
         },
       ),
-    // Beside the catalog rather than beside the till: this decides what
-    // every price in that catalog means, and the person who opens it is not
-    // the person standing at the till.
-    if (checkoutConfigurationRoute != null &&
-        membership.role.canAccess(checkoutConfigurationRoles))
+    // **One Settings route, tabbed, since 2026-09-13.** These were three
+    // separate rows opening three separate pages - what a price means, what the
+    // business is called, what it prints on - which are three settings and one
+    // subject. `TenantSettingsScreen` holds them as tabs, so changing two of
+    // them is one visit rather than two.
+    //
+    // *Staff* and *Logs* below deliberately stay their own routes: one is
+    // people and permissions and the other is a record of what happened, and
+    // neither is a setting.
+    if (settingsRoute != null && membership.role.canAccess(settingsRoles))
       HomeDestination(
-        destinationKey: const ValueKey('checkout-configuration'),
+        destinationKey: const ValueKey('settings'),
         label: 'Settings',
-        description: 'Decide what every price in the catalog means.',
+        description:
+            'What prices mean, what the business is called, what it prints on, '
+            'and when stock is counted.',
         group: 'Settings',
         icon: Icons.tune_outlined,
         onPressed: () {
@@ -3218,44 +3309,23 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             AppPageRoute<void>(
               builder: (_) => TenantSessionScope(
                 controller: controller,
-                child: checkoutConfigurationRoute!(reader),
+                child: settingsRoute!(reader, null),
               ),
             ),
           );
         },
       ),
-    // First in *Settings*, because it is the first thing a business that has
-    // just been approved has to fix: until it is set the home carries no name
-    // and every receipt prints an unbranded header.
-    if (brandingRoute != null && membership.role.canAccess(brandingRoles))
+    // **Printer, back beside Settings and not instead of it.** Folding the five
+    // settings into tabs put this one three taps away - open Settings, find the
+    // strip, scroll it - and it is the setting somebody reaches for while
+    // standing at the counter with a roll of paper that will not come out. It
+    // opens the same screen at its own tab, so there is still exactly one
+    // printer panel, one guard and one role list.
+    if (settingsRoute != null && membership.role.canAccess(printerSettingsRoles))
       HomeDestination(
-        destinationKey: const ValueKey('business-details'),
-        label: 'Business details',
-        description:
-            'The name, slogan and logo the home and every receipt carry.',
-        group: 'Settings',
-        icon: Icons.storefront_outlined,
-        onPressed: () {
-          final controller = TenantSessionScope.of(context);
-          Navigator.of(context).push(
-            AppPageRoute<void>(
-              builder: (_) => TenantSessionScope(
-                controller: controller,
-                child: brandingRoute!(reader),
-              ),
-            ),
-          );
-        },
-      ),
-    // Beside the checkout settings it sits next to in Firestore, and
-    // guarded by the same roles: both decide something about the business
-    // rather than about a sale, and neither is an operational act.
-    if (printerConfigurationRoute != null &&
-        membership.role.canAccess(printerConfigurationRoles))
-      HomeDestination(
-        destinationKey: const ValueKey('printer-configuration'),
+        destinationKey: const ValueKey('printer-settings'),
         label: 'Printer',
-        description: 'Choose the hardware receipts are printed on.',
+        description: 'Set the till printer and put a test page on the roll.',
         group: 'Settings',
         icon: Icons.print_outlined,
         onPressed: () {
@@ -3264,7 +3334,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             AppPageRoute<void>(
               builder: (_) => TenantSessionScope(
                 controller: controller,
-                child: printerConfigurationRoute!(reader),
+                child: settingsRoute!(reader, 'printer'),
               ),
             ),
           );

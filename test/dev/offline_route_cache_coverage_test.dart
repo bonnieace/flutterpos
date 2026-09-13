@@ -60,6 +60,12 @@ void main() {
     const deviceOnlyGuards = <String>{
       'lib/checkout/checkout_cart_panel.dart',
       'lib/checkout/checkout_evidence.dart',
+      // Counting reads the same offline catalog snapshot the cart above does,
+      // through the same `CheckoutCatalogSource`. There is no live reader to
+      // pair a cached one with: the count is taken in a stock room, and a
+      // screen that needed the network to list what to count would be useless
+      // exactly where it is used.
+      'lib/inventory/stock_take_panel.dart',
     };
 
     final guarded = <String>[];

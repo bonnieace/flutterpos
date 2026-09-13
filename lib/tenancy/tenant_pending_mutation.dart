@@ -17,13 +17,18 @@ enum TenantPendingMutationKind {
   brandingMerge,
   printerConfigurationMerge,
 
-  /// Bringing a product into the catalog. A plain Firestore `set`, which is
-  /// what `allow create` on `products` already admits for these roles - the
-  /// queue replays the same write a moment later, so `firestore.rules` is
-  /// untouched by any of this.
+  /// Bringing a product into the catalog. **A callable since 2026-09-13**, and
+  /// `allow create` on `products` is now `if false`. It had to become one: a
+  /// create may carry an opening quantity, and the `stock_adjustments` record
+  /// and `stock_movements` entry saying where those units came from cannot be
+  /// written by any client. The payload is unchanged - the drain builds the
+  /// callable's envelope from `targetPath` - so a record queued by an older
+  /// build still replays.
   productCreate,
 
-  /// Taking a product out of it. A plain `delete`, on the same terms.
+  /// Taking a product out of it. **Also a callable, and no longer a delete.**
+  /// Retiring clears the stock the product held, and whoever writes a quantity
+  /// writes the movement that accounts for it.
   productRetire,
 
   categoryCreate,
@@ -41,6 +46,20 @@ enum TenantPendingMutationKind {
   /// `stock_movements` are server-write-only, so a device cannot give an
   /// adjustment its ledger entry. Replay-safe on its own `requestId`.
   stockAdjust,
+
+  /// One page of a stock take: what somebody counted, and what their device
+  /// believed at the time.
+  ///
+  /// **Every page of one take carries the same `targetPath`**, which is the
+  /// take itself rather than any product. That is deliberate twice over: the
+  /// drain keeps one path's records in order, so the pages of a count go up in
+  /// order, while two people's counts drain independently of one another.
+  ///
+  /// Replay-safe without a `requestId` in the payload. The server keys its
+  /// idempotency record on the take and the page number, both of which are
+  /// already here, so a page may be re-sent at any time and land on the same
+  /// documents with the same values.
+  stockTakePage,
 }
 
 /// Whether the queue reaches this kind through the Admin SDK rather than
@@ -50,9 +69,25 @@ enum TenantPendingMutationKind {
 /// document write is applied by Firestore's own cache the moment it is
 /// submitted, whereas a callable does nothing at all until the device can reach
 /// the server. Both are durable here; only the second is invisible to Firestore.
-bool tenantMutationIsCallable(TenantPendingMutationKind kind) =>
-    kind == TenantPendingMutationKind.productCorrect ||
-    kind == TenantPendingMutationKind.stockAdjust;
+bool tenantMutationIsCallable(TenantPendingMutationKind kind) => switch (kind) {
+  // Everything that writes a quantity, or a document only the Admin SDK may
+  // write. A `switch` rather than a chain of comparisons so that adding a kind
+  // and forgetting to classify it stops compiling - which is how the two
+  // product kinds below came to be listed on the wrong side of this for a
+  // commit after they became callables.
+  TenantPendingMutationKind.productCreate ||
+  TenantPendingMutationKind.productRetire ||
+  TenantPendingMutationKind.productCorrect ||
+  TenantPendingMutationKind.stockAdjust ||
+  TenantPendingMutationKind.stockTakePage => true,
+  TenantPendingMutationKind.expenseCreate ||
+  TenantPendingMutationKind.expenseVoid ||
+  TenantPendingMutationKind.pendingReturnCreate ||
+  TenantPendingMutationKind.brandingMerge ||
+  TenantPendingMutationKind.printerConfigurationMerge ||
+  TenantPendingMutationKind.categoryCreate ||
+  TenantPendingMutationKind.categoryRename => false,
+};
 
 enum TenantPendingMutationState {
   queued,
@@ -927,6 +962,28 @@ final class TenantPendingMutationOverlayReader
           ...record.payload,
           'voidedAt': canonical?['voidedAt'] ?? record.createdAt,
         };
+      // **A queued count, drawn as the server will hold it.** Every page of
+      // one take shares this path and merges the same header, so the pages
+      // project onto one another harmlessly and the take appears as soon as the
+      // first of them is queued.
+      //
+      // The lines are not projected. They live under this document and the only
+      // surface that reads them is management's review, which is a surface for
+      // counts that have arrived.
+      case TenantPendingMutationKind.stockTakePage:
+        return <String, Object?>{
+          if (canonical != null) ...canonical,
+          'tenantId': record.tenantId,
+          // The counter is whoever queued it, never anything in the payload.
+          'counterUid': record.uid,
+          'businessDate': record.payload['businessDate'],
+          'scope': record.payload['scope'],
+          'productsInScope': record.payload['productsInScope'],
+          // A take already on the server keeps the standing it reached there;
+          // one that exists only here is still on its way.
+          'status': canonical?['status'] ?? 'submitting',
+          'createdAt': canonical?['createdAt'] ?? record.createdAt,
+        };
       case TenantPendingMutationKind.productCreate:
       case TenantPendingMutationKind.categoryCreate:
         return <String, Object?>{
@@ -1072,6 +1129,10 @@ void _requireTarget(
     TenantPendingMutationKind.stockAdjust => 'products',
     TenantPendingMutationKind.categoryCreate ||
     TenantPendingMutationKind.categoryRename => 'categories',
+    // The take, not the products counted in it. See the kind's own note: one
+    // path per count is what keeps a count's pages ordered without serialising
+    // one person's count behind another's.
+    TenantPendingMutationKind.stockTakePage => 'stock_takes',
   };
   if (collection != expected) {
     throw const TenantPendingMutationException('invalid_target');

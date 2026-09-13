@@ -756,4 +756,8 @@ String _mutationKindLabel(TenantPendingMutationKind kind) => switch (kind) {
   TenantPendingMutationKind.categoryRename => 'Renamed category',
   TenantPendingMutationKind.productCorrect => 'Product correction',
   TenantPendingMutationKind.stockAdjust => 'Stock adjustment',
+  // Singular, because one record is one page of one count and the person
+  // reading this list is being told what is still on its way - not how the
+  // count was split up to send it.
+  TenantPendingMutationKind.stockTakePage => 'Stock count',
 };

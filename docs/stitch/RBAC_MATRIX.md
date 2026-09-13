@@ -59,6 +59,10 @@ shift/session scope; **No** = no route/action.
 | Product stock and ledger | Full | Full | Full | No | Dedicated stock routes. |
 | Create stock correction | Full | Full | Full | No | Reasoned/manual adjustment. |
 | View stock adjustment/movement feeds | Full | Full | Full | No | Includes wider collection-group movement read. |
+| Take a stock count | Full | Full | Full | Full | **The widest row in this table, and deliberately so.** Counting writes to `stock_takes` through `submitStockTake` and moves no stock at all: the figures land as an observation and somebody who may adjust decides what follows. Opening it to a cashier is the point of the feature - the person best placed to count the shelf need not be trusted to correct it. |
+| Read a stock count's lines | Full | Full | Full | No | A line carries `expected`, the figure the count was taken blind to. A counter reads *that* they counted - `firestore.rules` lets them read their own take document - and never what the books said. |
+| Accept a stock count | Full | Full | Full | No | Writing the variances to the ledger is the same act as `Create stock correction` and takes the same roles. |
+| Set the counting schedule | Full | Full | No | No | Which days, who counts what, and whether the till is held. `configuration/{documentId}` already admits exactly owner and admin for writing; every active member reads it, because the till checks it on the way in. |
 | Daily summary | Full | Full | Full | No | `TenantDailyMetricsRepository.allowedRoles`. |
 | Sales totals | Full | Full | Full | No | Management reporting. |
 | Reconciliation status/anomalies | Full | Full | Full | No | Read scope. |

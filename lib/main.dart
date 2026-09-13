@@ -29,6 +29,7 @@ import 'reporting/reporting.dart';
 import 'returns/returns.dart';
 import 'sales/sales.dart';
 import 'shift/shift.dart';
+import 'ui/tokens.dart';
 
 Future<void> main() async {
   await SentryFlutter.init(
@@ -131,6 +132,17 @@ Future<void> main() async {
       // megabytes of a shop's own pictures with no second copy anywhere, and
       // they must not share a fate with the record of a sale.
       final productImageDrafts = await HiveTenantProductImageDrafts.open(
+        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+          storage: secureValueStore,
+          storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+              .productImageDraftStorageKey,
+        ),
+      );
+      // A stock count in progress. Its own box, because a count is an hour of
+      // somebody's attention with no second copy anywhere and must not share a
+      // fate with the record of a sale - the same argument the photograph
+      // drafts above make for themselves.
+      final stockTakeDrafts = await HiveTenantStockTakeDrafts.open(
         keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
           storage: secureValueStore,
           storageKey: SecureCheckoutOutboxEncryptionKeyProvider
@@ -263,6 +275,7 @@ Future<void> main() async {
             checkoutOutbox: checkoutOutbox,
             tenantMutationStore: tenantMutationStore,
             productImageDrafts: productImageDrafts,
+            stockTakeDrafts: stockTakeDrafts,
             tenantImageCache: tenantImageCache,
             checkoutCatalogCache: checkoutCatalogCache,
             checkoutReceiptCounters: checkoutReceiptCounters,
@@ -358,6 +371,7 @@ class SpiritPOSApp extends StatelessWidget {
     required this.checkoutOutbox,
     required this.tenantMutationStore,
     required this.productImageDrafts,
+    required this.stockTakeDrafts,
     required this.tenantImageCache,
     required this.checkoutCatalogCache,
     required this.checkoutReceiptCounters,
@@ -380,6 +394,7 @@ class SpiritPOSApp extends StatelessWidget {
   /// every surface that draws a product, through
   /// [TenantProductImageDraftScope].
   final HiveTenantProductImageDrafts productImageDrafts;
+  final HiveTenantStockTakeDrafts stockTakeDrafts;
 
   /// Photographs already published, kept on this device. Null where the boxes
   /// would not open, which draws every picture from the network exactly as the
@@ -603,6 +618,24 @@ class SpiritPOSApp extends StatelessWidget {
     final expenseWriter = QueuedTenantExpenseWriter(
       store: tenantMutationStore,
       onQueued: checkoutSyncSignals.requestSyncAfterSave,
+    );
+    // **One counting screen, two doors onto it.** A cashier opens it from the
+    // home menu; anybody who can read *Stock counts* opens it from the button on
+    // that screen. Built once rather than at each call site, so the draft box,
+    // the outbox writer and the sync signal cannot drift apart between them - a
+    // count started by one door and a count started by the other have to be the
+    // same count.
+    TenantStockTakeScreen buildStockTakeScreen() => TenantStockTakeScreen(
+      catalog: checkoutCatalogCache,
+      drafts: stockTakeDrafts,
+      obligations: stockTakeDrafts,
+      writer: QueuedTenantStockTakeWriter(
+        store: tenantMutationStore,
+        currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+        // The count is durable here the moment it is handed in; this asks the
+        // worker to start carrying it now rather than at the next reconnect.
+        onQueued: checkoutSyncSignals.requestSyncAfterSave,
+      ),
     );
     // **Where a callable-backed change waits.** Correcting a product and moving
     // stock are the two catalog changes that are not document writes and never
@@ -1052,25 +1085,51 @@ class SpiritPOSApp extends StatelessWidget {
               currency: TenantReportingCurrency.unknown,
               historyReader: tenantDataReader,
               returnActions: returnActions,
+              // **Inside the shift gate, so the count is asked about after the
+              // shift is settled.** `TenantShiftGate` renders its child only
+              // once a shift is open, which is exactly the ordering wanted and
+              // costs the shift code no change at all.
+              child: TenantStockTakeGate(
+                loadSchedule: (session) => TenantStockTakeScheduleRepository(
+                  session: session,
+                  // Cache-first, because this is read on the way into the till
+                  // and the till must open with no signal. A business whose
+                  // schedule this device has never read gets no schedule, which
+                  // means no count is due - the failure is open, by design.
+                  reader: tenantDataReader.cacheOnly,
+                ).load(),
+                obligations: stockTakeDrafts,
+                countRoute: (routeContext, scope) => TenantStockTakeScreen(
+                  catalog: checkoutCatalogCache,
+                  drafts: stockTakeDrafts,
+                  obligations: stockTakeDrafts,
+                  scope: scope,
+                  writer: QueuedTenantStockTakeWriter(
+                    store: tenantMutationStore,
+                    currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                    onQueued: checkoutSyncSignals.requestSyncAfterSave,
+                  ),
+                ),
               child: TenantCheckoutScreen(
-                cache: checkoutCatalogCache,
-                // The decorator is what makes a saved sale reach the server while the
-                // till stays open. It is wrapped here rather than inside the screen so
-                // the screen still knows only how to save.
-                drafts: CheckoutSyncOnSaveDraftSink(
-                  signals: checkoutSyncSignals,
-                  delegate: CheckoutDraftService(
-                    sessionController: sessions,
-                    cache: checkoutCatalogCache,
-                    outbox: checkoutOutbox,
-                    receipts: checkoutReceiptCounters,
-                    // The frozen restriction that a cashier cannot open checkout in a
-                    // second business while another still holds an open shift on this
-                    // device is enforced here, not by the screen.
-                    shiftBinder: TenantShiftCheckoutBinder(tenantShiftState),
-                    // The seam that was built and never connected: without it a sale
-                    // commits and no bytes are ever generated.
-                    onSaved: printReceipt,
+                  cache: checkoutCatalogCache,
+                  // The decorator is what makes a saved sale reach the server while the
+                  // till stays open. It is wrapped here rather than inside the screen so
+                  // the screen still knows only how to save.
+                  drafts: CheckoutSyncOnSaveDraftSink(
+                    signals: checkoutSyncSignals,
+                    delegate: CheckoutDraftService(
+                      sessionController: sessions,
+                      cache: checkoutCatalogCache,
+                      outbox: checkoutOutbox,
+                      receipts: checkoutReceiptCounters,
+                      // The frozen restriction that a cashier cannot open checkout in a
+                      // second business while another still holds an open shift on this
+                      // device is enforced here, not by the screen.
+                      shiftBinder: TenantShiftCheckoutBinder(tenantShiftState),
+                      // The seam that was built and never connected: without it a sale
+                      // commits and no bytes are ever generated.
+                      onSaved: printReceipt,
+                    ),
                   ),
                 ),
               ),
@@ -1085,78 +1144,148 @@ class SpiritPOSApp extends StatelessWidget {
             // A commit asks for a full sync pass, because the catalog refresh is the
             // only thing that re-reads the document: without it this device would
             // keep pricing new sales with the code that was just replaced.
-            checkoutConfigurationRoute: (reader) =>
-                TenantCheckoutConfigurationScreen(
-                  reader: reader,
-                  writer: FirebaseTenantCheckoutConfigurationWriter(
-                    firestore: FirebaseFirestore.instance,
-                    isOnline: isOnline,
-                  ),
-                  onPublished:
-                      checkoutSyncSignals.requestSyncAfterConfigurationChange,
-                ),
-            checkoutConfigurationRoles:
-                TenantCheckoutConfigurationPublisher.allowedRoles,
-            // Where this business prints. The last surface printing was missing:
-            // `docs/printer_transport.md` §6 forbids guessing an address, so until
-            // this has been used once every receipt queues with
-            // `printer_not_configured` and no paper comes out.
+            // **One settings route holding four tabs, since 2026-09-13.**
+            // Each tab is the *panel* its own route already wrapped in a
+            // scaffold, so every guard, role list and refusal inside them is
+            // untouched - this is a container change and nothing else.
             //
-            // `testPrint` puts a page on the roll against what is typed, before it
-            // is saved. The transport moves the bytes and `CheckoutPrinterTestPage`
-            // decides what they say; neither of them is the screen's business, so
-            // the screen is handed one function and no printer at all.
-            // The name and the receipt header, which nothing in this product could
-            // write until now: `TenantBrandingRepository` has always read
-            // `configuration/branding` and it was seeded by hand.
-            brandingRoute: (reader) => TenantBrandingScreen(
-              reader: reader,
-              writer: QueuedTenantConfigurationWriter(
-                store: tenantMutationStore,
-                cacheReader: reader.cached ?? reader,
-                currentUid: () => FirebaseAuth.instance.currentUser?.uid,
-                remote: FirebaseTenantConfigurationDocumentWriter(
-                  isOnline: isOnline,
+            // Two of these are what a newly approved business must set before
+            // it can trade at all: the catalog refresher refuses outright while
+            // no currency is published, and `docs/printer_transport.md` §6
+            // forbids guessing a printer address, so until each has been used
+            // once the till cannot sell and no paper comes out.
+            settingsRoute: (reader, initialTabKey) => TenantSettingsScreen(
+              initialTabKey: initialTabKey,
+              tabs: <TenantSettingsTab>[
+                // **What the business is, in one tab: its name, its mark, and
+                // the money it trades in.** The currency had a tab to itself
+                // called *Checkout*, which named a screen rather than a
+                // subject and held one field - and a person setting a business
+                // up sets all of this in one sitting. The two panels are
+                // stacked unchanged, each keeping its own guard and its own
+                // role list; both lists are owner and administrator already, so
+                // nothing is offered to anybody new.
+                //
+                // **It costs this tab two reads instead of one**, which is the
+                // honest price of merging two settings that each read a
+                // document. Opening both used to cost the same two; it is now
+                // paid at once rather than a tab apart.
+                TenantSettingsTab(
+                  tabKey: 'business-details',
+                  label: 'Business details',
+                  allowedRoles: TenantBrandingPublisher.allowedRoles,
+                  builder: (context) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      TenantBrandingPanel(
+                        reader: reader,
+                        writer: QueuedTenantConfigurationWriter(
+                          store: tenantMutationStore,
+                          cacheReader: reader.cached ?? reader,
+                          currentUid: () =>
+                              FirebaseAuth.instance.currentUser?.uid,
+                          remote: FirebaseTenantConfigurationDocumentWriter(
+                            isOnline: isOnline,
+                          ),
+                        ),
+                        // The logo's own prefix in Storage, gated in
+                        // `storage.rules` to the two roles that may publish the
+                        // document it goes in.
+                        logoStore: FirebaseTenantBrandingLogoStore(),
+                        // The catalog form's own cut-out, offered against a logo
+                        // for the same reason it is offered against a product
+                        // photograph: it is a picture off a phone either way.
+                        backgroundRemover: CallableTenantProductBackgroundRemover(
+                          callable: FirebaseRemoveProductBackgroundCallable(),
+                        ),
+                        // What the receipt will now say, on the roll, the moment it
+                        // is saved. Composed here because this is the only place
+                        // holding the ESC/POS profile and the platform transport at
+                        // once.
+                        printProof: printBrandingProof,
+                      ),
+                      SizedBox(
+                        height: AppTokens.componentOf(context).spacing.s24,
+                      ),
+                      // A commit asks for a full sync pass, because the catalog
+                      // refresh is the only thing that re-reads the document:
+                      // without it this device would keep pricing new sales
+                      // with the code that was just replaced.
+                      TenantCheckoutConfigurationPanel(
+                        reader: reader,
+                        writer: FirebaseTenantCheckoutConfigurationWriter(
+                          firestore: FirebaseFirestore.instance,
+                          isOnline: isOnline,
+                        ),
+                        onPublished: checkoutSyncSignals
+                            .requestSyncAfterConfigurationChange,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              // The logo's own prefix in Storage, gated in `storage.rules` to the
-              // two roles that may publish the document it goes in.
-              logoStore: FirebaseTenantBrandingLogoStore(),
-              // The catalog form's own cut-out, offered against a logo for the
-              // same reason it is offered against a product photograph: it is a
-              // picture off a phone either way. See `product_background_removal.dart`.
-              backgroundRemover: CallableTenantProductBackgroundRemover(
-                callable: FirebaseRemoveProductBackgroundCallable(),
-              ),
-              // What the receipt will now say, on the roll, the moment it is
-              // saved. Composed here because this is the only place holding the
-              // ESC/POS profile and the platform transport at once - the screen is
-              // handed one function and no printer at all.
-              printProof: printBrandingProof,
-            ),
-            brandingRoles: TenantBrandingPublisher.allowedRoles,
-            printerConfigurationRoute: (reader) =>
-                TenantPrinterConfigurationScreen(
-                  reader: reader,
-                  writer: QueuedTenantConfigurationWriter(
-                    store: tenantMutationStore,
-                    cacheReader: reader.cached ?? reader,
-                    currentUid: () => FirebaseAuth.instance.currentUser?.uid,
-                    remote: FirebaseTenantConfigurationDocumentWriter(
-                      firestore: FirebaseFirestore.instance,
-                      isOnline: isOnline,
+                TenantSettingsTab(
+                  tabKey: 'printer',
+                  label: 'Printer',
+                  allowedRoles:
+                      TenantPrinterConfigurationPublisher.allowedRoles,
+                  builder: (_) => TenantPrinterConfigurationPanel(
+                    reader: reader,
+                    writer: QueuedTenantConfigurationWriter(
+                      store: tenantMutationStore,
+                      cacheReader: reader.cached ?? reader,
+                      currentUid: () =>
+                          FirebaseAuth.instance.currentUser?.uid,
+                      remote: FirebaseTenantConfigurationDocumentWriter(
+                        firestore: FirebaseFirestore.instance,
+                        isOnline: isOnline,
+                      ),
+                    ),
+                    // Puts a page on the roll against what is typed, before it
+                    // is saved. The transport moves the bytes and
+                    // `CheckoutPrinterTestPage` decides what they say; neither
+                    // is the screen's business, so it is handed one function
+                    // and no printer at all.
+                    testPrint: (configuration) => printerTransport.send(
+                      configuration.endpoint,
+                      CheckoutPrinterTestPage(
+                        profile: printerCapabilityProfile,
+                        configuration: configuration,
+                      ).build(at: DateTime.now()),
                     ),
                   ),
-                  testPrint: (configuration) => printerTransport.send(
-                    configuration.endpoint,
-                    CheckoutPrinterTestPage(
-                      profile: printerCapabilityProfile,
-                      configuration: configuration,
-                    ).build(at: DateTime.now()),
+                ),
+                TenantSettingsTab(
+                  tabKey: 'stock-take',
+                  label: 'Stock counts',
+                  allowedRoles: TenantStockTakeSchedulePublisher.allowedRoles,
+                  // **Not queued, and that is deliberate.** The queued writer
+                  // carries `branding` and `printer` and passes everything else
+                  // straight at the server, which is what this wants: deciding
+                  // a counting rota is an owner sitting down with the business,
+                  // not an operational act taken on a shop floor with no
+                  // signal. The till reads the published document from cache
+                  // and treats an unreadable one as "no count is due", so a
+                  // schedule that never reaches a device interrupts nobody.
+                  builder: (_) => TenantStockTakeSettingsPanel(
+                    reader: reader,
+                    writer: QueuedTenantConfigurationWriter(
+                      store: tenantMutationStore,
+                      cacheReader: reader.cached ?? reader,
+                      currentUid: () =>
+                          FirebaseAuth.instance.currentUser?.uid,
+                      remote: FirebaseTenantConfigurationDocumentWriter(
+                        firestore: FirebaseFirestore.instance,
+                        isOnline: isOnline,
+                      ),
+                    ),
                   ),
                 ),
-            printerConfigurationRoles:
-                TenantPrinterConfigurationPublisher.allowedRoles,
+              ],
+            ),
+            settingsRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
+            // The printer tab's own list, so the shortcut and the tab behind it
+            // are offered to exactly the same people.
+            printerSettingsRoles: TenantPrinterConfigurationPublisher.allowedRoles,
             printQueueCount: () => _printQueueCount(checkoutPrintJobs),
             // Nightly reconciliation has been recording differences that nobody
             // sees unless they go looking for them. This is the count of the ones
@@ -1182,6 +1311,25 @@ class SpiritPOSApp extends StatelessWidget {
             // without it this device could not sell a product that now exists,
             // could still sell one that no longer does, and would keep pricing with
             // a figure that has just been corrected.
+            // **The only inventory route every active member reaches.** A count
+            // writes to `stock_takes`, which no client may write either - it goes
+            // through `submitStockTake` like the rest - and it moves no stock at
+            // all, which is what makes opening it safe.
+            stockTakeRoute: (reader) => buildStockTakeScreen(),
+            stockTakeRoles: TenantStockTakeGateway.allowedRoles,
+            stockTakeReviewRoute: (reader) => TenantStockTakeReviewScreen(
+              reader: reader,
+              // The same counting screen the home tile opens for a cashier.
+              // Anybody who can read the record of counts starts one from here
+              // instead, which is why the tile is not offered to them.
+              countRoute: (_) => buildStockTakeScreen(),
+              applyCallable: FirebaseApplyStockTakeCallable(),
+              // Accepting a count writes to `products`, `stock_adjustments` and
+              // `stock_movements`, so the till's offline catalog is stale the
+              // moment it lands.
+              onApplied: checkoutSyncSignals.requestSyncAfterCatalogChange,
+            ),
+            stockTakeReviewRoles: TenantStockTakeReviewRepository.allowedRoles,
             catalogManagementRoute: (reader) => TenantCatalogManagementScreen(
               reader: reader,
               productSearchReader: tenantDataReader,
@@ -1196,12 +1344,19 @@ class SpiritPOSApp extends StatelessWidget {
                 callable: FirebaseRemoveProductBackgroundCallable(),
               ),
               // **Durable-first since 2026-09-04, at the developer's direction.**
-              // These four remain the plain document writes described above - the
-              // queue replays exactly the `set`, `update` and `delete` the rules
-              // already admit, so nothing in `firestore.rules` moved. What changed
-              // is that the form no longer waits for the acknowledgement: adding a
-              // product used to hold the whole panel across a Storage upload, a
-              // download URL, a Firestore round trip and two catalog reads.
+              // What that bought is that the form no longer waits for an
+              // acknowledgement: adding a product used to hold the whole panel
+              // across a Storage upload, a download URL, a Firestore round trip
+              // and two catalog reads.
+              //
+              // **Two of these four stopped being document writes on 2026-09-13,
+              // and this comment claimed otherwise for a commit.** Creating and
+              // retiring a product are callables now and `allow create` and
+              // `allow delete` on `products` are both `if false`, because either
+              // may move a quantity and no device may write the
+              // `stock_adjustments` record that accounts for it. Only the two
+              // category writes are still the `set` and `update` the rules
+              // admit.
               //
               // `requestSyncAfterCatalogChange` rather than `requestSyncAfterSave`,
               // because a catalog change is precisely the case that does need the
@@ -1229,8 +1384,9 @@ class SpiritPOSApp extends StatelessWidget {
                   ),
               // Both bulk halves are callables and neither could be anything else.
               // A correction cannot be a client `WriteBatch` at all, for the reason
-              // above. An import could create products past the rules - `allow
-              // create` admits the same three roles - but no device can write the
+              // above. An import could once have created products past the rules,
+              // when `allow create` still admitted three roles - but no device can
+              // write the
               // `stock_adjustments` record and `stock_movements` entry that give an
               // opening quantity a recorded origin, because both collections are
               // server-write-only. A device import would therefore leave stock with

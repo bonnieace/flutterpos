@@ -12,6 +12,11 @@ enum TenantCollection {
   subscription('subscription'),
   auditLogs('audit_logs'),
 
+  /// Every stock count taken in this business. `submitStockTake` and
+  /// `applyStockTake` are the only writers; a counter reads their own and
+  /// management reads all of them.
+  stockTakes('stock_takes'),
+
   /// The business-wide immutable record of every manual `adjustStock`
   /// correction. `adjustStock` is the only writer; the client reads it and can
   /// never append, amend, or undo one.
@@ -66,6 +71,17 @@ enum TenantCollection {
 }
 
 /// Every subcollection of one tenant product allowed by the path contract.
+/// The subcollections a stock take owns.
+enum TenantStockTakeSubcollection {
+  /// One document per counted product, keyed by the product's own ID. Carries
+  /// `expected`, so it is readable by management alone - see `firestore.rules`.
+  lines('lines');
+
+  const TenantStockTakeSubcollection(this.segment);
+
+  final String segment;
+}
+
 enum TenantProductSubcollection {
   /// The immutable per-product stock ledger. Sales, verified returns, and
   /// manual adjustments all append to it, and only server code writes it.
@@ -181,6 +197,18 @@ final class TenantPaths {
     String productId,
     TenantProductSubcollection subcollection,
   ) => '${product(productId)}/${subcollection.segment}';
+
+  String stockTakeSubcollectionPath(
+    String takeId,
+    TenantStockTakeSubcollection subcollection,
+  ) =>
+      '${documentPath(TenantCollection.stockTakes, takeId)}/'
+      '${subcollection.segment}';
+
+  String stockTakeLines(String takeId) => stockTakeSubcollectionPath(
+    takeId,
+    TenantStockTakeSubcollection.lines,
+  );
 
   String productStockMovements(String productId) => productSubcollectionPath(
     productId,

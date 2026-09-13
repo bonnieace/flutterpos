@@ -37,6 +37,7 @@ export 'tenant_selection.dart';
 export 'tenant_session.dart';
 export 'tenant_setup_checklist.dart';
 export 'tenant_session_controller.dart';
+export 'tenant_settings_screen.dart';
 export 'tenant_staff_directory.dart';
 export 'tenant_staff_invitation.dart';
 export 'tenant_staff_names.dart';

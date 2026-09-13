@@ -695,6 +695,33 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // What somebody counted on the shelf, and what the books said at the time.
+      //
+      // **Written only by `submitStockTake`**, for the reason every collection
+      // around it is server-only: a count is read against the stock it will
+      // later correct, so a client that could write one could write the shortage
+      // it caused out of existence.
+      //
+      // A cashier reads their own counts and nobody else's, which is the split
+      // `shifts` already makes and for the same reason - a colleague's count is
+      // no more their business than a colleague's counted cash.
+      //
+      // **The lines are management-only, and that is the control, not an
+      // oversight.** A line carries `expected`: the figure the count was taken
+      // blind to. Letting the person who counted read it back would hand them
+      // the number they were deliberately not shown, which is most of what a
+      // blind count is for.
+      match /stock_takes/{takeId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager'])
+          || (activeStaff(tenantId) && resource.data.counterUid == request.auth.uid);
+        allow write: if false;
+
+        match /lines/{productId} {
+          allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+          allow write: if false;
+        }
+      }
+
       // The server's own record of every reconciliation run queued for this
       // business, and of whether each business day's totals are current.
       //
@@ -896,6 +923,10 @@ service cloud.firestore {
     }
 
     match /shifts/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /stock_takes/{document=**} {
       allow read, write: if false;
     }
 
