@@ -889,8 +889,22 @@ final class TenantPendingMutationOverlayReader
     Map<String, Object?>? canonical,
   ) {
     switch (record.kind) {
+      // **No longer a tombstone.** Retiring used to delete the document, so the
+      // overlay hid the row; it is a flag now, and the product stays in the
+      // catalog marked as retired. Drawing it that way offline is what makes the
+      // queued state and the settled state look the same.
+      //
+      // The quantity is cleared alongside it because the server clears it in the
+      // same transaction. Showing the old figure against a retired row would
+      // state stock that is already accounted for as gone.
       case TenantPendingMutationKind.productRetire:
-        return null;
+        if (canonical == null) return null;
+        final retiring = record.payload['retired'] != false;
+        return <String, Object?>{
+          ...canonical,
+          'retired': retiring,
+          if (retiring) 'quantity': 0,
+        };
       case TenantPendingMutationKind.productCorrect:
         if (canonical == null) return null;
         return _correctedProduct(canonical, record.payload);

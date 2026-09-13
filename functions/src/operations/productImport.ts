@@ -298,7 +298,7 @@ export function foldCategoryName(value: string): string {
  * A row that opens holding nothing is the ordinary case and writes no ledger
  * entry, exactly as the catalog's own create form behaves.
  */
-function readOpeningQuantity(value: unknown): number {
+export function readOpeningQuantity(value: unknown): number {
   if (value === undefined || value === null) return 0;
   if (
     !Number.isSafeInteger(value) ||

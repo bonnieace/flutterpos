@@ -274,8 +274,21 @@ service cloud.firestore {
       match /products/{productId} {
         allow read: if activeStaff(tenantId);
 
-        allow create: if hasTenantRole(tenantId, ['owner', 'admin', 'manager'])
-          && request.resource.data.quantity is int;
+        // **Server-only since 2026-09-13.** This admitted any document three
+        // roles cared to write, checking one field of it, and the client was
+        // the only thing standing between a business and a product its own till
+        // could not parse. It could not be tightened in place either: a create
+        // may now carry an opening quantity, and the `stock_adjustments` record
+        // and `stock_movements` entry that say where those units came from are
+        // server-write-only - so the product and its ledger entry have to be
+        // written by one principal, in one transaction. `createProduct` is that
+        // principal. It reads the resulting document through the same strict
+        // reader every device reads it with, and a device reaches it through the
+        // mutation outbox, so adding a product still works with no connection.
+        //
+        // `allow update` and `allow delete` below are unchanged: the checkout
+        // decrement and retiring a product are both still client writes.
+        allow create: if false;
 
         allow update: if activeStaff(tenantId)
           && resource.data.quantity is int
@@ -285,7 +298,16 @@ service cloud.firestore {
             .hasOnly(['quantity', 'updatedAt'])
           && request.resource.data.updatedAt == request.time;
 
-        allow delete: if hasTenantRole(tenantId, ['owner', 'admin']);
+        // **Server-only since 2026-09-13, and no longer a delete at all.**
+        // "Retire" removed the document: the quantity went with it, no movement
+        // recorded the stock leaving, every past sale line went on naming an ID
+        // nothing answered to, and the `stock_movements` below it were orphaned
+        // rather than removed - Firestore keeps a subcollection when its parent
+        // goes, so the ledger survived with no way into it. `setProductRetired`
+        // sets a flag and writes the movement that clears the stock in one
+        // transaction, which is the same rule `createProduct` follows in the
+        // other direction: whoever writes the quantity writes the movement.
+        allow delete: if false;
 
         // The append-only ledger of everything that moved this product's
         // stock: sales, verified returns, and manual adjustments. It is

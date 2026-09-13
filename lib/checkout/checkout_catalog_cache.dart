@@ -502,7 +502,13 @@ final class CheckoutCatalogCacheRefresher {
           );
         }
         if (!_owns(captured)) return _sessionChanged();
-        products.addAll(page.items);
+        // **A retired product is not cached, so the till cannot sell it - with
+        // or without a connection.** Filtered here rather than in the query on
+        // purpose: this pass already reads every product to build the cache, so
+        // dropping them costs nothing, while an equality filter on the server
+        // would need a composite index beside the category and search filters
+        // the catalog screen already uses.
+        products.addAll(page.items.where((product) => !product.retired));
         cursor = page.nextCursor;
         if (!page.hasMore || cursor == null) {
           productsComplete = true;

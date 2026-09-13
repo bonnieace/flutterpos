@@ -16,25 +16,57 @@ import '../tenancy/tenant_types.dart';
 
 /// The longest product or category name this surface writes.
 ///
-/// Nothing on the server bounds it: `allow create` on `products` checks only
-/// that `quantity is int`, and `categories` checks nothing at all. The bound is
-/// therefore the client's, and it exists so a name cannot be pasted long enough
-/// to make every catalog and receipt surface unreadable.
+/// **A category's name is bounded here and nowhere else**: `allow create` on
+/// `categories` checks nothing at all, and a category is still a document write.
+/// A product's name now passes `createProduct`, which reads the resulting
+/// document through the server's own `readSellableProduct` - so this is the
+/// tighter of two bounds there rather than the only one. It exists so a name
+/// cannot be pasted long enough to make every catalog and receipt surface
+/// unreadable.
 const int maximumCatalogNameLength = 120;
 
 /// The longest stock-keeping unit this surface writes, bounded for the same
 /// reason.
 const int maximumCatalogSkuLength = 64;
 
-/// The stock every product is created holding.
+/// The stock a product is created holding when the form was left blank.
 ///
-/// A create can name any integer the Firestore rule accepts, and this one
-/// deliberately never does. Stock that appears without a `stock_movements`
-/// entry has no recorded origin, and `adjustStock` already carries an
-/// `opening_balance` type whose whole purpose is to put the first units in and
-/// say where they came from. So a new product starts empty and its opening
-/// stock is recorded, once, through the route that writes a ledger entry.
+/// **This used to be the only figure a create could carry, and the reason was a
+/// capability rather than a policy.** Stock that appears with no
+/// `stock_movements` entry has no recorded origin, and no device can write that
+/// collection - so while creating a product was a Firestore `set`, zero was the
+/// only number the client could also account for. `createProduct` writes the
+/// product and its opening ledger entry in one transaction, so an opening
+/// balance is now nameable here exactly as it has always been nameable in an
+/// import. Blank still means none, which is the ordinary case.
 const int catalogOpeningQuantity = 0;
+
+/// The largest opening balance one created product may carry, matching the
+/// server's `MAXIMUM_IMPORT_OPENING_STOCK` and the import surface's own
+/// [maximumBulkOpeningQuantity].
+///
+/// One bound across the three, because a limit one create path enforces and
+/// another does not would be a way in rather than a rule.
+const int maximumCatalogOpeningQuantity = 1000000;
+
+/// Reads an opening balance typed into the add-product form.
+///
+/// Blank is [catalogOpeningQuantity] rather than a refusal: most products are
+/// added holding nothing, and an empty field is how somebody says so. Everything
+/// else is refused rather than coerced - `int.tryParse` would read "12.5" as
+/// null and "12abc" as null alike, and both are worth saying out loud, because a
+/// quantity silently read as zero is stock the shopkeeper believes they recorded.
+int tenantCatalogOpeningQuantity(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return catalogOpeningQuantity;
+  final quantity = int.tryParse(trimmed);
+  if (quantity == null ||
+      quantity < 0 ||
+      quantity > maximumCatalogOpeningQuantity) {
+    throw const TenantCatalogManagementException('invalid_opening_quantity');
+  }
+  return quantity;
+}
 
 /// Normalizes product search text identically to the callable and migration.
 String tenantProductSearchTerm(String value) =>
@@ -131,13 +163,16 @@ final class TenantCategoryRenameIntent {
   };
 }
 
-/// A validated instruction to create exactly one product document.
+/// A validated instruction to create exactly one product.
 ///
-/// The key set is the one [TenantProduct] demands, in full. The rule on
-/// `products` checks only `quantity is int`, so nothing on the server stops a
-/// client writing a product the till cannot parse - and one unparseable product
-/// makes the whole cached catalog a miss, which stops the business selling.
-/// This intent is the only thing that prevents it.
+/// The key set is the one [TenantProduct] demands, in full. It is no longer the
+/// *only* thing standing between a device and an unparseable product: `allow
+/// create` on `products` is now `if false`, and `createProduct` reads the
+/// document it is sent through `readSellableProduct` before writing it. This
+/// remains the first of those two checks, so a defect a person can fix is
+/// reported on the form instead of costing a round trip and an idempotency
+/// record - which is the same reason `TenantStockAdjustmentGateway.createIntent`
+/// mirrors the server's own validation.
 final class TenantProductCreateIntent {
   const TenantProductCreateIntent._({
     required this.path,
@@ -150,6 +185,7 @@ final class TenantProductCreateIntent {
     required this.categoryId,
     required this.categoryName,
     required this.createdBy,
+    required this.quantity,
     this.imageUrl,
   });
 
@@ -158,6 +194,16 @@ final class TenantProductCreateIntent {
   final String productId;
   final String name;
   final String sku;
+
+  /// The units the business already holds, and zero for the ordinary case.
+  ///
+  /// **The one quantity a single-product payload in this app may carry.** It
+  /// reaches the server through `createProduct`, which writes the opening
+  /// `stock_adjustments` record and `stock_movements` entry in the same
+  /// transaction as the product. No device can write either collection, which is
+  /// why this could not be a figure at all while creating a product was a
+  /// document write.
+  final int quantity;
 
   /// The price in exact integer minor units, as a sale line records it.
   final int priceMinor;
@@ -196,7 +242,7 @@ final class TenantProductCreateIntent {
     // Omitted rather than written as null when it was left blank, so "never
     // recorded" and "recorded as nothing" stay distinguishable in the document.
     if (cost != null) 'cost': cost,
-    'quantity': catalogOpeningQuantity,
+    'quantity': quantity,
     'categoryId': categoryId,
     'searchName': tenantProductSearchName(name),
     'searchPrefixes': tenantProductSearchPrefixes(name: name, sku: sku),
@@ -219,6 +265,8 @@ final class TenantProductRetireIntent {
     required this.name,
     required this.sku,
     required this.quantity,
+    required this.requestId,
+    required this.retired,
   });
 
   final String path;
@@ -227,9 +275,34 @@ final class TenantProductRetireIntent {
   final String name;
   final String sku;
 
-  /// The stock the product was holding when it was read. Retiring does not
-  /// change it, and no movement records its disappearance from the catalog.
+  /// The stock the product was holding when it was read.
+  ///
+  /// **Retiring now clears it, and says where it went.** `setProductRetired`
+  /// writes the `stock_movements` entry that accounts for these units in the
+  /// same transaction as the flag, so a product retired holding seventeen ends
+  /// at zero with a ledger entry rather than disappearing with the figure still
+  /// on it. The figure here is what the form states before the operator agrees.
   final int quantity;
+
+  /// One key per attempt, so a retry settles the first retirement rather than
+  /// clearing the stock twice.
+  ///
+  /// **Minted per attempt and not derived from the product**, unlike a create's.
+  /// A product may be retired, restored and retired again, and each retirement
+  /// clears whatever it held at that moment - so they are separate operations
+  /// and must not answer off one another's record.
+  final String requestId;
+
+  /// Whether this takes the product out of the catalog or puts it back.
+  final bool retired;
+
+  /// What the server is asked, which is also what the queue replays.
+  Map<String, Object?> payload() => <String, Object?>{
+    'tenantId': tenantId,
+    'productId': productId,
+    'requestId': requestId,
+    'retired': retired,
+  };
 }
 
 /// A descriptive field `updateProduct` may correct, with the exact key it reads.
@@ -495,6 +568,11 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
   /// [cost] is what the business paid for one unit, and it is the one field
   /// here that may be left blank: a business that does not track cost still has
   /// to be able to add a product.
+  /// [openingQuantity] is what the business already has on the shelf, and blank
+  /// means none. It is the one figure no other single-product payload in this
+  /// app may name: `createProduct` accepts it because the same transaction
+  /// writes the `stock_movements` entry saying where those units came from, and
+  /// nothing a device can write does.
   TenantProductCreateIntent buildProductIntent({
     required String name,
     required String sku,
@@ -503,6 +581,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     required Iterable<TenantCategory> categories,
     required String requestId,
     String cost = '',
+    String openingQuantity = '',
     Uri? imageUrl,
   }) {
     _requireCreateRole();
@@ -510,6 +589,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     final safeName = tenantCatalogNormalizedName(name, 'invalid_product_name');
     final safeSku = tenantCatalogNormalizedSku(sku);
     final priceMinor = tenantCatalogPriceMinorUnits(price);
+    final quantity = tenantCatalogOpeningQuantity(openingQuantity);
     final int? costMinor;
     if (cost.trim().isEmpty) {
       costMinor = null;
@@ -554,16 +634,23 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       categoryId: category.id,
       categoryName: category.name,
       createdBy: session.uid,
+      quantity: quantity,
       imageUrl: _validatedProductImage(imageUrl),
     );
   }
 
-  /// Builds the one delete instruction [product] describes.
+  /// Builds the one retirement - or restoration - [product] describes.
   ///
-  /// There is no request ID and no derived ID: the document already exists and
-  /// its path is the product's own, so a retry after an unknown outcome deletes
-  /// the same document a second time - which is exactly nothing.
-  TenantProductRetireIntent buildRetireIntent(TenantProduct product) {
+  /// **It carries a request ID now, and that is not ceremony.** This used to be
+  /// a delete, where a retry after an unknown outcome deleted the same document
+  /// a second time and that was exactly nothing. Retiring clears stock through
+  /// the ledger, so a second attempt under a fresh key would write a second
+  /// movement; one key per attempt is what makes the retry settle the first.
+  TenantProductRetireIntent buildRetireIntent(
+    TenantProduct product, {
+    required String requestId,
+    bool retired = true,
+  }) {
     if (!canRetireInSession(session)) {
       throw const TenantCatalogManagementException('retire_forbidden');
     }
@@ -572,6 +659,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     if (product.tenantId != session.tenantId) {
       throw const TenantCatalogManagementException('retire_forbidden');
     }
+    _requireRequestId(requestId);
     return TenantProductRetireIntent._(
       path: paths.product(product.id),
       tenantId: session.tenantId,
@@ -579,6 +667,8 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       name: product.name,
       sku: product.sku,
       quantity: product.quantity,
+      requestId: requestId,
+      retired: retired,
     );
   }
 
@@ -913,7 +1003,6 @@ typedef TenantCatalogDocumentCreator =
     Future<void> Function(String path, Map<String, Object?> data);
 typedef TenantCatalogDocumentUpdater =
     Future<void> Function(String path, Map<String, Object?> data);
-typedef TenantCatalogDocumentRemover = Future<void> Function(String path);
 
 /// Firestore implementation of the catalog write boundary.
 ///
@@ -930,7 +1019,6 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
   }) : this._(
          create: _firestoreCreator(firestore ?? FirebaseFirestore.instance),
          update: _firestoreUpdater(firestore ?? FirebaseFirestore.instance),
-         remove: _firestoreRemover(firestore ?? FirebaseFirestore.instance),
          isOnline: isOnline,
          writeTimeout: writeTimeout,
        );
@@ -938,13 +1026,11 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
   FirebaseTenantCatalogWriter.forTesting({
     required TenantCatalogDocumentCreator create,
     TenantCatalogDocumentUpdater? update,
-    required TenantCatalogDocumentRemover remove,
     required TenantCatalogOnlineCheck isOnline,
     Duration writeTimeout = const Duration(seconds: 20),
   }) : this._(
          create: create,
          update: update ?? _unsupportedUpdate,
-         remove: remove,
          isOnline: isOnline,
          writeTimeout: writeTimeout,
        );
@@ -952,12 +1038,10 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
   FirebaseTenantCatalogWriter._({
     required TenantCatalogDocumentCreator create,
     required TenantCatalogDocumentUpdater update,
-    required TenantCatalogDocumentRemover remove,
     required TenantCatalogOnlineCheck isOnline,
     required Duration writeTimeout,
   }) : _create = create,
        _update = update,
-       _remove = remove,
        _isOnline = isOnline,
        _writeTimeout = writeTimeout {
     if (writeTimeout <= Duration.zero) {
@@ -977,7 +1061,6 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
 
   final TenantCatalogDocumentCreator _create;
   final TenantCatalogDocumentUpdater _update;
-  final TenantCatalogDocumentRemover _remove;
   final TenantCatalogOnlineCheck _isOnline;
   final Duration _writeTimeout;
 
@@ -999,18 +1082,26 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
     );
   }
 
+  /// **Not a document write any more, and it cannot become one again.**
+  /// `allow create` on `products` is `if false`: a created product may carry an
+  /// opening quantity, and the `stock_adjustments` record and `stock_movements`
+  /// entry that account for those units are server-write-only, so the create and
+  /// its ledger entry have to be written by the same principal. `createProduct`
+  /// does it through the Admin SDK; `QueuedTenantCatalogWriter` is what the app
+  /// actually holds, and it queues the call.
+  ///
+  /// Refused rather than quietly attempted, on the same grounds as
+  /// [_unsupportedUpdate]: a `set` here would answer `permission-denied` from
+  /// the rules, which reports a configuration mistake as a shopkeeper's
+  /// authorization problem.
   @override
   Future<TenantCatalogWriteResult> createProduct(
     TenantProductCreateIntent intent,
-  ) {
-    _requireProductPath(intent.tenantId, intent.productId, intent.path);
-    return _write(
-      () => _create(intent.path, <String, Object?>{
-        ...intent.documentData(),
-        'createdAt': FieldValue.serverTimestamp(),
-      }),
-    );
-  }
+  ) => Future<TenantCatalogWriteResult>.error(
+    UnsupportedError(
+      'Creating a product is the createProduct callable, not a document write.',
+    ),
+  );
 
   @override
   Future<TenantCatalogWriteResult> renameCategory(
@@ -1030,25 +1121,19 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
     );
   }
 
+  /// **Not a document delete any more, and it cannot become one again.**
+  /// `allow delete` on `products` is `if false`: retiring clears the stock, and
+  /// the `stock_movements` entry accounting for those units is server-write-only,
+  /// so the flag and its ledger entry have to be written by one principal.
+  /// `setProductRetired` does it; `QueuedTenantCatalogWriter` queues the call.
   @override
   Future<TenantCatalogWriteResult> retireProduct(
     TenantProductRetireIntent intent,
-  ) {
-    _requireProductPath(intent.tenantId, intent.productId, intent.path);
-    return _write(() => _remove(intent.path));
-  }
-
-  static void _requireProductPath(
-    String tenantId,
-    String productId,
-    String path,
-  ) {
-    if (TenantPaths(tenantId).product(productId) != path) {
-      throw const TenantCatalogManagementException(
-        'catalog_path_escaped_tenant',
-      );
-    }
-  }
+  ) => Future<TenantCatalogWriteResult>.error(
+    UnsupportedError(
+      'Retiring a product is the setProductRetired callable, not a delete.',
+    ),
+  );
 
   Future<TenantCatalogWriteResult> _write(
     Future<void> Function() attempt,
@@ -1095,10 +1180,6 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
     UnsupportedError('Category rename is not configured.'),
   );
 
-  static TenantCatalogDocumentRemover _firestoreRemover(
-    FirebaseFirestore firestore,
-  ) =>
-      (path) => firestore.doc(path).delete();
 }
 
 /// Narrow callable boundary for `updateProduct`.
@@ -1175,6 +1256,15 @@ enum TenantProductUpdateFailure {
 
   /// The call was refused for a reason this client does not model.
   refused,
+
+  /// The correction could not be stored on this device, so it was never sent
+  /// and nothing anywhere recorded it.
+  ///
+  /// The twin of `TenantStockAdjustmentFailure.notRecorded`, and it exists for
+  /// the same reason: with a queue wired this is the only path a correction
+  /// takes, so the branch with no failure story was the one every correction
+  /// goes through.
+  notRecorded,
 
   /// The outcome is unknown; only a canonical re-read may settle it.
   ambiguous,
@@ -1512,12 +1602,26 @@ final class TenantProductUpdateGateway {
     }
     final queue = _queue;
     if (queue != null && previous != null) {
-      await queue(
-        tenantId: intent.tenantId,
-        productId: intent.productId,
-        requestId: intent.requestId,
-        payload: intent.payload(),
-      );
+      // Guarded for the reason the callable below is, and it was not until
+      // 2026-09-13: parking a correction can fail, and an unguarded throw here
+      // went straight past the panel's handlers and told the operator nothing.
+      try {
+        await queue(
+          tenantId: intent.tenantId,
+          productId: intent.productId,
+          requestId: intent.requestId,
+          payload: intent.payload(),
+        );
+      } catch (error) {
+        // A key already holding different values is the same fact the server
+        // states as `already-exists`, so it keeps that failure and its sentence
+        // rather than acquiring a second wording for one situation.
+        throw TenantProductUpdateException(
+          '$error'.contains('operation_id_conflict')
+              ? TenantProductUpdateFailure.duplicateRequest
+              : TenantProductUpdateFailure.notRecorded,
+        );
+      }
       return TenantProductUpdateResult.queued(
         intent: intent,
         previous: previous,

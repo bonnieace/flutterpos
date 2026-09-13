@@ -81,7 +81,6 @@ final class TenantBulkCatalogPanel extends StatefulWidget {
     this.onChanged,
     this.requestIdFactory,
     this.pageSize = 20,
-    this.categoryPageSize = 50,
   });
 
   final TenantDataReader reader;
@@ -90,7 +89,6 @@ final class TenantBulkCatalogPanel extends StatefulWidget {
   final VoidCallback? onChanged;
   final TenantCatalogRequestIdFactory? requestIdFactory;
   final int pageSize;
-  final int categoryPageSize;
 
   @override
   State<TenantBulkCatalogPanel> createState() => _TenantBulkCatalogPanelState();
@@ -487,9 +485,10 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
             session: session,
             reader: reader,
           );
-          final categories = await repository.loadCategories(
-            pageSize: widget.categoryPageSize,
-          );
+          // Every category, for the reason the catalog panel reads them all:
+          // a bulk move offers this list as the destination, and one that stops
+          // at a page cannot move products into the rest.
+          final categories = await repository.loadEveryCategory();
           final products = await repository.loadProducts(
             pageSize: widget.pageSize,
             cursor: cursor,

@@ -715,6 +715,92 @@ void main() {
     expect(snackNotice(tester).message, 'Undone. Nothing was sent.');
   });
 
+  testWidgets('a product can be added holding the stock already on the shelf', (
+    tester,
+  ) async {
+    // **The two journeys becoming one.** Adding a product used to write
+    // quantity 0 and then tell the operator to go and find the product and
+    // record an opening balance against it, because a device cannot write the
+    // `stock_movements` entry that says where units came from. `createProduct`
+    // writes the product and that entry in one transaction, so the figure is
+    // typed once, here.
+    final writer = _Writer();
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: writer,
+    );
+
+    await _fillProduct(
+      tester,
+      name: 'Mandazi',
+      sku: 'M-1',
+      price: '20',
+      openingQuantity: '24',
+    );
+    await _confirmProduct(tester);
+
+    expect(writer.products.single.quantity, 24);
+    expect(writer.products.single.documentData()['quantity'], 24);
+    // The sentence states what was recorded and where, rather than sending the
+    // operator off to record it themselves.
+    expect(snackNotice(tester).message, contains('holding 24 units'));
+    expect(snackNotice(tester).message, contains('opening balance'));
+    expect(snackNotice(tester).status, AppStatus.ok);
+  });
+
+  testWidgets('leaving the opening stock blank still adds the product', (
+    tester,
+  ) async {
+    // Blank is the ordinary case and must never be a refusal - most products
+    // are added before anything arrives. It is deliberately not part of the
+    // submit condition either, so nobody types a zero to add a product.
+    final writer = _Writer();
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: writer,
+    );
+
+    await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
+    await _confirmProduct(tester);
+
+    expect(writer.products.single.quantity, 0);
+    expect(snackNotice(tester).message, contains('holding no stock'));
+    expect(snackNotice(tester).status, AppStatus.ok);
+  });
+
+  testWidgets('an opening stock that is not whole units is refused here', (
+    tester,
+  ) async {
+    // Refused on the form rather than at the server, for the reason every other
+    // field here is: a defect a person can fix costs neither a round trip nor an
+    // idempotency record. And refused rather than read as zero, which would be
+    // stock the shopkeeper believes they recorded.
+    final writer = _Writer();
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: writer,
+    );
+
+    await _fillProduct(
+      tester,
+      name: 'Mandazi',
+      sku: 'M-1',
+      price: '20',
+      openingQuantity: '12.5',
+    );
+    await _confirmProduct(tester);
+
+    expect(writer.products, isEmpty);
+    expect(snackNotice(tester).message, contains('whole number of units'));
+    expect(snackNotice(tester).status, AppStatus.problem);
+  });
+
   testWidgets('a change already sent says so rather than claiming a reversal', (
     tester,
   ) async {
@@ -924,10 +1010,10 @@ void main() {
     final retire = find.byKey(const ValueKey('catalog-management-retire-pd-1'));
     await tester.tap(retire);
     await tester.pumpAndSettle();
-    // The action is reachable, which is what this test is about. It goes
-    // straight through now rather than opening a dialog, so what proves the
-    // menu item works is the retire itself.
-    expect(find.textContaining('White bread loaf is retired'), findsOne);
+    // The action is reachable, which is all this test is about. A stocked
+    // product asks before it clears anything, so the question appearing is what
+    // proves the menu item worked.
+    expect(find.textContaining('It holds 40 units'), findsOne);
   });
 
   testWidgets('an owner is offered the unit cost the manager is not', (
@@ -944,9 +1030,14 @@ void main() {
     );
   });
 
-  testWidgets('retiring says what survives it and then deletes', (
+  testWidgets('retiring a stocked product asks first, then says what it did', (
     tester,
   ) async {
+    // **A confirmation came back on 2026-09-13, for one case only.** Adding a
+    // product lost its confirmation in September and rightly: nothing was at
+    // stake and the notice offered an undo. Retiring a product that holds units
+    // writes a movement taking them off the books, and the figure is worth
+    // stating before it happens.
     final writer = _Writer();
     var syncs = 0;
 
@@ -959,18 +1050,40 @@ void main() {
     );
     await _tapProductAction(tester, 'pd-1', 'catalog-management-retire-pd-1');
 
-    // **The retire happens, then says what survived it.** Until 2026-09-04
-    // these sentences were a confirmation asked beforehand; the facts they
-    // carry - that the ledger outlives the product and every sale line still
-    // names it - are true afterwards too, and are worth more in a notice a
-    // person reads than in a dialog they dismiss.
+    // Nothing is sent until the question is answered.
+    expect(writer.retired, isEmpty);
+    expect(find.textContaining('It holds 40 units'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+
     expect(writer.retired.single.productId, 'pd-1');
     expect(writer.retired.single.quantity, 40);
+    expect(writer.retired.single.retired, isTrue);
     expect(syncs, 1);
-    expect(
-      snackNotice(tester).message,
-      startsWith('White bread loaf is retired.'),
+    // The sentence says what happened to the stock, which is the half the old
+    // one left out entirely.
+    expect(snackNotice(tester).message, contains('cleared to zero'));
+    expect(snackNotice(tester).message, contains('stock ledger'));
+  });
+
+  testWidgets('retiring a product holding nothing asks nothing', (
+    tester,
+  ) async {
+    // No stock to clear means no movement and nothing to weigh, so the question
+    // would be ceremony. The notice still says the product came off the till.
+    final writer = _Writer();
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(quantity: 0),
+      writer: writer,
     );
+    await _tapProductAction(tester, 'pd-1', 'catalog-management-retire-pd-1');
+    await tester.pumpAndSettle();
+
+    expect(writer.retired.single.quantity, 0);
+    expect(snackNotice(tester).message, contains('held no stock'));
   });
 
   testWidgets('a refusal from the server writes nothing and says so', (
@@ -983,6 +1096,7 @@ void main() {
 
     await _pump(tester, _controller(), reader, writer: writer);
     await _tapProductAction(tester, 'pd-1', 'catalog-management-retire-pd-1');
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
     await tester.pumpAndSettle();
 
     expect(snackNotice(tester).message, startsWith('Nothing was retired.'));
@@ -1876,6 +1990,7 @@ Future<void> _fillProduct(
   required String name,
   required String sku,
   required String price,
+  String? openingQuantity,
 }) async {
   await _waitOutSnackBar(tester);
   if (find
@@ -1908,6 +2023,13 @@ Future<void> _fillProduct(
     find.byKey(const ValueKey('catalog-management-product-price')),
     price,
   );
+  if (openingQuantity != null) {
+    final quantity = find.byKey(
+      const ValueKey('catalog-management-product-quantity'),
+    );
+    await tester.ensureVisible(quantity);
+    await tester.enterText(quantity, openingQuantity);
+  }
   await tester.pump();
 }
 
@@ -2148,7 +2270,7 @@ final class _Reader implements TenantDataReader {
         },
       });
 
-  factory _Reader.seeded({int productCount = 2, double? cost}) =>
+  factory _Reader.seeded({int productCount = 2, double? cost, int quantity = 40}) =>
       _Reader(<String, Map<String, Map<String, Object?>>>{
         _categoriesPath: <String, Map<String, Object?>>{
           'cat-bakery': <String, Object?>{'name': 'Bakery'},
@@ -2161,7 +2283,7 @@ final class _Reader implements TenantDataReader {
               'SKU': '616110000001$index',
               'price': 65,
               if (cost != null && index == 1) 'cost': cost,
-              'quantity': index == 1 ? 40 : index,
+              'quantity': index == 1 ? quantity : index,
               'categoryId': 'cat-bakery',
             },
         },

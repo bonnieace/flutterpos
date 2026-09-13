@@ -5,13 +5,38 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 import 'tenant_pending_mutation.dart';
 
+/// The `createProduct` request one queued create describes.
+///
+/// **Derived from the record rather than stored in it**, which is what let the
+/// create rule close in the same release the callable shipped. The payload is
+/// the document a device composed - unchanged from when this kind was a
+/// Firestore `set` - and the business and the product come from the path the
+/// record already targets. So a create queued by a build that wrote the document
+/// directly, one carrying no `quantity` at all, drains through the callable
+/// untouched and is read as opening nothing. Nothing durable on anybody's phone
+/// had to be migrated.
+///
+/// The product ID is also the idempotency key. It is already a digest of the
+/// request ID that minted it, so a replay answers off the server's own record
+/// instead of stocking the shelf twice.
+Map<String, Object?> tenantProductCreateCallablePayload(
+  TenantPendingMutationRecord record,
+) => <String, Object?>{
+  'tenantId': record.tenantId,
+  'productId': record.targetPath.split('/').last,
+  'document': record.payload,
+};
+
 /// Carries one queued mutation to the server, by whichever route its kind uses.
 ///
 /// **Two transports, one queue.** Most kinds are document writes the rules
 /// already admit, and replaying one is replaying the same `set` or `delete`.
-/// Two are callables, because `allow update` on `products` cannot be widened
-/// without giving up the guarantee that no client inflates stock - so a
-/// correction and an adjustment go through the Admin SDK instead.
+/// Three are callables, and each for the same underlying reason: the write
+/// cannot be split from the ledger entry that accounts for it. `allow update` on
+/// `products` cannot be widened without giving up the guarantee that no client
+/// inflates stock, so a correction and an adjustment go through the Admin SDK -
+/// and since 2026-09-13 a create does too, because a created product may carry
+/// an opening quantity whose `stock_movements` entry is server-written.
 ///
 /// **Replaying a callable is safe, and that is a server property rather than a
 /// hope.** `runIdempotentFirestoreTransaction` in `functions/src/core/`
@@ -84,12 +109,34 @@ final class FirebaseTenantMutationGateway
                 'updatedAt': FieldValue.serverTimestamp(),
               }, SetOptions(merge: true))
               .timeout(deadline);
-        // A whole-document `set` rather than a merge, matching
-        // `FirebaseTenantCatalogWriter`: the document is being brought into
-        // existence, the strict read model needs every field it names, and
-        // merging onto a deterministic ID that already exists would patch a
-        // product instead of refusing a replay.
+        // **A callable, because a created product may hold stock.** The
+        // `stock_adjustments` record and `stock_movements` entry that account for
+        // an opening balance are server-write-only, so the product and its ledger
+        // entry must be written by one principal inside one transaction. That is
+        // the whole reason this stopped being a `set`.
+        //
+        // **The envelope is rebuilt from the record, not stored in it.** The
+        // payload is the document a device composed, exactly as it always was,
+        // and the tenant and product come from `targetPath`. So a record queued
+        // by a build that wrote this document directly - one carrying no
+        // `quantity` at all, which the callable reads as zero - drains through
+        // here unchanged. That is what let `allow create` close in the same
+        // release without stranding work already durable on somebody's phone.
+        //
+        // The product ID is the idempotency key. It is already a digest of the
+        // request ID that minted it, so a replay answers off the server's record
+        // rather than stocking the shelf twice.
         case TenantPendingMutationKind.productCreate:
+          await _call(
+            'createProduct',
+            tenantProductCreateCallablePayload(record),
+          );
+        // A whole-document `set` rather than a merge: the document is being
+        // brought into existence, the strict read model needs every field it
+        // names, and merging onto a deterministic ID that already exists would
+        // patch a category instead of refusing a replay. A category carries no
+        // quantity and has no ledger, so it stays the document write `allow
+        // create` on `categories` still admits.
         case TenantPendingMutationKind.categoryCreate:
           await document
               .set(<String, Object?>{
@@ -104,8 +151,13 @@ final class FirebaseTenantMutationGateway
                 'updatedAt': FieldValue.serverTimestamp(),
               })
               .timeout(deadline);
+        // **A callable, because retiring clears stock.** The units a retired
+        // product was holding leave through a `stock_movements` entry written in
+        // the same transaction as the flag, and no device may write that
+        // collection - the same reason creating a product stopped being a `set`.
+        // The payload is the whole request, so nothing is derived here.
         case TenantPendingMutationKind.productRetire:
-          await document.delete().timeout(deadline);
+          await _call('setProductRetired', record.payload);
         case TenantPendingMutationKind.productCorrect:
           await _call('updateProduct', record.payload);
         case TenantPendingMutationKind.stockAdjust:

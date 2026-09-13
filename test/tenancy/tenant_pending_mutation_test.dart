@@ -276,6 +276,80 @@ void main() {
     gateway.release.complete();
     await running;
   });
+
+  group('the createProduct envelope', () {
+    /// The document a device composes for a product, as `documentData()` writes
+    /// it. Built here rather than imported so this pins the *shape the queue
+    /// holds*, which is the thing the envelope is derived from.
+    Map<String, Object?> composed({Object? quantity = 24}) => <String, Object?>{
+      'name': 'White bread loaf',
+      'SKU': '6161100000019',
+      'price': 65.0,
+      'categoryId': 'cat-bakery',
+      if (quantity != null) 'quantity': quantity,
+      'searchName': 'white bread loaf',
+      'searchPrefixes': const <String>['wh', 'whi'],
+      'createdBy': 'user-a',
+    };
+
+    Future<TenantPendingMutationRecord> queued({Object? quantity = 24}) =>
+        store.enqueue(
+          uid: 'user-a',
+          tenantId: 'tenant-a',
+          operationId: 'product-create-pd_abc',
+          kind: TenantPendingMutationKind.productCreate,
+          targetPath: 'tenants/tenant-a/products/pd_abc',
+          payload: composed(quantity: quantity),
+        );
+
+    test('is derived from the record rather than stored in it', () async {
+      final payload = tenantProductCreateCallablePayload(await queued());
+
+      expect(payload['tenantId'], 'tenant-a');
+      // From the path, which is the only place a product ID is ever written.
+      expect(payload['productId'], 'pd_abc');
+      expect(payload['document'], composed());
+      // Exactly three keys: anything else would be a second source of truth for
+      // something the record already knows.
+      expect(payload.keys, <String>['tenantId', 'productId', 'document']);
+    });
+
+    test('a create queued before this callable existed still drains', () async {
+      // **The whole migration argument, as a test.** A build that wrote this
+      // document directly queued a payload with no `quantity` key at all. It has
+      // to reach `createProduct` untouched and be read as opening nothing - if it
+      // did not, closing `allow create` in the same release would have stranded
+      // work already durable on somebody's phone.
+      final payload = tenantProductCreateCallablePayload(
+        await queued(quantity: null),
+      );
+      final document = payload['document']! as Map<String, Object?>;
+
+      expect(document.containsKey('quantity'), isFalse);
+      expect(payload['productId'], 'pd_abc');
+    });
+
+    test('the product ID is what the server keys idempotency on', () async {
+      // Not a second request ID carried beside it: the product ID is already a
+      // digest of the request ID that minted it, so one retry of one
+      // confirmation always addresses one record.
+      final first = tenantProductCreateCallablePayload(await queued());
+      final second = tenantProductCreateCallablePayload(
+        await store.enqueue(
+          uid: 'user-a',
+          tenantId: 'tenant-a',
+          operationId: 'product-create-pd_abc',
+          kind: TenantPendingMutationKind.productCreate,
+          targetPath: 'tenants/tenant-a/products/pd_abc',
+          payload: composed(),
+        ),
+      );
+
+      expect(second['productId'], first['productId']);
+      expect(second['document'], first['document']);
+    });
+  });
+
 }
 
 TenantSession _session() => TenantSession.active(

@@ -130,10 +130,8 @@ const Disclosure _stockQuantityDisclosure = Disclosure(
   summary: 'Why stock can be negative',
   child: Text(
     key: ValueKey('product-stock-quantity-scope'),
-    'This is the quantity the server holds, not a figure derived on this '
-    'device. Stock may legitimately be negative: a sale is never blocked '
-    'by a stock count, so a product can be sold past zero and corrected '
-    'here afterwards.',
+    'Stock may legitimately be negative: a sale is never blocked by a stock '
+    'count, so a product can be sold past zero and corrected here afterwards.',
   ),
 );
 
@@ -530,12 +528,17 @@ final class _TenantProductStockAdjustmentPanelState
       if (widget.onCompleted == null) _reload();
     } on TenantStockAdjustmentException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
-      // Only an unknown outcome may have moved stock, so only it keeps the
-      // request ID. Every other refusal left nothing behind, and reusing its ID
-      // would make an edited retry fail as a duplicate.
-      if (!error.mayHaveCommitted) _requestId = null;
+      // **Two different questions, and answering one with the other moves
+      // stock twice.** The key is held whenever an attempt under it may already
+      // be recorded - an unknown outcome, or a queue that says it already holds
+      // different figures - because minting a fresh one would put a second
+      // adjustment on top of the first. Every other refusal left nothing
+      // behind, and holding its key would make an edited retry fail as a
+      // duplicate for no reason. The re-read follows the same question: if
+      // something may be out there, the figure above is worth reading again.
+      if (!error.retainsRequestId) _requestId = null;
       _answer(_adjustmentNotice(error.failure));
-      if (error.mayHaveCommitted) _reload();
+      if (error.retainsRequestId) _reload();
     } on FormatException {
       if (!_stillCurrent(capturedKey)) return;
       // The call may well have moved stock; only its answer was unusable.
@@ -638,9 +641,11 @@ AppNotice _adjustmentNotice(TenantStockAdjustmentFailure failure) =>
         'Record a reason of at least $minimumStockAdjustmentReasonLength '
         'characters for this adjustment.',
       ),
-      TenantStockAdjustmentFailure.duplicateRequest => const AppNotice.refused(
-        'An earlier attempt already used this correction. Nothing changed a '
-        'second time; start a new adjustment.',
+      TenantStockAdjustmentFailure.duplicateRequest => const AppNotice.unknown(
+        'An earlier attempt recorded different figures under this correction, '
+        'and it has not settled yet. Nothing was changed a second time. Close '
+        'this and check the stock and the ledger before recording anything '
+        'else.',
       ),
       TenantStockAdjustmentFailure.outOfRange => const AppNotice.refused(
         'The resulting quantity would be too large to record. Nothing changed.',
@@ -652,6 +657,13 @@ AppNotice _adjustmentNotice(TenantStockAdjustmentFailure failure) =>
         ),
       TenantStockAdjustmentFailure.refused => const AppNotice.refused(
         'The adjustment was refused and no stock changed.',
+      ),
+      // `refused` rather than `unknown`: its own definition is "the write was
+      // refused and nothing changed", and that is precisely what is known here.
+      // Nothing is awaiting confirmation, so nothing should be drawn as pending.
+      TenantStockAdjustmentFailure.notRecorded => const AppNotice.refused(
+        'This device could not store the adjustment, so nothing was recorded '
+        'and nothing was sent. Try again, and report it if it keeps happening.',
       ),
       TenantStockAdjustmentFailure.ambiguous => const AppNotice.unknown(
         'The result is unknown. This page has been reloaded; check the stock '
@@ -802,7 +814,6 @@ final class _ProductStockContents extends StatelessWidget {
               label: 'Recorded stock',
               value: '${product.quantity}',
               icon: Icons.inventory_2_outlined,
-              detail: 'held by the server',
               // Negative is a real, permitted state rather than a fault, but it
               // is the one a person needs to notice on sight. It used to be a red
               // number, which is §9's "out of stock signalled by red text alone"
@@ -1061,7 +1072,6 @@ final class _AdjustStockContents extends StatelessWidget {
               label: 'Recorded stock',
               value: '${product.quantity}',
               icon: Icons.inventory_2_outlined,
-              detail: 'held by the server',
               status: product.quantity < 0 ? AppStatus.problem : null,
               statusLabel: product.quantity < 0 ? 'Below zero' : null,
             ),

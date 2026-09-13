@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_application_1/checkout/checkout_draft.dart';
+import 'package:flutter_application_1/inventory/bulk_catalog.dart';
 import 'package:flutter_application_1/inventory/catalog_management.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -104,12 +105,60 @@ void main() {
       expect(decoded.imageUrl, isNull);
     });
 
-    test('a product is always created holding nothing', () {
-      // Stock that appears without a `stock_movements` entry has no recorded
-      // origin. `adjustStock` carries `opening_balance` for exactly this, so the
-      // create never names a quantity of its own.
+    test('a product with no opening stock named holds nothing', () {
+      // Blank is the ordinary case and must never be a refusal: most products
+      // are added before anything arrives.
       expect(catalogOpeningQuantity, 0);
       expect(_productIntent(price: '1').documentData()['quantity'], 0);
+      expect(_productIntent(price: '1').quantity, 0);
+      expect(
+        _productIntent(price: '1', openingQuantity: '   ').quantity,
+        0,
+      );
+    });
+
+    test('a product may be created holding the stock already on the shelf', () {
+      // The one quantity a single-product payload in this app may carry. It goes
+      // to `createProduct`, which writes the `stock_adjustments` record and
+      // `stock_movements` entry accounting for it in the same transaction - and
+      // no device can write either, which is why this was zero until it did.
+      final intent = _productIntent(price: '1', openingQuantity: '24');
+
+      expect(intent.quantity, 24);
+      expect(intent.documentData()['quantity'], 24);
+    });
+
+    test('an opening stock that is not whole units is refused', () {
+      // Refused rather than coerced: `int.tryParse` reads "12.5" and "12abc"
+      // alike as null, and a quantity silently read as zero is stock the
+      // shopkeeper believes they recorded.
+      for (final typed in <String>['12.5', '12abc', '-1', 'four', '1e3']) {
+        expect(
+          () => _productIntent(price: '1', openingQuantity: typed),
+          _code('invalid_opening_quantity'),
+          reason: typed,
+        );
+      }
+    });
+
+    test('an opening stock past the shared bound is refused', () {
+      // The same figure `importProducts` and `adjustStock` enforce. A limit one
+      // create path applies and another does not would be a way in.
+      expect(maximumCatalogOpeningQuantity, maximumBulkOpeningQuantity);
+      expect(
+        () => _productIntent(
+          price: '1',
+          openingQuantity: '${maximumCatalogOpeningQuantity + 1}',
+        ),
+        _code('invalid_opening_quantity'),
+      );
+      expect(
+        _productIntent(
+          price: '1',
+          openingQuantity: '$maximumCatalogOpeningQuantity',
+        ).quantity,
+        maximumCatalogOpeningQuantity,
+      );
     });
 
     test('the category is taken from the ones this surface offered', () {
@@ -942,26 +991,38 @@ void main() {
 
   group('catalog writer', () {
     test('a create writes the named keys and a server timestamp', () async {
+      // A category, because it is the only create this writer still performs.
+      // A product's keys are pinned where a product is now written: the intent's
+      // own `documentData` below, and `productCreate.test.ts` on the server.
       final writer = _RecordingWriter();
 
-      final intent = _productIntent(price: '19.99');
-      final result = await writer.build().createProduct(intent);
+      final intent = _categoryIntent(name: 'Bakery');
+      final result = await writer.build().createCategory(intent);
 
       expect(result.kind, TenantCatalogWriteKind.committed);
       expect(writer.created.single.path, intent.path);
       expect(writer.created.single.data.keys, <String>[
         'name',
-        'SKU',
-        'price',
-        'quantity',
-        'categoryId',
-        'searchName',
-        'searchPrefixes',
         'createdBy',
         'createdAt',
       ]);
       expect(writer.created.single.data['createdAt'], isA<FieldValue>());
-      expect(writer.removed, isEmpty);
+      expect(writer.updated, isEmpty);
+    });
+
+    test('creating a product is refused rather than attempted', () async {
+      // `allow create` on `products` is `if false`, so a `set` here would answer
+      // `permission-denied` and report a configuration mistake as a shopkeeper's
+      // authorization problem. This writer is test-only - the app holds
+      // `QueuedTenantCatalogWriter`, which queues the callable - and saying so
+      // out loud is what stops a future session wiring this one back up.
+      final writer = _RecordingWriter();
+
+      await expectLater(
+        writer.build().createProduct(_productIntent(price: '1')),
+        throwsUnsupportedError,
+      );
+      expect(writer.created, isEmpty);
     });
 
     test('a category create writes its own path', () async {
@@ -975,13 +1036,18 @@ void main() {
       expect(writer.created.single.data['name'], 'Bakery');
     });
 
-    test('a retire deletes the product document and writes nothing', () async {
+    test('retiring a product is refused rather than attempted', () async {
+      // `allow delete` on `products` is `if false`, and retiring is no longer a
+      // delete in any case: clearing the stock means writing the ledger entry
+      // that accounts for it, which no device may write. A `delete` here would
+      // answer `permission-denied` and report a configuration mistake as a
+      // shopkeeper's authorization problem.
       final writer = _RecordingWriter();
 
-      final result = await writer.build().retireProduct(_retireIntent());
-
-      expect(result.kind, TenantCatalogWriteKind.committed);
-      expect(writer.removed.single, '$_productsPath/prod-bread');
+      await expectLater(
+        writer.build().retireProduct(_retireIntent()),
+        throwsUnsupportedError,
+      );
       expect(writer.created, isEmpty);
     });
 
@@ -991,16 +1057,18 @@ void main() {
       expect(
         (await writer
                 .build(online: false)
-                .createProduct(_productIntent(price: '1')))
+                .createCategory(_categoryIntent(name: 'Bakery')))
             .kind,
         TenantCatalogWriteKind.unavailable,
       );
       expect(
-        (await writer.build(online: false).retireProduct(_retireIntent())).kind,
+        (await writer
+                .build(online: false)
+                .renameCategory(_renameIntent(name: 'Bakery goods')))
+            .kind,
         TenantCatalogWriteKind.unavailable,
       );
       expect(writer.created, isEmpty);
-      expect(writer.removed, isEmpty);
     });
 
     test('a failing connectivity check counts as offline', () async {
@@ -1008,7 +1076,7 @@ void main() {
 
       final result = await writer
           .build(onlineCheck: () => Future<bool>.error(StateError('no radio')))
-          .createProduct(_productIntent(price: '1'));
+          .createCategory(_categoryIntent(name: 'Bakery'));
 
       expect(result.kind, TenantCatalogWriteKind.unavailable);
       expect(writer.created, isEmpty);
@@ -1027,7 +1095,7 @@ void main() {
             .build(
               error: FirebaseException(plugin: 'firestore', code: code),
             )
-            .createProduct(_productIntent(price: '1'));
+            .createCategory(_categoryIntent(name: 'Bakery'));
 
         expect(result.kind, TenantCatalogWriteKind.rejected, reason: code);
         expect(result.reasonCode, code);
@@ -1039,7 +1107,7 @@ void main() {
           .build(
             error: FirebaseException(plugin: 'firestore', code: 'unavailable'),
           )
-          .retireProduct(_retireIntent());
+          .renameCategory(_renameIntent(name: 'Bakery goods'));
       expect(unavailable.kind, TenantCatalogWriteKind.ambiguous);
       expect(unavailable.reasonCode, 'unavailable');
 
@@ -1053,17 +1121,16 @@ void main() {
     test('a write that never answers is ambiguous', () async {
       final writer = FirebaseTenantCatalogWriter.forTesting(
         create: (_, _) => Completer<void>().future,
-        remove: (_) => Completer<void>().future,
         isOnline: () async => true,
         writeTimeout: const Duration(milliseconds: 20),
       );
 
       expect(
-        (await writer.createProduct(_productIntent(price: '1'))).reasonCode,
+        (await writer.createCategory(_categoryIntent(name: 'Bakery'))).reasonCode,
         'write_timeout',
       );
       expect(
-        (await writer.retireProduct(_retireIntent())).kind,
+        (await writer.renameCategory(_renameIntent(name: 'Bakery goods'))).kind,
         TenantCatalogWriteKind.ambiguous,
       );
     });
@@ -1076,8 +1143,8 @@ void main() {
         // ever agree - which is what this proves for a second business.
         final writer = _RecordingWriter();
 
-        await writer.build().createProduct(
-          _productIntent(price: '1', tenantId: 'tenant-b'),
+        await writer.build().createCategory(
+          _categoryIntent(name: 'Bakery', tenantId: 'tenant-b'),
         );
 
         expect(writer.created.single.path, startsWith('tenants/tenant-b/'));
@@ -1088,7 +1155,6 @@ void main() {
       expect(
         () => FirebaseTenantCatalogWriter.forTesting(
           create: (_, _) async {},
-          remove: (_) async {},
           isOnline: () async => true,
           writeTimeout: Duration.zero,
         ),
@@ -1130,9 +1196,11 @@ List<TenantCategory> _categories(String tenantId) => <TenantCategory>[
 TenantCategoryCreateIntent _categoryIntent({
   required String name,
   TenantRole role = TenantRole.owner,
+  String tenantId = 'tenant-a',
   String requestId = _requestId,
 }) => _repository(
   role: role,
+  tenantId: tenantId,
 ).buildCategoryIntent(name: name, requestId: requestId);
 
 TenantProductCreateIntent _productIntent({
@@ -1141,6 +1209,7 @@ TenantProductCreateIntent _productIntent({
   String sku = '6161100000019',
   String categoryId = 'cat-bakery',
   String cost = '',
+  String openingQuantity = '',
   TenantRole role = TenantRole.owner,
   String tenantId = 'tenant-a',
   String uid = 'user-a',
@@ -1150,14 +1219,30 @@ TenantProductCreateIntent _productIntent({
   sku: sku,
   price: price,
   cost: cost,
+  openingQuantity: openingQuantity,
   categoryId: categoryId,
   categories: _categories(tenantId),
   requestId: requestId,
 );
 
+/// A rename of the Bakery category, which is the one document write this
+/// writer still performs — both product writes are callables now.
+TenantCategoryRenameIntent _renameIntent({required String name}) =>
+    _repository().buildCategoryRenameIntent(
+      category: TenantCategory.fromSnapshot(
+        TenantQueryDocumentSnapshot(
+          path: 'tenants/tenant-a/categories/cat-bakery',
+          data: <String, Object?>{'name': 'Bakery'},
+        ),
+      ),
+      name: name,
+    );
+
 TenantProductRetireIntent _retireIntent({
   TenantRole role = TenantRole.owner,
   String productTenantId = 'tenant-a',
+  String requestId = _requestId,
+  bool retired = true,
 }) => _repository(role: role).buildRetireIntent(
   TenantProduct.fromDocument(
     path: 'tenants/$productTenantId/products/prod-bread',
@@ -1169,6 +1254,8 @@ TenantProductRetireIntent _retireIntent({
       'categoryId': 'cat-bakery',
     },
   ),
+  requestId: requestId,
+  retired: retired,
 );
 
 /// The product every correction test starts from: priced at 65, costing 40,
@@ -1269,7 +1356,13 @@ final class _WrittenDocument {
 
 final class _RecordingWriter {
   final List<_WrittenDocument> created = <_WrittenDocument>[];
-  final List<String> removed = <String>[];
+
+  /// Renames, which are the only update this writer performs. Wired since
+  /// 2026-09-13: the `_write` machinery used to be exercised through a retire,
+  /// and retiring is a callable now, so a rename is what is left to drive it
+  /// with. Without this the path falls through to the unsupported stub and every
+  /// refusal reads as `unknown_error`.
+  final List<_WrittenDocument> updated = <_WrittenDocument>[];
 
   FirebaseTenantCatalogWriter build({
     bool online = true,
@@ -1280,8 +1373,8 @@ final class _RecordingWriter {
       created.add(_WrittenDocument(path, data));
       return error == null ? Future<void>.value() : Future<void>.error(error);
     },
-    remove: (path) {
-      removed.add(path);
+    update: (path, data) {
+      updated.add(_WrittenDocument(path, data));
       return error == null ? Future<void>.value() : Future<void>.error(error);
     },
     isOnline: onlineCheck ?? () async => online,

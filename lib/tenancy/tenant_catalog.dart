@@ -73,6 +73,20 @@ String tenantCategoryPhrase(
   required Map<String, String> names,
 }) => names[categoryId] ?? unlistedTenantCategoryPhrase;
 
+/// The most categories any surface in this app will read.
+///
+/// The same figure the server's `MAXIMUM_IMPORT_CATEGORY_SCAN` enforces while
+/// resolving a spreadsheet's category names, and deliberately not a second
+/// opinion about it: a client that offered a category the import would then
+/// refuse to resolve would be offering a choice that does not work.
+const int maximumCatalogCategoryScan = 500;
+
+/// How many categories one page of that scan asks for.
+///
+/// The largest page `readCollectionPage` will serve, so the scan is ten reads at
+/// the bound rather than twenty-five.
+const int _categoryScanPageSize = 50;
+
 /// Strict read model for `tenants/{tenantId}/products/{productId}`.
 ///
 /// New documents use `categoryId`. The legacy `category` alias is accepted
@@ -97,7 +111,12 @@ final class TenantProduct {
        cost = _optionalNonNegativeFiniteNumber(data, 'cost'),
        quantity = _signedSafeInteger(data, 'quantity'),
        categoryId = _categoryId(data),
-       imageUrl = _optionalHttpsUrl(data, 'image');
+       imageUrl = _optionalHttpsUrl(data, 'image'),
+       // Read permissively on purpose: every product written before retiring
+       // became a flag carries no such field, and this model is strict enough
+       // that one product it refuses makes the whole cached catalog a miss.
+       // Absent therefore means "in the catalog", which is what it always was.
+       retired = data['retired'] == true;
 
   final String id;
 
@@ -123,6 +142,16 @@ final class TenantProduct {
   final int quantity;
   final String categoryId;
   final Uri? imageUrl;
+
+  /// Whether this product has been taken out of the catalog.
+  ///
+  /// **Retired is not deleted, and not hidden from the books.** Reports and
+  /// stock valuations count a retired product exactly as before; it simply holds
+  /// nothing, because `setProductRetired` writes the movement that clears it in
+  /// the same transaction. What retiring changes is that the till will not offer
+  /// it and the catalog marks it - the document stays, so every past sale line
+  /// and every ledger entry below it still names something that answers.
+  final bool retired;
 }
 
 /// A product's standing, as one of §2.1's five - or nothing at all.
@@ -154,14 +183,27 @@ final class TenantProduct {
 /// Shared by both catalog surfaces rather than written twice, for the reason
 /// [tenantCategoryLabel] is: five copies of one lookup is how two screens come
 /// to disagree about what the same product is.
-RecordStatus? tenantProductStanding(TenantProduct product) =>
-    product.quantity > 0
-    ? null
-    : RecordStatus(
-        status: AppStatus.problem,
-        label: '${product.quantity} in stock',
-        badgeKey: ValueKey('product-stock-standing-${product.id}'),
-      );
+RecordStatus? tenantProductStanding(TenantProduct product) {
+  // **Retired outranks the stock figure, and is not a fault.** A retired
+  // product holds nothing by construction - the retirement clears it through
+  // the ledger - so the zero underneath is the expected consequence rather than
+  // a problem to act on. Drawing `0 in stock` in red over it would report the
+  // one state that is deliberate as the one state that needs attention.
+  if (product.retired) {
+    return RecordStatus(
+      status: AppStatus.info,
+      label: 'Retired',
+      badgeKey: ValueKey('product-retired-standing-${product.id}'),
+    );
+  }
+  return product.quantity > 0
+      ? null
+      : RecordStatus(
+          status: AppStatus.problem,
+          label: '${product.quantity} in stock',
+          badgeKey: ValueKey('product-stock-standing-${product.id}'),
+        );
+}
 
 /// The sentence both catalog surfaces owe a person reading a stock figure.
 ///
@@ -288,6 +330,56 @@ final class TenantCatalogRepository extends TenantReadRepository {
     );
   }
 
+  /// Every category this business holds, across as many pages as it takes.
+  ///
+  /// **For the surfaces that have to offer a complete choice.** Filing a product
+  /// under a category, moving one, and filtering the catalog by one all read a
+  /// single page - so a business past that page had categories it could see in
+  /// the Categories screen and could not select anywhere else. The screen said
+  /// so ("this list shows the first page"), which made it an honest defect
+  /// rather than a silent one, but it was still a category the product could not
+  /// be put in.
+  ///
+  /// **Bounded, and at the figure the server already chose.** `importProducts`
+  /// scans at most [maximumCatalogCategoryScan] categories while resolving names
+  /// and refuses the request beyond that, so one business-wide limit governs both
+  /// - a client that happily loaded more than the server will resolve would only
+  /// be offering a choice the import then refuses.
+  ///
+  /// [TenantCatalogPage.hasMore] therefore means something much rarer than it
+  /// did: not "there is another page" but "this business holds more categories
+  /// than anything here will read".
+  Future<TenantCatalogPage<TenantCategory>> loadEveryCategory({
+    int maximum = maximumCatalogCategoryScan,
+  }) async {
+    final items = <TenantCategory>[];
+    String? cursor;
+    while (items.length < maximum) {
+      final page = await loadCategories(
+        pageSize: _categoryScanPageSize,
+        cursor: cursor,
+      );
+      items.addAll(page.items);
+      // **Both conditions, not just `hasMore`.** A page that reports more and
+      // hands back no cursor would spin this loop for ever against the same
+      // page; treating a missing cursor as the end is the only reading that
+      // terminates, and it degrades to the behaviour this had before.
+      if (!page.hasMore || page.nextCursor == null) {
+        return TenantCatalogPage<TenantCategory>(
+          items: List<TenantCategory>.unmodifiable(items),
+          nextCursor: null,
+          hasMore: false,
+        );
+      }
+      cursor = page.nextCursor;
+    }
+    return TenantCatalogPage<TenantCategory>(
+      items: List<TenantCategory>.unmodifiable(items.take(maximum)),
+      nextCursor: cursor,
+      hasMore: true,
+    );
+  }
+
   Future<TenantCatalogPage<TenantProduct>> loadProducts({
     int pageSize = 20,
     String? cursor,
@@ -395,7 +487,7 @@ final class TenantCatalogRepository extends TenantReadRepository {
 
   Future<TenantCatalogSnapshot> loadInitial() async {
     final pages = await Future.wait<Object>([
-      loadCategories(pageSize: 50),
+      loadEveryCategory(),
       loadProducts(),
     ]);
     return TenantCatalogSnapshot(

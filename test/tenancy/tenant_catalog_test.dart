@@ -309,6 +309,95 @@ void main() {
       },
     );
 
+    test('every category is read, across as many pages as it takes', () async {
+      // **The defect: one page was all any form ever saw.** Filing a product
+      // under a category, moving one, and filtering by one all read a single
+      // page, so a business past it had categories it could see in the
+      // Categories screen and could select nowhere else.
+      var page = 0;
+      final reader = _CatalogReader(
+        handler: (query) async {
+          page++;
+          if (page == 1) {
+            expect(query.startAfterDocumentId, isNull);
+            // 51 for a page size of 50: one extra so `hasMore` is exact.
+            return <TenantQueryDocumentSnapshot>[
+              for (var i = 0; i < 51; i++)
+                _categorySnapshot(
+                  'tenant-a',
+                  'cat-a-${i.toString().padLeft(3, '0')}',
+                ),
+            ];
+          }
+          expect(query.startAfterDocumentId, 'cat-a-049');
+          return <TenantQueryDocumentSnapshot>[
+            _categorySnapshot('tenant-a', 'cat-b-0'),
+          ];
+        },
+      );
+      final repository = TenantCatalogRepository(
+        session: _session('tenant-a'),
+        reader: reader,
+      );
+
+      final categories = await repository.loadEveryCategory();
+
+      expect(page, 2, reason: 'the second page has to be asked for');
+      expect(categories.items, hasLength(51));
+      expect(categories.items.last.id, 'cat-b-0');
+      expect(categories.hasMore, isFalse);
+    });
+
+    test('the category scan stops at the bound the server also enforces', () async {
+      // A client that loaded more categories than `importProducts` will scan
+      // would offer a choice the import then refuses to resolve, so one figure
+      // governs both. `hasMore` then means "more than anything here reads",
+      // which is what the screen says.
+      final reader = _CatalogReader(
+        handler: (query) async => <TenantQueryDocumentSnapshot>[
+          for (var i = 0; i < 51; i++)
+            _categorySnapshot(
+            'tenant-a',
+            'cat-${query.startAfterDocumentId}-${i.toString().padLeft(3, '0')}',
+          ),
+        ],
+      );
+      final repository = TenantCatalogRepository(
+        session: _session('tenant-a'),
+        reader: reader,
+      );
+
+      final categories = await repository.loadEveryCategory(maximum: 120);
+
+      expect(categories.items, hasLength(120));
+      expect(categories.hasMore, isTrue);
+    });
+
+    test('a page claiming more with no cursor ends the scan', () async {
+      // Otherwise the loop asks for the same page for ever. It cannot happen
+      // through `readCollectionPage`, which is exactly why it is worth pinning:
+      // nothing else would notice if it started to.
+      var calls = 0;
+      final reader = _CatalogReader(
+        handler: (_) async {
+          calls++;
+          return <TenantQueryDocumentSnapshot>[
+            _categorySnapshot('tenant-a', 'drinks'),
+          ];
+        },
+      );
+      final repository = TenantCatalogRepository(
+        session: _session('tenant-a'),
+        reader: reader,
+      );
+
+      final categories = await repository.loadEveryCategory();
+
+      expect(calls, 1);
+      expect(categories.items.single.id, 'drinks');
+      expect(categories.hasMore, isFalse);
+    });
+
     test('rejects invalid page sizes and cross-tenant query results', () async {
       final reader = _CatalogReader(
         handler: (_) async => [_productSnapshot('tenant-b', 'product-a')],

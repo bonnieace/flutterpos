@@ -78,20 +78,6 @@ async function seedBusiness() {
   });
 }
 
-test("an owner, administrator, or manager stocks the catalog", async () => {
-  await seedBusiness();
-
-  for (const uid of ["owner-a", "admin-a", "manager-a"]) {
-    const firestore = authenticatedFirestore(testEnvironment, uid);
-    await assertSucceeds(
-      setDoc(doc(firestore, `${CATEGORIES}/ct_${uid}`), category(uid)),
-    );
-    await assertSucceeds(
-      setDoc(doc(firestore, `${PRODUCTS}/pd_${uid}`), product(uid)),
-    );
-  }
-});
-
 test("a cashier reads the catalog and never changes it", async () => {
   // The read is deliberately as wide as the set of people who may sell: a till
   // cannot price a sale without the product document.
@@ -119,37 +105,73 @@ test("a cashier reads the catalog and never changes it", async () => {
   await assertFails(deleteDoc(doc(firestore, `${PRODUCTS}/pd_seeded`)));
 });
 
-test("a create must carry an integer quantity", async () => {
-  // The single condition `allow create` checks. Everything else about the
-  // shape is the client's boundary, which is why that boundary is tested in
-  // Dart against the strict read model rather than only here.
+test("no client may create a product, whatever its role", async () => {
+  // **`allow create` is `if false`, and that is the whole rule.** It used to
+  // admit any document owner, admin or manager cared to write while checking one
+  // field of it, so the client was the only thing standing between a business
+  // and a product its own till could not parse. It could not merely be tightened
+  // either: a create may now carry an opening quantity, and the ledger entry
+  // that accounts for those units is server-write-only, so both have to be
+  // written by one principal. `createProduct` is that principal.
   await seedBusiness();
-  const firestore = authenticatedFirestore(testEnvironment, "owner-a");
 
-  for (const quantity of ["0", 0.5, null, true]) {
+  for (const uid of ["owner-a", "admin-a", "manager-a", "cashier-a"]) {
+    const firestore = authenticatedFirestore(testEnvironment, uid);
     await assertFails(
-      setDoc(doc(firestore, `${PRODUCTS}/pd_bad`), product("owner-a", { quantity })),
+      setDoc(doc(firestore, `${PRODUCTS}/pd_new`), product(uid)),
+    );
+    // Nor by opening with stock, which is the thing that made this server work.
+    await assertFails(
+      setDoc(
+        doc(firestore, `${PRODUCTS}/pd_stocked`),
+        product(uid, { quantity: 24 }),
+      ),
     );
   }
-  await assertSucceeds(
-    setDoc(doc(firestore, `${PRODUCTS}/pd_good`), product("owner-a")),
-  );
 });
 
-test("a create may carry the buying price, and the checkout rule still cannot", async () => {
-  // `allow create` names one condition and no key list, which is what lets the
-  // catalog surface add `cost` without a rules change. Pinned here because the
-  // day someone tightens that create rule with a `hasOnly`, a business that
-  // records what it pays stops being able to add products at all.
+test("a category is still a client write, and still checks nothing", async () => {
+  // The other half of the pair, deliberately unchanged. A category carries no
+  // quantity and has no ledger hanging off it, so nothing about it needs a
+  // transaction - and `QueuedTenantCatalogWriter` still replays it as a `set`.
+  // This is the backend/UI contract mismatch the inventory audit recorded
+  // separately: the rule admits delete and no UI offers one.
   await seedBusiness();
+
+  for (const [uid, writes] of [
+    ["owner-a", true],
+    ["admin-a", true],
+    ["manager-a", true],
+    ["cashier-a", false],
+  ]) {
+    const firestore = authenticatedFirestore(testEnvironment, uid);
+    const assertion = writes ? assertSucceeds : assertFails;
+    await assertion(
+      setDoc(doc(firestore, `${CATEGORIES}/ct_${uid}`), category(uid)),
+    );
+  }
+});
+
+test("the checkout decrement is the only client update a product accepts", async () => {
+  // Unchanged by the create rule closing, and the half that must never move: a
+  // cashier's till has to be able to take stock down with no connection, and
+  // nothing else about a product may be touched from a device.
+  await seedBusiness();
+  // Seeded explicitly: `seedBusiness` writes the roster and no catalog, and an
+  // update against a document that does not exist is refused for the wrong
+  // reason - which would make the `assertSucceeds` below unreachable and the
+  // `assertFails` above vacuous.
+  await seedDocuments(testEnvironment, {
+    [`${PRODUCTS}/pd_seeded`]: {
+      name: "White bread loaf",
+      SKU: "6161100000019",
+      price: 65,
+      quantity: 40,
+      categoryId: "cat-bakery",
+    },
+  });
   const firestore = authenticatedFirestore(testEnvironment, "owner-a");
 
-  await assertSucceeds(
-    setDoc(doc(firestore, `${PRODUCTS}/pd_costed`), product("owner-a", { cost: 40 })),
-  );
-
-  // And the half that must not move: the checkout decrement is still the only
-  // client update, so no cashier can reprice what the business pays.
   await assertFails(
     updateDoc(doc(firestore, `${PRODUCTS}/pd_seeded`), {
       cost: 1,
@@ -163,52 +185,60 @@ test("a create may carry the buying price, and the checkout rule still cannot", 
       updatedAt: serverTimestamp(),
     }),
   );
-});
-
-test("replaying a create onto an existing product is refused", async () => {
-  // The client derives one deterministic document ID per confirmed create and
-  // reuses it across a retry. That is only safe because a `set` onto a document
-  // that already exists is an *update*, and the update rule permits nothing but
-  // a strictly decreasing quantity - so a replay can never quietly rewrite a
-  // product that already sold.
-  await seedBusiness();
-  const firestore = authenticatedFirestore(testEnvironment, "owner-a");
-  const path = `${PRODUCTS}/pd_deterministic`;
-
-  await assertSucceeds(setDoc(doc(firestore, path), product()));
-  await assertFails(setDoc(doc(firestore, path), product()));
-  await assertFails(
-    setDoc(doc(firestore, path), product("owner-a", { price: 70 })),
+  await assertSucceeds(
+    updateDoc(doc(firestore, `${PRODUCTS}/pd_seeded`), {
+      quantity: 39,
+      updatedAt: serverTimestamp(),
+    }),
   );
 });
 
-test("only an owner or administrator retires a product", async () => {
+test("a set onto an existing product cannot rewrite it", async () => {
+  // What the deterministic-ID replay used to rest on, and still worth pinning:
+  // the update rule permits nothing but a strictly decreasing quantity, so no
+  // `set` can quietly rewrite a product that already sold. The create half of
+  // this moved to `functions/src/operations/productCreate.test.ts`, where the
+  // idempotency record is now what answers a replay.
   await seedBusiness();
+  const firestore = authenticatedFirestore(testEnvironment, "owner-a");
 
-  for (const [uid, retires] of [
-    ["cashier-a", false],
-    ["manager-a", false],
-    ["admin-a", true],
-    ["owner-a", true],
-  ]) {
-    await seedDocuments(testEnvironment, {
-      [`${PRODUCTS}/pd_seeded`]: {
-        name: "White bread loaf",
-        SKU: "6161100000019",
-        price: 65,
-        quantity: 40,
-        categoryId: "cat-bakery",
-      },
-    });
+  await assertFails(
+    setDoc(doc(firestore, `${PRODUCTS}/pd_seeded`), product("owner-a")),
+  );
+  await assertFails(
+    setDoc(
+      doc(firestore, `${PRODUCTS}/pd_seeded`),
+      product("owner-a", { price: 70 }),
+    ),
+  );
+});
+
+test("no client may delete a product, whatever its role", async () => {
+  // **This asserted that an owner and an administrator could, until
+  // 2026-09-13.** That delete was what "Retire product" did, and it removed the
+  // document carrying the current quantity: nothing recorded the stock leaving,
+  // every past sale line went on naming an ID nothing answered to, and the
+  // `stock_movements` below it were orphaned rather than deleted - Firestore
+  // keeps a subcollection when its parent goes - so the ledger survived with no
+  // way into it, because the way in is the product.
+  //
+  // `setProductRetired` sets a flag and writes the movement clearing the stock
+  // in one transaction. Who may do it is unchanged: owner and administrator, as
+  // this rule said, now enforced by the callable instead.
+  await seedBusiness();
+  await seedDocuments(testEnvironment, {
+    [`${PRODUCTS}/pd_seeded`]: {
+      name: "White bread loaf",
+      SKU: "6161100000019",
+      price: 65,
+      quantity: 40,
+      categoryId: "cat-bakery",
+    },
+  });
+
+  for (const uid of ["owner-a", "admin-a", "manager-a", "cashier-a"]) {
     const firestore = authenticatedFirestore(testEnvironment, uid);
-    const target = doc(firestore, `${PRODUCTS}/pd_seeded`);
-    if (retires) {
-      await assertSucceeds(deleteDoc(target));
-    } else {
-      // A manager stocks the shelf and may not empty it, which is exactly the
-      // split the client's two role lists model.
-      await assertFails(deleteDoc(target));
-    }
+    await assertFails(deleteDoc(doc(firestore, `${PRODUCTS}/pd_seeded`)));
   }
 });
 
@@ -252,11 +282,13 @@ test("another business's catalog is never reached", async () => {
   );
   await assertFails(deleteDoc(doc(foreign, `${PRODUCTS}/pd_seeded`)));
   // Its own business still answers, so the denial is the boundary and not a
-  // broken rule.
+  // broken rule. A category rather than a product, because no client creates a
+  // product anywhere any more - which would make this control pass for the same
+  // reason the denials above do, and prove nothing.
   await assertSucceeds(
     setDoc(
-      doc(foreign, "tenants/tenant-b/products/pd_new"),
-      product("owner-b"),
+      doc(foreign, "tenants/tenant-b/categories/ct_new"),
+      category("owner-b"),
     ),
   );
 });

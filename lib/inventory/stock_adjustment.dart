@@ -127,6 +127,17 @@ enum TenantStockAdjustmentFailure {
   /// The call was refused for a reason this client does not model.
   refused,
 
+  /// The adjustment could not be stored on this device, so it was never sent
+  /// and nothing anywhere recorded it.
+  ///
+  /// **Distinct from [ambiguous] in the one way that matters**: an ambiguous
+  /// attempt may have moved stock and a re-read is how it settles, while this
+  /// one certainly did not and the same figures may simply be entered again.
+  /// It is a local storage failure - a full disk, an unreadable box - and the
+  /// operator can do nothing about it except try, which is why it says so
+  /// rather than reporting a server problem.
+  notRecorded,
+
   /// The outcome is unknown; only a canonical re-read may settle it.
   ambiguous,
 }
@@ -144,6 +155,20 @@ final class TenantStockAdjustmentException implements Exception {
   /// anything is retried.
   bool get mayHaveCommitted =>
       failure == TenantStockAdjustmentFailure.ambiguous;
+
+  /// Whether an attempt under this same key may already have been recorded, so
+  /// the key must be held rather than discarded.
+  ///
+  /// **Not the same question as [mayHaveCommitted], and conflating them is a
+  /// way to move stock twice.** An ambiguous attempt may have reached the
+  /// server. A [duplicateRequest] certainly reached *something* - the local
+  /// queue or the server already holds a different adjustment under this exact
+  /// key - so minting a fresh one would record a second adjustment on top of
+  /// the first. Everything else left nothing behind, and holding its key would
+  /// make an edited retry fail as a duplicate for no reason.
+  bool get retainsRequestId =>
+      failure == TenantStockAdjustmentFailure.ambiguous ||
+      failure == TenantStockAdjustmentFailure.duplicateRequest;
 
   @override
   String toString() => 'TenantStockAdjustmentException(${failure.name})';
@@ -361,19 +386,37 @@ final class TenantStockAdjustmentGateway {
     }
     final queue = _queue;
     if (queue != null) {
-      await queue(
-        tenantId: _session.tenantId,
-        productId: intent.productId,
-        requestId: intent.requestId,
-        payload: <String, Object?>{
-          'tenantId': _session.tenantId,
-          'productId': intent.productId,
-          'quantityDelta': intent.quantityDelta,
-          'type': intent.type.wireValue,
-          'reason': intent.reason,
-          'requestId': intent.requestId,
-        },
-      );
+      // **Guarded, because parking an adjustment can fail too.** This branch ran
+      // bare until 2026-09-13: the callable below had a try/catch and the queue
+      // had none, so a device that could not write its own outbox threw straight
+      // past the panel's handlers and the operator was told nothing at all. The
+      // queue is the only path the app actually takes, so the one branch with no
+      // failure story was the one every adjustment goes through.
+      try {
+        await queue(
+          tenantId: _session.tenantId,
+          productId: intent.productId,
+          requestId: intent.requestId,
+          payload: <String, Object?>{
+            'tenantId': _session.tenantId,
+            'productId': intent.productId,
+            'quantityDelta': intent.quantityDelta,
+            'type': intent.type.wireValue,
+            'reason': intent.reason,
+            'requestId': intent.requestId,
+          },
+        );
+      } on TenantStockAdjustmentException {
+        rethrow;
+      } catch (error) {
+        // A key that already holds different figures is the same fact the
+        // server states as `already-exists`, so it is the same failure and the
+        // same sentence - one situation must not acquire a second wording
+        // depending on which layer noticed it first.
+        throw TenantStockAdjustmentException(
+          _queueFailure(error) ?? TenantStockAdjustmentFailure.notRecorded,
+        );
+      }
       return TenantStockAdjustmentResult.queued(
         intent: intent,
         previousQuantity: _product.quantity,
@@ -402,6 +445,18 @@ final class TenantStockAdjustmentGateway {
     }
     return TenantStockAdjustmentResult.fromCallable(response, intent: intent);
   }
+
+  /// Reads a queue refusal this gateway can name, or null for anything else.
+  ///
+  /// Matched on the message rather than the type, because `lib/inventory`
+  /// deliberately does not import the durable store - the queue is a function so
+  /// the dependency runs one way. Degrading to null is safe: the caller words it
+  /// as a storage failure, which is still truthful about the thing that matters,
+  /// that nothing was recorded.
+  static TenantStockAdjustmentFailure? _queueFailure(Object error) =>
+      '$error'.contains('operation_id_conflict')
+      ? TenantStockAdjustmentFailure.duplicateRequest
+      : null;
 
   void _requireAuthorizedSession() {
     if (!canAdjustInSession(_session)) {

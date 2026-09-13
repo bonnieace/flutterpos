@@ -63,10 +63,12 @@ export {
 
 export {
   adjustStock,
+  createProduct,
   getSalesComparison,
   importProducts,
   recordReceiptReprint,
   removeProductBackground,
+  setProductRetired,
   updateProduct,
   updateProducts,
   verifyReturnAndRestoreStock,

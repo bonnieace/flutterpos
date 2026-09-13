@@ -144,7 +144,15 @@ void main() {
     },
   );
 
-  test('a queued retire takes the product off the page', () async {
+  test('a queued retire marks the product rather than hiding it', () async {
+    // **This asserted the opposite until 2026-09-13**, and rightly: retiring
+    // was a delete, so the overlay drew a tombstone. It is a flag now - the
+    // document stays so every past sale line and the ledger below it still name
+    // something that answers - and the row stays with it, marked.
+    //
+    // The quantity goes to zero because the server clears it in the same
+    // transaction the flag is written in. Drawing the old figure against a
+    // retired row would state stock already accounted for as gone.
     final writer = QueuedTenantCatalogWriter(
       store: store,
       currentUid: () => 'user-a',
@@ -162,7 +170,37 @@ void main() {
             limit: 20,
           ),
         );
-    expect(page, isEmpty);
+    expect(page, hasLength(1));
+    expect(page.single.data['retired'], isTrue);
+    expect(page.single.data['quantity'], 0);
+    // Everything else the row draws is still the product's own.
+    expect(page.single.data['SKU'], '6161100000019');
+  });
+
+  test('a queued restore puts it back without inventing stock', () async {
+    // Restoring clears the flag and nothing else. Those units were accounted
+    // for as leaving; handing them back would be a movement nobody could
+    // explain, so a restored product takes an ordinary opening balance.
+    final writer = QueuedTenantCatalogWriter(
+      store: store,
+      currentUid: () => 'user-a',
+    );
+
+    expect(
+      (await writer.retireProduct(_retireIntent(retired: false))).kind,
+      TenantCatalogWriteKind.queued,
+    );
+
+    final page = await _overlay(store, base: _OneProduct())
+        .searchTenantProducts(
+          TenantProductSearchQuery.forTesting(
+            collectionPath: 'tenants/tenant-a/products',
+            limit: 20,
+          ),
+        );
+    expect(page.single.data['retired'], isFalse);
+    // Untouched: only a retirement clears the figure.
+    expect(page.single.data['quantity'], 40);
   });
 
   test(
@@ -273,8 +311,14 @@ TenantProductCreateIntent _productIntent() =>
       requestId: _productId,
     );
 
-TenantProductRetireIntent _retireIntent() =>
-    _catalogRepository().buildRetireIntent(_storedProduct());
+TenantProductRetireIntent _retireIntent({
+  String requestId = 'retire-request-1',
+  bool retired = true,
+}) => _catalogRepository().buildRetireIntent(
+  _storedProduct(),
+  requestId: requestId,
+  retired: retired,
+);
 
 TenantProduct _storedProduct() => TenantProduct.fromDocument(
   path: 'tenants/tenant-a/products/prod-bread',

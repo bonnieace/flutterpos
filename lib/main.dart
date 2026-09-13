@@ -623,7 +623,16 @@ class SpiritPOSApp extends StatelessWidget {
       required Map<String, Object?> payload,
     }) async {
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
+      // **Thrown, not returned.** This read `return` until 2026-09-13, and a
+      // silent return here is the worst answer available: the caller takes it
+      // for a successful enqueue and reports "Stock changed from 10 to 8" for an
+      // adjustment that was dropped on the floor. `QueuedTenantCatalogWriter`
+      // has always thrown for this same condition, so one of the two was wrong
+      // and it was this one. Reachable only if signing out races a live session,
+      // which is exactly the case nobody would be watching for.
+      if (uid == null) {
+        throw StateError('There is no signed-in account to record this against.');
+      }
       await tenantMutationStore.enqueue(
         uid: uid,
         tenantId: tenantId,

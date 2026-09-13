@@ -269,6 +269,162 @@ void main() {
       }
     });
 
+    test('a key is held whenever an attempt under it may be recorded', () {
+      // Deliberately a different question from `mayHaveCommitted`, and
+      // answering one with the other is how the same stock moves twice: a
+      // duplicate means something already holds this key, so minting a fresh
+      // one would record a second adjustment on top of the first.
+      for (final failure in TenantStockAdjustmentFailure.values) {
+        expect(
+          TenantStockAdjustmentException(failure).retainsRequestId,
+          failure == TenantStockAdjustmentFailure.ambiguous ||
+              failure == TenantStockAdjustmentFailure.duplicateRequest,
+          reason: failure.name,
+        );
+      }
+    });
+  });
+
+  group('the queue the app actually uses', () {
+    // **Every test above this drives the callable, and the app never does.**
+    // `main.dart` supplies both a callable and a queue, and `submit` takes the
+    // queue branch whenever one is present - so until 2026-09-13 the suite
+    // exercised a branch production never runs and never exercised the one it
+    // does. That is why an unguarded throw here went unnoticed.
+
+    TenantStockAdjustmentQueue recording(List<Map<String, Object?>> sent) =>
+        ({
+          required tenantId,
+          required productId,
+          required requestId,
+          required payload,
+        }) async => sent.add(payload);
+
+    TenantStockAdjustmentQueue failing(Object error) =>
+        ({
+          required tenantId,
+          required productId,
+          required requestId,
+          required payload,
+        }) async => throw error;
+
+    test('a queued adjustment answers from arithmetic, not a round trip', () async {
+      final sent = <Map<String, Object?>>[];
+      final callable = _Callable(const <String, Object?>{});
+      final gateway = _gateway(callable, queue: recording(sent));
+
+      final result = await gateway.submit(
+        gateway.createIntent(
+          type: TenantStockAdjustmentType.damage,
+          quantityDelta: -2,
+          reason: 'Two broken in transit',
+        ),
+      );
+
+      expect(sent, hasLength(1));
+      expect(sent.single['quantityDelta'], -2);
+      expect(sent.single['requestId'], 'adjust-stock-abcdefgh');
+      // The product held 4, so the answer is arithmetic on this device.
+      expect(result.previousQuantity, 4);
+      expect(result.quantity, 2);
+      // Null because only the server writes the record that ID names.
+      expect(result.adjustmentId, isNull);
+    });
+
+    test('a queue that cannot store it says so, and says nothing moved', () async {
+      // The defect this group exists for. This threw straight past the panel's
+      // handlers and the operator was told nothing at all.
+      final gateway = _gateway(
+        _Callable(const <String, Object?>{}),
+        queue: failing(StateError('the box is unwritable')),
+      );
+
+      await expectLater(
+        gateway.submit(
+          gateway.createIntent(
+            type: TenantStockAdjustmentType.damage,
+            quantityDelta: -2,
+            reason: 'Two broken in transit',
+          ),
+        ),
+        throwsA(
+          isA<TenantStockAdjustmentException>()
+              .having(
+                (error) => error.failure,
+                'failure',
+                TenantStockAdjustmentFailure.notRecorded,
+              )
+              // Nothing was written, so nothing is awaiting settlement and the
+              // key may be discarded.
+              .having(
+                (error) => error.mayHaveCommitted,
+                'mayHaveCommitted',
+                isFalse,
+              )
+              .having(
+                (error) => error.retainsRequestId,
+                'retainsRequestId',
+                isFalse,
+              ),
+        ),
+      );
+    });
+
+    test('a key already holding other figures is the duplicate it is', () async {
+      // The local queue and the server state one fact - this key already
+      // settled something else - so they must reach one failure and one
+      // sentence. And the key is held: an earlier adjustment is out there.
+      final gateway = _gateway(
+        _Callable(const <String, Object?>{}),
+        queue: failing(StateError('operation_id_conflict')),
+      );
+
+      await expectLater(
+        gateway.submit(
+          gateway.createIntent(
+            type: TenantStockAdjustmentType.damage,
+            quantityDelta: -3,
+            reason: 'Three broken in transit',
+          ),
+        ),
+        throwsA(
+          isA<TenantStockAdjustmentException>()
+              .having(
+                (error) => error.failure,
+                'failure',
+                TenantStockAdjustmentFailure.duplicateRequest,
+              )
+              .having(
+                (error) => error.retainsRequestId,
+                'retainsRequestId',
+                isTrue,
+              ),
+        ),
+      );
+    });
+
+    test('a refusal this gateway makes itself never reaches the queue', () async {
+      // The authorization guard runs before the queue, so a cashier's
+      // adjustment is refused here rather than parked and refused by a server a
+      // week later.
+      final sent = <Map<String, Object?>>[];
+      final gateway = _gateway(
+        _Callable(const <String, Object?>{}),
+        role: TenantRole.cashier,
+        queue: recording(sent),
+      );
+
+      expect(
+        () => gateway.createIntent(
+          type: TenantStockAdjustmentType.damage,
+          quantityDelta: -2,
+          reason: 'Two broken in transit',
+        ),
+        throwsA(isA<TenantStockAdjustmentException>()),
+      );
+      expect(sent, isEmpty);
+    });
+
     test('a timeout is unknown, never a refusal', () async {
       final gateway = _gateway(_Callable.failing(TimeoutException('slow')));
 
@@ -364,10 +520,12 @@ TenantStockAdjustmentGateway _gateway(
   _Callable callable, {
   TenantRole role = TenantRole.manager,
   TenantProduct? product,
+  TenantStockAdjustmentQueue? queue,
   List<String> requestIds = const <String>['adjust-stock-abcdefgh'],
 }) {
   var index = 0;
   return TenantStockAdjustmentGateway(
+    queue: queue,
     session: TenantSession.active(
       uid: 'manager-a',
       tenantId: 'tenant-a',

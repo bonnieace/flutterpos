@@ -174,12 +174,16 @@ final class QueuedTenantCatalogWriter implements TenantCatalogWriter {
     TenantProductRetireIntent intent,
   ) => _queue(
     tenantId: intent.tenantId,
-    operationId: 'product-retire-${intent.productId}',
+    // The request, not the product: one product may be retired, restored and
+    // retired again, and each of those clears whatever it held at that moment.
+    // Keying on the product would make the second collide with the first.
+    operationId: 'product-retire-${intent.requestId}',
     kind: TenantPendingMutationKind.productRetire,
     targetPath: intent.path,
-    // A delete carries nothing. The record still names the path, which is what
-    // the overlay draws a tombstone against and what confirmation reads back.
-    payload: const <String, Object?>{},
+    // **It carries the request now, where a delete carried nothing.** Retiring
+    // is a callable, because clearing the stock means writing the ledger entry
+    // that accounts for it, and no device may write that.
+    payload: intent.payload(),
   );
 
   Future<TenantCatalogWriteResult> _queue({

@@ -164,9 +164,18 @@ const COLLECTIONS = [
     ops: {
       get: { allow: MEMBERS },
       list: { allow: MEMBERS },
-      create: { allow: memberRoles(["owner", "admin", "manager"]) },
+      // Nobody, since 2026-09-13. A create may carry an opening quantity and
+      // the ledger entry accounting for it is server-written, so the two have to
+      // be one transaction; `createProduct` is it. Update stays wide because the
+      // checkout decrement is a client write a cashier makes with no connection.
+      create: { allow: NONE },
       update: { allow: MEMBERS },
-      delete: { allow: memberRoles(["owner", "admin"]) },
+      // Nobody, since 2026-09-13. "Retire" was this delete, and it took the
+      // quantity with it: no movement recorded the stock leaving, past sale
+      // lines named an ID nothing answered to, and the ledger below the product
+      // was orphaned rather than removed. `setProductRetired` sets a flag and
+      // clears the stock through the ledger in one transaction instead.
+      delete: { allow: NONE },
     },
   },
   {

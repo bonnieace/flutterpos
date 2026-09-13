@@ -780,6 +780,141 @@ void main() {
       findsNothing,
     );
   });
+
+  _queueFailureTests();
+  _ambiguousRetryTests();
+}
+
+/// What survives an ambiguous outcome, which is the moment an operator most
+/// needs it to.
+///
+/// The inventory audit recorded that the form was recreated after an unknown
+/// result, so the operator had to remember and retype the exact adjustment or
+/// the retained key would refuse an edited one. That is no longer true: the
+/// guard retains its value across a re-read of the same business rather than
+/// blanking to a spinner, so the subtree - and this form's state - stays
+/// mounted. Pinned here because nothing else would notice if the guard went back
+/// to blanking, and the audit's own description of this is how it read before.
+void _ambiguousRetryTests() {
+  testWidgets('an unknown outcome leaves the typed adjustment on screen', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _controller(),
+      _Reader()..respondMovements(<TenantQueryDocumentSnapshot>[]),
+      callable: _Callable.failing(TimeoutException('slow')),
+    );
+
+    await _submit(tester, units: '7', reason: 'Counted after the delivery');
+
+    expect(snackNotice(tester).status, AppStatus.attention);
+    // The three things the operator would otherwise have to remember, and the
+    // three the retained request ID requires be identical on the retry.
+    expect(
+      tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(const ValueKey('product-stock-units')),
+          matching: find.byType(TextField),
+        ),
+      ).controller?.text,
+      '7',
+    );
+    expect(
+      tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(const ValueKey('product-stock-reason')),
+          matching: find.byType(TextField),
+        ),
+      ).controller?.text,
+      'Counted after the delivery',
+    );
+    expect(find.byKey(const ValueKey('product-stock-form')), findsOneWidget);
+  });
+
+  testWidgets('an unknown outcome keeps the key so a retry is one operation', (
+    tester,
+  ) async {
+    // The other half of the same guarantee: the retry has to address the
+    // server's existing idempotency record rather than move the same stock a
+    // second time.
+    final callable = _Callable.failing(TimeoutException('slow'));
+    await _pump(
+      tester,
+      _controller(),
+      _Reader()..respondMovements(<TenantQueryDocumentSnapshot>[]),
+      callable: callable,
+      requestIds: <String>['adjust-stock-first11', 'adjust-stock-second2'],
+    );
+
+    await _submit(tester, units: '7', reason: 'Counted after the delivery');
+    await _submit(tester, units: '7', reason: 'Counted after the delivery');
+
+    expect(callable.payloads.map((payload) => payload['requestId']), <String>[
+      'adjust-stock-first11',
+      'adjust-stock-first11',
+    ]);
+  });
+}
+
+/// What the panel says when the durable queue - the path the app actually
+/// takes - cannot store the adjustment.
+///
+/// These two ran against the callable until 2026-09-13 and therefore proved
+/// nothing about the shipped path. Both defects they now pin were invisible for
+/// exactly that reason.
+void _queueFailureTests() {
+  testWidgets('a queue that cannot store it tells the operator so', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _controller(),
+      _Reader()..respondMovements(<TenantQueryDocumentSnapshot>[]),
+      callable: _Callable(_response()),
+      queue:
+          ({
+            required tenantId,
+            required productId,
+            required requestId,
+            required payload,
+          }) async => throw StateError('the box is unwritable'),
+    );
+
+    await _submit(tester, units: '2', reason: 'Two broken');
+
+    final notice = snackNotice(tester);
+    expect(notice.message, contains('could not store the adjustment'));
+    expect(notice.message, contains('nothing was recorded'));
+    expect(notice.status, AppStatus.problem);
+  });
+
+  testWidgets('a duplicate key is reported as unsettled, not as a refusal', (
+    tester,
+  ) async {
+    // `attention` rather than `problem`: an earlier adjustment under this key is
+    // out there and has not settled, which is the one thing the operator needs
+    // to know before recording anything else.
+    await _pump(
+      tester,
+      _controller(),
+      _Reader()..respondMovements(<TenantQueryDocumentSnapshot>[]),
+      callable: _Callable(_response()),
+      queue:
+          ({
+            required tenantId,
+            required productId,
+            required requestId,
+            required payload,
+          }) async => throw StateError('operation_id_conflict'),
+    );
+
+    await _submit(tester, units: '2', reason: 'Two broken');
+
+    final notice = snackNotice(tester);
+    expect(notice.message, contains('has not settled yet'));
+    expect(notice.status, AppStatus.attention);
+  });
 }
 
 Future<void> _pump(
@@ -788,6 +923,7 @@ Future<void> _pump(
   _Reader reader, {
   int pageSize = 20,
   AdjustStockCallable? callable,
+  TenantStockAdjustmentQueue? queue,
   List<String> requestIds = const <String>['adjust-stock-abcdefgh'],
   double width = 1400,
 }) async {
@@ -821,7 +957,15 @@ Future<void> _pump(
               : TenantProductStockAdjustmentPanel(
                   reader: reader,
                   product: _product(),
-                  actions: TenantStockActions(adjustCallable: callable),
+                  // **The queue is what the app supplies**, and a test that
+                  // leaves it null drives a branch `submit` never takes in
+                  // production. Most tests here are about the form and the
+                  // ledger and are honest to leave it out; the ones about what
+                  // an operator is told when a write fails must not.
+                  actions: TenantStockActions(
+                    adjustCallable: callable,
+                    adjustQueue: queue,
+                  ),
                   requestIdFactory: () =>
                       requestIds[index++ < requestIds.length
                           ? index - 1

@@ -262,6 +262,13 @@ final class _TenantCatalogManagementPanelState
   final TextEditingController _productSku = TextEditingController();
   final TextEditingController _productPrice = TextEditingController();
   final TextEditingController _productCost = TextEditingController();
+  final TextEditingController _productQuantity = TextEditingController();
+
+  /// One retirement key per product, kept only across an unknown outcome.
+  ///
+  /// Keyed by product rather than held as a single field, because the catalog
+  /// lists many and a person may retire two before either settles.
+  final Map<String, String> _retireRequestIds = <String, String>{};
   final TextEditingController _search = TextEditingController();
 
   String? _selectedCategoryId;
@@ -353,6 +360,7 @@ final class _TenantCatalogManagementPanelState
     _productSku.dispose();
     _productPrice.dispose();
     _productCost.dispose();
+    _productQuantity.dispose();
     _searchDebounce?.cancel();
     _search.dispose();
     super.dispose();
@@ -594,6 +602,7 @@ final class _TenantCatalogManagementPanelState
         sku: _productSku,
         price: _productPrice,
         cost: _productCost,
+        openingQuantity: _productQuantity,
         canRecordCost: TenantCatalogManagementRepository.canRecordCostInSession(
           session,
         ),
@@ -668,6 +677,7 @@ final class _TenantCatalogManagementPanelState
         sku: _productSku.text,
         price: _productPrice.text,
         cost: _productCost.text,
+        openingQuantity: _productQuantity.text,
         categoryId: _selectedCategoryId ?? '',
         categories: view.categories.items,
         requestId: _productRequestId ??= _newRequestId(),
@@ -720,6 +730,7 @@ final class _TenantCatalogManagementPanelState
           sku: _productSku.text,
           price: _productPrice.text,
           cost: _productCost.text,
+          openingQuantity: _productQuantity.text,
           categoryId: _selectedCategoryId ?? '',
           categories: view.categories.items,
           requestId: _productRequestId!,
@@ -747,7 +758,7 @@ final class _TenantCatalogManagementPanelState
         _productRequestId = null;
       }
       _report(
-        _productNotice(result),
+        _productNotice(result, intent),
         action: _undoAction(
           session,
           result,
@@ -814,21 +825,52 @@ final class _TenantCatalogManagementPanelState
     }
   }
 
-  Future<void> _retire(TenantSession session, TenantProduct product) async {
+  Future<void> _retire(
+    TenantSession session,
+    TenantProduct product, {
+    bool retired = true,
+  }) async {
     final writer = widget.writer;
     if (writer == null || _busy) return;
     final capturedKey = _sessionKey(session);
 
     final TenantProductRetireIntent intent;
     try {
-      intent = _repository(session).buildRetireIntent(product);
+      intent = _repository(session).buildRetireIntent(
+        product,
+        // One key per attempt, held per product: a retry after an unknown
+        // outcome must settle the first retirement rather than clear the stock
+        // a second time, and two products retired in one sitting are two
+        // operations.
+        requestId: _retireRequestIds[product.id] ??= _newRequestId(),
+        retired: retired,
+      );
     } on TenantCatalogManagementException catch (error) {
+      _retireRequestIds.remove(product.id);
       _report(_refusalNotice(error.code));
       return;
     }
-    // Retiring goes straight through too, and is the change that most needed
-    // the undo: it is a delete. It is withdrawable for exactly as long as it
-    // has not been sent, and the notice says which of those two it is.
+    // **A confirmation, because this one clears stock.** Adding a product lost
+    // its confirmation on 2026-09-04 and rightly: nothing was at stake and the
+    // notice offered an undo. Retiring a product holding units writes a movement
+    // that takes them off the books, and the figure is worth stating before it
+    // happens rather than afterwards.
+    if (retired &&
+        product.quantity != 0 &&
+        !await _confirmed(
+          title: 'Retire ${intent.name}?',
+          body:
+              'It holds ${intent.quantity} '
+              '${intent.quantity == 1 ? 'unit' : 'units'}. Retiring records an '
+              'adjustment clearing them to zero, so the stock ledger says where '
+              'they went, and takes the product off the till. Its ledger and '
+              'every past sale stay exactly as they are, and it can be restored '
+              'from this screen.',
+          action: 'Retire product',
+        )) {
+      _retireRequestIds.remove(product.id);
+      return;
+    }
     if (!_stillCurrent(capturedKey)) return;
 
     setState(() {
@@ -837,12 +879,18 @@ final class _TenantCatalogManagementPanelState
     try {
       final result = await writer.retireProduct(intent);
       if (!_stillCurrent(capturedKey)) return;
+      // Only an unknown outcome keeps the key. Everything else settled, so the
+      // next retirement of this product is a new operation clearing whatever it
+      // holds then.
+      if (result.kind != TenantCatalogWriteKind.ambiguous) {
+        _retireRequestIds.remove(product.id);
+      }
       _report(
         _retireNotice(result, intent),
         action: _undoAction(
           session,
           result,
-          label: 'Undo retiring this',
+          label: retired ? 'Undo retiring this' : 'Undo restoring this',
           productId: intent.productId,
         ),
       );
@@ -1096,6 +1144,7 @@ final class _TenantCatalogManagementPanelState
     _productSku.clear();
     _productPrice.clear();
     _productCost.clear();
+    _productQuantity.clear();
     _selectedCategoryId = null;
     _productImage = null;
   }
@@ -1137,9 +1186,10 @@ final class _TenantCatalogManagementPanelState
             reader: reader,
             productSearchReader: widget.productSearchReader,
           );
-          final categories = await repository.loadCategories(
-            pageSize: widget.categoryPageSize,
-          );
+          // Every category, not the first page: this list is what the add
+          // and edit forms file a product under and what the filter offers, so
+          // a category missing from it is a category no product can be put in.
+          final categories = await repository.loadEveryCategory();
           final supportsSearch =
               widget.productSearchReader != null ||
               reader is TenantProductSearchReader;
@@ -1290,6 +1340,9 @@ final class _TenantCatalogManagementPanelState
         onRetire: (product) {
           if (session != null) _retire(session, product);
         },
+        onRestore: (product) {
+          if (session != null) _retire(session, product, retired: false);
+        },
         onNextPage: () {
           if (view != null) _nextPage(view.products.nextCursor);
         },
@@ -1332,6 +1385,7 @@ final class _UnifiedInventoryContents extends StatelessWidget {
     required this.onAdjust,
     required this.onEdit,
     required this.onRetire,
+    required this.onRestore,
     required this.onNextPage,
     required this.onPreviousPage,
     required this.productVisualBuilder,
@@ -1364,6 +1418,12 @@ final class _UnifiedInventoryContents extends StatelessWidget {
   final ValueChanged<TenantProduct> onAdjust;
   final ValueChanged<TenantProduct> onEdit;
   final ValueChanged<TenantProduct> onRetire;
+
+  /// Puts a retired product back in the catalog. It does **not** give the stock
+  /// back: those units were accounted for as leaving, and inventing them again
+  /// would be a movement nobody could explain. A restored product takes an
+  /// ordinary opening balance.
+  final ValueChanged<TenantProduct> onRestore;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
   final TenantProductVisualBuilder? productVisualBuilder;
@@ -1415,14 +1475,25 @@ final class _UnifiedInventoryContents extends StatelessWidget {
             key: ValueKey('catalog-management-edit-${product.id}'),
             onPressed: busy ? null : () => onEdit(product),
           ),
+        // **One control, two directions.** A retired product is still listed -
+        // it is a flag now rather than a delete - so the row that retired it is
+        // the row that puts it back. Restoring is not destructive and is not
+        // drawn as though it were.
         if (canRetire && canWrite)
-          _InventoryProductAction(
-            label: 'Retire product',
-            icon: Icons.remove_shopping_cart_outlined,
-            key: ValueKey('catalog-management-retire-${product.id}'),
-            tier: AppButtonTier.destructive,
-            onPressed: busy ? null : () => onRetire(product),
-          ),
+          product.retired
+              ? _InventoryProductAction(
+                  label: 'Restore product',
+                  icon: Icons.add_shopping_cart_outlined,
+                  key: ValueKey('catalog-management-restore-${product.id}'),
+                  onPressed: busy ? null : () => onRestore(product),
+                )
+              : _InventoryProductAction(
+                  label: 'Retire product',
+                  icon: Icons.remove_shopping_cart_outlined,
+                  key: ValueKey('catalog-management-retire-${product.id}'),
+                  tier: AppButtonTier.destructive,
+                  onPressed: busy ? null : () => onRetire(product),
+                ),
       ];
 
   Widget _visual(TenantProduct product) =>
@@ -2785,14 +2856,29 @@ AppNotice _imageNotice(TenantProductImageException error) =>
       ),
     };
 
-AppNotice _productNotice(TenantCatalogWriteResult result) =>
+/// **The confirmed sentence is two, because adding a product now is.**
+/// It used to say "holding no stock" and then tell the operator to go and record
+/// an opening quantity from the product itself - two journeys, which is the thing
+/// this form stopped needing. A product added with stock says what it holds and
+/// where that figure is recorded; one added empty still says so plainly, because
+/// "no stock" is a fact about the shelf worth stating rather than an omission.
+AppNotice _productNotice(
+  TenantCatalogWriteResult result,
+  TenantProductCreateIntent intent,
+) =>
     switch (result.kind) {
       TenantCatalogWriteKind.committed ||
-      TenantCatalogWriteKind.queued => const AppNotice.confirmed(
-        'Product added, holding no stock. Record its opening quantity from the '
-        'product itself so the ledger says where those units came from. It is '
-        'on its way to the server now; every other device picks it up when it '
-        'syncs.',
+      TenantCatalogWriteKind.queued => AppNotice.confirmed(
+        intent.quantity > 0
+            ? '${intent.name} added, holding ${intent.quantity} '
+                  '${intent.quantity == 1 ? 'unit' : 'units'}. Those units are '
+                  'recorded in its stock ledger as an opening balance, so the '
+                  'figure says where it came from. It is on its way to the '
+                  'server now; every other device picks it up when it syncs.'
+            : '${intent.name} added, holding no stock. Record what arrives from '
+                  'the product itself, so the ledger says where those units '
+                  'came from. It is on its way to the server now; every other '
+                  'device picks it up when it syncs.',
       ),
       TenantCatalogWriteKind.rejected => const AppNotice.refused(
         'The product was refused and nothing was written. Only an owner, '
@@ -2810,25 +2896,45 @@ AppNotice _productNotice(TenantCatalogWriteResult result) =>
       ),
     };
 
+/// **Every sentence here changed on 2026-09-13, because the act did.**
+/// Retiring was a delete: the document carrying the quantity was removed, no
+/// movement recorded the stock leaving, and the confirmed sentence mentioned
+/// only the half that survived. It is a flag now, the units are cleared through
+/// the ledger in the same transaction, and the product stays - so the sentence
+/// says what happened to the stock rather than what did not happen to history.
 AppNotice _retireNotice(
   TenantCatalogWriteResult result,
   TenantProductRetireIntent intent,
 ) => switch (result.kind) {
   TenantCatalogWriteKind.committed ||
   TenantCatalogWriteKind.queued => AppNotice.confirmed(
-    '${intent.name} is retired. Its stock ledger and every sale that already '
-    'named it are untouched.',
+    intent.retired
+        ? intent.quantity == 0
+              ? '${intent.name} is retired and off the till. It held no stock, '
+                    'so nothing was cleared. Its ledger and every past sale are '
+                    'unchanged, and it can be restored from this screen.'
+              : '${intent.name} is retired and off the till. The '
+                    '${intent.quantity} '
+                    '${intent.quantity == 1 ? 'unit' : 'units'} it held are '
+                    'cleared to zero, recorded in its stock ledger. It can be '
+                    'restored from this screen.'
+        : '${intent.name} is back in the catalog, holding no stock. Record what '
+              'is on the shelf from the product itself.',
   ),
-  TenantCatalogWriteKind.rejected => const AppNotice.refused(
-    'Nothing was retired. Only an owner or administrator may retire a product.',
+  TenantCatalogWriteKind.rejected => AppNotice.refused(
+    intent.retired
+        ? 'Nothing was retired. Only an owner or administrator may retire a '
+              'product.'
+        : 'Nothing was restored. Only an owner or administrator may restore a '
+              'product.',
   ),
   TenantCatalogWriteKind.ambiguous => const AppNotice.unknown(
-    'The result is unknown. The catalog below has been re-read; if the product '
-    'is still listed, retire it again - retiring the same product twice '
-    'does nothing further.',
+    'The result is unknown. The catalog below has been re-read; if it has not '
+    'changed, try again - the retry settles the first attempt rather than '
+    'clearing the stock a second time.',
   ),
   TenantCatalogWriteKind.unavailable => const AppNotice.offline(
-    'This device is offline, so nothing was retired. The catalog can only be '
+    'This device is offline, so nothing was changed. The catalog can only be '
     'changed while online.',
   ),
 };
@@ -2910,6 +3016,10 @@ AppNotice _updateFailureNotice(TenantProductUpdateFailure failure) =>
       TenantProductUpdateFailure.refused => const AppNotice.refused(
         'The correction was refused and nothing was changed.',
       ),
+      TenantProductUpdateFailure.notRecorded => const AppNotice.refused(
+        'This device could not store the correction, so nothing was recorded '
+        'and nothing was sent. Try again, and report it if it keeps happening.',
+      ),
       TenantProductUpdateFailure.ambiguous => const AppNotice.unknown(
         'The result is unknown. The catalog below has been re-read; if the '
         'correction is not there, save it again - repeating the same '
@@ -2960,6 +3070,10 @@ String _refusalMessage(String code) => switch (code) {
   'product_unchanged' =>
     'Nothing on the form differs from what the product already holds, so there '
         'was nothing to correct and nothing was sent.',
+  'invalid_opening_quantity' =>
+    'Enter the opening stock as a whole number of units, at most '
+        '$maximumCatalogOpeningQuantity - or leave it blank if the product has '
+        'none yet.',
   'unknown_category' =>
     'Choose one of the categories shown above before adding the product.',
   'catalog_forbidden' =>
@@ -3061,6 +3175,7 @@ final class _AddProductScreen extends StatefulWidget {
     required this.sku,
     required this.price,
     required this.cost,
+    required this.openingQuantity,
     required this.canRecordCost,
     required this.selectedCategoryId,
     required this.image,
@@ -3078,6 +3193,13 @@ final class _AddProductScreen extends StatefulWidget {
   final TextEditingController sku;
   final TextEditingController price;
   final TextEditingController cost;
+
+  /// What the business already holds, blank when it holds none.
+  ///
+  /// A plain controller rather than a validated figure, for the reason every
+  /// other field here is one: what was typed is what decides whether the amount
+  /// is recordable, and `tenantCatalogOpeningQuantity` is what decides it.
+  final TextEditingController openingQuantity;
   final bool canRecordCost;
   final String? selectedCategoryId;
   final TenantProductImageCandidate? image;
@@ -3185,12 +3307,34 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
             ),
           ],
           SizedBox(height: tokens.spacing.s8),
+          // **Optional, and blank is the ordinary case.** A product being added
+          // for the first time usually holds nothing yet; one being brought
+          // across from a shelf that already exists usually does. Deliberately
+          // not part of `_canSubmit`, so nobody has to type a zero to add a
+          // product, and whole units only - stock is counted, not measured.
+          AppTextField(
+            key: const ValueKey('catalog-management-product-quantity'),
+            controller: widget.openingQuantity,
+            enabled: !widget.busy,
+            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+            label: 'Opening stock (optional)',
+            leading: Icons.inventory_2_outlined,
+            helper:
+                'How many units are on the shelf now. It is recorded in the '
+                'stock ledger as an opening balance, so the figure says where '
+                'it came from.',
+          ),
+          SizedBox(height: tokens.spacing.s8),
           AppSelect<String>(
             key: const ValueKey('catalog-management-product-category'),
             label: 'Category',
             value: _categoryId,
             helper: widget.moreCategories
-                ? 'More categories exist; this list shows the first page.'
+                // Reachable only past `maximumCatalogCategoryScan`, which is
+                // the figure the server refuses a name-resolving import at. It
+                // used to mean "there is a second page" and meant it often.
+                ? 'This business has more categories than any screen here '
+                      'reads, so some are not listed.'
                 : null,
             items: <AppSelectItem<String>>[
               const AppSelectItem<String>(value: '', label: 'Choose category'),
