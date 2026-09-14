@@ -15,6 +15,7 @@ import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'bulk_catalog.dart';
+import 'product_sheet.dart';
 import 'catalog_management.dart';
 
 /// The one route that corrects many products at once and imports a spreadsheet.
@@ -39,9 +40,23 @@ final class TenantBulkCatalogScreen extends StatelessWidget {
     this.importCallable,
     this.onChanged,
     this.requestIdFactory,
+    this.sheetPicker,
+    this.sheetSaver,
+    this.offerCorrections = false,
   });
 
   final TenantDataReader reader;
+
+  /// Whether this route also offers to correct many products at once.
+  ///
+  /// **Off since 2026-09-14, and the half it hides is still here.** Correcting
+  /// a field across many products shared this screen with importing, chosen
+  /// between by a pair of chips at the top - which asked somebody who came to
+  /// add stock to first work out which of two unrelated jobs the screen was
+  /// doing. Adding products is the job it is now. Every line serving the other
+  /// one is still compiled, still tested against this flag, and restoring it is
+  /// this one argument rather than a rewrite.
+  final bool offerCorrections;
 
   /// Corrects one field across many products. Injected by the composition root,
   /// and while it is absent this route does not offer to correct anything.
@@ -57,9 +72,17 @@ final class TenantBulkCatalogScreen extends StatelessWidget {
   /// One fresh request ID per page of one plan.
   final TenantCatalogRequestIdFactory? requestIdFactory;
 
+  /// Choosing a spreadsheet off the device. Absent leaves the button off, which
+  /// is what a build with no file picker wired gets; the field below still takes
+  /// pasted rows, so the route is never unusable for want of a platform seam.
+  final TenantProductSheetPicker? sheetPicker;
+
+  /// Handing a generated template to wherever this device keeps files.
+  final TenantProductSheetSaver? sheetSaver;
+
   @override
   Widget build(BuildContext context) => AppScaffold(
-    title: 'Bulk catalog changes',
+    title: 'Add many products',
     contentWidth: AppContentWidth.records,
     body: TenantBulkCatalogPanel(
       reader: reader,
@@ -67,6 +90,9 @@ final class TenantBulkCatalogScreen extends StatelessWidget {
       importCallable: importCallable,
       onChanged: onChanged,
       requestIdFactory: requestIdFactory,
+      sheetPicker: sheetPicker,
+      sheetSaver: sheetSaver,
+      offerCorrections: offerCorrections,
     ),
   );
 }
@@ -80,7 +106,11 @@ final class TenantBulkCatalogPanel extends StatefulWidget {
     this.importCallable,
     this.onChanged,
     this.requestIdFactory,
+    this.sheetPicker,
+    this.sheetSaver,
     this.pageSize = 20,
+    this.clock = DateTime.now,
+    this.offerCorrections = false,
   });
 
   final TenantDataReader reader;
@@ -88,7 +118,15 @@ final class TenantBulkCatalogPanel extends StatefulWidget {
   final ImportProductsCallable? importCallable;
   final VoidCallback? onChanged;
   final TenantCatalogRequestIdFactory? requestIdFactory;
+  final TenantProductSheetPicker? sheetPicker;
+  final TenantProductSheetSaver? sheetSaver;
   final int pageSize;
+
+  /// Only the date the template is named with, so a test can name one.
+  final DateTime Function() clock;
+
+  /// See [TenantBulkCatalogScreen.offerCorrections].
+  final bool offerCorrections;
 
   @override
   State<TenantBulkCatalogPanel> createState() => _TenantBulkCatalogPanelState();
@@ -111,7 +149,20 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
   final TextEditingController _value = TextEditingController();
   final TextEditingController _sheet = TextEditingController();
 
-  _BulkTask _task = _BulkTask.correct;
+  // **Fixed at `importSheet` since 2026-09-14, and the other value is kept.**
+  // Correcting many products at once was offered beside importing as a pair of
+  // chips, which asked somebody who came here to add stock to first decide
+  // which of two unrelated jobs this screen was doing. Adding products is the
+  // job; `_BulkTask.correct` and every line serving it stay compiled and tested
+  // so restoring it is a chip rather than a rewrite.
+  late _BulkTask _task = widget.offerCorrections
+      ? _BulkTask.correct
+      : _BulkTask.importSheet;
+
+  /// The file the rows below were read out of, so the person can see that the
+  /// one they chose is the one that was read. Null while nothing was picked -
+  /// including for rows that were pasted, which remains a supported way in.
+  String? _pickedName;
 
   /// Every product picked, keyed by ID and in the order it was picked.
   ///
@@ -203,6 +254,97 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
     _importPlan = null;
     _importCategoryNames = const <String, String>{};
     _report = null;
+  }
+
+  /// *Download Template*, the first of the two things the pre-multitenancy app
+  /// offered here.
+  ///
+  /// The example row names a category this business actually has, because a
+  /// category that does not exist refuses its row and a template nobody can
+  /// import back teaches the wrong lesson. With no categories yet the column is
+  /// left blank rather than filled with something invented.
+  Future<void> _downloadTemplate(
+    TenantSession session,
+    List<TenantCategory> categories,
+  ) async {
+    final saver = widget.sheetSaver;
+    if (saver == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final outcome = await saver.save(
+        filename: productImportTemplateFilename(widget.clock()),
+        contents: productImportTemplateCsv(
+          includeCost: TenantBulkCatalogRepository.canChangeMoneyInSession(
+            session,
+          ),
+          categoryName: categories.firstOrNull?.name,
+        ),
+      );
+      if (!mounted) return;
+      _reportNotice(switch (outcome) {
+        TenantSheetSaveOutcome.saved => const AppNotice(
+          status: AppStatus.ok,
+          message: 'Template sent. Fill it in and upload it back.',
+        ),
+        // Not a failure: the person opened the sheet and changed their mind.
+        TenantSheetSaveOutcome.dismissed => const AppNotice(
+          status: AppStatus.info,
+          message: 'Template not sent anywhere.',
+        ),
+        TenantSheetSaveOutcome.unavailable => const AppNotice(
+          status: AppStatus.problem,
+          message:
+              'This device offered nowhere to send the template. Install a '
+              'file manager or a mail app and try again.',
+        ),
+      });
+    } catch (error) {
+      if (!mounted) return;
+      _reportNotice(
+        AppNotice(
+          status: AppStatus.problem,
+          message: 'The template could not be prepared. $error',
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// *Upload*, the second. The file's rows land in the same field pasted rows
+  /// land in, so one parser, one preview and one commit serve both ways in - and
+  /// a row the sheet got wrong can be fixed here rather than back in Excel.
+  Future<void> _chooseFile() async {
+    final picker = widget.sheetPicker;
+    if (picker == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final picked = await picker.pick();
+      if (picked == null) return;
+      final text = decodeProductSheet(picked);
+      if (!mounted) return;
+      setState(() {
+        _sheet.text = text;
+        _pickedName = picked.name;
+        // The report on screen described the last sheet, not this one.
+        _discardPlan();
+      });
+    } on TenantProductSheetFormatException catch (error) {
+      if (!mounted) return;
+      _reportNotice(
+        AppNotice(status: AppStatus.problem, message: error.message),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _reportNotice(
+        AppNotice(
+          status: AppStatus.problem,
+          message: 'That file could not be read. $error',
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   void _changeTask(_BulkTask task) => setState(() {
@@ -532,6 +674,14 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
         // surface.
         canCorrect: widget.batchCallable != null,
         canImport: widget.importCallable != null,
+        offerCorrections: widget.offerCorrections,
+        onTaskChanged: _changeTask,
+        canDownloadTemplate: widget.sheetSaver != null,
+        canPickFile: widget.sheetPicker != null,
+        pickedName: _pickedName,
+        onDownloadTemplate: () =>
+            _downloadTemplate(session, view.categories.items),
+        onChooseFile: _chooseFile,
         // Taken from the guarded session rather than the caller, so a correction
         // that names money disappears the moment the session stops allowing it.
         canChangeMoney: TenantBulkCatalogRepository.canChangeMoneyInSession(
@@ -544,7 +694,6 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
         value: _value,
         sheet: _sheet,
         pageIndex: _pageIndex,
-        onTaskChanged: _changeTask,
         onToggle: _toggle,
         onSelectPage: () => _selectPage(view.products.items),
         onClearSelection: _clearSelection,
@@ -585,6 +734,13 @@ final class _BulkCatalogContents extends StatelessWidget {
     required this.report,
     required this.canCorrect,
     required this.canImport,
+    required this.offerCorrections,
+    required this.onTaskChanged,
+    required this.canDownloadTemplate,
+    required this.canPickFile,
+    required this.pickedName,
+    required this.onDownloadTemplate,
+    required this.onChooseFile,
     required this.canChangeMoney,
     required this.selected,
     required this.field,
@@ -593,7 +749,6 @@ final class _BulkCatalogContents extends StatelessWidget {
     required this.value,
     required this.sheet,
     required this.pageIndex,
-    required this.onTaskChanged,
     required this.onToggle,
     required this.onSelectPage,
     required this.onClearSelection,
@@ -613,6 +768,23 @@ final class _BulkCatalogContents extends StatelessWidget {
   final TenantBulkCatalogReport? report;
   final bool canCorrect;
   final bool canImport;
+
+  /// See [TenantBulkCatalogScreen.offerCorrections].
+  final bool offerCorrections;
+
+  final ValueChanged<_BulkTask> onTaskChanged;
+
+  /// Whether this build wired somewhere to send a generated template.
+  final bool canDownloadTemplate;
+
+  /// Whether this build wired a file picker.
+  final bool canPickFile;
+
+  /// The file the rows were read out of, or null for pasted rows.
+  final String? pickedName;
+
+  final VoidCallback onDownloadTemplate;
+  final VoidCallback onChooseFile;
   final bool canChangeMoney;
   final Map<String, TenantProduct> selected;
   final TenantProductField field;
@@ -621,7 +793,6 @@ final class _BulkCatalogContents extends StatelessWidget {
   final TextEditingController value;
   final TextEditingController sheet;
   final int pageIndex;
-  final ValueChanged<_BulkTask> onTaskChanged;
   final void Function(TenantProduct product, bool selected) onToggle;
   final VoidCallback onSelectPage;
   final VoidCallback onClearSelection;
@@ -706,23 +877,26 @@ final class _BulkCatalogContents extends StatelessWidget {
             'several requests and the report says which of them landed.',
           ),
         ),
-        SizedBox(height: tokens.spacing.s16),
-        FilterChipBar<_BulkTask>(
-          semanticLabel: 'Which bulk change this is',
-          selected: task,
-          onSelected: (value) => value == null ? null : onTaskChanged(value),
-          options: <FilterChipOption<_BulkTask>>[
-            for (final option in _BulkTask.values)
-              FilterChipOption<_BulkTask>(
-                key: ValueKey(
-                  'bulk-catalog-task-${option == _BulkTask.correct ? 'correct' : 'import'}',
+        if (offerCorrections) ...<Widget>[
+          SizedBox(height: tokens.spacing.s16),
+          FilterChipBar<_BulkTask>(
+            semanticLabel: 'Which bulk change this is',
+            selected: task,
+            onSelected: (value) => value == null ? null : onTaskChanged(value),
+            options: <FilterChipOption<_BulkTask>>[
+              for (final option in _BulkTask.values)
+                FilterChipOption<_BulkTask>(
+                  key: ValueKey(
+                    'bulk-catalog-task-'
+                    '${option == _BulkTask.correct ? 'correct' : 'import'}',
+                  ),
+                  value: option,
+                  label: option.label,
+                  enabled: !busy,
                 ),
-                value: option,
-                label: option.label,
-                enabled: !busy,
-              ),
-          ],
-        ),
+            ],
+          ),
+        ],
         if (!_offered) ...[
           SizedBox(height: tokens.spacing.s12),
           // A notice about this build, so it does not fold. `info` is §2.1's
@@ -955,7 +1129,51 @@ final class _BulkCatalogContents extends StatelessWidget {
   List<Widget> _importForm(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     return <Widget>[
-      SectionHeading('Paste the rows'),
+      // **The two doors the pre-multitenancy app had, in its order.** Take a
+      // template, fill it in, bring it back. Pasting rows still works and is
+      // still how a person with the sheet already open gets them in, but it is
+      // no longer the only way and no longer the first thing offered.
+      SectionHeading('Start from a template'),
+      SizedBox(height: tokens.spacing.s4),
+      const Text(
+        key: ValueKey('bulk-catalog-template-help'),
+        'Download the template, fill in one line per product in Excel or any '
+        'spreadsheet, then choose the saved file here. A .csv or an .xlsx is '
+        'read either way.',
+      ),
+      SizedBox(height: tokens.spacing.s12),
+      AppActionRow(
+        actions: <Widget>[
+          if (canDownloadTemplate)
+            AppButton(
+              key: const ValueKey('bulk-catalog-template'),
+              label: 'Download template',
+              icon: Icons.download_outlined,
+              tier: AppButtonTier.secondary,
+              onPressed: busy ? null : onDownloadTemplate,
+            ),
+          if (canPickFile)
+            AppButton(
+              key: const ValueKey('bulk-catalog-choose-file'),
+              label: 'Choose a file',
+              icon: Icons.upload_file_outlined,
+              tier: AppButtonTier.primary,
+              onPressed: busy ? null : onChooseFile,
+            ),
+        ],
+      ),
+      if (pickedName case final name?) ...<Widget>[
+        SizedBox(height: tokens.spacing.s12),
+        // Which file the rows below came out of. A person who picks the wrong
+        // export of three finds out here rather than in the report.
+        Callout(
+          key: const ValueKey('bulk-catalog-picked'),
+          status: AppStatus.ok,
+          message: 'Read from $name. Check the rows below, then preview.',
+        ),
+      ],
+      SizedBox(height: tokens.spacing.s24),
+      SectionHeading('The rows'),
       SizedBox(height: tokens.spacing.s8),
       // Three paragraphs of permanent helper prose behind one fold - §5.1's own
       // description of what `Disclosure` replaces, and the tallest single block
@@ -966,9 +1184,10 @@ final class _BulkCatalogContents extends StatelessWidget {
         summary: 'What the sheet must look like',
         child: Text(
           key: ValueKey('bulk-catalog-sheet-help'),
-          'Copy the rows out of the spreadsheet, header line included, and '
-          'paste them here. Columns may be separated by commas, tabs, or '
-          'semicolons, and a cell holding one of those can be wrapped in '
+          'These are the rows that will be imported, whether they were read '
+          'out of a file or pasted in. Columns may be separated by commas, '
+          'tabs, or semicolons, and a cell holding one of those can be '
+          'wrapped in '
           'double quotes.\n\n'
           'The header must name name, sku, and price. It may also name cost, '
           'quantity, and either category — the category\'s own name, matched '

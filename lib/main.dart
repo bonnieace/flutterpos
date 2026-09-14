@@ -1395,6 +1395,13 @@ class SpiritPOSApp extends StatelessWidget {
                 reader: reader,
                 batchCallable: FirebaseUpdateProductsCallable(),
                 importCallable: FirebaseImportProductsCallable(),
+                // The two platform halves of the journey the pre-multitenancy
+                // app had: take a template away, bring a filled sheet back.
+                // Injected rather than reached for inside the panel, because
+                // opening a file picker and raising a share sheet are the two
+                // things its widget tests cannot do.
+                sheetPicker: const FilePickerTenantProductSheetPicker(),
+                sheetSaver: const SharedFileTenantProductSheetSaver(),
                 onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
               ),
               onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,

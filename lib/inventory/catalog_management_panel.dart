@@ -1513,7 +1513,9 @@ final class _UnifiedInventoryContents extends StatelessWidget {
         ? null
         : AppButton(
             key: const ValueKey('catalog-management-bulk'),
-            label: compact ? 'Bulk & import' : 'Bulk changes & import',
+            // Named for the one job it does since 2026-09-14. It read "Bulk
+            // changes & import" while it was two jobs behind a pair of chips.
+            label: compact ? 'Add many' : 'Add many products',
             icon: Icons.cloud_upload_outlined,
             expand: compact,
             onPressed: busy ? null : onBulk,
@@ -1521,7 +1523,9 @@ final class _UnifiedInventoryContents extends StatelessWidget {
     final Widget? bulk = bulkButton == null
         ? null
         : Semantics(
-            label: 'Bulk changes & import',
+            // The full wording the compact button shortens, so a screen reader
+            // hears the same thing at every width.
+            label: 'Add many products',
             button: true,
             child: ExcludeSemantics(child: bulkButton),
           );

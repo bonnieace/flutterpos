@@ -1,7 +1,11 @@
-﻿import 'package:cloud_functions/cloud_functions.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/fields.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,6 +24,8 @@ const String _sheet =
     'Samosa,S-1,25,,Bakery\n';
 
 void main() {
+  _sheetJourney();
+
   testWidgets('a cashier is refused the whole route', (tester) async {
     await _pump(
       tester,
@@ -117,13 +123,19 @@ void main() {
 
     // One row naming money refuses every row with it, so the whole correction is
     // withheld rather than offered and refused.
-    expect(find.byKey(const ValueKey('bulk-catalog-field-price')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('bulk-catalog-field-price')),
+      findsNothing,
+    );
     expect(find.byKey(const ValueKey('bulk-catalog-field-cost')), findsNothing);
     expect(
       find.byKey(const ValueKey('bulk-catalog-field-clear-cost')),
       findsNothing,
     );
-    expect(find.byKey(const ValueKey('bulk-catalog-field-categoryId')), findsOne);
+    expect(
+      find.byKey(const ValueKey('bulk-catalog-field-categoryId')),
+      findsOne,
+    );
     expect(
       _callout(tester, 'bulk-catalog-money-hidden'),
       contains('refuses every row'),
@@ -146,7 +158,10 @@ void main() {
       _callout(tester, 'bulk-catalog-import-cost-hidden'),
       contains('A price is not'),
     );
-    await _paste(tester, 'name,sku,price,cost,category\nMandazi,M-1,20,9,Bakery');
+    await _paste(
+      tester,
+      'name,sku,price,cost,category\nMandazi,M-1,20,9,Bakery',
+    );
     await _tap(tester, 'bulk-catalog-preview');
 
     // Refused before anything is sent, where the server also decides it: over
@@ -353,7 +368,10 @@ void main() {
 
     expect(import.payloads, hasLength(2));
     expect(import.payloads.last['mode'], 'commit');
-    expect(import.payloads.last['requestId'], import.payloads.first['requestId']);
+    expect(
+      import.payloads.last['requestId'],
+      import.payloads.first['requestId'],
+    );
     expect(syncs, 1);
     expect(
       _text(tester, 'bulk-catalog-committed'),
@@ -431,7 +449,10 @@ void main() {
     expect(batch.payloads, hasLength(2));
     expect(
       _callout(tester, 'bulk-catalog-report-failure'),
-      allOf(contains('may or may not have been written'), contains('Nothing was written.')),
+      allOf(
+        contains('may or may not have been written'),
+        contains('Nothing was written.'),
+      ),
     );
     // A stopped chain is the one `problem` on this route. Every other notice
     // here is `info`, so the status is carrying the difference rather than the
@@ -465,7 +486,7 @@ void main() {
     expect(
       _text(tester, 'bulk-catalog-sheet-help'),
       allOf(
-        contains('header line included'),
+        contains('whether they were read out of a file or pasted in'),
         contains('The header must name name, sku, and price.'),
         contains('An opening quantity is recorded as an opening balance'),
       ),
@@ -583,6 +604,200 @@ void main() {
   });
 }
 
+/// Getting a sheet in and a template out, which is the journey this route was
+/// rebuilt around on 2026-09-14.
+void _sheetJourney() {
+  testWidgets('the route offers adding products and nothing else', (
+    tester,
+  ) async {
+    // The composition root leaves corrections off. Two chips at the top asking
+    // which of two unrelated jobs this screen was doing is the UX that went.
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: _ImportCallable(),
+      offerCorrections: false,
+    );
+
+    expect(
+      find.byKey(const ValueKey('bulk-catalog-task-correct')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('bulk-catalog-task-import')),
+      findsNothing,
+    );
+    // And it lands on the import without being asked to.
+    expect(find.byKey(const ValueKey('bulk-catalog-sheet')), findsOne);
+  });
+
+  testWidgets('a template is written with the columns the import reads', (
+    tester,
+  ) async {
+    final saver = _Saver();
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: _ImportCallable(),
+      offerCorrections: false,
+      sheetSaver: saver,
+    );
+    await _tap(tester, 'bulk-catalog-template');
+
+    expect(saver.filename, 'product_import_template_2026-09-14.csv');
+    expect(
+      saver.contents!.split('\r\n').first,
+      'name,sku,price,cost,quantity,category',
+    );
+    // The example names a category this business has, so the template it hands
+    // over is one the import that produced it would accept.
+    expect(saver.contents, contains('Bakery'));
+    expect(snackNotice(tester).status, AppStatus.ok);
+  });
+
+  testWidgets('a manager takes away a template with no cost column', (
+    tester,
+  ) async {
+    final saver = _Saver();
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.manager),
+      _Reader.seeded(),
+      import: _ImportCallable(),
+      offerCorrections: false,
+      sheetSaver: saver,
+    );
+    await _tap(tester, 'bulk-catalog-template');
+
+    expect(saver.contents!, startsWith('name,sku,price,quantity,category'));
+  });
+
+  testWidgets('a chosen file fills the rows and says which file it was', (
+    tester,
+  ) async {
+    final picker = _Picker(
+      name: 'stock.csv',
+      bytes: 'name,sku,price\nMandazi,M-1,20',
+    );
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: _ImportCallable(),
+      offerCorrections: false,
+      sheetPicker: picker,
+    );
+    await _tap(tester, 'bulk-catalog-choose-file');
+
+    expect(
+      tester
+          .widget<AppTextField>(
+            find.byKey(const ValueKey('bulk-catalog-sheet')),
+          )
+          .controller!
+          .text,
+      'name,sku,price\nMandazi,M-1,20',
+    );
+    // Which export of three was read, answered before the report rather than
+    // after it.
+    expect(_callout(tester, 'bulk-catalog-picked'), contains('stock.csv'));
+  });
+
+  testWidgets('backing out of the picker changes nothing', (tester) async {
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: _ImportCallable(),
+      offerCorrections: false,
+      sheetPicker: _Picker.cancelled(),
+    );
+    await _tap(tester, 'bulk-catalog-choose-file');
+
+    expect(find.byKey(const ValueKey('bulk-catalog-picked')), findsNothing);
+    expect(_enabled(tester, 'bulk-catalog-preview'), isFalse);
+  });
+
+  testWidgets('a file that is not a spreadsheet is refused, not pasted', (
+    tester,
+  ) async {
+    final picker = _Picker(name: 'notes.xlsx', bytes: 'not a workbook');
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: _ImportCallable(),
+      offerCorrections: false,
+      sheetPicker: picker,
+    );
+    await _tap(tester, 'bulk-catalog-choose-file');
+
+    expect(snackNotice(tester).status, AppStatus.problem);
+    expect(snackNotice(tester).message, contains('notes.xlsx'));
+    expect(_enabled(tester, 'bulk-catalog-preview'), isFalse);
+  });
+
+  testWidgets('neither door is drawn where its half was never wired', (
+    tester,
+  ) async {
+    // A build with no file picker still takes pasted rows, so the route is
+    // never unusable for want of a platform seam.
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: _ImportCallable(),
+      offerCorrections: false,
+    );
+
+    expect(find.byKey(const ValueKey('bulk-catalog-template')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('bulk-catalog-choose-file')),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('bulk-catalog-sheet')), findsOne);
+  });
+}
+
+final class _Picker implements TenantProductSheetPicker {
+  _Picker({required this.name, required this.bytes});
+  _Picker.cancelled() : name = null, bytes = null;
+
+  final String? name;
+  final String? bytes;
+
+  @override
+  Future<TenantPickedSheet?> pick() async {
+    final chosen = name;
+    if (chosen == null) return null;
+    return TenantPickedSheet(
+      name: chosen,
+      bytes: Uint8List.fromList(utf8.encode(bytes!)),
+    );
+  }
+}
+
+final class _Saver implements TenantProductSheetSaver {
+  String? filename;
+  String? contents;
+
+  @override
+  Future<TenantSheetSaveOutcome> save({
+    required String filename,
+    required String contents,
+  }) async {
+    this.filename = filename;
+    this.contents = contents;
+    return TenantSheetSaveOutcome.saved;
+  }
+}
+
 Future<void> _pump(
   WidgetTester tester,
   TenantSessionController controller,
@@ -592,6 +807,9 @@ Future<void> _pump(
   VoidCallback? onChanged,
   int pageSize = 20,
   double width = 1400,
+  bool offerCorrections = true,
+  TenantProductSheetPicker? sheetPicker,
+  TenantProductSheetSaver? sheetSaver,
 }) async {
   tester.view.physicalSize = Size(width, 8000);
   tester.view.devicePixelRatio = 1;
@@ -609,6 +827,15 @@ Future<void> _pump(
             onChanged: onChanged,
             pageSize: pageSize,
             requestIdFactory: _requestIds(),
+            // **The correcting half is still proved here.** It came off the
+            // route on 2026-09-14 and came off nothing else: every test below
+            // that drives a correction drives the code the composition root
+            // stopped offering, so turning it back on is a flag rather than a
+            // recovery job.
+            offerCorrections: offerCorrections,
+            sheetPicker: sheetPicker,
+            sheetSaver: sheetSaver,
+            clock: () => DateTime(2026, 9, 14),
           ),
         ),
       ),
@@ -692,7 +919,12 @@ Iterable<String> _documentIdsOnScreen(WidgetTester tester) => tester
     .where(RegExp(r'cat-|ct_').hasMatch);
 
 String _label(WidgetTester tester, String key) => tester
-    .widget<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Text)))
+    .widget<Text>(
+      find.descendant(
+        of: find.byKey(ValueKey(key)),
+        matching: find.byType(Text),
+      ),
+    )
     .data!;
 
 bool _enabled(WidgetTester tester, String key) => pressable(tester, key);
