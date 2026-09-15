@@ -1179,37 +1179,73 @@ final class _TenantCatalogManagementPanelState
     if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
-    TenantGuardedLoader<_CatalogView> readWith(TenantDataReader reader) =>
-        (session) async {
-          final repository = TenantCatalogRepository(
-            session: session,
-            reader: reader,
-            productSearchReader: widget.productSearchReader,
-          );
-          // Every category, not the first page: this list is what the add
-          // and edit forms file a product under and what the filter offers, so
-          // a category missing from it is a category no product can be put in.
-          final categories = await repository.loadEveryCategory();
-          final supportsSearch =
-              widget.productSearchReader != null ||
-              reader is TenantProductSearchReader;
-          final products = supportsSearch
-              ? await repository.searchProducts(
-                  pageSize: widget.pageSize,
-                  cursor: cursor,
-                  searchPrefix: _searchPrefix.isEmpty ? null : _searchPrefix,
-                  categoryId: _categoryFilter,
-                  stock: _stockFilter,
-                )
-              : await repository.loadProducts(
-                  pageSize: widget.pageSize,
-                  cursor: cursor,
-                );
-          return _CatalogView(categories: categories, products: products);
-        };
-    _loader = readWith(widget.reader);
+    // **Both readers travel together, and that is the point.** Until
+    // 2026-09-14 this closure took the reader for the pass and then named
+    // `widget.productSearchReader` anyway - the live one - and
+    // `TenantCatalogRepository` lets an explicit search reader outrank the
+    // reader it is given. So the cached pass read its categories off the disk
+    // and then blocked on the network for the products, and a catalog this
+    // device was holding the whole time took fifteen seconds to draw with no
+    // signal while every other offline-first route drew in two.
+    TenantGuardedLoader<_CatalogView> readWith(
+      TenantDataReader reader,
+      TenantProductSearchReader? searchReader,
+    ) => (session) async {
+      final repository = TenantCatalogRepository(
+        session: session,
+        reader: reader,
+        productSearchReader: searchReader,
+      );
+      // Every category, not the first page: this list is what the add
+      // and edit forms file a product under and what the filter offers, so
+      // a category missing from it is a category no product can be put in.
+      final categories = await repository.loadEveryCategory();
+      // The same question the repository's constructor answers, asked the
+      // same way: a pass whose own reader can search needs no companion,
+      // and one that cannot falls back to the companion it was handed.
+      final supportsSearch =
+          searchReader != null || reader is TenantProductSearchReader;
+      final products = supportsSearch
+          ? await repository.searchProducts(
+              pageSize: widget.pageSize,
+              cursor: cursor,
+              searchPrefix: _searchPrefix.isEmpty ? null : _searchPrefix,
+              categoryId: _categoryFilter,
+              stock: _stockFilter,
+            )
+          : await repository.loadProducts(
+              pageSize: widget.pageSize,
+              cursor: cursor,
+            );
+      return _CatalogView(categories: categories, products: products);
+    };
+    _loader = readWith(widget.reader, widget.productSearchReader);
     final cache = widget.reader.cached;
-    _loaderCached = cache == null ? null : readWith(cache);
+    final cachedSearch = widget.productSearchReader?.cachedProductSearch;
+    if (cache == null) {
+      _loaderCached = null;
+      return;
+    }
+    final readCached = readWith(cache, cachedSearch);
+    // **An empty answer from the disk is not an answer.** `Source.cache` is
+    // silent rather than failing for a path it has never seen - it hands back
+    // an empty page - so a device that has never synced cannot be told apart
+    // from a business that sells nothing. Drawing that would put *no products*
+    // on screen and then take it back a moment later, which on the catalog
+    // reads as the shop's products having been lost.
+    //
+    // Throwing is how a cached pass says it holds nothing:
+    // `TenantRouteGuard._loadFromCache` swallows every failure in silence and
+    // leaves the page on its shimmer until the server answers. Categories and
+    // products both, because a business with categories and no products yet is
+    // a real state worth drawing at once.
+    _loaderCached = (session) async {
+      final view = await readCached(session);
+      if (view.categories.items.isEmpty && view.products.items.isEmpty) {
+        throw const _NothingHeldOnThisDevice();
+      }
+      return view;
+    };
   }
 
   String? _loaderKey;
@@ -1357,6 +1393,15 @@ final class _CatalogView {
 
   final TenantCatalogPage<TenantCategory> categories;
   final TenantCatalogPage<TenantProduct> products;
+}
+
+/// What the cached pass throws when this device is holding no catalog at all.
+///
+/// Never shown to anybody and never caught by name: it exists so the guard's
+/// silent-failure path can carry the one fact a `Source.cache` read cannot
+/// state for itself - see `_composeLoaders`.
+final class _NothingHeldOnThisDevice implements Exception {
+  const _NothingHeldOnThisDevice();
 }
 
 /// The legacy `goods.dart` hierarchy rebuilt on the tenant-safe catalog model.
@@ -2869,36 +2914,35 @@ AppNotice _imageNotice(TenantProductImageException error) =>
 AppNotice _productNotice(
   TenantCatalogWriteResult result,
   TenantProductCreateIntent intent,
-) =>
-    switch (result.kind) {
-      TenantCatalogWriteKind.committed ||
-      TenantCatalogWriteKind.queued => AppNotice.confirmed(
-        intent.quantity > 0
-            ? '${intent.name} added, holding ${intent.quantity} '
-                  '${intent.quantity == 1 ? 'unit' : 'units'}. Those units are '
-                  'recorded in its stock ledger as an opening balance, so the '
-                  'figure says where it came from. It is on its way to the '
-                  'server now; every other device picks it up when it syncs.'
-            : '${intent.name} added, holding no stock. Record what arrives from '
-                  'the product itself, so the ledger says where those units '
-                  'came from. It is on its way to the server now; every other '
-                  'device picks it up when it syncs.',
-      ),
-      TenantCatalogWriteKind.rejected => const AppNotice.refused(
-        'The product was refused and nothing was written. Only an owner, '
-        'administrator, or manager may change the catalog, and an entry that '
-        'already exists is never overwritten.',
-      ),
-      TenantCatalogWriteKind.ambiguous => const AppNotice.unknown(
-        'The result is unknown. The catalog below has been re-read; if the '
-        'product is not listed, add it again - the retry addresses the same '
-        'document, so it cannot be stocked twice.',
-      ),
-      TenantCatalogWriteKind.unavailable => const AppNotice.offline(
-        'This device is offline, so nothing was written. The catalog can only '
-        'be changed while online.',
-      ),
-    };
+) => switch (result.kind) {
+  TenantCatalogWriteKind.committed ||
+  TenantCatalogWriteKind.queued => AppNotice.confirmed(
+    intent.quantity > 0
+        ? '${intent.name} added, holding ${intent.quantity} '
+              '${intent.quantity == 1 ? 'unit' : 'units'}. Those units are '
+              'recorded in its stock ledger as an opening balance, so the '
+              'figure says where it came from. It is on its way to the '
+              'server now; every other device picks it up when it syncs.'
+        : '${intent.name} added, holding no stock. Record what arrives from '
+              'the product itself, so the ledger says where those units '
+              'came from. It is on its way to the server now; every other '
+              'device picks it up when it syncs.',
+  ),
+  TenantCatalogWriteKind.rejected => const AppNotice.refused(
+    'The product was refused and nothing was written. Only an owner, '
+    'administrator, or manager may change the catalog, and an entry that '
+    'already exists is never overwritten.',
+  ),
+  TenantCatalogWriteKind.ambiguous => const AppNotice.unknown(
+    'The result is unknown. The catalog below has been re-read; if the '
+    'product is not listed, add it again - the retry addresses the same '
+    'document, so it cannot be stocked twice.',
+  ),
+  TenantCatalogWriteKind.unavailable => const AppNotice.offline(
+    'This device is offline, so nothing was written. The catalog can only '
+    'be changed while online.',
+  ),
+};
 
 /// **Every sentence here changed on 2026-09-13, because the act did.**
 /// Retiring was a delete: the document carrying the quantity was removed, no

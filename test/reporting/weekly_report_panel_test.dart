@@ -80,18 +80,131 @@ void main() {
     held.complete(<String, Object?>{});
     await tester.pumpAndSettle();
   });
+
+  testWidgets('a figure that is elaborated somewhere opens it', (tester) async {
+    // The old app's grid: *Total sales* opened the sales report rather than a
+    // menu whose first row opened it.
+    var opened = 0;
+    await _pumpReports(
+      tester,
+      callable: _held(),
+      destinations: WeeklyReportDestinations(
+        salesTotals: WeeklyReportDestination(
+          build: () {
+            opened++;
+            return const Scaffold(key: ValueKey('totals-stub'));
+          },
+          roles: const <TenantRole>[TenantRole.owner],
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('weekly-report-sales')));
+    await tester.pumpAndSettle();
+
+    expect(opened, 1);
+    expect(find.byKey(const ValueKey('totals-stub')), findsOneWidget);
+  });
+
+  testWidgets('a figure nothing elaborates is inert, not broken', (
+    tester,
+  ) async {
+    // No destination is wired at all, so every card is a plain figure - the
+    // state this page was in before the hub was retired, and the state the old
+    // app's *Low stock* card was always in.
+    await _pumpReports(tester, callable: _held());
+
+    expect(find.byKey(const ValueKey('weekly-report-sales')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('weekly-report-sales')));
+    // Frames, not a settle: the figures are still being read, and a skeleton
+    // never settles.
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    // Nothing was pushed: the page is still the page.
+    expect(find.byKey(const ValueKey('weekly-report-body')), findsOneWidget);
+  });
+
+  testWidgets('the other reports are cards on this grid', (tester) async {
+    await _pumpReports(
+      tester,
+      callable: _held(),
+      destinations: WeeklyReportDestinations(
+        dailySummary: WeeklyReportDestination(
+          build: () => const Scaffold(),
+          roles: const <TenantRole>[TenantRole.owner],
+        ),
+        differences: WeeklyReportDestination(
+          build: () => const Scaffold(),
+          roles: const <TenantRole>[TenantRole.owner],
+        ),
+        stockMovements: WeeklyReportDestination(
+          build: () => const Scaffold(),
+          roles: const <TenantRole>[TenantRole.owner],
+        ),
+        openDifferenceCount: (_) => 2,
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('weekly-report-daily-summary')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('weekly-report-stock-movements')),
+      findsOneWidget,
+    );
+    // §9: the count is said in words rather than left as a bare number.
+    expect(
+      find.text('2 differences are open and have not been resolved.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a role that may not read a report is not shown its card', (
+    tester,
+  ) async {
+    // The hub filtered every card by `session.canAccess` before drawing it.
+    // Folding the reports into this grid may not widen that.
+    await _pumpReports(
+      tester,
+      callable: _held(),
+      role: TenantRole.cashier,
+      destinations: WeeklyReportDestinations(
+        differences: WeeklyReportDestination(
+          build: () => const Scaffold(),
+          roles: const <TenantRole>[TenantRole.owner],
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('weekly-report-differences')),
+      findsNothing,
+    );
+  });
 }
+
+/// A callable that never answers, so the page stays on its figures-pending
+/// state while the cards - which do not wait for a figure - are exercised.
+_HeldTotalsCallable _held() => _HeldTotalsCallable(Completer<Object?>());
 
 Future<void> _pumpReports(
   WidgetTester tester, {
   required SalesTotalsCallable callable,
+  WeeklyReportDestinations destinations = const WeeklyReportDestinations(),
+  TenantRole role = TenantRole.owner,
 }) async {
   tester.view.physicalSize = const Size(1200, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final controller = TenantSessionController()
-    ..open(uid: 'user-a', membership: _membership());
+    ..open(
+      uid: 'user-a',
+      membership: _membership(role: role),
+    );
   addTearDown(controller.dispose);
   await tester.pumpWidget(
     MaterialApp(
@@ -101,6 +214,7 @@ Future<void> _pumpReports(
           reader: const _EmptyReader(),
           callable: callable,
           clock: () => DateTime.utc(2026, 8, 27, 12),
+          destinations: destinations,
         ),
       ),
     ),
@@ -141,18 +255,19 @@ final class _EmptyReader implements TenantDataReader {
   ) async => const <TenantQueryDocumentSnapshot>[];
 }
 
-TenantMembership _membership() => TenantMembership(
-  tenantId: 'tenant-a',
-  tenantName: 'Chilltent Lounge',
-  tenantSlug: 'chilltent-lounge',
-  role: TenantRole.owner,
-  membershipStatus: MembershipStatus.active,
-  tenantStatus: TenantStatus.active,
-  isOwner: true,
-  mirrorVersion: 1,
-  createdAt: DateTime.utc(2026, 8, 1),
-  updatedAt: DateTime.utc(2026, 8, 1),
-  serverCanAccess: true,
-  canonicalTenantExists: true,
-  canonicalMembershipExists: true,
-);
+TenantMembership _membership({TenantRole role = TenantRole.owner}) =>
+    TenantMembership(
+      tenantId: 'tenant-a',
+      tenantName: 'Chilltent Lounge',
+      tenantSlug: 'chilltent-lounge',
+      role: role,
+      membershipStatus: MembershipStatus.active,
+      tenantStatus: TenantStatus.active,
+      isOwner: role == TenantRole.owner,
+      mirrorVersion: 1,
+      createdAt: DateTime.utc(2026, 8, 1),
+      updatedAt: DateTime.utc(2026, 8, 1),
+      serverCanAccess: true,
+      canonicalTenantExists: true,
+      canonicalMembershipExists: true,
+    );

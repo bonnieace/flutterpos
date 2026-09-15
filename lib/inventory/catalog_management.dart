@@ -2,14 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:crypto/crypto.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_id.dart';
-import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
@@ -980,6 +978,26 @@ final class TenantCatalogWriteResult {
 }
 
 /// The narrow write boundary used to change a catalog.
+///
+/// **There is no Firestore implementation of it, and there cannot be one now.**
+/// All four of these are callables, for two reasons that meet here:
+///
+/// - a **product create** may carry an opening quantity, and a **retire** clears
+///   one. The `stock_adjustments` record and `stock_movements` entry that account
+///   for those units are server-write-only, so the product and its ledger entry
+///   have to be written by one principal in one transaction.
+/// - a **category create** and a **rename** must refuse a name another category
+///   in this business already folds to, because two categories with one name
+///   cannot be told apart when a spreadsheet names that category. Deciding that
+///   means reading every other category in the collection inside the transaction
+///   that writes, and a Firestore rule may read the document being written and
+///   named documents - never a query.
+///
+/// So `firestore.rules` denies all four to every client, and
+/// [QueuedTenantCatalogWriter] is the only implementation the app holds: it
+/// writes the intent to encrypted local storage and the pending-mutation worker
+/// carries it to the callable. None of this gave up offline - the outbox and its
+/// overlay are what bought that, never the direct write.
 abstract interface class TenantCatalogWriter {
   Future<TenantCatalogWriteResult> createCategory(
     TenantCategoryCreateIntent intent,
@@ -996,190 +1014,6 @@ abstract interface class TenantCatalogWriter {
   Future<TenantCatalogWriteResult> retireProduct(
     TenantProductRetireIntent intent,
   );
-}
-
-typedef TenantCatalogOnlineCheck = Future<bool> Function();
-typedef TenantCatalogDocumentCreator =
-    Future<void> Function(String path, Map<String, Object?> data);
-typedef TenantCatalogDocumentUpdater =
-    Future<void> Function(String path, Map<String, Object?> data);
-
-/// Firestore implementation of the catalog write boundary.
-///
-/// A create is a whole-document `set` rather than a merge, unlike checkout
-/// configuration: this document is being brought into existence, the strict read
-/// model requires every field it names, and merging onto a deterministic ID that
-/// already exists would silently patch a product instead of refusing a replay.
-/// `createdAt` is always a server timestamp.
-final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
-  FirebaseTenantCatalogWriter({
-    FirebaseFirestore? firestore,
-    required TenantCatalogOnlineCheck isOnline,
-    Duration writeTimeout = const Duration(seconds: 20),
-  }) : this._(
-         create: _firestoreCreator(firestore ?? FirebaseFirestore.instance),
-         update: _firestoreUpdater(firestore ?? FirebaseFirestore.instance),
-         isOnline: isOnline,
-         writeTimeout: writeTimeout,
-       );
-
-  FirebaseTenantCatalogWriter.forTesting({
-    required TenantCatalogDocumentCreator create,
-    TenantCatalogDocumentUpdater? update,
-    required TenantCatalogOnlineCheck isOnline,
-    Duration writeTimeout = const Duration(seconds: 20),
-  }) : this._(
-         create: create,
-         update: update ?? _unsupportedUpdate,
-         isOnline: isOnline,
-         writeTimeout: writeTimeout,
-       );
-
-  FirebaseTenantCatalogWriter._({
-    required TenantCatalogDocumentCreator create,
-    required TenantCatalogDocumentUpdater update,
-    required TenantCatalogOnlineCheck isOnline,
-    required Duration writeTimeout,
-  }) : _create = create,
-       _update = update,
-       _isOnline = isOnline,
-       _writeTimeout = writeTimeout {
-    if (writeTimeout <= Duration.zero) {
-      throw ArgumentError.value(writeTimeout, 'writeTimeout');
-    }
-  }
-
-  static const Set<String> _rejectedCodes = <String>{
-    'permission-denied',
-    'unauthenticated',
-    'invalid-argument',
-    'not-found',
-    'already-exists',
-    'failed-precondition',
-    'out-of-range',
-  };
-
-  final TenantCatalogDocumentCreator _create;
-  final TenantCatalogDocumentUpdater _update;
-  final TenantCatalogOnlineCheck _isOnline;
-  final Duration _writeTimeout;
-
-  @override
-  Future<TenantCatalogWriteResult> createCategory(
-    TenantCategoryCreateIntent intent,
-  ) {
-    if (TenantPaths(intent.tenantId).category(intent.categoryId) !=
-        intent.path) {
-      throw const TenantCatalogManagementException(
-        'catalog_path_escaped_tenant',
-      );
-    }
-    return _write(
-      () => _create(intent.path, <String, Object?>{
-        ...intent.documentData(),
-        'createdAt': FieldValue.serverTimestamp(),
-      }),
-    );
-  }
-
-  /// **Not a document write any more, and it cannot become one again.**
-  /// `allow create` on `products` is `if false`: a created product may carry an
-  /// opening quantity, and the `stock_adjustments` record and `stock_movements`
-  /// entry that account for those units are server-write-only, so the create and
-  /// its ledger entry have to be written by the same principal. `createProduct`
-  /// does it through the Admin SDK; `QueuedTenantCatalogWriter` is what the app
-  /// actually holds, and it queues the call.
-  ///
-  /// Refused rather than quietly attempted, on the same grounds as
-  /// [_unsupportedUpdate]: a `set` here would answer `permission-denied` from
-  /// the rules, which reports a configuration mistake as a shopkeeper's
-  /// authorization problem.
-  @override
-  Future<TenantCatalogWriteResult> createProduct(
-    TenantProductCreateIntent intent,
-  ) => Future<TenantCatalogWriteResult>.error(
-    UnsupportedError(
-      'Creating a product is the createProduct callable, not a document write.',
-    ),
-  );
-
-  @override
-  Future<TenantCatalogWriteResult> renameCategory(
-    TenantCategoryRenameIntent intent,
-  ) {
-    if (TenantPaths(intent.tenantId).category(intent.categoryId) !=
-        intent.path) {
-      throw const TenantCatalogManagementException(
-        'catalog_path_escaped_tenant',
-      );
-    }
-    return _write(
-      () => _update(intent.path, <String, Object?>{
-        ...intent.documentData(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }),
-    );
-  }
-
-  /// **Not a document delete any more, and it cannot become one again.**
-  /// `allow delete` on `products` is `if false`: retiring clears the stock, and
-  /// the `stock_movements` entry accounting for those units is server-write-only,
-  /// so the flag and its ledger entry have to be written by one principal.
-  /// `setProductRetired` does it; `QueuedTenantCatalogWriter` queues the call.
-  @override
-  Future<TenantCatalogWriteResult> retireProduct(
-    TenantProductRetireIntent intent,
-  ) => Future<TenantCatalogWriteResult>.error(
-    UnsupportedError(
-      'Retiring a product is the setProductRetired callable, not a delete.',
-    ),
-  );
-
-  Future<TenantCatalogWriteResult> _write(
-    Future<void> Function() attempt,
-  ) async {
-    if (!await _online()) {
-      return const TenantCatalogWriteResult.unavailable();
-    }
-    try {
-      await attempt().timeout(_writeTimeout);
-      return const TenantCatalogWriteResult.committed();
-    } on TimeoutException {
-      return const TenantCatalogWriteResult.ambiguous('write_timeout');
-    } on FirebaseException catch (error) {
-      return _rejectedCodes.contains(error.code)
-          ? TenantCatalogWriteResult.rejected(error.code)
-          : TenantCatalogWriteResult.ambiguous(error.code);
-    } catch (_) {
-      return const TenantCatalogWriteResult.ambiguous('unknown_error');
-    }
-  }
-
-  Future<bool> _online() async {
-    try {
-      return await _isOnline();
-    } catch (_) {
-      return false;
-    }
-  }
-
-  static TenantCatalogDocumentCreator _firestoreCreator(
-    FirebaseFirestore firestore,
-  ) =>
-      (path, data) => firestore.doc(path).set(data);
-
-  static TenantCatalogDocumentUpdater _firestoreUpdater(
-    FirebaseFirestore firestore,
-  ) =>
-      (path, data) => firestore.doc(path).update(data);
-
-  static Future<void> _unsupportedUpdate(
-    String path,
-    Map<String, Object?> data,
-  ) => Future<void>.error(
-    UnsupportedError('Category rename is not configured.'),
-  );
-
 }
 
 /// Narrow callable boundary for `updateProduct`.

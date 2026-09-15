@@ -2,11 +2,11 @@ import { after, afterEach, before, test } from "node:test";
 
 import { assertFails, assertSucceeds } from "@firebase/rules-unit-testing";
 import {
+  deleteDoc,
   doc,
   getDoc,
   increment,
   serverTimestamp,
-  setDoc,
   updateDoc,
 } from "firebase/firestore";
 
@@ -59,6 +59,8 @@ test("canonical membership allows the selected tenant and denies another tenant"
       status: "active",
     },
     "tenants/tenant-b/products/product-b": { name: "B", quantity: 9 },
+    "tenants/tenant-a/categories/category-a": { name: "Category A" },
+    "tenants/tenant-b/categories/category-b": { name: "Category B" },
   });
 
   const firestore = authenticatedFirestore(testEnvironment, "alice");
@@ -69,15 +71,15 @@ test("canonical membership allows the selected tenant and denies another tenant"
   await assertFails(
     getDoc(doc(firestore, "tenants/tenant-b/products/product-b")),
   );
+  // A delete rather than a write: `allow create, update` on `categories` is
+  // `if false` for every client since 2026-09-14, so a write would be denied in
+  // both businesses and prove nothing about the boundary. Delete is the one
+  // client write the collection still admits.
   await assertSucceeds(
-    setDoc(doc(firestore, "tenants/tenant-a/categories/category-a"), {
-      name: "Category A",
-    }),
+    deleteDoc(doc(firestore, "tenants/tenant-a/categories/category-a")),
   );
   await assertFails(
-    setDoc(doc(firestore, "tenants/tenant-b/categories/category-b"), {
-      name: "Category B",
-    }),
+    deleteDoc(doc(firestore, "tenants/tenant-b/categories/category-b")),
   );
   const unauthenticated = testEnvironment.unauthenticatedContext().firestore();
   await assertFails(
@@ -129,9 +131,7 @@ test("an active owner mirror never authorizes without canonical staff", async ()
     }),
   );
   await assertFails(
-    setDoc(doc(firestore, "tenants/tenant-a/categories/category-a"), {
-      name: "Mirror-only write",
-    }),
+    deleteDoc(doc(firestore, "tenants/tenant-a/categories/category-a")),
   );
 });
 

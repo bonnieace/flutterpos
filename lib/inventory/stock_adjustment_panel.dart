@@ -142,8 +142,7 @@ const Disclosure _stockLedgerDisclosure = Disclosure(
   child: Text(
     key: ValueKey('product-stock-ledger-scope'),
     'Every sale, verified return, and manual adjustment the server '
-    'recorded for this product. It is listed by record ID, which is not '
-    'time order; each entry states when it was recorded.',
+    'recorded for this product, most recent first.',
   ),
 );
 
@@ -621,55 +620,55 @@ String _resolutionNote(TenantReconciliationAnomaly anomaly) =>
 /// **Nine refusals and one unknown**, on the split every other surface in this
 /// family takes: `ambiguous` is the only branch where stock may actually have
 /// moved, and it is the only one that sends a person to look at the ledger.
-AppNotice _adjustmentNotice(TenantStockAdjustmentFailure failure) =>
-    switch (failure) {
-      TenantStockAdjustmentFailure.forbidden => const AppNotice.refused(
-        'Only an owner, administrator, or manager may adjust stock.',
-      ),
-      TenantStockAdjustmentFailure.productMissing => const AppNotice.refused(
-        'This product no longer exists in this business, so nothing changed.',
-      ),
-      TenantStockAdjustmentFailure.refusedDirection => const AppNotice.refused(
-        'That adjustment type cannot move stock in that direction. Nothing '
-        'changed.',
-      ),
-      TenantStockAdjustmentFailure.invalidQuantity => const AppNotice.refused(
-        'Enter a whole number of units between 1 and '
-        '$maximumStockAdjustmentQuantityDelta.',
-      ),
-      TenantStockAdjustmentFailure.invalidReason => const AppNotice.refused(
-        'Record a reason of at least $minimumStockAdjustmentReasonLength '
-        'characters for this adjustment.',
-      ),
-      TenantStockAdjustmentFailure.duplicateRequest => const AppNotice.unknown(
-        'An earlier attempt recorded different figures under this correction, '
-        'and it has not settled yet. Nothing was changed a second time. Close '
-        'this and check the stock and the ledger before recording anything '
-        'else.',
-      ),
-      TenantStockAdjustmentFailure.outOfRange => const AppNotice.refused(
-        'The resulting quantity would be too large to record. Nothing changed.',
-      ),
-      TenantStockAdjustmentFailure.invalidStoredQuantity =>
-        const AppNotice.refused(
-          'This product\'s recorded quantity is not a whole number, so nothing '
-          'can be added to it. It needs reconciliation.',
-        ),
-      TenantStockAdjustmentFailure.refused => const AppNotice.refused(
-        'The adjustment was refused and no stock changed.',
-      ),
-      // `refused` rather than `unknown`: its own definition is "the write was
-      // refused and nothing changed", and that is precisely what is known here.
-      // Nothing is awaiting confirmation, so nothing should be drawn as pending.
-      TenantStockAdjustmentFailure.notRecorded => const AppNotice.refused(
-        'This device could not store the adjustment, so nothing was recorded '
-        'and nothing was sent. Try again, and report it if it keeps happening.',
-      ),
-      TenantStockAdjustmentFailure.ambiguous => const AppNotice.unknown(
-        'The result is unknown. This page has been reloaded; check the stock '
-        'and the ledger below before trying again.',
-      ),
-    };
+AppNotice _adjustmentNotice(
+  TenantStockAdjustmentFailure failure,
+) => switch (failure) {
+  TenantStockAdjustmentFailure.forbidden => const AppNotice.refused(
+    'Only an owner, administrator, or manager may adjust stock.',
+  ),
+  TenantStockAdjustmentFailure.productMissing => const AppNotice.refused(
+    'This product no longer exists in this business, so nothing changed.',
+  ),
+  TenantStockAdjustmentFailure.refusedDirection => const AppNotice.refused(
+    'That adjustment type cannot move stock in that direction. Nothing '
+    'changed.',
+  ),
+  TenantStockAdjustmentFailure.invalidQuantity => const AppNotice.refused(
+    'Enter a whole number of units between 1 and '
+    '$maximumStockAdjustmentQuantityDelta.',
+  ),
+  TenantStockAdjustmentFailure.invalidReason => const AppNotice.refused(
+    'Record a reason of at least $minimumStockAdjustmentReasonLength '
+    'characters for this adjustment.',
+  ),
+  TenantStockAdjustmentFailure.duplicateRequest => const AppNotice.unknown(
+    'An earlier attempt recorded different figures under this correction, '
+    'and it has not settled yet. Nothing was changed a second time. Close '
+    'this and check the stock and the ledger before recording anything '
+    'else.',
+  ),
+  TenantStockAdjustmentFailure.outOfRange => const AppNotice.refused(
+    'The resulting quantity would be too large to record. Nothing changed.',
+  ),
+  TenantStockAdjustmentFailure.invalidStoredQuantity => const AppNotice.refused(
+    'This product\'s recorded quantity is not a whole number, so nothing '
+    'can be added to it. It needs reconciliation.',
+  ),
+  TenantStockAdjustmentFailure.refused => const AppNotice.refused(
+    'The adjustment was refused and no stock changed.',
+  ),
+  // `refused` rather than `unknown`: its own definition is "the write was
+  // refused and nothing changed", and that is precisely what is known here.
+  // Nothing is awaiting confirmation, so nothing should be drawn as pending.
+  TenantStockAdjustmentFailure.notRecorded => const AppNotice.refused(
+    'This device could not store the adjustment, so nothing was recorded '
+    'and nothing was sent. Try again, and report it if it keeps happening.',
+  ),
+  TenantStockAdjustmentFailure.ambiguous => const AppNotice.unknown(
+    'The result is unknown. This page has been reloaded; check the stock '
+    'and the ledger below before trying again.',
+  ),
+};
 
 /// One product's stock page while it is still being read.
 ///
@@ -974,9 +973,8 @@ final class _ProductStockContents extends StatelessWidget {
           key: ValueKey('product-stock-differences-truncated'),
           status: AppStatus.info,
           message:
-              'More are recorded against this product than are shown here, and '
-              'this is not a list in time order, so these are not the most '
-              'recent ones.',
+              'More are recorded against this product than are shown here. '
+              'These are the most recent ones.',
         ),
       ],
       SizedBox(height: tokens.spacing.s12),

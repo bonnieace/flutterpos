@@ -12,9 +12,12 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
+import '../ui/routes.dart';
 import '../ui/fields.dart';
+import '../ui/press.dart';
 import '../ui/status.dart';
 import '../ui/rolling_number.dart';
 import '../ui/skeleton.dart';
@@ -107,7 +110,11 @@ final class WeeklyReportContents extends StatelessWidget {
     required this.onRetry,
     this.currency,
     this.failureMessage,
+    this.destinations = const WeeklyReportDestinations(),
   });
+
+  /// The reports the cards on this grid open. See [WeeklyReportDestinations].
+  final WeeklyReportDestinations destinations;
 
   final TenantReportWeek week;
 
@@ -187,6 +194,7 @@ final class WeeklyReportContents extends StatelessWidget {
           week: week,
           wide: wide,
           medium: medium,
+          destinations: destinations,
         ),
         SizedBox(height: tokens.spacing.s32),
         _FilterBar(
@@ -285,7 +293,10 @@ final class _MetricGrid extends StatelessWidget {
     required this.week,
     required this.wide,
     required this.medium,
+    required this.destinations,
   });
+
+  final WeeklyReportDestinations destinations;
 
   final TenantWeeklyReport? report;
 
@@ -315,6 +326,29 @@ final class _MetricGrid extends StatelessWidget {
 
   static const String _countedLabel = 'On this device';
 
+  /// The tap for a destination this session may open, or null.
+  ///
+  /// **`of` rather than a read, for the reason the hub gave**: the scope is an
+  /// `InheritedNotifier`, so depending on it is what redraws this grid when the
+  /// business changes. A card that survived a switch would be a door into
+  /// figures the new session may not read. And the push re-establishes the
+  /// scope around the child, because a route is a new subtree under the
+  /// navigator rather than under this widget.
+  VoidCallback? _open(BuildContext context, WeeklyReportDestination? to) {
+    if (to == null) return null;
+    final controller = TenantSessionScope.of(context);
+    final session = controller.session;
+    if (session == null || !session.canAccess(allowedRoles: to.roles)) {
+      return null;
+    }
+    return () => Navigator.of(context).push(
+      AppPageRoute<void>(
+        builder: (_) =>
+            TenantSessionScope(controller: controller, child: to.build()),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -322,6 +356,9 @@ final class _MetricGrid extends StatelessWidget {
     final previous = data?.previousTotals;
     final profit = data?.totals?.profitReport;
     final net = data?.netProfitReport;
+    // Both money questions elaborate into the same place: it is the only
+    // surface that can answer either.
+    final takings = _open(context, destinations.salesTotals);
     final cards = <Widget>[
       _MetricCard(
         cardKey: const ValueKey('weekly-report-sales'),
@@ -340,6 +377,7 @@ final class _MetricGrid extends StatelessWidget {
         comparisonLabel: _comparisonLabel,
         icon: Icons.attach_money,
         emphasis: true,
+        onTap: takings,
       ),
       // **Only where the session may see cost.** `TenantProfitReport` puts the
       // margin behind owner and administrator everywhere else in this app, and
@@ -402,6 +440,7 @@ final class _MetricGrid extends StatelessWidget {
         comparisonLabel: _comparisonLabel,
         icon: Icons.receipt_long,
         emphasis: true,
+        onTap: takings,
       ),
       // **Where the old page's *Low stock* card was.** This product has no
       // reorder level to read - see `weekly_report.dart` - and a card is not
@@ -435,6 +474,61 @@ final class _MetricGrid extends StatelessWidget {
         icon: Icons.inventory_2_outlined,
         emphasis: true,
       ),
+      // **The rest of the reports, as cards in the same grid.** They used to be
+      // a menu in front of this page; a menu whose only job is to name six
+      // things is a step between somebody and all six. Each is drawn only where
+      // the session may open it, so a grid with no reconciliation rights is
+      // simply the six figures.
+      if (_open(context, destinations.dailySummary) case final open?)
+        _ReportCard(
+          cardKey: const ValueKey('weekly-report-daily-summary'),
+          title: 'DAILY SUMMARY',
+          description:
+              'What reconciliation settled for each recent day, and why a day '
+              'is in the state it is.',
+          icon: Icons.today_outlined,
+          onTap: open,
+        ),
+      if (_open(context, destinations.monthlyReport) case final open?)
+        _ReportCard(
+          cardKey: const ValueKey('weekly-report-monthly'),
+          title: 'MONTHLY REPORT',
+          description:
+              'The same reading over a chosen calendar month, which no '
+              'standing period can name once the month has ended.',
+          icon: Icons.calendar_month_outlined,
+          onTap: open,
+        ),
+      if (_open(context, destinations.differences) case final open?)
+        _ReportCard(
+          cardKey: const ValueKey('weekly-report-differences'),
+          title: 'DIFFERENCES',
+          // **A figure, because the home tile's badge is one.** §9: a figure
+          // alone is not a status, so the count is said in words here rather
+          // than left as a number beside a label.
+          description: switch (destinations.openDifferenceCount?.call(
+            TenantSessionScope.of(context),
+          )) {
+            null =>
+              'Every difference reconciliation recorded and could not resolve.',
+            0 => 'Nothing is open. Every difference has been resolved.',
+            1 => 'One difference is open and has not been resolved.',
+            final count =>
+              '$count differences are open and have not been resolved.',
+          },
+          icon: Icons.rule_folder_outlined,
+          onTap: open,
+        ),
+      if (_open(context, destinations.stockMovements) case final open?)
+        _ReportCard(
+          cardKey: const ValueKey('weekly-report-stock-movements'),
+          title: 'STOCK MOVEMENTS',
+          description:
+              'Everything that moved stock across the business - sales, '
+              'returns and corrections - newest first.',
+          icon: Icons.swap_vert_outlined,
+          onTap: open,
+        ),
     ];
 
     if (!medium) {
@@ -483,6 +577,79 @@ final class _MetricGrid extends StatelessWidget {
 /// What a card prints where it has no figure at all.
 const String _noFigure = '\u2014';
 
+/// A report in the grid: a door with a sentence instead of a figure.
+///
+/// **The same box as [_MetricCard], deliberately.** These sit in one grid with
+/// the figures, so a different container would read as a different kind of
+/// thing on a page whose whole argument is that they are not. What differs is
+/// what fills it: a metric states a number and may lead somewhere, a report
+/// states what is behind it and always does. Neither invents a figure it would
+/// have to read the server to know.
+final class _ReportCard extends StatelessWidget {
+  const _ReportCard({
+    required this.cardKey,
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final Key cardKey;
+  final String title;
+  final String description;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final role = tokens.colors.action.secondary;
+    return PressSurface(
+      borderRadius: BorderRadius.circular(tokens.radius.md),
+      onPressed: onTap,
+      hoverOverlay: role.hoverWash(),
+      pressedOverlay: role.pressedWash(),
+      minimumTapTarget: tokens.density.minimumTapTarget,
+      fillWidth: true,
+      child: WeeklyReportCard(
+        key: cardKey,
+        padding: tokens.spacing.s20,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    title,
+                    style: tokens.typography.labelEyebrow.copyWith(
+                      color: tokens.colors.text.tertiary,
+                    ),
+                  ),
+                ),
+                Icon(
+                  icon,
+                  size: WeeklyReportMetrics.cardGlyph,
+                  color: tokens.colors.status.ok.fg,
+                ),
+              ],
+            ),
+            SizedBox(height: tokens.spacing.s12),
+            Text(
+              description,
+              style: tokens.typography.bodyMedium.copyWith(
+                color: tokens.colors.text.secondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 final class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.cardKey,
@@ -494,6 +661,7 @@ final class _MetricCard extends StatelessWidget {
     this.change,
     this.comparisonLabel,
     this.subtitle,
+    this.onTap,
   });
 
   final Key cardKey;
@@ -515,6 +683,17 @@ final class _MetricCard extends StatelessWidget {
   final String? comparisonLabel;
   final String? subtitle;
 
+  /// Where this figure is elaborated, or null where nothing elaborates it.
+  ///
+  /// **Null is a first-class answer, and the layout does not change for it.**
+  /// The old app's grid mixed both - *Total sales* opened its report and *Low
+  /// stock* opened nothing - so a card that leads somewhere and a card that
+  /// only states a figure have to sit in one grid without one of them looking
+  /// broken. `PressSurface` takes a null `onPressed` as inert: no hover, no
+  /// pressed overlay, no focus ring, no spring, and the same box. So both
+  /// kinds are built by the same code path and neither is a special case.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -523,108 +702,120 @@ final class _MetricCard extends StatelessWidget {
     final deltaColor = rising
         ? tokens.colors.status.ok.fg
         : tokens.colors.status.problem.fg;
-    return WeeklyReportCard(
-      key: cardKey,
-      padding: tokens.spacing.s20,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  title,
-                  style: tokens.typography.labelEyebrow.copyWith(
-                    color: tokens.colors.text.tertiary,
-                  ),
-                ),
-              ),
-              Icon(
-                icon,
-                size: WeeklyReportMetrics.cardGlyph,
-                color: emphasis
-                    ? tokens.colors.status.ok.fg
-                    : tokens.colors.status.problem.fg,
-              ),
-            ],
-          ),
-          SizedBox(height: tokens.spacing.s12),
-          // The title and the glyph above are the same whether or not the
-          // figure has arrived, so they are drawn for real and only the figure
-          // is a placeholder - decision 35, on one card.
-          if (reading)
-            SkeletonGroup(
-              semanticLabel: 'Reading $title.',
-              child: SkeletonLine(
-                widthFactor: WeeklyReportMetrics.readingWidthFactor,
-                style: tokens.typography.numericCompact,
-                tone: SkeletonTone.onRaised,
-              ),
-            )
-          // **A roll rather than a swap, because this figure is expected to
-          // change under a reader's eyes.** The takings are drawn from what
-          // this device counted and then corrected when the server answers; a
-          // number that silently becomes a different number is the kind of
-          // thing somebody notices afterwards and does not trust. `numeric`
-          // roles are tabular, so the digits that did not change hold still.
-          //
-          // An em dash is not a figure and cannot roll to one, so it stays a
-          // plain `Text` until there is something to count.
-          else if (value == _noFigure)
-            Text(
-              value,
-              style: tokens.typography.numericCompact.copyWith(
-                color: tokens.colors.text.primary,
-              ),
-            )
-          else
-            RollingNumber(
-              value: value,
-              style: tokens.typography.numericCompact.copyWith(
-                color: tokens.colors.text.primary,
-              ),
-            ),
-          if (delta != null && !reading) ...<Widget>[
-            SizedBox(height: tokens.spacing.s8),
+    final role = tokens.colors.action.secondary;
+    return PressSurface(
+      borderRadius: BorderRadius.circular(tokens.radius.md),
+      onPressed: onTap,
+      hoverOverlay: role.hoverWash(),
+      pressedOverlay: role.pressedWash(),
+      minimumTapTarget: tokens.density.minimumTapTarget,
+      // A card is as wide as its grid cell and as tall as what it says.
+      fillWidth: true,
+      child: WeeklyReportCard(
+        key: cardKey,
+        padding: tokens.spacing.s20,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                // §9: never colour alone. The arrow states the direction and
-                // the sign states it again in the figure.
-                Icon(
-                  rising ? Icons.arrow_upward : Icons.arrow_downward,
-                  size: WeeklyReportMetrics.deltaGlyph,
-                  color: deltaColor,
-                ),
-                SizedBox(width: tokens.spacing.s4),
-                Text(
-                  '${delta.abs().toStringAsFixed(1)}%',
-                  style: tokens.typography.caption.copyWith(color: deltaColor),
-                ),
-                SizedBox(width: tokens.spacing.s4),
                 Expanded(
                   child: Text(
-                    comparisonLabel ?? '',
-                    style: tokens.typography.caption.copyWith(
+                    title,
+                    style: tokens.typography.labelEyebrow.copyWith(
                       color: tokens.colors.text.tertiary,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
+                ),
+                Icon(
+                  icon,
+                  size: WeeklyReportMetrics.cardGlyph,
+                  color: emphasis
+                      ? tokens.colors.status.ok.fg
+                      : tokens.colors.status.problem.fg,
                 ),
               ],
             ),
-          ],
-          if (subtitle case final note?) ...<Widget>[
-            SizedBox(height: tokens.spacing.s8),
-            Text(
-              note,
-              style: tokens.typography.caption.copyWith(
-                color: tokens.colors.status.attention.fg,
+            SizedBox(height: tokens.spacing.s12),
+            // The title and the glyph above are the same whether or not the
+            // figure has arrived, so they are drawn for real and only the figure
+            // is a placeholder - decision 35, on one card.
+            if (reading)
+              SkeletonGroup(
+                semanticLabel: 'Reading $title.',
+                child: SkeletonLine(
+                  widthFactor: WeeklyReportMetrics.readingWidthFactor,
+                  style: tokens.typography.numericCompact,
+                  tone: SkeletonTone.onRaised,
+                ),
+              )
+            // **A roll rather than a swap, because this figure is expected to
+            // change under a reader's eyes.** The takings are drawn from what
+            // this device counted and then corrected when the server answers; a
+            // number that silently becomes a different number is the kind of
+            // thing somebody notices afterwards and does not trust. `numeric`
+            // roles are tabular, so the digits that did not change hold still.
+            //
+            // An em dash is not a figure and cannot roll to one, so it stays a
+            // plain `Text` until there is something to count.
+            else if (value == _noFigure)
+              Text(
+                value,
+                style: tokens.typography.numericCompact.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              )
+            else
+              RollingNumber(
+                value: value,
+                style: tokens.typography.numericCompact.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
               ),
-            ),
+            if (delta != null && !reading) ...<Widget>[
+              SizedBox(height: tokens.spacing.s8),
+              Row(
+                children: <Widget>[
+                  // §9: never colour alone. The arrow states the direction and
+                  // the sign states it again in the figure.
+                  Icon(
+                    rising ? Icons.arrow_upward : Icons.arrow_downward,
+                    size: WeeklyReportMetrics.deltaGlyph,
+                    color: deltaColor,
+                  ),
+                  SizedBox(width: tokens.spacing.s4),
+                  Text(
+                    '${delta.abs().toStringAsFixed(1)}%',
+                    style: tokens.typography.caption.copyWith(
+                      color: deltaColor,
+                    ),
+                  ),
+                  SizedBox(width: tokens.spacing.s4),
+                  Expanded(
+                    child: Text(
+                      comparisonLabel ?? '',
+                      style: tokens.typography.caption.copyWith(
+                        color: tokens.colors.text.tertiary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (subtitle case final note?) ...<Widget>[
+              SizedBox(height: tokens.spacing.s8),
+              Text(
+                note,
+                style: tokens.typography.caption.copyWith(
+                  color: tokens.colors.status.attention.fg,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

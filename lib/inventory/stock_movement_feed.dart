@@ -87,13 +87,17 @@ final class TenantStockMovementFeedRepository extends TenantReadRepository {
     String? cursor,
   }) => _load(pageSize: pageSize, cursor: cursor, source: source);
 
-  /// Reads one bounded page, optionally narrowed to one source.
+  /// Reads one bounded page newest first, optionally narrowed to one source.
   ///
-  /// The page is ordered by ascending document path and is deliberately **not**
-  /// presented as chronological. A group page sorts by product first and then
-  /// by movement ID, and a movement ID is a digest for an adjustment and
-  /// `sale_{saleId}` for a sale, so the order carries no time information at
-  /// all. Each entry states its own recorded instants instead.
+  /// **Ordered by `occurredAt` since 2026-09-14.** A group page used to sort by
+  /// product first and then by movement ID, which put every movement of one
+  /// product together and every product in ID order - so "what moved this week"
+  /// was answerable only by reading the whole ledger. Ordering by when the
+  /// stock moved is what makes this page the business's own timeline.
+  ///
+  /// It needs a composite index, because the tenant binding is an equality
+  /// filter the repository attaches itself. That index is in
+  /// `firestore.indexes.json` beside the one the source filter already needed.
   Future<TenantStockMovementFeedPage> _load({
     required int pageSize,
     required String? cursor,
@@ -110,6 +114,8 @@ final class TenantStockMovementFeedRepository extends TenantReadRepository {
       groupReader: _groupReader,
       pageSize: pageSize,
       cursor: cursor,
+      descending: true,
+      order: TenantCollectionOrder.occurredAt,
       equalityFilters: source == null
           ? const <String, Object?>{}
           : <String, Object?>{'sourceType': source.wireValue},

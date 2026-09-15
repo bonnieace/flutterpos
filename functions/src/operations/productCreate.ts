@@ -1,4 +1,5 @@
 import {FieldValue, getFirestore} from "firebase-admin/firestore";
+import type {DocumentReference, Transaction} from "firebase-admin/firestore";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {requireTenantMember} from "../core/authorization";
 import {TenantRole} from "../core/model";
@@ -314,6 +315,36 @@ export function productCreateFingerprintInput(
   };
 }
 
+/**
+ * Refuses a product filed under a category this business does not hold.
+ *
+ * **The check `updateProduct` and `importProducts` have always made, and this
+ * path could not make until 2026-09-14.** A device offline can add a category
+ * and then file a product under it, and the outbox drains one document path
+ * concurrently with another - so the product could reach the server before the
+ * category's own write landed, and a refusal here is permanent. What closed the
+ * race is the deferral in `TenantPendingMutationWorker`: a queued product now
+ * waits for the category it names.
+ *
+ * Read inside the caller's transaction, so a category deleted while this request
+ * was in flight cannot leave a product pointing at nothing.
+ */
+export async function assertProductCreateCategoryExists(
+  transaction: Transaction,
+  tenantRef: DocumentReference,
+  categoryId: string
+): Promise<void> {
+  const snapshot = await transaction.get(
+    tenantRef.collection("categories").doc(categoryId)
+  );
+  if (!snapshot.exists) {
+    throw new HttpsError(
+      "failed-precondition",
+      "The category does not exist in this business."
+    );
+  }
+}
+
 export const createProduct = onCall<
   CreateProductRequest,
   Promise<CreateProductResponse>
@@ -334,19 +365,22 @@ export const createProduct = onCall<
   assertProductCreateAuthorized(actor.staff.role, input);
   const plan = planProductCreate({tenantId, productId, actorUid: actor.uid, input});
 
-  // The category is deliberately **not** checked for existence, which differs
-  // from `updateProduct` and from `importProducts`. Both of those answer a
-  // request whose category must already be on the server; this one routinely does
-  // not. A device offline can add a category and then file a product under it,
-  // and the outbox drains one document path concurrently with another - so the
-  // product can reach here before the category's own write lands. A refusal would
-  // be permanent (`failed-precondition` is a rejected code) and the product would
-  // be lost, and a retryable refusal would retry for ever on a category that
-  // genuinely is not coming. Closing this needs the deferral
-  // `TenantProductImageUploadWorker` already does for a photograph whose product
-  // is still queued; until then the client's own guard - a product may only name
-  // a category this session read from this business - is what stands, exactly as
-  // it stood when this was a document write.
+  // **The category is checked here since 2026-09-14, and could not be before.**
+  // `updateProduct` and `importProducts` have always answered a request whose
+  // category must already be on the server; this one routinely did not. A device
+  // offline can add a category and then file a product under it, and the outbox
+  // drains one document path concurrently with another - so the product could
+  // reach here before the category's own write landed. A refusal is permanent
+  // (`failed-precondition` is a rejected code), so it would have lost the
+  // product for a race the operator did nothing wrong in.
+  //
+  // What closed it is the deferral in `TenantPendingMutationWorker`, modelled on
+  // the one `TenantProductImageUploadWorker` performs for a photograph whose
+  // product is still queued: a queued product waits for the category it names
+  // rather than racing it. The race gone, the check is the same one the other
+  // two paths make, and a product filed under a category that does not exist -
+  // invisible to every grouped surface without being unreadable, the worst kind
+  // of wrong - is refused where somebody can read the refusal.
   return runIdempotentFirestoreTransaction(db, {
     actorUid: actor.uid,
     operation: "createProduct",
@@ -364,6 +398,12 @@ export const createProduct = onCall<
     assertProductCreateAuthorized(currentActor.staff.role, input);
     const tenantRef = db.collection("tenants").doc(tenantId);
     const productRef = tenantRef.collection("products").doc(plan.productId);
+
+    await assertProductCreateCategoryExists(
+      transaction,
+      tenantRef,
+      plan.documentData.categoryId as string
+    );
 
     transaction.create(productRef, {
       ...plan.documentData,

@@ -3,6 +3,8 @@ import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/collection_pages.dart';
+
 void main() {
   group('stock movement feed repository', () {
     test('the business-wide page is bound to the session alone', () async {
@@ -33,9 +35,9 @@ void main() {
         'product-1/sale_co-1': _saleMovement(),
       });
 
-      final page = await _repository(reader).loadMovementsOfSource(
-        source: TenantStockMovementSource.sale,
-      );
+      final page = await _repository(
+        reader,
+      ).loadMovementsOfSource(source: TenantStockMovementSource.sale);
 
       expect(reader.queries.single.equalityFilters, <String, Object?>{
         'tenantId': 'tenant-a',
@@ -46,29 +48,32 @@ void main() {
       expect(page.isSourceScoped, isTrue);
     });
 
-    test('an unmodelled source is listed but can never be filtered for', () async {
-      final reader = _GroupReader(<String, Map<String, Object?>>{
-        'product-1/wo_abc': _adjustmentMovement()
-          ..['sourceType'] = 'stock_take_import',
-      });
-      final repository = _repository(reader);
+    test(
+      'an unmodelled source is listed but can never be filtered for',
+      () async {
+        final reader = _GroupReader(<String, Map<String, Object?>>{
+          'product-1/wo_abc': _adjustmentMovement()
+            ..['sourceType'] = 'stock_take_import',
+        });
+        final repository = _repository(reader);
 
-      // A server deploy adding a source is not evidence of anything wrong, so
-      // the unnarrowed page still names it honestly.
-      final page = await repository.loadMovements();
-      expect(page.items.single.source, TenantStockMovementSource.other);
-      expect(page.items.single.sourceType, 'stock_take_import');
+        // A server deploy adding a source is not evidence of anything wrong, so
+        // the unnarrowed page still names it honestly.
+        final page = await repository.loadMovements();
+        expect(page.items.single.source, TenantStockMovementSource.other);
+        expect(page.items.single.sourceType, 'stock_take_import');
 
-      // There is no wire value to filter by, so asking for one is refused
-      // before any query rather than issuing a page that can never match.
-      await expectLater(
-        repository.loadMovementsOfSource(
-          source: TenantStockMovementSource.other,
-        ),
-        _code('unfilterable_movement_source'),
-      );
-      expect(reader.queries.length, 1);
-    });
+        // There is no wire value to filter by, so asking for one is refused
+        // before any query rather than issuing a page that can never match.
+        await expectLater(
+          repository.loadMovementsOfSource(
+            source: TenantStockMovementSource.other,
+          ),
+          _code('unfilterable_movement_source'),
+        );
+        expect(reader.queries.length, 1);
+      },
+    );
 
     test('a cashier is refused before any read is issued', () async {
       final reader = _GroupReader(<String, Map<String, Object?>>{
@@ -123,18 +128,21 @@ void main() {
       );
     });
 
-    test('a narrowed page answering with another source fails closed', () async {
-      final reader = _GroupReader(<String, Map<String, Object?>>{
-        'product-1/sa_abc': _adjustmentMovement(),
-      }, ignoreFilters: true);
+    test(
+      'a narrowed page answering with another source fails closed',
+      () async {
+        final reader = _GroupReader(<String, Map<String, Object?>>{
+          'product-1/sa_abc': _adjustmentMovement(),
+        }, ignoreFilters: true);
 
-      await expectLater(
-        _repository(reader).loadMovementsOfSource(
-          source: TenantStockMovementSource.sale,
-        ),
-        _code('foreign_movement_source'),
-      );
-    });
+        await expectLater(
+          _repository(
+            reader,
+          ).loadMovementsOfSource(source: TenantStockMovementSource.sale),
+          _code('foreign_movement_source'),
+        );
+      },
+    );
 
     test('a movement that contradicts itself hides the page', () async {
       final reader = _GroupReader(<String, Map<String, Object?>>{
@@ -148,32 +156,46 @@ void main() {
     });
 
     test('pages are bounded and resume from a whole document path', () async {
+      // **The order is the business's timeline, not the product tree.** These
+      // three are deliberately arranged so "newest first" and "by path" cannot
+      // both be true: the most recent movement is below `product-2`, which
+      // sorts last by path, and the oldest shares a product with the newest.
       final reader = _GroupReader(<String, Map<String, Object?>>{
-        'product-1/sa_1': _adjustmentMovement(),
-        'product-1/sa_2': _adjustmentMovement(),
-        'product-2/sa_1': _adjustmentMovement(),
+        'product-1/sa_1': _adjustmentMovement(at: DateTime.utc(2026, 8, 1, 9)),
+        'product-1/sa_2': _adjustmentMovement(at: DateTime.utc(2026, 8, 2, 9)),
+        'product-2/sa_1': _adjustmentMovement(at: DateTime.utc(2026, 8, 3, 9)),
       });
       final repository = _repository(reader);
 
       final page = await repository.loadMovements(pageSize: 2);
-      expect(
-        page.items.map((item) => '${item.productId}/${item.id}'),
-        <String>['product-1/sa_1', 'product-1/sa_2'],
-      );
+      expect(page.items.map((item) => '${item.productId}/${item.id}'), <String>[
+        'product-2/sa_1',
+        'product-1/sa_2',
+      ]);
       expect(page.hasMore, isTrue);
       // One movement ID is unique only below its own product, so only a whole
-      // path can say where the next page resumes.
+      // path can say where the next page resumes - carried here beside the
+      // instant, because two movements recorded in the same millisecond are
+      // separated by nothing else.
       expect(
         page.nextCursor,
-        'tenants/tenant-a/products/product-1/stock_movements/sa_2',
+        endsWith('|tenants/tenant-a/products/product-1/stock_movements/sa_2'),
       );
 
       final last = await repository.loadMovements(
         pageSize: 2,
         cursor: page.nextCursor,
       );
-      expect(reader.queries.last.startAfterDocumentPath, page.nextCursor);
-      expect(last.items.single.productId, 'product-2');
+      expect(
+        reader.queries.last.startAfterDocumentPath,
+        'tenants/tenant-a/products/product-1/stock_movements/sa_2',
+      );
+      expect(
+        reader.queries.last.startAfterOrderValue,
+        DateTime.utc(2026, 8, 2, 9),
+      );
+      expect(last.items.single.productId, 'product-1');
+      expect(last.items.single.id, 'sa_1');
       expect(last.hasMore, isFalse);
       expect(last.nextCursor, isNull);
 
@@ -227,7 +249,7 @@ Matcher _code(String code) => throwsA(
 );
 
 /// The exact entry `adjustStock` appends below the product.
-Map<String, Object?> _adjustmentMovement() => <String, Object?>{
+Map<String, Object?> _adjustmentMovement({DateTime? at}) => <String, Object?>{
   'movementId': 'sa_abc',
   'tenantId': 'tenant-a',
   'productId': 'product-1',
@@ -238,7 +260,10 @@ Map<String, Object?> _adjustmentMovement() => <String, Object?>{
   'quantityAfter': 7,
   'reason': 'Broken in transit',
   'actorUid': 'manager-a',
-  'recordedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 9)),
+  // Both, as `adjustStock` writes them in one transaction. The feed is ordered
+  // by `occurredAt`, so a fixture without one is a document no writer produces.
+  'occurredAt': Timestamp.fromDate(at ?? DateTime.utc(2026, 8, 1, 9)),
+  'recordedAt': Timestamp.fromDate(at ?? DateTime.utc(2026, 8, 1, 9)),
 };
 
 /// The entry nightly reconciliation writes for a confirmed sale: no actor and
@@ -283,30 +308,40 @@ final class _GroupReader
         TenantQueryDocumentSnapshot(path: path, data: _adjustmentMovement()),
       ];
     }
-    final keys = movements.keys.toList()..sort();
-    final cursor = query.startAfterDocumentPath;
-    final selected = <TenantQueryDocumentSnapshot>[];
-    for (final key in keys) {
-      final parts = key.split('/');
-      // Every writer repeats the identity its own path encodes, so the fake
-      // does too rather than making each case restate it.
-      final data = <String, Object?>{
-        ...movements[key]!,
-        'productId': parts[0],
-        'movementId': parts[1],
-      };
-      final path =
-          'tenants/tenant-a/products/${parts[0]}/stock_movements/${parts[1]}';
-      if (cursor != null && path.compareTo(cursor) <= 0) continue;
-      if (!ignoreFilters &&
-          query.equalityFilters.entries.any(
-            (filter) => data[filter.key] != filter.value,
-          )) {
-        continue;
-      }
-      if (selected.length >= query.limit) break;
-      selected.add(TenantQueryDocumentSnapshot(path: path, data: data));
-    }
-    return selected;
+    // Ordered, cursored and filtered the way Firestore would, because the
+    // repository proves the order of what it is handed - and this feed is
+    // newest-first by `occurredAt`, so a fake answering in path order is
+    // answering a query it was not asked.
+    final documents = <TenantQueryDocumentSnapshot>[
+      for (final key in movements.keys)
+        () {
+          final parts = key.split('/');
+          // Every writer repeats the identity its own path encodes, so the fake
+          // does too rather than making each case restate it.
+          return TenantQueryDocumentSnapshot(
+            path:
+                'tenants/tenant-a/products/${parts[0]}/stock_movements/'
+                '${parts[1]}',
+            data: <String, Object?>{
+              ...movements[key]!,
+              'productId': parts[0],
+              'movementId': parts[1],
+            },
+          );
+        }(),
+    ];
+    return tenantCollectionGroupPageOf(
+      ignoreFilters
+          ? TenantCollectionGroupQuery.forTesting(
+              collectionId: query.collectionId,
+              limit: query.limit,
+              startAfterDocumentPath: query.startAfterDocumentPath,
+              startAfterOrderValue: query.startAfterOrderValue,
+              descending: query.descending,
+              order: query.order,
+            )
+          : query,
+      documents,
+    );
   }
 }

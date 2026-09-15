@@ -3,6 +3,8 @@ import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/collection_pages.dart';
+
 void main() {
   group('stock adjustment read model', () {
     test('decodes the record adjustStock writes', () {
@@ -109,10 +111,12 @@ void main() {
         reader.queries.single.collectionPath,
         'tenants/tenant-a/stock_adjustments',
       );
-      // An adjustment ID is `sa_` plus a digest, so document order carries no
-      // time information and a newest-first page would be a lie. Ascending key
-      // order is also servable by the automatic index.
-      expect(reader.queries.single.descending, isFalse);
+      // **Newest first, by `createdAt`, since 2026-09-14.** An adjustment ID is
+      // `sa_` plus a digest, so document order carries no time information -
+      // which used to make this page arbitrary and say so. The question the
+      // page exists for is what was corrected most recently.
+      expect(reader.queries.single.descending, isTrue);
+      expect(reader.queries.single.order, TenantCollectionOrder.createdAt);
       expect(reader.queries.single.equalityFilters, isEmpty);
       expect(page.items.single.id, 'sa_abc');
       expect(page.productId, isNull);
@@ -133,7 +137,8 @@ void main() {
       expect(reader.queries.single.equalityFilters, <String, Object?>{
         'productId': 'product-1',
       });
-      expect(reader.queries.single.descending, isFalse);
+      expect(reader.queries.single.descending, isTrue);
+      expect(reader.queries.single.order, TenantCollectionOrder.createdAt);
       expect(page.items.single.id, 'sa_abc');
       expect(page.productId, 'product-1');
       expect(page.isProductScoped, isTrue);
@@ -190,40 +195,48 @@ void main() {
       );
     });
 
-    test('a filtered page answering for another product fails closed', () async {
-      // A page narrowed to one product that returns another one is a broken
-      // boundary, not a row to quietly skip past.
-      final reader = _FeedReader(
-        <String, Map<String, Object?>>{
+    test(
+      'a filtered page answering for another product fails closed',
+      () async {
+        // A page narrowed to one product that returns another one is a broken
+        // boundary, not a row to quietly skip past.
+        final reader = _FeedReader(<String, Map<String, Object?>>{
           'sa_abc': _adjustmentData()..['productId'] = 'product-9',
-        },
-        ignoreFilters: true,
-      );
+        }, ignoreFilters: true);
 
-      await expectLater(
-        _repository(reader).loadProductAdjustments(productId: 'product-1'),
-        _code('foreign_product_adjustment'),
-      );
-    });
+        await expectLater(
+          _repository(reader).loadProductAdjustments(productId: 'product-1'),
+          _code('foreign_product_adjustment'),
+        );
+      },
+    );
 
     test('pages are bounded and advance a stable cursor', () async {
+      // Deliberately recorded out of ID order, so "newest first" and "by ID"
+      // cannot both be true of the result: `sa_1` is the most recent.
       final reader = _FeedReader(<String, Map<String, Object?>>{
-        'sa_1': _adjustmentData(),
-        'sa_2': _adjustmentData(),
-        'sa_3': _adjustmentData(),
+        'sa_1': _adjustmentData(recordedAt: DateTime.utc(2026, 8, 3, 9)),
+        'sa_2': _adjustmentData(recordedAt: DateTime.utc(2026, 8, 2, 9)),
+        'sa_3': _adjustmentData(recordedAt: DateTime.utc(2026, 8, 1, 9)),
       });
       final repository = _repository(reader);
 
       final page = await repository.loadAdjustments(pageSize: 2);
       expect(page.items.map((item) => item.id), <String>['sa_1', 'sa_2']);
       expect(page.hasMore, isTrue);
-      expect(page.nextCursor, 'sa_2');
+      // The instant and the document, because two records written in the same
+      // millisecond are separated only by the second.
+      expect(page.nextCursor, endsWith('|sa_2'));
 
       final last = await repository.loadAdjustments(
         pageSize: 2,
         cursor: page.nextCursor,
       );
       expect(reader.queries.last.startAfterDocumentId, 'sa_2');
+      expect(
+        reader.queries.last.startAfterOrderValue,
+        DateTime.utc(2026, 8, 2, 9),
+      );
       expect(last.items.single.id, 'sa_3');
       expect(last.hasMore, isFalse);
       expect(last.nextCursor, isNull);
@@ -265,7 +278,9 @@ TenantStockAdjustmentRecord _record({
 );
 
 /// The exact immutable record `functions/src/operations/stock.ts` creates.
-Map<String, Object?> _adjustmentData() => <String, Object?>{
+Map<String, Object?> _adjustmentData({
+  DateTime? recordedAt,
+}) => <String, Object?>{
   'tenantId': 'tenant-a',
   'productId': 'product-1',
   'sourceType': 'manual_adjustment',
@@ -276,7 +291,7 @@ Map<String, Object?> _adjustmentData() => <String, Object?>{
   'reason': 'Broken in transit',
   'actorUid': 'manager-a',
   'requestId': 'adjust-stock-abcdefgh',
-  'createdAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 9)),
+  'createdAt': Timestamp.fromDate(recordedAt ?? DateTime.utc(2026, 8, 1, 9)),
 };
 
 final class _FeedReader implements TenantDataReader {
@@ -309,26 +324,30 @@ final class _FeedReader implements TenantDataReader {
         TenantQueryDocumentSnapshot(path: path, data: _adjustmentData()),
       ];
     }
-    final ids = adjustments.keys.toList()..sort();
-    final cursor = query.startAfterDocumentId;
-    final selected = <TenantQueryDocumentSnapshot>[];
-    for (final id in ids) {
-      final data = adjustments[id]!;
-      if (cursor != null && id.compareTo(cursor) <= 0) continue;
-      if (!ignoreFilters &&
-          query.equalityFilters.entries.any(
-            (filter) => data[filter.key] != filter.value,
-          )) {
-        continue;
-      }
-      if (selected.length >= query.limit) break;
-      selected.add(
+    // Ordered, cursored and filtered the way Firestore would, because the
+    // repository proves the order of what it is handed - and since the feed is
+    // newest-first by `createdAt`, a fake answering in ID order is answering a
+    // query it was not asked.
+    final documents = <TenantQueryDocumentSnapshot>[
+      for (final entry in adjustments.entries)
         TenantQueryDocumentSnapshot(
-          path: '${query.collectionPath}/$id',
-          data: data,
+          path: '${query.collectionPath}/${entry.key}',
+          data: entry.value,
         ),
+    ];
+    if (ignoreFilters) {
+      return tenantCollectionPageOf(
+        TenantCollectionQuery.forTesting(
+          collectionPath: query.collectionPath,
+          limit: query.limit,
+          startAfterDocumentId: query.startAfterDocumentId,
+          startAfterOrderValue: query.startAfterOrderValue,
+          descending: query.descending,
+          order: query.order,
+        ),
+        documents,
       );
     }
-    return selected;
+    return tenantCollectionPageOf(query, documents);
   }
 }

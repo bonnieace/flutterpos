@@ -30,6 +30,7 @@ import '../expenses/expense_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
+import '../tenancy/tenant_types.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
 import 'profit_report.dart';
@@ -48,7 +49,62 @@ final class WeeklyReportView {
   final SalesTotalsSessionContext context;
 }
 
-/// The guarded route.
+/// One report a card on this page opens, and who may open it.
+///
+/// **A pair rather than a bare callback, because the hub's role gate has to
+/// survive its retirement.** Every card the hub drew was filtered by
+/// `session.canAccess` before it was drawn at all; folding those reports into
+/// this grid without carrying the roles across would have widened who can reach
+/// reconciliation. A destination whose roles the session does not hold is not
+/// drawn dimmed - it is not drawn.
+final class WeeklyReportDestination {
+  const WeeklyReportDestination({required this.build, required this.roles});
+
+  /// The screen to push. Called at tap time, under a re-established session
+  /// scope, exactly as the hub pushed its own.
+  final Widget Function() build;
+
+  final List<TenantRole> roles;
+}
+
+/// What this page's cards lead to.
+///
+/// **The page is no longer named for the week, and this is why.** It used to be
+/// one report behind a menu of six; the menu is gone and the figures on this
+/// grid are the doors now, so the page is the reports surface and these are the
+/// rest of the reports. Every field is optional: a build that wires none gets
+/// exactly the read-only week this screen has always been.
+final class WeeklyReportDestinations {
+  const WeeklyReportDestinations({
+    this.salesTotals,
+    this.dailySummary,
+    this.monthlyReport,
+    this.differences,
+    this.stockMovements,
+    this.openDifferenceCount,
+  });
+
+  /// What the server holds for a period, split by how each sale was paid for.
+  /// Both *Total sales* and *Transactions* elaborate into it, because it is the
+  /// one surface that answers either question.
+  final WeeklyReportDestination? salesTotals;
+
+  final WeeklyReportDestination? dailySummary;
+  final WeeklyReportDestination? monthlyReport;
+  final WeeklyReportDestination? differences;
+
+  /// Everything that moved this business's stock. See
+  /// `TenantStockMovementFeedRepository`.
+  final WeeklyReportDestination? stockMovements;
+
+  /// How many differences are still open, or null where the figure is unknown.
+  ///
+  /// Becomes the *Differences* card's own figure. It is the reason the badge on
+  /// the home tile still resolves in one tap now the hub is gone.
+  final int? Function(TenantSessionController sessions)? openDifferenceCount;
+}
+
+/// The guarded route. The reports surface, week-scoped by default.
 final class TenantWeeklyReportScreen extends StatefulWidget {
   const TenantWeeklyReportScreen({
     super.key,
@@ -57,7 +113,11 @@ final class TenantWeeklyReportScreen extends StatefulWidget {
     this.salesRepositoryFactory,
     this.checkoutOutbox,
     this.clock,
+    this.destinations = const WeeklyReportDestinations(),
   });
+
+  /// The reports the figures on this page open. See [WeeklyReportDestinations].
+  final WeeklyReportDestinations destinations;
 
   final TenantDataReader reader;
   final SalesTotalsCallable callable;
@@ -231,6 +291,7 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
           onChooseMember: _chooseMember,
           onChooseCategory: _chooseCategory,
           onRetry: _retry,
+          destinations: widget.destinations,
         ),
       ),
       // The filters survive a failure, exactly as they do on the totals page: a
@@ -250,6 +311,7 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
           onChooseMember: _chooseMember,
           onChooseCategory: _chooseCategory,
           onRetry: _retry,
+          destinations: widget.destinations,
           failureMessage: weeklyReportFailureMessage(error),
         ),
       ),
@@ -269,6 +331,7 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
           onChooseMember: _chooseMember,
           onChooseCategory: _chooseCategory,
           onRetry: _retry,
+          destinations: widget.destinations,
         ),
       ),
     );

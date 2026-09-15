@@ -8,6 +8,8 @@ import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/collection_pages.dart';
+
 import '../support/text.dart';
 
 void main() {
@@ -29,7 +31,11 @@ void main() {
       'tenants/tenant-a/products/product-1/stock_movements',
     );
     expect(reader.queries.single.equalityFilters, isEmpty);
-    expect(reader.queries.single.descending, isFalse);
+    // Newest first, by when the stock moved. A movement ID is a digest or
+    // `sale_{saleId}`, so what this used to be ordered by said nothing about
+    // when anything happened to the product.
+    expect(reader.queries.single.descending, isTrue);
+    expect(reader.queries.single.order, TenantCollectionOrder.occurredAt);
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('product-ledger-title')))
@@ -89,9 +95,11 @@ void main() {
     // than copied. A movement recorded by nobody names the server.
     final reader = _Reader(
       product: _productData(),
+      // The sale moved earlier, so the adjustment heads the newest-first page
+      // and the attribute order asserted below is its own.
       movements: <String, Map<String, Object?>>{
         'sa_abc': _adjustmentData(),
-        'sale_co-1': _saleData(),
+        'sale_co-1': _saleData(at: DateTime.utc(2026, 8, 1, 8)),
       },
       staffNames: <String, String>{'manager-a': 'Amina'},
     );
@@ -159,7 +167,7 @@ void main() {
     );
     expect(
       textAt(tester, 'product-ledger-recorded-sale_co-1'),
-      'Recorded 2026-08-01 11:00 UTC by the server',
+      'Recorded 2026-08-01 08:00 UTC by the server',
     );
     // The columns are the union of what any record carries, so a sale that is
     // silent about a reason gets an empty cell rather than a dash.
@@ -290,15 +298,26 @@ void main() {
   testWidgets('pages advance and return on a stable cursor', (tester) async {
     final reader = _Reader(
       product: _productData(),
+      // Moved oldest-first in ID order, so the first page holding `mv-3` is
+      // the page being newest-first rather than a coincidence of the IDs.
       movements: <String, Map<String, Object?>>{
-        'mv-1': _adjustmentData(movementId: 'mv-1'),
-        'mv-2': _adjustmentData(movementId: 'mv-2'),
-        'mv-3': _adjustmentData(movementId: 'mv-3'),
+        'mv-1': _adjustmentData(
+          movementId: 'mv-1',
+          at: DateTime.utc(2026, 8, 1, 9),
+        ),
+        'mv-2': _adjustmentData(
+          movementId: 'mv-2',
+          at: DateTime.utc(2026, 8, 2, 9),
+        ),
+        'mv-3': _adjustmentData(
+          movementId: 'mv-3',
+          at: DateTime.utc(2026, 8, 3, 9),
+        ),
       },
     );
 
     await _pump(tester, _controller(), reader, pageSize: 2);
-    expect(find.byKey(const ValueKey('product-ledger-entry-mv-1')), findsOne);
+    expect(find.byKey(const ValueKey('product-ledger-entry-mv-3')), findsOne);
     // **Present and disabled rather than absent**, since `Pagination`. Eleven
     // screens used to hide the control on the first page, so the bar moved
     // under a thumb as a person paged; §5's `disabled` row is what that is for,
@@ -316,7 +335,11 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(reader.queries.last.startAfterDocumentId, 'mv-2');
-    expect(find.byKey(const ValueKey('product-ledger-entry-mv-3')), findsOne);
+    expect(
+      reader.queries.last.startAfterOrderValue,
+      DateTime.utc(2026, 8, 2, 9),
+    );
+    expect(find.byKey(const ValueKey('product-ledger-entry-mv-1')), findsOne);
     expect(
       tester
           .widget<AppButton>(find.byKey(const ValueKey('product-ledger-next')))
@@ -327,7 +350,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('product-ledger-previous')));
     await tester.pump();
     await tester.pump();
-    expect(find.byKey(const ValueKey('product-ledger-entry-mv-1')), findsOne);
+    expect(find.byKey(const ValueKey('product-ledger-entry-mv-3')), findsOne);
   });
 
   testWidgets('a tenant switch discards the outstanding page', (tester) async {
@@ -449,20 +472,16 @@ final class _Reader implements TenantDataReader, TenantCollectionGroupReader {
     queries.add(query);
     if (failCollection) throw StateError('unavailable');
     final page = _defer ? await _deferred() : movements;
-    final ids = page.keys.toList()..sort();
-    final cursor = query.startAfterDocumentId;
-    final matches = <TenantQueryDocumentSnapshot>[];
-    for (final id in ids) {
-      if (cursor != null && id.compareTo(cursor) <= 0) continue;
-      matches.add(
+    // Ordered, cursored and filtered the way Firestore would: the stock ledger
+    // is newest-first by time now, and the repository proves the order of what
+    // it is handed.
+    return tenantCollectionPageOf(query, <TenantQueryDocumentSnapshot>[
+      for (final entry in page.entries)
         TenantQueryDocumentSnapshot(
-          path: '${query.collectionPath}/$id',
-          data: page[id]!,
+          path: '${query.collectionPath}/${entry.key}',
+          data: entry.value,
         ),
-      );
-      if (matches.length >= query.limit) break;
-    }
-    return matches;
+    ]);
   }
 
   Future<Map<String, Map<String, Object?>>> _deferred() {
@@ -513,27 +532,37 @@ Map<String, Object?> _productData() => <String, Object?>{
   'categoryId': 'cat-1',
 };
 
-Map<String, Object?> _adjustmentData({String movementId = 'sa_abc'}) =>
-    <String, Object?>{
-      'movementId': movementId,
-      'tenantId': 'tenant-a',
-      'productId': 'product-1',
-      'sourceType': 'manual_adjustment',
-      'adjustmentType': 'damage',
-      'quantityDelta': -3,
-      'previousQuantity': 10,
-      'quantityAfter': 7,
-      'reason': 'Broken in transit',
-      'actorUid': 'manager-a',
-      'recordedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 9)),
-    };
+Map<String, Object?> _adjustmentData({
+  String movementId = 'sa_abc',
+  DateTime? at,
+}) => <String, Object?>{
+  'movementId': movementId,
+  'tenantId': 'tenant-a',
+  'productId': 'product-1',
+  'sourceType': 'manual_adjustment',
+  'adjustmentType': 'damage',
+  'quantityDelta': -3,
+  'previousQuantity': 10,
+  'quantityAfter': 7,
+  'reason': 'Broken in transit',
+  'actorUid': 'manager-a',
+  // Both, as every writer of this collection sets them in one transaction. The
+  // ledger is ordered by `occurredAt`, so a fixture without one is a document
+  // no writer produces.
+  'occurredAt': Timestamp.fromDate(at ?? DateTime.utc(2026, 8, 1, 9)),
+  'recordedAt': Timestamp.fromDate(at ?? DateTime.utc(2026, 8, 1, 9)),
+};
 
-Map<String, Object?> _saleData() => <String, Object?>{
+Map<String, Object?> _saleData({DateTime? at}) => <String, Object?>{
   'movementId': 'sale_co-1',
   'tenantId': 'tenant-a',
   'productId': 'product-1',
   'sourceType': 'sale',
   'sourceId': 'co-1',
   'quantityDelta': -2,
-  'recordedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 11)),
+  // Both, as every writer of this collection sets them in one
+  // transaction. The ledger is ordered by `occurredAt`, so a
+  // fixture without one is a document no writer produces.
+  'occurredAt': Timestamp.fromDate(at ?? DateTime.utc(2026, 8, 1, 11)),
+  'recordedAt': Timestamp.fromDate(at ?? DateTime.utc(2026, 8, 1, 11)),
 };

@@ -111,10 +111,7 @@ void main() {
       expect(catalogOpeningQuantity, 0);
       expect(_productIntent(price: '1').documentData()['quantity'], 0);
       expect(_productIntent(price: '1').quantity, 0);
-      expect(
-        _productIntent(price: '1', openingQuantity: '   ').quantity,
-        0,
-      );
+      expect(_productIntent(price: '1', openingQuantity: '   ').quantity, 0);
     });
 
     test('a product may be created holding the stock already on the shelf', () {
@@ -586,7 +583,10 @@ void main() {
         categoryId: 'cat-drinks',
       ).changes.single.toString();
 
-      expect(offPage, 'Category: was $unlistedTenantCategoryPhrase, now Drinks');
+      expect(
+        offPage,
+        'Category: was $unlistedTenantCategoryPhrase, now Drinks',
+      );
       expect(offPage, isNot(contains('cat-elsewhere')));
     });
 
@@ -628,7 +628,10 @@ void main() {
         );
       }
       // A manager corrects a mistyped name and cannot touch either money field.
-      expect(_updateIntent(name: 'Brown', role: TenantRole.manager).name, 'Brown');
+      expect(
+        _updateIntent(name: 'Brown', role: TenantRole.manager).name,
+        'Brown',
+      );
       expect(
         () => _updateIntent(price: '70', role: TenantRole.manager),
         _code('price_forbidden'),
@@ -652,9 +655,11 @@ void main() {
       // figure it is showing - and a resent identical price would otherwise be
       // refused as a money change by somebody correcting a name.
       expect(
-        _updateIntent(name: 'Brown', price: null, role: TenantRole.manager)
-            .payload()
-            .containsKey('price'),
+        _updateIntent(
+          name: 'Brown',
+          price: null,
+          role: TenantRole.manager,
+        ).payload().containsKey('price'),
         isFalse,
       );
     });
@@ -742,38 +747,46 @@ void main() {
   });
 
   group('update gateway', () {
-    test('sends exactly the intent and decodes what the server applied', () async {
-      final callable = _UpdateCallable(
-        answer: _response(<String, Object?>{'changedFields': <String>['name']}),
-      );
-      final intent = _updateIntent(name: 'Brown bread loaf');
-
-      final result = await _gateway(callable).submit(intent);
-
-      expect(callable.payloads.single, intent.payload());
-      expect(result.updateId, 'pu_0123456789abcdef');
-      expect(result.productId, 'prod-bread');
-      expect(result.changedFields, <TenantProductField>[
-        TenantProductField.name,
-      ]);
-      expect(result.name, 'Brown bread loaf');
-      expect(result.priceMinor, 6500);
-    });
-
-    test('a response describing another product or business is refused', () async {
-      for (final overrides in <Map<String, Object?>>[
-        <String, Object?>{'tenantId': 'tenant-b'},
-        <String, Object?>{'productId': 'prod-other'},
-      ]) {
-        expect(
-          () => _gateway(
-            _UpdateCallable(answer: _response(overrides)),
-          ).submit(_updateIntent(name: 'Brown bread loaf')),
-          throwsA(isA<FormatException>()),
-          reason: overrides.toString(),
+    test(
+      'sends exactly the intent and decodes what the server applied',
+      () async {
+        final callable = _UpdateCallable(
+          answer: _response(<String, Object?>{
+            'changedFields': <String>['name'],
+          }),
         );
-      }
-    });
+        final intent = _updateIntent(name: 'Brown bread loaf');
+
+        final result = await _gateway(callable).submit(intent);
+
+        expect(callable.payloads.single, intent.payload());
+        expect(result.updateId, 'pu_0123456789abcdef');
+        expect(result.productId, 'prod-bread');
+        expect(result.changedFields, <TenantProductField>[
+          TenantProductField.name,
+        ]);
+        expect(result.name, 'Brown bread loaf');
+        expect(result.priceMinor, 6500);
+      },
+    );
+
+    test(
+      'a response describing another product or business is refused',
+      () async {
+        for (final overrides in <Map<String, Object?>>[
+          <String, Object?>{'tenantId': 'tenant-b'},
+          <String, Object?>{'productId': 'prod-other'},
+        ]) {
+          expect(
+            () => _gateway(
+              _UpdateCallable(answer: _response(overrides)),
+            ).submit(_updateIntent(name: 'Brown bread loaf')),
+            throwsA(isA<FormatException>()),
+            reason: overrides.toString(),
+          );
+        }
+      },
+    );
 
     test('a response is refused unless it applied what was asked', () async {
       // This is the surface that states what a business now sells and at what
@@ -784,7 +797,9 @@ void main() {
         <String, Object?>{
           'changedFields': <String>['name', 'price'],
         },
-        <String, Object?>{'changedFields': <String>['quantity']},
+        <String, Object?>{
+          'changedFields': <String>['quantity'],
+        },
         <String, Object?>{'changedFields': <String>[]},
         // Reports the product still holding the name that was corrected.
         <String, Object?>{'name': 'White bread loaf'},
@@ -885,30 +900,47 @@ void main() {
 
     test('a refusal is classified by what the server actually said', () async {
       for (final entry in <List<String>, TenantProductUpdateFailure>{
-        <String>['permission-denied', 'Only an owner or an administrator may '
-            'change a product\'s price.']: TenantProductUpdateFailure
-            .priceForbidden,
-        <String>['permission-denied', 'Only an owner or an administrator may '
-            'change what a product costs.']: TenantProductUpdateFailure
-            .costForbidden,
+        <String>[
+          'permission-denied',
+          'Only an owner or an administrator may '
+              'change a product\'s price.',
+        ]: TenantProductUpdateFailure.priceForbidden,
+        <String>[
+          'permission-denied',
+          'Only an owner or an administrator may '
+              'change what a product costs.',
+        ]: TenantProductUpdateFailure.costForbidden,
         <String>['permission-denied', 'Not a member.']:
             TenantProductUpdateFailure.forbidden,
         <String>['unauthenticated', 'no auth']:
             TenantProductUpdateFailure.forbidden,
         <String>['not-found', 'The product does not exist in this business.']:
             TenantProductUpdateFailure.productMissing,
-        <String>['already-exists', 'requestId was already used with different '
-            'input.']: TenantProductUpdateFailure.duplicateRequest,
-        <String>['failed-precondition', 'The category does not exist in this '
-            'business.']: TenantProductUpdateFailure.categoryMissing,
-        <String>['failed-precondition', 'This product already holds every '
-            'value in the request.']: TenantProductUpdateFailure.unchanged,
-        <String>['failed-precondition', 'This product\'s stock quantity is not '
-            'an integer, which no callable can correct. It needs an operator.']:
-            TenantProductUpdateFailure.needsOperator,
-        <String>['failed-precondition', 'This product\'s name is unreadable. '
-            'Correct it in the same request.']: TenantProductUpdateFailure
-            .productUnreadable,
+        <String>[
+          'already-exists',
+          'requestId was already used with different '
+              'input.',
+        ]: TenantProductUpdateFailure.duplicateRequest,
+        <String>[
+          'failed-precondition',
+          'The category does not exist in this '
+              'business.',
+        ]: TenantProductUpdateFailure.categoryMissing,
+        <String>[
+          'failed-precondition',
+          'This product already holds every '
+              'value in the request.',
+        ]: TenantProductUpdateFailure.unchanged,
+        <String>[
+          'failed-precondition',
+          'This product\'s stock quantity is not '
+              'an integer, which no callable can correct. It needs an operator.',
+        ]: TenantProductUpdateFailure.needsOperator,
+        <String>[
+          'failed-precondition',
+          'This product\'s name is unreadable. '
+              'Correct it in the same request.',
+        ]: TenantProductUpdateFailure.productUnreadable,
         <String>['invalid-argument', 'quantity is not editable here.']:
             TenantProductUpdateFailure.invalidRequest,
         <String>['unavailable', 'down']: TenantProductUpdateFailure.ambiguous,
@@ -948,8 +980,9 @@ void main() {
 
     test('a call that never answers is an unknown outcome', () async {
       await expectLater(
-        _gateway(_UpdateCallable(error: TimeoutException('slow')))
-            .submit(_updateIntent(name: 'Brown bread loaf')),
+        _gateway(
+          _UpdateCallable(error: TimeoutException('slow')),
+        ).submit(_updateIntent(name: 'Brown bread loaf')),
         throwsA(
           isA<TenantProductUpdateException>().having(
             (error) => error.failure,
@@ -959,8 +992,9 @@ void main() {
         ),
       );
       await expectLater(
-        _gateway(_UpdateCallable(error: StateError('transport closed')))
-            .submit(_updateIntent(name: 'Brown bread loaf')),
+        _gateway(
+          _UpdateCallable(error: StateError('transport closed')),
+        ).submit(_updateIntent(name: 'Brown bread loaf')),
         throwsA(isA<TenantProductUpdateException>()),
       );
     });
@@ -986,180 +1020,6 @@ void main() {
         throwsA(isA<TenantProductUpdateException>()),
       );
       expect(callable.payloads, isEmpty);
-    });
-  });
-
-  group('catalog writer', () {
-    test('a create writes the named keys and a server timestamp', () async {
-      // A category, because it is the only create this writer still performs.
-      // A product's keys are pinned where a product is now written: the intent's
-      // own `documentData` below, and `productCreate.test.ts` on the server.
-      final writer = _RecordingWriter();
-
-      final intent = _categoryIntent(name: 'Bakery');
-      final result = await writer.build().createCategory(intent);
-
-      expect(result.kind, TenantCatalogWriteKind.committed);
-      expect(writer.created.single.path, intent.path);
-      expect(writer.created.single.data.keys, <String>[
-        'name',
-        'createdBy',
-        'createdAt',
-      ]);
-      expect(writer.created.single.data['createdAt'], isA<FieldValue>());
-      expect(writer.updated, isEmpty);
-    });
-
-    test('creating a product is refused rather than attempted', () async {
-      // `allow create` on `products` is `if false`, so a `set` here would answer
-      // `permission-denied` and report a configuration mistake as a shopkeeper's
-      // authorization problem. This writer is test-only - the app holds
-      // `QueuedTenantCatalogWriter`, which queues the callable - and saying so
-      // out loud is what stops a future session wiring this one back up.
-      final writer = _RecordingWriter();
-
-      await expectLater(
-        writer.build().createProduct(_productIntent(price: '1')),
-        throwsUnsupportedError,
-      );
-      expect(writer.created, isEmpty);
-    });
-
-    test('a category create writes its own path', () async {
-      final writer = _RecordingWriter();
-
-      final intent = _categoryIntent(name: 'Bakery');
-      final result = await writer.build().createCategory(intent);
-
-      expect(result.kind, TenantCatalogWriteKind.committed);
-      expect(writer.created.single.path, intent.path);
-      expect(writer.created.single.data['name'], 'Bakery');
-    });
-
-    test('retiring a product is refused rather than attempted', () async {
-      // `allow delete` on `products` is `if false`, and retiring is no longer a
-      // delete in any case: clearing the stock means writing the ledger entry
-      // that accounts for it, which no device may write. A `delete` here would
-      // answer `permission-denied` and report a configuration mistake as a
-      // shopkeeper's authorization problem.
-      final writer = _RecordingWriter();
-
-      await expectLater(
-        writer.build().retireProduct(_retireIntent()),
-        throwsUnsupportedError,
-      );
-      expect(writer.created, isEmpty);
-    });
-
-    test('an offline device attempts nothing at all', () async {
-      final writer = _RecordingWriter();
-
-      expect(
-        (await writer
-                .build(online: false)
-                .createCategory(_categoryIntent(name: 'Bakery')))
-            .kind,
-        TenantCatalogWriteKind.unavailable,
-      );
-      expect(
-        (await writer
-                .build(online: false)
-                .renameCategory(_renameIntent(name: 'Bakery goods')))
-            .kind,
-        TenantCatalogWriteKind.unavailable,
-      );
-      expect(writer.created, isEmpty);
-    });
-
-    test('a failing connectivity check counts as offline', () async {
-      final writer = _RecordingWriter();
-
-      final result = await writer
-          .build(onlineCheck: () => Future<bool>.error(StateError('no radio')))
-          .createCategory(_categoryIntent(name: 'Bakery'));
-
-      expect(result.kind, TenantCatalogWriteKind.unavailable);
-      expect(writer.created, isEmpty);
-    });
-
-    test('a refusal the server proved is rejected, not retried', () async {
-      for (final code in <String>[
-        'permission-denied',
-        'unauthenticated',
-        'invalid-argument',
-        'not-found',
-        'already-exists',
-        'failed-precondition',
-      ]) {
-        final result = await _RecordingWriter()
-            .build(
-              error: FirebaseException(plugin: 'firestore', code: code),
-            )
-            .createCategory(_categoryIntent(name: 'Bakery'));
-
-        expect(result.kind, TenantCatalogWriteKind.rejected, reason: code);
-        expect(result.reasonCode, code);
-      }
-    });
-
-    test('an unproven outcome is ambiguous, never rejected', () async {
-      final unavailable = await _RecordingWriter()
-          .build(
-            error: FirebaseException(plugin: 'firestore', code: 'unavailable'),
-          )
-          .renameCategory(_renameIntent(name: 'Bakery goods'));
-      expect(unavailable.kind, TenantCatalogWriteKind.ambiguous);
-      expect(unavailable.reasonCode, 'unavailable');
-
-      final unknown = await _RecordingWriter()
-          .build(error: StateError('transport closed'))
-          .createCategory(_categoryIntent(name: 'Bakery'));
-      expect(unknown.kind, TenantCatalogWriteKind.ambiguous);
-      expect(unknown.reasonCode, 'unknown_error');
-    });
-
-    test('a write that never answers is ambiguous', () async {
-      final writer = FirebaseTenantCatalogWriter.forTesting(
-        create: (_, _) => Completer<void>().future,
-        isOnline: () async => true,
-        writeTimeout: const Duration(milliseconds: 20),
-      );
-
-      expect(
-        (await writer.createCategory(_categoryIntent(name: 'Bakery'))).reasonCode,
-        'write_timeout',
-      );
-      expect(
-        (await writer.renameCategory(_renameIntent(name: 'Bakery goods'))).kind,
-        TenantCatalogWriteKind.ambiguous,
-      );
-    });
-
-    test(
-      'every write path is re-derived from the intent\'s own business',
-      () async {
-        // The writer never trusts the path it was handed. Only the repository can
-        // build an intent and it takes both from one session, so the two can only
-        // ever agree - which is what this proves for a second business.
-        final writer = _RecordingWriter();
-
-        await writer.build().createCategory(
-          _categoryIntent(name: 'Bakery', tenantId: 'tenant-b'),
-        );
-
-        expect(writer.created.single.path, startsWith('tenants/tenant-b/'));
-      },
-    );
-
-    test('a non-positive write timeout is a programming error', () {
-      expect(
-        () => FirebaseTenantCatalogWriter.forTesting(
-          create: (_, _) async {},
-          isOnline: () async => true,
-          writeTimeout: Duration.zero,
-        ),
-        throwsA(isA<ArgumentError>()),
-      );
     });
   });
 }
@@ -1346,40 +1206,6 @@ Matcher _code(String code) => throwsA(
     code,
   ),
 );
-
-final class _WrittenDocument {
-  const _WrittenDocument(this.path, this.data);
-
-  final String path;
-  final Map<String, Object?> data;
-}
-
-final class _RecordingWriter {
-  final List<_WrittenDocument> created = <_WrittenDocument>[];
-
-  /// Renames, which are the only update this writer performs. Wired since
-  /// 2026-09-13: the `_write` machinery used to be exercised through a retire,
-  /// and retiring is a callable now, so a rename is what is left to drive it
-  /// with. Without this the path falls through to the unsupported stub and every
-  /// refusal reads as `unknown_error`.
-  final List<_WrittenDocument> updated = <_WrittenDocument>[];
-
-  FirebaseTenantCatalogWriter build({
-    bool online = true,
-    Object? error,
-    Future<bool> Function()? onlineCheck,
-  }) => FirebaseTenantCatalogWriter.forTesting(
-    create: (path, data) {
-      created.add(_WrittenDocument(path, data));
-      return error == null ? Future<void>.value() : Future<void>.error(error);
-    },
-    update: (path, data) {
-      updated.add(_WrittenDocument(path, data));
-      return error == null ? Future<void>.value() : Future<void>.error(error);
-    },
-    isOnline: onlineCheck ?? () async => online,
-  );
-}
 
 final class _Reader implements TenantDocumentReader {
   const _Reader();

@@ -199,8 +199,15 @@ const COLLECTIONS = [
     ops: {
       get: { allow: MEMBERS },
       list: { allow: MEMBERS },
-      create: { allow: memberRoles(["owner", "admin", "manager"]) },
-      update: { allow: memberRoles(["owner", "admin", "manager"]) },
+      // Server-written since 2026-09-14, and unusually it is not about a
+      // ledger: two categories folding to one name cannot be told apart when a
+      // spreadsheet names that category, and refusing the second one means
+      // reading every other category in the collection - which a rule cannot
+      // do. `createCategory` and `renameCategory` decide it in the transaction
+      // that writes.
+      create: { allow: NONE },
+      update: { allow: NONE },
+      // Still a client delete, and still with no surface that issues one.
       delete: { allow: memberRoles(["owner", "admin", "manager"]) },
     },
   },

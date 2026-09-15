@@ -167,13 +167,18 @@ final class _TenantStockMovementFeedPanelState
     _loaderKey = key;
     final source = _source;
     final cursor = _cursors[_pageIndex];
+    // Both readers per pass, for the reason `catalog_management_panel` takes
+    // both: this feed reads across every product's `stock_movements` through a
+    // second boundary, and naming the live one on the cached pass makes the
+    // page wait for a network whatever the disk is holding.
     TenantGuardedLoader<_MovementFeedView> readWith(
       TenantDocumentReader reader,
+      TenantCollectionGroupReader groupReader,
     ) => (session) async {
       final repository = TenantStockMovementFeedRepository(
         session: session,
         reader: reader,
-        groupReader: widget.groupReader,
+        groupReader: groupReader,
       );
       final page = source == null
           ? await repository.loadMovements(
@@ -194,9 +199,16 @@ final class _TenantStockMovementFeedPanelState
         ]),
       );
     };
-    _loader = readWith(widget.reader);
+    _loader = readWith(widget.reader, widget.groupReader);
     final cache = widget.reader.cached;
-    _loaderCached = cache == null ? null : readWith(cache);
+    // **No cached pass without both halves.** This repository has no fallback
+    // for the group reader - it is required - so a device copy that cannot
+    // answer the collection group has nothing to offer the feed, and a pass
+    // built on the live one would be the defect this change removes.
+    final cachedGroup = widget.groupReader.cachedCollectionGroup;
+    _loaderCached = cache == null || cachedGroup == null
+        ? null
+        : readWith(cache, cachedGroup);
   }
 
   @override
@@ -272,8 +284,9 @@ final class _MovementFeedContents extends StatelessWidget {
         SizedBox(height: tokens.spacing.s4),
         const Text(
           'The ledger is permanent and cannot be edited from this app. It is '
-          'listed by product and then by record ID, which is not time order; '
-          'each entry states when it was recorded.',
+          'listed by when the stock moved, most recent first - which for a '
+          'sale reconciled later is when the sale happened, not when it '
+          'reached the server.',
         ),
         SizedBox(height: tokens.spacing.s16),
         AppSelect<TenantStockMovementSource?>(

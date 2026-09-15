@@ -719,7 +719,7 @@ final class _MutationReviewRowState extends State<_MutationReviewRow> {
   @override
   Widget build(BuildContext context) {
     final record = widget.record;
-    final reason = record.reasonCode?.replaceAll('_', ' ') ?? 'not accepted';
+    final reason = _mutationRejectionReason(record);
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
@@ -742,6 +742,29 @@ final class _MutationReviewRowState extends State<_MutationReviewRow> {
             ),
     );
   }
+}
+
+/// Why one change was not accepted, in words rather than in a wire code.
+///
+/// **Only where the code alone would mislead.** A reason code with its
+/// underscores taken out reads well enough for most refusals - *permission
+/// denied*, *not found* - and spelling every one of them out here would be a
+/// second vocabulary to keep in step with the server's. The exception is a
+/// duplicate category name, where `already-exists` is true of the *name* and
+/// reads as though the change had already been made.
+String _mutationRejectionReason(TenantPendingMutationRecord record) {
+  final code = record.reasonCode;
+  if (code == null) return 'not accepted';
+  final duplicateName =
+      code == 'already-exists' &&
+      (record.kind == TenantPendingMutationKind.categoryCreate ||
+          record.kind == TenantPendingMutationKind.categoryRename);
+  if (duplicateName) {
+    return 'This business already has a category with that name. Two '
+        'categories with one name cannot be told apart when a spreadsheet '
+        'names that category.';
+  }
+  return code.replaceAll('_', ' ');
 }
 
 String _mutationKindLabel(TenantPendingMutationKind kind) => switch (kind) {

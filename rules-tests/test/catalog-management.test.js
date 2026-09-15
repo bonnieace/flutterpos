@@ -130,26 +130,51 @@ test("no client may create a product, whatever its role", async () => {
   }
 });
 
-test("a category is still a client write, and still checks nothing", async () => {
-  // The other half of the pair, deliberately unchanged. A category carries no
-  // quantity and has no ledger hanging off it, so nothing about it needs a
-  // transaction - and `QueuedTenantCatalogWriter` still replays it as a `set`.
-  // This is the backend/UI contract mismatch the inventory audit recorded
-  // separately: the rule admits delete and no UI offers one.
+test("no client may name a category, whatever its role", async () => {
+  // **`allow create, update` is `if false` since 2026-09-14.** It used to admit
+  // any name owner, admin or manager cared to write, and nothing checked
+  // whether another category in the business already held it. Two that fold to
+  // one name cannot be told apart when a spreadsheet names that category, so
+  // `importProducts` refuses the row - and the only thing it can then be asked
+  // by is the document ID nothing in this product shows anybody. Refusing the
+  // second name means reading every other category in the collection, which a
+  // rule cannot do at all.
   await seedBusiness();
 
-  for (const [uid, writes] of [
-    ["owner-a", true],
-    ["admin-a", true],
-    ["manager-a", true],
-    ["cashier-a", false],
-  ]) {
+  for (const uid of ["owner-a", "admin-a", "manager-a", "cashier-a"]) {
     const firestore = authenticatedFirestore(testEnvironment, uid);
-    const assertion = writes ? assertSucceeds : assertFails;
-    await assertion(
+    await assertFails(
       setDoc(doc(firestore, `${CATEGORIES}/ct_${uid}`), category(uid)),
     );
   }
+});
+
+test("deleting a category is the one client write it still admits", async () => {
+  // The backend/UI contract mismatch the inventory audit recorded separately,
+  // and it outlived the rule that surrounded it: the rule admits delete for the
+  // same three roles, and no surface in the app offers one.
+  await seedBusiness();
+  await seedDocuments(testEnvironment, {
+    [`${CATEGORIES}/ct_owner-a`]: { name: "Bakery" },
+    [`${CATEGORIES}/ct_cashier-a`]: { name: "Drinks" },
+  });
+
+  await assertFails(
+    deleteDoc(
+      doc(
+        authenticatedFirestore(testEnvironment, "cashier-a"),
+        `${CATEGORIES}/ct_cashier-a`,
+      ),
+    ),
+  );
+  await assertSucceeds(
+    deleteDoc(
+      doc(
+        authenticatedFirestore(testEnvironment, "owner-a"),
+        `${CATEGORIES}/ct_owner-a`,
+      ),
+    ),
+  );
 });
 
 test("the checkout decrement is the only client update a product accepts", async () => {
@@ -242,18 +267,27 @@ test("no client may delete a product, whatever its role", async () => {
   }
 });
 
-test("a category is writable by everyone who may add a product", async () => {
-  // Wider than `products` deliberately: `allow create, update, delete` on
-  // `categories` names all three roles. The client offers only create, so this
-  // records what the rule permits rather than what the app does.
+test("a category is written by the server, and deleted by a client", async () => {
+  // **Create and update closed on 2026-09-14.** Not because a category holds a
+  // quantity - it holds a name - but because two categories folding to one name
+  // make every spreadsheet naming that category ambiguous, and refusing the
+  // second one means reading every other category in the collection inside the
+  // transaction that writes. A rule may read the document being written and
+  // named documents, never a query. `createCategory` and `renameCategory` do it.
+  //
+  // Delete is untouched and still has no surface that issues one, which is
+  // recorded here rather than quietly widened or quietly closed.
   await seedBusiness();
   await seedDocuments(testEnvironment, {
     [`${CATEGORIES}/cat-bakery`]: { name: "Bakery" },
   });
   const firestore = authenticatedFirestore(testEnvironment, "manager-a");
 
-  await assertSucceeds(
-    setDoc(doc(firestore, `${CATEGORIES}/cat-bakery`), category("manager-a")),
+  await assertFails(
+    setDoc(doc(firestore, `${CATEGORIES}/ct_new`), category("manager-a")),
+  );
+  await assertFails(
+    updateDoc(doc(firestore, `${CATEGORIES}/cat-bakery`), { name: "Baked" }),
   );
   await assertSucceeds(deleteDoc(doc(firestore, `${CATEGORIES}/cat-bakery`)));
 });
@@ -282,14 +316,14 @@ test("another business's catalog is never reached", async () => {
   );
   await assertFails(deleteDoc(doc(foreign, `${PRODUCTS}/pd_seeded`)));
   // Its own business still answers, so the denial is the boundary and not a
-  // broken rule. A category rather than a product, because no client creates a
-  // product anywhere any more - which would make this control pass for the same
-  // reason the denials above do, and prove nothing.
+  // broken rule. A *read* rather than a write: no client creates a product or a
+  // category anywhere any more, so every write control would now pass for the
+  // same reason the denials above do and prove nothing.
+  await seedDocuments(testEnvironment, {
+    "tenants/tenant-b/categories/ct_own": { name: "Bakery" },
+  });
   await assertSucceeds(
-    setDoc(
-      doc(foreign, "tenants/tenant-b/categories/ct_new"),
-      category("owner-b"),
-    ),
+    getDoc(doc(foreign, "tenants/tenant-b/categories/ct_own")),
   );
 });
 

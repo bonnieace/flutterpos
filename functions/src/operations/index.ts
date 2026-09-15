@@ -1,4 +1,5 @@
 export {adjustStock} from "./stock";
+export {createCategory, renameCategory} from "./categories";
 export {createProduct} from "./productCreate";
 export {setProductRetired} from "./productRetire";
 export {submitStockTake} from "./stockTake";

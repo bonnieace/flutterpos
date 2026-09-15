@@ -15,6 +15,7 @@ import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'bulk_catalog.dart';
+import 'bulk_catalog_attempt_store.dart';
 import 'product_sheet.dart';
 import 'catalog_management.dart';
 
@@ -42,6 +43,7 @@ final class TenantBulkCatalogScreen extends StatelessWidget {
     this.requestIdFactory,
     this.sheetPicker,
     this.sheetSaver,
+    this.attempts,
     this.offerCorrections = false,
   });
 
@@ -80,6 +82,12 @@ final class TenantBulkCatalogScreen extends StatelessWidget {
   /// Handing a generated template to wherever this device keeps files.
   final TenantProductSheetSaver? sheetSaver;
 
+  /// Where an import that stopped part way is held between attempts. Absent
+  /// leaves a stopped import unrecoverable past this screen, which is what a
+  /// build with no durable storage wired gets; the recovery still works within
+  /// one visit, because the attempt is held in memory either way.
+  final TenantProductImportAttemptSource? attempts;
+
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Add many products',
@@ -92,6 +100,7 @@ final class TenantBulkCatalogScreen extends StatelessWidget {
       requestIdFactory: requestIdFactory,
       sheetPicker: sheetPicker,
       sheetSaver: sheetSaver,
+      attempts: attempts,
       offerCorrections: offerCorrections,
     ),
   );
@@ -108,6 +117,7 @@ final class TenantBulkCatalogPanel extends StatefulWidget {
     this.requestIdFactory,
     this.sheetPicker,
     this.sheetSaver,
+    this.attempts,
     this.pageSize = 20,
     this.clock = DateTime.now,
     this.offerCorrections = false,
@@ -120,6 +130,10 @@ final class TenantBulkCatalogPanel extends StatefulWidget {
   final TenantCatalogRequestIdFactory? requestIdFactory;
   final TenantProductSheetPicker? sheetPicker;
   final TenantProductSheetSaver? sheetSaver;
+
+  /// See [TenantBulkCatalogScreen.attempts].
+  final TenantProductImportAttemptSource? attempts;
+
   final int pageSize;
 
   /// Only the date the template is named with, so a test can name one.
@@ -191,6 +205,24 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
   /// wording they were planned with.
   Map<String, String> _importCategoryNames = const <String, String>{};
   TenantBulkCatalogReport? _report;
+
+  /// The import this device started and has not seen finish.
+  ///
+  /// **Not the plan, and the difference is the whole of H3.** A plan is built
+  /// from the sheet and dies with it; an attempt is the request IDs a commit
+  /// was actually sent under, written down before the first page goes out. A
+  /// chain that stops - a refusal, or an answer that never arrived - leaves
+  /// this set, and the recovery re-sends *these* pages under *these* keys, so
+  /// a page the server already wrote answers off its own idempotency record
+  /// instead of creating four hundred products a second time.
+  ///
+  /// Held in state as well as on disk so the recovery works in a build with no
+  /// durable store wired, for as long as this screen is open.
+  TenantProductImportAttempt? _attempt;
+
+  /// The session [_attempt] was read for, so it is re-read when that changes
+  /// and not on every build.
+  String? _attemptKey;
 
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
@@ -478,14 +510,28 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
       _busy = true;
     });
     try {
-      final report = batchPlan != null
-          ? await _runBatch(session, batchPlan, TenantBulkCatalogMode.commit)
-          : await _runImport(
-              session,
-              importPlan!,
-              TenantBulkCatalogMode.commit,
-              categoryNames: _importCategoryNames,
-            );
+      final TenantBulkCatalogReport report;
+      if (batchPlan != null) {
+        report = await _runBatch(
+          session,
+          batchPlan,
+          TenantBulkCatalogMode.commit,
+        );
+      } else {
+        // **Written down before the first page is sent, not after.** An attempt
+        // recorded once the chain has stopped would be recorded by a device
+        // that may already be offline, or not at all by one that was killed -
+        // and the pages whose answers went missing are exactly the ones a
+        // recovery needs the keys for.
+        final opened = TenantProductImportAttempt.opening(
+          plan: importPlan!,
+          categoryNames: _importCategoryNames,
+          startedAt: widget.clock(),
+        );
+        await _holdAttempt(session, opened);
+        if (!_stillCurrent(capturedKey)) return;
+        report = await _commitAttempt(session, opened);
+      }
       if (!_stillCurrent(capturedKey)) return;
       setState(() => _report = report);
       // A page that landed changed what this device caches, so the sync pass is
@@ -496,6 +542,160 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Finishes the import this device started and has not seen finish.
+  ///
+  /// **It does not look at the sheet, and that is the point.** The pages it
+  /// sends are the ones the stopped commit sent, under the keys it sent them
+  /// under. The first of them is the page nobody knows the fate of: the server
+  /// decides, by finding its own record or not finding it, and this device
+  /// stops guessing.
+  Future<void> _resumeImport(TenantSession session) async {
+    if (_busy) return;
+    final attempt = _attempt;
+    if (attempt == null || attempt.isComplete) return;
+    final capturedKey = _sessionKey(session);
+    if (!await _confirmed(
+          title: 'Finish this import?',
+          body:
+              'The ${attempt.remainingRowCount} products that were never '
+              'confirmed will be sent again under the same request. A page the '
+              'server already recorded is answered from that record, so '
+              'nothing is created twice.',
+          action: 'Finish the import',
+        ) ||
+        !_stillCurrent(capturedKey)) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _discardPlan();
+    });
+    try {
+      final report = await _commitAttempt(session, attempt);
+      if (!_stillCurrent(capturedKey)) return;
+      setState(() => _report = report);
+      if (report.pagesAnswered > attempt.pagesAnswered) {
+        widget.onChanged?.call();
+      }
+      _reload();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Stops offering to finish it, without undoing anything it wrote.
+  ///
+  /// **Nothing is deleted by this.** Pages that landed created products, and a
+  /// product is retired rather than un-created. What it discards is this
+  /// device's ability to finish the rest safely - so it says so, because the
+  /// alternative is somebody clearing the notice and importing the sheet again,
+  /// which is the duplication this whole path exists to prevent.
+  Future<void> _discardAttempt(TenantSession session) async {
+    if (_busy) return;
+    final attempt = _attempt;
+    if (attempt == null) return;
+    final capturedKey = _sessionKey(session);
+    if (!await _confirmed(
+          title: 'Forget this unfinished import?',
+          body:
+              'Products it already created stay in the catalog, and the '
+              '${attempt.remainingRowCount} that were never confirmed will not '
+              'be sent. Importing that sheet again after this would create '
+              'every product it did create a second time, so check the catalog '
+              'first.',
+          action: 'Forget it',
+        ) ||
+        !_stillCurrent(capturedKey)) {
+      return;
+    }
+    await widget.attempts?.clear(uid: session.uid, tenantId: session.tenantId);
+    if (!_stillCurrent(capturedKey)) return;
+    setState(() => _attempt = null);
+  }
+
+  /// Drives one attempt's remaining pages, writing it back as each answers.
+  ///
+  /// Sequential and stopping at the first refusal, as a plan's chain is and for
+  /// the same reason. What is new is the write between pages: a device killed
+  /// on page six resumes at page six, and the five before it are never sent
+  /// again.
+  Future<TenantBulkCatalogReport> _commitAttempt(
+    TenantSession session,
+    TenantProductImportAttempt attempt,
+  ) async {
+    final gateway = TenantProductImportGateway(
+      session: session,
+      callable: widget.importCallable!,
+    );
+    var current = attempt;
+    TenantBulkCatalogFailure? failure;
+    String? detail;
+    for (final page in attempt.remainingPages) {
+      try {
+        final outcomes = describeImportOutcomes(
+          page,
+          await gateway.send(page, TenantBulkCatalogMode.commit),
+          names: attempt.categoryNames,
+        );
+        current = current.advanced(answered: 1, outcomes: outcomes);
+        await _holdAttempt(session, current);
+      } on TenantBulkCatalogRequestException catch (error) {
+        failure = error.failure;
+        detail = error.detail;
+        break;
+      } on FormatException {
+        failure = TenantBulkCatalogFailure.ambiguous;
+        detail = _untrustedAnswer;
+        break;
+      }
+    }
+    if (current.isComplete) {
+      await widget.attempts?.clear(
+        uid: session.uid,
+        tenantId: session.tenantId,
+      );
+      if (mounted) setState(() => _attempt = null);
+    }
+    final rows = <TenantBulkCatalogRowReport>[...current.rows]
+      ..sort((left, right) => left.position.compareTo(right.position));
+    return TenantBulkCatalogReport(
+      mode: TenantBulkCatalogMode.commit,
+      pageCount: current.pages.length,
+      pagesAnswered: current.pagesAnswered,
+      rows: rows,
+      failure: failure,
+      failureDetail: detail,
+    );
+  }
+
+  /// Holds [attempt] on this device and in this screen's state.
+  ///
+  /// Both, because they answer different failures: the store survives the app
+  /// being killed, and the field survives nothing at all but is what a build
+  /// with no store wired recovers from for as long as this screen is open.
+  Future<void> _holdAttempt(
+    TenantSession session,
+    TenantProductImportAttempt attempt,
+  ) async {
+    await widget.attempts?.save(uid: session.uid, attempt: attempt);
+    if (mounted) setState(() => _attempt = attempt);
+  }
+
+  /// Reads the unfinished import for this session, once per session.
+  ///
+  /// Called from the guard's builder, where the session is known. It assigns
+  /// rather than calling `setState`, because the build that calls it is the
+  /// build that reads what it assigned.
+  void _syncAttempt(TenantSession session) {
+    final key = _sessionKey(session);
+    if (_attemptKey == key) return;
+    _attemptKey = key;
+    _attempt = widget.attempts?.attemptFor(
+      uid: session.uid,
+      tenantId: session.tenantId,
+    );
   }
 
   /// Drives one plan's pages in order, stopping at the first refusal.
@@ -664,53 +864,59 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
         key: ValueKey('bulk-catalog-failure'),
         child: Text('The catalog could not be read.'),
       ),
-      builder: (context, session, view) => _BulkCatalogContents(
-        view: view,
-        task: _task,
-        busy: _busy,
-        report: _report,
-        // Which halves this build has at all. A missing callable is a half this
-        // route does not offer, exactly as a missing writer is on the catalog
-        // surface.
-        canCorrect: widget.batchCallable != null,
-        canImport: widget.importCallable != null,
-        offerCorrections: widget.offerCorrections,
-        onTaskChanged: _changeTask,
-        canDownloadTemplate: widget.sheetSaver != null,
-        canPickFile: widget.sheetPicker != null,
-        pickedName: _pickedName,
-        onDownloadTemplate: () =>
-            _downloadTemplate(session, view.categories.items),
-        onChooseFile: _chooseFile,
-        // Taken from the guarded session rather than the caller, so a correction
-        // that names money disappears the moment the session stops allowing it.
-        canChangeMoney: TenantBulkCatalogRepository.canChangeMoneyInSession(
-          session,
-        ),
-        selected: _selected,
-        field: _field,
-        clearCost: _clearCost,
-        valueCategoryId: _valueCategoryId,
-        value: _value,
-        sheet: _sheet,
-        pageIndex: _pageIndex,
-        onToggle: _toggle,
-        onSelectPage: () => _selectPage(view.products.items),
-        onClearSelection: _clearSelection,
-        onFieldChanged: _changeField,
-        onCategoryChosen: (categoryId) => setState(() {
-          _valueCategoryId = categoryId;
-          _discardPlan();
-        }),
-        onFormChanged: () => setState(_discardPlan),
-        onPreview: () => _preview(session, view),
-        onCommit: () => _commit(session),
-        onDiscard: () => setState(() {
-          _discardPlan();
-        }),
-        onNextPage: () => _nextPage(view.products.nextCursor),
-        onPreviousPage: _previousPage,
-      ),
+      builder: (context, session, view) {
+        _syncAttempt(session);
+        return _BulkCatalogContents(
+          view: view,
+          task: _task,
+          busy: _busy,
+          report: _report,
+          attempt: _attempt,
+          onResumeImport: () => _resumeImport(session),
+          onDiscardAttempt: () => _discardAttempt(session),
+          // Which halves this build has at all. A missing callable is a half this
+          // route does not offer, exactly as a missing writer is on the catalog
+          // surface.
+          canCorrect: widget.batchCallable != null,
+          canImport: widget.importCallable != null,
+          offerCorrections: widget.offerCorrections,
+          onTaskChanged: _changeTask,
+          canDownloadTemplate: widget.sheetSaver != null,
+          canPickFile: widget.sheetPicker != null,
+          pickedName: _pickedName,
+          onDownloadTemplate: () =>
+              _downloadTemplate(session, view.categories.items),
+          onChooseFile: _chooseFile,
+          // Taken from the guarded session rather than the caller, so a correction
+          // that names money disappears the moment the session stops allowing it.
+          canChangeMoney: TenantBulkCatalogRepository.canChangeMoneyInSession(
+            session,
+          ),
+          selected: _selected,
+          field: _field,
+          clearCost: _clearCost,
+          valueCategoryId: _valueCategoryId,
+          value: _value,
+          sheet: _sheet,
+          pageIndex: _pageIndex,
+          onToggle: _toggle,
+          onSelectPage: () => _selectPage(view.products.items),
+          onClearSelection: _clearSelection,
+          onFieldChanged: _changeField,
+          onCategoryChosen: (categoryId) => setState(() {
+            _valueCategoryId = categoryId;
+            _discardPlan();
+          }),
+          onFormChanged: () => setState(_discardPlan),
+          onPreview: () => _preview(session, view),
+          onCommit: () => _commit(session),
+          onDiscard: () => setState(() {
+            _discardPlan();
+          }),
+          onNextPage: () => _nextPage(view.products.nextCursor),
+          onPreviousPage: _previousPage,
+        );
+      },
     );
   }
 }
@@ -732,6 +938,9 @@ final class _BulkCatalogContents extends StatelessWidget {
     required this.task,
     required this.busy,
     required this.report,
+    required this.attempt,
+    required this.onResumeImport,
+    required this.onDiscardAttempt,
     required this.canCorrect,
     required this.canImport,
     required this.offerCorrections,
@@ -766,6 +975,12 @@ final class _BulkCatalogContents extends StatelessWidget {
   final _BulkTask task;
   final bool busy;
   final TenantBulkCatalogReport? report;
+
+  /// The import this device started and has not seen finish, or null.
+  final TenantProductImportAttempt? attempt;
+
+  final VoidCallback onResumeImport;
+  final VoidCallback onDiscardAttempt;
   final bool canCorrect;
   final bool canImport;
 
@@ -808,9 +1023,19 @@ final class _BulkCatalogContents extends StatelessWidget {
 
   bool get _offered => task == _BulkTask.correct ? canCorrect : canImport;
 
+  /// The import waiting to be finished, when there is one.
+  ///
+  /// A correction is not held up by it: `updateProducts` addresses each row by
+  /// the product it corrects, so it has no creation to repeat.
+  TenantProductImportAttempt? get _unfinished {
+    final held = attempt;
+    if (held == null || held.isComplete) return null;
+    return task == _BulkTask.importSheet ? held : null;
+  }
+
   /// Whether a preview would have something to describe.
   bool get _canPreview {
-    if (busy || !_offered) return false;
+    if (busy || !_offered || _unfinished != null) return false;
     if (task == _BulkTask.importSheet) return sheet.text.trim().isNotEmpty;
     if (selected.isEmpty) return false;
     return switch (field) {
@@ -825,6 +1050,7 @@ final class _BulkCatalogContents extends StatelessWidget {
     final answered = report;
     return !busy &&
         _offered &&
+        _unfinished == null &&
         answered != null &&
         answered.mode == TenantBulkCatalogMode.preview &&
         answered.complete &&
@@ -894,6 +1120,44 @@ final class _BulkCatalogContents extends StatelessWidget {
                   label: option.label,
                   enabled: !busy,
                 ),
+            ],
+          ),
+        ],
+        if (_unfinished case final unfinished?) ...[
+          SizedBox(height: tokens.spacing.s16),
+          // **`attention`, not `problem`.** Nothing has gone wrong that cannot
+          // be put right from here, and every product the pages that landed
+          // created is in the catalog and correct. What is outstanding is a
+          // decision - finish it or forget it - and §2.1 puts work awaiting
+          // somebody on the attention row.
+          Callout(
+            key: const ValueKey('bulk-catalog-unfinished'),
+            status: AppStatus.attention,
+            message:
+                'An import of ${unfinished.rowCount} products stopped after '
+                '${unfinished.pagesAnswered} of ${unfinished.pages.length} '
+                'requests. Finish it here rather than importing the sheet '
+                'again: finishing sends the same requests, so a page the '
+                'server already recorded creates nothing, while a fresh '
+                'import would create those products a second time.',
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          AppActionRow(
+            actions: <Widget>[
+              AppButton(
+                key: const ValueKey('bulk-catalog-resume'),
+                label:
+                    'Finish it (${unfinished.remainingRowCount} products left)',
+                icon: Icons.restart_alt,
+                tier: AppButtonTier.primary,
+                onPressed: busy ? null : onResumeImport,
+              ),
+              AppButton(
+                key: const ValueKey('bulk-catalog-forget-attempt'),
+                label: 'Forget it',
+                tier: AppButtonTier.tertiary,
+                onPressed: busy ? null : onDiscardAttempt,
+              ),
             ],
           ),
         ],

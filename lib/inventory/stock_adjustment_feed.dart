@@ -190,15 +190,18 @@ final class TenantStockAdjustmentFeedRepository extends TenantReadRepository {
     String? cursor,
   }) => _load(pageSize: pageSize, cursor: cursor, productId: productId);
 
-  /// Reads one bounded page, optionally narrowed to one product.
+  /// Reads one bounded page newest first, optionally narrowed to one product.
   ///
-  /// The page is ordered by ascending document ID and is deliberately **not**
-  /// presented as chronological: an adjustment ID is `sa_` plus a digest of the
-  /// actor, operation, tenant, and request ID, so document order carries no
-  /// time information at all. Each record states its own recorded instant
-  /// instead. Ascending order also keeps both pages servable by Firestore's
-  /// automatic index, since a descending key scan would need a filter and a
-  /// composite index while buying nothing but a different arbitrary order.
+  /// **Ordered by `createdAt` since 2026-09-14.** It used to be ordered by
+  /// ascending document ID and said so, because an adjustment ID is `sa_` plus
+  /// a digest of the actor, operation, tenant and request ID - an order
+  /// carrying no time information whatever. The investigation this page exists
+  /// for is *what was corrected most recently*, and answering it by reading
+  /// every page and comparing instants by eye is not answering it.
+  ///
+  /// The product-filtered page needs a composite index; the unfiltered one is a
+  /// single-field descending scan Firestore serves on its own. Both are in
+  /// `firestore.indexes.json`.
   Future<TenantStockAdjustmentRecordPage> _load({
     required int pageSize,
     required String? cursor,
@@ -220,6 +223,8 @@ final class TenantStockAdjustmentFeedRepository extends TenantReadRepository {
       collectionReader: _collectionReader,
       pageSize: pageSize,
       cursor: cursor,
+      descending: true,
+      order: TenantCollectionOrder.createdAt,
       equalityFilters: filteredProductId == null
           ? const <String, Object?>{}
           : <String, Object?>{'productId': filteredProductId},

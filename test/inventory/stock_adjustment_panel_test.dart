@@ -10,6 +10,8 @@ import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/collection_pages.dart';
+
 import '../support/notices.dart';
 import '../support/text.dart';
 
@@ -167,7 +169,14 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(find.byKey(const ValueKey('product-stock-empty')), findsOne);
-    expect(reader.movementQueries.single.descending, isFalse);
+    // Newest first, by when the stock moved. A movement ID is a digest or
+    // `sale_{saleId}`, so what this used to be ordered by said nothing about
+    // when anything happened to the product.
+    expect(reader.movementQueries.single.descending, isTrue);
+    expect(
+      reader.movementQueries.single.order,
+      TenantCollectionOrder.occurredAt,
+    );
     expect(reader.movementQueries.single.equalityFilters, isEmpty);
   });
 
@@ -208,10 +217,7 @@ void main() {
       'reason': 'Delivery received',
       'requestId': 'adjust-stock-abcdefgh',
     });
-    expect(
-      snackNotice(tester).message,
-      'Stock changed from 7 to 11.',
-    );
+    expect(snackNotice(tester).message, 'Stock changed from 7 to 11.');
     // **This notice sits directly above the "Reconciliation found" section**,
     // which draws every recorded difference as a red `Callout`. A bare sentence
     // there read as part of the problem rather than as the answer to it.
@@ -284,10 +290,7 @@ void main() {
     await _pump(tester, _controller(), reader, callable: callable);
     await _submit(tester, units: '4', reason: 'Delivery received');
 
-    expect(
-      snackNotice(tester).message,
-      startsWith('The result is unknown.'),
-    );
+    expect(snackNotice(tester).message, startsWith('The result is unknown.'));
     // The quantity is re-read after an unknown outcome, because only the server
     // can say whether stock moved.
     expect(reader.productReads, 2);
@@ -377,31 +380,37 @@ void main() {
   });
 
   testWidgets('the ledger pages forward and back', (tester) async {
+    // Moved oldest-first in ID order, so the first page holding `mv-3` is the
+    // page being newest-first rather than a coincidence of the IDs.
     final reader = _Reader()
       ..respondMovements(<TenantQueryDocumentSnapshot>[
-        _sale('mv-1'),
-        _sale('mv-2'),
-        _sale('mv-3'),
+        _sale('mv-1', movedAt: DateTime.utc(2026, 8, 1, 11)),
+        _sale('mv-2', movedAt: DateTime.utc(2026, 8, 2, 11)),
+        _sale('mv-3', movedAt: DateTime.utc(2026, 8, 3, 11)),
       ]);
 
     await _pump(tester, _controller(), reader, pageSize: 2);
 
-    expect(find.byKey(const ValueKey('product-stock-entry-mv-1')), findsOne);
+    expect(find.byKey(const ValueKey('product-stock-entry-mv-3')), findsOne);
     expect(
-      find.byKey(const ValueKey('product-stock-entry-mv-3')),
+      find.byKey(const ValueKey('product-stock-entry-mv-1')),
       findsNothing,
     );
 
     await tester.tap(find.byKey(const ValueKey('product-stock-next')));
     await tester.pump();
     await tester.pump();
-    expect(find.byKey(const ValueKey('product-stock-entry-mv-3')), findsOne);
+    expect(find.byKey(const ValueKey('product-stock-entry-mv-1')), findsOne);
+    expect(
+      reader.movementQueries.last.startAfterOrderValue,
+      DateTime.utc(2026, 8, 2, 11),
+    );
     expect(reader.movementQueries.last.startAfterDocumentId, 'mv-2');
 
     await tester.tap(find.byKey(const ValueKey('product-stock-previous')));
     await tester.pump();
     await tester.pump();
-    expect(find.byKey(const ValueKey('product-stock-entry-mv-1')), findsOne);
+    expect(find.byKey(const ValueKey('product-stock-entry-mv-3')), findsOne);
   });
 
   testWidgets('the ledger opens this product\'s manual corrections', (
@@ -705,7 +714,7 @@ void main() {
       find.byKey(const ValueKey('product-stock-differences-truncated')),
     );
     expect(truncated.status, AppStatus.info);
-    expect(truncated.message, contains('not a list in time order'));
+    expect(truncated.message, contains('These are the most recent ones.'));
   });
 
   testWidgets('an unreadable difference leaves the stock and ledger readable', (
@@ -812,21 +821,27 @@ void _ambiguousRetryTests() {
     // The three things the operator would otherwise have to remember, and the
     // three the retained request ID requires be identical on the retry.
     expect(
-      tester.widget<TextField>(
-        find.descendant(
-          of: find.byKey(const ValueKey('product-stock-units')),
-          matching: find.byType(TextField),
-        ),
-      ).controller?.text,
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(const ValueKey('product-stock-units')),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller
+          ?.text,
       '7',
     );
     expect(
-      tester.widget<TextField>(
-        find.descendant(
-          of: find.byKey(const ValueKey('product-stock-reason')),
-          matching: find.byType(TextField),
-        ),
-      ).controller?.text,
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(const ValueKey('product-stock-reason')),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller
+          ?.text,
       'Counted after the delivery',
     );
     expect(find.byKey(const ValueKey('product-stock-form')), findsOneWidget);
@@ -1100,12 +1115,17 @@ TenantQueryDocumentSnapshot _adjustment(String movementId) =>
         'quantityAfter': 7,
         'reason': 'Broken in transit',
         'actorUid': 'manager-a',
+        // Both, as every writer of this collection sets them in one
+        // transaction. The ledger is ordered by `occurredAt`, so a
+        // fixture without one is a document no writer produces.
+        'occurredAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 9)),
         'recordedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 9)),
       },
     );
 
 TenantQueryDocumentSnapshot _sale(
   String movementId, {
+  DateTime? movedAt,
   Map<String, Object?>? overrides,
 }) {
   final data = <String, Object?>{
@@ -1115,7 +1135,11 @@ TenantQueryDocumentSnapshot _sale(
     'sourceType': 'sale',
     'sourceId': 'chk-1',
     'quantityDelta': -2,
-    'recordedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 11)),
+    // Both, as every writer of this collection sets them in one
+    // transaction. The ledger is ordered by `occurredAt`, so a
+    // fixture without one is a document no writer produces.
+    'occurredAt': Timestamp.fromDate(movedAt ?? DateTime.utc(2026, 8, 1, 11)),
+    'recordedAt': Timestamp.fromDate(movedAt ?? DateTime.utc(2026, 8, 1, 11)),
   };
   if (overrides != null) data.addAll(overrides);
   return TenantQueryDocumentSnapshot(
@@ -1268,20 +1292,21 @@ final class _Reader implements TenantDataReader {
         : query.collectionPath == 'tenants/tenant-a/reconciliation_anomalies'
         ? _anomalies
         : const <TenantQueryDocumentSnapshot>[];
-    final cursor = query.startAfterDocumentId;
-    final matches = <TenantQueryDocumentSnapshot>[];
-    for (final snapshot in page) {
-      final id = snapshot.path.split('/').last;
-      if (cursor != null && id.compareTo(cursor) <= 0) continue;
-      final matchesFilters =
-          ignoreFilters ||
-          query.equalityFilters.entries.every(
-            (filter) => snapshot.data[filter.key] == filter.value,
-          );
-      if (!matchesFilters) continue;
-      matches.add(snapshot);
-      if (matches.length >= query.limit) break;
-    }
-    return matches;
+    // Ordered, cursored and filtered the way Firestore would: the stock ledger
+    // is newest-first by time now, and the repository proves the order of what
+    // it is handed.
+    return tenantCollectionPageOf(
+      ignoreFilters
+          ? TenantCollectionQuery.forTesting(
+              collectionPath: query.collectionPath,
+              limit: query.limit,
+              startAfterDocumentId: query.startAfterDocumentId,
+              startAfterOrderValue: query.startAfterOrderValue,
+              descending: query.descending,
+              order: query.order,
+            )
+          : query,
+      page,
+    );
   }
 }

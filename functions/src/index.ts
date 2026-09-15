@@ -64,11 +64,13 @@ export {
 export {
   adjustStock,
   applyStockTake,
+  createCategory,
   createProduct,
   getSalesComparison,
   importProducts,
   recordReceiptReprint,
   removeProductBackground,
+  renameCategory,
   setProductRetired,
   submitStockTake,
   updateProduct,

@@ -460,6 +460,194 @@ void main() {
     expect(_status(tester, 'bulk-catalog-report-failure'), AppStatus.problem);
   });
 
+  testWidgets('an import whose answer went missing is finished, not restarted', (
+    tester,
+  ) async {
+    // **H3, as a test.** Sixty products is two requests. The first lands; the
+    // second is sent and its answer never arrives, so nothing on the device
+    // knows whether the server wrote it. The way out used to be previewing the
+    // sheet again, which built a new plan with new request IDs and asked the
+    // server to create every one of those products a second time - and a
+    // duplicate name and a duplicate code are both deliberately allowed, so
+    // nothing downstream would have refused them.
+    final attempts = _Attempts();
+    final import = _ImportCallable(loseAnswerAt: 1);
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: import,
+      attempts: attempts,
+    );
+    await _choose(tester, 'bulk-catalog-task-import');
+    await _paste(tester, _sheetOf(60));
+    await _tap(tester, 'bulk-catalog-preview');
+    await _tap(tester, 'bulk-catalog-commit');
+    await _tap(tester, 'bulk-catalog-confirm');
+
+    // Two commits sent, one answered. The unanswered one is not counted as
+    // done: whether it landed is the server's to say.
+    expect(import.committedRequestIds, hasLength(2));
+    expect(
+      _callout(tester, 'bulk-catalog-unfinished'),
+      contains('stopped after 1 of 2 requests'),
+    );
+    // And the sheet cannot simply be run again while it is outstanding.
+    expect(_enabled(tester, 'bulk-catalog-preview'), isFalse);
+
+    await _tap(tester, 'bulk-catalog-resume');
+    await _tap(tester, 'bulk-catalog-confirm');
+
+    // The page nobody knew the fate of was re-sent under the key it was first
+    // sent under, so the server answers off its own idempotency record instead
+    // of creating thirty products again.
+    expect(import.committedRequestIds, hasLength(3));
+    expect(import.committedRequestIds[2], import.committedRequestIds[1]);
+    expect(import.committedRequestIds[2], isNot(import.committedRequestIds[0]));
+  });
+
+  testWidgets('an import that finishes leaves nothing to recover', (
+    tester,
+  ) async {
+    final attempts = _Attempts();
+    final import = _ImportCallable();
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: import,
+      attempts: attempts,
+    );
+    await _choose(tester, 'bulk-catalog-task-import');
+    await _paste(tester, _sheetOf(60));
+    await _tap(tester, 'bulk-catalog-preview');
+    await _tap(tester, 'bulk-catalog-commit');
+    await _tap(tester, 'bulk-catalog-confirm');
+
+    expect(import.committedRequestIds, hasLength(2));
+    expect(find.byKey(const ValueKey('bulk-catalog-unfinished')), findsNothing);
+    // Held while it was in flight, and cleared once every page had answered -
+    // an import that finished is not an import waiting to be finished.
+    expect(attempts.saves, greaterThan(1));
+    expect(attempts.held, isEmpty);
+  });
+
+  testWidgets('an unfinished import survives the app being killed', (
+    tester,
+  ) async {
+    // The panel that offers the recovery is not the panel that started it: the
+    // store is read on the way in, so a device killed mid-import still knows
+    // which requests it has already made.
+    final attempts = _Attempts();
+    final first = _ImportCallable(loseAnswerAt: 1);
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: first,
+      attempts: attempts,
+    );
+    await _choose(tester, 'bulk-catalog-task-import');
+    await _paste(tester, _sheetOf(60));
+    await _tap(tester, 'bulk-catalog-preview');
+    await _tap(tester, 'bulk-catalog-commit');
+    await _tap(tester, 'bulk-catalog-confirm');
+    expect(attempts.held, isNotEmpty);
+
+    // A second panel over the same store, with no sheet pasted into it and no
+    // plan in memory.
+    final second = _ImportCallable();
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: second,
+      attempts: attempts,
+    );
+    await _choose(tester, 'bulk-catalog-task-import');
+
+    expect(
+      _callout(tester, 'bulk-catalog-unfinished'),
+      contains('stopped after 1 of 2 requests'),
+    );
+
+    await _tap(tester, 'bulk-catalog-resume');
+    await _tap(tester, 'bulk-catalog-confirm');
+
+    // Read back out of storage rather than out of a plan, and identical to the
+    // key the first panel sent - which is the whole of what the store is for.
+    expect(second.committedRequestIds.single, first.committedRequestIds[1]);
+    expect(attempts.held, isEmpty);
+  });
+
+  testWidgets('forgetting an unfinished import says what it would cost', (
+    tester,
+  ) async {
+    final attempts = _Attempts();
+    final import = _ImportCallable(loseAnswerAt: 1);
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      import: import,
+      attempts: attempts,
+    );
+    await _choose(tester, 'bulk-catalog-task-import');
+    await _paste(tester, _sheetOf(60));
+    await _tap(tester, 'bulk-catalog-preview');
+    await _tap(tester, 'bulk-catalog-commit');
+    await _tap(tester, 'bulk-catalog-confirm');
+
+    await _tap(tester, 'bulk-catalog-forget-attempt');
+    expect(find.textContaining('stay in the catalog'), findsOne);
+    expect(find.textContaining('a second time'), findsWidgets);
+    await _tap(tester, 'bulk-catalog-confirm');
+
+    // Nothing is undone by forgetting it - what goes is this device's ability
+    // to finish the rest safely, which is why it says so first.
+    expect(import.committedRequestIds, hasLength(2));
+    expect(attempts.held, isEmpty);
+    expect(find.byKey(const ValueKey('bulk-catalog-unfinished')), findsNothing);
+    expect(_enabled(tester, 'bulk-catalog-preview'), isTrue);
+  });
+
+  testWidgets('a correction that stops part way holds no attempt', (
+    tester,
+  ) async {
+    // Deliberately not symmetrical. `updateProducts` addresses each row by the
+    // product it corrects, so re-sending a page that already landed sets the
+    // same field to the same value and reports it unchanged. Only creation
+    // cannot be repeated safely, so only an import is written down.
+    final attempts = _Attempts();
+    final batch = _BatchCallable(corruptAt: 1);
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      batch: batch,
+      attempts: attempts,
+    );
+    await _select(tester, 'pd-001');
+    await _choose(tester, 'bulk-catalog-category-cat-drinks');
+    await _tap(tester, 'bulk-catalog-preview');
+    await _tap(tester, 'bulk-catalog-commit');
+    await _tap(tester, 'bulk-catalog-confirm');
+
+    // The chain stopped on an answer that could not be trusted, exactly as the
+    // import's did - and nothing was written down, because nothing needs to be.
+    expect(
+      _callout(tester, 'bulk-catalog-report-failure'),
+      contains('may or may not have been written'),
+    );
+    expect(attempts.held, isEmpty);
+    expect(find.byKey(const ValueKey('bulk-catalog-unfinished')), findsNothing);
+  });
+
   testWidgets('both explanations fold, and the words survive the fold', (
     tester,
   ) async {
@@ -810,6 +998,7 @@ Future<void> _pump(
   bool offerCorrections = true,
   TenantProductSheetPicker? sheetPicker,
   TenantProductSheetSaver? sheetSaver,
+  TenantProductImportAttemptSource? attempts,
 }) async {
   tester.view.physicalSize = Size(width, 8000);
   tester.view.devicePixelRatio = 1;
@@ -835,6 +1024,7 @@ Future<void> _pump(
             offerCorrections: offerCorrections,
             sheetPicker: sheetPicker,
             sheetSaver: sheetSaver,
+            attempts: attempts,
             clock: () => DateTime(2026, 9, 14),
           ),
         ),
@@ -1107,12 +1297,39 @@ final class _BatchCallable implements UpdateProductsCallable {
 /// Answers `importProducts` the way the server does, resolving every category
 /// name to `cat-bakery`.
 final class _ImportCallable implements ImportProductsCallable {
+  _ImportCallable({this.failCommitAt, this.error, this.loseAnswerAt});
+
+  /// Which commit request refuses, counted from zero over commits alone so a
+  /// preview of the same pages can still answer.
+  final int? failCommitAt;
+  final Object? error;
+
+  /// Which commit request answers with something that cannot be read, which is
+  /// the shape of an answer that never arrived: the server may or may not have
+  /// written it.
+  final int? loseAnswerAt;
+
   final List<Map<String, Object?>> payloads = <Map<String, Object?>>[];
+
+  /// The request IDs of every commit, in order. What a recovery is judged by.
+  final List<String> committedRequestIds = <String>[];
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     payloads.add(payload);
     final mode = payload['mode']! as String;
+    if (mode == 'commit') {
+      final at = committedRequestIds.length;
+      committedRequestIds.add(payload['requestId']! as String);
+      if (at == failCommitAt) {
+        throw error ??
+            FirebaseFunctionsException(
+              code: 'unavailable',
+              message: 'The server could not be reached.',
+            );
+      }
+      if (at == loseAnswerAt) return <String, Object?>{'importId': 'im_x'};
+    }
     final rows = (payload['rows']! as List).cast<Map<String, Object?>>();
     return <String, Object?>{
       'importId': 'im_x',
@@ -1157,4 +1374,53 @@ final class _ImportCallable implements ImportProductsCallable {
       },
     };
   }
+}
+
+/// An attempt store that keeps what it is given, and nothing more.
+///
+/// Round-tripped through `toStorage`/`fromStorage` on purpose: a store that
+/// handed the same object back would prove the panel works and say nothing about
+/// whether the request IDs survive being written down, which is the only thing
+/// the durable store exists for.
+final class _Attempts implements TenantProductImportAttemptSource {
+  final Map<String, Map<String, Object?>> held =
+      <String, Map<String, Object?>>{};
+  int saves = 0;
+
+  String _key(String uid, String tenantId) => '$uid::$tenantId';
+
+  @override
+  TenantProductImportAttempt? attemptFor({
+    required String uid,
+    required String tenantId,
+  }) {
+    final raw = held[_key(uid, tenantId)];
+    if (raw == null) return null;
+    return TenantProductImportAttempt.fromStorage(
+      Map<Object?, Object?>.from(raw),
+    );
+  }
+
+  @override
+  Future<void> save({
+    required String uid,
+    required TenantProductImportAttempt attempt,
+  }) async {
+    saves++;
+    held[_key(uid, attempt.tenantId)] = attempt.toStorage();
+  }
+
+  @override
+  Future<void> clear({required String uid, required String tenantId}) async {
+    held.remove(_key(uid, tenantId));
+  }
+}
+
+/// A sheet of [rows] importable products, which is [rows] / 50 requests.
+String _sheetOf(int rows) {
+  final buffer = StringBuffer('name,sku,price,category\n');
+  for (var index = 1; index <= rows; index++) {
+    buffer.writeln('Product $index,P-$index,20,Bakery');
+  }
+  return buffer.toString();
 }

@@ -338,15 +338,18 @@ final class TenantProductStockRepository extends TenantReadRepository {
     return product;
   }
 
-  /// Pages one product's stock ledger.
+  /// Pages one product's stock ledger, newest first.
   ///
-  /// The page is ordered by ascending document ID and is deliberately **not**
-  /// presented as chronological: a movement ID is a digest for an adjustment
-  /// and `sale_{saleId}` for a sale, so document order carries no time
-  /// information at all. Each entry states its own recorded instants instead.
-  /// Ascending order also keeps the page servable by Firestore's automatic
-  /// index, since a descending key scan would need a filter and a composite
-  /// index while buying nothing.
+  /// **Ordered by `occurredAt` since 2026-09-14.** It used to be ordered by
+  /// document ID and said so, because a movement ID is a digest for an
+  /// adjustment and `sale_{saleId}` for a sale - an order carrying no time
+  /// information whatever. That made the one question this page exists to
+  /// answer, *what happened to this product most recently*, a matter of reading
+  /// every page and comparing the instants by eye.
+  ///
+  /// `occurredAt` rather than `recordedAt`: a sale reconciled hours after the
+  /// event moved its units when the sale happened. Every writer of this
+  /// collection sets both in the same transaction that writes the movement.
   Future<TenantStockMovementPage> loadMovements({
     required String productId,
     int pageSize = 20,
@@ -359,6 +362,8 @@ final class TenantProductStockRepository extends TenantReadRepository {
       collectionReader: _collectionReader,
       pageSize: pageSize,
       cursor: cursor,
+      descending: true,
+      order: TenantCollectionOrder.occurredAt,
     );
     final items = <TenantStockMovement>[];
     for (final snapshot in page.items) {

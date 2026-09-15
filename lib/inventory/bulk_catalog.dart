@@ -312,6 +312,38 @@ final class TenantProductImportRow {
     // shipped, and it is invisible rather than broken.
     if (categoryName != null) 'categoryName': categoryName,
   };
+
+  /// This row as this device holds it between a commit and its recovery.
+  ///
+  /// The **parsed** row rather than the sheet line it came from, because the
+  /// sheet is the part that changes. A recovery re-sends exactly what was sent
+  /// under exactly the request ID it was sent under, and the server's
+  /// fingerprint covers these values in this order - so storing the text and
+  /// re-parsing it would be storing something that can come back different.
+  Map<String, Object?> toStorage() => <String, Object?>{
+    'index': index,
+    'line': line,
+    'name': name,
+    'sku': sku,
+    'priceMinor': priceMinor,
+    'costMinor': costMinor,
+    'quantity': quantity,
+    'categoryId': categoryId,
+    'categoryName': categoryName,
+  };
+
+  static TenantProductImportRow fromStorage(Map<Object?, Object?> raw) =>
+      TenantProductImportRow._(
+        index: _storedInt(raw, 'index'),
+        line: _storedInt(raw, 'line'),
+        name: _storedString(raw, 'name'),
+        sku: _storedString(raw, 'sku'),
+        priceMinor: _storedInt(raw, 'priceMinor'),
+        costMinor: _storedIntOrNull(raw, 'costMinor'),
+        quantity: _storedInt(raw, 'quantity'),
+        categoryId: _storedStringOrNull(raw, 'categoryId'),
+        categoryName: _storedStringOrNull(raw, 'categoryName'),
+      );
 }
 
 /// One request of an import: immutable, and its own idempotency key, for the
@@ -342,6 +374,42 @@ final class TenantProductImportPage {
     'requestId': requestId,
     'rows': <Map<String, Object?>>[for (final row in rows) row.payload()],
   };
+
+  /// This page as this device holds it between a commit and its recovery.
+  ///
+  /// [requestId] is the field the whole recovery turns on. The server records
+  /// each completed request against `actorUid + operation + tenant + requestId`
+  /// and answers a repeat off that record, so a page whose answer was lost is
+  /// re-sent under the key it was first sent under and creates nothing the
+  /// second time. A page rebuilt from the sheet would carry a new key, and a new
+  /// key is the one input that defeats the server's idempotency.
+  Map<String, Object?> toStorage() => <String, Object?>{
+    'tenantId': tenantId,
+    'requestId': requestId,
+    'number': number,
+    'pageCount': pageCount,
+    'rows': <Map<String, Object?>>[for (final row in rows) row.toStorage()],
+  };
+
+  static TenantProductImportPage fromStorage(Map<Object?, Object?> raw) {
+    final rows = raw['rows'];
+    if (rows is! List) {
+      throw const TenantBulkCatalogException('attempt_unreadable');
+    }
+    return TenantProductImportPage._(
+      tenantId: _storedTenantId(raw),
+      requestId: _storedRequestId(raw),
+      number: _storedInt(raw, 'number'),
+      pageCount: _storedInt(raw, 'pageCount'),
+      rows: List<TenantProductImportRow>.unmodifiable(<TenantProductImportRow>[
+        for (final row in rows)
+          if (row is Map)
+            TenantProductImportRow.fromStorage(Map<Object?, Object?>.from(row))
+          else
+            throw const TenantBulkCatalogException('attempt_unreadable'),
+      ]),
+    );
+  }
 }
 
 /// Every request one import needs, plus the rows that never became one.
@@ -367,6 +435,249 @@ final class TenantProductImportPlan {
   final int lineCount;
 
   int get rowCount => pages.fold(0, (total, page) => total + page.rows.length);
+}
+
+/// One commit of an import, held on this device until every page has answered.
+///
+/// **The identity of an attempt is the whole of this.** An import of four
+/// hundred products is eight sequential requests, and the middle of that chain
+/// is where a shopkeeper loses signal. When a page's answer never arrives,
+/// nothing on the device knows whether the server wrote it - and the only way
+/// forward used to be previewing the sheet again, which builds a fresh plan with
+/// fresh request IDs and asks the server to create every product a second time.
+/// Nothing downstream would have refused them: a duplicate name and a duplicate
+/// code are both deliberately allowed, so the shop ends up with two of each
+/// product, two opening balances, and two ledgers.
+///
+/// So the attempt is written to this device before the first page is sent, and
+/// each page is marked off as it answers. Recovering means re-sending *these*
+/// pages under *these* request IDs: a page the server already wrote answers off
+/// its own idempotency record and creates nothing, and a page it never received
+/// is created exactly once. The sheet in the text field is never consulted,
+/// because the sheet is the part that can have changed in between.
+///
+/// **A correction has no attempt and does not need one.** `updateProducts`
+/// addresses each row by the product it corrects, so re-sending a page that
+/// already landed sets the same field to the same value and reports it
+/// `unchanged`. Only creation cannot be repeated safely.
+final class TenantProductImportAttempt {
+  const TenantProductImportAttempt._({
+    required this.tenantId,
+    required this.startedAt,
+    required this.pages,
+    required this.pagesAnswered,
+    required this.rows,
+    required this.categoryNames,
+  });
+
+  /// Opens an attempt over a previewed plan, before anything is sent.
+  factory TenantProductImportAttempt.opening({
+    required TenantProductImportPlan plan,
+    required Map<String, String> categoryNames,
+    required DateTime startedAt,
+  }) {
+    if (plan.pages.isEmpty) {
+      throw const TenantBulkCatalogException('sheet_has_no_rows');
+    }
+    return TenantProductImportAttempt._(
+      tenantId: plan.pages.first.tenantId,
+      startedAt: startedAt,
+      pages: plan.pages,
+      pagesAnswered: 0,
+      // The rows this client refused are part of the report from the start, and
+      // an attempt recovered after a restart has no other way back to them.
+      rows: plan.refused,
+      categoryNames: categoryNames,
+    );
+  }
+
+  final String tenantId;
+
+  /// When the commit this attempt records was started, by this device's clock.
+  /// Shown to the person recovering it, because "an import stopped" is a
+  /// different sentence depending on whether it stopped a minute or a week ago.
+  final DateTime startedAt;
+
+  final List<TenantProductImportPage> pages;
+
+  /// How many of [pages] the server has answered, counted from the first.
+  ///
+  /// **A page whose answer was lost is not counted.** That is the point: it is
+  /// re-sent, and the server decides whether it has already been done. Counting
+  /// it would be this device guessing at the one thing it does not know.
+  final int pagesAnswered;
+
+  /// Every row outcome gathered so far, refusals from the sheet included.
+  final List<TenantBulkCatalogRowReport> rows;
+
+  /// The category names this import resolved against, so a recovered report
+  /// names a category the way the person who typed it does.
+  final Map<String, String> categoryNames;
+
+  bool get isComplete => pagesAnswered >= pages.length;
+
+  /// The pages still to send, beginning with the one that may or may not have
+  /// landed.
+  List<TenantProductImportPage> get remainingPages =>
+      pages.skip(pagesAnswered).toList(growable: false);
+
+  int get rowCount => pages.fold(0, (total, page) => total + page.rows.length);
+
+  int get remainingRowCount =>
+      remainingPages.fold(0, (total, page) => total + page.rows.length);
+
+  /// The same attempt, [answered] pages further on, carrying [outcomes].
+  TenantProductImportAttempt advanced({
+    required int answered,
+    required List<TenantBulkCatalogRowReport> outcomes,
+  }) => TenantProductImportAttempt._(
+    tenantId: tenantId,
+    startedAt: startedAt,
+    pages: pages,
+    pagesAnswered: pagesAnswered + answered,
+    rows: List<TenantBulkCatalogRowReport>.unmodifiable(
+      <TenantBulkCatalogRowReport>[...rows, ...outcomes],
+    ),
+    categoryNames: categoryNames,
+  );
+
+  Map<String, Object?> toStorage() => <String, Object?>{
+    'tenantId': tenantId,
+    'startedAt': startedAt.toUtc().toIso8601String(),
+    'pagesAnswered': pagesAnswered,
+    'pages': <Map<String, Object?>>[for (final page in pages) page.toStorage()],
+    'rows': <Map<String, Object?>>[for (final row in rows) row.toStorage()],
+    'categoryNames': Map<String, String>.from(categoryNames),
+  };
+
+  /// Reads one back, refusing anything this device did not write.
+  ///
+  /// Strict rather than lenient, and deliberately: the one thing an attempt is
+  /// for is re-sending a request field for field, so a value this read loosely
+  /// is a request that would go out wrong. The caller discards what it refuses.
+  static TenantProductImportAttempt fromStorage(Map<Object?, Object?> raw) {
+    final pages = raw['pages'];
+    final rows = raw['rows'];
+    final names = raw['categoryNames'];
+    if (pages is! List || rows is! List || names is! Map) {
+      throw const TenantBulkCatalogException('attempt_unreadable');
+    }
+    final startedAt = DateTime.tryParse(_storedString(raw, 'startedAt'));
+    if (startedAt == null) {
+      throw const TenantBulkCatalogException('attempt_unreadable');
+    }
+    final decoded = <TenantProductImportPage>[
+      for (final page in pages)
+        if (page is Map)
+          TenantProductImportPage.fromStorage(Map<Object?, Object?>.from(page))
+        else
+          throw const TenantBulkCatalogException('attempt_unreadable'),
+    ];
+    final tenantId = _storedTenantId(raw);
+    final answered = _storedInt(raw, 'pagesAnswered');
+    if (decoded.isEmpty ||
+        answered < 0 ||
+        answered > decoded.length ||
+        decoded.any((page) => page.tenantId != tenantId)) {
+      throw const TenantBulkCatalogException('attempt_unreadable');
+    }
+    return TenantProductImportAttempt._(
+      tenantId: tenantId,
+      startedAt: startedAt.toUtc(),
+      pages: List<TenantProductImportPage>.unmodifiable(decoded),
+      pagesAnswered: answered,
+      rows: List<TenantBulkCatalogRowReport>.unmodifiable(
+        <TenantBulkCatalogRowReport>[
+          for (final row in rows)
+            if (row is Map)
+              TenantBulkCatalogRowReport.fromStorage(
+                Map<Object?, Object?>.from(row),
+              )
+            else
+              throw const TenantBulkCatalogException('attempt_unreadable'),
+        ],
+      ),
+      categoryNames: _storedCategoryNames(names),
+    );
+  }
+}
+
+/// Reads one stored field, refusing what this device did not write.
+///
+/// Declared here rather than shared with the other durable stores on this
+/// device: an attempt is re-sent field for field, so a value read loosely is a
+/// request sent wrong, and the refusal these raise is what the reader discards
+/// the whole attempt on.
+String _storedString(Map<Object?, Object?> raw, String key) {
+  final value = raw[key];
+  if (value is! String || value.isEmpty) {
+    throw const TenantBulkCatalogException('attempt_unreadable');
+  }
+  return value;
+}
+
+/// The category names an attempt resolved against, read back strictly.
+Map<String, String> _storedCategoryNames(Map<Object?, Object?> raw) {
+  final names = <String, String>{};
+  for (final entry in raw.entries) {
+    final id = entry.key;
+    final name = entry.value;
+    if (id is! String || name is! String) {
+      throw const TenantBulkCatalogException('attempt_unreadable');
+    }
+    names[id] = name;
+  }
+  return Map<String, String>.unmodifiable(names);
+}
+
+/// The stored business, checked against the shape a tenant ID may take.
+String _storedTenantId(Map<Object?, Object?> raw) {
+  try {
+    return validateTenantId(_storedString(raw, 'tenantId'));
+  } on ArgumentError {
+    throw const TenantBulkCatalogException('attempt_unreadable');
+  }
+}
+
+/// The stored idempotency key, checked against the shape the server accepts.
+///
+/// A key this device would not now send is a key the server would refuse, and
+/// an attempt that cannot be re-sent is worse than none: it would offer a
+/// recovery that fails every time it is pressed.
+String _storedRequestId(Map<Object?, Object?> raw) {
+  final requestId = _storedString(raw, 'requestId');
+  try {
+    requireTenantCatalogRequestId(requestId);
+  } on TenantCatalogManagementException {
+    throw const TenantBulkCatalogException('attempt_unreadable');
+  }
+  return requestId;
+}
+
+String? _storedStringOrNull(Map<Object?, Object?> raw, String key) {
+  final value = raw[key];
+  if (value == null) return null;
+  if (value is! String || value.isEmpty) {
+    throw const TenantBulkCatalogException('attempt_unreadable');
+  }
+  return value;
+}
+
+int _storedInt(Map<Object?, Object?> raw, String key) {
+  final value = raw[key];
+  if (value is! int) {
+    throw const TenantBulkCatalogException('attempt_unreadable');
+  }
+  return value;
+}
+
+int? _storedIntOrNull(Map<Object?, Object?> raw, String key) {
+  final value = raw[key];
+  if (value == null) return null;
+  if (value is! int) {
+    throw const TenantBulkCatalogException('attempt_unreadable');
+  }
+  return value;
 }
 
 /// What happened to one row, across both callables.
@@ -413,6 +724,41 @@ final class TenantBulkCatalogRowReport {
 
   /// What the row holds or would hold, or why it was refused.
   final String detail;
+
+  /// One outcome as this device holds it while an import is being recovered.
+  ///
+  /// Stored so a report survives the app being killed: an attempt resumed after
+  /// a restart still names every row the sheet refused and every row an earlier
+  /// page created, rather than describing only the pages sent since.
+  Map<String, Object?> toStorage() => <String, Object?>{
+    'position': position,
+    'subject': subject,
+    'status': status.name,
+    'detail': detail,
+  };
+
+  static TenantBulkCatalogRowReport fromStorage(Map<Object?, Object?> raw) {
+    final position = raw['position'];
+    final subject = raw['subject'];
+    final status = raw['status'];
+    final detail = raw['detail'];
+    if (position is! int ||
+        subject is! String ||
+        status is! String ||
+        detail is! String) {
+      throw const TenantBulkCatalogException('attempt_unreadable');
+    }
+    final decoded = TenantBulkCatalogRowStatus.fromWire(status);
+    if (decoded == null) {
+      throw const TenantBulkCatalogException('attempt_unreadable');
+    }
+    return TenantBulkCatalogRowReport(
+      position: position,
+      subject: subject,
+      status: decoded,
+      detail: detail,
+    );
+  }
 }
 
 /// What a chain of requests did, whichever callable it drove.
@@ -1740,6 +2086,9 @@ String bulkCatalogRefusalMessage(
   'invalid_catalog_request_id' =>
     'This build produced an unusable request identifier, so nothing was '
         'sent.',
+  'attempt_unreadable' =>
+    'The unfinished import held on this device could not be read, so it was '
+        'discarded. Check the catalog before importing that sheet again.',
   _ => 'That row could not be read.',
 };
 

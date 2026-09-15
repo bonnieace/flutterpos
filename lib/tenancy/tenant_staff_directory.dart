@@ -583,22 +583,32 @@ final class _TenantStaffManagementPanelState
     final search = _searchTerm;
     final role = _role;
     final status = _status;
-    TenantGuardedLoader<TenantStaffPage> readWith(TenantDataReader reader) =>
+    // Both readers per pass. Nothing supplies a `queryReader` today, so the
+    // repository resolves the boundary off `reader` and the cached pass is
+    // already correct - but naming the live one here is the defect that cost
+    // the catalog its offline read, and it would cost this one the same the
+    // day a companion is wired.
+    TenantGuardedLoader<TenantStaffPage> readWith(
+      TenantDataReader reader,
+      TenantStaffDirectoryQueryReader? queryReader,
+    ) =>
         (session) =>
-        TenantStaffDirectoryRepository(
-          session: session,
-          reader: reader,
-          queryReader: widget.queryReader,
-        ).queryPage(
-          pageSize: widget.pageSize,
-          cursor: cursor,
-          search: search.isEmpty ? null : search,
-          role: role,
-          status: status,
-        );
-    _loader = readWith(widget.reader);
+            TenantStaffDirectoryRepository(
+              session: session,
+              reader: reader,
+              queryReader: queryReader,
+            ).queryPage(
+              pageSize: widget.pageSize,
+              cursor: cursor,
+              search: search.isEmpty ? null : search,
+              role: role,
+              status: status,
+            );
+    _loader = readWith(widget.reader, widget.queryReader);
     final cache = widget.reader.cached;
-    _loaderCached = cache == null ? null : readWith(cache);
+    _loaderCached = cache == null
+        ? null
+        : readWith(cache, widget.queryReader?.cachedStaffDirectory);
   }
 
   Future<void> _openForm(
@@ -909,6 +919,7 @@ final class _StaffManagementContents extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<TenantRole?> onRoleChanged;
   final ValueChanged<MembershipStatus?> onStatusChanged;
+
   /// Whether this session may invite. It decides only whether the read-only
   /// notice is drawn - the control itself is in the toolbar now.
   final bool canInvite;
@@ -999,6 +1010,7 @@ final class _StaffManagementContents extends StatelessWidget {
       ],
     );
   }
+
   Widget _filters(BuildContext context, {required bool compact}) {
     final tokens = AppTokens.componentOf(context);
     final searchField = AppTextField(
@@ -1157,8 +1169,7 @@ final class _StaffDirectoryReading extends StatelessWidget {
               ],
             ),
           SizedBox(height: tokens.spacing.s16),
-          for (var card = 0; card < _cards; card++)
-            const _StaffCardSkeleton(),
+          for (var card = 0; card < _cards; card++) const _StaffCardSkeleton(),
         ],
       ),
     );

@@ -377,6 +377,79 @@ void main() {
     },
   );
 
+  testWidgets(
+    'the catalog draws from this device while the server is still answering',
+    (tester) async {
+      // Every live read hangs, so nothing but the cached pass can put a
+      // product on screen. Before 2026-09-14 the cached pass was handed the
+      // *live* product-search reader - `TenantCatalogRepository` lets an
+      // explicit search reader outrank the reader it is given - so it hung
+      // here exactly as it hung on a phone with no signal, and the catalog sat
+      // on its shimmer for fifteen seconds with the answer already on disk.
+      final device = _DeviceCopy(
+        documents: _Reader.seeded(),
+        search: _SearchReader.seeded(productCount: 1),
+      );
+      final reader = _LiveWithDeviceCopy(device);
+
+      await _pump(
+        tester,
+        _controller(),
+        reader,
+        writer: _Writer(),
+        productSearchReader: reader,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Brown bread'), findsOneWidget);
+      expect(device.search.queries, hasLength(1));
+      expect(
+        reader.liveSearchQueries,
+        isZero,
+        reason: 'the cached pass must not search over the network',
+      );
+    },
+  );
+
+  testWidgets(
+    'a device holding no catalog waits rather than saying there is none',
+    (tester) async {
+      // `Source.cache` answers a path it has never seen with an empty page
+      // rather than a failure, so a device that has never synced is
+      // indistinguishable from a business that sells nothing. Drawing that would
+      // say *no products* and then take it back, which on the catalog reads as
+      // the shop's products having been lost.
+      final reader = _LiveWithDeviceCopy(
+        _DeviceCopy(
+          documents: _Reader.empty(),
+          search: _SearchReader(const []),
+        ),
+      );
+
+      await _pump(
+        tester,
+        _controller(),
+        reader,
+        writer: _Writer(),
+        productSearchReader: reader,
+      );
+      // Not `pumpAndSettle`: staying on the shimmer is the whole assertion, and
+      // a shimmer never settles.
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(
+        find.byKey(const ValueKey('inventory-empty-catalog')),
+        findsNothing,
+        reason: 'an empty cache is not the same fact as an empty catalog',
+      );
+      expect(
+        find.byKey(const ValueKey('catalog-management-page')),
+        findsNothing,
+      );
+    },
+  );
+
   testWidgets('a business with no categories is told what comes first', (
     tester,
   ) async {
@@ -725,12 +798,7 @@ void main() {
     // writes the product and that entry in one transaction, so the figure is
     // typed once, here.
     final writer = _Writer();
-    await _pump(
-      tester,
-      _controller(),
-      _Reader.seeded(),
-      writer: writer,
-    );
+    await _pump(tester, _controller(), _Reader.seeded(), writer: writer);
 
     await _fillProduct(
       tester,
@@ -757,12 +825,7 @@ void main() {
     // are added before anything arrives. It is deliberately not part of the
     // submit condition either, so nobody types a zero to add a product.
     final writer = _Writer();
-    await _pump(
-      tester,
-      _controller(),
-      _Reader.seeded(),
-      writer: writer,
-    );
+    await _pump(tester, _controller(), _Reader.seeded(), writer: writer);
 
     await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
     await _confirmProduct(tester);
@@ -780,12 +843,7 @@ void main() {
     // idempotency record. And refused rather than read as zero, which would be
     // stock the shopkeeper believes they recorded.
     final writer = _Writer();
-    await _pump(
-      tester,
-      _controller(),
-      _Reader.seeded(),
-      writer: writer,
-    );
+    await _pump(tester, _controller(), _Reader.seeded(), writer: writer);
 
     await _fillProduct(
       tester,
@@ -1850,7 +1908,9 @@ void main() {
 Future<void> _pump(
   WidgetTester tester,
   TenantSessionController controller,
-  _Reader reader, {
+  // Widened from `_Reader` on 2026-09-14 so a reader that also holds a device
+  // copy can be pumped through the same helper.
+  TenantDataReader reader, {
   TenantCatalogWriter? writer,
   UpdateProductCallable? callable,
   WidgetBuilder? bulkRoute,
@@ -2270,24 +2330,27 @@ final class _Reader implements TenantDataReader {
         },
       });
 
-  factory _Reader.seeded({int productCount = 2, double? cost, int quantity = 40}) =>
-      _Reader(<String, Map<String, Map<String, Object?>>>{
-        _categoriesPath: <String, Map<String, Object?>>{
-          'cat-bakery': <String, Object?>{'name': 'Bakery'},
-          'cat-drinks': <String, Object?>{'name': 'Drinks'},
+  factory _Reader.seeded({
+    int productCount = 2,
+    double? cost,
+    int quantity = 40,
+  }) => _Reader(<String, Map<String, Map<String, Object?>>>{
+    _categoriesPath: <String, Map<String, Object?>>{
+      'cat-bakery': <String, Object?>{'name': 'Bakery'},
+      'cat-drinks': <String, Object?>{'name': 'Drinks'},
+    },
+    _productsPath: <String, Map<String, Object?>>{
+      for (var index = 1; index <= productCount; index++)
+        'pd-$index': <String, Object?>{
+          'name': index == 1 ? 'White bread loaf' : 'Product $index',
+          'SKU': '616110000001$index',
+          'price': 65,
+          if (cost != null && index == 1) 'cost': cost,
+          'quantity': index == 1 ? quantity : index,
+          'categoryId': 'cat-bakery',
         },
-        _productsPath: <String, Map<String, Object?>>{
-          for (var index = 1; index <= productCount; index++)
-            'pd-$index': <String, Object?>{
-              'name': index == 1 ? 'White bread loaf' : 'Product $index',
-              'SKU': '616110000001$index',
-              'price': 65,
-              if (cost != null && index == 1) 'cost': cost,
-              'quantity': index == 1 ? quantity : index,
-              'categoryId': 'cat-bakery',
-            },
-        },
-      });
+    },
+  });
 
   final Map<String, Map<String, Map<String, Object?>>> _collections;
   final bool _fails;
@@ -2317,6 +2380,65 @@ final class _Reader implements TenantDataReader {
             data: documents[id]!,
           ),
     ].take(query.limit).toList();
+  }
+}
+
+/// The copy this device holds: documents and product search over one store.
+final class _DeviceCopy implements TenantDataReader, TenantProductSearchReader {
+  _DeviceCopy({required this.documents, required this.search});
+
+  final _Reader documents;
+  final _SearchReader search;
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) =>
+      documents.getDocument(path);
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) => documents.getCollectionPage(query);
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantProducts(
+    TenantProductSearchQuery query,
+  ) => search.searchTenantProducts(query);
+}
+
+/// A live reader that also holds a copy on this device, and never answers.
+///
+/// **[cacheOnly] hands back a different object on purpose.** The defect this
+/// stands guard over paired the cached document reader with the live
+/// product-search reader, and only two readers that can be told apart can say
+/// which pass asked. Every live read here hangs rather than failing, which is
+/// what a socket on a phone with no signal does.
+final class _LiveWithDeviceCopy
+    implements TenantCacheReadable, TenantProductSearchReader {
+  _LiveWithDeviceCopy(this._device);
+
+  final _DeviceCopy _device;
+
+  /// How many searches went over the network. Must stay zero on a cached pass.
+  int liveSearchQueries = 0;
+
+  @override
+  TenantDataReader get cacheOnly => _device;
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) =>
+      Completer<TenantDocumentSnapshot?>().future;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) => Completer<List<TenantQueryDocumentSnapshot>>().future;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantProducts(
+    TenantProductSearchQuery query,
+  ) {
+    liveSearchQueries++;
+    return Completer<List<TenantQueryDocumentSnapshot>>().future;
   }
 }
 

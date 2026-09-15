@@ -149,6 +149,17 @@ Future<void> main() async {
               .productImageDraftStorageKey,
         ),
       );
+      // The request IDs of an import that has not finished. Its own box for the
+      // reason the count above has one: what it holds is the only thing that
+      // can tell a stopped import from a fresh one, and losing it with a sale
+      // would mean creating four hundred products twice.
+      final productImportAttempts = await HiveTenantProductImportAttempts.open(
+        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+          storage: secureValueStore,
+          storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+              .productImageDraftStorageKey,
+        ),
+      );
       // Photographs this device has already downloaded, so a catalog draws on a
       // cold start without fetching it all again and draws at all with no
       // signal. Its own boxes, unencrypted and bounded - see
@@ -276,6 +287,7 @@ Future<void> main() async {
             tenantMutationStore: tenantMutationStore,
             productImageDrafts: productImageDrafts,
             stockTakeDrafts: stockTakeDrafts,
+            productImportAttempts: productImportAttempts,
             tenantImageCache: tenantImageCache,
             checkoutCatalogCache: checkoutCatalogCache,
             checkoutReceiptCounters: checkoutReceiptCounters,
@@ -372,6 +384,7 @@ class SpiritPOSApp extends StatelessWidget {
     required this.tenantMutationStore,
     required this.productImageDrafts,
     required this.stockTakeDrafts,
+    required this.productImportAttempts,
     required this.tenantImageCache,
     required this.checkoutCatalogCache,
     required this.checkoutReceiptCounters,
@@ -396,6 +409,10 @@ class SpiritPOSApp extends StatelessWidget {
   final HiveTenantProductImageDrafts productImageDrafts;
   final HiveTenantStockTakeDrafts stockTakeDrafts;
 
+  /// The request IDs of an import that stopped part way, so it can be finished
+  /// rather than run again under keys the server has never seen.
+  final HiveTenantProductImportAttempts productImportAttempts;
+
   /// Photographs already published, kept on this device. Null where the boxes
   /// would not open, which draws every picture from the network exactly as the
   /// app did before the store existed.
@@ -418,6 +435,7 @@ class SpiritPOSApp extends StatelessWidget {
   /// How the account-creation wizard pushed over the routing shell tells it that
   /// the business it resolved against no longer exists in the state it saw.
   final TenantBootstrapRefreshSignals bootstrapRefreshSignals;
+
   /// The emailed invitation the app was opened on, and the ones that arrive
   /// later. Null in a host that no link can reach.
   final InvitationLinkIntake? invitationIntake;
@@ -457,8 +475,9 @@ class SpiritPOSApp extends StatelessWidget {
   /// own copy - so both must be able to listen, and the shell compares the
   /// stream by identity to decide whether to resubscribe. A fresh
   /// `authStateChanges()` per build would resubscribe forever.
-  static final Stream<Object?> _identityChanges =
-      FirebaseAuth.instance.authStateChanges().asBroadcastStream();
+  static final Stream<Object?> _identityChanges = FirebaseAuth.instance
+      .authStateChanges()
+      .asBroadcastStream();
 
   /// Trades a credential the server minted for a live session on this device.
   ///
@@ -664,7 +683,9 @@ class SpiritPOSApp extends StatelessWidget {
       // and it was this one. Reachable only if signing out races a live session,
       // which is exactly the case nobody would be watching for.
       if (uid == null) {
-        throw StateError('There is no signed-in account to record this against.');
+        throw StateError(
+          'There is no signed-in account to record this against.',
+        );
       }
       await tenantMutationStore.enqueue(
         uid: uid,
@@ -920,92 +941,110 @@ class SpiritPOSApp extends StatelessWidget {
               return token.claims?['platformRole'] == 'superAdmin';
             },
             tenantDataReader: tenantDataReader,
-            // **The hub, restored 2026-08-29.** This slot held the daily summary,
-            // then the weekly report from 2026-08-27 - and a slot that can only
-            // name one report is why the other five had no entrance. The old app
-            // reached its reports through a hub and this does again, so the daily
-            // summary keeps the reconciliation chain it always declared while the
-            // week sits beside it rather than in its place.
-            dailySummaryRoute: (reader) => TenantReportsHubScreen(
-              // The reconciled totals, and - one day at a time - why each day is in
-              // the state it is. The explanation is reached from the summary itself
-              // rather than from the hub, because that is where a manager already
-              // asks whether a day is reconciled.
-              dailySummaryRoute: () => TenantDailySummaryScreen(
+            // **The hub is retired, 2026-09-14, at the developer's direction.**
+            // It was restored on 2026-08-29 because a slot that can name only one
+            // report had left the other five with no entrance, and a menu was the
+            // cheapest way to name six things. What it cost is a step in front of
+            // every one of them: the old mono-tenant app put the week on the slot
+            // itself and made its figures the doors, so *Total sales* opened the
+            // sales report rather than a list whose first row opened it.
+            //
+            // The week is that page again, and the five reports are cards on its
+            // own grid. Each still re-asks the role question with its own domain's
+            // list - see `WeeklyReportDestination` - so a role that opens *Reports*
+            // still sees only the reports it may read.
+            dailySummaryRoute: (reader) => TenantWeeklyReportScreen(
+              reader: reader,
+              callable: salesTotalsCallable,
+              checkoutOutbox: checkoutOutbox,
+              // The sale-line roll-up behind *Top selling items* and *Recent
+              // transactions* needs the history reader, which the plain
+              // constructor cannot reach.
+              salesRepositoryFactory: (session) => TenantSaleHistoryRepository(
+                session: session,
                 reader: reader,
-                reconciliationRoute: (businessDate) =>
-                    TenantReconciliationStatusScreen(
-                      reader: reader,
-                      businessDate: businessDate,
-                      actions: reconciliationActions,
-                    ),
-                reconciliationRoles:
-                    TenantReconciliationStatusRepository.allowedRoles,
-                // Reached from the summary rather than the hub for the same reason:
-                // the summary is where somebody learns that today has no reconciled
-                // figures yet, and this is the answer to that.
-                salesTotalsRoute: () => TenantSalesTotalsScreen(
-                  callable: salesTotalsCallable,
-                  reader: reader,
-                  checkoutOutbox: checkoutOutbox,
+                reportReader: tenantDataReader,
+              ),
+              destinations: WeeklyReportDestinations(
+                // What *Total sales* and *Transactions* elaborate into: the one
+                // surface that can total today and split it by how each sale was
+                // paid for.
+                salesTotals: WeeklyReportDestination(
+                  build: () => TenantSalesTotalsScreen(
+                    callable: salesTotalsCallable,
+                    reader: reader,
+                    checkoutOutbox: checkoutOutbox,
+                  ),
+                  roles: TenantSalesTotalsGateway.allowedRoles,
                 ),
-                salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
-              ),
-              dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
-              // **The old app's weekly Reports & Analytics page**: the
-              // week-against-week comparison is the reading this product did not
-              // otherwise have.
-              weeklyReportRoute: () => TenantWeeklyReportScreen(
-                reader: reader,
-                callable: salesTotalsCallable,
-                checkoutOutbox: checkoutOutbox,
-                // The sale-line roll-up behind *Top selling items* and *Recent
-                // transactions* needs the history reader, which the plain
-                // constructor cannot reach.
-                salesRepositoryFactory: (session) =>
-                    TenantSaleHistoryRepository(
-                      session: session,
+                // The reconciled totals, and - one day at a time - why each day is
+                // in the state it is. The explanation stays reached from the
+                // summary itself, which is where a manager already asks.
+                dailySummary: WeeklyReportDestination(
+                  build: () => TenantDailySummaryScreen(
+                    reader: reader,
+                    reconciliationRoute: (businessDate) =>
+                        TenantReconciliationStatusScreen(
+                          reader: reader,
+                          businessDate: businessDate,
+                          actions: reconciliationActions,
+                        ),
+                    reconciliationRoles:
+                        TenantReconciliationStatusRepository.allowedRoles,
+                    salesTotalsRoute: () => TenantSalesTotalsScreen(
+                      callable: salesTotalsCallable,
                       reader: reader,
-                      reportReader: tenantDataReader,
+                      checkoutOutbox: checkoutOutbox,
                     ),
+                    salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
+                  ),
+                  roles: TenantDailyMetricsRepository.allowedRoles,
+                ),
+                // A calendar month, which nothing else in this product can name:
+                // every standing period ends today, so once August began nothing
+                // could be asked how July went. It stays its own screen because it
+                // cannot reuse this page's loader - two range requests rather than
+                // one per day, which a month cannot afford.
+                monthlyReport: WeeklyReportDestination(
+                  build: () => TenantMonthlyReportScreen(
+                    reader: reader,
+                    callable: salesTotalsCallable,
+                    checkoutOutbox: checkoutOutbox,
+                  ),
+                  roles: TenantSalesTotalsGateway.allowedRoles,
+                ),
+                // **The one tap the badge on *Reports* needs.** These records were
+                // reachable only through the daily summary, then a run, then its
+                // differences - a route nobody walks unless they already know
+                // something is waiting at the end of it, which is precisely why a
+                // recorded difference could sit unread.
+                differences: WeeklyReportDestination(
+                  build: () => TenantReconciliationAnomalyScreen(
+                    reader: reader,
+                    actions: reconciliationActions,
+                  ),
+                  roles: TenantReconciliationAnomalyRepository.allowedRoles,
+                ),
+                // **Given a door at last.** Built, tested and unreachable: the
+                // route was declared on the landing screen and on the catalog
+                // panel and consumed by neither, so the only surface that can say
+                // what moved across the whole business has never been openable.
+                stockMovements: WeeklyReportDestination(
+                  build: () => TenantStockMovementFeedScreen(
+                    reader: reader,
+                    groupReader: tenantDataReader,
+                    productLedgerRoute: (productId) =>
+                        TenantProductLedgerScreen(
+                          reader: reader,
+                          productId: productId,
+                        ),
+                  ),
+                  roles: TenantStockMovementFeedRepository.allowedRoles,
+                ),
+                openDifferenceCount: (sessions) =>
+                    openDifferencesFactory(sessions).openCount,
               ),
-              weeklyReportRoles: TenantSalesTotalsGateway.allowedRoles,
-              // A calendar month, which nothing else in this product can name: every
-              // standing period ends today, so once August began nothing could be
-              // asked how July went. Two range requests rather than the weekly
-              // report's one-per-day, which a month cannot afford.
-              monthlyReportRoute: () => TenantMonthlyReportScreen(
-                reader: reader,
-                callable: salesTotalsCallable,
-                checkoutOutbox: checkoutOutbox,
-              ),
-              monthlyReportRoles: TenantSalesTotalsGateway.allowedRoles,
-              // The same screen the summary opens, reached directly as well: it is
-              // the only surface that can total *today*, and the summary it used to
-              // sit behind is normally blank for today by design.
-              salesTotalsRoute: () => TenantSalesTotalsScreen(
-                callable: salesTotalsCallable,
-                reader: reader,
-                checkoutOutbox: checkoutOutbox,
-              ),
-              salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
-              // **The one tap the badge on *Reports* needs.** These records were
-              // reachable only through the daily summary, then a run, then its
-              // differences - a route nobody walks unless they already know
-              // something is waiting at the end of it, which is precisely why a
-              // recorded difference could sit unread.
-              differencesRoute: () => TenantReconciliationAnomalyScreen(
-                reader: reader,
-                actions: reconciliationActions,
-              ),
-              differencesRoles:
-                  TenantReconciliationAnomalyRepository.allowedRoles,
-              openDifferenceCount: (sessions) =>
-                  openDifferencesFactory(sessions).openCount,
             ),
-            // The hub itself is offered to whoever may read any report on it. Every
-            // card then re-asks the question with its own domain's list, so a role
-            // that reaches the hub still sees only the reports it may read.
             dailySummaryRoles: TenantSalesTotalsGateway.allowedRoles,
             expensesRoute: (reader) =>
                 TenantExpensesScreen(reader: reader, writer: expenseWriter),
@@ -1110,7 +1149,7 @@ class SpiritPOSApp extends StatelessWidget {
                     onQueued: checkoutSyncSignals.requestSyncAfterSave,
                   ),
                 ),
-              child: TenantCheckoutScreen(
+                child: TenantCheckoutScreen(
                   cache: checkoutCatalogCache,
                   // The decorator is what makes a saved sale reach the server while the
                   // till stays open. It is wrapped here rather than inside the screen so
@@ -1195,9 +1234,11 @@ class SpiritPOSApp extends StatelessWidget {
                         // The catalog form's own cut-out, offered against a logo
                         // for the same reason it is offered against a product
                         // photograph: it is a picture off a phone either way.
-                        backgroundRemover: CallableTenantProductBackgroundRemover(
-                          callable: FirebaseRemoveProductBackgroundCallable(),
-                        ),
+                        backgroundRemover:
+                            CallableTenantProductBackgroundRemover(
+                              callable:
+                                  FirebaseRemoveProductBackgroundCallable(),
+                            ),
                         // What the receipt will now say, on the roll, the moment it
                         // is saved. Composed here because this is the only place
                         // holding the ESC/POS profile and the platform transport at
@@ -1233,8 +1274,7 @@ class SpiritPOSApp extends StatelessWidget {
                     writer: QueuedTenantConfigurationWriter(
                       store: tenantMutationStore,
                       cacheReader: reader.cached ?? reader,
-                      currentUid: () =>
-                          FirebaseAuth.instance.currentUser?.uid,
+                      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
                       remote: FirebaseTenantConfigurationDocumentWriter(
                         firestore: FirebaseFirestore.instance,
                         isOnline: isOnline,
@@ -1271,8 +1311,7 @@ class SpiritPOSApp extends StatelessWidget {
                     writer: QueuedTenantConfigurationWriter(
                       store: tenantMutationStore,
                       cacheReader: reader.cached ?? reader,
-                      currentUid: () =>
-                          FirebaseAuth.instance.currentUser?.uid,
+                      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
                       remote: FirebaseTenantConfigurationDocumentWriter(
                         firestore: FirebaseFirestore.instance,
                         isOnline: isOnline,
@@ -1285,7 +1324,8 @@ class SpiritPOSApp extends StatelessWidget {
             settingsRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
             // The printer tab's own list, so the shortcut and the tab behind it
             // are offered to exactly the same people.
-            printerSettingsRoles: TenantPrinterConfigurationPublisher.allowedRoles,
+            printerSettingsRoles:
+                TenantPrinterConfigurationPublisher.allowedRoles,
             printQueueCount: () => _printQueueCount(checkoutPrintJobs),
             // Nightly reconciliation has been recording differences that nobody
             // sees unless they go looking for them. This is the count of the ones
@@ -1334,6 +1374,16 @@ class SpiritPOSApp extends StatelessWidget {
               reader: reader,
               productSearchReader: tenantDataReader,
               imageStore: FirebaseTenantProductImageStore(),
+              // **Where a photograph waits, and the reason adding one offline
+              // works at all.** Without this the form falls to the inline
+              // `TenantProductImageStore.upload` - a Storage `putData` with no
+              // timeout, which offline retries for Storage's own ten minutes
+              // and holds the whole catalog panel disabled for every second of
+              // it. Staged here instead: the bytes go to an encrypted box on
+              // this device, the product is written immediately, and
+              // `TenantProductImageUploadWorker` above carries the picture up
+              // once the product itself is on the server.
+              imageDrafts: productImageDrafts,
               // *Remove background*, restored from the old catalog form. The key
               // lives in the deployment's secret manager and the call is made by
               // `removeProductBackground`; a deployment that never set the secret
@@ -1402,6 +1452,10 @@ class SpiritPOSApp extends StatelessWidget {
                 // things its widget tests cannot do.
                 sheetPicker: const FilePickerTenantProductSheetPicker(),
                 sheetSaver: const SharedFileTenantProductSheetSaver(),
+                // Where an import that stopped part way is kept, so it can be
+                // finished under the request IDs it was started under rather
+                // than run again under new ones.
+                attempts: productImportAttempts,
                 onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
               ),
               onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,

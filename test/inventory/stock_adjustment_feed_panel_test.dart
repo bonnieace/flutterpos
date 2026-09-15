@@ -7,6 +7,8 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/collection_pages.dart';
+
 import '../support/text.dart';
 
 void main() {
@@ -94,7 +96,11 @@ void main() {
           .data,
       '+6 • ${TenantStockAdjustmentType.restock.label}',
     );
-    expect(reader.queries.single.descending, isFalse);
+    // Newest first, by when the correction was recorded. An adjustment ID is
+    // `sa_` plus a digest, so what this page used to be ordered by said nothing
+    // about when anything happened.
+    expect(reader.queries.single.descending, isTrue);
+    expect(reader.queries.single.order, TenantCollectionOrder.createdAt);
     expect(reader.queries.single.equalityFilters, isEmpty);
   });
 
@@ -145,21 +151,23 @@ void main() {
   });
 
   testWidgets('the feed pages forward and back', (tester) async {
+    // Recorded oldest-first in ID order, so the first page holding `sa_3` is
+    // the page being newest-first rather than a coincidence of the IDs.
     final reader = _Reader()
       ..respond(<TenantQueryDocumentSnapshot>[
-        _adjustment('sa_1'),
-        _adjustment('sa_2'),
-        _adjustment('sa_3'),
+        _adjustment('sa_1', recordedAt: DateTime.utc(2026, 8, 1, 9)),
+        _adjustment('sa_2', recordedAt: DateTime.utc(2026, 8, 2, 9)),
+        _adjustment('sa_3', recordedAt: DateTime.utc(2026, 8, 3, 9)),
       ]);
 
     await _pump(tester, _controller(), reader, pageSize: 2);
 
     expect(
-      find.byKey(const ValueKey('stock-adjustments-entry-sa_1')),
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_3')),
       findsOne,
     );
     expect(
-      find.byKey(const ValueKey('stock-adjustments-entry-sa_3')),
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_1')),
       findsNothing,
     );
 
@@ -167,16 +175,20 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(
-      find.byKey(const ValueKey('stock-adjustments-entry-sa_3')),
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_1')),
       findsOne,
     );
     expect(reader.queries.last.startAfterDocumentId, 'sa_2');
+    expect(
+      reader.queries.last.startAfterOrderValue,
+      DateTime.utc(2026, 8, 2, 9),
+    );
 
     await tester.tap(find.byKey(const ValueKey('stock-adjustments-previous')));
     await tester.pump();
     await tester.pump();
     expect(
-      find.byKey(const ValueKey('stock-adjustments-entry-sa_1')),
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_3')),
       findsOne,
     );
   });
@@ -340,6 +352,7 @@ TenantProduct _product() => TenantProduct.fromDocument(
 TenantQueryDocumentSnapshot _adjustment(
   String adjustmentId, {
   String tenantId = 'tenant-a',
+  DateTime? recordedAt,
   Map<String, Object?>? overrides,
 }) {
   final data = <String, Object?>{
@@ -353,7 +366,7 @@ TenantQueryDocumentSnapshot _adjustment(
     'reason': 'Broken in transit',
     'actorUid': 'manager-a',
     'requestId': 'adjust-stock-abcdefgh',
-    'createdAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 9)),
+    'createdAt': Timestamp.fromDate(recordedAt ?? DateTime.utc(2026, 8, 1, 9)),
   };
   if (overrides != null) data.addAll(overrides);
   return TenantQueryDocumentSnapshot(
@@ -430,14 +443,11 @@ final class _Reader implements TenantDataReader {
       _pending.add(completer);
       return completer.future;
     }
-    final cursor = query.startAfterDocumentId;
-    final matches = <TenantQueryDocumentSnapshot>[];
-    for (final snapshot in _page) {
-      final id = snapshot.path.split('/').last;
-      if (cursor != null && id.compareTo(cursor) <= 0) continue;
-      matches.add(snapshot);
-      if (matches.length >= query.limit) break;
-    }
-    return Future<List<TenantQueryDocumentSnapshot>>.value(matches);
+    // Ordered, cursored and filtered the way Firestore would: the stock ledger
+    // is newest-first by time now, and the repository proves the order of what
+    // it is handed.
+    return Future<List<TenantQueryDocumentSnapshot>>.value(
+      tenantCollectionPageOf(query, _page),
+    );
   }
 }

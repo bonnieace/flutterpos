@@ -193,6 +193,7 @@ final class TenantRoutingShell extends StatefulWidget {
   /// Exchanges a server-minted credential for a live session; forwarded to the
   /// onboarding flow. See `OnboardingFlow.resumeSession`.
   final Future<void> Function(String token)? resumeSession;
+
   /// The invitation the app was launched on, if it was launched on one.
   final TenantInvitationLink? invitationLink;
   final bool invalidInvitationLink;
@@ -251,9 +252,9 @@ final class TenantRoutingShell extends StatefulWidget {
   final PlatformGlobalUserDataSource? platformGlobalUserDataSource;
   final SetTenantLifecycleCallable? setTenantLifecycleCallable;
   final SetGlobalUserStatusCallable? setGlobalUserStatusCallable;
-  final PlatformTenantRequestIdFactory?
-  platformTenantReviewRequestIdFactory;
+  final PlatformTenantRequestIdFactory? platformTenantReviewRequestIdFactory;
   final TenantDataReader? tenantDataReader;
+
   /// Fires when this device has a network again.
   ///
   /// **What it is for is the offline card.** `TenantBootstrapResult.fromCache`
@@ -488,16 +489,13 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   /// invitations cannot be accepted at once, and the one just tapped is the one
   /// the person is looking at; the earlier one is still in their mailbox.
   void _subscribeToInvitationArrivals() {
-    _invitationSubscription = widget.invitationArrivals?.listen(
-      (arrival) {
-        if (!mounted) return;
-        setState(() {
-          _pendingInvitationLink = arrival.link;
-          _hasInvalidInvitationLink = arrival.invalid;
-        });
-      },
-      onError: (Object _, StackTrace _) {},
-    );
+    _invitationSubscription = widget.invitationArrivals?.listen((arrival) {
+      if (!mounted) return;
+      setState(() {
+        _pendingInvitationLink = arrival.link;
+        _hasInvalidInvitationLink = arrival.invalid;
+      });
+    }, onError: (Object _, StackTrace _) {});
   }
 
   void _subscribeToReconnects() {
@@ -3259,14 +3257,15 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         // shows.
         label: 'Reports',
         description:
-            'Weekly sales, profit and best sellers, against the week before.',
+            'Weekly sales, profit and best sellers, and every other report '
+            'from the figures themselves.',
         group: 'Reports',
         icon: Icons.insights_outlined,
         // **The one figure on this page that is asking for something.** Nightly
         // reconciliation records differences that nobody sees unless they go
-        // looking; this is the count of the ones still open, and the hub behind
-        // it says the same thing in a sentence - a number alone is not a
-        // status.
+        // looking; this is the count of the ones still open, and the
+        // *Differences* card it now opens onto says the same thing in a
+        // sentence - a number alone is not a status.
         badgeCount: _openDifferences(context),
         status: switch (_openDifferences(context)) {
           null || 0 => null,
@@ -3321,7 +3320,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // standing at the counter with a roll of paper that will not come out. It
     // opens the same screen at its own tab, so there is still exactly one
     // printer panel, one guard and one role list.
-    if (settingsRoute != null && membership.role.canAccess(printerSettingsRoles))
+    if (settingsRoute != null &&
+        membership.role.canAccess(printerSettingsRoles))
       HomeDestination(
         destinationKey: const ValueKey('printer-settings'),
         label: 'Printer',

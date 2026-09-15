@@ -3,6 +3,8 @@ import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/collection_pages.dart';
+
 void main() {
   group('stock movement read model', () {
     test('decodes the three shapes the server actually writes', () {
@@ -125,9 +127,12 @@ void main() {
         reader.queries.single.collectionPath,
         'tenants/tenant-a/products/product-1/stock_movements',
       );
-      // Movement IDs are digests and `sale_{saleId}` values, so document order
-      // carries no time information and a newest-first page would be a lie.
-      expect(reader.queries.single.descending, isFalse);
+      // **Newest first, by `occurredAt`, since 2026-09-14.** Movement IDs are
+      // digests and `sale_{saleId}` values, so document order carried no time
+      // information at all - which made "what happened to this product most
+      // recently" a matter of reading every page and comparing by eye.
+      expect(reader.queries.single.descending, isTrue);
+      expect(reader.queries.single.order, TenantCollectionOrder.occurredAt);
       expect(reader.queries.single.equalityFilters, isEmpty);
       expect(view.product.quantity, 7);
       expect(view.movements.items.single.id, 'sa_abc');
@@ -214,10 +219,12 @@ void main() {
     test('pages are bounded and advance a stable cursor', () async {
       final reader = _StockReader(
         product: _productData(),
+        // Arranged so "newest first" and "by ID" cannot both hold: the
+        // most recent movement is the one whose ID sorts last.
         movements: <String, Map<String, Object?>>{
-          'mv-1': _saleData(),
-          'mv-2': _saleData(),
-          'mv-3': _saleData(),
+          'mv-1': _saleData(at: DateTime.utc(2026, 8, 1, 11)),
+          'mv-2': _saleData(at: DateTime.utc(2026, 8, 2, 11)),
+          'mv-3': _saleData(at: DateTime.utc(2026, 8, 3, 11)),
         },
       );
       final repository = _repository(reader);
@@ -226,9 +233,9 @@ void main() {
         productId: 'product-1',
         pageSize: 2,
       );
-      expect(page.items.map((item) => item.id), <String>['mv-1', 'mv-2']);
+      expect(page.items.map((item) => item.id), <String>['mv-3', 'mv-2']);
       expect(page.hasMore, isTrue);
-      expect(page.nextCursor, 'mv-2');
+      expect(page.nextCursor, endsWith('|mv-2'));
 
       final last = await repository.loadMovements(
         productId: 'product-1',
@@ -236,7 +243,11 @@ void main() {
         cursor: page.nextCursor,
       );
       expect(reader.queries.last.startAfterDocumentId, 'mv-2');
-      expect(last.items.single.id, 'mv-3');
+      expect(
+        reader.queries.last.startAfterOrderValue,
+        DateTime.utc(2026, 8, 2, 11),
+      );
+      expect(last.items.single.id, 'mv-1');
       expect(last.hasMore, isFalse);
       await expectLater(
         repository.loadMovements(productId: 'product-1', pageSize: 51),
@@ -255,9 +266,9 @@ void main() {
         movements: <String, Map<String, Object?>>{'sa_abc': _adjustmentData()},
       );
 
-      final ledger = await _repository(reader).loadLedger(
-        productId: 'product-1',
-      );
+      final ledger = await _repository(
+        reader,
+      ).loadLedger(productId: 'product-1');
 
       expect(reader.documentPaths, <String>[
         'tenants/tenant-a/products/product-1',
@@ -266,7 +277,8 @@ void main() {
         reader.queries.single.collectionPath,
         'tenants/tenant-a/products/product-1/stock_movements',
       );
-      expect(reader.queries.single.descending, isFalse);
+      expect(reader.queries.single.descending, isTrue);
+      expect(reader.queries.single.order, TenantCollectionOrder.occurredAt);
       expect(reader.queries.single.equalityFilters, isEmpty);
       expect(ledger.productId, 'product-1');
       expect(ledger.productExists, isTrue);
@@ -283,9 +295,9 @@ void main() {
         movements: <String, Map<String, Object?>>{'sa_abc': _adjustmentData()},
       );
 
-      final ledger = await _repository(reader).loadLedger(
-        productId: 'product-1',
-      );
+      final ledger = await _repository(
+        reader,
+      ).loadLedger(productId: 'product-1');
 
       expect(ledger.productExists, isFalse);
       expect(ledger.product, isNull);
@@ -307,25 +319,28 @@ void main() {
       );
     });
 
-    test('a product ID that is not a document ID never reaches a path', () async {
-      // A row of the business-wide feed is where this ID comes from, so unlike
-      // the stock route it was never validated by a decoded catalog record.
-      final reader = _StockReader(
-        product: _productData(),
-        movements: const <String, Map<String, Object?>>{},
-      );
-      final repository = _repository(reader);
-
-      for (final productId in <String>['', 'a/b', '.', '..', 'x' * 1501]) {
-        await expectLater(
-          repository.loadLedger(productId: productId),
-          _code('invalid_product_id'),
-          reason: productId,
+    test(
+      'a product ID that is not a document ID never reaches a path',
+      () async {
+        // A row of the business-wide feed is where this ID comes from, so unlike
+        // the stock route it was never validated by a decoded catalog record.
+        final reader = _StockReader(
+          product: _productData(),
+          movements: const <String, Map<String, Object?>>{},
         );
-      }
-      expect(reader.documentPaths, isEmpty);
-      expect(reader.queries, isEmpty);
-    });
+        final repository = _repository(reader);
+
+        for (final productId in <String>['', 'a/b', '.', '..', 'x' * 1501]) {
+          await expectLater(
+            repository.loadLedger(productId: productId),
+            _code('invalid_product_id'),
+            reason: productId,
+          );
+        }
+        expect(reader.documentPaths, isEmpty);
+        expect(reader.queries, isEmpty);
+      },
+    );
 
     test('a cashier is refused before any read is issued', () async {
       final reader = _StockReader(
@@ -346,29 +361,32 @@ void main() {
       expect(reader.queries, isEmpty);
     });
 
-    test('a product answered from another business still fails closed', () async {
-      // Tolerating absence must not tolerate a foreign document: an absent
-      // product is a fact about this business, a foreign one is a broken
-      // boundary.
-      final reader = _StockReader(
-        product: _productData(),
-        movements: const <String, Map<String, Object?>>{},
-        productPath: 'tenants/tenant-b/products/product-1',
-      );
+    test(
+      'a product answered from another business still fails closed',
+      () async {
+        // Tolerating absence must not tolerate a foreign document: an absent
+        // product is a fact about this business, a foreign one is a broken
+        // boundary.
+        final reader = _StockReader(
+          product: _productData(),
+          movements: const <String, Map<String, Object?>>{},
+          productPath: 'tenants/tenant-b/products/product-1',
+        );
 
-      await expectLater(
-        _repository(reader).findProduct('product-1'),
-        throwsA(isA<TenantScopeViolation>()),
-      );
-    });
+        await expectLater(
+          _repository(reader).findProduct('product-1'),
+          throwsA(isA<TenantScopeViolation>()),
+        );
+      },
+    );
 
     test('the ledger pages exactly as the stock route does', () async {
       final reader = _StockReader(
         product: null,
         movements: <String, Map<String, Object?>>{
-          'mv-1': _saleData(),
-          'mv-2': _saleData(),
-          'mv-3': _saleData(),
+          'mv-1': _saleData(at: DateTime.utc(2026, 8, 1, 11)),
+          'mv-2': _saleData(at: DateTime.utc(2026, 8, 2, 11)),
+          'mv-3': _saleData(at: DateTime.utc(2026, 8, 3, 11)),
         },
       );
       final repository = _repository(reader);
@@ -378,7 +396,7 @@ void main() {
         pageSize: 2,
       );
       expect(page.movements.items.map((item) => item.id), <String>[
-        'mv-1',
+        'mv-3',
         'mv-2',
       ]);
       expect(page.movements.hasMore, isTrue);
@@ -389,7 +407,7 @@ void main() {
         cursor: page.movements.nextCursor,
       );
       expect(reader.queries.last.startAfterDocumentId, 'mv-2');
-      expect(last.movements.items.single.id, 'mv-3');
+      expect(last.movements.items.single.id, 'mv-1');
       expect(last.movements.hasMore, isFalse);
     });
   });
@@ -449,7 +467,7 @@ Map<String, Object?> _returnData() => <String, Object?>{
   'recordedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 10)),
 };
 
-Map<String, Object?> _saleData() => <String, Object?>{
+Map<String, Object?> _saleData({DateTime? at}) => <String, Object?>{
   'movementId': 'sale_chk-1',
   'tenantId': 'tenant-a',
   'productId': 'product-1',
@@ -457,7 +475,10 @@ Map<String, Object?> _saleData() => <String, Object?>{
   'sourceId': 'chk-1',
   'quantityDelta': -2,
   'lineCount': 1,
-  'recordedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 11)),
+  // The ledger is ordered by when the stock moved, which for a sale reconciled
+  // later is the sale rather than the write. Every writer sets both.
+  'occurredAt': Timestamp.fromDate(at ?? DateTime.utc(2026, 8, 1, 11)),
+  'recordedAt': Timestamp.fromDate(at ?? DateTime.utc(2026, 8, 1, 11)),
 };
 
 Map<String, Object?> _productData() => <String, Object?>{
@@ -506,19 +527,14 @@ final class _StockReader implements TenantDataReader {
         TenantQueryDocumentSnapshot(path: path, data: _saleData()),
       ];
     }
-    final ids = movements.keys.toList()..sort();
-    final cursor = query.startAfterDocumentId;
-    final selected = <TenantQueryDocumentSnapshot>[];
-    for (final id in ids) {
-      if (cursor != null && id.compareTo(cursor) <= 0) continue;
-      if (selected.length >= query.limit) break;
-      selected.add(
+    // Ordered and cursored the way Firestore would: this ledger is newest-first
+    // by `occurredAt`, and the repository proves the order of what it is given.
+    return tenantCollectionPageOf(query, <TenantQueryDocumentSnapshot>[
+      for (final entry in movements.entries)
         TenantQueryDocumentSnapshot(
-          path: '${query.collectionPath}/$id',
-          data: <String, Object?>{...movements[id]!, 'movementId': id},
+          path: '${query.collectionPath}/${entry.key}',
+          data: <String, Object?>{...entry.value, 'movementId': entry.key},
         ),
-      );
-    }
-    return selected;
+    ]);
   }
 }

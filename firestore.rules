@@ -335,7 +335,18 @@ service cloud.firestore {
 
       match /categories/{categoryId} {
         allow read: if activeStaff(tenantId);
-        allow create, update, delete: if hasTenantRole(
+        // **Server-written since 2026-09-14, and for one reason.** Two
+        // categories folding to the same name cannot be told apart when a
+        // spreadsheet names that category, so `importProducts` refuses the row
+        // rather than guessing - and the only way it can be asked again is by
+        // document ID, which nothing in this product shows anybody. Preventing
+        // the ambiguity means reading every other category in the collection,
+        // and a rule may read the document being written and named documents,
+        // never a query. So `createCategory` and `renameCategory` make the
+        // check inside the transaction that writes, and a device queues the
+        // call exactly as it queues a product create.
+        allow create, update: if false;
+        allow delete: if hasTenantRole(
           tenantId,
           ['owner', 'admin', 'manager']
         );

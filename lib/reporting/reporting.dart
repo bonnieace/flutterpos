@@ -16,7 +16,6 @@ export 'reconciliation_run_panel.dart';
 export 'reconciliation_status.dart';
 export 'reconciliation_status_panel.dart';
 export 'reporting_currency.dart';
-export 'reports_hub_panel.dart';
 export 'sales_totals.dart';
 export 'sales_totals_choosers.dart';
 export 'sales_totals_panel.dart';

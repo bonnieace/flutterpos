@@ -277,6 +277,201 @@ void main() {
     await running;
   });
 
+  group('a product waits for the category it names', () {
+    /// Queues a category and a product filed under it, the way a device that
+    /// added both offline holds them.
+    Future<void> queueBoth({required String categoryId}) async {
+      await store.enqueue(
+        uid: 'owner-a',
+        tenantId: 'tenant-a',
+        operationId: 'category-create-$categoryId',
+        kind: TenantPendingMutationKind.categoryCreate,
+        targetPath: 'tenants/tenant-a/categories/$categoryId',
+        payload: const <String, Object?>{'name': 'Bakery'},
+      );
+      await store.enqueue(
+        uid: 'owner-a',
+        tenantId: 'tenant-a',
+        operationId: 'product-create-pd_abc',
+        kind: TenantPendingMutationKind.productCreate,
+        targetPath: 'tenants/tenant-a/products/pd_abc',
+        payload: <String, Object?>{
+          'name': 'White bread loaf',
+          'SKU': '6161100000019',
+          'price': 65.0,
+          'categoryId': categoryId,
+        },
+      );
+    }
+
+    test('the product is held back while its category is still queued', () async {
+      // **The race `createProduct` could not check for until now.** Groups drain
+      // concurrently, so without this the product could reach a server that has
+      // never heard of its category - and the refusal there is permanent.
+      await queueBoth(categoryId: 'ct_bakery');
+      final gateway = _DeferringGateway(holdCategory: true);
+
+      await TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'device-a',
+      ).run(_session());
+
+      expect(gateway.submitted, <String>['category-create-ct_bakery']);
+    });
+
+    test('it goes on the pass after its category settles', () async {
+      await queueBoth(categoryId: 'ct_bakery');
+      final gateway = _DeferringGateway();
+      final worker = TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'device-a',
+      );
+
+      await worker.run(_session());
+      await worker.run(_session());
+
+      expect(
+        gateway.submitted,
+        containsAllInOrder(<String>[
+          'category-create-ct_bakery',
+          'product-create-pd_abc',
+        ]),
+      );
+    });
+
+    test('waiting costs the record no attempt and no backoff', () async {
+      // Deferring is not a failure: nothing was sent, so nothing may be counted
+      // against the record. A deferral that burned an attempt would eventually
+      // exhaust a product whose category simply took a while.
+      await queueBoth(categoryId: 'ct_bakery');
+      final gateway = _DeferringGateway(holdCategory: true);
+
+      await TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'device-a',
+      ).run(_session());
+
+      final records = await store.recordsForSession(
+        uid: 'owner-a',
+        tenantId: 'tenant-a',
+      );
+      final product = records.firstWhere(
+        (record) => record.operationId == 'product-create-pd_abc',
+      );
+      expect(product.attemptCount, 0);
+      expect(product.state, TenantPendingMutationState.queued);
+    });
+
+    test('a product naming a category nobody queued is not held', () async {
+      // The ordinary case: the category is already on the server, so there is
+      // nothing to wait for and the product goes on the first pass.
+      await store.enqueue(
+        uid: 'owner-a',
+        tenantId: 'tenant-a',
+        operationId: 'product-create-pd_abc',
+        kind: TenantPendingMutationKind.productCreate,
+        targetPath: 'tenants/tenant-a/products/pd_abc',
+        payload: const <String, Object?>{
+          'name': 'White bread loaf',
+          'SKU': '6161100000019',
+          'price': 65.0,
+          'categoryId': 'ct_already_there',
+        },
+      );
+      final gateway = _DeferringGateway();
+
+      await TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'device-a',
+      ).run(_session());
+
+      expect(gateway.submitted, <String>['product-create-pd_abc']);
+    });
+  });
+
+  group('the category envelope', () {
+    /// The document a device composes for a category, as `documentData()`
+    /// writes it. Built here rather than imported so this pins the *shape the
+    /// queue holds*, which is what the envelope is derived from.
+    Map<String, Object?> composed({String name = 'Bakery'}) =>
+        <String, Object?>{'name': name, 'createdBy': 'user-a'};
+
+    Future<TenantPendingMutationRecord> queued({
+      TenantPendingMutationKind kind = TenantPendingMutationKind.categoryCreate,
+      Map<String, Object?>? payload,
+    }) => store.enqueue(
+      uid: 'user-a',
+      tenantId: 'tenant-a',
+      operationId: 'category-create-ct_abc',
+      kind: kind,
+      targetPath: 'tenants/tenant-a/categories/ct_abc',
+      payload: payload ?? composed(),
+    );
+
+    test('is derived from the record rather than stored in it', () async {
+      final payload = tenantCategoryCallablePayload(await queued());
+
+      expect(payload['tenantId'], 'tenant-a');
+      // From the path, which is the only place a category ID is ever written.
+      expect(payload['categoryId'], 'ct_abc');
+      expect(payload['document'], composed());
+      expect(payload.keys, <String>['tenantId', 'categoryId', 'document']);
+    });
+
+    test('a category queued before the callable existed still drains', () async {
+      // **The migration argument, as a test.** A build that wrote this document
+      // directly queued exactly this payload, and it has to reach
+      // `createCategory` untouched - otherwise closing `allow create` in the
+      // same release would have stranded work already durable on a phone. The
+      // server accepts `createdBy` and takes the actor from the request.
+      final payload = tenantCategoryCallablePayload(await queued());
+      final document = payload['document']! as Map<String, Object?>;
+
+      expect(document['createdBy'], 'user-a');
+      expect(document['name'], 'Bakery');
+    });
+
+    test('a rename derives the same envelope', () async {
+      final payload = tenantCategoryCallablePayload(
+        await queued(
+          kind: TenantPendingMutationKind.categoryRename,
+          payload: <String, Object?>{
+            'name': 'Baked goods',
+            'updatedBy': 'user-a',
+          },
+        ),
+      );
+
+      expect(payload['categoryId'], 'ct_abc');
+      expect(payload['document'], <String, Object?>{
+        'name': 'Baked goods',
+        'updatedBy': 'user-a',
+      });
+    });
+
+    test('both kinds reach the server through the Admin SDK', () {
+      // The classification the worker branches on. A device cannot decide
+      // whether a name is free - it can only see the categories it has read -
+      // so neither of these can be a document write again.
+      expect(
+        tenantMutationIsCallable(TenantPendingMutationKind.categoryCreate),
+        isTrue,
+      );
+      expect(
+        tenantMutationIsCallable(TenantPendingMutationKind.categoryRename),
+        isTrue,
+      );
+    });
+  });
+
   group('the createProduct envelope', () {
     /// The document a device composes for a product, as `documentData()` writes
     /// it. Built here rather than imported so this pins the *shape the queue
@@ -349,7 +544,6 @@ void main() {
       expect(second['document'], first['document']);
     });
   });
-
 }
 
 TenantSession _session() => TenantSession.active(
@@ -446,6 +640,40 @@ final class _ParallelGateway
     if (record.operationId.endsWith('-a')) await release.future;
     if (record.operationId.endsWith('-b') && !otherStarted.isCompleted) {
       otherStarted.complete();
+    }
+    return const TenantMutationSubmissionResult(
+      TenantMutationSubmissionOutcome.committed,
+    );
+  }
+}
+
+/// A gateway that can hold one kind back, so a pass can end with a category
+/// still unresolved.
+final class _DeferringGateway
+    implements
+        TenantMutationSubmissionGateway,
+        TenantMutationConfirmationGateway {
+  _DeferringGateway({this.holdCategory = false});
+
+  /// Whether a category create answers with an uncertain outcome, which is what
+  /// leaves it unresolved for the product behind it.
+  final bool holdCategory;
+
+  final List<String> submitted = <String>[];
+
+  @override
+  Future<Map<String, Object?>?> read(String targetPath) async => null;
+
+  @override
+  Future<TenantMutationSubmissionResult> submit(
+    TenantPendingMutationRecord record,
+  ) async {
+    submitted.add(record.operationId);
+    if (holdCategory &&
+        record.kind == TenantPendingMutationKind.categoryCreate) {
+      return const TenantMutationSubmissionResult(
+        TenantMutationSubmissionOutcome.uncertain,
+      );
     }
     return const TenantMutationSubmissionResult(
       TenantMutationSubmissionOutcome.committed,

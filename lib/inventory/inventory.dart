@@ -1,4 +1,5 @@
 export 'bulk_catalog.dart';
+export 'bulk_catalog_attempt_store.dart';
 export 'bulk_catalog_panel.dart';
 export 'product_sheet.dart';
 export 'catalog_management.dart';

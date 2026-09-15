@@ -214,8 +214,7 @@ final class _AdjustmentFeedContents extends StatelessWidget {
         SizedBox(height: tokens.spacing.s4),
         const Text(
           'An adjustment is permanent: correcting one means recording another. '
-          'This page is listed by record ID, which is not time order; each '
-          'entry states when it was recorded.',
+          'The most recently recorded are listed first.',
         ),
         SizedBox(height: tokens.spacing.s16),
         // §4.3's responsive contract: stacked cards on a phone, two-column cards

@@ -38,12 +38,100 @@ final class TenantQueryDocumentSnapshot {
 /// repository chose. Callers cannot supply them, and the reader may not add,
 /// drop, or reinterpret one. [descending] reverses the document-ID ordering
 /// only; the reader may not order by any other field.
+/// One stored instant, however the reader that answered spells it.
+///
+/// **Both spellings, because both are real.** Firestore answers a timestamp as
+/// its own `Timestamp`; every test double, every cached projection, and every
+/// record this device composed answers a `DateTime`. Anything else - including
+/// a server timestamp a local write has not had filled in yet - is null, and
+/// the caller decides whether that is a refusal or a fallback.
+DateTime? tenantStoredInstant(Object? value) {
+  if (value is DateTime) return value.toUtc();
+  if (value is Timestamp) return value.toDate().toUtc();
+  return null;
+}
+
+/// How a page of a collection is ordered, and by what.
+///
+/// **A typed enum, never a caller-supplied field name**, for the reason every
+/// other narrowing on this boundary is one: a repository decides what a surface
+/// may sort by, and a string would let a caller ask for an ordering no index
+/// serves and no proof below checks.
+///
+/// [documentId] is what every read here used until 2026-09-14 and what most of
+/// them still use. It is not a weaker choice - for a collection whose IDs are
+/// sequential or date-prefixed it *is* the chronological order, and it needs no
+/// composite index. The two time orderings exist for the stock ledger alone,
+/// where an ID is a digest and carries no time information whatever.
+enum TenantCollectionOrder {
+  /// By document ID, ascending or descending. Needs no composite index.
+  documentId(null),
+
+  /// By when the record was written, then by document ID to break ties.
+  createdAt('createdAt'),
+
+  /// By when the stock actually moved, then by document ID.
+  ///
+  /// Distinct from `recordedAt` deliberately: a sale reconciled hours later
+  /// moved its units when the sale happened, and "what happened most recently"
+  /// is a question about the shop, not about the server's write log.
+  occurredAt('occurredAt');
+
+  const TenantCollectionOrder(this.field);
+
+  /// The document field this orders by, or null to order by document ID.
+  final String? field;
+
+  bool get isByDocumentId => field == null;
+}
+
+/// The cursor a time-ordered page resumes after.
+///
+/// **Two values, because one is not enough.** Firestore orders by the named
+/// field and then by document ID, so resuming needs both: two movements
+/// recorded in the same millisecond are separated only by their IDs, and a
+/// cursor carrying just the instant would either repeat one or skip one.
+///
+/// Written as `<microseconds>|<document>` so it stays the opaque string every
+/// paginated surface in this app already passes around.
+final class TenantPageCursor {
+  const TenantPageCursor({required this.at, required this.document});
+
+  final DateTime at;
+
+  /// The document ID for a collection page, or the whole resource path for a
+  /// collection-group page - whichever that page is ordered by after the field.
+  final String document;
+
+  static const String separator = '|';
+
+  String encode() => '${at.toUtc().microsecondsSinceEpoch}$separator$document';
+
+  /// Reads one back, refusing anything this boundary did not write.
+  static TenantPageCursor decode(String cursor, {String fieldName = 'cursor'}) {
+    final at = cursor.indexOf(separator);
+    if (at <= 0 || at == cursor.length - 1) {
+      throw ArgumentError.value(cursor, fieldName, 'is not a page cursor');
+    }
+    final micros = int.tryParse(cursor.substring(0, at));
+    if (micros == null) {
+      throw ArgumentError.value(cursor, fieldName, 'is not a page cursor');
+    }
+    return TenantPageCursor(
+      at: DateTime.fromMicrosecondsSinceEpoch(micros, isUtc: true),
+      document: cursor.substring(at + 1),
+    );
+  }
+}
+
 final class TenantCollectionQuery {
   TenantCollectionQuery._({
     required this.collectionPath,
     required this.limit,
     this.startAfterDocumentId,
+    this.startAfterOrderValue,
     this.descending = false,
+    this.order = TenantCollectionOrder.documentId,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) : equalityFilters = Map<String, Object?>.unmodifiable(equalityFilters);
 
@@ -56,13 +144,17 @@ final class TenantCollectionQuery {
     required String collectionPath,
     required int limit,
     String? startAfterDocumentId,
+    DateTime? startAfterOrderValue,
     bool descending = false,
+    TenantCollectionOrder order = TenantCollectionOrder.documentId,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) => TenantCollectionQuery._(
     collectionPath: collectionPath,
     limit: limit,
     startAfterDocumentId: startAfterDocumentId,
+    startAfterOrderValue: startAfterOrderValue,
     descending: descending,
+    order: order,
     equalityFilters: equalityFilters,
   );
 
@@ -70,8 +162,17 @@ final class TenantCollectionQuery {
   final int limit;
   final String? startAfterDocumentId;
 
-  /// Whether the page is ordered by descending document ID.
+  /// The ordering field's value on the last document of the previous page, for
+  /// a time-ordered page. Null for one ordered by document ID, which needs no
+  /// second cursor component.
+  final DateTime? startAfterOrderValue;
+
+  /// Whether the page runs from the largest ordering value downwards.
   final bool descending;
+
+  /// What the page is ordered by. See [TenantCollectionOrder].
+  final TenantCollectionOrder order;
+
   final Map<String, Object?> equalityFilters;
 }
 
@@ -119,6 +220,59 @@ extension TenantCachedSalesHistoryRead on TenantSalesHistoryQueryReader {
     if (self is! TenantCacheReadable) return null;
     final Object cached = self.cacheOnly;
     return cached is TenantSalesHistoryQueryReader ? cached : null;
+  }
+}
+
+/// Asking a product-search reader for the copy this device holds.
+///
+/// **A third extension, for the same reason as the one above.** The catalog
+/// searches through [TenantProductSearchReader], which is not part of
+/// [TenantDataReader] either - so a panel that pairs `reader.cached` with the
+/// live search reader reads its categories off the disk and its products off
+/// the network, which is the whole page waiting for a network it has already
+/// decided it does not need.
+extension TenantCachedProductSearchRead on TenantProductSearchReader {
+  /// A product-search reader over local storage only, or null where there is
+  /// no local copy - or where the copy cannot answer this particular boundary.
+  TenantProductSearchReader? get cachedProductSearch {
+    // Typed as Object to promote across two unrelated interfaces, exactly as
+    // [TenantCachedSalesHistoryRead.cachedSalesHistory] does.
+    final Object self = this;
+    if (self is! TenantCacheReadable) return null;
+    final Object cached = self.cacheOnly;
+    return cached is TenantProductSearchReader ? cached : null;
+  }
+}
+
+/// Asking a collection-group reader for the copy this device holds.
+///
+/// The stock movement feed reads across every product's `stock_movements` at
+/// once, which is a [TenantCollectionGroupReader] and so a fourth boundary
+/// `cached` cannot answer for.
+extension TenantCachedCollectionGroupRead on TenantCollectionGroupReader {
+  /// A collection-group reader over local storage only, or null where there is
+  /// no local copy - or where the copy cannot answer this particular boundary.
+  TenantCollectionGroupReader? get cachedCollectionGroup {
+    final Object self = this;
+    if (self is! TenantCacheReadable) return null;
+    final Object cached = self.cacheOnly;
+    return cached is TenantCollectionGroupReader ? cached : null;
+  }
+}
+
+/// Asking a staff-directory reader for the copy this device holds.
+///
+/// Nothing wires a companion directory reader today - the staff screen hands
+/// over one reader and the repository resolves the boundary off it - so this
+/// exists to keep that true the day something does.
+extension TenantCachedStaffDirectoryRead on TenantStaffDirectoryQueryReader {
+  /// A staff-directory reader over local storage only, or null where there is
+  /// no local copy - or where the copy cannot answer this particular boundary.
+  TenantStaffDirectoryQueryReader? get cachedStaffDirectory {
+    final Object self = this;
+    if (self is! TenantCacheReadable) return null;
+    final Object cached = self.cacheOnly;
+    return cached is TenantStaffDirectoryQueryReader ? cached : null;
   }
 }
 
@@ -389,6 +543,9 @@ final class TenantCollectionGroupQuery {
     required this.collectionId,
     required this.limit,
     this.startAfterDocumentPath,
+    this.startAfterOrderValue,
+    this.descending = false,
+    this.order = TenantCollectionOrder.documentId,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) : equalityFilters = Map<String, Object?>.unmodifiable(equalityFilters);
 
@@ -397,11 +554,17 @@ final class TenantCollectionGroupQuery {
     required String collectionId,
     required int limit,
     String? startAfterDocumentPath,
+    DateTime? startAfterOrderValue,
+    bool descending = false,
+    TenantCollectionOrder order = TenantCollectionOrder.documentId,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) => TenantCollectionGroupQuery._(
     collectionId: collectionId,
     limit: limit,
     startAfterDocumentPath: startAfterDocumentPath,
+    startAfterOrderValue: startAfterOrderValue,
+    descending: descending,
+    order: order,
     equalityFilters: equalityFilters,
   );
 
@@ -415,6 +578,16 @@ final class TenantCollectionGroupQuery {
   /// A collection-group page is ordered by the whole resource path rather than
   /// by a leaf document ID, so a bare ID could not resume it.
   final String? startAfterDocumentPath;
+
+  /// The ordering field's value on the last document of the previous page, for
+  /// a time-ordered page. Null for one ordered by resource path.
+  final DateTime? startAfterOrderValue;
+
+  /// Whether the page runs from the largest ordering value downwards.
+  final bool descending;
+
+  /// What the page is ordered by. See [TenantCollectionOrder].
+  final TenantCollectionOrder order;
 
   final Map<String, Object?> equalityFilters;
 }
@@ -499,16 +672,15 @@ final class FirebaseTenantDocumentReader
   }
 
   @override
-  Future<TenantDocumentSnapshot?> getDocument(String path) =>
-      _heldOrEmpty(() async {
-        final snapshot = await _firestore.doc(path).get(_options);
-        final data = snapshot.data();
-        if (!snapshot.exists || data == null) return null;
-        return TenantDocumentSnapshot(
-          path: snapshot.reference.path,
-          data: data,
-        );
-      }, null);
+  Future<TenantDocumentSnapshot?> getDocument(String path) => _heldOrEmpty(
+    () async {
+      final snapshot = await _firestore.doc(path).get(_options);
+      final data = snapshot.data();
+      if (!snapshot.exists || data == null) return null;
+      return TenantDocumentSnapshot(path: snapshot.reference.path, data: data);
+    },
+    null,
+  );
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
@@ -520,11 +692,26 @@ final class FirebaseTenantDocumentReader
     for (final filter in query.equalityFilters.entries) {
       request = request.where(filter.key, isEqualTo: filter.value);
     }
+    // The field first and the document ID second, exactly as the ordering proof
+    // in [TenantReadRepository] checks: the ID is what separates two records
+    // written in the same millisecond, and a page ordered on the field alone
+    // could repeat one or skip one across a page boundary.
+    final orderField = query.order.field;
+    if (orderField != null) {
+      request = request.orderBy(orderField, descending: query.descending);
+    }
     request = request
         .orderBy(FieldPath.documentId, descending: query.descending)
         .limit(query.limit);
     final cursor = query.startAfterDocumentId;
-    if (cursor != null) request = request.startAfter(<Object>[cursor]);
+    if (cursor != null) {
+      final orderValue = query.startAfterOrderValue;
+      request = request.startAfter(<Object>[
+        if (orderField != null && orderValue != null)
+          Timestamp.fromDate(orderValue),
+        cursor,
+      ]);
+    }
     return _pageOf(request);
   }
 
@@ -538,12 +725,25 @@ final class FirebaseTenantDocumentReader
     for (final filter in query.equalityFilters.entries) {
       request = request.where(filter.key, isEqualTo: filter.value);
     }
-    request = request.orderBy(FieldPath.documentId).limit(query.limit);
+    final orderField = query.order.field;
+    if (orderField != null) {
+      request = request.orderBy(orderField, descending: query.descending);
+    }
+    request = request
+        .orderBy(FieldPath.documentId, descending: query.descending)
+        .limit(query.limit);
     final cursor = query.startAfterDocumentPath;
     // `__name__` in a collection group orders by the whole resource path, so
     // the cursor is that complete path. Firestore refuses a bare document ID
     // here - it accepts one only for a page whose collection path is known.
-    if (cursor != null) request = request.startAfter(<Object>[cursor]);
+    if (cursor != null) {
+      final orderValue = query.startAfterOrderValue;
+      request = request.startAfter(<Object>[
+        if (orderField != null && orderValue != null)
+          Timestamp.fromDate(orderValue),
+        cursor,
+      ]);
+    }
     return _pageOf(request);
   }
 
@@ -763,15 +963,18 @@ abstract base class TenantReadRepository {
   /// Neither callers nor repository subclasses can supply a collection path.
   /// [equalityFilters] narrows the page to exact field values; every returned
   /// document is still proved to be a direct child of this tenant collection.
-  /// [descending] reverses the document-ID ordering so a history surface can
-  /// page from the newest record; the ordering proof reverses with it, and no
-  /// other sort field is reachable from here.
+  /// [descending] reverses the ordering so a history surface can page from the
+  /// newest record; the ordering proof reverses with it. [order] chooses what
+  /// that ordering is over - the document ID by default, or one of the two
+  /// instants [TenantCollectionOrder] names, which is a typed choice and never
+  /// a caller-supplied field.
   Future<TenantDocumentPage> readCollectionPage(
     TenantCollection collection, {
     required TenantCollectionReader collectionReader,
     int pageSize = 20,
     String? cursor,
     bool descending = false,
+    TenantCollectionOrder order = TenantCollectionOrder.documentId,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) => _readPage(
     paths.collectionPath(collection),
@@ -779,6 +982,7 @@ abstract base class TenantReadRepository {
     pageSize: pageSize,
     cursor: cursor,
     descending: descending,
+    order: order,
     equalityFilters: equalityFilters,
   );
 
@@ -822,6 +1026,7 @@ abstract base class TenantReadRepository {
     int pageSize = 20,
     String? cursor,
     bool descending = false,
+    TenantCollectionOrder order = TenantCollectionOrder.documentId,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) async => _readPage(
     paths.productSubcollectionPath(productId, subcollection),
@@ -829,6 +1034,7 @@ abstract base class TenantReadRepository {
     pageSize: pageSize,
     cursor: cursor,
     descending: descending,
+    order: order,
     equalityFilters: equalityFilters,
   );
 
@@ -852,6 +1058,8 @@ abstract base class TenantReadRepository {
     required TenantCollectionGroupReader groupReader,
     int pageSize = 20,
     String? cursor,
+    bool descending = false,
+    TenantCollectionOrder order = TenantCollectionOrder.documentId,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) async {
     if (pageSize < 1 || pageSize > 50) {
@@ -865,15 +1073,31 @@ abstract base class TenantReadRepository {
         'The tenant binding of a group page is not a caller-supplied filter.',
       );
     }
-    final validatedCursor = cursor == null
-        ? null
-        : _validatedGroupCursor(cursor, subcollection);
+    // The resource path alone for a path-ordered page, an instant and the path
+    // for a time-ordered one - the same pair a single-collection page carries,
+    // over the whole path because that is what `__name__` orders in a group.
+    final String? validatedCursor;
+    final DateTime? cursorOrderValue;
+    if (cursor == null) {
+      validatedCursor = null;
+      cursorOrderValue = null;
+    } else if (order.isByDocumentId) {
+      validatedCursor = _validatedGroupCursor(cursor, subcollection);
+      cursorOrderValue = null;
+    } else {
+      final decoded = TenantPageCursor.decode(cursor);
+      validatedCursor = _validatedGroupCursor(decoded.document, subcollection);
+      cursorOrderValue = decoded.at;
+    }
     final requestedLimit = pageSize + 1;
     final snapshots = await groupReader.getCollectionGroupPage(
       TenantCollectionGroupQuery._(
         collectionId: subcollection.segment,
         limit: requestedLimit,
         startAfterDocumentPath: validatedCursor,
+        startAfterOrderValue: cursorOrderValue,
+        descending: descending,
+        order: order,
         equalityFilters: <String, Object?>{
           tenantIdField: session.tenantId,
           ...callerFilters,
@@ -888,6 +1112,7 @@ abstract base class TenantReadRepository {
 
     final seenPaths = <String>{};
     String? previousPath;
+    DateTime? previousOrderValue;
     for (final snapshot in snapshots) {
       _requireGroupChildPath(snapshot.path, subcollection);
       if (!seenPaths.add(snapshot.path)) {
@@ -895,20 +1120,45 @@ abstract base class TenantReadRepository {
           'The group reader returned duplicate document ${snapshot.path}.',
         );
       }
-      if (previousPath != null &&
-          compareDocumentPaths(previousPath, snapshot.path) >= 0) {
-        throw const TenantScopeViolation(
-          'Collection group results were not ordered by document path.',
-        );
+      final orderValue = order.isByDocumentId
+          ? null
+          : _requireOrderValue(snapshot, order);
+      if (previousPath != null) {
+        // The field first and the path second, which is the order Firestore
+        // itself applies. `compareDocumentPaths` rather than a string compare,
+        // for the reason it documents.
+        var comparison = 0;
+        if (previousOrderValue != null && orderValue != null) {
+          comparison = previousOrderValue.compareTo(orderValue);
+        }
+        if (comparison == 0) {
+          comparison = compareDocumentPaths(previousPath, snapshot.path);
+        }
+        if (comparison * (descending ? -1 : 1) >= 0) {
+          throw TenantScopeViolation(
+            order.isByDocumentId
+                ? 'Collection group results were not ordered by document path.'
+                : 'Collection group results were not ordered by '
+                      '${order.field}.',
+          );
+        }
       }
       previousPath = snapshot.path;
+      previousOrderValue = orderValue;
     }
 
     final hasMore = snapshots.length > pageSize;
     final items = hasMore ? snapshots.take(pageSize).toList() : snapshots;
     return TenantDocumentGroupPage(
       items: items,
-      nextCursor: hasMore ? items.last.path : null,
+      nextCursor: !hasMore
+          ? null
+          : order.isByDocumentId
+          ? items.last.path
+          : TenantPageCursor(
+              at: _requireOrderValue(items.last, order),
+              document: items.last.path,
+            ).encode(),
       hasMore: hasMore,
     );
   }
@@ -957,6 +1207,41 @@ abstract base class TenantReadRepository {
     return cursor;
   }
 
+  /// The ordering field of one returned document, as an instant.
+  ///
+  /// **A document that does not carry it is a broken page, not a row to sort
+  /// last.** Firestore excludes such a document from an ordered query
+  /// altogether, so one arriving here means the reader ignored the ordering -
+  /// and a page that quietly dropped records would be the worst possible answer
+  /// to "what happened most recently".
+  static DateTime _requireOrderValue(
+    TenantQueryDocumentSnapshot snapshot,
+    TenantCollectionOrder order,
+  ) {
+    final value = tenantStoredInstant(snapshot.data[order.field]);
+    if (value == null) {
+      throw TenantScopeViolation(
+        'A document ordered by ${order.field} does not carry it as an instant: '
+        '${snapshot.path}.',
+      );
+    }
+    return value;
+  }
+
+  /// Orders two page keys the way Firestore orders a field then `__name__`.
+  static int _comparePageKeys(
+    DateTime? leftValue,
+    String leftDocument,
+    DateTime? rightValue,
+    String rightDocument,
+  ) {
+    if (leftValue != null && rightValue != null) {
+      final byValue = leftValue.compareTo(rightValue);
+      if (byValue != 0) return byValue;
+    }
+    return leftDocument.compareTo(rightDocument);
+  }
+
   /// Compares two document paths the way Firestore orders `__name__`.
   ///
   /// The comparison is segment by segment, never over the joined string: a
@@ -988,6 +1273,7 @@ abstract base class TenantReadRepository {
     required String? cursor,
     required bool descending,
     required Map<String, Object?> equalityFilters,
+    TenantCollectionOrder order = TenantCollectionOrder.documentId,
   }) async {
     if (pageSize < 1 || pageSize > 50) {
       throw RangeError.range(pageSize, 1, 50, 'pageSize');
@@ -995,25 +1281,45 @@ abstract base class TenantReadRepository {
     final safeFilters = _validatedEqualityFilters(equalityFilters);
     // Firestore refuses a descending scan of a whole collection by key
     // ("Firestore does not support descending key scans"), so a newest-first
-    // page must always be narrowed by at least one equality filter. Refusing it
-    // here turns a runtime query failure into an immediate programming error.
-    if (descending && safeFilters.isEmpty) {
+    // page must always be narrowed by at least one equality filter. A page
+    // ordered by a *field* is exempt: that is an ordinary descending index
+    // scan, which is the whole reason the time orderings exist.
+    if (descending && order.isByDocumentId && safeFilters.isEmpty) {
       throw ArgumentError.value(
         descending,
         'descending',
         'A descending page requires at least one equality filter.',
       );
     }
-    final validatedCursor = cursor == null
-        ? null
-        : validateTenantDocumentId(cursor, fieldName: 'cursor');
+    // A page ordered by document ID resumes after an ID; a time-ordered one
+    // resumes after an instant *and* an ID, because two records written in the
+    // same millisecond are separated only by the second. Both arrive here as
+    // the one opaque string every paginated surface passes around.
+    final String? validatedCursor;
+    final DateTime? cursorOrderValue;
+    if (cursor == null) {
+      validatedCursor = null;
+      cursorOrderValue = null;
+    } else if (order.isByDocumentId) {
+      validatedCursor = validateTenantDocumentId(cursor, fieldName: 'cursor');
+      cursorOrderValue = null;
+    } else {
+      final decoded = TenantPageCursor.decode(cursor);
+      validatedCursor = validateTenantDocumentId(
+        decoded.document,
+        fieldName: 'cursor',
+      );
+      cursorOrderValue = decoded.at;
+    }
     final requestedLimit = pageSize + 1;
     final snapshots = await collectionReader.getCollectionPage(
       TenantCollectionQuery._(
         collectionPath: expectedCollectionPath,
         limit: requestedLimit,
         startAfterDocumentId: validatedCursor,
+        startAfterOrderValue: cursorOrderValue,
         descending: descending,
+        order: order,
         equalityFilters: safeFilters,
       ),
     );
@@ -1025,6 +1331,7 @@ abstract base class TenantReadRepository {
 
     final seenIds = <String>{};
     String? previousId;
+    DateTime? previousOrderValue;
     for (final snapshot in snapshots) {
       final prefix = '$expectedCollectionPath/';
       if (!snapshot.path.startsWith(prefix)) {
@@ -1047,24 +1354,52 @@ abstract base class TenantReadRepository {
           'The collection reader returned duplicate document $documentId.',
         );
       }
+      // **The proof did not weaken; it took a second component.** For a page
+      // ordered by document ID it is exactly what it always was. For a
+      // time-ordered one it is the pair Firestore itself orders by - the field,
+      // then the ID - so a reader that returned the right documents in the
+      // wrong order is still caught, and so is one that ignored the ordering
+      // and answered by key.
+      final orderValue = order.isByDocumentId
+          ? null
+          : _requireOrderValue(snapshot, order);
       final ordered =
           previousId == null ||
-          (descending
-              ? previousId.compareTo(documentId) > 0
-              : previousId.compareTo(documentId) < 0);
+          _comparePageKeys(
+                    previousOrderValue,
+                    previousId,
+                    orderValue,
+                    documentId,
+                  ) *
+                  (descending ? -1 : 1) <
+              0;
       if (!ordered) {
-        throw const TenantScopeViolation(
-          'Collection results were not ordered by document ID.',
+        throw TenantScopeViolation(
+          order.isByDocumentId
+              ? 'Collection results were not ordered by document ID.'
+              : 'Collection results were not ordered by ${order.field}.',
         );
       }
       previousId = documentId;
+      previousOrderValue = orderValue;
     }
 
     final hasMore = snapshots.length > pageSize;
     final items = hasMore ? snapshots.take(pageSize).toList() : snapshots;
-    final nextCursor = hasMore
-        ? items.last.path.substring('$expectedCollectionPath/'.length)
-        : null;
+    final String? nextCursor;
+    if (!hasMore) {
+      nextCursor = null;
+    } else {
+      final lastId = items.last.path.substring(
+        '$expectedCollectionPath/'.length,
+      );
+      nextCursor = order.isByDocumentId
+          ? lastId
+          : TenantPageCursor(
+              at: _requireOrderValue(items.last, order),
+              document: lastId,
+            ).encode();
+    }
     return TenantDocumentPage(
       items: items,
       nextCursor: nextCursor,

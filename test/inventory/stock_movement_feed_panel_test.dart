@@ -7,6 +7,8 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/collection_pages.dart';
+
 import '../support/text.dart';
 
 void main() {
@@ -208,10 +210,12 @@ void main() {
   testWidgets('narrowing the feed restarts it with the typed filter', (
     tester,
   ) async {
+    // `sa_2` moved first, so the newest-first page begins with `sa_1` and the
+    // cursor names it - which a page ordered by path would never do.
     final reader = _Reader()
       ..respond(<TenantQueryDocumentSnapshot>[
-        _movement('product-1', 'sa_1'),
-        _movement('product-1', 'sa_2'),
+        _movement('product-1', 'sa_1', movedAt: DateTime.utc(2026, 8, 2, 9)),
+        _movement('product-1', 'sa_2', movedAt: DateTime.utc(2026, 8, 1, 9)),
       ]);
 
     await _pump(tester, _controller(), reader, pageSize: 1);
@@ -531,6 +535,7 @@ TenantQueryDocumentSnapshot _movement(
   String productId,
   String movementId, {
   String tenantId = 'tenant-a',
+  DateTime? movedAt,
   Map<String, Object?>? overrides,
 }) {
   final data = <String, Object?>{
@@ -544,7 +549,11 @@ TenantQueryDocumentSnapshot _movement(
     'quantityAfter': 7,
     'reason': 'Broken in transit',
     'actorUid': 'manager-a',
-    'recordedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 9)),
+    // Both, as every writer of this collection sets them in one
+    // transaction. The ledger is ordered by `occurredAt`, so a
+    // fixture without one is a document no writer produces.
+    'occurredAt': Timestamp.fromDate(movedAt ?? DateTime.utc(2026, 8, 1, 9)),
+    'recordedAt': Timestamp.fromDate(movedAt ?? DateTime.utc(2026, 8, 1, 9)),
   };
   if (overrides != null) {
     overrides.forEach((field, value) {
@@ -631,18 +640,11 @@ final class _Reader
       _pending.add(completer);
       return completer.future;
     }
-    final cursor = query.startAfterDocumentPath;
-    final matches = <TenantQueryDocumentSnapshot>[];
-    for (final snapshot in _page) {
-      if (cursor != null && snapshot.path.compareTo(cursor) <= 0) continue;
-      if (query.equalityFilters.entries.any(
-        (filter) => snapshot.data[filter.key] != filter.value,
-      )) {
-        continue;
-      }
-      matches.add(snapshot);
-      if (matches.length >= query.limit) break;
-    }
-    return Future<List<TenantQueryDocumentSnapshot>>.value(matches);
+    // Ordered, cursored and filtered the way Firestore would: the stock ledger
+    // is newest-first by time now, and the repository proves the order of what
+    // it is handed.
+    return Future<List<TenantQueryDocumentSnapshot>>.value(
+      tenantCollectionGroupPageOf(query, _page),
+    );
   }
 }

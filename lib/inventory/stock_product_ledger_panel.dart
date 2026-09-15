@@ -245,8 +245,7 @@ final class _LedgerContents extends StatelessWidget {
         SizedBox(height: tokens.spacing.s8),
         const Text(
           'The ledger is permanent and cannot be edited from this app. It is '
-          'listed by record ID, which is not time order; each entry states when '
-          'it was recorded.',
+          'listed by when the stock moved, most recent first.',
         ),
         SizedBox(height: tokens.spacing.s16),
         // §4.3's responsive contract. Every entry is stated in the shared record

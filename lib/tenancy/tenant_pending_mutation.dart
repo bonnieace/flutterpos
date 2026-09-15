@@ -79,14 +79,20 @@ bool tenantMutationIsCallable(TenantPendingMutationKind kind) => switch (kind) {
   TenantPendingMutationKind.productRetire ||
   TenantPendingMutationKind.productCorrect ||
   TenantPendingMutationKind.stockAdjust ||
-  TenantPendingMutationKind.stockTakePage => true,
+  TenantPendingMutationKind.stockTakePage ||
+  // **Neither of these writes a quantity.** They are here for the other half of
+  // the rule - a document only the Admin SDK may write - and the reason is
+  // uniqueness: two categories folding to one name make every spreadsheet that
+  // names that category ambiguous, and refusing the second one means reading
+  // every other category in the collection inside the transaction that writes.
+  // A rule cannot query, and a device cannot see what it has not read.
+  TenantPendingMutationKind.categoryCreate ||
+  TenantPendingMutationKind.categoryRename => true,
   TenantPendingMutationKind.expenseCreate ||
   TenantPendingMutationKind.expenseVoid ||
   TenantPendingMutationKind.pendingReturnCreate ||
   TenantPendingMutationKind.brandingMerge ||
-  TenantPendingMutationKind.printerConfigurationMerge ||
-  TenantPendingMutationKind.categoryCreate ||
-  TenantPendingMutationKind.categoryRename => false,
+  TenantPendingMutationKind.printerConfigurationMerge => false,
 };
 
 enum TenantPendingMutationState {
@@ -597,17 +603,65 @@ final class TenantPendingMutationWorker {
     }
     // Path order is strict (create before void); different documents do not
     // hold one another behind an unreachable request.
-    await Future.wait<void>(byTarget.values.map(_runTarget));
+    //
+    // **With one exception, and it is the reason this set exists.** Groups
+    // drain concurrently, so a product filed under a category this same device
+    // queued a moment ago can reach the server first - and `createProduct` now
+    // refuses a category the business does not hold. The product waits for its
+    // category rather than racing it.
+    final queuedCategories = _queuedCategoryIds(records);
+    await Future.wait<void>(
+      byTarget.values.map((group) => _runTarget(group, queuedCategories)),
+    );
     await _store.purgeConfirmed();
   }
 
-  Future<void> _runTarget(List<TenantPendingMutationRecord> records) async {
+  /// The categories this device has queued and not yet seen settle.
+  ///
+  /// **Unresolved, so a rejected category stops holding anything.** A category
+  /// refused for its name is never coming, and a product waiting on one would
+  /// wait for ever; letting it through means the server refuses it too, in the
+  /// same words and where somebody can see them.
+  static Set<String> _queuedCategoryIds(
+    List<TenantPendingMutationRecord> records,
+  ) => <String>{
+    for (final record in records)
+      if (record.kind == TenantPendingMutationKind.categoryCreate &&
+          record.isUnresolved)
+        record.targetPath.split('/').last,
+  };
+
+  /// Whether this record is a product filed under a category still in flight.
+  ///
+  /// The deferral `TenantProductImageUploadWorker` performs for a photograph
+  /// whose product is still queued, applied to the pair one step up. It reads
+  /// the category out of the document a device composed, which is the only
+  /// place a queued create records it.
+  static bool _awaitsQueuedCategory(
+    TenantPendingMutationRecord record,
+    Set<String> queuedCategories,
+  ) {
+    if (record.kind != TenantPendingMutationKind.productCreate) return false;
+    final categoryId = record.payload['categoryId'];
+    return categoryId is String && queuedCategories.contains(categoryId);
+  }
+
+  Future<void> _runTarget(
+    List<TenantPendingMutationRecord> records,
+    Set<String> queuedCategories,
+  ) async {
     for (var record in records) {
       if (record.state == TenantPendingMutationState.rejected ||
           record.state == TenantPendingMutationState.needsAttention) {
         break;
       }
       if (record.state == TenantPendingMutationState.confirmed) continue;
+      // **Left exactly as it is, for the next pass.** Not a failure and not an
+      // attempt: nothing is sent, no attempt is counted, and no backoff is
+      // started, because there is nothing wrong with this record - the one it
+      // depends on has simply not landed yet. The whole group returns, since a
+      // correction to a product that does not exist yet cannot go either.
+      if (_awaitsQueuedCategory(record, queuedCategories)) return;
       try {
         if (_store.hasActiveLease(record)) continue;
         if (record.state == TenantPendingMutationState.awaitingConfirmation ||
@@ -780,11 +834,17 @@ final class TenantPendingMutationOverlayReader
       if (data == null) continue;
       final id = entry.key.split('/').last;
       final cursor = query.startAfterDocumentId;
-      if (cursor != null &&
-          (query.descending
-              ? id.compareTo(cursor) >= 0
-              : id.compareTo(cursor) <= 0)) {
-        continue;
+      if (cursor != null) {
+        // The same pair the transport resumes on: the ordering field first when
+        // there is one, then the document ID. Comparing IDs alone on a
+        // time-ordered page would drop records the server would have returned.
+        final comparison = _comparePageKeys(
+          _orderValue(data, query.order),
+          id,
+          query.startAfterOrderValue,
+          cursor,
+        );
+        if (query.descending ? comparison >= 0 : comparison <= 0) continue;
       }
       if (!query.equalityFilters.entries.every(
         (filter) => data[filter.key] == filter.value,
@@ -793,14 +853,48 @@ final class TenantPendingMutationOverlayReader
       }
       items.add(TenantQueryDocumentSnapshot(path: entry.key, data: data));
     }
+    // The same ordering the transport applies, so a queued record does not sit
+    // where the server would not have put it.
     items.sort((left, right) {
-      final order = left.path
-          .split('/')
-          .last
-          .compareTo(right.path.split('/').last);
+      final order = _comparePageKeys(
+        _orderValue(left.data, query.order),
+        left.path.split('/').last,
+        _orderValue(right.data, query.order),
+        right.path.split('/').last,
+      );
       return query.descending ? -order : order;
     });
     return items.take(query.limit).toList(growable: false);
+  }
+
+  /// One document's ordering value, or null for a page ordered by document ID.
+  ///
+  /// Lenient where [TenantReadRepository] is strict, and deliberately: this is
+  /// sorting a *local* projection, where a record queued a moment ago may not
+  /// carry a server timestamp yet. A document with nothing to sort on falls
+  /// back to its ID, which is the order it would have had anyway. The proof
+  /// above still refuses a page the transport ordered wrongly.
+  static DateTime? _orderValue(
+    Map<String, Object?> data,
+    TenantCollectionOrder order,
+  ) {
+    final field = order.field;
+    if (field == null) return null;
+    return tenantStoredInstant(data[field]);
+  }
+
+  /// Orders two page keys the way Firestore orders a field then `__name__`.
+  static int _comparePageKeys(
+    DateTime? leftValue,
+    String leftDocument,
+    DateTime? rightValue,
+    String rightDocument,
+  ) {
+    if (leftValue != null && rightValue != null) {
+      final byValue = leftValue.compareTo(rightValue);
+      if (byValue != 0) return byValue;
+    }
+    return leftDocument.compareTo(rightDocument);
   }
 
   @override

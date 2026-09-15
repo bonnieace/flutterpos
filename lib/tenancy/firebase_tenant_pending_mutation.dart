@@ -27,6 +27,27 @@ Map<String, Object?> tenantProductCreateCallablePayload(
   'document': record.payload,
 };
 
+/// The `createCategory` or `renameCategory` request one queued write describes.
+///
+/// Derived from the record rather than stored in it, exactly as
+/// [tenantProductCreateCallablePayload] is and for the same reason: the payload
+/// is the document a device composed - unchanged from when these kinds were
+/// Firestore writes - and the business and the category come from the path the
+/// record already targets. So a category queued by a build that wrote the
+/// document directly drains through the callable untouched, and nothing durable
+/// on anybody's phone had to be migrated when the rule closed.
+///
+/// For a create the category ID is also the idempotency key. It is already a
+/// digest of the request ID that minted it, so a replay answers off the server's
+/// own record rather than being refused as a duplicate of itself.
+Map<String, Object?> tenantCategoryCallablePayload(
+  TenantPendingMutationRecord record,
+) => <String, Object?>{
+  'tenantId': record.tenantId,
+  'categoryId': record.targetPath.split('/').last,
+  'document': record.payload,
+};
+
 /// Carries one queued mutation to the server, by whichever route its kind uses.
 ///
 /// **Two transports, one queue.** Most kinds are document writes the rules
@@ -131,26 +152,24 @@ final class FirebaseTenantMutationGateway
             'createProduct',
             tenantProductCreateCallablePayload(record),
           );
-        // A whole-document `set` rather than a merge: the document is being
-        // brought into existence, the strict read model needs every field it
-        // names, and merging onto a deterministic ID that already exists would
-        // patch a category instead of refusing a replay. A category carries no
-        // quantity and has no ledger, so it stays the document write `allow
-        // create` on `categories` still admits.
+        // **A callable since 2026-09-14, and not because of a ledger.** A
+        // category holds no quantity; what it holds is a name, and two
+        // categories folding to one name make every spreadsheet naming that
+        // category ambiguous - `importProducts` refuses the row rather than
+        // guessing, and the only thing it can then be asked by is the document
+        // ID nothing in this product shows anybody. Refusing the second one
+        // means reading every other category in the collection, which a
+        // Firestore rule cannot do: it may read the document being written and
+        // named documents, never a query. So the check moved into the
+        // transaction that writes, and `allow create, update` on `categories`
+        // closed.
+        //
+        // The envelope is rebuilt from the record, so a category queued by the
+        // build before this one drains through here unchanged.
         case TenantPendingMutationKind.categoryCreate:
-          await document
-              .set(<String, Object?>{
-                ...record.payload,
-                'createdAt': FieldValue.serverTimestamp(),
-              })
-              .timeout(deadline);
+          await _call('createCategory', tenantCategoryCallablePayload(record));
         case TenantPendingMutationKind.categoryRename:
-          await document
-              .update(<String, Object?>{
-                ...record.payload,
-                'updatedAt': FieldValue.serverTimestamp(),
-              })
-              .timeout(deadline);
+          await _call('renameCategory', tenantCategoryCallablePayload(record));
         // **A callable, because retiring clears stock.** The units a retired
         // product was holding leave through a `stock_movements` entry written in
         // the same transaction as the flag, and no device may write that

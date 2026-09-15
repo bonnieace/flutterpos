@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {HttpsError} from "firebase-functions/v2/https";
 import {TenantRole} from "../core/model";
+import type {
+  DocumentReference,
+  Transaction,
+} from "firebase-admin/firestore";
 import {
   CREATE_OPENING_STOCK_REASON,
+  assertProductCreateCategoryExists,
   ProductCreateInput,
   assertProductCreateAuthorized,
   planProductCreate,
@@ -290,4 +295,39 @@ test("an input that differs only in how the price was written hashes alike", () 
   );
 
   assert.deepEqual(typed, replanned);
+});
+
+/**
+ * The category check, which this path could not make until the client stopped
+ * racing it. See `assertProductCreateCategoryExists` for why.
+ */
+function transactionHolding(exists: boolean): Transaction {
+  return {get: async () => ({exists})} as unknown as Transaction;
+}
+
+const categoryTenantRef = {
+  collection: () => ({doc: () => ({})}),
+} as unknown as DocumentReference;
+
+test("a product filed under a category this business holds is allowed", async () => {
+  await assertProductCreateCategoryExists(
+    transactionHolding(true),
+    categoryTenantRef,
+    CATEGORY
+  );
+});
+
+test("a product filed under a category that does not exist is refused", async () => {
+  // The same refusal `updateProduct` makes, in the same words, for the same
+  // reason: a product filed under a category that does not exist is invisible
+  // to every grouped catalog surface without being unreadable.
+  await assert.rejects(
+    assertProductCreateCategoryExists(
+      transactionHolding(false),
+      categoryTenantRef,
+      "ct_missing"
+    ),
+    (error: unknown) =>
+      error instanceof HttpsError && error.code === "failed-precondition"
+  );
 });
