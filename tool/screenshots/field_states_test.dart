@@ -118,7 +118,8 @@ class _FieldMatrix extends StatelessWidget {
                 child: AppTextField(
                   key: ValueKey('field-helper'),
                   label: 'Code (SKU or barcode)',
-                  helper: 'What the till matches a scan against. No spaces.',
+                  helper:
+                      'What the register matches a scan against. No spaces.',
                 ),
               ),
               const _Row(

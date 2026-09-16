@@ -861,7 +861,7 @@ final class _CartEditorState extends State<_CartEditor> {
       return 'Remove the item whose price cannot be recorded exactly.';
     }
     if (_exceedsRecordableAmount(total)) {
-      return 'This sale is larger than this till can record. Reduce a '
+      return 'This sale is larger than this register can record. Reduce a '
           'quantity.';
     }
     if (_tender == null) return 'Choose how the customer paid.';
@@ -1299,7 +1299,7 @@ final class _CartEditorState extends State<_CartEditor> {
         status: AppStatus.problem,
         message:
             'This sale cannot be totalled because one item has a price the '
-            'till cannot record exactly.',
+            'register cannot record exactly.',
       );
     }
     // **The word takes its own width and the figure takes the rest**, which is
@@ -1385,7 +1385,7 @@ final class _CartEditorState extends State<_CartEditor> {
           title: 'Saved without a receipt number',
           notice: const AppNotice.unknown(
             'The sale is saved on this device and syncs on its own, but the '
-            'till could not state a receipt number for it.',
+            'register could not state a receipt number for it.',
           ),
           stillTrue:
               'The sale is not lost and nothing needs ringing up again. Ask '
@@ -2398,7 +2398,7 @@ final class _CartLine extends StatelessWidget {
                   onIncrement: product == null ? null : onIncrement,
                   onDecrement: onDecrement,
                   error: quantityUnusable
-                      ? 'Not a quantity this till can sell. This line still '
+                      ? 'Not a quantity this register can sell. This line still '
                             'has $quantity.'
                       : null,
                 ),

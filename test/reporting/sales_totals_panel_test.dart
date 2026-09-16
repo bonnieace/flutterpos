@@ -739,7 +739,7 @@ void main() {
     // can finish the screen without reading.
     expect(
       _notice(tester, 'sales-totals-tender-disclaimer'),
-      'Recorded by the cashier at the till; the payment itself is not '
+      'Recorded by the cashier at the register; the payment itself is not '
       'verified.',
     );
   });

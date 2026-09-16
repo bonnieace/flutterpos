@@ -214,7 +214,7 @@ class _TenantStockTakeSettingsPanelState
             title: 'This setting could not be read',
             message:
                 'Nobody is being asked to count while it stays that way, and '
-                'the till is unaffected. Choosing below replaces it.',
+                'the register is unaffected. Choosing below replaces it.',
           ),
         if (duplicated.isNotEmpty)
           Callout(
@@ -264,22 +264,19 @@ class _TenantStockTakeSettingsPanelState
           ],
         ),
         SizedBox(height: tokens.spacing.s8),
-        Text(
-          switch (enforcement) {
-            TenantStockTakeEnforcement.off =>
-              'The rota below is recorded and nobody is interrupted.',
-            TenantStockTakeEnforcement.prompt =>
-              'Whoever owes a count is asked once when they open the register, '
-                  'and may carry on selling.',
-            // The sentence that matters, because this is the setting that can
-            // stop a shop trading.
-            TenantStockTakeEnforcement.block =>
-              'Whoever owes a count cannot sell until they have handed it in. '
-                  'Handing it in is enough - they do not wait for anybody to '
-                  'approve it, and it works with no connection.',
-          },
-          style: tokens.typography.bodyMedium,
-        ),
+        Text(switch (enforcement) {
+          TenantStockTakeEnforcement.off =>
+            'The rota below is recorded and nobody is interrupted.',
+          TenantStockTakeEnforcement.prompt =>
+            'Whoever owes a count is asked once when they open the register, '
+                'and may carry on selling.',
+          // The sentence that matters, because this is the setting that can
+          // stop a shop trading.
+          TenantStockTakeEnforcement.block =>
+            'Whoever owes a count cannot sell until they have handed it in. '
+                'Handing it in is enough - they do not wait for anybody to '
+                'approve it, and it works with no connection.',
+        }, style: tokens.typography.bodyMedium),
         SizedBox(height: tokens.spacing.s24),
         SectionHeading('Which days'),
         SizedBox(height: tokens.spacing.s8),
@@ -356,10 +353,7 @@ class _TenantStockTakeSettingsPanelState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          member.displayName,
-          style: tokens.typography.labelLarge,
-        ),
+        Text(member.displayName, style: tokens.typography.labelLarge),
         SizedBox(height: tokens.spacing.s8),
         FilterChipBar<String>(
           semanticLabel: 'What ${member.displayName} counts',
@@ -382,9 +376,7 @@ class _TenantStockTakeSettingsPanelState
             ),
             for (final category in categories)
               FilterChipOption<String>(
-                key: ValueKey(
-                  'stock-take-assign-${member.uid}-${category.id}',
-                ),
+                key: ValueKey('stock-take-assign-${member.uid}-${category.id}'),
                 value: category.id,
                 label: category.name,
               ),
@@ -411,15 +403,16 @@ class _TenantStockTakeSettingsPanelState
 
     final TenantStockTakeScheduleIntent intent;
     try {
-      intent = TenantStockTakeSchedulePublisher(
-        session: session,
-        reader: widget.reader,
-      ).buildIntent(
-        enforcement: _enforcement ?? TenantStockTakeEnforcement.off,
-        weekdays: _selectedWeekdays,
-        assignments: assignments,
-        published: published,
-      );
+      intent =
+          TenantStockTakeSchedulePublisher(
+            session: session,
+            reader: widget.reader,
+          ).buildIntent(
+            enforcement: _enforcement ?? TenantStockTakeEnforcement.off,
+            weekdays: _selectedWeekdays,
+            assignments: assignments,
+            published: published,
+          );
     } on TenantStockTakeScheduleException catch (error) {
       showAppSnackBar(context, _refusal(error.code));
       return;
@@ -442,9 +435,11 @@ class _TenantStockTakeSettingsPanelState
         // copy still holding the pre-save value won the race and the form blanked
         // itself. A save that looks discarded is worse than a stale one, and the
         // form already holds exactly what the server now has.
-        setState(() => _saved = TenantPublishedStockTakeSchedule.published(
-          intent.schedule,
-        ));
+        setState(
+          () => _saved = TenantPublishedStockTakeSchedule.published(
+            intent.schedule,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);

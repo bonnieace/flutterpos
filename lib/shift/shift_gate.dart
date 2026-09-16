@@ -14,29 +14,35 @@
 /// which the old dialog did not and which is how that one was escapable on
 /// Android. The only ways out are opening a shift or leaving the till.
 ///
-/// **It asks for no opening float, and that is a gap rather than a decision.**
-/// The old dialog collected opening cash; `TenantShiftController.openShift`
-/// takes none and `TenantShift` carries no such field, so a float box here
-/// would be a control writing to nothing. Recorded in
-/// `docs/stitch/OPEN_QUESTIONS.md` rather than invented.
+/// **It asks for the opening float, and the figure now goes somewhere.** The
+/// box is optional and empty means none, so a shop that keeps no change in the
+/// drawer answers by not answering. What is typed is recorded on the shift and
+/// added by nightly reconciliation to the cash it expects the drawer to hold -
+/// so a float no longer reads as a surplus at close. The old dialog collected
+/// this figure and only ever displayed it back; this one is compared against.
 library;
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../inventory/catalog_management.dart';
 import '../reporting/reporting_currency.dart';
 import '../returns/return_actions.dart';
 import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
+import '../ui/fields.dart';
 import '../ui/illustration.dart';
 import '../ui/press.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'shift_controller.dart';
+import 'shift_declaration.dart';
 import 'shift_panel.dart';
 
 /// What a person chose on the way out of the till.
@@ -107,7 +113,8 @@ final class TenantShiftGate extends StatefulWidget {
   State<TenantShiftGate> createState() => _TenantShiftGateState();
 }
 
-class _TenantShiftGateState extends State<TenantShiftGate> {
+class _TenantShiftGateState extends State<TenantShiftGate>
+    with WidgetsBindingObserver {
   TenantSessionController? _sessions;
   TenantShiftController? _shifts;
 
@@ -125,11 +132,54 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
   /// either way, and nothing can be sold behind a modal sheet.
   bool _closingUp = false;
 
+  /// The session the shift on screen was read for.
+  ///
+  /// **Because the controller object never changes and the session does.** The
+  /// gate subscribes to one `TenantSessionController` for the life of the till,
+  /// so `identical(sessions, _sessions)` is true on every notification - which
+  /// meant a role change, a deactivation, or a business switch reached this
+  /// widget and was thrown away. The till went on drawing a shift read for an
+  /// access decision that no longer held. See [_sessionMoved].
+  String? _readFor;
+
+  /// What identifies a session for that purpose: who, which business, and which
+  /// access decision. The epoch is the load-bearing third - `TenantSessionController.refresh`
+  /// keeps it when the answer has not moved and bumps it when it has.
+  static String? _identityOf(TenantSession? session) => session == null
+      ? null
+      : '${session.uid}:${session.tenantId}:${session.epoch}';
+
+  @override
+  void initState() {
+    super.initState();
+    // **So the till can be told a decision somebody else made.** A role change
+    // or a deactivation reaches this device through no channel of its own; the
+    // routing shell asks again when the app is picked back up, and the till has
+    // to ask again with it. Without this the shell re-read, the session moved,
+    // and the shift on screen stayed exactly as it was.
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final shifts = _shifts;
+    final session = _sessions?.session;
+    if (shifts == null || session == null) return;
+    // Cheap and non-blocking: `restore` publishes what this device already
+    // knows first and corrects it underneath, so a resumed till never flashes
+    // a spinner over a shift it is holding.
+    unawaited(shifts.restore(session));
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final sessions = TenantSessionScope.of(context);
-    if (identical(sessions, _sessions) && _shifts != null) return;
+    if (identical(sessions, _sessions) && _shifts != null) {
+      _sessionMoved(sessions);
+      return;
+    }
     _sessions = sessions;
     // **Unsubscribed, not disposed.** The controller is the session's and
     // outlives this gate - see `shiftControllerFactory` - so disposing it here
@@ -147,11 +197,38 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
     // what it last knew and corrects itself, rather than flashing a spinner
     // between every sale.
     final session = sessions.session;
+    _readFor = _identityOf(session);
     if (session != null) unawaited(shifts.restore(session));
+  }
+
+  /// Re-reads the shift when the *session* changed under an unchanged
+  /// controller, and leaves the till when there is no longer a session to sell
+  /// in.
+  ///
+  /// **The till fails closed at the write either way** - `CheckoutDraftService`
+  /// refuses a draft whose session has moved - so what this fixes is not a
+  /// security hole but a screen that lied: a deactivated cashier kept a till
+  /// that looked ready to sell, and only found out when a sale was refused.
+  void _sessionMoved(TenantSessionController sessions) {
+    final session = sessions.session;
+    final identity = _identityOf(session);
+    if (identity == _readFor) return;
+    _readFor = identity;
+    if (session == null || !session.canAccess()) {
+      // Nothing can be sold here any more, and the shift belongs to a session
+      // this device has left. Leaving is the honest answer; the gate's own
+      // modal would be a second question nobody can act on.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).maybePop();
+      });
+      return;
+    }
+    unawaited(_shifts?.restore(session) ?? Future<void>.value());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // The listener is this gate's; the controller is not. Leaving the till
     // keeps the shift state warm for the next entry, which is the whole point
     // of caching it.
@@ -290,6 +367,22 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
   @override
   Widget build(BuildContext context) {
     final shifts = _shifts;
+    // **A till is never drawn for a session that cannot sell.** Popping the
+    // route is what takes the person somewhere useful, but a pop is a frame
+    // away and a navigation can be refused; this is the guarantee, and it holds
+    // in the frame the access ends. `CheckoutDraftService` refuses the write
+    // regardless - what this removes is the window in which the screen says
+    // otherwise. See [_sessionMoved].
+    final live = _sessions?.session;
+    if (live == null || !live.canAccess()) {
+      return _surface(
+        key: const ValueKey('shift-gate-no-session'),
+        const LoadingState(
+          key: ValueKey('shift-gate-leaving'),
+          message: 'Closing this register.',
+        ),
+      );
+    }
     // **The expiry outranks the phase.** Starting a cash count moves an
     // expired shift to `closing`, and `closing` draws the till - so without
     // this a cashier could reopen the sheet, cancel, and keep selling past the
@@ -297,6 +390,20 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
     final phase = shifts != null && shifts.state.shiftExpired
         ? TenantShiftPhase.expired
         : shifts?.state.phase ?? TenantShiftPhase.unknown;
+    // **Midnight ends a shift as surely as the cap does.** A sale resolves the
+    // business date afresh and the shift froze its own when it opened, so the
+    // draft service refuses every sale across that boundary - correctly, since
+    // a sale filed under yesterday's shift could never be reconciled against
+    // it. Until this, the phase said nothing about it: the till drew a sellable
+    // screen and the refusal arrived one sale at a time, at the counter, with a
+    // customer waiting.
+    //
+    // Only where a till would otherwise be drawn. A shift already being counted
+    // off, closed, or past the cap has its own surface and its own words.
+    final dayEnded =
+        shifts != null &&
+        shifts.state.shiftDayEnded &&
+        (phase == TenantShiftPhase.open || phase == TenantShiftPhase.closing);
     return PopScope(
       // Every way out of the till goes through the exit dialog, including the
       // system back gesture.
@@ -325,6 +432,33 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
         // *no shift* empty state - there is nothing to open, only something to
         // close - and since 2026-09-05 that close can be made with no
         // connection, so nothing here has to send anybody looking for one.
+        // Drawn ahead of the phase switch below, because an open shift whose
+        // day has ended must not fall through to the till.
+        _ when dayEnded => _surface(
+          key: const ValueKey('shift-gate-day-ended'),
+          ErrorState(
+            status: AppStatus.attention,
+            badgeLabel: 'New business day',
+            statement:
+                'This shift belongs to yesterday, so it can no longer take '
+                'sales.',
+            detail:
+                'Count it off and open a new one for today. The count works '
+                'with no connection: it is saved here and reaches the server '
+                'on its own.',
+            stillTrue:
+                'Every sale you have already recorded is saved and will be '
+                'sent.',
+            actions: <Widget>[
+              AppButton(
+                key: const ValueKey('shift-gate-close-day'),
+                label: 'Close shift',
+                tier: AppButtonTier.primary,
+                onPressed: _closeShift,
+              ),
+            ],
+          ),
+        ),
         TenantShiftPhase.expired => _surface(
           key: const ValueKey('shift-gate-expired'),
           ErrorState(
@@ -384,8 +518,8 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
           Callout(
             status: AppStatus.problem,
             message:
-                'Shift state could not be read, so this till stays closed. '
-                'Check the connection and open the till again.',
+                'Shift state could not be read, so this register stays closed. '
+                'Check the connection and open the register again.',
           ),
         ),
         TenantShiftPhase.open || TenantShiftPhase.closing => widget.child,
@@ -413,6 +547,12 @@ final class _ShiftGateDialog extends StatefulWidget {
 class _ShiftGateDialogState extends State<_ShiftGateDialog> {
   bool _busy = false;
 
+  /// What the cashier says the drawer starts with, as typed.
+  final TextEditingController _float = TextEditingController();
+
+  /// Why the float box cannot be read, or null while it can.
+  String? _floatError;
+
   @override
   void initState() {
     super.initState();
@@ -429,7 +569,24 @@ class _ShiftGateDialogState extends State<_ShiftGateDialog> {
     // Unsubscribed, never disposed: the controller is the session's and
     // outlives this dialog.
     widget.shifts.removeListener(_handleShiftChanged);
+    _float.dispose();
     super.dispose();
+  }
+
+  /// The float in minor units, or null where the box does not read as money.
+  ///
+  /// **An empty box is no float, not a refusal.** Most shops do not keep one,
+  /// and requiring a typed `0` of all of them to open a till would teach every
+  /// cashier to clear one more box without reading it.
+  int? _floatMinor() {
+    final text = _float.text.trim();
+    if (text.isEmpty) return 0;
+    try {
+      final minor = tenantCatalogPriceMinorUnits(text);
+      return minor > maximumShiftCashMinor ? null : minor;
+    } on TenantCatalogManagementException {
+      return null;
+    }
   }
 
   void _handleShiftChanged() {
@@ -438,8 +595,19 @@ class _ShiftGateDialogState extends State<_ShiftGateDialog> {
 
   Future<void> _open() async {
     if (_busy) return;
-    setState(() => _busy = true);
-    final state = await widget.shifts.openShift();
+    final float = _floatMinor();
+    // **Refused here rather than sent as a zero.** A float that cannot be read
+    // is not a shift with no float: it is a figure the cashier meant to record,
+    // and opening without it would silently bill them for it at close.
+    if (float == null) {
+      setState(() => _floatError = 'Enter an amount, like 2000 or 1500.50.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _floatError = null;
+    });
+    final state = await widget.shifts.openShift(openingFloatMinor: float);
     if (!mounted) return;
     setState(() => _busy = false);
     if (state.phase == TenantShiftPhase.open) Navigator.of(context).pop();
@@ -473,10 +641,44 @@ class _ShiftGateDialogState extends State<_ShiftGateDialog> {
             ),
             SizedBox(height: tokens.spacing.s16),
             Text(
-              'Every sale is recorded against a shift, so this till opens one '
+              'Every sale is recorded against a shift, so this register opens one '
               'before it can sell.',
               textAlign: TextAlign.center,
               style: tokens.typography.bodyLarge.copyWith(
+                color: tokens.colors.text.secondary,
+              ),
+            ),
+            SizedBox(height: tokens.spacing.s16),
+            AppTextField(
+              key: const ValueKey('shift-gate-opening-float'),
+              controller: _float,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              ],
+              label: 'Opening float',
+              leading: Icons.savings_outlined,
+              enabled: !_busy,
+              error: _floatError,
+              // **Not autofocused, unlike the close sheet's boxes.** This
+              // dialog's job is to open a shift and most shops will leave this
+              // empty; raising the keyboard over the one button a cashier came
+              // here to press would cost every one of them a tap to save the
+              // few who type in it.
+              textInputAction: TextInputAction.done,
+              onSubmitted: _busy ? null : (_) => _open(),
+            ),
+            SizedBox(height: tokens.spacing.s8),
+            Text(
+              // Says what the figure is *for*, because that is what makes a
+              // cashier bother with it: it is the reason their drawer balances
+              // at the end of the day instead of reading over by the float.
+              'The change in the drawer before any sale. Leave it empty if '
+              'there is none — it is counted back at close, not taken as '
+              'takings.',
+              style: tokens.typography.caption.copyWith(
                 color: tokens.colors.text.secondary,
               ),
             ),

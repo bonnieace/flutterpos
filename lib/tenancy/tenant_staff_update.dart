@@ -13,6 +13,7 @@ import 'tenant_id.dart';
 import 'tenant_membership_labels.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
+import 'tenant_staff_request_ticket.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_staff_invitation.dart';
 import 'tenant_types.dart';
@@ -79,12 +80,23 @@ final class TenantStaffUpdateResult {
     required this.status,
   });
 
+  /// Decodes one `updateStaffUser` response.
+  ///
+  /// **Only the field this mutation set is checked against an expectation.**
+  /// Until 2026-09-15 this also required the returned `status` to equal the one
+  /// on the directory row the form opened with - a field `updateStaffUser` does
+  /// not write and returns fresh from the transaction. So an administrator
+  /// correcting a phone number while a colleague deactivated the same person
+  /// got a committed write reported as *Staff details could not be updated*,
+  /// and retrying replayed the same request id against the server's idempotency
+  /// record, which returned the same fresh status and failed identically -
+  /// forever. The status is still decoded and carried; it is simply not
+  /// evidence of anything having gone wrong.
   factory TenantStaffUpdateResult.fromCallable(
     Object? value, {
     required String expectedTenantId,
     required String expectedUid,
     required TenantRole expectedRole,
-    required MembershipStatus expectedStatus,
   }) {
     final data = _strictUpdateMap(value);
     if (data['tenantId'] != expectedTenantId) {
@@ -105,7 +117,7 @@ final class TenantStaffUpdateResult {
     }
     final role = TenantRole.fromWire(data['role']);
     final status = MembershipStatus.fromWire(data['status']);
-    if (role != expectedRole || status != expectedStatus) {
+    if (role != expectedRole) {
       throw const FormatException(
         'updateStaffUser returned an unexpected staff state.',
       );
@@ -134,7 +146,7 @@ final class TenantStaffUpdateGateway {
   }) : _session = session,
        _target = target,
        _callable = callable,
-       _requestIdFactory = requestIdFactory ?? _secureUpdateRequestId;
+       _requestIdFactory = requestIdFactory ?? secureUpdateRequestId;
 
   static const allowedRoles = <TenantRole>[TenantRole.admin];
 
@@ -184,7 +196,6 @@ final class TenantStaffUpdateGateway {
       expectedTenantId: _session.tenantId,
       expectedUid: _target.uid,
       expectedRole: draft.role,
-      expectedStatus: _target.status,
     );
   }
 
@@ -205,6 +216,7 @@ final class TenantStaffUpdateForm extends StatefulWidget {
     required this.onSuccess,
     required this.onCancel,
     this.requestIdFactory,
+    this.tickets,
   });
 
   final TenantSession session;
@@ -213,6 +225,9 @@ final class TenantStaffUpdateForm extends StatefulWidget {
   final VoidCallback onSuccess;
   final VoidCallback onCancel;
   final TenantStaffRequestIdFactory? requestIdFactory;
+
+  /// Where this device remembers the request id of an unfinished edit.
+  final TenantStaffRequestTicketSource? tickets;
 
   @override
   State<TenantStaffUpdateForm> createState() => _TenantStaffUpdateFormState();
@@ -267,11 +282,24 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
     final controller = TenantSessionScope.read(context);
     final submittedTargetUid = widget.target.uid;
     if (!_isCurrent(controller, submittedTargetUid)) return;
+    // **The flag is raised before the first `await`, not after it.**
+    // Reading the device's ticket is asynchronous, and a second tap landing
+    // while that read was in flight would find `_submitting` still false and
+    // start a second submission.
+    setState(() {
+      _submitting = true;
+      _safeError = null;
+    });
+    final requestId = await _resolveRequestId(submittedTargetUid);
+    if (!mounted || !_isCurrent(controller, submittedTargetUid)) {
+      _abandonSubmission();
+      return;
+    }
     final gateway = TenantStaffUpdateGateway(
       session: widget.session,
       target: widget.target,
       callable: widget.callable,
-      requestIdFactory: widget.requestIdFactory,
+      requestIdFactory: () => requestId,
     );
     late final TenantStaffUpdateIntent intent;
     try {
@@ -281,31 +309,100 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
         role: _role,
       );
     } catch (_) {
-      if (!mounted || !_isCurrent(controller, submittedTargetUid)) return;
-      setState(() => _safeError = 'Check the staff details and try again.');
+      if (!mounted || !_isCurrent(controller, submittedTargetUid)) {
+        _abandonSubmission();
+        return;
+      }
+      setState(() {
+        _submitting = false;
+        _safeError = 'Check the staff details and try again.';
+      });
       return;
     }
-    setState(() {
-      _submitting = true;
-      _safeError = null;
-    });
     try {
       await gateway.submit(intent);
-    } catch (_) {
-      if (!mounted || !_isCurrent(controller, submittedTargetUid)) return;
+    } catch (error) {
+      // The server re-read this actor's membership and disagreed with what
+      // this session believes about itself. Ask for the session to be
+      // re-read, so the next look at this screen shows what is actually
+      // permitted rather than offering the same refused control again.
+      if (isTenantStaffAuthorizationRefusal(error)) {
+        controller.requestRevalidation();
+      }
+      if (!mounted || !_isCurrent(controller, submittedTargetUid)) {
+        _abandonSubmission();
+        return;
+      }
       setState(() {
         _submitting = false;
         _safeError = 'Staff details could not be updated. Please try again.';
       });
       return;
     }
-    if (!mounted || !_isCurrent(controller, submittedTargetUid)) return;
+    await _clearRequestTicket(submittedTargetUid);
+    if (!mounted || !_isCurrent(controller, submittedTargetUid)) {
+      _abandonSubmission();
+      return;
+    }
     setState(() => _submitting = false);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Staff details updated.')));
     widget.onSuccess();
   }
+
+  /// The id this edit should be asked under, replayed across a restart.
+  ///
+  /// **Fingerprinted on the same fields the server hashes**
+  /// (`membership.ts` records `{targetUid, name, phone, role}`), so the two
+  /// agree on what counts as the same request. Where they disagree the server
+  /// wins safely: a replayed id carrying different input is refused as
+  /// `already-exists` rather than quietly answering with the first attempt's
+  /// result.
+  /// Ends the submission locally when its result is no longer this form's to
+  /// apply.
+  ///
+  /// **A discarded result must still release the button.** These guards existed
+  /// to stop a stale answer being applied after the session moved under it, and
+  /// they returned without clearing `_submitting` - so the form kept its
+  /// spinner for as long as it stayed on screen, over a submission that was
+  /// never coming back. Harmless while a session only changed on a switch that
+  /// tore the route down anyway; reachable the moment anything refreshes a live
+  /// session, which is what noticing a remote role change is for.
+  void _abandonSubmission() {
+    if (!mounted || !_submitting) return;
+    setState(() => _submitting = false);
+  }
+
+  Future<String> _resolveRequestId(String targetUid) async {
+    final tickets = widget.tickets;
+    final mint = widget.requestIdFactory ?? secureUpdateRequestId;
+    if (tickets == null) return mint();
+    return tickets.resolve(
+      uid: widget.session.uid,
+      tenantId: widget.session.tenantId,
+      operation: _ticketOperation,
+      target: targetUid,
+      fingerprint: tenantStaffRequestFingerprint(<String, Object?>{
+        'targetUid': targetUid,
+        'name': normalizeTenantStaffInviteName(_nameController.text),
+        'phone': normalizeTenantStaffInvitePhone(_phoneController.text),
+        'role': _role.wireValue,
+      }),
+      mint: mint,
+    );
+  }
+
+  Future<void> _clearRequestTicket(String targetUid) async {
+    await widget.tickets?.clear(
+      uid: widget.session.uid,
+      tenantId: widget.session.tenantId,
+      operation: _ticketOperation,
+      target: targetUid,
+    );
+  }
+
+  static const _ticketOperation = 'updateStaffUser';
 
   bool _isCurrent(
     TenantSessionController controller,
@@ -329,18 +426,15 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // **§8 rule 4: the verb persists.** The action that opens this form
-          // says `Correct`, and this said `Edit` - one act named two ways on
-          // one screen, and the only one of this route's five forms that did
-          // it. The other four already carry the verb of the action that opened
-          // them: `Resend invitation to ...`, `Cancel invitation for ...`,
-          // `Replace invitation email for ...`, `Deactivate ...`.
+          // and this heading say the same thing, as this route's other four
+          // forms already do: `Resend invitation to ...`, `Cancel invitation
+          // for ...`, `Replace invitation email for ...`, `Deactivate ...`.
           //
-          // ST-055 writes this heading `Correct Staff: {name}`, so the design
-          // and the rule agree, and the words are the design's rather than a
-          // third phrasing chosen here. `Staff:` is doing work: this route also
-          // opens an *invitation* form, and correcting a person's details is
-          // not correcting their invitation.
-          SectionHeading('Correct Staff: ${widget.target.displayName}'),
+          // Both were `Correct` until 2026-09-15, which named a third of what
+          // the form does. A person correcting a phone number is also
+          // submitting the role on screen, and `Correct` is precisely the word
+          // that stops them noticing.
+          SectionHeading('Edit role and details: ${widget.target.displayName}'),
           SizedBox(height: tokens.spacing.s8),
           AppTextField(
             key: const ValueKey('update-staff-name'),
@@ -464,7 +558,9 @@ Map<String, Object?> _strictUpdateMap(Object? value) {
   return result;
 }
 
-String _secureUpdateRequestId() {
+/// Mints one staff-update request id. Public so the ticket store can use the
+/// same minter the gateway would have.
+String secureUpdateRequestId() {
   final random = Random.secure();
   final bytes = List<int>.generate(18, (_) => random.nextInt(256));
   return 'update-${base64Url.encode(bytes).replaceAll('=', '')}';

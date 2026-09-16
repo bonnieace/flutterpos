@@ -4,6 +4,7 @@ import {
   bindStaffDeliveryRecipient,
   invitationDeliveryLink,
   isEligibleStaffInvitationRecipient,
+  mirrorDeliveryStateOntoStaff,
   validateInvitationDeliveryTask,
 } from "./invitationDelivery";
 import {hashRecipient} from "../email/recipientHash";
@@ -148,4 +149,84 @@ test("staff delivery rechecks the current Auth and canonical tenant identity", (
     {...tenant, status: "suspended"},
     staff
   ), false);
+});
+
+test("the delivery mirror writes only onto a still-pending staff record", () => {
+  // **The guard is the whole of this helper.** The worker runs long after the
+  // transaction that queued it, so by the time it lands the member may have
+  // accepted or the invitation may have been cancelled and the record deleted.
+  const writes: Array<Record<string, unknown>> = [];
+  const transaction = {
+    update: (_ref: unknown, data: Record<string, unknown>) => {
+      writes.push(data);
+    },
+  } as unknown as Parameters<typeof mirrorDeliveryStateOntoStaff>[0];
+  const staffRef = {id: "user-1"} as
+    Parameters<typeof mirrorDeliveryStateOntoStaff>[1];
+  const snapshot = (
+    exists: boolean,
+    data?: Record<string, unknown>
+  ) => ({exists, data: () => data}) as unknown as
+    Parameters<typeof mirrorDeliveryStateOntoStaff>[2];
+
+  // Still pending: the one case that writes.
+  mirrorDeliveryStateOntoStaff(
+    transaction,
+    staffRef,
+    snapshot(true, {uid: "user-1", status: "pending"}),
+    {invitationDeliveryState: "sent"}
+  );
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].invitationDeliveryState, "sent");
+
+  // Accepted between the send and this write: the membership has moved on and a
+  // delivery label must not be hung on it.
+  mirrorDeliveryStateOntoStaff(
+    transaction,
+    staffRef,
+    snapshot(true, {uid: "user-1", status: "active"}),
+    {invitationDeliveryState: "sent"}
+  );
+  // Cancelled: the record is gone, and updating it would fail the task into a
+  // retry loop against a document that is never coming back.
+  mirrorDeliveryStateOntoStaff(
+    transaction,
+    staffRef,
+    snapshot(false),
+    {invitationDeliveryState: "failed"}
+  );
+  // A record whose projected uid is not its own document id.
+  mirrorDeliveryStateOntoStaff(
+    transaction,
+    staffRef,
+    snapshot(true, {uid: "someone-else", status: "pending"}),
+    {invitationDeliveryState: "failed"}
+  );
+  assert.equal(writes.length, 1);
+});
+
+test("the delivery mirror never touches the membership's own invitation state", () => {
+  // Four server gates read `invitationStatus` on this record -
+  // `requirePendingStaffInvitation`, `acceptancePolicy`,
+  // `isEligibleStaffInvitationRecipient` and the client's strict projection - so
+  // a delivery outcome folded into it would refuse the recipient's acceptance
+  // and the administrator's replace-the-address.
+  const writes: Array<Record<string, unknown>> = [];
+  const transaction = {
+    update: (_ref: unknown, data: Record<string, unknown>) => {
+      writes.push(data);
+    },
+  } as unknown as Parameters<typeof mirrorDeliveryStateOntoStaff>[0];
+
+  mirrorDeliveryStateOntoStaff(
+    transaction,
+    {id: "user-1"} as Parameters<typeof mirrorDeliveryStateOntoStaff>[1],
+    ({exists: true, data: () => ({uid: "user-1", status: "pending"})}) as
+      unknown as Parameters<typeof mirrorDeliveryStateOntoStaff>[2],
+    {invitationDeliveryState: "failed"}
+  );
+
+  assert.equal(writes.length, 1);
+  assert.ok(!("invitationStatus" in writes[0]));
+  assert.equal(writes[0].invitationDeliveryState, "failed");
 });

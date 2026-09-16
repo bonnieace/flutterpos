@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/buttons.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -110,7 +112,6 @@ void main() {
         {...valid, 'tenantId': 'tenant-b'},
         {...valid, 'uid': 'staff-b'},
         {...valid, 'role': 'cashier'},
-        {...valid, 'status': 'inactive'},
         {...valid, 'unexpected': true},
         {...valid, 'uid': 'bad/uid'},
       ];
@@ -122,11 +123,32 @@ void main() {
             expectedTenantId: 'tenant-a',
             expectedUid: 'staff-a',
             expectedRole: TenantRole.manager,
-            expectedStatus: MembershipStatus.active,
           ),
           throwsFormatException,
         );
       }
+    });
+
+    test('accepts a status this mutation did not set and did not expect', () {
+      // **The committed write that reported itself as a failure.** An
+      // administrator opens Correct against an active member; a colleague
+      // deactivates that member; the correction commits and the server returns
+      // the fresh `inactive`. Requiring it to match the row the form opened
+      // with turned that into *Staff details could not be updated*, and the
+      // retry replayed the same request id into the same idempotency record for
+      // the same fresh status - so it could never succeed.
+      final result = TenantStaffUpdateResult.fromCallable(
+        {
+          ..._updateResponse('tenant-a', 'staff-a', role: TenantRole.manager),
+          'status': 'inactive',
+        },
+        expectedTenantId: 'tenant-a',
+        expectedUid: 'staff-a',
+        expectedRole: TenantRole.manager,
+      );
+
+      expect(result.status, MembershipStatus.inactive);
+      expect(result.role, TenantRole.manager);
     });
   });
 
@@ -335,6 +357,130 @@ void main() {
         callable.payloads.last['requestId'],
       );
       expect(successes, 1);
+    });
+
+    testWidgets('a discarded result releases the button it was spinning', (
+      tester,
+    ) async {
+      // **N3.** These guards exist to stop a stale answer being applied after
+      // the session moved under it, and they returned without clearing
+      // `_submitting` - so the form kept spinning over a submission that was
+      // never coming back. Latent while a session only changed on a switch that
+      // tore the route down; reachable the moment a live session can refresh.
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      final pending = Completer<Object?>();
+      final callable = _UpdateCallable(handler: (_, _) => pending.future);
+
+      await tester.pumpWidget(
+        _formApp(
+          controller: controller,
+          target: _summary('tenant-a', 'staff-a'),
+          callable: callable,
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('update-staff-submit')));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester
+            .widget<AppButton>(
+              find.byKey(const ValueKey('update-staff-submit')),
+            )
+            .loading,
+        isTrue,
+      );
+
+      // The session moves under the form while its answer is outstanding.
+      controller.open(
+        uid: 'admin-a',
+        membership: _membership('tenant-b', role: TenantRole.owner),
+      );
+      await tester.pump();
+      pending.completeError(StateError('discarded'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<AppButton>(
+              find.byKey(const ValueKey('update-staff-submit')),
+            )
+            .loading,
+        isFalse,
+        reason: 'a result this form may no longer apply must still free it',
+      );
+    });
+
+    testWidgets('a refused edit asks for the session to be re-read', (
+      tester,
+    ) async {
+      // **M1's own scenario, from the other end.** The session still believes
+      // this actor is an administrator; the server re-read their canonical
+      // membership and disagrees. Nothing pushes that decision to this device -
+      // `listMyTenants` is a callable, and a deactivated member loses the right
+      // to read the record saying they were deactivated - so the refusal itself
+      // is the notification, and acting on it is what turns *press it again and
+      // be refused again* into a screen that corrects itself.
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      var revalidations = 0;
+      controller.onRevalidationRequested = () => revalidations++;
+      final callable = _UpdateCallable(
+        handler: (_, _) => Future<Object?>.error(
+          FirebaseFunctionsException(
+            code: 'permission-denied',
+            message: 'not an administrator',
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        _formApp(
+          controller: controller,
+          target: _summary('tenant-a', 'staff-a'),
+          callable: callable,
+        ),
+      );
+      await _tapVisible(tester, 'update-staff-submit');
+
+      expect(revalidations, 1);
+      expect(
+        find.text('Staff details could not be updated. Please try again.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a refusal about the target does not ask for a re-read', (
+      tester,
+    ) async {
+      // `failed-precondition` is the server disagreeing about the *member*, not
+      // about the actor - a colleague got there first. Asking for a session
+      // re-read on that would have every raced record trigger one, and it would
+      // say nothing about what this session may do.
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      var revalidations = 0;
+      controller.onRevalidationRequested = () => revalidations++;
+      final callable = _UpdateCallable(
+        handler: (_, _) => Future<Object?>.error(
+          FirebaseFunctionsException(
+            code: 'failed-precondition',
+            message: 'the target is not active',
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        _formApp(
+          controller: controller,
+          target: _summary('tenant-a', 'staff-a'),
+          callable: callable,
+        ),
+      );
+      await _tapVisible(tester, 'update-staff-submit');
+
+      expect(revalidations, 0);
     });
 
     testWidgets('tenant switch discards an outstanding success', (

@@ -369,14 +369,25 @@ final class _ShiftHistoryContents extends StatelessWidget {
           _ => AppStatus.problem,
         },
         label: switch (variance) {
+          // Two different silences, and they need different words: one is a
+          // shift closed before summaries existed, the other is one somebody
+          // had to end on a cashier's behalf, holding none of its sales.
+          null when entry.closedWithoutEvidence => 'Closed without its sales',
           null => 'No closing summary',
-          0 => 'Cash matches',
-          final over when over > 0 => 'Cash over',
-          _ => 'Cash short',
+          // **Takings, not cash.** The figure is the whole declaration against
+          // the whole of the sales; calling it cash is what made a shop with
+          // M-Pesa read as short by the value of its M-Pesa.
+          0 => 'Takings match',
+          final over when over > 0 => 'Takings over',
+          _ => 'Takings short',
         },
-        semanticLabel: variance == null
-            ? 'No closing summary was recorded for this shift.'
-            : _varianceLabel(variance),
+        semanticLabel: switch (variance) {
+          null when entry.closedWithoutEvidence =>
+            'This shift was closed by a device holding none of its sales, so '
+                'its figures are not known.',
+          null => 'No closing summary was recorded for this shift.',
+          _ => _varianceLabel(variance),
+        },
       ),
       attributes: <RecordAttribute>[
         RecordAttribute(
@@ -385,6 +396,18 @@ final class _ShiftHistoryContents extends StatelessWidget {
           value: _money(entry.closingCashMinor),
           valueKey: ValueKey('shift-history-counted-${entry.id}'),
         ),
+        // **Shown only where there was one**, because a row reading *Opening
+        // float 0.00* on every shift in a shop that never floats a till is
+        // noise on the screen a cashier settles cash from. Where there was one
+        // it has to be here: it is subtracted from the difference above, and a
+        // figure that moves the answer has to be visible beside it.
+        if (entry.openingFloatMinor > 0)
+          RecordAttribute(
+            kind: RecordValueKind.money,
+            label: 'Opening float',
+            value: _money(entry.openingFloatMinor),
+            valueKey: ValueKey('shift-history-float-${entry.id}'),
+          ),
         // Two figures the close recorded, and two columns: one sentence naming
         // both meant the transaction count could not be read down a page.
         if (summary != null) ...<RecordAttribute>[
@@ -478,10 +501,10 @@ String _amendedLabel(ShiftSummaryAmendment amendment) {
 
 /// The difference between two recorded figures, named rather than recomputed.
 String _varianceLabel(int varianceMinor) {
-  if (varianceMinor == 0) return 'Counted cash matches recorded sales.';
+  if (varianceMinor == 0) return 'Declared takings match recorded sales.';
   return varianceMinor > 0
-      ? 'Counted cash is over by ${_money(varianceMinor)}.'
-      : 'Counted cash is short by ${_money(-varianceMinor)}.';
+      ? 'Declared takings are over by ${_money(varianceMinor)}.'
+      : 'Declared takings are short by ${_money(-varianceMinor)}.';
 }
 
 String _closedLabel(TenantShiftHistoryEntry entry) {

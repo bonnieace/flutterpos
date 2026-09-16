@@ -280,6 +280,63 @@ test("a client cannot choose when a shift began or pre-close it", async () => {
   }
 });
 
+test("an opening float is optional, bounded, and never negative", async () => {
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+
+  // The change in the drawer before the first sale. Nightly verification adds
+  // it to the cash it expects of that drawer, so what is written here is what
+  // the cashier is judged against - which is why a negative is refused rather
+  // than clamped: it would lower what they have to account for.
+  await assertSucceeds(
+    openShift(firestore, {
+      shiftId: "shift-float",
+      overrides: { openingFloatMinor: 200000 },
+    }),
+  );
+  // A shop that keeps no change writes no field, and reconciliation reads an
+  // absent one as zero - which is what every shift opened before this meant.
+  await assertSucceeds(openShift(firestore, { shiftId: "shift-no-float" }));
+
+  const denied = [
+    ["negative-float", { openingFloatMinor: -1 }],
+    ["fractional-float", { openingFloatMinor: 1500.5 }],
+    ["text-float", { openingFloatMinor: "2000" }],
+    ["absurd-float", { openingFloatMinor: 1000000000001 }],
+  ];
+
+  for (const [name, overrides] of denied) {
+    await assertFails(
+      openShift(firestore, { shiftId: `shift-${name}`, overrides }),
+    );
+    if (await storedShift(`shift-${name}`)) {
+      throw new Error(`A denied ${name} shift was still created.`);
+    }
+  }
+});
+
+test("a close cannot rewrite the float the shift was opened on", async () => {
+  // **The figure is fixed at open**, because it is half of the comparison the
+  // close is marked against. A cashier who could raise it at close could raise
+  // the cash expected of a drawer they had already counted, and settle any
+  // shortfall by declaring the drawer had started fuller than it did.
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+  await assertSucceeds(
+    openShift(firestore, {
+      shiftId: "shift-fixed-float",
+      overrides: { openingFloatMinor: 200000 },
+    }),
+  );
+
+  await assertFails(
+    closeShift(firestore, {
+      shiftId: "shift-fixed-float",
+      overrides: { openingFloatMinor: 500000 },
+    }),
+  );
+});
+
 test("a shift is always opened by its own cashier", async () => {
   await seedShiftTenant();
 

@@ -275,6 +275,77 @@ void main() {
       },
     );
 
+    testWidgets(
+      'a restart mid-invitation replays the first request, not a second',
+      (tester) async {
+        // **M5.** The invitation is sent, the server commits it, and the reply
+        // never arrives - the connection drops, the app is closed. Before the
+        // ticket store the request id died with the form, so pressing Invite
+        // again after a restart was a *new* logical operation: a new id, a new
+        // idempotency record, and a server that correctly refuses to create a
+        // membership that already exists. The operator was told the invitation
+        // had failed, and it had not.
+        final tickets = _RecordingTickets();
+        var minted = 0;
+        final controller = TenantSessionController()
+          ..open(
+            uid: 'owner-a',
+            membership: _membership('tenant-a', role: TenantRole.owner),
+          );
+        final lost = Completer<Object?>();
+        final callable = _InviteCallable(
+          handler: (payload, callIndex) => callIndex == 0
+              ? lost.future
+              : Future.value(_inviteResponse('tenant-a')),
+        );
+
+        await tester.pumpWidget(
+          _formApp(
+            controller: controller,
+            callable: callable,
+            tickets: tickets,
+            requestIdFactory: () => 'invite-mint-${++minted}',
+          ),
+        );
+        await _fillValidForm(tester);
+        await tester.tap(find.byKey(const ValueKey('invite-staff-submit')));
+        // Two pumps: reading the device's ticket is a turn of the loop before
+        // the callable is reached at all.
+        await tester.pump();
+        await tester.pump();
+        expect(callable.payloads, hasLength(1));
+
+        // The process dies with the answer still outstanding: the whole widget
+        // tree goes, and with it every scrap of in-memory state. Only the
+        // device's own store survives, which is the point.
+        lost.completeError(StateError('connection lost'));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+
+        await tester.pumpWidget(
+          _formApp(
+            controller: controller,
+            callable: callable,
+            tickets: tickets,
+            requestIdFactory: () => 'invite-mint-${++minted}',
+          ),
+        );
+        await _fillValidForm(tester);
+        await tester.tap(find.byKey(const ValueKey('invite-staff-submit')));
+        await tester.pumpAndSettle();
+
+        expect(callable.payloads, hasLength(2));
+        expect(
+          callable.payloads[1]['requestId'],
+          callable.payloads[0]['requestId'],
+          reason: 'the second press must replay the first request',
+        );
+        // And the answer ends the replay, so a later invitation is its own
+        // request rather than an echo of this one.
+        expect(tickets.cleared, isTrue);
+      },
+    );
+
     testWidgets('tenant switch discards an outstanding success', (
       tester,
     ) async {
@@ -447,6 +518,8 @@ Widget _formApp({
   required TenantSessionController controller,
   required InviteStaffCallable callable,
   VoidCallback? onSuccess,
+  TenantStaffRequestTicketSource? tickets,
+  TenantStaffRequestIdFactory? requestIdFactory,
 }) => MaterialApp(
   home: TenantSessionScope(
     controller: controller,
@@ -454,7 +527,8 @@ Widget _formApp({
       body: TenantStaffInvitationForm(
         session: controller.session!,
         callable: callable,
-        requestIdFactory: () => 'invite-form-request',
+        requestIdFactory: requestIdFactory ?? () => 'invite-form-request',
+        tickets: tickets,
         onSuccess: onSuccess ?? () {},
       ),
     ),
@@ -504,4 +578,41 @@ Future<void> _tapVisible(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
   await tester.tap(finder);
   await tester.pumpAndSettle();
+}
+
+/// An in-memory stand-in for the device's durable ticket store.
+final class _RecordingTickets implements TenantStaffRequestTicketSource {
+  final Map<String, ({String fingerprint, String requestId})> _held = {};
+  bool cleared = false;
+
+  String _key(String uid, String tenantId, String operation, String target) =>
+      '$uid::$tenantId::$operation::$target';
+
+  @override
+  Future<String> resolve({
+    required String uid,
+    required String tenantId,
+    required String operation,
+    required String target,
+    required String fingerprint,
+    required String Function() mint,
+  }) async {
+    final key = _key(uid, tenantId, operation, target);
+    final held = _held[key];
+    if (held != null && held.fingerprint == fingerprint) return held.requestId;
+    final requestId = mint();
+    _held[key] = (fingerprint: fingerprint, requestId: requestId);
+    return requestId;
+  }
+
+  @override
+  Future<void> clear({
+    required String uid,
+    required String tenantId,
+    required String operation,
+    required String target,
+  }) async {
+    cleared = true;
+    _held.remove(_key(uid, tenantId, operation, target));
+  }
 }

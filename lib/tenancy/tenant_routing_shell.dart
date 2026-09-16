@@ -42,6 +42,7 @@ import 'tenant_route_guard.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
 import 'tenant_staff_directory.dart';
+import 'tenant_staff_request_ticket.dart';
 import 'tenant_switch.dart';
 import 'tenant_types.dart';
 import 'tenant_visible_invitation_acceptance.dart';
@@ -113,6 +114,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.setGlobalUserStatusCallable,
     this.platformTenantReviewRequestIdFactory,
     this.tenantDataReader,
+    this.staffRequestTickets,
     this.tenantRouteBuilder,
     this.reconnectSignals,
     this.checkoutRoute,
@@ -254,6 +256,11 @@ final class TenantRoutingShell extends StatefulWidget {
   final SetGlobalUserStatusCallable? setGlobalUserStatusCallable;
   final PlatformTenantRequestIdFactory? platformTenantReviewRequestIdFactory;
   final TenantDataReader? tenantDataReader;
+
+  /// Where this device remembers the request id of an unfinished staff
+  /// mutation, so a second press after a restart replays the first request
+  /// rather than starting a second one.
+  final TenantStaffRequestTicketSource? staffRequestTickets;
 
   /// Fires when this device has a network again.
   ///
@@ -448,7 +455,8 @@ enum _RoutingPhase {
   signingOut,
 }
 
-final class _TenantRoutingShellState extends State<TenantRoutingShell> {
+final class _TenantRoutingShellState extends State<TenantRoutingShell>
+    with WidgetsBindingObserver {
   final TenantSessionController _sessionController = TenantSessionController();
   StreamSubscription<String?>? _authSubscription;
   StreamSubscription<Object?>? _tenantRecoverySubscription;
@@ -476,6 +484,10 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // The other half of noticing a decision somebody else made: a guarded
+    // surface that gets refused can say so, and this is what it says it to.
+    _sessionController.onRevalidationRequested = _scheduleBootstrapRefresh;
     _pendingInvitationLink = widget.invitationLink;
     _hasInvalidInvitationLink = widget.invalidInvitationLink;
     _subscribeToAuth();
@@ -702,7 +714,13 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     int token,
   ) {
     if (!_isCurrent(uid, token)) return;
-    _sessionController.open(uid: uid, membership: membership);
+    // **`refresh`, not `open`.** This is reached by the first bootstrap *and*
+    // by every re-read of an already open session, and only the first of those
+    // is a new session. See `TenantSessionController.refresh`: an unchanged
+    // access decision keeps its epoch, so a re-read that confirms what the
+    // session already held does not invalidate every page and in-flight form
+    // on screen.
+    _sessionController.refresh(uid: uid, membership: membership);
     setState(() {
       _bootstrapResult = result;
       _membership = membership;
@@ -715,6 +733,24 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
           .catchError((_) {}),
     );
     _runTenantRecovery();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // **The moment the app can notice a decision somebody else made.** A role
+    // change or a deactivation reaches this device through no channel of its
+    // own: `listMyTenants` is a callable, not a document, and the canonical
+    // staff record stops being readable at the instant a membership is
+    // deactivated - so the one thing this app cannot do is be *told*. What it
+    // can do is ask again when somebody picks their phone back up.
+    //
+    // **Safe to do often, because `TenantSessionController.refresh` is now
+    // free when the answer has not moved**: an unchanged access decision keeps
+    // its epoch and disturbs nothing on screen. Debounced by
+    // `_scheduleBootstrapRefresh`, single-flighted by `_startBootstrapRefresh`,
+    // and a refresh that cannot reach the server leaves the session exactly as
+    // it was - so this changes nothing at all offline.
+    if (state == AppLifecycleState.resumed) _scheduleBootstrapRefresh();
   }
 
   void _scheduleBootstrapRefresh() {
@@ -733,10 +769,42 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     _bootstrapRefresh = pending;
     unawaited(
       pending.whenComplete(() {
-        if (identical(_bootstrapRefresh, pending)) _bootstrapRefresh = null;
+        if (!identical(_bootstrapRefresh, pending)) return;
+        // **`setState`, because a refusal is news.** Until this settles the
+        // shell says nothing about where its data came from; the moment it
+        // settles without replacing the cached result, the offline note is
+        // owed. Clearing the field silently would leave that note waiting for
+        // whatever unrelated rebuild happened next.
+        if (!mounted) {
+          _bootstrapRefresh = null;
+          return;
+        }
+        setState(() => _bootstrapRefresh = null);
       }),
     );
   }
+
+  /// Whether the shell has *established* that it is working from saved data.
+  ///
+  /// **A cache hit is not evidence of being offline, and this used to treat it
+  /// as though it were.** The bootstrap reads the device first and draws the
+  /// home from it before asking the server anything - that is deliberate, and
+  /// it is why a till opens in a basement. But the banner it drew says
+  /// *Changes will sync when connected*, which is a claim about the network,
+  /// and at the moment it first appeared the app had not yet tried to reach
+  /// the network at all. Every cold start therefore announced an outage it had
+  /// no grounds for, and then took it back a second later when the refresh
+  /// landed - which is worse than saying nothing, because a person who has
+  /// been told twice that they are offline while they are not stops believing
+  /// the notice on the day it is true.
+  ///
+  /// So the note waits for an answer. While the refresh is in flight the
+  /// shell is silent, because *unknown* is its honest state; a refresh that
+  /// succeeds replaces the cached result and there is nothing to say; and a
+  /// refresh that fails leaves the cached result standing, which is the one
+  /// case the sentence was written for.
+  bool get _worksFromSavedData =>
+      _bootstrapRefresh == null && (_bootstrapResult?.fromCache ?? false);
 
   Future<void> _refreshOpenSession(String uid, int token) async {
     try {
@@ -898,6 +966,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _flowToken++;
     _bootstrapRefreshDebounce?.cancel();
     _authSubscription?.cancel();
@@ -1029,6 +1098,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
               widget.acceptVisibleInvitationCallable,
           visibleInvitationRequestIdFactory:
               widget.visibleInvitationRequestIdFactory,
+          staffRequestTickets: widget.staffRequestTickets,
           requestTenantCallable: widget.requestTenantCallable,
           tenantRequestIdFactory: widget.tenantRequestIdFactory,
           onTenantRequested: _refreshAfterTenantRequest,
@@ -1049,11 +1119,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             Expanded(child: _buildTenantRoute(context)),
-            if (_bootstrapResult case TenantBootstrapResult(
-              fromCache: true,
-              cachedAt: final cachedAt,
-            ))
-              _OfflineBootstrapBanner(cachedAt: cachedAt),
+            if (_worksFromSavedData)
+              _OfflineBootstrapBanner(cachedAt: _bootstrapResult?.cachedAt),
           ],
         ),
         _RoutingPhase.platform => _buildPlatformRoute(),
@@ -1201,6 +1268,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       membership: membership,
       reader: widget.tenantDataReader ?? FirebaseTenantDocumentReader(),
       onSignOut: _signOut,
+      staffRequestTickets: widget.staffRequestTickets,
       isDefaultTenant:
           _bootstrapResult?.profile.defaultTenantId == membership.tenantId,
       setDefaultTenantCallable: widget.setDefaultTenantCallable,
@@ -1415,6 +1483,7 @@ final class TenantBusinessSelector extends StatefulWidget {
     this.onReloadIdentity,
     this.acceptVisibleInvitationCallable,
     this.visibleInvitationRequestIdFactory,
+    this.staffRequestTickets,
     this.requestTenantCallable,
     this.tenantRequestIdFactory,
     this.isCurrent,
@@ -1422,6 +1491,9 @@ final class TenantBusinessSelector extends StatefulWidget {
 
   final TenantVisibleInvitationIdentity? identity;
   final TenantRequestIdentity? requestIdentity;
+
+  /// Where this device remembers the request id of an unfinished acceptance.
+  final TenantStaffRequestTicketSource? staffRequestTickets;
 
   /// The identity offered the verification panel. This screen is exactly where
   /// an unverified identity is stuck: it can neither request a business nor
@@ -1691,6 +1763,7 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
                                       FirebaseAcceptVisibleTenantInvitationCallable(),
                                   requestIdFactory:
                                       widget.visibleInvitationRequestIdFactory,
+                                  tickets: widget.staffRequestTickets,
                                   isCurrent: widget.isCurrent,
                                   onSuccess: _accepted,
                                   onCancel: () =>
@@ -2476,6 +2549,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     required this.membership,
     required this.reader,
     required this.onSignOut,
+    this.staffRequestTickets,
     this.isDefaultTenant = false,
     this.setDefaultTenantCallable,
     this.defaultTenantRequestIdFactory,
@@ -2527,6 +2601,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   final TenantMembership membership;
   final TenantDataReader reader;
+
+  /// Where this device remembers the request id of an unfinished staff
+  /// mutation. Handed to the staff route this screen opens.
+  final TenantStaffRequestTicketSource? staffRequestTickets;
   final Future<void> Function() onSignOut;
   final bool isDefaultTenant;
   final SetDefaultTenantCallable? setDefaultTenantCallable;
@@ -3079,8 +3157,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       HomeDestination(
         destinationKey: const ValueKey('start-checkout'),
         label: 'Register',
-        description:
-            'Process sales, manage orders, and handle customer transactions.',
+        // **It promised two things this product does not have.** The line read
+        // *Process sales, manage orders, and handle customer transactions*, and
+        // there is no order anywhere in the live app and no customer record of
+        // any kind - `lib/model/customer.dart` is one of the unreachable files
+        // `test/dev/reachable_lib_test.dart` pins. Naming a capability on the
+        // one screen every shopkeeper opens first is how a person goes looking
+        // for a feature that was never built.
+        description: 'Ring up a sale, take the payment, and print the receipt.',
         icon: Icons.point_of_sale,
         isPrimary: true,
         onPressed: () {
@@ -3325,7 +3409,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       HomeDestination(
         destinationKey: const ValueKey('printer-settings'),
         label: 'Printer',
-        description: 'Set the till printer and put a test page on the roll.',
+        description:
+            'Set the register printer and put a test page on the roll.',
         group: 'Settings',
         icon: Icons.print_outlined,
         onPressed: () {
@@ -3344,8 +3429,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       HomeDestination(
         destinationKey: const ValueKey('staff'),
         label: 'Staff',
-        description:
-            'Manage employee profiles, permissions, and access control.',
+        description: 'Manage your team, their roles and access.',
         group: 'Settings',
         icon: Icons.people_outline,
         onPressed: () {
@@ -3354,7 +3438,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             AppPageRoute<void>(
               builder: (_) => TenantSessionScope(
                 controller: controller,
-                child: TenantStaffDirectoryScreen(reader: reader),
+                child: TenantStaffDirectoryScreen(
+                  reader: reader,
+                  tickets: staffRequestTickets,
+                ),
               ),
             ),
           );

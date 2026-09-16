@@ -36,6 +36,7 @@ final class TenantShiftLocalRecord {
     required this.closeInProgress,
     required this.updatedAt,
     required this.openedAt,
+    this.openingFloatMinor = 0,
     this.countedCashMinor,
     this.declaration,
     this.closedAt,
@@ -68,6 +69,16 @@ final class TenantShiftLocalRecord {
   /// would be worse: it is unverifiable, and reconciliation is built on the
   /// server's.
   final DateTime? closedAt;
+
+  /// The change this drawer started with, in minor units.
+  ///
+  /// **Durable because the replay needs it.** A shift opened with no network
+  /// is sent later by `TenantShiftController._replayUnsentOpen`, which rebuilds
+  /// the intent from this record - so a float held only in the dialog that
+  /// collected it would be silently dropped by exactly the shifts most likely
+  /// to need it. Zero for every record written before the field existed, which
+  /// is the same answer those shifts already gave.
+  final int openingFloatMinor;
 
   /// The cash figure a close recorded before the tender declaration existed.
   ///
@@ -113,6 +124,9 @@ final class TenantShiftLocalRecord {
     serverConfirmedOpen: serverConfirmedOpen ?? this.serverConfirmedOpen,
     closeInProgress: closeInProgress ?? this.closeInProgress,
     openedAt: openedAt,
+    // Fixed at open, like the shift document's own copy: no later edit to this
+    // record may change what the drawer is said to have started with.
+    openingFloatMinor: openingFloatMinor,
     // **Both figures clear together, because they are one fact.** An abandoned
     // count that dropped the declaration but kept the legacy cash number would
     // leave the record claiming a close was counted when nothing was.
@@ -134,6 +148,7 @@ final class TenantShiftLocalRecord {
     'deviceId': deviceId,
     'serverConfirmedOpen': serverConfirmedOpen,
     'closeInProgress': closeInProgress,
+    if (openingFloatMinor > 0) 'openingFloatMinor': openingFloatMinor,
     // The legacy figure is preserved on a record that still carries one, so a
     // close counted by the previous build survives this one's first save and
     // can still be replayed. Nothing writes it fresh.
@@ -295,6 +310,7 @@ final class HiveTenantShiftState {
     final serverConfirmedOpen = map['serverConfirmedOpen'];
     final closeInProgress = map['closeInProgress'];
     final countedCashMinor = map['countedCashMinor'];
+    final openingFloatMinor = map['openingFloatMinor'];
     final updatedAtMs = map['updatedAtMs'];
     final openedAtMs = map['openedAtMs'];
     final closedAtMs = map['closedAtMs'];
@@ -319,6 +335,10 @@ final class HiveTenantShiftState {
         updatedAtMs is! int ||
         (countedCashMinor != null &&
             (countedCashMinor is! int || countedCashMinor < 0)) ||
+        (openingFloatMinor != null &&
+            (openingFloatMinor is! int ||
+                openingFloatMinor < 0 ||
+                openingFloatMinor > maximumShiftCashMinor)) ||
         (closedAtMs != null && closedAtMs is! int)) {
       throw const TenantShiftStateException('malformed_shift_state');
     }
@@ -342,6 +362,9 @@ final class HiveTenantShiftState {
       serverConfirmedOpen: serverConfirmedOpen,
       closeInProgress: closeInProgress,
       countedCashMinor: countedCashMinor as int?,
+      // Absent reads as no float, which is what every shift opened before the
+      // field existed meant.
+      openingFloatMinor: (openingFloatMinor as int?) ?? 0,
       // Absent on every record written before an offline close was possible,
       // which reads correctly as "this shift was not closed here".
       closedAt: closedAtMs is int

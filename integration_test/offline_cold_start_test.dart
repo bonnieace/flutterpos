@@ -40,12 +40,7 @@ void main() {
       // Opening the register primes catalog, configuration, and shift reads.
       await tester.tap(find.byKey(const ValueKey('start-checkout')));
       await tester.pump();
-      await _waitForAny(tester, <Finder>[
-        find.byKey(const ValueKey('checkout-cart')),
-        find.byKey(const ValueKey('checkout-wide')),
-        find.byKey(const ValueKey('checkout-compact')),
-        find.byKey(const ValueKey('tenant-shift-panel')),
-      ]);
+      await _waitForAny(tester, _registerArrived);
       return;
     }
 
@@ -65,12 +60,11 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('start-checkout')));
     await tester.pump();
-    await _waitForAny(tester, <Finder>[
-      find.byKey(const ValueKey('checkout-cart')),
-      find.byKey(const ValueKey('checkout-wide')),
-      find.byKey(const ValueKey('checkout-compact')),
-      find.byKey(const ValueKey('tenant-shift-panel')),
-    ], timeout: const Duration(seconds: 2));
+    await _waitForAny(
+      tester,
+      _registerArrived,
+      timeout: const Duration(seconds: 2),
+    );
 
     // When the seeded catalog and open shift make a product directly usable,
     // prove the durable checkout path too. A seed without one still proves the
@@ -96,6 +90,32 @@ void main() {
     }
   });
 }
+
+/// Reaching the register, by any of the surfaces that count as having reached
+/// it.
+///
+/// **This test primes caches; it does not assert that a till may sell.** The
+/// register opens onto the shift gate, and the gate has every right to refuse -
+/// no shift open, a shift past the 24-hour cap, one that belongs to yesterday.
+/// Each of those is the register reached, and the catalog, configuration and
+/// shift reads this test exists to warm have all happened by then.
+///
+/// **`tenant-shift-panel` was in this list and has not existed since the gate
+/// replaced that panel**, so the only accepted outcomes were the three till
+/// layouts - and the test passed anyway, because a freshly seeded shift is
+/// always sellable *on the day it was seeded*. It took a shift left open across
+/// midnight to show that the list had gone stale.
+final List<Finder> _registerArrived = <Finder>[
+  find.byKey(const ValueKey('checkout-cart')),
+  find.byKey(const ValueKey('checkout-wide')),
+  find.byKey(const ValueKey('checkout-compact')),
+  find.byKey(const ValueKey('shift-gate-blocked')),
+  find.byKey(const ValueKey('shift-gate-expired')),
+  find.byKey(const ValueKey('shift-gate-day-ended')),
+  find.byKey(const ValueKey('shift-gate-closed-pending')),
+  find.byKey(const ValueKey('shift-gate-unavailable')),
+  find.byKey(const ValueKey('shift-gate-error')),
+];
 
 Future<void> _waitFor(
   WidgetTester tester,

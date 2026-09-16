@@ -13,9 +13,23 @@ import 'tenant_id.dart';
 import 'tenant_membership_labels.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
+import 'tenant_staff_request_ticket.dart';
 import 'tenant_types.dart';
 
 typedef TenantStaffRequestIdFactory = String Function();
+
+/// Whether [error] is the server saying this session may not do that.
+///
+/// **Only `permission-denied`.** Every staff callable re-reads the actor's
+/// canonical membership before it acts, so this code means the server disagreed
+/// with what the session believed about itself - which is near-proof the
+/// session is stale. `failed-precondition` is deliberately excluded: it is the
+/// server disagreeing about the *target* (an invitation that is no longer
+/// pending, a member who is no longer active), which says nothing about the
+/// actor and would have a form asking for a re-read every time an operator
+/// raced a colleague on one record.
+bool isTenantStaffAuthorizationRefusal(Object error) =>
+    error is FirebaseFunctionsException && error.code == 'permission-denied';
 
 /// Narrow callable boundary for the one enabled staff mutation.
 abstract interface class InviteStaffCallable {
@@ -165,7 +179,7 @@ final class TenantStaffInvitationGateway {
     TenantStaffRequestIdFactory? requestIdFactory,
   }) : _session = session,
        _callable = callable,
-       _requestIdFactory = requestIdFactory ?? _secureInviteRequestId;
+       _requestIdFactory = requestIdFactory ?? secureInviteRequestId;
 
   static const allowedRoles = <TenantRole>[TenantRole.admin];
 
@@ -214,12 +228,20 @@ final class TenantStaffInvitationForm extends StatefulWidget {
     required this.callable,
     required this.onSuccess,
     this.requestIdFactory,
+    this.tickets,
   });
 
   final TenantSession session;
   final InviteStaffCallable callable;
   final VoidCallback onSuccess;
   final TenantStaffRequestIdFactory? requestIdFactory;
+
+  /// Where this device remembers the request id of an unfinished invitation.
+  ///
+  /// Null keeps the pre-2026-09-15 behaviour, which is a request id that lives
+  /// and dies with this form. Every composition that can reach a real backend
+  /// supplies one.
+  final TenantStaffRequestTicketSource? tickets;
 
   @override
   State<TenantStaffInvitationForm> createState() =>
@@ -257,43 +279,91 @@ final class _TenantStaffInvitationFormState
     if (_submitting || !(_formKey.currentState?.validate() ?? false)) return;
     final controller = TenantSessionScope.read(context);
     if (!_isCurrent(controller)) return;
-    final gateway = TenantStaffInvitationGateway(
-      session: widget.session,
-      callable: widget.callable,
-      requestIdFactory: widget.requestIdFactory,
-    );
-    late final TenantStaffInviteIntent intent;
+    // **The draft is built before the request id, because it decides it.** Its
+    // constructor is where the address, name and phone are normalized, and the
+    // normalized values are what the ticket is fingerprinted on - so whitespace
+    // an operator cannot see does not read as a different invitation.
+    late final TenantStaffInviteDraft draft;
     try {
-      intent = _intent ??= gateway.createIntent(
-        TenantStaffInviteDraft(
-          email: _emailController.text,
-          name: _nameController.text,
-          phone: _phoneController.text,
-          role: _role,
-        ),
+      draft = TenantStaffInviteDraft(
+        email: _emailController.text,
+        name: _nameController.text,
+        phone: _phoneController.text,
+        role: _role,
       );
     } catch (_) {
-      if (!mounted || !_isCurrent(controller)) return;
+      if (!mounted || !_isCurrent(controller)) {
+        _abandonSubmission();
+        return;
+      }
       setState(
         () => _safeError = 'Check the invitation details and try again.',
       );
       return;
     }
+    // **The flag is raised before the first `await`, not after it.** Reading
+    // the device's ticket is asynchronous, and a second tap landing while that
+    // read was in flight would find `_submitting` still false and start a
+    // second submission. This held by microtask timing alone until 2026-09-15,
+    // which is not a thing to hold single-flight together with.
     setState(() {
       _submitting = true;
       _safeError = null;
     });
+    final requestId = await _resolveRequestId(draft);
+    if (!mounted || !_isCurrent(controller)) {
+      _abandonSubmission();
+      return;
+    }
+    final gateway = TenantStaffInvitationGateway(
+      session: widget.session,
+      callable: widget.callable,
+      requestIdFactory: () => requestId,
+    );
+    late final TenantStaffInviteIntent intent;
+    try {
+      intent = _intent ??= gateway.createIntent(draft);
+    } catch (_) {
+      if (!mounted || !_isCurrent(controller)) {
+        _abandonSubmission();
+        return;
+      }
+      setState(() {
+        _submitting = false;
+        _safeError = 'Check the invitation details and try again.';
+      });
+      return;
+    }
     try {
       await gateway.submit(intent);
-    } catch (_) {
-      if (!mounted || !_isCurrent(controller)) return;
+    } catch (error) {
+      // The server re-read this actor's membership and disagreed with what
+      // this session believes about itself. Ask for the session to be
+      // re-read, so the next look at this screen shows what is actually
+      // permitted rather than offering the same refused control again.
+      if (isTenantStaffAuthorizationRefusal(error)) {
+        controller.requestRevalidation();
+      }
+      if (!mounted || !_isCurrent(controller)) {
+        _abandonSubmission();
+        return;
+      }
       setState(() {
         _submitting = false;
         _safeError = 'Invitation could not be sent. Please try again.';
       });
       return;
     }
-    if (!mounted || !_isCurrent(controller)) return;
+    // **Cleared on the answer, and only on the answer.** A refusal deliberately
+    // keeps its ticket: pressing again then replays the same id and is refused
+    // the same way, which is the honest result, and editing the address changes
+    // the fingerprint and mints a fresh id on its own. The one case that must
+    // keep a ticket is the one with no answer at all.
+    await _clearRequestTicket();
+    if (!mounted || !_isCurrent(controller)) {
+      _abandonSubmission();
+      return;
+    }
     setState(() => _submitting = false);
     showAppSnackBar(
       context,
@@ -301,6 +371,54 @@ final class _TenantStaffInvitationFormState
     );
     widget.onSuccess();
   }
+
+  /// Ends the submission locally when its result is no longer this form's to
+  /// apply.
+  ///
+  /// **A discarded result must still release the button.** These guards existed
+  /// to stop a stale answer being applied after the session moved under it, and
+  /// they returned without clearing `_submitting` - so the form kept its
+  /// spinner for as long as it stayed on screen, over a submission that was
+  /// never coming back. Harmless while a session only changed on a switch that
+  /// tore the route down anyway; reachable the moment anything refreshes a live
+  /// session, which is what noticing a remote role change is for.
+  void _abandonSubmission() {
+    if (!mounted || !_submitting) return;
+    setState(() => _submitting = false);
+  }
+
+  /// The id this invitation should be asked under, replayed across a restart.
+  Future<String> _resolveRequestId(TenantStaffInviteDraft draft) async {
+    final tickets = widget.tickets;
+    final mint = widget.requestIdFactory ?? secureInviteRequestId;
+    if (tickets == null) return mint();
+    return tickets.resolve(
+      uid: widget.session.uid,
+      tenantId: widget.session.tenantId,
+      operation: _ticketOperation,
+      // An invitation names an address rather than a member, and the address is
+      // already in the fingerprint.
+      target: '',
+      fingerprint: tenantStaffRequestFingerprint(<String, Object?>{
+        'email': draft.email,
+        'name': draft.name,
+        'phone': draft.phone,
+        'role': draft.role.wireValue,
+      }),
+      mint: mint,
+    );
+  }
+
+  Future<void> _clearRequestTicket() async {
+    await widget.tickets?.clear(
+      uid: widget.session.uid,
+      tenantId: widget.session.tenantId,
+      operation: _ticketOperation,
+      target: '',
+    );
+  }
+
+  static const _ticketOperation = 'inviteStaff';
 
   bool _isCurrent(TenantSessionController controller) {
     final current = controller.session;
@@ -466,7 +584,12 @@ Map<String, Object?> _strictStringMap(
   return result;
 }
 
-String _secureInviteRequestId() {
+/// Mints one invitation request id.
+///
+/// Public so `TenantStaffRequestTicketSource` can be handed the same minter the
+/// gateway would have used, rather than inventing a second spelling of an id
+/// the server validates.
+String secureInviteRequestId() {
   final random = Random.secure();
   final bytes = List<int>.generate(18, (_) => random.nextInt(256));
   return 'invite-${base64Url.encode(bytes).replaceAll('=', '')}';

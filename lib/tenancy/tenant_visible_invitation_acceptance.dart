@@ -14,6 +14,7 @@ import 'tenant_id.dart';
 import 'tenant_membership.dart';
 import 'tenant_membership_labels.dart';
 import 'tenant_staff_directory.dart';
+import 'tenant_staff_request_ticket.dart';
 import 'tenant_types.dart';
 
 typedef TenantVisibleInvitationRequestIdFactory = String Function();
@@ -182,8 +183,7 @@ final class TenantVisibleInvitationAcceptanceGateway {
   }) : _identity = identity,
        _membership = membership,
        _callable = callable,
-       _requestIdFactory =
-           requestIdFactory ?? _secureVisibleAcceptanceRequestId;
+       _requestIdFactory = requestIdFactory ?? secureVisibleAcceptanceRequestId;
 
   final TenantVisibleInvitationIdentity _identity;
   final TenantMembership _membership;
@@ -193,8 +193,7 @@ final class TenantVisibleInvitationAcceptanceGateway {
   static bool canAccept({
     required TenantVisibleInvitationIdentity identity,
     required TenantMembership membership,
-  }) =>
-      identity.canAcceptVisibleInvitation && awaitsAcceptance(membership);
+  }) => identity.canAcceptVisibleInvitation && awaitsAcceptance(membership);
 
   /// The half of [canAccept] that is about the invitation rather than the
   /// caller.
@@ -270,6 +269,7 @@ final class TenantVisibleInvitationAcceptanceForm extends StatefulWidget {
     required this.onSuccess,
     required this.onCancel,
     this.requestIdFactory,
+    this.tickets,
     this.isCurrent,
   });
 
@@ -279,6 +279,9 @@ final class TenantVisibleInvitationAcceptanceForm extends StatefulWidget {
   final VoidCallback onSuccess;
   final VoidCallback onCancel;
   final TenantVisibleInvitationRequestIdFactory? requestIdFactory;
+
+  /// Where this device remembers the request id of an unfinished acceptance.
+  final TenantStaffRequestTicketSource? tickets;
   final TenantVisibleInvitationCurrentCheck? isCurrent;
 
   @override
@@ -318,11 +321,21 @@ final class _TenantVisibleInvitationAcceptanceFormState
     final submittedTenantId = widget.membership.tenantId;
     final submittedMembershipStatus = widget.membership.membershipStatus;
     final submittedInvitationStatus = widget.membership.invitationStatus;
+    // **The flag is raised before the first `await`, not after it.**
+    // Reading the device's ticket is asynchronous, and a second tap landing
+    // while that read was in flight would find `_submitting` still false and
+    // start a second submission.
+    setState(() {
+      _submitting = true;
+      _safeError = null;
+    });
+    final requestId = await _resolveRequestId(submittedUid, submittedTenantId);
+    if (!mounted) return;
     final gateway = TenantVisibleInvitationAcceptanceGateway(
       identity: widget.identity,
       membership: widget.membership,
       callable: widget.callable,
-      requestIdFactory: widget.requestIdFactory,
+      requestIdFactory: () => requestId,
     );
     late final TenantVisibleInvitationAcceptanceIntent intent;
     try {
@@ -335,18 +348,22 @@ final class _TenantVisibleInvitationAcceptanceFormState
             submittedMembershipStatus,
             submittedInvitationStatus,
           )) {
+        _abandonSubmission();
         return;
       }
-      setState(() => _safeError = 'This invitation cannot be accepted here.');
+      setState(() {
+        _submitting = false;
+        _safeError = 'This invitation cannot be accepted here.';
+      });
       return;
     }
-    setState(() {
-      _submitting = true;
-      _safeError = null;
-    });
     try {
       await gateway.submit(intent);
     } catch (error) {
+      // **No revalidation hook here, deliberately.** This form runs in the
+      // business selector, before any session exists - accepting is what
+      // creates one - so there is no open session to re-read. A refusal is
+      // already handled by the selector's own acceptance failure path.
       if (!mounted ||
           !_isStillSubmitted(
             submittedUid,
@@ -354,6 +371,7 @@ final class _TenantVisibleInvitationAcceptanceFormState
             submittedMembershipStatus,
             submittedInvitationStatus,
           )) {
+        _abandonSubmission();
         return;
       }
       setState(() {
@@ -368,6 +386,9 @@ final class _TenantVisibleInvitationAcceptanceFormState
       });
       return;
     }
+    // Cleared on the answer, and only on the answer: an acceptance with no
+    // reply keeps its ticket so the next press finishes it.
+    await _clearRequestTicket(submittedUid, submittedTenantId);
     if (!mounted ||
         !_isStillSubmitted(
           submittedUid,
@@ -375,6 +396,7 @@ final class _TenantVisibleInvitationAcceptanceFormState
           submittedMembershipStatus,
           submittedInvitationStatus,
         )) {
+      _abandonSubmission();
       return;
     }
     setState(() => _submitting = false);
@@ -386,6 +408,56 @@ final class _TenantVisibleInvitationAcceptanceFormState
     );
     widget.onSuccess();
   }
+
+  /// Ends the submission locally when its result is no longer this form's to
+  /// apply.
+  ///
+  /// **A discarded result must still release the button.** These guards existed
+  /// to stop a stale answer being applied after the session moved under it, and
+  /// they returned without clearing `_submitting` - so the form kept its
+  /// spinner for as long as it stayed on screen, over a submission that was
+  /// never coming back. Harmless while a session only changed on a switch that
+  /// tore the route down anyway; reachable the moment anything refreshes a live
+  /// session, which is what noticing a remote role change is for.
+  void _abandonSubmission() {
+    if (!mounted || !_submitting) return;
+    setState(() => _submitting = false);
+  }
+
+  /// The id this acceptance should be asked under, replayed across a restart.
+  ///
+  /// **The recipient's half of M5.** Accepting is the one staff mutation an
+  /// ordinary employee performs, usually on a phone, often on the connection
+  /// that made them close the app in the first place - so a lost reply here
+  /// leaves somebody unable to tell whether they have joined the business.
+  /// There is nothing to fingerprint beyond who is accepting what: the callable
+  /// carries a tenant and a request id and nothing else.
+  Future<String> _resolveRequestId(String uid, String tenantId) async {
+    final tickets = widget.tickets;
+    final mint = widget.requestIdFactory ?? secureVisibleAcceptanceRequestId;
+    if (tickets == null) return mint();
+    return tickets.resolve(
+      uid: uid,
+      tenantId: tenantId,
+      operation: _ticketOperation,
+      target: uid,
+      fingerprint: tenantStaffRequestFingerprint(<String, Object?>{
+        'tenantId': tenantId,
+      }),
+      mint: mint,
+    );
+  }
+
+  Future<void> _clearRequestTicket(String uid, String tenantId) async {
+    await widget.tickets?.clear(
+      uid: uid,
+      tenantId: tenantId,
+      operation: _ticketOperation,
+      target: uid,
+    );
+  }
+
+  static const _ticketOperation = 'acceptVisibleTenantInvitation';
 
   bool _isStillSubmitted(
     String expectedUid,
@@ -472,7 +544,9 @@ Map<String, Object?> _strictAcceptanceMap(
   return result;
 }
 
-String _secureVisibleAcceptanceRequestId() {
+/// Mints one acceptance request id. Public so the ticket store can use the
+/// same minter the gateway would have.
+String secureVisibleAcceptanceRequestId() {
   final random = Random.secure();
   final bytes = List<int>.generate(18, (_) => random.nextInt(256));
   return 'accept-visible-${base64Url.encode(bytes).replaceAll('=', '')}';

@@ -154,6 +154,37 @@ void main() {
       expect(restored.countedCashMinor, isNull);
     });
 
+    test('the opening float round-trips through the box', () async {
+      // **Durable because the replay reads it.** A shift opened with no network
+      // is sent later from this record, so a float that did not survive the box
+      // would be dropped by exactly the opens most likely to carry one - and
+      // the shift would then be marked against its sales alone.
+      await state.save(_record(openingFloatMinor: 200000));
+      await state.close();
+
+      box = await _openBox();
+      state = HiveTenantShiftState.fromBox(box);
+      final restored = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+
+      expect(restored!.openingFloatMinor, 200000);
+    });
+
+    test(
+      'a record written before the float existed reads as no float',
+      () async {
+        await state.save(_record());
+        await state.close();
+
+        box = await _openBox();
+        state = HiveTenantShiftState.fromBox(box);
+        final restored = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+
+        // Absent and zero are one answer, so a till already open when this build
+        // arrives keeps trading rather than being refused as malformed.
+        expect(restored!.openingFloatMinor, 0);
+      },
+    );
+
     test('abandoning a count clears both figures together', () async {
       final saved = await state.save(
         _record(
@@ -330,6 +361,7 @@ TenantShiftLocalRecord _record({
   int? countedCashMinor,
   ShiftTenderDeclaration? declaration,
   DateTime? openedAt,
+  int openingFloatMinor = 0,
 }) => TenantShiftLocalRecord(
   uid: uid,
   tenantId: tenantId,
@@ -340,6 +372,7 @@ TenantShiftLocalRecord _record({
   closeInProgress: closeInProgress,
   countedCashMinor: countedCashMinor,
   declaration: declaration,
+  openingFloatMinor: openingFloatMinor,
   updatedAt: DateTime.utc(2026, 7, 31, 9),
   openedAt: openedAt ?? DateTime.utc(2026, 7, 31, 9),
 );

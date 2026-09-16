@@ -311,10 +311,10 @@ _DifferenceReading _reading(
   TenantReconciliationAnomalyKind.missingTenderDeclaration =>
     const _DifferenceReading(
       sentence:
-          'This shift was closed without saying what the till held, so '
+          'This shift was closed without saying what the register held, so '
           'nothing could be compared against its sales.',
       explanation:
-          'This shift was closed without saying what the till held, so '
+          'This shift was closed without saying what the register held, so '
           'nothing could be compared against its sales.',
     ),
   TenantReconciliationAnomalyKind.other => const _DifferenceReading(
@@ -466,8 +466,9 @@ _DifferenceReading _tenderVariance(TenantReconciliationAnomaly anomaly) {
     if (variance < 0) short.add(tender.label);
   }
   final clauses = <String>[
-    if (over.isNotEmpty) '${_list(over)} came to more than the sales account '
-        'for',
+    if (over.isNotEmpty)
+      '${_list(over)} came to more than the sales account '
+          'for',
     if (short.isNotEmpty) '${_list(short)} came to less',
   ];
   return _DifferenceReading(
@@ -479,7 +480,7 @@ _DifferenceReading _tenderVariance(TenantReconciliationAnomaly anomaly) {
     // them up would otherwise find the report short by exactly that much and
     // conclude the wrong thing.
     explanation: <String>[
-      'What the cashier said the till held disagrees with what its own sales '
+      'What the cashier said the register held disagrees with what its own sales '
           'account for.',
       if ((anomaly.expectedUnattributedMinor ?? 0) > 0)
         'A further ${_money(anomaly.expectedUnattributedMinor!)} of this '
@@ -501,8 +502,9 @@ String _list(List<String> items) => items.length == 1
     ? items.single
     : '${items.sublist(0, items.length - 1).join(', ')} and ${items.last}';
 
-String _capitalise(String sentence) =>
-    sentence.isEmpty ? sentence : sentence[0].toUpperCase() + sentence.substring(1);
+String _capitalise(String sentence) => sentence.isEmpty
+    ? sentence
+    : sentence[0].toUpperCase() + sentence.substring(1);
 
 String _signed(num value) {
   if (value == 0) return 'agrees';

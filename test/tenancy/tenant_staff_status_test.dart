@@ -127,7 +127,6 @@ void main() {
         null,
         {...valid, 'tenantId': 'tenant-b'},
         {...valid, 'uid': 'staff-b'},
-        {...valid, 'role': 'manager'},
         {...valid, 'status': 'active'},
         {...valid, 'unexpected': true},
         {...valid, 'uid': 'bad/uid'},
@@ -139,12 +138,33 @@ void main() {
             response,
             expectedTenantId: 'tenant-a',
             expectedUid: 'staff-a',
-            expectedRole: TenantRole.cashier,
             expectedStatus: MembershipStatus.inactive,
           ),
           throwsFormatException,
         );
       }
+    });
+
+    test('accepts a role this mutation did not set and did not expect', () {
+      // The mirror image of the update form's defect: a colleague changes this
+      // person's role while the deactivation confirmation is open, the
+      // deactivation commits, and the fresh role came back as a failure.
+      final result = TenantStaffStatusResult.fromCallable(
+        {
+          ..._statusResponse(
+            'tenant-a',
+            'staff-a',
+            status: MembershipStatus.inactive,
+          ),
+          'role': 'manager',
+        },
+        expectedTenantId: 'tenant-a',
+        expectedUid: 'staff-a',
+        expectedStatus: MembershipStatus.inactive,
+      );
+
+      expect(result.role, TenantRole.manager);
+      expect(result.status, MembershipStatus.inactive);
     });
   });
 

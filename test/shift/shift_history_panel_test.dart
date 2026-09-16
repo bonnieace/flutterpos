@@ -38,9 +38,9 @@ void main() {
     // §2.1's own table decides the standing: a drawer that disagrees with the
     // sales is "difference found", and the amount stays a figure of its own so
     // the badge never carries it alone.
-    _expectStatus(tester, 'shift-history-status-shift-b', 'Cash over');
+    _expectStatus(tester, 'shift-history-status-shift-b', 'Takings over');
     _expectText(tester, 'shift-history-variance-shift-b', '262.50');
-    _expectStatus(tester, 'shift-history-status-shift-a', 'Cash short');
+    _expectStatus(tester, 'shift-history-status-shift-a', 'Takings short');
     _expectText(tester, 'shift-history-variance-shift-a', '87.50');
     // Only management may look beyond its own shifts.
     expect(find.byKey(const ValueKey('shift-history-scope')), findsNothing);
@@ -135,7 +135,7 @@ void main() {
     _expectStatus(
       tester,
       'shift-history-status-shift-a',
-      'Cash matches',
+      'Takings match',
       status: AppStatus.ok,
     );
     // A difference of nothing is not a difference, so the column is silent
@@ -651,6 +651,19 @@ TenantQueryDocumentSnapshot _snapshot(
     'transactionCount': 3,
   };
   if (overrides != null) data.addAll(overrides);
+  // **The declaration mirrors the counted cash unless a case says otherwise.**
+  // The difference this surface names is the whole declaration against the whole
+  // takings, so a fixture without one states no difference at all - which is
+  // right for a shift closed before the triple existed and wrong for every case
+  // here, all of which are about the difference itself.
+  // All three or none: a partial triple is refused by the read model, which is
+  // right, and would make every case here fail for the wrong reason.
+  if (data['closingCashMinor'] != null &&
+      !data.containsKey('declaredCashMinor')) {
+    data['declaredCashMinor'] = data['closingCashMinor'];
+    data.putIfAbsent('declaredMpesaMinor', () => 0);
+    data.putIfAbsent('declaredCardMinor', () => 0);
+  }
   data.removeWhere((key, value) => value == null);
   return TenantQueryDocumentSnapshot(
     path: responsePath ?? 'tenants/$tenantId/shifts/$shiftId',

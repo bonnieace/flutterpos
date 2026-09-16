@@ -1,3 +1,4 @@
+export 'abandoned_shift.dart';
 export 'shift_controller.dart';
 export 'shift_declaration.dart';
 export 'shift_gate.dart';

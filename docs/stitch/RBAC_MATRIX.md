@@ -52,6 +52,7 @@ shift/session scope; **No** = no route/action.
 | Change/default business | Full | Full | Full | Full | Only when another accessible membership exists; switching requires connectivity. |
 | Open/close own shift | Own | Own | Own | Own | Session-bound local/server state. |
 | View management shift history | Full | Full | Full | No | Manager-or-above management history. |
+| Close an abandoned shift | Full | Full | Full | No | Finding one is manager-or-above; ending one is owner-or-admin, on the server. |
 | Manage catalog operational fields | Full | Full | Full | No | Product/category operations for owner/admin/manager. |
 | Change price or cost | Full | Full | No | No | Money fields are narrower than general catalog editing. |
 | Retire product | Full | Full | No | No | `retireRoles`. |

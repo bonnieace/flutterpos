@@ -59,14 +59,20 @@ String membershipStatusSemanticLabel(MembershipStatus status) =>
 
 /// How far this person's invitation has got.
 ///
-/// Two of the five state what has **not** happened, which is §8 rule 2 - state
+/// Two of the six state what has **not** happened, which is §8 rule 2 - state
 /// what is true, then what it means - rather than a status word that leaves a
 /// person guessing whether an email is on its way.
-String staffInvitationStatusLabel(TenantStaffInvitationStatus status) =>
-    switch (status) {
-      TenantStaffInvitationStatus.pending => 'Not sent yet',
-      TenantStaffInvitationStatus.sent => 'Sent',
-      TenantStaffInvitationStatus.accepted => 'Accepted',
-      TenantStaffInvitationStatus.cancelled => 'Cancelled',
-      TenantStaffInvitationStatus.expired => 'Expired',
+///
+/// **Takes the derived state rather than the stored one**, because the two
+/// disagree about the case that matters: a link a week past its deadline is
+/// still stored as `sent`, and *Sent* is exactly the word that stops an
+/// administrator doing the one thing that would fix it.
+String staffInvitationStatusLabel(TenantStaffInvitationState state) =>
+    switch (state) {
+      TenantStaffInvitationState.notSent => 'Not sent yet',
+      TenantStaffInvitationState.sent => 'Sent',
+      TenantStaffInvitationState.expired => 'Expired',
+      TenantStaffInvitationState.undeliverable => 'Could not be delivered',
+      TenantStaffInvitationState.accepted => 'Accepted',
+      TenantStaffInvitationState.cancelled => 'Cancelled',
     };

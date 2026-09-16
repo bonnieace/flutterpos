@@ -13,6 +13,7 @@ import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
+import 'tenant_staff_request_ticket.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_staff_invitation.dart';
 import 'tenant_types.dart';
@@ -187,7 +188,7 @@ final class TenantStaffInvitationEmailReplacementGateway {
   }) : _session = session,
        _target = target,
        _callable = callable,
-       _requestIdFactory = requestIdFactory ?? _secureReplacementRequestId;
+       _requestIdFactory = requestIdFactory ?? secureReplacementRequestId;
 
   static const allowedRoles = <TenantRole>[TenantRole.admin];
 
@@ -270,6 +271,7 @@ final class TenantStaffInvitationEmailReplacementForm extends StatefulWidget {
     required this.onSuccess,
     required this.onCancel,
     this.requestIdFactory,
+    this.tickets,
   });
 
   final TenantSession session;
@@ -278,6 +280,9 @@ final class TenantStaffInvitationEmailReplacementForm extends StatefulWidget {
   final VoidCallback onSuccess;
   final VoidCallback onCancel;
   final TenantStaffRequestIdFactory? requestIdFactory;
+
+  /// Where this device remembers the request id of an unfinished email replacement.
+  final TenantStaffRequestTicketSource? tickets;
 
   @override
   State<TenantStaffInvitationEmailReplacementForm> createState() =>
@@ -339,11 +344,21 @@ final class _TenantStaffInvitationEmailReplacementFormState
     )) {
       return;
     }
+    // **The flag is raised before the first `await`, not after it.**
+    // Reading the device's ticket is asynchronous, and a second tap landing
+    // while that read was in flight would find `_submitting` still false and
+    // start a second submission.
+    setState(() {
+      _submitting = true;
+      _safeError = null;
+    });
+    final requestId = await _resolveRequestId(submittedTargetUid);
+    if (!mounted) return;
     final gateway = TenantStaffInvitationEmailReplacementGateway(
       session: widget.session,
       target: widget.target,
       callable: widget.callable,
-      requestIdFactory: widget.requestIdFactory,
+      requestIdFactory: () => requestId,
     );
     late final TenantStaffInvitationEmailReplacementIntent intent;
     try {
@@ -357,18 +372,25 @@ final class _TenantStaffInvitationEmailReplacementFormState
             submittedStatus,
             submittedInvitationStatus,
           )) {
+        _abandonSubmission();
         return;
       }
-      setState(() => _safeError = 'Check the corrected email and try again.');
+      setState(() {
+        _submitting = false;
+        _safeError = 'Check the corrected email and try again.';
+      });
       return;
     }
-    setState(() {
-      _submitting = true;
-      _safeError = null;
-    });
     try {
       await gateway.submit(intent);
-    } catch (_) {
+    } catch (error) {
+      // The server re-read this actor's membership and disagreed with what
+      // this session believes about itself. Ask for the session to be
+      // re-read, so the next look at this screen shows what is actually
+      // permitted rather than offering the same refused control again.
+      if (isTenantStaffAuthorizationRefusal(error)) {
+        controller.requestRevalidation();
+      }
       if (!mounted ||
           !_isCurrent(
             controller,
@@ -377,6 +399,7 @@ final class _TenantStaffInvitationEmailReplacementFormState
             submittedStatus,
             submittedInvitationStatus,
           )) {
+        _abandonSubmission();
         return;
       }
       setState(() {
@@ -386,6 +409,9 @@ final class _TenantStaffInvitationEmailReplacementFormState
       });
       return;
     }
+    // Cleared on the answer, and only on the answer: a request with no
+    // reply keeps its ticket so the next press finishes it.
+    await _clearRequestTicket(submittedTargetUid);
     if (!mounted ||
         !_isCurrent(
           controller,
@@ -394,6 +420,7 @@ final class _TenantStaffInvitationEmailReplacementFormState
           submittedStatus,
           submittedInvitationStatus,
         )) {
+      _abandonSubmission();
       return;
     }
     setState(() => _submitting = false);
@@ -403,6 +430,53 @@ final class _TenantStaffInvitationEmailReplacementFormState
     );
     widget.onSuccess();
   }
+
+  /// Ends the submission locally when its result is no longer this form's to
+  /// apply.
+  ///
+  /// **A discarded result must still release the button.** These guards existed
+  /// to stop a stale answer being applied after the session moved under it, and
+  /// they returned without clearing `_submitting` - so the form kept its
+  /// spinner for as long as it stayed on screen, over a submission that was
+  /// never coming back. Harmless while a session only changed on a switch that
+  /// tore the route down anyway; reachable the moment anything refreshes a live
+  /// session, which is what noticing a remote role change is for.
+  void _abandonSubmission() {
+    if (!mounted || !_submitting) return;
+    setState(() => _submitting = false);
+  }
+
+  /// Fingerprinted on the fields `issuance.ts` hashes:
+  /// `{oldUid, correctedEmail}`.
+  Future<String> _resolveRequestId(String targetUid) async {
+    final tickets = widget.tickets;
+    final mint = widget.requestIdFactory ?? secureReplacementRequestId;
+    if (tickets == null) return mint();
+    return tickets.resolve(
+      uid: widget.session.uid,
+      tenantId: widget.session.tenantId,
+      operation: _ticketOperation,
+      target: targetUid,
+      fingerprint: tenantStaffRequestFingerprint(<String, Object?>{
+        'oldUid': targetUid,
+        'correctedEmail': normalizeTenantStaffInviteEmail(
+          _emailController.text,
+        ),
+      }),
+      mint: mint,
+    );
+  }
+
+  Future<void> _clearRequestTicket(String targetUid) async {
+    await widget.tickets?.clear(
+      uid: widget.session.uid,
+      tenantId: widget.session.tenantId,
+      operation: _ticketOperation,
+      target: targetUid,
+    );
+  }
+
+  static const _ticketOperation = 'replacePendingStaffEmail';
 
   bool _isCurrent(
     TenantSessionController controller,
@@ -519,7 +593,9 @@ Map<String, Object?> _strictReplacementMap(
   return result;
 }
 
-String _secureReplacementRequestId() {
+/// Mints one request id. Public so the ticket store can use the same
+/// minter the gateway would have.
+String secureReplacementRequestId() {
   final random = Random.secure();
   final bytes = List<int>.generate(18, (_) => random.nextInt(256));
   return 'replace-email-${base64Url.encode(bytes).replaceAll('=', '')}';

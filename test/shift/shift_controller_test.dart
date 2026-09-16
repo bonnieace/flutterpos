@@ -117,6 +117,41 @@ void main() {
       expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNotNull);
     });
 
+    test('records the opening float the cashier entered', () async {
+      final controller = _controller(sessions, state, server);
+      await controller.openShift(openingFloatMinor: 200000);
+
+      expect(server.created.single.$2['openingFloatMinor'], 200000);
+    });
+
+    test('writes no float field for a till that was given no change', () async {
+      final controller = _controller(sessions, state, server);
+      await controller.openShift();
+
+      // Absent rather than zero: the two mean the same thing to every reader,
+      // and a shop that keeps no change should not carry a field about one on
+      // every shift it ever opens.
+      expect(
+        server.created.single.$2.containsKey('openingFloatMinor'),
+        isFalse,
+      );
+    });
+
+    test('replays an offline open with the float it was opened on', () async {
+      // **The case the float is most likely to be lost in.** A shift opened
+      // with no network is rebuilt later from the durable record, so a float
+      // held only by the dialog that collected it would survive every open
+      // except the ones that go through this path - and the shift would then
+      // be marked against its sales alone and read as over by the float.
+      final offline = _controller(sessions, state, server, online: false);
+      await offline.openShift(openingFloatMinor: 150000);
+
+      final controller = _controller(sessions, state, server);
+      await controller.restore(sessions.requireSession());
+
+      expect(server.created.single.$2['openingFloatMinor'], 150000);
+    });
+
     test('keeps an unsent offline shift when the replay fails', () async {
       final offline = _controller(sessions, state, server, online: false);
       await offline.openShift();
@@ -231,6 +266,62 @@ void main() {
       expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
     });
 
+    test('an unsent write does not confirm the shift it looks like', () async {
+      // **H2.** The create timed out and is sitting in the local mutation
+      // queue. A `Source.serverAndCache` read falls back to local storage, so
+      // the shift reads back looking perfectly open - but the server has never
+      // seen it, and promoting on that is what later destroys the record.
+      final pending = _Server()
+        ..shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      await state.save(_record(serverConfirmedOpen: false));
+      final controller = _controllerWithReader(
+        sessions,
+        state,
+        server,
+        _PendingWriteReader(pending, server),
+      );
+
+      final restored = await controller.restore(sessions.requireSession());
+
+      // The till still sells - an unconfirmed shift binds sales by design.
+      expect(restored.phase, TenantShiftPhase.open);
+      final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+      expect(
+        record!.serverConfirmedOpen,
+        isFalse,
+        reason:
+            'Only the server may confirm. Local storage answering with this '
+            'device own write is not the server answering.',
+      );
+    });
+
+    test('a rejected write replays the shift rather than destroying it', () async {
+      // The other half of H2, and the half that costs a trading day. The queued
+      // create is refused - a deactivated cashier is the ordinary way - so
+      // Firestore reverts it and local storage no longer has it either. With
+      // the record wrongly marked confirmed this cleared it, stranding every
+      // outbox sale stamped with the shift id behind a `validSaleShift` that
+      // would deny them for ever. Left unconfirmed, it replays instead.
+      await state.save(_record(serverConfirmedOpen: false));
+      final controller = _controllerWithReader(
+        sessions,
+        state,
+        server,
+        // Nothing anywhere: the revert has happened and the server never had it.
+        _PendingWriteReader(_Server(), server),
+      );
+
+      final restored = await controller.restore(sessions.requireSession());
+
+      expect(restored.phase, TenantShiftPhase.open);
+      expect(
+        server.created.single.$1,
+        'tenants/tenant-a/shifts/shift-a',
+        reason: 'The same shift id, so the outbox sales still name something.',
+      );
+      expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNotNull);
+    });
+
     test('refuses a shift that belongs to another cashier', () async {
       await state.save(_record());
       server.shifts['tenants/tenant-a/shifts/shift-a'] = _document(
@@ -246,7 +337,9 @@ void main() {
     });
 
     test('reports only local facts while offline', () async {
-      await state.save(_record(closeInProgress: true, declaration: _declared(900)));
+      await state.save(
+        _record(closeInProgress: true, declaration: _declared(900)),
+      );
       final controller = _controller(sessions, state, server, online: false);
 
       final restored = await controller.restore(sessions.requireSession());
@@ -268,7 +361,9 @@ void main() {
     });
 
     test('a cash count does not survive a restart', () async {
-      await state.save(_record(closeInProgress: true, declaration: _declared(900)));
+      await state.save(
+        _record(closeInProgress: true, declaration: _declared(900)),
+      );
       server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
       final controller = _controller(sessions, state, server);
 
@@ -327,7 +422,9 @@ void main() {
           TenantSwitchBlocker.unfinishedCashCountOrShiftClose,
         );
 
-        final closed = await controller.closeShift(declaration: _declared(125000));
+        final closed = await controller.closeShift(
+          declaration: _declared(125000),
+        );
         expect(closed.phase, TenantShiftPhase.none);
         expect(server.updated.single.$2['status'], 'closed');
         expect(server.updated.single.$2['closingCashMinor'], 125000);
@@ -481,7 +578,9 @@ void main() {
         await controller.openShift();
         await controller.startCashCount();
 
-        final closed = await controller.closeShift(declaration: _declared(125000));
+        final closed = await controller.closeShift(
+          declaration: _declared(125000),
+        );
 
         expect(closed.phase, TenantShiftPhase.none);
         expect(ledger.requested, contains('shift-1'));
@@ -839,7 +938,9 @@ void main() {
 
   group('closing with no connection', () {
     test('an offline close is recorded and stops the till selling', () async {
-      await state.save(_record(closeInProgress: true, declaration: _declared(900)));
+      await state.save(
+        _record(closeInProgress: true, declaration: _declared(900)),
+      );
       server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
       final controller = _controller(sessions, state, server, online: false);
 
@@ -859,7 +960,9 @@ void main() {
     });
 
     test('the close sends itself on the next restore', () async {
-      await state.save(_record(closeInProgress: true, declaration: _declared(900)));
+      await state.save(
+        _record(closeInProgress: true, declaration: _declared(900)),
+      );
       server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
       await _controller(
         sessions,
@@ -882,7 +985,9 @@ void main() {
     });
 
     test('a close that still cannot be sent stays closed here', () async {
-      await state.save(_record(closeInProgress: true, declaration: _declared(900)));
+      await state.save(
+        _record(closeInProgress: true, declaration: _declared(900)),
+      );
       server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
       await _controller(
         sessions,
@@ -943,6 +1048,15 @@ void main() {
   });
 }
 
+/// [_controller] with the reader named, for the two H2 cases that need local
+/// storage and the server to disagree.
+TenantShiftController _controllerWithReader(
+  TenantSessionController sessions,
+  HiveTenantShiftState state,
+  _Server server,
+  TenantDataReader reader,
+) => _controller(sessions, state, server, reader: reader);
+
 TenantShiftController _controller(
   TenantSessionController sessions,
   HiveTenantShiftState state,
@@ -951,13 +1065,14 @@ TenantShiftController _controller(
   VoidCallback? beforeCreate,
   VoidCallback? beforeRead,
   ShiftSalesLedger? salesLedger,
+  TenantDataReader? reader,
 }) {
   var nextShift = 0;
   return TenantShiftController(
     sessionController: sessions,
     localState: state,
     salesLedger: salesLedger ?? _Ledger(),
-    reader: _Reader(server, beforeRead: beforeRead),
+    reader: reader ?? _Reader(server, beforeRead: beforeRead),
     writer: FirebaseTenantShiftWriter.forTesting(
       isOnline: () async => online,
       create: (path, data) async {
@@ -1065,11 +1180,51 @@ final class _Server {
   }
 }
 
-final class _Reader implements TenantDataReader {
+/// The reader H2 describes: local storage has the write, the server does not.
+///
+/// **This is the one shape the ordinary fakes cannot express.** `_Reader` reads
+/// a single map, so its two modes agree by construction; the defect needs them
+/// to disagree - an ordinary read answered out of the device's own unsent `set`
+/// while a server-backed read correctly says there is nothing there. Confirmed
+/// against the real SDK in `integration_test/shift_pending_write_test.dart`.
+final class _PendingWriteReader
+    implements TenantDataReader, TenantServerReadable {
+  _PendingWriteReader(this._pending, this._server);
+
+  /// What local storage answers with, standing in for the queued write.
+  final _Server _pending;
+
+  /// What the server answers with, which is nothing until the write lands.
+  final _Server _server;
+
+  @override
+  TenantDataReader get serverOnly => _Reader(_server);
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) =>
+      _Reader(_pending).getDocument(path);
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) => _Reader(_pending).getCollectionPage(query);
+}
+
+/// A reader over `_Server`, which is a server and holds no local copy.
+///
+/// **[serverOnly] is itself, because every read here is already a server read.**
+/// `_Server` has no cache for an answer to come out of, so the two modes are
+/// one read - and a fake that declined the mode would leave
+/// `TenantShiftController._settle` unable to confirm any shift at all, which is
+/// H2's fix failing closed rather than working.
+final class _Reader implements TenantDataReader, TenantServerReadable {
   _Reader(this._server, {this.beforeRead});
 
   final _Server _server;
   final VoidCallback? beforeRead;
+
+  @override
+  TenantDataReader get serverOnly => this;
 
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {

@@ -124,7 +124,8 @@ class _TenantStockTakeGateState extends State<TenantStockTakeGate> {
   }
 
   bool get _blocking =>
-      _enforcement == TenantStockTakeEnforcement.block && _outstanding.isNotEmpty;
+      _enforcement == TenantStockTakeEnforcement.block &&
+      _outstanding.isNotEmpty;
 
   bool get _prompting =>
       _enforcement == TenantStockTakeEnforcement.prompt &&
@@ -223,7 +224,7 @@ final class _StockTakeHeld extends StatelessWidget {
                 ),
                 SizedBox(height: tokens.spacing.s12),
                 Text(
-                  'A stock count is due today and this till is waiting for it. '
+                  'A stock count is due today and this register is waiting for it. '
                   'It takes as long as it takes to walk the shelf; nothing else '
                   'is held up once you have handed it in.',
                   style: tokens.typography.bodyMedium,
@@ -274,7 +275,7 @@ final class _StockTakeGateDialog extends StatelessWidget {
               ? 'You have $remaining counts to take today. Start with the '
                     'first; the others follow.'
               : blocking
-              ? 'This till is waiting for it. Count the shelf and hand the '
+              ? 'This register is waiting for it. Count the shelf and hand the '
                     'figures in, and the register opens.'
               : 'Count the shelf when you get a moment and hand the figures '
                     'in. Nothing is held up in the meantime.',

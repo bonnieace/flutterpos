@@ -789,9 +789,21 @@ async function verifyShiftExpectation(
     ) return {salesVariance: false, tenderVariance: false};
     const expectedSales = safeNonNegativeNumber(currentExpectation.get("sales"));
     const expectedTransactions = safeInteger(currentExpectation.get("transactions"));
-    const observedSales = shiftSnapshot.exists ?
+    // **A close made with no sale evidence states no figures, it does not state
+    // zero.** `closedWithoutEvidence` is written by a device that holds none of
+    // the shift's sales - a reinstall, or the other till of a duplicated shift -
+    // so its summary is zero because it is unknown. Reading that zero as an
+    // observation reported the shift's entire takings as a shortfall, every
+    // night, against a shift nobody could have closed any better.
+    //
+    // `compareShiftTenders` has always skipped these, and says in its own
+    // comment that it does so because *`invalid_or_missing_shift` already says
+    // so* - which is the status this now produces. That expectation was the
+    // design; only this half of it was missing.
+    const evidenceFree = shiftSnapshot.get("closedWithoutEvidence") === true;
+    const observedSales = shiftSnapshot.exists && !evidenceFree ?
       safeNonNegativeNumber(shiftSnapshot.get("totalSales")) : undefined;
-    const observedTransactions = shiftSnapshot.exists ?
+    const observedTransactions = shiftSnapshot.exists && !evidenceFree ?
       safeInteger(shiftSnapshot.get("transactionCount")) : undefined;
     const valid = expectedSales !== undefined && expectedTransactions !== undefined &&
       observedSales !== undefined && observedTransactions !== undefined;
@@ -888,26 +900,54 @@ interface ShiftTenderComparison {
   figures: TenderFigures;
 }
 
-const TENDER_VARIANCE_FIELDS = [
-  "cashVarianceMinor",
-  "mpesaVarianceMinor",
-  "cardVarianceMinor",
-  "totalVarianceMinor",
-] as const;
+/**
+ * What has to agree before a declaration is accepted: the money, not the split.
+ *
+ * **The declaration is the authority on how the money came in, and the sales
+ * are the authority on how much.** A sale records whichever tender was tapped
+ * at the moment of payment and nothing ever edits it afterwards, so the split
+ * derived from sales is the weaker of the two: the cashier is standing at the
+ * drawer and can see what is actually in it. Marking their answer against the
+ * sales therefore reported the more reliable source as the error.
+ *
+ * **It cost shops real time.** One sale rung as cash that was actually M-Pesa
+ * put cash over by its value and M-Pesa short by the same, with the total exact
+ * and not a shilling missing - and left an owner a difference to investigate
+ * until somebody dismissed it by hand.
+ *
+ * So only [totalVarianceMinor] decides. The per-method figures are still
+ * computed and still recorded on the verification and on any anomaly, because
+ * they are the payment split reporting reads; they simply no longer raise one
+ * by themselves. Money genuinely missing still moves the total and still does.
+ */
+const TENDER_AGREEMENT_FIELDS = ["totalVarianceMinor"] as const;
 
 /**
  * Compares what a cashier declared the till held against what its sales say.
  *
  * **Silence is the default, and there are three ways to earn it.** An
- * expectation written before the split existed cannot be compared. A shift
- * closed by a device holding none of its sales has no derived side worth
- * comparing - `invalid_or_missing_shift` already says so, and a second record
- * would be the same fact twice. And a shift closed before the rollout was
- * finished was closed by a build with nowhere to type a declaration, so its
- * absence says nothing about the shop.
+ * expectation written before the split existed cannot be compared. A shift with
+ * no declaration on it has nothing to mark. And a shift closed before the
+ * rollout was finished was closed by a build with nowhere to type a
+ * declaration, so its absence says nothing about the shop.
  *
  * Everything after those is a real answer: a declaration that disagrees, or one
  * that a current build should have recorded and did not.
+ *
+ * **`closedWithoutEvidence` is not one of the three, and used to be.** It says
+ * the closing device could not summarize the shift's *sales* - its own record
+ * of them died with the app data it was wiped with - and that is why
+ * `verifyShiftExpectation` declines the sales comparison. It says nothing about
+ * the cash. The cashier counted the drawer and typed three figures; the
+ * expectation those are marked against is built here, from the sale documents
+ * the server already holds, and is not affected by what the device forgot. So
+ * both halves of the comparison are present and it was being refused anyway.
+ *
+ * **The cost of refusing it was a shortfall nobody could see.** A till that was
+ * genuinely short after a reinstall raised no tender difference at all: the
+ * count went in, was thrown away here, and the only record left was
+ * `invalid_or_missing_shift`, which reads as a bookkeeping gap rather than as
+ * missing money. A reinstall must not be a way to make a short drawer quiet.
  */
 function compareShiftTenders(
   expectation: DocumentSnapshot<DocumentData>,
@@ -924,9 +964,10 @@ function compareShiftTenders(
   ) {
     return {status: "no_expectation", figures: {}};
   }
-  if (!shift.exists || shift.get("closedWithoutEvidence") === true) {
+  if (!shift.exists) {
     return {status: "unverifiable", figures: {}};
   }
+  const evidenceFree = shift.get("closedWithoutEvidence") === true;
   const declaredCashMinor = safeInteger(shift.get("declaredCashMinor"));
   const declaredMpesaMinor = safeInteger(shift.get("declaredMpesaMinor"));
   const declaredCardMinor = safeInteger(shift.get("declaredCardMinor"));
@@ -934,6 +975,15 @@ function compareShiftTenders(
     declaredCashMinor === undefined || declaredMpesaMinor === undefined ||
     declaredCardMinor === undefined
   ) {
+    // **An evidence-free close with no declaration counted nothing, and that
+    // is a legitimate answer rather than an omission.** It is the shape a
+    // second shift is closed in when one drawer has already been counted once
+    // - see `TenantShiftController.closeShiftWithoutEvidence` - so demanding a
+    // declaration of it would raise a difference against a till that was never
+    // supposed to be counted twice.
+    if (evidenceFree) {
+      return {status: "unverifiable", figures: {}};
+    }
     const endTime = shift.get("endTime");
     const closedAt = endTime instanceof Timestamp ? endTime.toMillis() : undefined;
     if (closedAt === undefined || closedAt < TENDER_DECLARATION_REQUIRED_FROM) {
@@ -952,26 +1002,59 @@ function compareShiftTenders(
   }
   const declaredTotalMinor =
     declaredCashMinor + declaredMpesaMinor + declaredCardMinor;
+  // **The float is money the drawer was given, not money the shift took.**
+  // The cashier counts the whole drawer at close - they are asked what the
+  // till holds, and the change they started with is sitting in it - so the
+  // cash expected of them is their sales plus that float. Without this term a
+  // shop that floats its till declares the float as a surplus every day, on
+  // every shift, for a drawer that balances to the shilling.
+  //
+  // Absent reads as zero, which is what every shift opened before the field
+  // existed meant, so no closed shift changes its answer under this.
+  //
+  // **A negative float is not believed.** Rules refuse one on write, and this
+  // is the second lock: read as-is it would *lower* the cash expected of the
+  // drawer, which is the one direction a dishonest figure would be worth
+  // writing in. Anything that is not a non-negative integer reads as no float.
+  const declaredFloat = safeInteger(shift.get("openingFloatMinor"));
+  const openingFloatMinor =
+    declaredFloat !== undefined && declaredFloat >= 0 ? declaredFloat : 0;
+  const expectedDrawerCashMinor = expectedCashMinor + openingFloatMinor;
   // The derived total includes what could not be attributed, so a shift whose
   // sales name no method is short by exactly that rather than silently balanced.
-  const expectedTotalMinor = expectedCashMinor + expectedMpesaMinor +
+  const expectedTotalMinor = expectedDrawerCashMinor + expectedMpesaMinor +
     expectedCardMinor + expectedUnattributedMinor;
   const figures: TenderFigures = {
     declaredCashMinor,
     declaredMpesaMinor,
     declaredCardMinor,
+    // **Recorded as the sales expected, not the drawer expected.** This is the
+    // figure every report of the tender split reads, and the float is not a
+    // taking; an owner reading `expectedCashMinor` wants what was sold for
+    // cash. The float is carried beside it so the variance can be explained.
     expectedCashMinor,
+    // **Written only where there is a float, and that is a migration
+    // guarantee rather than tidiness.** `tenderFiguresMoved` reopens an
+    // acknowledged difference whose figures changed, and it compares field by
+    // field - so recording these unconditionally would reopen every difference
+    // an owner has ever dismissed, on the first nightly run after this
+    // deploys, for shops that do not float a till at all. A shop that starts
+    // floating one does see its open differences move, which is correct: the
+    // figure they are marked against genuinely changed.
+    ...(openingFloatMinor > 0 ?
+      {openingFloatMinor, expectedDrawerCashMinor} :
+      {}),
     expectedMpesaMinor,
     expectedCardMinor,
     expectedUnattributedMinor,
-    cashVarianceMinor: declaredCashMinor - expectedCashMinor,
+    cashVarianceMinor: declaredCashMinor - expectedDrawerCashMinor,
     mpesaVarianceMinor: declaredMpesaMinor - expectedMpesaMinor,
     cardVarianceMinor: declaredCardMinor - expectedCardMinor,
     declaredTotalMinor,
     expectedTotalMinor,
     totalVarianceMinor: declaredTotalMinor - expectedTotalMinor,
   };
-  const agrees = TENDER_VARIANCE_FIELDS.every((field) => figures[field] === 0);
+  const agrees = TENDER_AGREEMENT_FIELDS.every((field) => figures[field] === 0);
   return agrees ?
     {status: "matched", figures} :
     {status: "variance", anomalyType: "shift_tender_variance", figures};

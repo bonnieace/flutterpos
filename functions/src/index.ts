@@ -90,3 +90,5 @@ export {
   startStaggeredMonthlyReconciliation,
   startWeeklyStockCheckpoints,
 } from "./reconciliation";
+
+export {closeAbandonedShift} from "./shifts/abandonedShift";

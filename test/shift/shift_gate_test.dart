@@ -86,6 +86,52 @@ void main() {
     expect(server.created, hasLength(1));
   });
 
+  testWidgets('opening with a float records what was in the drawer', (
+    tester,
+  ) async {
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey('shift-gate-opening-float')),
+      '2000',
+    );
+    await _tap(tester, const ValueKey('shift-gate-open'));
+
+    expect(find.byKey(_till), findsOneWidget);
+    expect(server.created.single.$2['openingFloatMinor'], 200000);
+  });
+
+  testWidgets('an empty float box is no float, not a refusal', (tester) async {
+    // Most shops keep no change in the drawer. Requiring all of them to type a
+    // zero to open a till teaches every cashier to clear one more box without
+    // reading it, which is the opposite of what asking is for.
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    await _tap(tester, const ValueKey('shift-gate-open'));
+
+    expect(find.byKey(_till), findsOneWidget);
+    expect(server.created.single.$2.containsKey('openingFloatMinor'), isFalse);
+  });
+
+  testWidgets('a float that cannot be read refuses to open the shift', (
+    tester,
+  ) async {
+    // **Refused rather than sent as a zero.** A figure that will not parse is
+    // not a shift with no float: the cashier meant to record one, and opening
+    // without it would quietly bill them for it at close.
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey('shift-gate-opening-float')),
+      '1.2.3',
+    );
+    await _tap(tester, const ValueKey('shift-gate-open'));
+
+    expect(server.created, isEmpty);
+    expect(find.byKey(_till), findsNothing);
+    expect(find.text('Enter an amount, like 2000 or 1500.50.'), findsOneWidget);
+  });
+
   testWidgets('leaving the modal leaves the till rather than selling', (
     tester,
   ) async {
@@ -219,6 +265,86 @@ void main() {
     expect(written['totalSalesMinor'], 0);
     expect(written['transactionCount'], 0);
     expect(written['declaredCashMinor'], 25000);
+  });
+
+  testWidgets('one count closes both shifts when a second is open', (
+    tester,
+  ) async {
+    // **One drawer answering to two shifts.** The guard that keeps a cashier to
+    // one open shift reads only this device, so two tills can both pass it in
+    // the same moment - and the cashier then meets one till that has to be
+    // counted twice. Counting it twice cannot be done truthfully: the money is
+    // already declared onto the shift they just closed.
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
+    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
+      overrides: <String, Object?>{
+        'shiftId': 'shift-elsewhere',
+        'deviceId': _deviceOther,
+      },
+    );
+    await state.save(shiftRecord());
+
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    await _openCloseSheet(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey('declared-cash')),
+      '250.00',
+    );
+    await _settle(tester);
+    await _tap(tester, const ValueKey('close-shift-confirm'));
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull);
+    final byPath = <String, Map<String, Object?>>{
+      for (final write in server.updated) write.$1: write.$2,
+    };
+    expect(byPath.keys, hasLength(2));
+
+    // The shift that was counted carries the count, and its own sale evidence.
+    final counted = byPath['tenants/tenant-a/shifts/shift-a']!;
+    expect(counted['declaredCashMinor'], 25000);
+    expect(counted.containsKey('closedWithoutEvidence'), isFalse);
+
+    // The other one is closed and declares nothing. Zero is not a count here,
+    // and the absent declared keys are what stop one drawer being recorded
+    // twice - `compareShiftTenders` reads the marker and does not compare.
+    final other = byPath['tenants/tenant-a/shifts/shift-elsewhere']!;
+    expect(other['closedWithoutEvidence'], isTrue);
+    expect(other['totalSalesMinor'], 0);
+    expect(other['transactionCount'], 0);
+    expect(other['closingCashMinor'], 0);
+    expect(other.containsKey('declaredCashMinor'), isFalse);
+    expect(other.containsKey('declaredMpesaMinor'), isFalse);
+    expect(other.containsKey('declaredCardMinor'), isFalse);
+
+    // And the person reads that it happened, because it is their name on it.
+    expect(
+      find.byKey(const ValueKey('shift-close-other-shift')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('an ordinary close says nothing about a second shift', (
+    tester,
+  ) async {
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
+    await state.save(shiftRecord());
+
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    await _openCloseSheet(tester);
+    await tester.enterText(find.byKey(const ValueKey('declared-cash')), '0');
+    await _settle(tester);
+    await _tap(tester, const ValueKey('close-shift-confirm'));
+    await _settle(tester);
+
+    expect(server.updated, hasLength(1));
+    expect(
+      find.byKey(const ValueKey('shift-close-other-shift')),
+      findsNothing,
+      reason: 'There was no second shift, so there is nothing to report.',
+    );
   });
 
   testWidgets('the modal stops refusing once the orphan is gone', (
@@ -396,6 +522,85 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(server.updated, hasLength(1));
     expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
+  });
+
+  testWidgets('a shift from yesterday stops selling and offers the close', (
+    tester,
+  ) async {
+    // **H3.** The business date freezes when a shift opens and every sale
+    // resolves it afresh, so a shift carried across midnight is refused by the
+    // draft service on every sale. The gate said nothing about it: the till
+    // drew a sellable screen and the cashier met the refusal at the counter,
+    // one sale at a time, with a customer waiting.
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
+    // The suite's clock is 2026-07-31; this shift belongs to the day before.
+    await state.save(shiftRecord(businessDate: '2026-07-30'));
+
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+
+    expect(find.byKey(const ValueKey('shift-gate-day-ended')), findsOneWidget);
+    expect(
+      find.byKey(_till),
+      findsNothing,
+      reason: 'Every sale on this shift would be refused, so none is offered.',
+    );
+    // And the way out is the only one there is, on the surface that says so.
+    expect(find.byKey(const ValueKey('shift-gate-close-day')), findsOneWidget);
+  });
+
+  testWidgets('losing access takes the till away rather than leaving it drawn', (
+    tester,
+  ) async {
+    // **N3, and the whole of M2.** The gate holds one session controller for
+    // the life of the till, so every notification arrived as the *same* object
+    // and was discarded - a deactivation reached this widget and changed
+    // nothing. The till went on looking ready to sell, and the cashier only
+    // learned otherwise when a sale was refused.
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
+    await state.save(shiftRecord());
+
+    final sessions = await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    expect(find.byKey(_till), findsOneWidget);
+
+    sessions.clear();
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(_till),
+      findsNothing,
+      reason:
+          'A till whose session has gone cannot record a sale, so it must not '
+          'go on drawing one that looks like it can.',
+    );
+  });
+
+  testWidgets('a session that moves under the till re-reads the shift', (
+    tester,
+  ) async {
+    // The other half: access did not end, it *changed* - a new epoch from the
+    // shell's own re-read. The shift has to be read again for the session that
+    // now holds the till, rather than left as it was for the previous one.
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
+    await state.save(shiftRecord());
+
+    final sessions = await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    final readsBefore = server.reads.length;
+
+    // Same person, same business, a fresh access decision.
+    sessions.open(uid: 'user-a', membership: shiftMembership('tenant-a'));
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(
+      server.reads.length,
+      greaterThan(readsBefore),
+      reason: 'The shift must be re-read for the session that now holds it.',
+    );
+    expect(find.byKey(_till), findsOneWidget);
   });
 
   testWidgets('switching business while a shift is being opened draws no till', (

@@ -44,6 +44,7 @@ export 'tenant_staff_names.dart';
 export 'tenant_staff_invitation_cancellation.dart';
 export 'tenant_staff_invitation_email_replacement.dart';
 export 'tenant_staff_invitation_resend.dart';
+export 'tenant_staff_request_ticket.dart';
 export 'tenant_staff_status.dart';
 export 'tenant_staff_update.dart';
 export 'tenant_switch.dart';

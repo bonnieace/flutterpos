@@ -441,40 +441,38 @@ class _OnboardingFlowState extends State<OnboardingFlow>
   /// first, because a person who pressed *Sign out* does not need to be told
   /// their session ended.
   void _subscribeToIdentityChanges() {
-    _identitySubscription = widget.identityChanges?.listen(
-      (_) {
-        if (!mounted) return;
-        final uid = widget.readIdentity().uid;
-        final lost = uid == null && _seenUid != null && !_leaving;
-        // **A different account never inherits these keys.** They are recorded
-        // against the uid that minted them, so a retry under somebody else's
-        // identity would address the previous person's operation. The accessors
-        // compare the input; only this can see the identity move underneath
-        // them. `account_verification.dart` makes the same guard for the same
-        // reason.
-        final changedIdentity = uid != null && _seenUid != null && uid != _seenUid;
-        if (changedIdentity) {
-          _signupIntent = null;
-          _emailChangeIntent = null;
-          _verificationIntent = null;
+    _identitySubscription = widget.identityChanges?.listen((_) {
+      if (!mounted) return;
+      final uid = widget.readIdentity().uid;
+      final lost = uid == null && _seenUid != null && !_leaving;
+      // **A different account never inherits these keys.** They are recorded
+      // against the uid that minted them, so a retry under somebody else's
+      // identity would address the previous person's operation. The accessors
+      // compare the input; only this can see the identity move underneath
+      // them. `account_verification.dart` makes the same guard for the same
+      // reason.
+      final changedIdentity =
+          uid != null && _seenUid != null && uid != _seenUid;
+      if (changedIdentity) {
+        _signupIntent = null;
+        _emailChangeIntent = null;
+        _verificationIntent = null;
+      }
+      setState(() {
+        if (uid != null) {
+          _seenUid = uid;
+          _sessionEnded = false;
+        } else if (lost) {
+          _sessionEnded = true;
+          _poll?.cancel();
+          _poll = null;
+          _busy = false;
+          _reauthRequired = false;
+          _reauthController.clear();
+          _clearNotice();
         }
-        setState(() {
-          if (uid != null) {
-            _seenUid = uid;
-            _sessionEnded = false;
-          } else if (lost) {
-            _sessionEnded = true;
-            _poll?.cancel();
-            _poll = null;
-            _busy = false;
-            _reauthRequired = false;
-            _reauthController.clear();
-            _clearNotice();
-          }
-        });
-      },
-      onError: (Object _, StackTrace _) {},
-    );
+      });
+    }, onError: (Object _, StackTrace _) {});
   }
 
   @override
@@ -922,9 +920,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       setState(() {
         _busy = false;
         _raise(
-          const AppNotice.refused(
-            'That password was not accepted. Try again.',
-          ),
+          const AppNotice.refused('That password was not accepted. Try again.'),
         );
       });
       return;
@@ -1001,7 +997,8 @@ class _OnboardingFlowState extends State<OnboardingFlow>
         // "nothing was attempted, or we cannot tell" case - see
         // `accountProfileFailure`.
         final notice = _noticeFor(error);
-        if (accountProfileFailure(error).kind == SignInFailureKind.unreachable) {
+        if (accountProfileFailure(error).kind ==
+            SignInFailureKind.unreachable) {
           _addressOutcomeUnknown = true;
         }
         _raise(notice);
@@ -1085,9 +1082,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
                   Semantics(
                     header: true,
                     child: Text(
-                      _sessionEnded
-                          ? 'Your session has ended'
-                          : _heading(step),
+                      _sessionEnded ? 'Your session has ended' : _heading(step),
                       key: const ValueKey('onboarding-heading'),
                       style: tokens.typography.display.copyWith(
                         color: tokens.colors.text.primary,
@@ -1180,8 +1175,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
   /// set it to, and the identity's copy is read from a cached user record that
   /// a server-side change does not touch. Falls back to the identity for the
   /// ordinary case where nothing has been changed.
-  String? get _verifyingAddress =>
-      _changedEmail ?? widget.readIdentity().email;
+  String? get _verifyingAddress => _changedEmail ?? widget.readIdentity().email;
 
   /// The address the verify subheading prints, with somewhere legal to break.
   ///
@@ -1216,9 +1210,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
   String get _breakableVerifyingAddress {
     final address = _verifyingAddress;
     if (address == null) return 'your address';
-    return address
-        .replaceAll('@', '@\u200b')
-        .replaceAll('.', '.\u200b');
+    return address.replaceAll('@', '@\u200b').replaceAll('.', '.\u200b');
   }
 
   /// The step's name, in the role `login_screen.dart` gives *Welcome back*.
@@ -1239,7 +1231,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
   String _subheading(OnboardingStep step) => switch (step) {
     OnboardingStep.account =>
       _creatingAccount
-          ? 'Two more steps and your till is open.'
+          ? 'Two more steps and your register is open.'
           : 'Finish the account you already started.',
     // **Names the address only when it can.** An attempt whose answer never
     // arrived leaves this flow unable to say where the link went: the change
@@ -1251,14 +1243,15 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     // The generic sentence lasts until a reload settles it, which is seconds
     // once the connection is back, and it is followed by
     // [onboardingUnreachableNotice] saying why in the meantime.
-    OnboardingStep.verify => _addressOutcomeUnknown
-        ? 'We sent a link to your address. Open it and this screen moves on by '
-              'itself.'
-        : 'We sent a link to $_breakableVerifyingAddress. '
-              'Open it and this screen moves on by itself.',
+    OnboardingStep.verify =>
+      _addressOutcomeUnknown
+          ? 'We sent a link to your address. Open it and this screen moves on by '
+                'itself.'
+          : 'We sent a link to $_breakableVerifyingAddress. '
+                'Open it and this screen moves on by itself.',
     OnboardingStep.business =>
       'The last step. You can trade straight away while it is reviewed.',
-    OnboardingStep.complete => 'Your till is ready to take its first sale.',
+    OnboardingStep.complete => 'Your register is ready to take its first sale.',
   };
 
   /// One sentence for a session that ended without being asked to.
@@ -1491,7 +1484,8 @@ class _OnboardingFlowState extends State<OnboardingFlow>
         // exists to be read *before* anything is pressed, by somebody who has
         // been watching a screen that promised to move on by itself while it
         // silently could not find out whether it should.
-        if (_refreshFailures >= onboardingRefreshFailuresBeforeNotice) ...<Widget>[
+        if (_refreshFailures >=
+            onboardingRefreshFailuresBeforeNotice) ...<Widget>[
           Callout(
             key: const ValueKey('onboarding-verify-unreachable'),
             status: onboardingUnreachableNotice.status,

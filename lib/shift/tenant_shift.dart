@@ -78,6 +78,8 @@ final class TenantShift {
       startedAt: _optionalInstant(data, 'startTime'),
       endedAt: _optionalInstant(data, 'endTime'),
       closingCashMinor: _optionalNonNegativeInteger(data, 'closingCashMinor'),
+      openingFloatMinor:
+          _optionalNonNegativeInteger(data, 'openingFloatMinor') ?? 0,
       declaration: _optionalDeclaration(data),
       closedWithoutEvidence: _optionalTrueFlag(data, 'closedWithoutEvidence'),
     );
@@ -93,6 +95,7 @@ final class TenantShift {
     required this.startedAt,
     required this.endedAt,
     required this.closingCashMinor,
+    required this.openingFloatMinor,
     required this.declaration,
     required this.closedWithoutEvidence,
   });
@@ -106,6 +109,24 @@ final class TenantShift {
   final DateTime? startedAt;
   final DateTime? endedAt;
   final int? closingCashMinor;
+
+  /// The change the drawer started the shift with, in minor units.
+  ///
+  /// **Zero and absent are the same answer**, which is why this is not
+  /// nullable: a shop that floats no change and a shop that has never recorded
+  /// one both expect their takings compared against their sales alone. Every
+  /// shift written before the float existed reads as zero, so no history
+  /// changes meaning under it.
+  ///
+  /// **It is part of what the drawer should hold, not part of what the shift
+  /// took.** The cashier counts the whole drawer at close, float included, and
+  /// reconciliation adds this to the cash its sales expect - so the float
+  /// cancels out and a balanced drawer reads as balanced. Without it, a shop
+  /// that floats its till books that float as a surplus every single day.
+  ///
+  /// Fixed at open and never rewritten: the close rule's `affectedKeys` does
+  /// not list it, so the server refuses a close that would move it.
+  final int openingFloatMinor;
 
   /// What the cashier declared the till held, by payment method.
   ///
@@ -137,6 +158,7 @@ final class TenantShiftOpenIntent {
     required this.staffId,
     required this.deviceId,
     required this.businessDate,
+    required this.openingFloatMinor,
   });
 
   final String path;
@@ -146,6 +168,10 @@ final class TenantShiftOpenIntent {
   final String deviceId;
   final String businessDate;
 
+  /// The change the drawer starts with, in minor units. See
+  /// [TenantShift.openingFloatMinor].
+  final int openingFloatMinor;
+
   Map<String, Object?> documentData() => <String, Object?>{
     'shiftId': shiftId,
     'tenantId': tenantId,
@@ -153,6 +179,11 @@ final class TenantShiftOpenIntent {
     'deviceId': deviceId,
     'businessDate': businessDate,
     'status': TenantShiftStatus.open.wireValue,
+    // **Omitted entirely when there is no float**, rather than written as a
+    // zero. Absent and zero mean the same thing to every reader, and a shop
+    // that keeps no change in the drawer should not have a field about one on
+    // every shift it ever opens.
+    if (openingFloatMinor > 0) 'openingFloatMinor': openingFloatMinor,
   };
 }
 
@@ -246,11 +277,20 @@ final class TenantShiftRepository extends TenantReadRepository {
     return shift;
   }
 
+  /// Builds the create for one shift, with the change its drawer starts with.
+  ///
+  /// [openingFloatMinor] defaults to none, so every existing caller opens a
+  /// shift that took no float and is compared against its sales alone - which
+  /// is exactly what those shifts meant before the field existed.
   TenantShiftOpenIntent buildOpenIntent({
     required String shiftId,
     required String deviceId,
     required String businessDate,
+    int openingFloatMinor = 0,
   }) {
+    if (openingFloatMinor < 0 || openingFloatMinor > maximumShiftCashMinor) {
+      throw const TenantShiftException('invalid_opening_float');
+    }
     final safeId = _validatedShiftId(shiftId);
     final String safeDeviceId;
     final String safeBusinessDate;
@@ -267,6 +307,7 @@ final class TenantShiftRepository extends TenantReadRepository {
       staffId: session.uid,
       deviceId: safeDeviceId,
       businessDate: safeBusinessDate,
+      openingFloatMinor: openingFloatMinor,
     );
   }
 
@@ -323,16 +364,28 @@ final class TenantShiftRepository extends TenantReadRepository {
   /// evidence - the person is standing at the drawer - and reconciliation
   /// derives the other side of the comparison from the sales the server already
   /// holds. So a recovery close says *more* than the dead end it replaces.
+  ///
+  /// **Null where the drawer has already been counted onto another shift.** A
+  /// cashier who ends up with two open shifts for one till counts that till
+  /// once, and the count belongs to whichever shift can carry it; asking again
+  /// here would take a second figure for money that has already been declared,
+  /// and every surface downstream would then hold one drawer twice. An omitted
+  /// declaration writes no declared keys at all - which the rules permit, and
+  /// which `compareShiftTenders` reads as *unverifiable* rather than as a
+  /// declaration a current build should have recorded and did not.
   TenantShiftCloseIntent buildRecoveryCloseIntent({
     required TenantShift shift,
-    required ShiftTenderDeclaration declaration,
+    ShiftTenderDeclaration? declaration,
   }) {
     _assertClosable(shift);
     return TenantShiftCloseIntent._(
       path: paths.shift(_validatedShiftId(shift.id)),
       tenantId: session.tenantId,
       shiftId: shift.id,
-      closingCashMinor: declaration.cashMinor,
+      // Zero because nothing was counted onto this shift, which is the same
+      // thing its zero summary says. The rules require the field; they do not
+      // require it to claim anything.
+      closingCashMinor: declaration?.cashMinor ?? 0,
       totalSalesMinor: 0,
       transactionCount: 0,
       declaration: declaration,

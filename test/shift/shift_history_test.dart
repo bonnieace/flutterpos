@@ -26,6 +26,132 @@ void main() {
       expect(entry.endedAt, DateTime.utc(2026, 7, 31, 18));
     });
 
+    test('a shift closed without its sales states no difference', () {
+      // **Zero and zero is not a balanced drawer.** A close made by a device
+      // holding none of the shift's sales writes zero for both figures as an
+      // admission, and subtracting one from the other used to render the most
+      // confident badge this surface has - *Cash matches* - over the one shift
+      // nobody can say anything about.
+      final entry = TenantShiftHistoryEntry.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _closed(
+          overrides: <String, Object?>{
+            'closingCashMinor': 0,
+            'closingCash': 0,
+            'totalSalesMinor': 0,
+            'totalSales': 0,
+            'transactionCount': 0,
+            'closedWithoutEvidence': true,
+          },
+        ),
+      );
+
+      expect(entry.closedWithoutEvidence, isTrue);
+      expect(entry.cashVarianceMinor, isNull);
+    });
+
+    test('a shift closed before the declaration states no difference', () {
+      // **The defect this replaces.** Such a shift carries a cash figure and
+      // nothing else, and the difference used to be counted *cash* against
+      // sales by *every* method - so a shop taking half its money by M-Pesa
+      // read as short by exactly that half, for ever, on the surface a cashier
+      // is answerable from. There is no honest comparison to make here, so none
+      // is made.
+      final entry = TenantShiftHistoryEntry.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _closed(
+          overrides: <String, Object?>{
+            'declaredCashMinor': null,
+            'declaredMpesaMinor': null,
+            'declaredCardMinor': null,
+          },
+        ),
+      );
+
+      expect(entry.summary!.totalSalesMinor, 98750);
+      expect(entry.closingCashMinor, 125000);
+      expect(entry.cashVarianceMinor, isNull);
+    });
+
+    test(
+      'the difference is the whole declaration against the whole takings',
+      () {
+        // Cash 400.00 and M-Pesa 600.00 against sales of 987.50: over by 12.50.
+        // Under the old arithmetic this shift read as *short by 587.50* - the
+        // value of its M-Pesa - which is money nobody had lost.
+        final entry = TenantShiftHistoryEntry.fromDocument(
+          path: 'tenants/tenant-a/shifts/shift-a',
+          data: _closed(
+            overrides: <String, Object?>{
+              'closingCashMinor': 40000,
+              'closingCash': 400,
+              'declaredCashMinor': 40000,
+              'declaredMpesaMinor': 60000,
+              'declaredCardMinor': 0,
+            },
+          ),
+        );
+
+        expect(entry.cashVarianceMinor, 1250);
+      },
+    );
+
+    test('the opening float is counted back rather than read as a surplus', () {
+      // The drawer was given 200.00 in change before it sold anything, and the
+      // cashier counted the whole thing at close: 987.50 of sales sitting on
+      // top of the float. Nothing is missing. Without the float term this row
+      // said *Takings over* by 200.00, every day, to the person answerable for
+      // the drawer - and disagreed with the server's own verification of the
+      // same shift, which is worse than either figure being wrong alone.
+      final entry = TenantShiftHistoryEntry.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _closed(
+          overrides: <String, Object?>{
+            'openingFloatMinor': 20000,
+            'closingCashMinor': 118750,
+            'closingCash': 1187.5,
+            'declaredCashMinor': 118750,
+            'declaredMpesaMinor': 0,
+            'declaredCardMinor': 0,
+          },
+        ),
+      );
+
+      expect(entry.openingFloatMinor, 20000);
+      expect(entry.cashVarianceMinor, 0);
+    });
+
+    test('a float does not absorb money genuinely missing from the drawer', () {
+      // The same float, and 100.00 of the drawer absent: still short by 100.00.
+      final entry = TenantShiftHistoryEntry.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _closed(
+          overrides: <String, Object?>{
+            'openingFloatMinor': 20000,
+            'closingCashMinor': 108750,
+            'closingCash': 1087.5,
+            'declaredCashMinor': 108750,
+            'declaredMpesaMinor': 0,
+            'declaredCardMinor': 0,
+          },
+        ),
+      );
+
+      expect(entry.cashVarianceMinor, -10000);
+    });
+
+    test('a shift carrying no float reads exactly as it did before one', () {
+      // Every shift closed before the field existed, and every shift of every
+      // shop that keeps no change in the drawer.
+      final entry = TenantShiftHistoryEntry.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _closed(),
+      );
+
+      expect(entry.openingFloatMinor, 0);
+      expect(entry.cashVarianceMinor, 125000 - 98750);
+    });
+
     test('a shift closed without a summary keeps its counted cash', () {
       final entry = TenantShiftHistoryEntry.fromDocument(
         path: 'tenants/tenant-a/shifts/shift-a',
@@ -227,6 +353,10 @@ void main() {
             'totalSalesMinor': 0,
             'totalSales': 0,
             'transactionCount': 0,
+            // A shift that took nothing declared nothing, by every method.
+            'declaredCashMinor': 0,
+            'declaredMpesaMinor': 0,
+            'declaredCardMinor': 0,
           },
         ),
       );
@@ -438,6 +568,18 @@ Map<String, Object?> _closed({
     'transactionCount': 3,
   };
   if (overrides != null) data.addAll(overrides);
+  // **The declared triple, because the difference is computed from it.** It
+  // mirrors the counted cash unless a case names its own, so a fixture reads as
+  // a shift closed by a current build; one closed before the triple existed
+  // carries none and states no difference, which a case below asserts.
+  // All three or none: a partial triple is refused by the read model, which is
+  // right, and would make every case here fail for the wrong reason.
+  if (data['closingCashMinor'] != null &&
+      !data.containsKey('declaredCashMinor')) {
+    data['declaredCashMinor'] = data['closingCashMinor'];
+    data.putIfAbsent('declaredMpesaMinor', () => 0);
+    data.putIfAbsent('declaredCardMinor', () => 0);
+  }
   data.removeWhere((key, value) => value == null);
   return data;
 }

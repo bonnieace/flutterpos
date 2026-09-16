@@ -46,7 +46,7 @@ const List<String> checkoutTenderWireValues = <String>['cash', 'mpesa', 'card'];
 /// assertion about how the customer paid. Displaying it without this would
 /// imply the money arrived, which nothing here has checked.
 const String checkoutTenderDisclaimer =
-    'Recorded by the cashier at the till; the payment itself is not verified.';
+    'Recorded by the cashier at the register; the payment itself is not verified.';
 
 /// What a surface says about a sale that recorded no tender at all.
 ///

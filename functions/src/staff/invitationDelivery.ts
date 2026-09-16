@@ -3,11 +3,13 @@ import {getAuth} from "firebase-admin/auth";
 import {getFunctions} from "firebase-admin/functions";
 import {
   DocumentReference,
+  DocumentSnapshot,
   FieldPath,
   FieldValue,
   Firestore,
   getFirestore,
   Timestamp,
+  Transaction,
 } from "firebase-admin/firestore";
 import {defineString} from "firebase-functions/params";
 import {onSchedule} from "firebase-functions/v2/scheduler";
@@ -119,6 +121,47 @@ export function isEligibleStaffInvitationRecipient(
     normalizeEmail(staff.email) === task.invitedEmail;
 }
 
+/**
+ * Mirrors what the delivery subsystem knows onto the canonical staff record.
+ *
+ * **The staff directory reads canonical staff and nothing else.** Delivery
+ * state lived in `email_deliveries` and in the invitation's own record, and a
+ * device may read neither - so an invitation emailed an hour ago still read as
+ * *Not sent yet* on the only screen an administrator has, and the recovery they
+ * reached for was to send it a second time.
+ *
+ * **Deliberately not `invitationStatus`.** That field is where the membership
+ * stands, it is only ever `pending` or `accepted` on this record, and three
+ * server gates read it: `requirePendingStaffInvitation` for resend, cancel and
+ * email replacement, and `acceptancePolicy` for acceptance itself. Folding a
+ * delivery outcome into it would have refused the recipient's acceptance and
+ * the administrator's replace-the-address - the two recoveries a failed
+ * delivery exists to prompt. An email's fate is a different fact from a
+ * membership's, so it gets a different field.
+ *
+ * **Guarded, and silent when the guard fails.** This worker runs long after the
+ * transaction that queued it, and by the time it lands the member may have
+ * accepted, or the invitation may have been cancelled and this record deleted.
+ * Writing regardless would either fail the task into a retry loop against a
+ * document that is never coming back, or hang a delivery label on a membership
+ * that is no longer pending. Neither is worth a label, so a mirror that no
+ * longer applies is dropped.
+ */
+export function mirrorDeliveryStateOntoStaff(
+  transaction: Transaction,
+  staffRef: DocumentReference,
+  staffSnapshot: DocumentSnapshot,
+  fields: Record<string, unknown>
+): void {
+  if (!staffSnapshot.exists) return;
+  const staff = staffSnapshot.data() as StoredStaffRecord;
+  if (staff.uid !== staffRef.id || staff.status !== "pending") return;
+  transaction.update(staffRef, {
+    ...fields,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
 async function terminalizeStaffDelivery(
   db: Firestore,
   deliveryRef: DocumentReference,
@@ -126,8 +169,13 @@ async function terminalizeStaffDelivery(
   status: "cancelled" | "superseded" | "permanent_failure",
   errorCode: string
 ): Promise<void> {
+  const staffRef = db.collection("tenants").doc(task.tenantId)
+    .collection("staff").doc(task.targetUid);
   await db.runTransaction(async (transaction) => {
-    const current = await transaction.get(deliveryRef);
+    const [current, staffSnapshot] = await transaction.getAll(
+      deliveryRef,
+      staffRef
+    );
     if (
       current.data()?.invitationVersion !== task.invitationVersion ||
       current.data()?.attemptCount !== task.dispatchAttempt ||
@@ -148,6 +196,13 @@ async function terminalizeStaffDelivery(
       dispatchLeaseExpiresAt: FieldValue.delete(),
       lastErrorCode: errorCode,
       updatedAt: FieldValue.serverTimestamp(),
+    });
+    // **Only `permanent_failure` is the member's business.** `cancelled` has
+    // already deleted this record, and `superseded` means a newer delivery owns
+    // the projection and is mid-flight with it.
+    if (status !== "permanent_failure") return;
+    mirrorDeliveryStateOntoStaff(transaction, staffRef, staffSnapshot, {
+      invitationDeliveryState: "failed",
     });
   });
 }
@@ -259,7 +314,12 @@ export async function dispatchInvitationDelivery(
       return false;
     }
     const invitationRef = db.doc(delivery.invitationPath);
-    const invitationSnapshot = await transaction.get(invitationRef);
+    const staffRef = db.collection("tenants").doc(delivery.tenantId)
+      .collection("staff").doc(delivery.targetUid);
+    const [invitationSnapshot, staffSnapshot] = await transaction.getAll(
+      invitationRef,
+      staffRef
+    );
     if (!invitationSnapshot.exists) return false;
     const invitation = invitationSnapshot.data() as StoredInvitationRecord;
     if (
@@ -292,16 +352,28 @@ export async function dispatchInvitationDelivery(
       dispatchAttempt,
       credentialBootstrapRequired: storedCredentialBootstrapRequired(invitation),
     };
+    const invitationExpiresAt = Timestamp.fromMillis(
+      now.toMillis() + INVITATION_LIFETIME_MILLISECONDS
+    );
     transaction.update(invitationRef, {
       invitationVersion,
       invitationTokenHash: proof.tokenHash,
       invitationTokenKeyVersion: proof.tokenKeyVersion,
       invitationIssuedAt: now,
-      invitationExpiresAt: Timestamp.fromMillis(
-        now.toMillis() + INVITATION_LIFETIME_MILLISECONDS
-      ),
+      invitationExpiresAt,
       invitationTokenUsedAt: null,
       updatedAt: FieldValue.serverTimestamp(),
+    });
+    // **The deadline is minted here, so this is where the directory learns it.**
+    // `staff_invitations` is unreadable by every client, and the expiry only
+    // exists once a token does - an invitation whose first delivery has not been
+    // claimed has no deadline to show. The status goes back to `pending` with
+    // it because that is the truth about *this* attempt: a resend mints fresh
+    // proof and has not delivered it yet, so a row still reading `sent` from the
+    // previous round would be describing an email that no longer opens anything.
+    mirrorDeliveryStateOntoStaff(transaction, staffRef, staffSnapshot, {
+      invitationDeliveryState: "pending",
+      invitationExpiresAt,
     });
     transaction.update(deliveryRef, {
       status: "enqueueing",
@@ -629,7 +701,10 @@ export const deliverStaffInvitation = onTaskDispatched<InvitationDeliveryTask>(
     }
     if (await hasActiveEmailSuppression(db, recipient)) {
       await db.runTransaction(async (transaction) => {
-        const current = await transaction.get(deliveryRef);
+        const [current, staffSnapshot] = await transaction.getAll(
+          deliveryRef,
+          staffRef
+        );
         if (
           current.data()?.invitationVersion !== task.invitationVersion ||
           current.data()?.attemptCount !== task.dispatchAttempt
@@ -644,6 +719,11 @@ export const deliverStaffInvitation = onTaskDispatched<InvitationDeliveryTask>(
           lastErrorCode: "recipient_suppressed",
           updatedAt: FieldValue.serverTimestamp(),
         });
+        // A suppressed recipient is not a transient failure and resending will
+        // not reach them; the recovery is a different address.
+        mirrorDeliveryStateOntoStaff(transaction, staffRef, staffSnapshot, {
+          invitationDeliveryState: "failed",
+        });
       });
       return;
     }
@@ -657,7 +737,10 @@ export const deliverStaffInvitation = onTaskDispatched<InvitationDeliveryTask>(
       const retryable = (error instanceof EmailProviderError ? error.retryable : true) &&
         task.dispatchAttempt < MAX_INVITATION_DELIVERY_ATTEMPTS;
       await db.runTransaction(async (transaction) => {
-        const current = await transaction.get(deliveryRef);
+        const [current, staffSnapshot] = await transaction.getAll(
+          deliveryRef,
+          staffRef
+        );
         if (
           current.data()?.invitationVersion !== task.invitationVersion ||
           current.data()?.attemptCount !== task.dispatchAttempt
@@ -676,12 +759,22 @@ export const deliverStaffInvitation = onTaskDispatched<InvitationDeliveryTask>(
           lastErrorCode: safeCode,
           updatedAt: FieldValue.serverTimestamp(),
         });
+        // **A retry is not news.** The worker is still trying and the row
+        // already says `Not sent yet`, which stays true; only running out of
+        // attempts changes what the administrator should do about it.
+        if (retryable) return;
+        mirrorDeliveryStateOntoStaff(transaction, staffRef, staffSnapshot, {
+          invitationDeliveryState: "failed",
+        });
       });
       if (retryable) throw error;
       return;
     }
     await db.runTransaction(async (transaction) => {
-      const current = await transaction.get(deliveryRef);
+      const [current, staffSnapshot] = await transaction.getAll(
+        deliveryRef,
+        staffRef
+      );
       if (
         current.data()?.invitationVersion !== task.invitationVersion ||
         current.data()?.attemptCount !== task.dispatchAttempt
@@ -698,6 +791,11 @@ export const deliverStaffInvitation = onTaskDispatched<InvitationDeliveryTask>(
       transaction.update(invitationRef, {
         invitationStatus: "sent",
         updatedAt: FieldValue.serverTimestamp(),
+      });
+      // The half that was missing: three records knew this had been emailed and
+      // the one the directory reads was not among them.
+      mirrorDeliveryStateOntoStaff(transaction, staffRef, staffSnapshot, {
+        invitationDeliveryState: "sent",
       });
     });
   }

@@ -171,12 +171,12 @@ void main() {
         tester,
         const AppTextField(
           label: 'Code (SKU or barcode)',
-          helper: 'What the till matches a scan against. No spaces.',
+          helper: 'What the register matches a scan against. No spaces.',
         ),
       );
       final style = _styleOf(
         tester,
-        'What the till matches a scan against. No spaces.',
+        'What the register matches a scan against. No spaces.',
       );
       expect(style.fontSize, _tokens.typography.caption.fontSize);
       expect(style.color, _tokens.colors.text.tertiary);

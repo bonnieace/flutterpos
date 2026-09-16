@@ -280,12 +280,12 @@ final class TenantRequestForm extends StatefulWidget {
   /// about the name is now the name field's own helper, which is where a fact
   /// about one field belongs.
   final String? description;
+
   /// The one action this form has. There was a *Review* step before it until
   /// 2026-09-12; see [_TenantRequestFormState._submit].
   final String submitLabel;
   final TenantRequestIdFactory? requestIdFactory;
   final TenantRequestCurrentCheck? isCurrent;
-
 
   @override
   State<TenantRequestForm> createState() => _TenantRequestFormState();
@@ -363,7 +363,9 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
   /// form must not inherit the previous key. `_resetIntent` is the other half.
   TenantRequestIntent? _intentFor() {
     final existing = _intent;
-    if (existing != null && existing.uid == widget.identity.uid) return existing;
+    if (existing != null && existing.uid == widget.identity.uid) {
+      return existing;
+    }
     try {
       return _intent = _gateway().createIntent(
         name: _nameController.text,
@@ -453,7 +455,7 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
             // Moved off the standing paragraph on 2026-09-02: it is a fact
             // about this field, and a helper is where those go - which is also
             // how the currency field below already explains itself.
-            helper: 'This names your till and every receipt it prints.',
+            helper: 'This names your register and every receipt it prints.',
             autovalidateMode: AutovalidateMode.onUserInteraction,
             onChanged: _fieldChanged,
             validator: (value) => _validateName(value ?? ''),
@@ -672,9 +674,10 @@ String deriveTenantRequestSlug(String name, {String Function()? suffix}) {
 /// one is a name somebody else can take first.
 String _secureSlugSuffix() {
   final random = Random.secure();
-  return List<int>.generate(3, (_) => random.nextInt(256))
-      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-      .join();
+  return List<int>.generate(
+    3,
+    (_) => random.nextInt(256),
+  ).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 }
 
 String tenantRequestSafeError(Object error) {

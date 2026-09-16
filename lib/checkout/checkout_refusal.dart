@@ -78,6 +78,15 @@ final class CheckoutRefusal {
       'Your shift is being closed, so no new sale can be recorded on it.',
       cashierCanFix: true,
     ),
+    // **A shift is the unit a day's takings are reconciled in**, so one left
+    // running for days makes its own summary meaningless. Ending it needs no
+    // network, which is what makes refusing here safe to do.
+    'shift_expired' => const CheckoutRefusal._(
+      'shift_expired',
+      'Your shift has been open more than a day, so no new sale can be '
+          'recorded on it. Count the cash and close it, then open a new one.',
+      cashierCanFix: true,
+    ),
     // A shift from another business day could never be reconciled against this
     // sale, so the shift is ended rather than the sale re-dated.
     'shift_business_date_mismatch' => const CheckoutRefusal._(
@@ -116,7 +125,7 @@ final class CheckoutRefusal {
     // would record a sale that disagrees with the catalog, so it is refused.
     'price_not_representable' => const CheckoutRefusal._(
       'price_not_representable',
-      'One of these items has a price this till cannot record exactly. Ask a '
+      'One of these items has a price this register cannot record exactly. Ask a '
           'manager to correct the price.',
       cashierCanFix: false,
     ),
@@ -165,7 +174,7 @@ final class CheckoutRefusal {
     ),
     'draft_contract_violation' => const CheckoutRefusal._(
       'draft_contract_violation',
-      'This sale did not pass the checks this till applies, so nothing was '
+      'This sale did not pass the checks this register applies, so nothing was '
           'saved. Ask for help before selling.',
       cashierCanFix: false,
     ),

@@ -60,6 +60,7 @@ import 'package:flutter_application_1/returns/return_verification.dart';
 import 'package:flutter_application_1/returns/return_history.dart';
 import 'package:flutter_application_1/sales/receipt_lookup.dart';
 import 'package:flutter_application_1/sales/sale_history.dart';
+import 'package:flutter_application_1/shift/abandoned_shift.dart';
 import 'package:flutter_application_1/shift/shift_history.dart';
 import 'package:flutter_application_1/tenancy/tenant_staff_directory.dart';
 import 'package:flutter_application_1/tenancy/tenant_staff_invitation.dart';
@@ -108,6 +109,18 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
   'TenantShiftHistoryRepository.managementRoles': (
     expected: TenantShiftHistoryRepository.managementRoles,
     row: 'View management shift history: manager-or-above.',
+  ),
+  // | Close an abandoned shift | Full | Full | Full | No |
+  //
+  // **Finding one and ending one are two different permissions, deliberately.**
+  // This list gates the *finding*: it is a read of another cashier's shift, so
+  // it matches the row above it exactly. Ending one is narrower and is not a
+  // client decision at all - `closeAbandonedShift` re-checks owner-or-admin on
+  // the server, inside the transaction that closes it, because a manager who
+  // could end a colleague's shift could erase a drawer nobody had counted.
+  'TenantAbandonedShiftRepository.allowedRoles': (
+    expected: TenantAbandonedShiftRepository.allowedRoles,
+    row: 'Close an abandoned shift: manager-or-above finds, server decides.',
   ),
   // | Manage catalog operational fields | Full | Full | Full | No |
   'TenantCatalogManagementRepository.allowedRoles': (
@@ -290,13 +303,15 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
   // | Business details and logo | Full | Full | No | No |
   'TenantBrandingPublisher.allowedRoles': (
     expected: TenantBrandingPublisher.allowedRoles,
-    row: 'Publish business details: owner/administrator, as the receipt '
+    row:
+        'Publish business details: owner/administrator, as the receipt '
         'header it writes is business-wide.',
   ),
   // | Setup checklist | Full | Full | No | No |
   'TenantSetupChecklist.allowedRoles': (
     expected: TenantSetupChecklist.allowedRoles,
-    row: 'Setup checklist: owner/administrator, being the list of things only '
+    row:
+        'Setup checklist: owner/administrator, being the list of things only '
         'they can finish.',
   ),
   // | Receipt lookup, management scope | Full | Full | Full | No |
@@ -316,7 +331,8 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
   // | Sale history report, management scope | Full | Full | Full | No |
   'TenantSaleHistoryRepository.managementReportRoles': (
     expected: TenantSaleHistoryRepository.managementReportRoles,
-    row: 'Sale history management scope: reading the sales of another '
+    row:
+        'Sale history management scope: reading the sales of another '
         'member.',
   ),
   // | Return history | Full | Full | Full | Full |
@@ -336,6 +352,8 @@ const Map<String, List<TenantRole>> _fromTheMatrix = <String, List<TenantRole>>{
   'TenantReceiptLookupRepository.allowedRoles': <TenantRole>[_o, _a, _m, _c],
   'TenantReturnRequestRepository.allowedRoles': <TenantRole>[_o, _a, _m, _c],
   'TenantShiftHistoryRepository.managementRoles': _management,
+  // Finding one is the same read as the row above; ending one is the server's.
+  'TenantAbandonedShiftRepository.allowedRoles': _management,
   'TenantCatalogManagementRepository.allowedRoles': _management,
   'TenantCatalogManagementRepository.costRoles': <TenantRole>[_o, _a],
   'TenantCatalogManagementRepository.retireRoles': <TenantRole>[_o, _a],

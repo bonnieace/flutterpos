@@ -129,12 +129,64 @@ final class TenantShiftHistoryEntry {
   /// This is a subtraction of two recorded figures. The device deliberately
   /// does not recompute either side from local evidence: only reconciliation
   /// can decide which one is wrong.
+  /// **Null for a shift closed without its sales, because nothing is known.**
+  /// Such a close writes zero for the counted cash and zero for the takings -
+  /// not as figures but as an admission that the closing device held none -
+  /// and subtracting one from the other produced a variance of zero, which
+  /// this surface drew as *Cash matches* with a positive badge. That is the
+  /// most confident possible statement about the one shift nobody can make any
+  /// statement about. `closedWithoutEvidence` is the marker that says so, and
+  /// the server reads it the same way: see `compareShiftTenders` and
+  /// `verifyShiftExpectation`, both of which decline to compare.
+  /// **It compares the whole declaration against the whole takings, because
+  /// those are the two figures that describe the same thing.** It used to be
+  /// `closingCashMinor - totalSalesMinor`: counted *cash* against sales by
+  /// *every* method. A shop taking half its money by M-Pesa therefore read as
+  /// short by exactly that half, every day, on the surface a cashier is
+  /// answerable from - and would go looking for money that was never missing.
+  ///
+  /// The server has always made the honest comparison and still does, per
+  /// method, in `compareShiftTenders`. What the shift document lacks is a
+  /// per-tender *sales* split, so this cannot repeat that work; what it has is
+  /// the declared triple, and the sum of that is comparable to the sales total
+  /// on its own terms.
+  ///
+  /// **Null where the declaration is absent**, which is every shift closed
+  /// before the triple existed. Those carry a cash figure alone, and comparing
+  /// one method against all of them is the defect this replaces.
+  ///
+  /// **The opening float is subtracted, for the same reason the server adds it
+  /// to the other side.** The cashier counts the whole drawer, change included,
+  /// so a declaration from a floated till is over its takings by exactly that
+  /// float. Leaving it in would have this row read *Takings over* by the float
+  /// every day - and disagree with the verification an owner sees for the same
+  /// shift, which is worse than either figure being wrong alone.
   int? get cashVarianceMinor {
+    if (shift.closedWithoutEvidence) return null;
     final recorded = summary;
-    return recorded == null
-        ? null
-        : closingCashMinor - recorded.totalSalesMinor;
+    final declared = shift.declaration;
+    if (recorded == null || declared == null) return null;
+    final declaredTotalMinor =
+        declared.cashMinor + declared.mpesaMinor + declared.cardMinor;
+    return declaredTotalMinor -
+        shift.openingFloatMinor -
+        recorded.totalSalesMinor;
   }
+
+  /// The change this drawer started with, in minor units.
+  ///
+  /// Zero for a shift opened with no float and for every shift opened before
+  /// the field existed. Exposed so a surface showing a variance can also show
+  /// the figure that was taken out of it.
+  int get openingFloatMinor => shift.openingFloatMinor;
+
+  /// Whether this shift was closed by something holding none of its sales.
+  ///
+  /// Separate from [cashVarianceMinor] being null, which a shift closed before
+  /// summaries existed also is: the two read the same on a badge and need
+  /// different words, because one is an old record and the other is a shift
+  /// somebody had to end on a cashier's behalf.
+  bool get closedWithoutEvidence => shift.closedWithoutEvidence;
 
   /// The three summary fields are written by one close, so a document either
   /// carries all of them or none. A partial or incoherent summary is refused:

@@ -26,7 +26,7 @@ void main() {
     'disabled': _Case(enabled: false),
     'error': _Case(
       quantity: 3,
-      error: 'Not a quantity this till can sell. This line still has 3.',
+      error: 'Not a quantity this register can sell. This line still has 3.',
     ),
     'no-increment': _Case(canIncrement: false),
     'no-decrement': _Case(canDecrement: false),

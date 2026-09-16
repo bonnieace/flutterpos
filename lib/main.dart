@@ -160,6 +160,17 @@ Future<void> main() async {
               .productImageDraftStorageKey,
         ),
       );
+      // The request id of a staff mutation this device started and has not had
+      // an answer to. It is the difference between *press Invite again after a
+      // restart and be refused because the person already exists* and *press
+      // Invite again and be told what the first attempt actually did*.
+      final staffRequestTickets = await HiveTenantStaffRequestTickets.open(
+        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+          storage: secureValueStore,
+          storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+              .productImageDraftStorageKey,
+        ),
+      );
       // Photographs this device has already downloaded, so a catalog draws on a
       // cold start without fetching it all again and draws at all with no
       // signal. Its own boxes, unencrypted and bounded - see
@@ -288,6 +299,7 @@ Future<void> main() async {
             productImageDrafts: productImageDrafts,
             stockTakeDrafts: stockTakeDrafts,
             productImportAttempts: productImportAttempts,
+            staffRequestTickets: staffRequestTickets,
             tenantImageCache: tenantImageCache,
             checkoutCatalogCache: checkoutCatalogCache,
             checkoutReceiptCounters: checkoutReceiptCounters,
@@ -385,6 +397,7 @@ class SpiritPOSApp extends StatelessWidget {
     required this.productImageDrafts,
     required this.stockTakeDrafts,
     required this.productImportAttempts,
+    required this.staffRequestTickets,
     required this.tenantImageCache,
     required this.checkoutCatalogCache,
     required this.checkoutReceiptCounters,
@@ -412,6 +425,7 @@ class SpiritPOSApp extends StatelessWidget {
   /// The request IDs of an import that stopped part way, so it can be finished
   /// rather than run again under keys the server has never seen.
   final HiveTenantProductImportAttempts productImportAttempts;
+  final HiveTenantStaffRequestTickets staffRequestTickets;
 
   /// Photographs already published, kept on this device. Null where the boxes
   /// would not open, which draws every picture from the network exactly as the
@@ -941,6 +955,7 @@ class SpiritPOSApp extends StatelessWidget {
               return token.claims?['platformRole'] == 'superAdmin';
             },
             tenantDataReader: tenantDataReader,
+            staffRequestTickets: staffRequestTickets,
             // **The hub is retired, 2026-09-14, at the developer's direction.**
             // It was restored on 2026-08-29 because a slot that can name only one
             // report had left the other five with no entrance, and a menu was the
@@ -1526,6 +1541,53 @@ class SpiritPOSApp extends StatelessWidget {
                   return result.outcome == CheckoutPrintOutcome.sent
                       ? null
                       : result.reasonCode;
+                },
+                // **The one notification here that is about the business.** A
+                // shift whose cashier lost their access can be closed by nobody
+                // at a till, so it is offered to the roles the Rules already let
+                // read another cashier's shift - and to nobody else, which is
+                // why both of these are null for a cashier rather than merely
+                // disabled.
+                abandonedShifts: () async {
+                  final session = TenantSessionScope.read(context).session;
+                  if (session == null ||
+                      !TenantAbandonedShiftRepository.isVisibleTo(session)) {
+                    return const <AbandonedShift>[];
+                  }
+                  return TenantAbandonedShiftRepository(
+                    session: session,
+                    reader: tenantDataReader,
+                  ).find(collectionReader: tenantDataReader);
+                },
+                onCloseAbandonedShift: (shift) async {
+                  final session = TenantSessionScope.read(context).session;
+                  if (session == null) {
+                    throw const AbandonedShiftCloseException(
+                      AbandonedShiftCloseFailure.forbidden,
+                    );
+                  }
+                  await FirebaseCloseAbandonedShiftCallable().call(<
+                    String,
+                    Object?
+                  >{
+                    'tenantId': session.tenantId,
+                    'shiftId': shift.shiftId,
+                    // **Required, and it is what the audit entry will say.**
+                    // The server refuses a close carrying no reason at all,
+                    // which is right for a destructive act on somebody else's
+                    // shift. Nothing on this surface asks the operator to type
+                    // one - the row already states the whole circumstance - so
+                    // the circumstance is what gets recorded.
+                    'reason':
+                        'Closed from notifications: the cashier was '
+                        'deactivated while this shift was open.',
+                    // One request id per attempt, so a retry after an uncertain
+                    // outcome is a new attempt rather than a replay of one the
+                    // server may already have applied.
+                    'requestId':
+                        'close-${shift.shiftId}-'
+                        '${DateTime.now().toUtc().millisecondsSinceEpoch}',
+                  });
                 },
               ),
             ),

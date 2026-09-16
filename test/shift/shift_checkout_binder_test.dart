@@ -305,12 +305,50 @@ void main() {
     );
   });
 
+  test('a shift past the cap no longer binds a sale', () async {
+    // **N4.** The 24-hour cap used to be a property of the screen and of
+    // nothing else: `TenantShiftPhase.expired` stopped the gate drawing a till,
+    // and the binder - the one thing every sale goes through - never asked. So
+    // the picture refused and the till accepted, and since nothing recomputes
+    // expiry while a till is open, a device left running kept selling past it.
+    await shiftState.save(_record(deviceId: deviceId));
+    final binder = TenantShiftCheckoutBinder(
+      shiftState,
+      // One minute past a day after the shift opened.
+      clock: () => DateTime.utc(2026, 8, 1, 9, 1),
+    );
+
+    final binding = await binder.bindCheckoutShift(
+      _session(TenantRole.cashier),
+    );
+
+    expect(binding.refusalCode, 'shift_expired');
+  });
+
+  test('a shift inside the cap still binds', () async {
+    await shiftState.save(_record(deviceId: deviceId));
+    final binder = TenantShiftCheckoutBinder(
+      shiftState,
+      // One minute short of a day, which is still a trading shift.
+      clock: () => DateTime.utc(2026, 8, 1, 8, 59),
+    );
+
+    final binding = await binder.bindCheckoutShift(
+      _session(TenantRole.cashier),
+    );
+
+    expect(binding.refusalCode, isNull);
+  });
+
   test('the binder itself answers only for this exact session', () async {
     await shiftState.save(_record(deviceId: deviceId));
     await shiftState.save(
       _record(tenantId: 'tenant-b', shiftId: 'shift-b', deviceId: deviceId),
     );
-    final binder = TenantShiftCheckoutBinder(shiftState);
+    // The fixtures open their shifts on the same morning the suite's clock
+    // reads, so the binder measures the cap against that rather than against
+    // a wall clock months later.
+    final binder = TenantShiftCheckoutBinder(shiftState, clock: clock);
 
     expect(
       (await binder.bindCheckoutShift(
@@ -355,7 +393,7 @@ CheckoutDraftService _service(
   cache: cache,
   outbox: outbox,
   receipts: receipts,
-  shiftBinder: TenantShiftCheckoutBinder(shiftState),
+  shiftBinder: TenantShiftCheckoutBinder(shiftState, clock: clock),
   clock: clock,
 );
 

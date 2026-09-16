@@ -1829,7 +1829,7 @@ String _batchConfirmation(
       );
     case TenantProductField.categoryId:
       buffer.write(
-        '\n\nEvery grouped report and every till filter follows the new '
+        '\n\nEvery grouped report and every register filter follows the new '
         'category from now on. Figures already recorded are not regrouped.',
       );
     case TenantProductField.name:

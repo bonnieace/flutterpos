@@ -56,9 +56,7 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
-  testWidgets('opens, counts, and closes one shift', (
-    tester,
-  ) async {
+  testWidgets('opens, counts, and closes one shift', (tester) async {
     final sessions = await _pumpPanel(tester, state, server);
 
     expect(_heading(tester), 'No shift open');
@@ -190,7 +188,10 @@ void main() {
     await _openShiftSheet(tester);
     expect(find.byKey(const ValueKey('shift-expected-cash')), findsNothing);
     expect(find.byKey(const ValueKey('shift-confirmed-sales')), findsNothing);
-    expect(find.byKey(const ValueKey('shift-unattributed-tender')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('shift-unattributed-tender')),
+      findsNothing,
+    );
     expect(find.textContaining('Expected cash'), findsNothing);
     expect(find.textContaining('Confirmed sales'), findsNothing);
     // The disclaimer is now always present, because the sheet always names
@@ -207,6 +208,42 @@ void main() {
     expect(find.byKey(const ValueKey('shift-close-sales')), findsNothing);
     expect(find.textContaining('Confirmed sales'), findsNothing);
     expect(find.textContaining('Expected cash'), findsNothing);
+  });
+
+  testWidgets('a floated till is told to count its change in', (tester) async {
+    // **The failure this prevents is the likely one.** A shop that floats a
+    // drawer usually lifts the float back out before counting the takings - and
+    // a cashier who does that declares the sales alone while reconciliation
+    // expects the sales plus the float, so they read as short by exactly the
+    // change they just put back in the safe.
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument(
+      overrides: const <String, Object?>{'openingFloatMinor': 200000},
+    );
+
+    await _pumpPanel(tester, state, server);
+    await _openShiftSheet(tester);
+
+    expect(
+      find.byKey(const ValueKey('shift-opening-float-notice')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('started with'), findsOneWidget);
+  });
+
+  testWidgets('a till given no change is told nothing about a float', (
+    tester,
+  ) async {
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
+
+    await _pumpPanel(tester, state, server);
+    await _openShiftSheet(tester);
+
+    expect(
+      find.byKey(const ValueKey('shift-opening-float-notice')),
+      findsNothing,
+    );
   });
 
   testWidgets('an empty box is zero and a misspelling is refused', (
@@ -237,7 +274,6 @@ void main() {
     expect(server.updated.single.$2['declaredMpesaMinor'], 0);
     expect(server.updated.single.$2['declaredCardMinor'], 0);
   });
-
 
   testWidgets('states unsynchronized sales instead of a cash figure', (
     tester,
@@ -325,7 +361,10 @@ void main() {
     expect(find.textContaining('not synchronized'), findsNothing);
     // The blocker is the only thing this sheet says about the shift's sales,
     // so a shift with none to report says nothing at all about them.
-    expect(find.byKey(const ValueKey('shift-unsynchronized-sales')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('shift-unsynchronized-sales')),
+      findsNothing,
+    );
   });
 
   testWidgets('the declaration is asked for only once the sheet is open', (

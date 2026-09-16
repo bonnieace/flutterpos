@@ -124,15 +124,21 @@ TenantShiftLocalRecord shiftRecord({
   bool closeInProgress = false,
   int? countedCashMinor,
   DateTime? openedAt,
+  int openingFloatMinor = 0,
+
+  /// The day this shift belongs to. Named for the midnight case, where a shift
+  /// from yesterday must stop selling today.
+  String businessDate = shiftBusinessDate,
 }) => TenantShiftLocalRecord(
   uid: uid,
   tenantId: tenantId,
   shiftId: shiftId,
-  businessDate: shiftBusinessDate,
+  businessDate: businessDate,
   deviceId: shiftDeviceId,
   serverConfirmedOpen: true,
   closeInProgress: closeInProgress,
   countedCashMinor: countedCashMinor,
+  openingFloatMinor: openingFloatMinor,
   updatedAt: DateTime.utc(2026, 7, 31, 9),
   openedAt: openedAt ?? DateTime.utc(2026, 7, 31, 9),
 );
@@ -174,10 +180,22 @@ final class ShiftServer {
   }
 }
 
-final class ShiftReader implements TenantDataReader {
+/// A reader over [ShiftServer], which is a server and holds no local copy.
+///
+/// **It answers [serverOnly] with itself, and that is not a shortcut.** Every
+/// read here goes to `_server.shifts` - there is no cache in this fake for an
+/// answer to come out of - so a server-only read and an ordinary one are the
+/// same read, which is exactly what the interface is claiming. A fake that
+/// declined the mode would make `TenantShiftController._settle` unable to
+/// confirm anything, which is the *failure* shape of H2's fix rather than its
+/// working one.
+final class ShiftReader implements TenantDataReader, TenantServerReadable {
   ShiftReader(this._server);
 
   final ShiftServer _server;
+
+  @override
+  TenantDataReader get serverOnly => this;
 
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {

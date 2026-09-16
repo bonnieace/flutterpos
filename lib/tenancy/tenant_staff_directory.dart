@@ -25,17 +25,33 @@ import 'tenant_staff_invitation.dart';
 import 'tenant_staff_invitation_cancellation.dart';
 import 'tenant_staff_invitation_email_replacement.dart';
 import 'tenant_staff_invitation_resend.dart';
+import 'tenant_staff_request_ticket.dart';
 import 'tenant_staff_status.dart';
 import 'tenant_staff_update.dart';
 import 'tenant_types.dart';
 
-/// Invitation state safe to expose from a canonical staff summary.
+/// Where this person's *membership* invitation stands.
+///
+/// **Every value here is one the server actually writes.** This carried an
+/// `expired` until 2026-09-15 and nothing had ever produced it: expiry is
+/// derived from a deadline on both sides of the wire rather than stored as a
+/// state. Worse, the strict projection below refuses a pending member carrying
+/// anything but `pending` or `sent` - and that refusal fails the whole
+/// directory page rather than the one row - so the value could only ever have
+/// arrived as an outage.
+///
+/// **This is not where an email's fate is recorded**; see
+/// [TenantStaffInvitationDelivery]. Four server gates read this field -
+/// `requirePendingStaffInvitation`, `acceptancePolicy`,
+/// `isEligibleStaffInvitationRecipient` and the projection below - so a
+/// delivery outcome folded into it would refuse the recipient's acceptance and
+/// the administrator's replace-the-address, which are the two recoveries a
+/// failed delivery exists to prompt.
 enum TenantStaffInvitationStatus {
   pending('pending'),
   sent('sent'),
   accepted('accepted'),
-  cancelled('cancelled'),
-  expired('expired');
+  cancelled('cancelled');
 
   const TenantStaffInvitationStatus(this.wireValue);
 
@@ -46,9 +62,64 @@ enum TenantStaffInvitationStatus {
     'sent' => TenantStaffInvitationStatus.sent,
     'accepted' => TenantStaffInvitationStatus.accepted,
     'cancelled' => TenantStaffInvitationStatus.cancelled,
-    'expired' => TenantStaffInvitationStatus.expired,
     _ => throw FormatException('Invalid staff invitation status: $value'),
   };
+}
+
+/// What became of the invitation email itself.
+///
+/// Absent on a record whose first delivery has not been claimed, and on every
+/// record written before 2026-09-15 - both read as [notSent], which is what
+/// they were.
+enum TenantStaffInvitationDelivery {
+  /// Nothing has been emailed for the current link yet.
+  notSent('pending'),
+
+  /// It went out.
+  sent('sent'),
+
+  /// It cannot reach that address and retrying will not change that: the
+  /// provider refused it permanently, the attempts ran out, or the recipient is
+  /// suppressed. The recovery is a different address.
+  failed('failed');
+
+  const TenantStaffInvitationDelivery(this.wireValue);
+
+  final String wireValue;
+
+  static TenantStaffInvitationDelivery fromWire(Object? value) =>
+      switch (value) {
+        null => TenantStaffInvitationDelivery.notSent,
+        'pending' => TenantStaffInvitationDelivery.notSent,
+        'sent' => TenantStaffInvitationDelivery.sent,
+        'failed' => TenantStaffInvitationDelivery.failed,
+        _ => throw FormatException('Invalid invitation delivery: $value'),
+      };
+}
+
+/// What the directory should say about an invitation, deadline included.
+///
+/// **Expiry is derived, never stored**, which is how the server treats it too:
+/// `acceptancePolicy` compares the deadline against the clock at the moment
+/// somebody tries to accept, and no process anywhere writes an expired state. A
+/// stored one would need a scheduled writer walking every pending member of
+/// every business to keep a label honest, and it would still be wrong either
+/// side of the boundary minute.
+enum TenantStaffInvitationState {
+  /// Nothing has been emailed yet, or a fresh link has been minted and its
+  /// delivery has not gone out.
+  notSent,
+
+  /// Emailed, and the link still opens.
+  sent,
+
+  /// Emailed, and the link has passed its deadline. Resend is the recovery.
+  expired,
+
+  /// Undeliverable to that address. A different address is the recovery.
+  undeliverable,
+  accepted,
+  cancelled,
 }
 
 /// Strict projection of `tenants/{tenantId}/staff/{uid}` for management lists.
@@ -107,6 +178,12 @@ final class TenantStaffSummary {
       role: role,
       status: status,
       invitationStatus: invitationStatus,
+      invitationDelivery: TenantStaffInvitationDelivery.fromWire(
+        snapshot.data['invitationDeliveryState'],
+      ),
+      invitationExpiresAt: tenantStoredInstant(
+        snapshot.data['invitationExpiresAt'],
+      ),
       isOwner: isOwner,
     );
   }
@@ -119,6 +196,8 @@ final class TenantStaffSummary {
     required this.role,
     required this.status,
     required this.invitationStatus,
+    required this.invitationDelivery,
+    required this.invitationExpiresAt,
     required this.isOwner,
   });
 
@@ -129,9 +208,52 @@ final class TenantStaffSummary {
   final TenantRole role;
   final MembershipStatus status;
   final TenantStaffInvitationStatus invitationStatus;
+
+  /// What became of the invitation email, as the delivery worker last left it.
+  final TenantStaffInvitationDelivery invitationDelivery;
+
+  /// When the emailed link stops opening, in UTC.
+  ///
+  /// **Null is not "never".** The deadline is minted with the token, which
+  /// happens when a delivery is claimed - so an invitation whose first delivery
+  /// has not been dispatched has no deadline yet, and neither has a record
+  /// written before this field existed. Both read as *not expired*, which is
+  /// the safe direction: the server refuses an expired proof regardless, so the
+  /// cost of being wrong here is a label, not an admission.
+  final DateTime? invitationExpiresAt;
   final bool isOwner;
 
   String get displayName => name ?? email;
+
+  /// What to say about this invitation at [now], deadline applied.
+  ///
+  /// **The membership's standing outranks the email's.** An accepted member is
+  /// accepted however their invitation was delivered, and reading the two
+  /// fields the other way round would let a stale delivery label speak over a
+  /// membership that has already moved on.
+  TenantStaffInvitationState invitationState(DateTime now) {
+    switch (invitationStatus) {
+      case TenantStaffInvitationStatus.accepted:
+        return TenantStaffInvitationState.accepted;
+      case TenantStaffInvitationStatus.cancelled:
+        return TenantStaffInvitationState.cancelled;
+      case TenantStaffInvitationStatus.pending:
+      case TenantStaffInvitationStatus.sent:
+        switch (invitationDelivery) {
+          case TenantStaffInvitationDelivery.failed:
+            return TenantStaffInvitationState.undeliverable;
+          case TenantStaffInvitationDelivery.notSent:
+            // Nothing has gone out for the current link, so the deadline on the
+            // *previous* one says nothing an operator can act on.
+            return TenantStaffInvitationState.notSent;
+          case TenantStaffInvitationDelivery.sent:
+            final deadline = invitationExpiresAt;
+            return deadline != null && !deadline.isAfter(now.toUtc())
+                ? TenantStaffInvitationState.expired
+                : TenantStaffInvitationState.sent;
+        }
+    }
+  }
 }
 
 /// One bounded page of canonical tenant staff.
@@ -360,6 +482,8 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
     this.updateCallable,
     this.requestIdFactory,
     this.queryReader,
+    this.clock,
+    this.tickets,
   });
 
   static const allowedRoles = <TenantRole>[
@@ -376,6 +500,17 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
   final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
   final TenantStaffDirectoryQueryReader? queryReader;
+
+  /// The clock the invitation deadline is read against.
+  ///
+  /// Injectable for the same reason `requestIdFactory` beside it is: *Expired*
+  /// is a statement about a moment, and a test that cannot move the moment can
+  /// only ever assert the unexpired half of it.
+  final DateTime Function()? clock;
+
+  /// Where this device remembers the request id of an unfinished staff
+  /// mutation, so a second press after a restart is the same request.
+  final TenantStaffRequestTicketSource? tickets;
 
   /// **The scaffold is built below the guard, not above it.** *Invite staff* is
   /// a page action and belongs at the trailing edge of the toolbar, and whether
@@ -394,6 +529,8 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
     updateCallable: updateCallable,
     requestIdFactory: requestIdFactory,
     queryReader: queryReader,
+    clock: clock,
+    tickets: tickets,
   );
 }
 
@@ -410,8 +547,19 @@ final class _StaffFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppScaffold(
-    title: 'User Management',
-    subtitle: 'Manage user accounts and permissions.',
+    // **One vocabulary, from the drawer to the row.** The destination said
+    // `Staff`, this said `User Management`, and the row action said `Correct` -
+    // three names for one screen, and the operator was left to work out that
+    // all three were the same place. `Staff` is the one the drawer already
+    // uses and the one a shopkeeper would say, so the other two moved to it.
+    title: 'Staff',
+    // **Short enough to survive a phone.** The first attempt at this ran to
+    // *Manage your team, their roles, and their access to this business.* and
+    // was ellipsised at `their acces...` on a Pixel 6 - longer than the
+    // `User Management` line it replaced, and so a readability regression
+    // rather than the clarification it was meant to be. Same three nouns, one
+    // line that fits.
+    subtitle: 'Manage your team, their roles and access.',
     contentWidth: AppContentWidth.records,
     primaryAction: action,
     body: child,
@@ -431,6 +579,8 @@ final class TenantStaffDirectoryPanel extends StatefulWidget {
     this.updateCallable,
     this.requestIdFactory,
     this.queryReader,
+    this.clock,
+    this.tickets,
     this.pageSize = 20,
   });
 
@@ -443,6 +593,8 @@ final class TenantStaffDirectoryPanel extends StatefulWidget {
   final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
   final TenantStaffDirectoryQueryReader? queryReader;
+  final DateTime Function()? clock;
+  final TenantStaffRequestTicketSource? tickets;
   final int pageSize;
 
   @override
@@ -463,6 +615,8 @@ final class _TenantStaffDirectoryPanelState
     updateCallable: widget.updateCallable,
     requestIdFactory: widget.requestIdFactory,
     queryReader: widget.queryReader,
+    clock: widget.clock,
+    tickets: widget.tickets,
     pageSize: widget.pageSize,
   );
 }
@@ -479,6 +633,8 @@ final class _TenantStaffManagementPanel extends StatefulWidget {
     required this.updateCallable,
     required this.requestIdFactory,
     required this.queryReader,
+    required this.clock,
+    required this.tickets,
     required this.pageSize,
   });
 
@@ -491,6 +647,8 @@ final class _TenantStaffManagementPanel extends StatefulWidget {
   final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
   final TenantStaffDirectoryQueryReader? queryReader;
+  final DateTime Function()? clock;
+  final TenantStaffRequestTicketSource? tickets;
   final int pageSize;
 
   @override
@@ -511,6 +669,8 @@ final class _TenantStaffManagementPanelState
   String? _loaderKey;
   TenantGuardedLoader<TenantStaffPage>? _loader;
   TenantGuardedLoader<TenantStaffPage>? _loaderCached;
+
+  DateTime _now() => (widget.clock ?? DateTime.now)();
 
   @override
   void dispose() {
@@ -645,6 +805,7 @@ final class _TenantStaffManagementPanelState
               session: session,
               callable: widget.inviteCallable ?? FirebaseInviteStaffCallable(),
               requestIdFactory: widget.requestIdFactory,
+              tickets: widget.tickets,
               onSuccess: success,
             ),
             SizedBox(height: AppTokens.componentOf(context).spacing.s8),
@@ -661,6 +822,7 @@ final class _TenantStaffManagementPanelState
           target: staff!,
           callable: widget.updateCallable ?? FirebaseUpdateStaffUserCallable(),
           requestIdFactory: widget.requestIdFactory,
+          tickets: widget.tickets,
           onSuccess: success,
           onCancel: close,
         ),
@@ -670,6 +832,7 @@ final class _TenantStaffManagementPanelState
           callable:
               widget.resendCallable ?? FirebaseResendStaffInvitationCallable(),
           requestIdFactory: widget.requestIdFactory,
+          tickets: widget.tickets,
           onSuccess: success,
           onCancel: close,
         ),
@@ -681,6 +844,7 @@ final class _TenantStaffManagementPanelState
                 widget.cancelInvitationCallable ??
                 FirebaseCancelTenantInvitationCallable(),
             requestIdFactory: widget.requestIdFactory,
+            tickets: widget.tickets,
             onSuccess: success,
             onCancel: close,
           ),
@@ -692,6 +856,7 @@ final class _TenantStaffManagementPanelState
                 widget.replaceEmailCallable ??
                 FirebaseReplacePendingStaffEmailCallable(),
             requestIdFactory: widget.requestIdFactory,
+            tickets: widget.tickets,
             onSuccess: success,
             onCancel: close,
           ),
@@ -700,6 +865,7 @@ final class _TenantStaffManagementPanelState
           target: staff!,
           callable: widget.statusCallable ?? FirebaseSetStaffStatusCallable(),
           requestIdFactory: widget.requestIdFactory,
+          tickets: widget.tickets,
           onSuccess: success,
           onCancel: close,
         ),
@@ -747,7 +913,14 @@ final class _TenantStaffManagementPanelState
     }
     return <_StaffMenuAction>[
       _StaffMenuAction(
-        label: 'Correct',
+        // **`Correct` was the most dangerous word on this screen.** The form it
+        // opens submits name, phone *and* role, so an administrator who
+        // believed they were fixing a mistyped phone number was also
+        // resubmitting the role their form had loaded - which is the whole of
+        // what makes a stale edit able to reinstate a role somebody else has
+        // just removed. Naming the role in the verb is what lets a person see
+        // that before they press Save rather than afterwards.
+        label: 'Edit role and details',
         icon: Icons.edit_outlined,
         key: ValueKey('edit-staff-${staff.uid}'),
         onPressed: () => _openForm(session, _StaffActionKind.correct, staff),
@@ -851,6 +1024,8 @@ final class _TenantStaffManagementPanelState
           onStatusChanged: _setStatus,
           canInvite: _canInvite(session),
           actionsFor: (staff) => _actionsFor(session, staff),
+          invitationStateFor: (staff) => staff.invitationState(_now()),
+          selfUid: session.uid,
           onPrevious: _pageIndex == 0 ? null : _previous,
           onNext: page.hasMore ? () => _next(page.nextCursor) : null,
         ),
@@ -905,6 +1080,8 @@ final class _StaffManagementContents extends StatelessWidget {
     required this.onStatusChanged,
     required this.canInvite,
     required this.actionsFor,
+    required this.invitationStateFor,
+    required this.selfUid,
     required this.onPrevious,
     required this.onNext,
   });
@@ -924,6 +1101,11 @@ final class _StaffManagementContents extends StatelessWidget {
   /// notice is drawn - the control itself is in the toolbar now.
   final bool canInvite;
   final List<_StaffMenuAction> Function(TenantStaffSummary) actionsFor;
+  final TenantStaffInvitationState Function(TenantStaffSummary)
+  invitationStateFor;
+
+  /// The signed-in Auth UID, so one row can be marked as the reader's own.
+  final String selfUid;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
@@ -967,10 +1149,10 @@ final class _StaffManagementContents extends StatelessWidget {
           const Callout(
             key: ValueKey('staff-directory-read-only'),
             status: AppStatus.info,
-            title: 'Read-only staff directory',
+            title: 'Read-only staff list',
             message:
-                'You can review staff accounts and permissions. Account '
-                'changes are available to owners and administrators.',
+                'You can see your team and their roles. Only the owner and '
+                'administrators can change them.',
           ),
           SizedBox(height: tokens.spacing.s16),
         ],
@@ -997,6 +1179,8 @@ final class _StaffManagementContents extends StatelessWidget {
             illustration: _hasQuery ? 'file-search.svg' : 'team.svg',
           ),
           actionsFor: actionsFor,
+          invitationStateFor: invitationStateFor,
+          selfUid: selfUid,
         ),
         SizedBox(height: tokens.spacing.s16),
         Pagination(
@@ -1275,11 +1459,22 @@ final class _StaffDirectoryList extends StatelessWidget {
     required this.staff,
     required this.empty,
     required this.actionsFor,
+    required this.invitationStateFor,
+    required this.selfUid,
   });
 
   final List<TenantStaffSummary> staff;
   final Widget empty;
   final List<_StaffMenuAction> Function(TenantStaffSummary) actionsFor;
+
+  /// The deadline applied to one row, resolved against the screen's clock.
+  ///
+  /// A function rather than a `DateTime` threaded through four widgets, for the
+  /// reason [actionsFor] beside it is one: the row asks what to say about this
+  /// member, and the screen - which owns the clock - answers.
+  final TenantStaffInvitationState Function(TenantStaffSummary)
+  invitationStateFor;
+  final String selfUid;
 
   @override
   Widget build(BuildContext context) {
@@ -1293,13 +1488,20 @@ final class _StaffDirectoryList extends StatelessWidget {
             staff: staff,
             showInvitation: width >= 1200,
             actionsFor: actionsFor,
+            invitationStateFor: invitationStateFor,
+            selfUid: selfUid,
           )
         : Padding(
             padding: EdgeInsets.all(tokens.spacing.s8),
             child: Column(
               children: <Widget>[
                 for (final member in staff)
-                  _StaffCard(staff: member, actions: actionsFor(member)),
+                  _StaffCard(
+                    staff: member,
+                    actions: actionsFor(member),
+                    invitationState: invitationStateFor(member),
+                    isSelf: member.uid == selfUid,
+                  ),
               ],
             ),
           );
@@ -1339,10 +1541,17 @@ final class _StaffDirectoryList extends StatelessWidget {
 /// choice. Recorded in `docs/stitch/OPEN_QUESTIONS.md` beside decision 26a,
 /// which this deliberately departs from.
 final class _StaffCard extends StatelessWidget {
-  const _StaffCard({required this.staff, required this.actions});
+  const _StaffCard({
+    required this.staff,
+    required this.actions,
+    required this.invitationState,
+    required this.isSelf,
+  });
 
   final TenantStaffSummary staff;
   final List<_StaffMenuAction> actions;
+  final TenantStaffInvitationState invitationState;
+  final bool isSelf;
 
   @override
   Widget build(BuildContext context) {
@@ -1371,7 +1580,14 @@ final class _StaffCard extends StatelessWidget {
             children: <Widget>[
               _StaffAvatar(staff: staff, size: _StaffAvatar.cardSize),
               SizedBox(width: tokens.spacing.s12),
-              Expanded(child: _StaffIdentity(staff: staff, showPhone: true)),
+              Expanded(
+                child: _StaffIdentity(
+                  staff: staff,
+                  showPhone: true,
+                  invitationState: invitationState,
+                  isSelf: isSelf,
+                ),
+              ),
               if (actions.isNotEmpty)
                 _StaffActionMenu(staff: staff, actions: actions),
             ],
@@ -1391,7 +1607,7 @@ final class _StaffCard extends StatelessWidget {
                 Flexible(
                   child: Text(
                     key: ValueKey('staff-invitation-${staff.uid}'),
-                    staffInvitationStatusLabel(staff.invitationStatus),
+                    staffInvitationStatusLabel(invitationState),
                     textAlign: TextAlign.end,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1474,16 +1690,60 @@ final class _StaffRolePill extends StatelessWidget {
   }
 }
 
+/// Marks the signed-in person's own row.
+///
+/// **Because every action on this screen is one they can aim at themselves.**
+/// An administrator may change their own role or deactivate their own
+/// membership, and the row offering that was drawn exactly like the twenty
+/// employee rows around it. The backend protects the *owner* from self-demotion
+/// and nothing else, so for an admin the only thing between them and locking
+/// themselves out of their own business was noticing which row they were on.
+///
+/// A word rather than a tint, per §9: the one thing that must not convey a
+/// status is colour on its own.
+final class _SelfMarker extends StatelessWidget {
+  const _SelfMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final ink = tokens.colors.text.secondary;
+    return Container(
+      key: const ValueKey('staff-self-marker'),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.s8,
+        vertical: tokens.spacing.s4,
+      ),
+      decoration: BoxDecoration(
+        color: ink.withValues(alpha: _StaffRolePill.fill),
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+      ),
+      child: Text(
+        'You',
+        style: tokens.typography.labelMedium.copyWith(
+          color: ink,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
 final class _StaffTable extends StatelessWidget {
   const _StaffTable({
     required this.staff,
     required this.showInvitation,
     required this.actionsFor,
+    required this.invitationStateFor,
+    required this.selfUid,
   });
 
   final List<TenantStaffSummary> staff;
   final bool showInvitation;
   final List<_StaffMenuAction> Function(TenantStaffSummary) actionsFor;
+  final TenantStaffInvitationState Function(TenantStaffSummary)
+  invitationStateFor;
+  final String selfUid;
 
   @override
   Widget build(BuildContext context) {
@@ -1512,6 +1772,8 @@ final class _StaffTable extends StatelessWidget {
                 Expanded(
                   child: _StaffIdentity(
                     staff: member,
+                    invitationState: invitationStateFor(member),
+                    isSelf: member.uid == selfUid,
                     invitationInIdentity:
                         !showInvitation &&
                         member.status == MembershipStatus.pending,
@@ -1528,7 +1790,7 @@ final class _StaffTable extends StatelessWidget {
             status: _membershipBadge(member),
             invitation: Text(
               member.status == MembershipStatus.pending
-                  ? staffInvitationStatusLabel(member.invitationStatus)
+                  ? staffInvitationStatusLabel(invitationStateFor(member))
                   : '—',
               key: ValueKey('staff-invitation-${member.uid}'),
               maxLines: 1,
@@ -1611,11 +1873,17 @@ final class _StaffTableRow extends StatelessWidget {
 final class _StaffIdentity extends StatelessWidget {
   const _StaffIdentity({
     required this.staff,
+    required this.invitationState,
+    required this.isSelf,
     this.showPhone = false,
     this.invitationInIdentity = false,
   });
 
   final TenantStaffSummary staff;
+  final TenantStaffInvitationState invitationState;
+
+  /// Whether this row is the signed-in person's own membership.
+  final bool isSelf;
   final bool showPhone;
   final bool invitationInIdentity;
 
@@ -1626,14 +1894,25 @@ final class _StaffIdentity extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Text(
-          staff.displayName,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: tokens.typography.bodyLarge.copyWith(
-            color: tokens.colors.text.primary,
-            fontWeight: FontWeight.w700,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Flexible(
+              child: Text(
+                staff.displayName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: tokens.typography.bodyLarge.copyWith(
+                  color: tokens.colors.text.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (isSelf) ...<Widget>[
+              SizedBox(width: tokens.spacing.s8),
+              const _SelfMarker(),
+            ],
+          ],
         ),
         SizedBox(height: tokens.spacing.s4),
         Text(
@@ -1658,7 +1937,7 @@ final class _StaffIdentity extends StatelessWidget {
         if (invitationInIdentity) ...<Widget>[
           SizedBox(height: tokens.spacing.s4),
           Text(
-            'Invitation: ${staffInvitationStatusLabel(staff.invitationStatus)}',
+            'Invitation: ${staffInvitationStatusLabel(invitationState)}',
             key: ValueKey('staff-invitation-${staff.uid}'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

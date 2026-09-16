@@ -418,6 +418,24 @@ service cloud.firestore {
             '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
           )
           && request.resource.data.startTime == request.time
+          // The change the drawer starts the shift with. Optional - a shop
+          // that floats no till writes no field, and reconciliation reads an
+          // absent one as zero, which is what every shift opened before this
+          // existed already meant.
+          //
+          // **Bounded and non-negative for one reason**: nightly verification
+          // adds it to the cash it expects of the drawer, so a negative would
+          // lower what the cashier has to account for. The close cannot touch
+          // it either - `affectedKeys` below does not list it - so whatever is
+          // written here is what the shift is judged against.
+          && (
+            !('openingFloatMinor' in request.resource.data)
+            || (
+              request.resource.data.openingFloatMinor is int
+              && request.resource.data.openingFloatMinor >= 0
+              && request.resource.data.openingFloatMinor <= 1000000000000
+            )
+          )
           && !('endTime' in request.resource.data);
         allow update: if activeStaff(tenantId)
           && resource.data.staffId == request.auth.uid

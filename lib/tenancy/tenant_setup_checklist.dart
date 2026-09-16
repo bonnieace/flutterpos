@@ -111,7 +111,7 @@ String tenantSetupStepLabel(TenantSetupStep step) => switch (step) {
 
 String tenantSetupStepDetail(TenantSetupStep step) => switch (step) {
   TenantSetupStep.currency =>
-    'Until this is set the till cannot price a sale, and it will refuse every '
+    'Until this is set the register cannot price a sale, and it will refuse every '
         'one.',
   TenantSetupStep.products =>
     'The catalog is empty, so there is nothing to ring up yet.',

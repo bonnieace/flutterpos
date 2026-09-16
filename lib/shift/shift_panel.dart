@@ -173,6 +173,15 @@ final class _ShiftCloseSheetState extends State<_ShiftCloseSheet> {
   /// entered, which is the only thing this surface may read back to them.
   ShiftTenderDeclaration? _counted;
 
+  /// What became of a second shift this cashier still had open, if there was
+  /// one. Null is the ordinary case: there was nothing else to close.
+  ///
+  /// It is reported rather than done quietly, because closing a shift is a
+  /// bookkeeping act and the person whose name is on it should read that it
+  /// happened - and, where it did not, that the other till still needs seeing
+  /// to. See [_closeOtherOpenShift].
+  ({bool closed, String? errorCode})? _otherShift;
+
   /// The state a finished close settled on, or null while the count is still
   /// the subject of this sheet.
   ///
@@ -266,15 +275,55 @@ final class _ShiftCloseSheetState extends State<_ShiftCloseSheet> {
     if (declaration == null) return;
     setState(() => _busy = true);
     final state = await widget.shifts.closeShift(declaration: declaration);
+    final other =
+        state.phase == TenantShiftPhase.none && state.errorCode == null
+        ? await _closeOtherOpenShift()
+        : null;
     if (!mounted) return;
     setState(() {
       _busy = false;
       _counted = declaration;
+      _otherShift = other;
       // Still `closing` means the count is still running and the refusal is
       // about this attempt: the sheet stays a form, with the notice above the
       // amounts that are still typed into it.
       _outcome = state.phase == TenantShiftPhase.closing ? null : state;
     });
+  }
+
+  /// Closes a second shift this cashier still has open, without counting again.
+  ///
+  /// **One till is counted once, so the second shift declares nothing.** Two
+  /// open shifts for one cashier are possible - the check that prevents them
+  /// reads only this device, so two tills can pass it at the same moment - and
+  /// the cashier meets that as one drawer answering to two shifts. Asking them
+  /// to count a second time cannot produce a true answer: the money has already
+  /// been declared onto the shift they just closed, and whatever they typed
+  /// here would be that same money recorded twice or a guess at a split.
+  ///
+  /// **Done here rather than left for the next shift to trip over.** The shift
+  /// stays invisible to this device while it holds one of its own, so the
+  /// refusal would otherwise arrive at the *start* of the next shift - by which
+  /// time the drawer it belongs to has been counted, handed over and gone.
+  ///
+  /// Returns null where there was no second shift, which is the ordinary case.
+  Future<({bool closed, String? errorCode})?> _closeOtherOpenShift() async {
+    // `restore` is the discovery: with the local record now cleared by the
+    // close, it runs `_adoptDiscoveredShift`, which finds this cashier's
+    // remaining canonical shift and names it. No new controller surface.
+    final discovered = await widget.shifts.restore(widget.session);
+    if (!mounted) return null;
+    final shiftId = discovered.otherDeviceShiftId;
+    if (shiftId == null) return null;
+    final state = await widget.shifts.closeShiftWithoutEvidence(
+      shiftId: shiftId,
+      // The drawer is already counted. See the doc comment above.
+      declaration: null,
+    );
+    if (!mounted) return null;
+    final closed =
+        state.phase == TenantShiftPhase.none && state.errorCode == null;
+    return (closed: closed, errorCode: closed ? null : state.errorCode);
   }
 
   /// Closes a shift left open by an installation this device no longer is.
@@ -334,12 +383,14 @@ final class _ShiftCloseSheetState extends State<_ShiftCloseSheet> {
             _ShiftClosed(
               state: settled,
               counted: _counted,
+              otherShift: _otherShift,
               currency: widget.currency,
               onDone: () => Navigator.of(context).pop(true),
             )
           else
             _ShiftCount(
               state: widget.shifts.state,
+              currency: widget.currency,
               busy: _busy,
               declared: _declared,
               fieldErrors: _fieldErrors,
@@ -387,13 +438,24 @@ String shiftErrorMessage(String? code) => switch (code) {
   'shift_open_on_other_device' =>
     'This shift is open on another device. Close it there, or close it from '
         'here without its sales.',
+  // **"An earlier installation", not "an update".** An update keeps the app's
+  // data and its device identity, so a shift survives one and this refusal is
+  // never seen after one. What produces it is an uninstall, a cleared storage,
+  // or an install Android treated as fresh - and a sentence blaming an update
+  // would send a cashier looking for a problem with a release.
+  //
+  // **The pronoun used to be the whole trouble.** It read *the sales it holds
+  // are no longer on it*, where the first "it" was the shift and the second the
+  // device - so the natural reading was that a day's sales had been lost. They
+  // are on the server, and the sentence now says which thing lost what.
   'shift_open_on_earlier_install' =>
-    'This shift was opened on this device before the app was reinstalled, and '
-        'the sales it holds are no longer on it. It can be closed from here '
-        'without them.',
+    'This shift was opened by an earlier installation of the app, so this '
+        'device no longer holds the sales rung up against it. Count the drawer '
+        'and close it here - its takings are worked out from the sales the '
+        'server already has.',
   'orphan_shift_not_found' =>
     'That shift is no longer open, so there is nothing to close. Refresh to '
-        'see where the till stands.',
+        'see where the register stands.',
   'orphan_shift_ambiguous' =>
     'More than one open shift matches, so this device cannot tell which to '
         'close. An owner or administrator must close it.',
@@ -453,6 +515,7 @@ String _shiftStatusLabel(TenantShiftPhase phase) => switch (phase) {
 final class _ShiftCount extends StatelessWidget {
   const _ShiftCount({
     required this.state,
+    required this.currency,
     required this.busy,
     required this.declared,
     required this.fieldErrors,
@@ -464,6 +527,10 @@ final class _ShiftCount extends StatelessWidget {
   });
 
   final TenantShiftState state;
+
+  /// What this business calls its money, so the opening float is named the way
+  /// every other amount on this sheet is.
+  final TenantReportingCurrency currency;
   final bool busy;
   final Map<CheckoutTender, TextEditingController> declared;
   final Map<CheckoutTender, String> fieldErrors;
@@ -560,13 +627,37 @@ final class _ShiftCount extends StatelessWidget {
   /// shown the figure to match writes the figure to match; the whole value of
   /// this surface is that it is answered from the drawer.
   static const String _declarationPrompt =
-      'Enter what the till holds or can account for, by payment method. '
+      'Enter what the register holds or can account for, by payment method. '
       'Leave a box empty for none.';
 
+  /// The reminder a floated till needs, because the count is marked against it.
+  ///
+  /// **The one way this feature makes things worse if it is not said.** A shop
+  /// that floats a drawer commonly lifts the float back out before counting the
+  /// takings - and a cashier who does that then declares the sales alone, while
+  /// reconciliation is expecting the sales *plus* the float. They read as short
+  /// by exactly the change they just put back in the safe, every single day.
+  ///
+  /// **It does not give the count away.** The blind declaration exists so that
+  /// nobody is shown the figure they are meant to match; this is not that
+  /// figure. It is a fact about the drawer they were handed, which they can see
+  /// by looking in it, and it says nothing about what the shift sold.
+  static String _floatNotice(String amount) =>
+      'This register started with $amount in change. Count it in — it is taken '
+      'back out when your takings are worked out.';
+
   /// The extra sentence a recovery close needs, because it records differently.
+  ///
+  /// **It used to say the count would come to nothing, and that was true.**
+  /// `compareShiftTenders` refused to mark any evidence-free close, so a
+  /// cashier who counted carefully and a cashier who typed anything at all were
+  /// recorded identically - and a till that was genuinely short raised nothing.
+  /// The count is marked now, so the sentence says so: what cannot be checked
+  /// is the shift's own *sales* figure, which this device never held.
   static const String _orphanDeclarationNotice =
-      'This device holds none of that shift’s sales, so its takings will '
-      'be recorded as unverifiable and an owner will see it as a difference.';
+      'This device holds none of that shift’s sales, so its sales figure '
+      'cannot be checked and an owner will see a record of that. What you '
+      'count is still checked against the sales the server holds.';
 
   /// Whichever close this sheet is currently offering.
   void _submit() {
@@ -583,6 +674,11 @@ final class _ShiftCount extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final sales = state.sales;
     final counting = state.phase == TenantShiftPhase.closing;
+    // **Zero where the canonical shift is not in hand**, which is a till that
+    // opened with no network and has not settled yet. The reminder is an aid
+    // rather than a gate: the server adds the float whether or not this line
+    // was drawn, so its absence costs a prompt and never a figure.
+    final openingFloatMinor = state.shift?.openingFloatMinor ?? 0;
     return Column(
       key: const ValueKey('tenant-shift-sheet'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -627,6 +723,20 @@ final class _ShiftCount extends StatelessWidget {
                 .body(tokens.typography)
                 .copyWith(color: tokens.colors.text.secondary),
           ),
+          // **Only for the shift being counted, never for an orphan.** A
+          // recovery close is made by a device holding none of that shift's
+          // sales, and this device's own float says nothing about the drawer
+          // somebody else was handed.
+          if (orphanShiftId == null && openingFloatMinor > 0) ...[
+            SizedBox(height: tokens.spacing.s8),
+            Text(
+              key: const ValueKey('shift-opening-float-notice'),
+              _floatNotice(currency.format(openingFloatMinor / 100)),
+              style: tokens.density
+                  .body(tokens.typography)
+                  .copyWith(color: tokens.colors.status.attention.fg),
+            ),
+          ],
           for (final tender in CheckoutTender.values) ...[
             SizedBox(height: tokens.spacing.s8),
             AppTextField(
@@ -733,12 +843,16 @@ final class _ShiftClosed extends StatelessWidget {
     required this.counted,
     required this.currency,
     required this.onDone,
+    this.otherShift,
   });
 
   final TenantShiftState state;
 
   /// The figures that were entered, in minor units.
   final ShiftTenderDeclaration? counted;
+
+  /// What became of a second shift this cashier had open, where there was one.
+  final ({bool closed, String? errorCode})? otherShift;
 
   final TenantReportingCurrency currency;
   final VoidCallback onDone;
@@ -805,6 +919,25 @@ final class _ShiftClosed extends StatelessWidget {
             status: AppStatus.problem,
             message: shiftErrorMessage(state.errorCode),
           ),
+        // **A second shift is said out loud either way.** It was closed on this
+        // person's behalf without them counting for it, or it is still open and
+        // somebody has to see to the other till - and both are facts about
+        // their name on a day's books. Absent for the ordinary close, where
+        // there was no second shift to say anything about.
+        if (otherShift case final other?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s16),
+          Callout(
+            key: const ValueKey('shift-close-other-shift'),
+            status: other.closed ? AppStatus.ok : AppStatus.problem,
+            message: other.closed
+                ? 'You also had a shift open on another register. It has been '
+                      'closed with no separate count, because this register was '
+                      'counted once.'
+                : 'You also have a shift open on another register, and it could '
+                      'not be closed from here. '
+                      '${shiftErrorMessage(other.errorCode)}',
+          ),
+        ],
         SizedBox(height: tokens.spacing.s20),
         AppActionRow(
           actions: <Widget>[

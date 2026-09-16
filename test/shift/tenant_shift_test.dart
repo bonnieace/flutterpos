@@ -170,6 +170,68 @@ void main() {
       });
     });
 
+    test('an open intent carries the float the drawer starts with', () {
+      final intent = _repository(_Reader(const {})).buildOpenIntent(
+        shiftId: 'shift-a',
+        deviceId: _deviceA,
+        businessDate: _businessDate,
+        openingFloatMinor: 200000,
+      );
+
+      expect(intent.documentData()['openingFloatMinor'], 200000);
+    });
+
+    test('an open intent with no float writes no field about one', () {
+      // Absent and zero are one answer to every reader, and a shop that keeps
+      // no change in the drawer should not carry a field about one on every
+      // shift it opens. It is also what keeps the server from reopening every
+      // difference an owner has already dismissed - see the reconciliation
+      // processors, which record the float only where there is one.
+      final intent = _repository(_Reader(const {})).buildOpenIntent(
+        shiftId: 'shift-a',
+        deviceId: _deviceA,
+        businessDate: _businessDate,
+      );
+
+      expect(intent.documentData().containsKey('openingFloatMinor'), isFalse);
+    });
+
+    test('refuses a float that is negative or larger than money gets', () {
+      final repository = _repository(_Reader(const {}));
+
+      // A negative float lowers the cash the drawer has to account for, which
+      // is the one direction a dishonest figure is worth writing in. Rules
+      // refuse it too; this is the first of the two locks.
+      for (final float in <int>[-1, maximumShiftCashMinor + 1]) {
+        expect(
+          () => repository.buildOpenIntent(
+            shiftId: 'shift-a',
+            deviceId: _deviceA,
+            businessDate: _businessDate,
+            openingFloatMinor: float,
+          ),
+          throwsA(_code('invalid_opening_float')),
+        );
+      }
+    });
+
+    test('a shift document reads back the float it was opened with', () {
+      final shift = TenantShift.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: <String, Object?>{
+          'shiftId': 'shift-a',
+          'tenantId': 'tenant-a',
+          'staffId': 'user-a',
+          'deviceId': _deviceA,
+          'businessDate': _businessDate,
+          'status': 'open',
+          'openingFloatMinor': 200000,
+        },
+      );
+
+      expect(shift.openingFloatMinor, 200000);
+    });
+
     test('refuses an open intent with unusable device or date', () {
       final repository = _repository(_Reader(const {}));
 

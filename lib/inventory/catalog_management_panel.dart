@@ -469,7 +469,7 @@ final class _TenantCatalogManagementPanelState
           title: 'Add the category "${intent.name}"?',
           body:
               'A category groups products in the catalog and filters them at '
-              'the till. Every product names one, so this is what a new product '
+              'the register. Every product names one, so this is what a new product '
               'can be filed under. It can be renamed later, but is never '
               'deleted from this screen.',
           action: 'Add category',
@@ -863,7 +863,7 @@ final class _TenantCatalogManagementPanelState
               'It holds ${intent.quantity} '
               '${intent.quantity == 1 ? 'unit' : 'units'}. Retiring records an '
               'adjustment clearing them to zero, so the stock ledger says where '
-              'they went, and takes the product off the till. Its ledger and '
+              'they went, and takes the product off the register. Its ledger and '
               'every past sale stay exactly as they are, and it can be restored '
               'from this screen.',
           action: 'Retire product',
@@ -2958,10 +2958,10 @@ AppNotice _retireNotice(
   TenantCatalogWriteKind.queued => AppNotice.confirmed(
     intent.retired
         ? intent.quantity == 0
-              ? '${intent.name} is retired and off the till. It held no stock, '
+              ? '${intent.name} is retired and off the register. It held no stock, '
                     'so nothing was cleared. Its ledger and every past sale are '
                     'unchanged, and it can be restored from this screen.'
-              : '${intent.name} is retired and off the till. The '
+              : '${intent.name} is retired and off the register. The '
                     '${intent.quantity} '
                     '${intent.quantity == 1 ? 'unit' : 'units'} it held are '
                     'cleared to zero, recorded in its stock ledger. It can be '
@@ -3096,13 +3096,13 @@ String _refusalMessage(String code) => switch (code) {
     'Enter a product name of at most $maximumCatalogNameLength characters.',
   'invalid_sku' =>
     'Enter a code of at most $maximumCatalogSkuLength characters, with no '
-        'spaces - it is what the till matches a scan against.',
+        'spaces - it is what the register matches a scan against.',
   'invalid_price' =>
     'Enter a price as a plain amount with at most two decimal places, such as '
         '65 or 19.99.',
   'price_not_representable' =>
     'That price is larger than a sale in this app can record. It is refused '
-        'here rather than at the till, where it would stop a customer.',
+        'here rather than at the register, where it would stop a customer.',
   'invalid_cost' =>
     'Enter the unit cost as a plain amount with at most two decimal places, '
         'such as 40 or 12.50 - or leave it blank if you do not track it.',
@@ -3329,7 +3329,7 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
             onChanged: (_) => setState(() {}),
             label: 'Code (SKU or barcode)',
             leading: Icons.tag,
-            helper: 'What the till matches a scan against. No spaces.',
+            helper: 'What the register matches a scan against. No spaces.',
           ),
           SizedBox(height: tokens.spacing.s8),
           AppTextField(
@@ -3529,7 +3529,7 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
     return AppScaffold(
       key: const ValueKey('inventory-categories-screen'),
       title: 'Categories',
-      subtitle: 'How the till groups what you sell.',
+      subtitle: 'How the register groups what you sell.',
       // A column of short names takes reading width, not a table's. §4.2.
       contentWidth: AppContentWidth.reading,
       body: FutureBuilder<TenantCatalogPage<TenantCategory>>(
@@ -3564,7 +3564,7 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
                       : 'Nothing on this page',
                   hint: _page == 0
                       ? 'A category groups products in the catalog and filters '
-                            'them at the till.'
+                            'them at the register.'
                       : null,
                   illustration: 'my-files.svg',
                 )
@@ -3986,10 +3986,10 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
             'every sale records what a unit cost at the moment of that sale, '
             'so correcting it prices the next sale and never changes a profit '
             'already reported.\n\n'
-            'The till matches a scan against the code, so changing it stops '
+            'The register matches a scan against the code, so changing it stops '
             'the old one finding this product. Nothing makes a code unique '
             'either - if another product already scans as the new one, the '
-            'till refuses that scan rather than picking one.',
+            'register refuses that scan rather than picking one.',
           ),
         ),
         SizedBox(height: tokens.spacing.s12),
@@ -4007,7 +4007,7 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
           label: 'Code (SKU or barcode)',
           leading: Icons.tag,
           helper:
-              'What the till matches a scan against. No spaces. The old '
+              'What the register matches a scan against. No spaces. The old '
               'code stops finding this product.',
         ),
         if (widget.canChangeMoney) ...[

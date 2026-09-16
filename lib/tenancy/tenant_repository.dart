@@ -203,6 +203,42 @@ abstract interface class TenantCacheReadable implements TenantDataReader {
   TenantDataReader get cacheOnly;
 }
 
+/// A reader that can also be made to ignore the copy this device holds.
+///
+/// **The mirror of [TenantCacheReadable], and it exists for the opposite
+/// reason.** `cacheOnly` is for a surface that wants an answer now and will
+/// correct it later; this is for the few questions where an answer out of local
+/// storage is not an answer at all - where the caller is deciding whether the
+/// *server* has something, and a copy of the device's own unsent write would
+/// answer *yes* to a question that was really about the server.
+///
+/// See `TenantShiftController._settle`: promoting a shift record to
+/// `serverConfirmedOpen` on a cache-answered read is what let a rejected create
+/// take a trading day's sales down with it.
+abstract interface class TenantServerReadable implements TenantDataReader {
+  /// The same reads, answered **only** by the server.
+  ///
+  /// Unlike [TenantCacheReadable.cacheOnly] this one *fails* rather than
+  /// answering empty when it cannot be served - being unable to reach the
+  /// server is precisely the case the caller has to tell apart, so it must not
+  /// be flattened into "nothing there".
+  TenantDataReader get serverOnly;
+}
+
+/// Asking any reader to leave this device's own copy out of it.
+extension TenantServerRead on TenantDocumentReader {
+  /// A reader that only the server may answer, or null where this reader has no
+  /// such mode - which is every test fake unless it says otherwise, so a suite
+  /// keeps reading exactly the way it did before this existed.
+  ///
+  /// **A null answer must fail closed at the call site**, not fall back to this
+  /// reader: the whole point of asking is that a local answer will not do.
+  TenantDataReader? get serverBacked {
+    final self = this;
+    return self is TenantServerReadable ? self.serverOnly : null;
+  }
+}
+
 /// Asking a sales-history reader for the copy this device holds.
 ///
 /// **A second extension because the boundary is a second interface.** The sales
@@ -609,6 +645,7 @@ final class FirebaseTenantDocumentReader
     implements
         TenantDataReader,
         TenantCacheReadable,
+        TenantServerReadable,
         TenantCollectionGroupReader,
         TenantProductSearchReader,
         TenantStaffDirectoryQueryReader,
@@ -645,6 +682,19 @@ final class FirebaseTenantDocumentReader
   @override
   FirebaseTenantDocumentReader get cacheOnly =>
       FirebaseTenantDocumentReader._(_firestore, Source.cache);
+
+  /// The same reader over the same project, answering **only** from the server.
+  ///
+  /// **`Source.server` is the whole of it, and it is the half of H2's fix that
+  /// had to exist somewhere.** A `serverAndCache` read falls back to local
+  /// storage whenever the server cannot be reached, and local storage contains
+  /// this device's own writes the instant they are made - so a caller asking
+  /// *does the server have this* could be shown its own unsent `set` and
+  /// believe the answer. This mode cannot be: it reaches the server or it
+  /// throws, and the throw is the honest answer.
+  @override
+  FirebaseTenantDocumentReader get serverOnly =>
+      FirebaseTenantDocumentReader._(_firestore, Source.server);
 
   GetOptions get _options => GetOptions(source: _source);
 

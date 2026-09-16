@@ -225,7 +225,12 @@ void main() {
       await tester.tap(find.text('Staff'));
       await tester.pumpAndSettle();
 
-      expect(find.text('User Management'), findsOneWidget);
+      // The destination and the page it opens now carry the same name, so the
+      // subtitle is what identifies the screen rather than its title.
+      expect(
+        find.text('Manage your team, their roles and access.'),
+        findsOneWidget,
+      );
       expect(find.text('Owner Person'), findsOneWidget);
       // Role and standing used to be one hyphenated string, `owner - active`,
       // then a chip each. Step 6's sweep makes standing the record's one
@@ -241,10 +246,7 @@ void main() {
       // **The key rather than the words, since 2026-08-28.** Inviting moved to
       // the toolbar as a glyph, so its label is a semantic one now; what is
       // being asserted here is unchanged - that an owner is offered it.
-      expect(
-        find.byKey(const ValueKey('invite-staff-open')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('invite-staff-open')), findsOneWidget);
       // Role is a labelled key-value line rather than a badge, because it is
       // not one of §2.1's five statuses and a list where two things wear a
       // badge has neither of them meaning anything.
@@ -291,12 +293,22 @@ void main() {
             'staff-a',
             name: 'Pending Person',
             status: MembershipStatus.pending,
-            invitationStatus: TenantStaffInvitationStatus.sent,
+            invitationStatus: TenantStaffInvitationStatus.pending,
+            // **The delivery field, not `invitationStatus`.** Canonical staff
+            // only ever carries `pending` or `accepted` there - four server
+            // gates read it - so what the operator needs to know about the
+            // email lives beside it rather than inside it.
+            invitationDelivery: TenantStaffInvitationDelivery.sent,
+            invitationExpiresAt: DateTime.utc(2026, 9, 20),
           ),
         ],
       );
       await tester.pumpWidget(
-        _staffApp(controller: controller, reader: reader),
+        _staffApp(
+          controller: controller,
+          reader: reader,
+          clock: () => DateTime.utc(2026, 9, 15),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -311,6 +323,126 @@ void main() {
       );
       // Exactly one badge per member, and never two.
       expect(find.byType(StatusBadge), findsExactly(2));
+    });
+
+    testWidgets('an invitation past its deadline says so, not "Sent"', (
+      tester,
+    ) async {
+      // **The case M4 was raised for.** The stored state is still `sent` a
+      // fortnight later - nothing anywhere writes an expired one - so a
+      // directory reading the field alone tells an administrator the invitation
+      // is fine while the recipient is looking at a refusal. The deadline is
+      // the other half of the fact, and it is derived here exactly as
+      // `acceptancePolicy` derives it on the server.
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      final reader = _StaffReader(
+        queryHandler: (_) async => [
+          _staffSnapshot('tenant-a', 'owner-a', role: TenantRole.owner),
+          _staffSnapshot(
+            'tenant-a',
+            'staff-a',
+            name: 'Lapsed Person',
+            status: MembershipStatus.pending,
+            invitationStatus: TenantStaffInvitationStatus.pending,
+            invitationDelivery: TenantStaffInvitationDelivery.sent,
+            invitationExpiresAt: DateTime.utc(2026, 9, 8),
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _staffApp(
+          controller: controller,
+          reader: reader,
+          clock: () => DateTime.utc(2026, 9, 15),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Invitation: Expired'), findsOneWidget);
+      expect(find.text('Invitation: Sent'), findsNothing);
+    });
+
+    testWidgets('an undeliverable invitation is named as one', (tester) async {
+      // Suppressed, refused outright, or out of attempts. Resending reaches the
+      // same address, so the word has to be different from `Expired` - these
+      // two states look alike and their recoveries are not.
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      final reader = _StaffReader(
+        queryHandler: (_) async => [
+          _staffSnapshot('tenant-a', 'owner-a', role: TenantRole.owner),
+          _staffSnapshot(
+            'tenant-a',
+            'staff-a',
+            name: 'Unreachable Person',
+            status: MembershipStatus.pending,
+            invitationStatus: TenantStaffInvitationStatus.pending,
+            invitationDelivery: TenantStaffInvitationDelivery.failed,
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _staffApp(controller: controller, reader: reader),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Invitation: Could not be delivered'), findsOneWidget);
+    });
+
+    testWidgets('a record with no delivery field reads as not sent', (
+      tester,
+    ) async {
+      // Every invitation written before 2026-09-15, and every one whose first
+      // delivery has not been claimed yet. Absent is not an error and not an
+      // expiry; it is the state those records are actually in.
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      final reader = _StaffReader(
+        queryHandler: (_) async => [
+          _staffSnapshot('tenant-a', 'owner-a', role: TenantRole.owner),
+          _staffSnapshot(
+            'tenant-a',
+            'staff-a',
+            name: 'New Person',
+            status: MembershipStatus.pending,
+            invitationStatus: TenantStaffInvitationStatus.pending,
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _staffApp(controller: controller, reader: reader),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Invitation: Not sent yet'), findsOneWidget);
+    });
+
+    testWidgets('the signed-in member is marked on their own row alone', (
+      tester,
+    ) async {
+      // **Every action on this screen can be aimed at the person using it.** An
+      // admin may change their own role or deactivate their own membership, and
+      // the row offering that was drawn exactly like the employee rows around
+      // it. The owner is protected server-side; an admin is not.
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      final reader = _StaffReader(
+        queryHandler: (_) async => [
+          // Document-id ascending: the repository refuses an unstably ordered
+          // page, and `admin-a` sorts before `owner-a`.
+          _staffSnapshot('tenant-a', 'admin-a', role: TenantRole.admin),
+          _staffSnapshot('tenant-a', 'owner-a', role: TenantRole.owner),
+          _staffSnapshot('tenant-a', 'staff-a'),
+        ],
+      );
+      await tester.pumpWidget(
+        _staffApp(controller: controller, reader: reader),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('You'), findsOneWidget);
+      expect(find.byKey(const ValueKey('staff-self-marker')), findsOneWidget);
     });
 
     testWidgets('a member with nothing to do carries no actions at all', (
@@ -350,7 +482,7 @@ void main() {
         find.byKey(const ValueKey('staff-directory-read-only')),
       );
       expect(notice.status, AppStatus.info);
-      expect(notice.title, 'Read-only staff directory');
+      expect(notice.title, 'Read-only staff list');
     });
 
     testWidgets('a session that can change something is told nothing', (
@@ -521,10 +653,13 @@ final class _StaffReader
 Widget _staffApp({
   required TenantSessionController controller,
   required TenantDataReader reader,
+  DateTime Function()? clock,
 }) => MaterialApp(
   home: TenantSessionScope(
     controller: controller,
-    child: Scaffold(body: TenantStaffDirectoryPanel(reader: reader)),
+    child: Scaffold(
+      body: TenantStaffDirectoryPanel(reader: reader, clock: clock),
+    ),
   ),
 );
 
@@ -542,6 +677,8 @@ TenantQueryDocumentSnapshot _staffSnapshot(
   MembershipStatus status = MembershipStatus.active,
   TenantStaffInvitationStatus invitationStatus =
       TenantStaffInvitationStatus.accepted,
+  TenantStaffInvitationDelivery? invitationDelivery,
+  DateTime? invitationExpiresAt,
   String name = 'Staff Person',
   String phone = '+254700000000',
 }) => TenantQueryDocumentSnapshot(
@@ -551,7 +688,21 @@ TenantQueryDocumentSnapshot _staffSnapshot(
     ..['status'] = status.wireValue
     ..['invitationStatus'] = invitationStatus.wireValue
     ..['name'] = name
-    ..['phone'] = phone,
+    ..['phone'] = phone
+    // Absent unless the case under test is about delivery, because absent is
+    // what a record carries until its first delivery is claimed.
+    ..addAll(
+      invitationDelivery == null
+          ? const <String, Object?>{}
+          : <String, Object?>{
+              'invitationDeliveryState': invitationDelivery.wireValue,
+            },
+    )
+    ..addAll(
+      invitationExpiresAt == null
+          ? const <String, Object?>{}
+          : <String, Object?>{'invitationExpiresAt': invitationExpiresAt},
+    ),
 );
 
 Map<String, Object?> _staffData(String uid) => <String, Object?>{

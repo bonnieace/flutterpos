@@ -55,6 +55,80 @@ void main() {
     await fixture.dispose(tester);
   });
 
+  testWidgets('coming back to the app re-reads the open session', (
+    tester,
+  ) async {
+    // **M1.** A role change or a deactivation reaches this device through no
+    // channel of its own: `listMyTenants` is a callable rather than a document,
+    // and a deactivated member loses the right to read the record that says so.
+    // What the app can do is ask again when somebody picks their phone back up.
+    TenantSessionController? sessions;
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-only')],
+      tenantSessionRecoveryFactory: (controller) {
+        sessions = controller;
+        return (_) async => null;
+      },
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    final settledCalls = fixture.gateway.listCalls;
+    final settledEpoch = sessions!.session!.epoch;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    // The refresh is debounced by a second before it is asked for at all.
+    await tester.pump(const Duration(seconds: 2));
+    await _pumpRouting(tester);
+
+    expect(fixture.gateway.listCalls, greaterThan(settledCalls));
+    // **And it cost nothing on screen.** The access decision came back
+    // unchanged, so the session kept its epoch - no guard re-read, no form
+    // mid-submit told its own result was stale. This is what makes refreshing
+    // on every resume a reasonable thing to do at all.
+    expect(sessions!.session!.epoch, settledEpoch);
+    expect(find.text('Business tenant-only'), findsOneWidget);
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('a demotion made elsewhere reaches a live session on resume', (
+    tester,
+  ) async {
+    // The half that has to actually work: somebody else changed this member's
+    // role while the app was in the background, and the re-read on resume is
+    // where the app finds out. Here the epoch *must* advance - every guard and
+    // every form holding a result from the old session has to be told.
+    TenantSessionController? sessions;
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-only')],
+      tenantSessionRecoveryFactory: (controller) {
+        sessions = controller;
+        return (_) async => null;
+      },
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    final settledEpoch = sessions!.session!.epoch;
+    expect(sessions!.session!.role, TenantRole.admin);
+
+    fixture.gateway.memberships[0] = _membership(
+      'tenant-only',
+      role: TenantRole.cashier,
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 2));
+    await _pumpRouting(tester);
+
+    expect(sessions!.session!.role, TenantRole.cashier);
+    expect(sessions!.session!.epoch, greaterThan(settledEpoch));
+    await fixture.dispose(tester);
+  });
+
   testWidgets(
     'opens cached tenant before a degraded network answers and then refreshes',
     (tester) async {
@@ -80,9 +154,14 @@ void main() {
       await _pumpRouting(tester);
 
       expect(find.text('Business tenant-a'), findsOneWidget);
+      // **Silent while the answer is outstanding.** The till is drawn from the
+      // device, which is the whole point of the cache-first open - but the
+      // network has not been asked yet, so there is nothing truthful to say
+      // about it. This used to announce an outage here, on every cold start,
+      // and take it back a second later.
       expect(
         find.byKey(const ValueKey('offline-bootstrap-banner')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(fixture.gateway.rootCalls, 1);
       expect(fixture.gateway.listCalls, 0);
@@ -100,16 +179,68 @@ void main() {
     },
   );
 
+  testWidgets('says it is working from saved data once the refresh fails', (
+    tester,
+  ) async {
+    // **The other half of the same rule.** Silence is right while the answer is
+    // outstanding; it would be wrong once the answer is in. A refusal leaves
+    // the cached result standing, and that is the one case the sentence was
+    // written for - a person settling a drawer is owed the knowledge that the
+    // figures in front of them came off this phone.
+    final liveProfile = Completer<RootRoutingProfile>();
+    final cachedAt = DateTime.utc(2026, 8, 30, 9);
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a')],
+      localTenantId: 'tenant-a',
+      profileFuture: liveProfile.future,
+      rootCache: _MemoryRootCache(
+        CachedRootRoutingProfile(profile: _activeProfile, cachedAt: cachedAt),
+      ),
+      directoryCache: _MemoryDirectoryCache(
+        CachedTenantDirectory(
+          memberships: [_membership('tenant-a')],
+          cachedAt: cachedAt,
+        ),
+      ),
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    expect(
+      find.byKey(const ValueKey('offline-bootstrap-banner')),
+      findsNothing,
+    );
+
+    liveProfile.completeError(const TenantBootstrapUnavailable('unavailable'));
+    await _pumpRouting(tester);
+
+    expect(
+      find.byKey(const ValueKey('offline-bootstrap-banner')),
+      findsOneWidget,
+    );
+    // The till is still open on the cached business: a refused refresh reports
+    // where the data came from, it does not take the shop off the air.
+    expect(find.text('Business tenant-a'), findsOneWidget);
+    await fixture.dispose(tester);
+  });
+
   testWidgets('the offline card sits under the page, not over it', (
     tester,
   ) async {
     // **Moved on 2026-09-03.** It was the first thing in the column, above the
     // app bar, so a standing condition pushed every screen down and sat where
     // the business's own name belongs.
+    // **Offline is a refusal, not a silence.** This fixture used to hand the
+    // shell a future that never completed, which is *no answer yet* rather
+    // than *no network* - and the card is now owed only once the network has
+    // actually been asked and has failed.
+    final liveProfile = Completer<RootRoutingProfile>();
     final fixture = _ShellFixture(
       memberships: [_membership('tenant-a')],
       localTenantId: 'tenant-a',
-      profileFuture: Completer<RootRoutingProfile>().future,
+      profileFuture: liveProfile.future,
       rootCache: _MemoryRootCache(
         CachedRootRoutingProfile(
           profile: _activeProfile,
@@ -125,6 +256,8 @@ void main() {
     );
     await fixture.pump(tester);
     fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    liveProfile.completeError(const TenantBootstrapUnavailable('unavailable'));
     await _pumpRouting(tester);
 
     final card = find.byKey(const ValueKey('offline-bootstrap-banner'));
@@ -168,12 +301,17 @@ void main() {
     fixture.auth.add('user-a');
     await _pumpRouting(tester);
 
+    // The first ask fails, which is what earns the card in the first place.
+    liveProfile.completeError(const TenantBootstrapUnavailable('unavailable'));
+    await _pumpRouting(tester);
+
     final card = find.byKey(const ValueKey('offline-bootstrap-banner'));
     expect(card, findsOneWidget);
 
     // The radio comes back, and the refresh the reconnect asks for is what
     // replaces the cached bootstrap with a live one.
-    liveProfile.complete(_activeProfile);
+    fixture.gateway.profileFuture = null;
+    fixture.gateway.profile = _activeProfile;
     reconnects.add(null);
     await _pumpRouting(tester);
 
@@ -190,10 +328,11 @@ void main() {
     // `MaterialApp.home` - every destination is a push on the root
     // `Navigator`, which sits above it. A pushed page therefore covers the
     // card completely, and no destination carries one of its own.
+    final liveProfile = Completer<RootRoutingProfile>();
     final fixture = _ShellFixture(
       memberships: [_membership('tenant-a')],
       localTenantId: 'tenant-a',
-      profileFuture: Completer<RootRoutingProfile>().future,
+      profileFuture: liveProfile.future,
       rootCache: _MemoryRootCache(
         CachedRootRoutingProfile(
           profile: _activeProfile,
@@ -209,6 +348,9 @@ void main() {
     );
     await fixture.pump(tester);
     fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    // Earned by a refusal, as everywhere else.
+    liveProfile.completeError(const TenantBootstrapUnavailable('unavailable'));
     await _pumpRouting(tester);
     expect(find.byKey(const ValueKey('offline-bootstrap-banner')), findsOne);
 
@@ -604,7 +746,10 @@ void main() {
 
     expect(find.byKey(const ValueKey('routing-onboarding')), findsOneWidget);
     // This profile has no name, so the flow asks for one before anything else.
-    expect(find.byKey(const ValueKey('onboarding-account-step')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-account-step')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('account-verification')), findsNothing);
     expect(find.byKey(const ValueKey('show-tenant-request')), findsNothing);
     await fixture.dispose(tester);
@@ -686,10 +831,16 @@ void main() {
     fixture.auth.add('user-a');
     await _pumpRouting(tester);
 
-    expect(find.byKey(const ValueKey('onboarding-verify-step')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-verify-step')),
+      findsOneWidget,
+    );
     // Nothing was pressed to get here and nothing needs to be: the first email
     // was enqueued by `completeSelfSignup`.
-    expect(find.byKey(const ValueKey('onboarding-verify-resend')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-verify-resend')),
+      findsOneWidget,
+    );
     await fixture.dispose(tester);
   });
 
@@ -710,9 +861,15 @@ void main() {
     fixture.auth.add('user-a');
     await _pumpRouting(tester);
 
-    expect(find.byKey(const ValueKey('onboarding-business-step')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-business-step')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('tenant-request-name')), findsOneWidget);
-    expect(find.byKey(const ValueKey('tenant-request-currency')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('tenant-request-currency')),
+      findsOneWidget,
+    );
     await fixture.dispose(tester);
   });
 
@@ -734,84 +891,83 @@ void main() {
     await fixture.dispose(tester);
   });
 
-  testWidgets(
-    'creates an active business from onboarding without opening it',
-    (tester) async {
-      late final _ShellFixture fixture;
-      final callable = _ShellRequestCallable((name, slug) {
-        fixture.gateway.memberships.add(
-          _membership(
-            'tenant-requested',
-            membershipStatus: MembershipStatus.active,
-          ),
-        );
-      });
-      fixture = _ShellFixture(
-        memberships: [],
-        profile: _signedUpProfile,
-        emailVerified: true,
-        reloadIdentity: () async {},
-        requestTenantCallable: callable,
+  testWidgets('creates an active business from onboarding without opening it', (
+    tester,
+  ) async {
+    late final _ShellFixture fixture;
+    final callable = _ShellRequestCallable((name, slug) {
+      fixture.gateway.memberships.add(
+        _membership(
+          'tenant-requested',
+          membershipStatus: MembershipStatus.active,
+        ),
       );
-      await fixture.pump(tester);
+    });
+    fixture = _ShellFixture(
+      memberships: [],
+      profile: _signedUpProfile,
+      emailVerified: true,
+      reloadIdentity: () async {},
+      requestTenantCallable: callable,
+    );
+    await fixture.pump(tester);
 
-      fixture.auth.add('user-a');
-      await _pumpRouting(tester);
-      expect(
-        find.byKey(const ValueKey('onboarding-business-step')),
-        findsOneWidget,
-      );
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    expect(
+      find.byKey(const ValueKey('onboarding-business-step')),
+      findsOneWidget,
+    );
 
-      await tester.enterText(
-        find.byKey(const ValueKey('tenant-request-name')),
-        '  New   Business ',
-      );
-      // The step scrolls, so a tap at a control's centre would otherwise land
-      // on whatever is painted at that point instead.
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('tenant-request-submit')),
-      );
-      await tester.tap(find.byKey(const ValueKey('tenant-request-submit')));
-      await _pumpRouting(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey('tenant-request-name')),
+      '  New   Business ',
+    );
+    // The step scrolls, so a tap at a control's centre would otherwise land
+    // on whatever is painted at that point instead.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('tenant-request-submit')),
+    );
+    await tester.tap(find.byKey(const ValueKey('tenant-request-submit')));
+    await _pumpRouting(tester);
 
-      final payload = callable.payloads.single;
-      expect(payload['name'], 'New Business');
-      expect(payload['requestId'], 'routing-tenant-request');
-      // The currency the select offers first, published at
-      // `configuration/checkout` by the same transaction that creates the
-      // business - so a new till can price a sale before anybody opens
-      // Settings.
-      expect(payload['currency'], 'TZS');
-      // The slug is the name plus a random suffix, so its shape is what can be
-      // asserted, not its value. The exact derivation is pinned in
-      // `tenant_request_test.dart`.
-      expect(payload['slug'], matches(RegExp(r'^new-business-[0-9a-f]{6}$')));
-      expect(payload.keys.toSet(), <String>{
-        'name',
-        'slug',
-        'currency',
-        'requestId',
-      });
+    final payload = callable.payloads.single;
+    expect(payload['name'], 'New Business');
+    expect(payload['requestId'], 'routing-tenant-request');
+    // The currency the select offers first, published at
+    // `configuration/checkout` by the same transaction that creates the
+    // business - so a new till can price a sale before anybody opens
+    // Settings.
+    expect(payload['currency'], 'TZS');
+    // The slug is the name plus a random suffix, so its shape is what can be
+    // asserted, not its value. The exact derivation is pinned in
+    // `tenant_request_test.dart`.
+    expect(payload['slug'], matches(RegExp(r'^new-business-[0-9a-f]{6}$')));
+    expect(payload.keys.toSet(), <String>{
+      'name',
+      'slug',
+      'currency',
+      'requestId',
+    });
 
-      // The flow ends on a statement rather than dropping somebody back onto a
-      // list of one, and nothing has been opened yet.
-      expect(
-        find.byKey(const ValueKey('onboarding-complete-step')),
-        findsOneWidget,
-      );
-      expect(fixture.openedController, isNull);
+    // The flow ends on a statement rather than dropping somebody back onto a
+    // list of one, and nothing has been opened yet.
+    expect(
+      find.byKey(const ValueKey('onboarding-complete-step')),
+      findsOneWidget,
+    );
+    expect(fixture.openedController, isNull);
 
-      // **And it opens.** A business is active from the moment it is created,
-      // so the till is available immediately rather than after somebody has
-      // approved the request - which is the whole of what this change was for.
-      await tester.tap(find.byKey(const ValueKey('onboarding-open-business')));
-      await _pumpRouting(tester);
+    // **And it opens.** A business is active from the moment it is created,
+    // so the till is available immediately rather than after somebody has
+    // approved the request - which is the whole of what this change was for.
+    await tester.tap(find.byKey(const ValueKey('onboarding-open-business')));
+    await _pumpRouting(tester);
 
-      expect(find.text('Business tenant-requested'), findsOneWidget);
-      expect(fixture.openedController, isNotNull);
-      await fixture.dispose(tester);
-    },
-  );
+    expect(find.text('Business tenant-requested'), findsOneWidget);
+    expect(fixture.openedController, isNotNull);
+    await fixture.dispose(tester);
+  });
 
   testWidgets('shows tenant requests only to verified tenant identities', (
     tester,
@@ -1371,7 +1527,14 @@ final class _FakeGateway implements TenantDirectoryGateway, RootRoutingGateway {
 
   final List<TenantMembership> memberships;
   RootRoutingProfile profile;
-  final Future<RootRoutingProfile>? profileFuture;
+
+  /// The answer the next root read gives, or null to answer from [profile].
+  ///
+  /// **Mutable, so a test can let the radio come back.** A device that is
+  /// offline and then is not gives one answer and then a different one; a
+  /// gateway pinned to a single future can only ever be one or the other,
+  /// which cannot express the case the offline card exists for.
+  Future<RootRoutingProfile>? profileFuture;
   int rootFailures;
   int listCalls = 0;
   int rootCalls = 0;
@@ -1508,7 +1671,6 @@ final class _ShellPlatformDataSource
       ),
     ];
   }
-
 }
 
 final class _ShellLifecycleCallable implements SetTenantLifecycleCallable {
@@ -1620,11 +1782,12 @@ TenantMembership _membership(
   TenantStatus tenantStatus = TenantStatus.active,
   bool canAccess = true,
   String? invitationStatus,
+  TenantRole role = TenantRole.admin,
 }) => TenantMembership(
   tenantId: tenantId,
   tenantName: 'Business $tenantId',
   tenantSlug: tenantId,
-  role: TenantRole.admin,
+  role: role,
   membershipStatus: membershipStatus,
   tenantStatus: tenantStatus,
   invitationStatus: invitationStatus,

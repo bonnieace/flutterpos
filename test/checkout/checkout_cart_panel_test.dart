@@ -485,7 +485,10 @@ void main() {
       await _enter(tester, 'checkout-search', 'cola');
 
       expect(find.byKey(const ValueKey('checkout-product-cola')), findsOne);
-      expect(find.byKey(const ValueKey('checkout-product-water')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('checkout-product-water')),
+        findsNothing,
+      );
       expect(find.byKey(const ValueKey('checkout-line-cola')), findsNothing);
     });
 
@@ -507,7 +510,10 @@ void main() {
       await _enter(tester, 'checkout-search', 'sku-cola');
 
       expect(find.byKey(const ValueKey('checkout-product-cola')), findsOne);
-      expect(find.byKey(const ValueKey('checkout-product-water')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('checkout-product-water')),
+        findsNothing,
+      );
     });
 
     testWidgets('a search matching nothing says so and adds nothing', (
@@ -676,10 +682,7 @@ void main() {
       await _tap(tester, 'checkout-clear-confirm');
 
       // The receipt describes a different, finished sale.
-      expect(
-        snackNotice(tester).message,
-        contains('CT-A7F-20260731-0001'),
-      );
+      expect(snackNotice(tester).message, contains('CT-A7F-20260731-0001'));
     });
   });
 
@@ -789,7 +792,7 @@ void main() {
 
       expect(
         _text(tester, 'checkout-save-blocked'),
-        'This sale is larger than this till can record. Reduce a quantity.',
+        'This sale is larger than this register can record. Reduce a quantity.',
       );
       expect(_save(tester).onPressed, isNull);
       expect(drafts.requests, isEmpty);
@@ -817,7 +820,7 @@ void main() {
 
       expect(
         _text(tester, 'checkout-save-blocked'),
-        'This sale is larger than this till can record. Reduce a quantity.',
+        'This sale is larger than this register can record. Reduce a quantity.',
       );
     });
 
@@ -1152,10 +1155,7 @@ void main() {
       // that reached the printer must not send anybody to the queue - and must
       // not raise a modal at all.
       expect(find.byType(NoticeDialog), findsNothing);
-      expect(
-        find.textContaining('Unprinted receipts'),
-        findsNothing,
-      );
+      expect(find.textContaining('Unprinted receipts'), findsNothing);
     });
 
     testWidgets('a till that cannot save says so as information', (
@@ -1420,10 +1420,7 @@ void main() {
       await _tap(tester, 'checkout-save');
 
       expect(find.byType(AppSnackBar), findsOne);
-      expect(
-        snackNotice(tester).message,
-        contains('CT-A7F-20260731-0002'),
-      );
+      expect(snackNotice(tester).message, contains('CT-A7F-20260731-0002'));
       expect(
         snackNotice(tester).message,
         isNot(contains('CT-A7F-20260731-0001')),
@@ -1476,10 +1473,7 @@ void main() {
       );
       // Silence here would have the cashier ring the same sale up again, so
       // the bound on it is stated rather than left to be inferred.
-      expect(
-        find.textContaining('nothing needs ringing up again'),
-        findsOne,
-      );
+      expect(find.textContaining('nothing needs ringing up again'), findsOne);
       expect(find.text('Saved without a receipt number'), findsOne);
     });
 
@@ -1611,8 +1605,11 @@ void main() {
       await _pumpUnsettledTill(
         tester,
         sessions,
-        _Catalog()
-          ..put(uid: 'user-a', tenantId: 'tenant-a', products: <TenantProduct>[]),
+        _Catalog()..put(
+          uid: 'user-a',
+          tenantId: 'tenant-a',
+          products: <TenantProduct>[],
+        ),
       );
 
       expect(

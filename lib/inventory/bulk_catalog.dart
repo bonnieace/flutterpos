@@ -2041,7 +2041,7 @@ String bulkCatalogRefusalMessage(
         'as 65 or 19.99.',
   'price_not_representable' =>
     'That price is larger than a sale in this app can record, so it is '
-        'refused here rather than at the till.',
+        'refused here rather than at the register.',
   'invalid_cost' =>
     'The unit cost must be a plain amount with at most two decimal places, '
         'or blank.',
@@ -2055,7 +2055,7 @@ String bulkCatalogRefusalMessage(
         '$maximumCatalogNameLength characters.',
   'invalid_sku' =>
     'The code must not be blank, must have no spaces, and must be at most '
-        '$maximumCatalogSkuLength characters - it is what the till matches '
+        '$maximumCatalogSkuLength characters - it is what the register matches '
         'a scan against.',
   'invalid_quantity' =>
     'The opening quantity must be a whole number of units between 0 and '

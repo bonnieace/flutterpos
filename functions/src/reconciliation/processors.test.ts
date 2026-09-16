@@ -1232,6 +1232,170 @@ test("a declaration that disagrees with the sales is recorded once, with both si
   assert.equal(anomaly.businessDate, LOCAL_DATE);
 });
 
+test("a miscategorised tender balances out rather than raising a difference", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_tender", {
+    shiftId: "shift-01",
+    sales: 500,
+    transactions: 4,
+    ...tenderExpectation(25000, 25000, 0),
+  });
+  // **One sale rung as cash that was actually M-Pesa.** Cash is 250.00 over and
+  // M-Pesa 250.00 short, the drawer holds exactly what it should, and nothing
+  // is missing. The sale's tender is whatever was tapped at payment and is
+  // never edited afterwards; the cashier counting the drawer is the better
+  // witness to the split, so their answer is taken rather than marked.
+  seedClosedShift(db, "shift-01", 500, 4, {
+    ...declaredAt(AFTER_CUTOFF),
+    declaredCashMinor: 50000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
+    {processed: 1, varianceCount: 0, tenderVarianceCount: 0, hasMore: false}
+  );
+
+  const verification = stored(db, verificationPath("exp_tender"));
+  assert.equal(verification.tenderStatus, "matched");
+  // Recorded even though nothing was raised: the split is what reporting reads.
+  assert.equal(verification.cashVarianceMinor, 25000);
+  assert.equal(verification.mpesaVarianceMinor, -25000);
+  assert.equal(verification.totalVarianceMinor, 0);
+  assert.deepEqual(db.ids(`tenants/${TENANT}/reconciliation_anomalies`), []);
+});
+
+test("a floated drawer counts its change back rather than declaring a surplus", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_tender", {
+    shiftId: "shift-01",
+    sales: 500,
+    transactions: 4,
+    ...tenderExpectation(50000, 0, 0),
+  });
+  // **The till was given 2,000.00 in change before it sold anything.** At close
+  // the cashier counts the whole drawer - 500.00 of sales sitting on top of the
+  // float - and declares 2,500.00. Nothing is missing and nothing is over.
+  // Without the float term this shift reported a 2,000.00 surplus every day it
+  // traded, against a drawer that balanced to the shilling.
+  seedClosedShift(db, "shift-01", 500, 4, {
+    ...declaredAt(AFTER_CUTOFF),
+    openingFloatMinor: 200000,
+    declaredCashMinor: 250000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
+    {processed: 1, varianceCount: 0, tenderVarianceCount: 0, hasMore: false}
+  );
+
+  const verification = stored(db, verificationPath("exp_tender"));
+  assert.equal(verification.tenderStatus, "matched");
+  assert.equal(verification.totalVarianceMinor, 0);
+  assert.equal(verification.cashVarianceMinor, 0);
+  // **The float is recorded beside the figures, not folded into them.**
+  // `expectedCashMinor` stays what the shift sold for cash, because that is
+  // what every report of the split reads; the drawer figure is the one the
+  // count was marked against, and both are kept so the answer can be explained.
+  assert.equal(verification.openingFloatMinor, 200000);
+  assert.equal(verification.expectedCashMinor, 50000);
+  assert.equal(verification.expectedDrawerCashMinor, 250000);
+});
+
+test("a float does not hide money missing from the drawer it floated", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_tender", {
+    shiftId: "shift-01",
+    sales: 500,
+    transactions: 4,
+    ...tenderExpectation(50000, 0, 0),
+  });
+  // The same float, and 100.00 of the drawer genuinely absent.
+  seedClosedShift(db, "shift-01", 500, 4, {
+    ...declaredAt(AFTER_CUTOFF),
+    openingFloatMinor: 200000,
+    declaredCashMinor: 240000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
+    {processed: 1, varianceCount: 0, tenderVarianceCount: 1, hasMore: false}
+  );
+
+  const anomaly = stored(db, tenderAnomalyPath("shift-01"));
+  assert.equal(anomaly.anomalyType, "shift_tender_variance");
+  assert.equal(anomaly.totalVarianceMinor, -10000);
+});
+
+test("a negative float is not believed, because it would lower the count", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_tender", {
+    shiftId: "shift-01",
+    sales: 500,
+    transactions: 4,
+    ...tenderExpectation(50000, 0, 0),
+  });
+  // Rules refuse this on write. Were it ever to reach the server it would
+  // reduce the cash the drawer has to account for, which is the one direction
+  // a dishonest figure is worth writing in - so it reads as no float, and the
+  // 100.00 short stays short.
+  seedClosedShift(db, "shift-01", 500, 4, {
+    ...declaredAt(AFTER_CUTOFF),
+    openingFloatMinor: -10000,
+    declaredCashMinor: 40000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
+    {processed: 1, varianceCount: 0, tenderVarianceCount: 1, hasMore: false}
+  );
+
+  const anomaly = stored(db, tenderAnomalyPath("shift-01"));
+  assert.equal(anomaly.totalVarianceMinor, -10000);
+  // Recorded as no float at all rather than as a zero, which is what keeps a
+  // shop that never floats a till from having every dismissed difference
+  // reopened by this change - see the acknowledgement test below.
+  assert.equal(anomaly.openingFloatMinor, undefined);
+});
+
+test("a total that disagrees still raises, whatever the split does", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_tender", {
+    shiftId: "shift-01",
+    sales: 500,
+    transactions: 4,
+    ...tenderExpectation(25000, 25000, 0),
+  });
+  // The same miscategorisation, and 100.00 of the drawer genuinely absent.
+  seedClosedShift(db, "shift-01", 500, 4, {
+    ...declaredAt(AFTER_CUTOFF),
+    declaredCashMinor: 40000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
+    {processed: 1, varianceCount: 0, tenderVarianceCount: 1, hasMore: false}
+  );
+
+  const anomaly = stored(db, tenderAnomalyPath("shift-01"));
+  assert.equal(anomaly.anomalyType, "shift_tender_variance");
+  assert.equal(anomaly.totalVarianceMinor, -10000);
+});
+
 test("a declaration that agrees deletes a difference that no longer holds", async () => {
   const db = firestoreWithClaimedJob();
   db.seed(tenderAnomalyPath("shift-01"), {
@@ -1303,6 +1467,56 @@ test("an acknowledged difference survives a re-verify that changes nothing", asy
   // An owner accepted this difference; the nightly sweep must not reopen it
   // just for running again. A figure that actually moves is a new fact and does.
   assert.equal(stored(db, tenderAnomalyPath("shift-01")).resolution, "acknowledged");
+});
+
+test("adding the opening float does not reopen differences already accepted", async () => {
+  // **The migration guarantee, pinned.** This anomaly was written before the
+  // float existed and carries none of its fields. A shop that does not float a
+  // till must read exactly as it did before the field shipped, because the
+  // comparison reopens a dismissed difference whose figures move - and an owner
+  // who comes in to find every difference they ever settled waiting for them
+  // again will stop settling them.
+  const db = firestoreWithClaimedJob();
+  db.seed(tenderAnomalyPath("shift-01"), {
+    tenantId: TENANT,
+    shiftId: "shift-01",
+    anomalyType: "shift_tender_variance",
+    declaredCashMinor: 20000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+    expectedCashMinor: 25000,
+    expectedMpesaMinor: 0,
+    expectedCardMinor: 0,
+    expectedUnattributedMinor: 0,
+    cashVarianceMinor: -5000,
+    mpesaVarianceMinor: 0,
+    cardVarianceMinor: 0,
+    declaredTotalMinor: 20000,
+    expectedTotalMinor: 25000,
+    totalVarianceMinor: -5000,
+    resolution: "acknowledged",
+  });
+  seedExpectation(db, "exp_tender", {
+    shiftId: "shift-01",
+    sales: 250,
+    transactions: 2,
+    ...tenderExpectation(25000),
+  });
+  // No `openingFloatMinor` anywhere on the shift, which is every shift closed
+  // before this release and every shift of every shop that keeps no change.
+  seedClosedShift(db, "shift-01", 250, 2, {
+    ...declaredAt(AFTER_CUTOFF),
+    declaredCashMinor: 20000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"}));
+
+  const anomaly = stored(db, tenderAnomalyPath("shift-01"));
+  assert.equal(anomaly.resolution, "acknowledged");
+  assert.equal(anomaly.totalVarianceMinor, -5000);
 });
 
 test("a difference whose figures move is reopened", async () => {
@@ -1406,7 +1620,7 @@ test("an expectation written before the split compares nothing", async () => {
   assert.deepEqual(db.ids(`tenants/${TENANT}/reconciliation_anomalies`), []);
 });
 
-test("a recovery close is refused rather than compared", async () => {
+test("a recovery close still has its drawer marked", async () => {
   const db = firestoreWithClaimedJob();
   seedExpectation(db, "exp_recovery", {
     shiftId: "shift-01",
@@ -1427,18 +1641,100 @@ test("a recovery close is refused rather than compared", async () => {
 
   await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"}));
 
-  // The sales check already reports it as unbelievable; a tender difference
-  // measured against figures nobody trusts would be the same fact twice.
-  assert.equal(stored(db, verificationPath("exp_recovery")).status, "variance");
-  assert.equal(stored(db, verificationPath("exp_recovery")).tenderStatus, "unverifiable");
-  assert.equal(db.ids(`tenants/${TENANT}/reconciliation_anomalies`).length, 1);
-  assert.equal(
-    stored(
-      db,
-      `tenants/${TENANT}/reconciliation_anomalies/${shiftAnomalyId("shift-01", "generation-one")}`
-    ).anomalyType,
-    "shift_variance"
+  // **The two halves answer separately, because they know different things.**
+  //
+  // *The sales half cannot answer.* The zero summary says the closing device
+  // could prove nothing, so there is no observation to compare - and reading it
+  // as one reported a 100.00 shift as a 100.00 shortfall, every night, against
+  // a shift nobody could have closed better.
+  const verification = stored(db, verificationPath("exp_recovery"));
+  assert.equal(verification.status, "invalid_or_missing_shift");
+  assert.equal(verification.observedSales, null);
+  assert.equal(verification.salesVariance, null);
+
+  // *The cash half can, and used to refuse to.* The cashier counted the drawer
+  // and it is 1.00 light. That figure was being thrown away because the same
+  // flag was read as covering both halves - so a till that came up short after
+  // a reinstall raised nothing at all, and the only record left said the sales
+  // total could not be checked. A reinstall is not a way to quieten a short
+  // drawer.
+  assert.equal(verification.tenderStatus, "variance");
+  assert.equal(verification.totalVarianceMinor, -100);
+  assert.equal(verification.cashVarianceMinor, -100);
+
+  const anomalyTypes = db
+    .ids(`tenants/${TENANT}/reconciliation_anomalies`)
+    .map((id: string) =>
+      stored(db, `tenants/${TENANT}/reconciliation_anomalies/${id}`).anomalyType
+    )
+    .sort();
+  assert.deepEqual(anomalyTypes, [
+    "invalid_or_missing_shift",
+    "shift_tender_variance",
+  ]);
+});
+
+test("a recovery close whose drawer balances raises no difference for it", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_recovery", {
+    shiftId: "shift-01",
+    sales: 100,
+    transactions: 1,
+    ...tenderExpectation(10000),
+  });
+  // The ordinary case after a reinstall: the cashier still has the drawer and
+  // it is right. The sales figure remains uncheckable, which is honest, but
+  // nobody is asked to look into money that is all there.
+  seedClosedShift(db, "shift-01", 0, 0, {
+    ...declaredAt(AFTER_CUTOFF),
+    closedWithoutEvidence: true,
+    declaredCashMinor: 10000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  db.clearWrites();
+
+  await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"}));
+
+  const verification = stored(db, verificationPath("exp_recovery"));
+  assert.equal(verification.status, "invalid_or_missing_shift");
+  assert.equal(verification.tenderStatus, "matched");
+  assert.equal(verification.totalVarianceMinor, 0);
+  const anomalyTypes = db
+    .ids(`tenants/${TENANT}/reconciliation_anomalies`)
+    .map((id: string) =>
+      stored(db, `tenants/${TENANT}/reconciliation_anomalies/${id}`).anomalyType
+    );
+  assert.deepEqual(anomalyTypes, ["invalid_or_missing_shift"]);
+});
+
+test("a recovery close with nothing declared is still only unverifiable", async () => {
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, "exp_recovery", {
+    shiftId: "shift-01",
+    sales: 100,
+    transactions: 1,
+    ...tenderExpectation(10000),
+  });
+  // **One drawer counted once.** Where a cashier closes two shifts for one
+  // till, the count belongs to whichever shift can carry it and the other
+  // declares nothing rather than repeating a figure. The absence must not read
+  // as a missing declaration a current build should have recorded.
+  seedClosedShift(db, "shift-01", 0, 0, {
+    ...declaredAt(AFTER_CUTOFF),
+    closedWithoutEvidence: true,
+  });
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
+    {processed: 1, varianceCount: 1, tenderVarianceCount: 0, hasMore: false}
   );
+
+  const verification = stored(db, verificationPath("exp_recovery"));
+  assert.equal(verification.status, "invalid_or_missing_shift");
+  assert.equal(verification.tenderStatus, "unverifiable");
+  assert.equal(db.ids(`tenants/${TENANT}/reconciliation_anomalies`).length, 1);
 });
 
 test("an expectation that does not name a shift is quarantined, not verified", async () => {
