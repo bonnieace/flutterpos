@@ -331,10 +331,49 @@ final class _ShiftCloseSheetState extends State<_ShiftCloseSheet> {
   /// The same three boxes, because the declaration needs no sale evidence -
   /// see [TenantShiftController.closeShiftWithoutEvidence]. The outcome is
   /// reported exactly as an ordinary close is.
+  /// Closes a shift this device holds no sales for, without counting it.
+  ///
+  /// **A separate control rather than a blank form.** Reconciliation reads an
+  /// absent declaration as nothing to compare; it reads a declaration of zero
+  /// as a drawer somebody looked into and found empty. Those are different
+  /// statements and only the person closing the shift knows which one is true,
+  /// so they are asked rather than inferred from an untouched box.
+  Future<void> _closeOrphanUncounted(String shiftId) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final state = await widget.shifts.closeShiftWithoutEvidence(
+      shiftId: shiftId,
+      declaration: null,
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _counted = null;
+      _outcome = state;
+    });
+  }
+
   Future<void> _closeOrphan(String shiftId) async {
     if (_busy) return;
     final declaration = _readDeclaration();
     if (declaration == null) return;
+    // **An untouched form is not a count of nothing.** Everywhere else on this
+    // sheet an empty box is a legitimate zero, because the cashier is holding
+    // the drawer and a till that took no card should not need a typed `0`. A
+    // recovery close is the one place that reasoning fails: the person may not
+    // have the drawer at all, and recording their silence as *empty* would
+    // report the float and every taking as missing.
+    if (declaration.isZero && _declared.values.every((c) => c.text.isEmpty)) {
+      setState(() {
+        _fieldErrors
+          ..clear()
+          ..addAll(<CheckoutTender, String>{
+            for (final tender in CheckoutTender.values)
+              tender: 'Enter what you counted, or close without counting.',
+          });
+      });
+      return;
+    }
     setState(() => _busy = true);
     final state = await widget.shifts.closeShiftWithoutEvidence(
       shiftId: shiftId,
@@ -396,6 +435,7 @@ final class _ShiftCloseSheetState extends State<_ShiftCloseSheet> {
               fieldErrors: _fieldErrors,
               onClose: _close,
               onCloseOrphan: _closeOrphan,
+              onCloseOrphanUncounted: _closeOrphanUncounted,
               onCancelCashCount: _cancel,
               onRefresh: () =>
                   _dispatch((shifts) => shifts.restore(widget.session)),
@@ -521,6 +561,7 @@ final class _ShiftCount extends StatelessWidget {
     required this.fieldErrors,
     required this.onClose,
     required this.onCloseOrphan,
+    required this.onCloseOrphanUncounted,
     required this.onCancelCashCount,
     required this.onRefresh,
     required this.onViewHistory,
@@ -536,6 +577,9 @@ final class _ShiftCount extends StatelessWidget {
   final Map<CheckoutTender, String> fieldErrors;
   final VoidCallback onClose;
   final void Function(String shiftId) onCloseOrphan;
+
+  /// Closes a shift whose drawer the person at this device does not hold.
+  final void Function(String shiftId) onCloseOrphanUncounted;
   final VoidCallback onCancelCashCount;
   final VoidCallback onRefresh;
   final VoidCallback? onViewHistory;
@@ -788,10 +832,28 @@ final class _ShiftCount extends StatelessWidget {
               // and names a device the cashier is already holding.
               AppButton(
                 key: const ValueKey('close-orphan-shift'),
-                label: 'Close that shift from here',
+                label: 'Close with this count',
                 tier: AppButtonTier.primary,
                 loading: busy,
                 onPressed: busy ? null : () => onCloseOrphan(orphan),
+              ),
+            // **Because an empty box used to mean two different things.** A
+            // person closing a drawer they are not holding left the boxes
+            // blank, which was recorded as *counted, and it held nothing* -
+            // identical to a cashier who really did count an empty till. Since
+            // the count is now marked against the sales the server holds, that
+            // silence would accuse somebody of losing whatever the drawer
+            // should have had in it, the opening float included.
+            //
+            // So the two answers are two controls. This one writes no
+            // declaration at all, which reconciliation already reads as
+            // *nothing to compare* rather than as a drawer counted empty.
+            if (orphanShiftId case final orphan?)
+              AppButton(
+                key: const ValueKey('close-orphan-uncounted'),
+                label: 'I do not have this drawer',
+                tier: AppButtonTier.secondary,
+                onPressed: busy ? null : () => onCloseOrphanUncounted(orphan),
               ),
             if (counting) ...[
               // 8 rule 4: the verb persists from the control that opened this.

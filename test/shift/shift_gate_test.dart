@@ -267,6 +267,62 @@ void main() {
     expect(written['declaredCashMinor'], 25000);
   });
 
+  testWidgets('a drawer the closer does not hold is closed without a count', (
+    tester,
+  ) async {
+    // **The other half of the recovery close, and the one that was implicit.**
+    // Leaving the boxes blank used to record *counted, and it held nothing* -
+    // indistinguishable from a cashier who really had counted an empty till.
+    // Now that the count is marked against the sales the server holds, that
+    // silence would report the drawer's whole contents as missing, the opening
+    // float included. The two answers are two controls.
+    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
+      overrides: <String, Object?>{
+        'shiftId': 'shift-elsewhere',
+        'deviceId': _deviceOther,
+      },
+    );
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    await _tap(tester, const ValueKey('shift-gate-close-orphan'));
+    await _settle(tester);
+    await _tap(tester, const ValueKey('close-orphan-uncounted'));
+
+    final written = server.updated.single.$2;
+    expect(written['closedWithoutEvidence'], isTrue);
+    // No declared keys at all: reconciliation reads their absence as nothing
+    // to compare, which is exactly what this person is saying.
+    expect(written.containsKey('declaredCashMinor'), isFalse);
+    expect(written.containsKey('declaredMpesaMinor'), isFalse);
+    expect(written.containsKey('declaredCardMinor'), isFalse);
+    expect(written['closingCashMinor'], 0);
+  });
+
+  testWidgets('an untouched recovery form is refused rather than read as zero', (
+    tester,
+  ) async {
+    // Everywhere else on this sheet an empty box is a legitimate zero, because
+    // the cashier is holding the drawer. Here it is the one thing it must not
+    // mean, so pressing the count control with nothing typed says so.
+    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
+      overrides: <String, Object?>{
+        'shiftId': 'shift-elsewhere',
+        'deviceId': _deviceOther,
+      },
+    );
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+    await _tap(tester, const ValueKey('shift-gate-close-orphan'));
+    await _settle(tester);
+    await _tap(tester, const ValueKey('close-orphan-shift'));
+
+    expect(server.updated, isEmpty);
+    expect(
+      find.text('Enter what you counted, or close without counting.'),
+      findsWidgets,
+    );
+  });
+
   testWidgets('one count closes both shifts when a second is open', (
     tester,
   ) async {
