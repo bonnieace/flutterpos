@@ -453,10 +453,27 @@ export function stockComparisonOutcome(
     facts.invalidMovementCount > 0 ? "invalid_movements" :
     !facts.chainValid ? "checkpoint_chain_invalid" :
     facts.variance === 0 ? "matched" : "variance";
+  // **Split by direction since 2026-09-17, and for one reason.** Every stock
+  // disagreement was reported as `stock_variance`, so "the shelf holds three
+  // fewer than anything accounts for" and "three more" reached a shopkeeper as
+  // the same undifferentiated fact of a number being wrong. They are not the
+  // same event and they do not have the same causes.
+  //
+  // **Short is the one that matters.** It is what a sale whose ledger entry
+  // never landed looks like, and it is what a quantity lowered outside the app
+  // looks like - `allow update` on `products` admits a strictly decreasing
+  // quantity with no movement required, because the checkout decrement is still
+  // written by the till. Neither is visible anywhere else in the system, and
+  // both read the same way: units left, and nothing says why.
+  //
+  // **Over is rarer and points elsewhere.** No client write can produce it; the
+  // rule permits only a decrease. Units the books hold that no movement put
+  // there means the ledger is incomplete, not that the shelf is.
   const anomalyType = facts.invalidMovementCount > 0 ?
     "invalid_stock_movement" :
     !facts.chainValid ? "checkpoint_chain_invalid" :
-    facts.variance !== 0 ? "stock_variance" : undefined;
+    facts.variance < 0 ? "stock_short_of_ledger" :
+    facts.variance > 0 ? "stock_over_ledger" : undefined;
   return anomalyType === undefined ? {status} : {status, anomalyType};
 }
 

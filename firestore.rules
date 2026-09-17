@@ -296,8 +296,17 @@ service cloud.firestore {
         // reader every device reads it with, and a device reaches it through the
         // mutation outbox, so adding a product still works with no connection.
         //
-        // `allow update` and `allow delete` below are unchanged: the checkout
-        // decrement and retiring a product are both still client writes.
+        // `allow update` below is unchanged, because the checkout decrement is
+        // still a client write - that is what lets a till sell with no signal,
+        // and it is the reason the rule still admits a quantity going down with
+        // no movement beside it. Reconciliation is what catches one that should
+        // not have: stock short of its ledger is reported as its own kind.
+        //
+        // `allow delete` is **not** unchanged, whatever an earlier draft of this
+        // comment said. Retiring a product clears the stock it was holding, and
+        // whoever writes a quantity writes the movement accounting for it, so it
+        // became `setProductRetired` in the same commit and the rule below is
+        // `if false`.
         allow create: if false;
 
         allow update: if activeStaff(tenantId)

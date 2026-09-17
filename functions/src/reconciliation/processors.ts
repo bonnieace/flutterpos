@@ -394,16 +394,35 @@ async function reconcileProduct(
       nonNegativeInteger(stateSnapshot.get("activeInvalidMovementCount")) : 0;
 
     if (!stateSnapshot.exists) {
-      const latest = await transaction.get(
-        movements.orderBy("recordedAt", "desc")
-          .orderBy(FieldPath.documentId(), "desc")
-          .limit(1)
-      );
-      expectedQuantity = observedQuantity;
-      cursorTimestamp = latest.docs[0]?.get("recordedAt") instanceof Timestamp ?
-        latest.docs[0].get("recordedAt") as Timestamp : undefined;
-      cursorId = latest.docs[0]?.id;
-      baselineStatus = "baseline_established";
+      // **A product's first check adds up its whole history, from nothing.**
+      //
+      // This used to read the current quantity, call that the expected figure,
+      // put the cursor on the newest movement and record `baseline_established`
+      // - which meant the first thing reconciliation ever did to a product was
+      // agree with it. Whatever the figure was, sound or not, became the truth
+      // every later check measured against, and every movement written before
+      // that moment was never read. A product already five units short when the
+      // baseline ran was five units short forever, and nothing downstream could
+      // see it: the chain of checkpoints was sound, and its origin was a number
+      // nobody had checked.
+      //
+      // Starting at zero makes the first check the real one. `createProduct`
+      // writes an opening-balance movement, `importProducts` writes one, every
+      // sale, return, count and correction writes one - so the ledger is a
+      // complete account of how a product got to where it is, and adding it up
+      // either reaches the current quantity or names the gap.
+      //
+      // A product holding stock that no movement explains now reports a
+      // variance on its first check. **That is the correct answer, not a false
+      // alarm.** It means exactly what it says: those units are not accounted
+      // for.
+      //
+      // Long histories are not a problem here. The paging below reads
+      // MOVEMENT_PAGE_SIZE at a time and the `movement_backlog` branch carries
+      // the cursor to the next run without reporting a variance mid-walk, so a
+      // product with ten thousand movements is replayed across many runs rather
+      // than in one transaction.
+      expectedQuantity = 0;
     } else {
       const storedExpected = safeInteger(stateSnapshot.get("expectedQuantity"));
       const storedTimestamp = stateSnapshot.get("lastMovementAt");
@@ -416,7 +435,14 @@ async function reconcileProduct(
         (storedTimestamp !== undefined && !(storedTimestamp instanceof Timestamp)) ||
         (storedId !== undefined && typeof storedId !== "string")
       ) {
-        expectedQuantity = observedQuantity;
+        // **Rebuilt from origin too, and for the same reason.** This branch had
+        // the first check's flaw a second time: state that could not be trusted
+        // was replaced by trusting the current quantity instead, which laundered
+        // whatever the corrupt state was hiding into an accepted figure. State
+        // being unusable is a reason to recount from the ledger, not a reason to
+        // stop asking. The status still records that a rebuild happened, so the
+        // run is not reported as an ordinary clean verification.
+        expectedQuantity = 0;
         baselineStatus = "baseline_reestablished_invalid_state";
         chainValid = false;
       } else {
@@ -435,31 +461,19 @@ async function reconcileProduct(
 
     let movementQuery = movements.orderBy("recordedAt", "asc")
       .orderBy(FieldPath.documentId(), "asc");
+    // **No cursor means start at the beginning, in every case.** There were
+    // three branches here, and two of them existed to skip a product's history
+    // by jumping the cursor to the newest movement. Nothing does that now: a
+    // run either continues from where the last one stopped, or it reads the
+    // ledger from the first entry.
     if (cursorTimestamp && cursorId) {
       movementQuery = movementQuery.startAfter(cursorTimestamp, cursorId);
-    } else if (stateSnapshot.exists && baselineStatus === "verified") {
-      // A valid baseline with no movement cursor starts at the beginning.
-    } else if (baselineStatus.startsWith("baseline_reestablished")) {
-      const latest = await transaction.get(
-        movements.orderBy("recordedAt", "desc")
-          .orderBy(FieldPath.documentId(), "desc")
-          .limit(1)
-      );
-      cursorTimestamp = latest.docs[0]?.get("recordedAt") instanceof Timestamp ?
-        latest.docs[0].get("recordedAt") as Timestamp : undefined;
-      cursorId = latest.docs[0]?.id;
-      movementQuery = movements.orderBy("recordedAt", "asc")
-        .orderBy(FieldPath.documentId(), "asc")
-        .startAfter(cursorTimestamp ?? Timestamp.fromMillis(0), cursorId ?? "");
     }
 
-    let movementSnapshot;
-    if (!stateSnapshot.exists) {
-      movementSnapshot = undefined;
-    } else {
-      movementSnapshot = await transaction.get(movementQuery.limit(MOVEMENT_PAGE_SIZE + 1));
-    }
-    const movementDocuments = movementSnapshot?.docs.slice(0, MOVEMENT_PAGE_SIZE) ?? [];
+    const movementSnapshot = await transaction.get(
+      movementQuery.limit(MOVEMENT_PAGE_SIZE + 1)
+    );
+    const movementDocuments = movementSnapshot.docs.slice(0, MOVEMENT_PAGE_SIZE);
     let invalidMovementCount = 0;
     for (const movement of movementDocuments) {
       const delta = safeInteger(movement.get("quantityDelta"));
@@ -476,7 +490,7 @@ async function reconcileProduct(
         invalidMovementCount += 1;
       }
     }
-    const backlog = (movementSnapshot?.size ?? 0) > MOVEMENT_PAGE_SIZE;
+    const backlog = movementSnapshot.size > MOVEMENT_PAGE_SIZE;
     const cumulativeInvalidMovementCount = priorInvalidMovementCount + invalidMovementCount;
     const cursor = movementCursor(cursorTimestamp, cursorId);
     const variance = observedQuantity - expectedQuantity;

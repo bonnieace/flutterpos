@@ -463,7 +463,10 @@ void main() {
       find.byKey(const ValueKey('product-stock-difference-stock_a')),
     );
     expect(callout.status, AppStatus.problem);
-    expect(callout.title, 'Stock does not match its ledger');
+    // The kind names the direction, because the direction is what decides
+    // whether it is worth chasing: this fixture holds seven against ten the
+    // ledger accounts for, so three units left with nothing saying why.
+    expect(callout.title, 'Stock left without a record');
     // The figures come from the vocabulary the differences list shares; the
     // resolution sentence is this screen's own, because it names the form three
     // inches below. The provenance is one instant format across the family now,
@@ -1030,7 +1033,7 @@ TenantQueryDocumentSnapshot _stockAnomaly(
   'tenantId': 'tenant-a',
   'productId': 'product-1',
   'jobId': 'rj_abc',
-  'anomalyType': 'stock_variance',
+  'anomalyType': 'stock_short_of_ledger',
   'expectedQuantity': 10,
   'observedQuantity': 7,
   'variance': -3,

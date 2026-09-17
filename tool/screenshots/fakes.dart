@@ -885,7 +885,7 @@ Map<String, Map<String, Object?>> seedReconciliationAnomalies() =>
         'tenantId': seedTenantId,
         'productId': 'pd-milk-500',
         'jobId': 'rj_000001',
-        'anomalyType': 'stock_variance',
+        'anomalyType': 'stock_short_of_ledger',
         'expectedQuantity': 10,
         'observedQuantity': 7,
         'variance': -3,

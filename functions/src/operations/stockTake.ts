@@ -70,7 +70,14 @@ export type StockTakeScope =
   | {kind: "all"}
   | {kind: "category"; categoryId: string};
 
-const BUSINESS_DATE_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
+/**
+ * The trading day a count is taken for, as the whole system writes one.
+ *
+ * Exported because `applyStockTake` validates the same field when it carries it
+ * onto the ledger: the day a correction is attributed to and the day the count
+ * claimed must be the same shape, or one of them is not a business date.
+ */
+export const BUSINESS_DATE_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 
 /**
  * The page bound, which is `importProducts`' own.

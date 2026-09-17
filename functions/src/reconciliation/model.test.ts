@@ -267,10 +267,25 @@ test("a stock comparison with nothing wrong records no difference", () => {
   assert.deepEqual(stockComparisonOutcome(CLEAN_COMPARISON), {status: "matched"});
 });
 
-test("a quantity that disagrees with its ledger is a stock variance", () => {
+test("a quantity that disagrees with its ledger is named by its direction", () => {
+  // **Which way it goes is the whole of what makes one worth chasing.** Short
+  // means units left with nothing saying why - a sale whose ledger entry never
+  // landed, or a quantity lowered outside the app, neither visible any other
+  // way. Over means the books claim units no movement put there, which no client
+  // write can do. Reporting both as one kind put them in front of a shopkeeper
+  // as the same fact, and they are not.
+  assert.deepEqual(
+    stockComparisonOutcome({...CLEAN_COMPARISON, variance: -3}),
+    {status: "variance", anomalyType: "stock_short_of_ledger"}
+  );
   assert.deepEqual(
     stockComparisonOutcome({...CLEAN_COMPARISON, variance: 3}),
-    {status: "variance", anomalyType: "stock_variance"}
+    {status: "variance", anomalyType: "stock_over_ledger"}
+  );
+  // Zero is neither, and writes no anomaly at all.
+  assert.deepEqual(
+    stockComparisonOutcome({...CLEAN_COMPARISON, variance: 0}),
+    {status: "matched"}
   );
 });
 
@@ -317,17 +332,18 @@ test("a quantity that agrees with untrustworthy evidence is not matched", () => 
   );
 });
 
-test("a baseline names itself, and still reports a broken chain", () => {
-  // A run with no trustworthy figure to compare against did not compare
-  // anything, so the status says which baseline it established - but a chain that
-  // did not verify is still a difference somebody has to be told about.
-  assert.deepEqual(
-    stockComparisonOutcome({
-      ...CLEAN_COMPARISON,
-      baselineStatus: "baseline_established",
-    }),
-    {status: "baseline_established"}
-  );
+test("a rebuilt baseline names itself, and still reports a broken chain", () => {
+  // **There is one baseline status left, and it is this one.**
+  // `baseline_established` used to be the other: a product's first run accepted
+  // its current quantity and recorded that it had established rather than
+  // compared. Nothing establishes now - a first run adds the ledger up from
+  // nothing like any other - so the only run that still names a baseline is one
+  // that had to throw carried state away and rebuild.
+  //
+  // It rebuilds from the ledger too, so the variance it reports is a real
+  // comparison. What the status carries is that the state was unusable, and a
+  // chain that did not verify is still a difference somebody has to be told
+  // about.
   assert.deepEqual(
     stockComparisonOutcome({
       ...CLEAN_COMPARISON,

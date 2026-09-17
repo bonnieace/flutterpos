@@ -60,7 +60,7 @@ function stockAnomaly({ tenantId = "tenant-a" } = {}) {
     tenantId,
     productId: "product-a",
     jobId: "rj_abc",
-    anomalyType: "stock_variance",
+    anomalyType: "stock_short_of_ledger",
     expectedQuantity: 10,
     observedQuantity: 7,
     variance: -3,
@@ -157,7 +157,7 @@ test("the page narrows to one kind and resumes from a document ID", async () => 
   const narrowed = await assertSucceeds(
     getDocs(
       anomalyPage(firestore, "tenant-a", [
-        where("anomalyType", "==", "stock_variance"),
+        where("anomalyType", "==", "stock_short_of_ledger"),
       ]),
     ),
   );
@@ -307,7 +307,7 @@ test("the open-difference count is read by management and written by nobody", as
       jobId: "rj_abc",
       openCount: 3,
       truncated: false,
-      byType: { shift_tender_variance: 2, stock_variance: 1 },
+      byType: { shift_tender_variance: 2, stock_short_of_ledger: 1 },
       countedAt: Timestamp.fromDate(new Date("2026-08-01T02:30:00Z")),
     },
   });

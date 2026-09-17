@@ -294,7 +294,8 @@ _DifferenceReading _reading(
       ),
     ],
   ),
-  TenantReconciliationAnomalyKind.stockVariance => _stockVariance(anomaly),
+  TenantReconciliationAnomalyKind.stockShortOfLedger ||
+  TenantReconciliationAnomalyKind.stockOverLedger => _stockMismatch(anomaly),
   TenantReconciliationAnomalyKind.invalidOrMissingShift =>
     const _DifferenceReading(
       sentence:
@@ -368,7 +369,13 @@ _DifferenceReading _saleLines(TenantReconciliationAnomaly anomaly) {
   );
 }
 
-_DifferenceReading _stockVariance(TenantReconciliationAnomaly anomaly) {
+/// Reads either direction of a stock disagreement.
+///
+/// **One reading for two kinds, deliberately.** The kind names which way the
+/// difference goes, because that is what decides whether it is worth chasing;
+/// the sentence underneath states the same three figures either way, and the
+/// sign it already carries says the rest.
+_DifferenceReading _stockMismatch(TenantReconciliationAnomaly anomaly) {
   final variance = anomaly.quantityVariance!;
   final direction = variance > 0 ? 'more' : 'fewer';
   return _DifferenceReading(

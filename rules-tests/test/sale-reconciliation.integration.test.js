@@ -672,16 +672,22 @@ test("a full run baselines stock, and a later run reports what a sale moved", as
   for (const productId of productIds) {
     const verification = await stockVerification(fixture, baseline.jobId, productId);
     assert.equal(verification.exists, true, `${productId} must have been read`);
-    assert.equal(verification.get("status"), "baseline_established");
+    // **Compared, not baselined.** A product's first run used to accept whatever
+    // quantity it found; it now adds the ledger up, which for a seeded product is
+    // one opening balance of a hundred against a hundred held. They agree - but
+    // it is an answer the run reached rather than one it assumed.
+    assert.equal(verification.get("status"), "matched");
     assert.equal(verification.get("expectedQuantity"), SEEDED_PRODUCT_QUANTITY);
     assert.equal(verification.get("observedQuantity"), SEEDED_PRODUCT_QUANTITY);
     assert.equal(verification.get("variance"), 0);
     assert.equal(verification.get("invalidMovementCount"), 0);
     assert.equal(verification.get("checkpointChainValid"), true);
-    // No movement existed to resume from, and the cursor names that rather than
-    // being absent - so a later run can tell "start at the beginning" from
-    // "somebody wrote an empty cursor".
-    assert.equal(verification.get("movementCursor"), "baseline:none");
+    // The cursor sits on the last movement this run actually read - the opening
+    // balance - so the next run continues from there instead of replaying it.
+    assert.match(
+      verification.get("movementCursor"),
+      new RegExp(`^[0-9]+:${openingMovementId(productId)}$`),
+    );
     assert.equal(verification.get("mutatesStock"), false);
 
     const checkpoint = await stockCheckpoint(fixture, baseline.jobId, productId);
@@ -701,7 +707,7 @@ test("a full run baselines stock, and a later run reports what a sale moved", as
     // The carried state is what the next run resumes from, and it must point at
     // the checkpoint this run just wrote or the chain has no link to verify.
     const state = await stockState(fixture, productId);
-    assert.equal(state.get("status"), "baseline_established");
+    assert.equal(state.get("status"), "matched");
     assert.equal(state.get("expectedQuantity"), SEEDED_PRODUCT_QUANTITY);
     assert.equal(state.get("lastVariance"), 0);
     assert.equal(state.get("lastVerificationCompleted"), true);
@@ -798,7 +804,7 @@ test("a full run baselines stock, and a later run reports what a sale moved", as
   // the figures the ledger and the product actually differ by.
   const anomalies = await listProductAnomalies(fixture, fixture.productId);
   assert.equal(anomalies.length, 1);
-  assert.equal(anomalies[0].get("anomalyType"), "stock_variance");
+  assert.equal(anomalies[0].get("anomalyType"), "stock_over_ledger");
   assert.equal(anomalies[0].get("expectedQuantity"), expectedQuantity);
   assert.equal(anomalies[0].get("observedQuantity"), SEEDED_PRODUCT_QUANTITY);
   assert.equal(anomalies[0].get("variance"), STOCK_SALE_QUANTITY);
@@ -1099,6 +1105,11 @@ function businessDateFor(instant) {
  * emulator: the dirty-day counters are per business, and a shared tenant would
  * make every assertion about `saleReceiptCount` depend on what ran before it.
  */
+/** The `stock_movements` ID a fixture's opening balance is written at. */
+function openingMovementId(productId) {
+  return `sa_open_${productId}`;
+}
+
 async function seedTenant(suffix, options = {}) {
   const tenantId = `tenant-${suffix}`;
   const productId = `product-${suffix}`;
@@ -1125,6 +1136,16 @@ async function seedTenant(suffix, options = {}) {
     createdAt: now,
     updatedAt: now,
   });
+  // **Every seeded product opens with a movement that accounts for its stock**,
+  // because that is what a real one has: `createProduct` writes an opening
+  // balance in the same transaction as the product, and since 2026-09-17 the
+  // stock phase adds a ledger up from nothing rather than accepting the figure it
+  // finds. A product seeded without one holds a hundred units nothing explains,
+  // and the phase would be right to report that - a fixture defect arriving as a
+  // finding, which is the worst shape a fixture defect can take.
+  const openingRecordedAt = Timestamp.fromMillis(
+    now.toMillis() - SETTLED_PRODUCT_AGE_MILLISECONDS,
+  );
   for (const id of [productId, ...(untouchedProductId ? [untouchedProductId] : [])]) {
     batch.set(firestore.doc(`tenants/${tenantId}/products/${id}`), {
       productId: id,
@@ -1136,6 +1157,30 @@ async function seedTenant(suffix, options = {}) {
       createdAt: now,
       updatedAt: productUpdatedAt,
     });
+    batch.set(
+      firestore.doc(
+        `tenants/${tenantId}/products/${id}` +
+          `/stock_movements/${openingMovementId(id)}`,
+      ),
+      {
+        movementId: openingMovementId(id),
+        tenantId,
+        productId: id,
+        sourceType: "product_created",
+        adjustmentType: "opening_balance",
+        quantityDelta: SEEDED_PRODUCT_QUANTITY,
+        previousQuantity: 0,
+        quantityAfter: SEEDED_PRODUCT_QUANTITY,
+        reason: "Opening balance recorded when the product was created.",
+        actorUid: `owner-${suffix}`,
+        requestId: `seed-${id}`,
+        // Before anything a test does, so a replay reaches it first and every
+        // sale movement the trigger writes lands after it.
+        occurredAt: openingRecordedAt,
+        recordedAt: openingRecordedAt,
+        createdAt: openingRecordedAt,
+      },
+    );
   }
   if (options.closedShift) {
     batch.set(firestore.doc(`tenants/${tenantId}/shifts/${shiftId}`), {

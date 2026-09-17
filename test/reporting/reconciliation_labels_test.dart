@@ -85,10 +85,7 @@ void main() {
       expect(reconciliationRunStatusWord(quarantined), 'Stopped');
       // The detail is the enum's own label, shown only where it says more than
       // the word. Nothing here is invented copy.
-      expect(
-        reconciliationRunStatusDetail(failed),
-        'Failed, retry scheduled',
-      );
+      expect(reconciliationRunStatusDetail(failed), 'Failed, retry scheduled');
       expect(
         reconciliationRunStatusDetail(quarantined),
         'Stopped after repeated failures',
@@ -154,7 +151,7 @@ void main() {
 
     test('a stock variance states both figures and their difference', () {
       expect(
-        reconciliationDifferenceFigures(_stockVariance()),
+        reconciliationDifferenceFigures(_stockShort()),
         'Its ledger expects 10, and the product records 7: 3 fewer than the '
         'ledger accounts for.',
       );
@@ -163,7 +160,7 @@ void main() {
     test('a variance the other way reads as more rather than fewer', () {
       final over = _anomaly(<String, Object?>{
         'productId': 'product-a',
-        'anomalyType': 'stock_variance',
+        'anomalyType': 'stock_over_ledger',
         'expectedQuantity': 7,
         'observedQuantity': 10,
         'variance': 3,
@@ -222,7 +219,7 @@ void main() {
 
     test('the subject is the ID the rest of the app attributes by', () {
       expect(
-        reconciliationDifferenceSubject(_stockVariance()),
+        reconciliationDifferenceSubject(_stockShort()),
         'Product product-a',
       );
       expect(
@@ -257,7 +254,7 @@ void main() {
       // excluded because the prose says "agrees" where a figure says `0`, which
       // is the one place they are deliberately not the same string.
       for (final anomaly in <TenantReconciliationAnomaly>[
-        _stockVariance(),
+        _stockShort(),
         _anomaly(<String, Object?>{
           'sourceId': 'checkout-a',
           'anomalyType': 'invalid_sale_lines',
@@ -303,13 +300,14 @@ void main() {
       // Nothing is left over: "Its ledger expects 10, and the product records 7"
       // *is* the three figures, and a screen drawing both would report one
       // difference twice.
-      final figures = reconciliationDifferenceFigureLines(_stockVariance());
+      final figures = reconciliationDifferenceFigureLines(_stockShort());
 
-      expect(reconciliationDifferenceExplanation(_stockVariance()), isNull);
-      expect(
-        figures.map((figure) => figure.slug),
-        <String>['expected', 'observed', 'variance'],
-      );
+      expect(reconciliationDifferenceExplanation(_stockShort()), isNull);
+      expect(figures.map((figure) => figure.slug), <String>[
+        'expected',
+        'observed',
+        'variance',
+      ]);
       expect(figures[0].value, '10');
       expect(figures[1].value, '7');
       // The sign is on the figure and the direction is a word beside it, so
@@ -321,7 +319,7 @@ void main() {
     test('a variance the other way is signed the other way', () {
       final over = _anomaly(<String, Object?>{
         'productId': 'product-a',
-        'anomalyType': 'stock_variance',
+        'anomalyType': 'stock_over_ledger',
         'expectedQuantity': 7,
         'observedQuantity': 10,
         'variance': 3,
@@ -346,10 +344,7 @@ void main() {
       });
 
       final figures = reconciliationDifferenceFigureLines(shift);
-      expect(
-        figures.map((figure) => figure.value),
-        <String>['-12.5', '0'],
-      );
+      expect(figures.map((figure) => figure.value), <String>['-12.5', '0']);
       expect(figures[0].detail, 'short of the sales recorded');
       expect(figures[1].detail, 'agrees with the sales recorded');
       expect(
@@ -381,10 +376,7 @@ void main() {
       );
       // The explanation drops the number the sentence carried, because the
       // figure beside it now states it.
-      expect(
-        reconciliationDifferenceExplanation(chain),
-        isNot(contains('10')),
-      );
+      expect(reconciliationDifferenceExplanation(chain), isNot(contains('10')));
     });
 
     test('a kind that reports a refusal to read carries no figure', () {
@@ -435,7 +427,7 @@ void main() {
       final dated = _anomaly(<String, Object?>{
         'productId': 'product-a',
         'jobId': 'rj_abc',
-        'anomalyType': 'stock_variance',
+        'anomalyType': 'stock_short_of_ledger',
         'expectedQuantity': 10,
         'observedQuantity': 7,
         'variance': -3,
@@ -479,9 +471,9 @@ void main() {
   });
 }
 
-TenantReconciliationAnomaly _stockVariance() => _anomaly(<String, Object?>{
+TenantReconciliationAnomaly _stockShort() => _anomaly(<String, Object?>{
   'productId': 'product-a',
-  'anomalyType': 'stock_variance',
+  'anomalyType': 'stock_short_of_ledger',
   'expectedQuantity': 10,
   'observedQuantity': 7,
   'variance': -3,

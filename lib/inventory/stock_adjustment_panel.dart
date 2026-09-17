@@ -589,12 +589,13 @@ final class _TenantProductStockAdjustmentPanelState
 /// `reconciliation_labels.dart` with the figures.** What a difference *is* is the
 /// same on every surface that shows it; what to press about it is a fact about
 /// this page, and this page is the only one with the form three inches below.
-/// Only one of the four kinds a product can hold is a quantity disagreement an
-/// adjustment resolves, and the other three say so rather than inviting a
+/// Only a quantity disagreement is something an adjustment resolves - either
+/// direction of one - and the kinds that are not say so rather than inviting a
 /// correction that would not resolve them.
 String _resolutionNote(TenantReconciliationAnomaly anomaly) =>
     switch (anomaly.kind) {
-      TenantReconciliationAnomalyKind.stockVariance =>
+      TenantReconciliationAnomalyKind.stockShortOfLedger ||
+      TenantReconciliationAnomalyKind.stockOverLedger =>
         'An adjustment recorded below is how this is put right.',
       TenantReconciliationAnomalyKind.invalidStockMovement =>
         'An adjustment will not resolve this: the ledger entry below is what '

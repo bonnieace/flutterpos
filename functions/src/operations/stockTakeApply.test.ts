@@ -24,13 +24,21 @@ const TENANT = "tenant-a";
 const TAKE = `st_${"a".repeat(40)}`;
 const PRODUCT = `pd_${"1".repeat(40)}`;
 const ACTOR = "user-manager";
+const BUSINESS_DATE = "2026-09-15";
 
-function plan(overrides: {variance?: number; storedQuantity?: number} = {}) {
+function plan(
+  overrides: {
+    variance?: number;
+    storedQuantity?: number;
+    businessDate?: string;
+  } = {}
+) {
   return planStockTakeLine({
     tenantId: TENANT,
     takeId: TAKE,
     productId: PRODUCT,
     actorUid: ACTOR,
+    businessDate: overrides.businessDate ?? BUSINESS_DATE,
     variance: overrides.variance ?? -2,
     storedQuantity: overrides.storedQuantity ?? 40,
   });
@@ -92,11 +100,13 @@ test("a correction that would leave the safe range is refused", () => {
 
 test("the ledger record carries exactly the fields adjustStock writes", () => {
   // A unit counted off and a unit adjusted off are the same unit, and
-  // reconciliation reads one ledger. `takeId` is the one addition, and it is
-  // what makes a movement traceable back to the count that caused it.
+  // reconciliation reads one ledger. `takeId` and `businessDate` are the two
+  // additions: one makes a movement traceable back to the count that caused it,
+  // the other says which trading day that count was about.
   assert.deepEqual(Object.keys(plan().ledgerData).sort(), [
     "actorUid",
     "adjustmentType",
+    "businessDate",
     "previousQuantity",
     "productId",
     "quantityAfter",
@@ -107,6 +117,31 @@ test("the ledger record carries exactly the fields adjustStock writes", () => {
     "takeId",
     "tenantId",
   ]);
+});
+
+test("the correction is dated to the count, not to the approval", () => {
+  // **The defect this closes.** A count taken on Tuesday and approved on Friday
+  // writes a correction belonging to Tuesday. Dating it to the approval put the
+  // shortfall on Friday instead: Tuesday read clean, and Friday read short by
+  // units that never moved on it.
+  //
+  // Nothing here reads a clock, and that is the point - the day is a fact the
+  // count carried, not one this arithmetic is entitled to decide.
+  const tuesday = plan({businessDate: "2026-09-15"});
+  const friday = plan({businessDate: "2026-09-18"});
+
+  assert.equal(tuesday.ledgerData.businessDate, "2026-09-15");
+  assert.equal(friday.ledgerData.businessDate, "2026-09-18");
+});
+
+test("the trading day does not reach the adjustment identity", () => {
+  // The ID is the count and the product, so re-applying a count that somehow
+  // arrived with a different day still lands on the one document rather than
+  // writing a second correction beside the first.
+  assert.equal(
+    plan({businessDate: "2026-09-15"}).adjustmentId,
+    plan({businessDate: "2026-09-18"}).adjustmentId
+  );
 });
 
 test("an adjustment is named after the count and the product together", () => {

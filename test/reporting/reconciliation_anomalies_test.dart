@@ -36,7 +36,7 @@ void main() {
         ),
       );
 
-      expect(anomaly.kind, TenantReconciliationAnomalyKind.stockVariance);
+      expect(anomaly.kind, TenantReconciliationAnomalyKind.stockShortOfLedger);
       expect(anomaly.isStockAnomaly, isTrue);
       expect(anomaly.productId, 'product-a');
       expect(anomaly.quantityVariance, -7);
@@ -350,7 +350,65 @@ void main() {
         expect(values.add(kind.wireValue), isTrue, reason: kind.name);
         expect(TenantReconciliationAnomalyKind.parse(kind.wireValue), kind);
       }
-      expect(values, hasLength(9));
+      // Ten since the stock disagreement split by direction: short and over are
+      // different events with different causes, and one kind covering both put
+      // them in front of a shopkeeper as the same fact.
+      expect(values, hasLength(10));
+    });
+
+    test('refuses a stock record whose sign contradicts its own kind', () {
+      // **The kind is the sign.** The server picks `stock_short_of_ledger` only
+      // for a negative variance and `stock_over_ledger` only for a positive one,
+      // so a record calling itself short while its figures say the books are
+      // over is a writer and a reader that disagree. Drawing it either way would
+      // put a sentence in front of somebody that its own numbers contradict.
+      for (final contradiction in <String, Map<String, Object?>>{
+        'short with the books over': <String, Object?>{
+          'anomalyType': 'stock_short_of_ledger',
+          'expectedQuantity': 7,
+          'observedQuantity': 10,
+          'variance': 3,
+        },
+        'over with the books short': <String, Object?>{
+          'anomalyType': 'stock_over_ledger',
+          'expectedQuantity': 10,
+          'observedQuantity': 7,
+          'variance': -3,
+        },
+        'short with no difference at all': <String, Object?>{
+          'anomalyType': 'stock_short_of_ledger',
+          'expectedQuantity': 7,
+          'observedQuantity': 7,
+          'variance': 0,
+        },
+      }.entries) {
+        expect(
+          () => TenantReconciliationAnomaly.fromDocument(
+            path: 'tenants/tenant-a/reconciliation_anomalies/stock_abc',
+            data: _stockAnomaly(overrides: contradiction.value),
+          ),
+          throwsA(isA<TenantReconciliationException>()),
+          reason: contradiction.key,
+        );
+      }
+    });
+
+    test('reads a record whose books are over its ledger', () {
+      final anomaly = TenantReconciliationAnomaly.fromDocument(
+        path: 'tenants/tenant-a/reconciliation_anomalies/stock_abc',
+        data: _stockAnomaly(
+          overrides: <String, Object?>{
+            'anomalyType': 'stock_over_ledger',
+            'expectedQuantity': 7,
+            'observedQuantity': 10,
+            'variance': 3,
+          },
+        ),
+      );
+
+      expect(anomaly.kind, TenantReconciliationAnomalyKind.stockOverLedger);
+      expect(anomaly.isStockAnomaly, isTrue);
+      expect(anomaly.quantityVariance, 3);
     });
   });
 
@@ -383,13 +441,16 @@ void main() {
         ],
       );
 
-      final page = await _repository(reader).loadPage(
-        kind: TenantReconciliationAnomalyKind.stockVariance,
-      );
+      final page = await _repository(
+        reader,
+      ).loadPage(kind: TenantReconciliationAnomalyKind.stockShortOfLedger);
 
-      expect(page.items.single.kind, TenantReconciliationAnomalyKind.stockVariance);
+      expect(
+        page.items.single.kind,
+        TenantReconciliationAnomalyKind.stockShortOfLedger,
+      );
       expect(reader.queries.single.equalityFilters, {
-        'anomalyType': 'stock_variance',
+        'anomalyType': 'stock_short_of_ledger',
       });
     });
 
@@ -398,9 +459,9 @@ void main() {
       final reader = _Reader();
 
       await expectLater(
-        _repository(reader).loadPage(
-          kind: TenantReconciliationAnomalyKind.other,
-        ),
+        _repository(
+          reader,
+        ).loadPage(kind: TenantReconciliationAnomalyKind.other),
         _failsWithCode('unfilterable_anomaly_kind'),
       );
       expect(reader.queries, isEmpty);
@@ -450,35 +511,43 @@ void main() {
       );
     });
 
-    test('fails closed when a record in this path names another business', () async {
-      final reader = _Reader(
-        page: <TenantQueryDocumentSnapshot>[
-          _snapshot('sale_a', _saleAnomaly(tenantId: 'tenant-b')),
-        ],
-        ignoreFilters: true,
-      );
+    test(
+      'fails closed when a record in this path names another business',
+      () async {
+        final reader = _Reader(
+          page: <TenantQueryDocumentSnapshot>[
+            _snapshot('sale_a', _saleAnomaly(tenantId: 'tenant-b')),
+          ],
+          ignoreFilters: true,
+        );
 
-      await expectLater(
-        _repository(reader).loadPage(),
-        _failsWithCode('anomaly_identity_mismatch'),
-      );
-    });
+        await expectLater(
+          _repository(reader).loadPage(),
+          _failsWithCode('anomaly_identity_mismatch'),
+        );
+      },
+    );
 
-    test('fails closed when a narrowed page answers with another kind', () async {
-      // A filtered page returning foreign rows is a broken boundary, not rows
-      // to quietly skip past.
-      final reader = _Reader(
-        page: <TenantQueryDocumentSnapshot>[_snapshot('sale_a', _saleAnomaly())],
-        ignoreFilters: true,
-      );
+    test(
+      'fails closed when a narrowed page answers with another kind',
+      () async {
+        // A filtered page returning foreign rows is a broken boundary, not rows
+        // to quietly skip past.
+        final reader = _Reader(
+          page: <TenantQueryDocumentSnapshot>[
+            _snapshot('sale_a', _saleAnomaly()),
+          ],
+          ignoreFilters: true,
+        );
 
-      await expectLater(
-        _repository(
-          reader,
-        ).loadPage(kind: TenantReconciliationAnomalyKind.stockVariance),
-        _failsWithCode('foreign_anomaly_kind'),
-      );
-    });
+        await expectLater(
+          _repository(
+            reader,
+          ).loadPage(kind: TenantReconciliationAnomalyKind.stockShortOfLedger),
+          _failsWithCode('foreign_anomaly_kind'),
+        );
+      },
+    );
 
     test('refuses a cashier before issuing any read', () async {
       final reader = _Reader();
@@ -562,7 +631,7 @@ Map<String, Object?> _stockAnomaly({
   'tenantId': tenantId,
   'productId': 'product-a',
   'jobId': 'rj_abc',
-  'anomalyType': 'stock_variance',
+  'anomalyType': 'stock_short_of_ledger',
   'expectedQuantity': 10,
   'observedQuantity': 7,
   'variance': -3,

@@ -623,13 +623,37 @@ test("a business date exactly on the stale bound is regenerated and swept clean"
 // processStockPage
 // ---------------------------------------------------------------------------
 
-/** A product settled outside the deferral window, so it is compared rather than deferred. */
-function seedProduct(db: FakeFirestore, productId: string, quantity: number): void {
+/**
+ * A product settled outside the deferral window, so it is compared rather than
+ * deferred.
+ *
+ * **It gets an opening-balance movement matching its quantity**, because that is
+ * what a real product has - `createProduct` writes one, `importProducts` writes
+ * one - and reconciliation now adds a ledger up from nothing rather than
+ * accepting the figure it finds. A product seeded without one holds stock that
+ * nothing accounts for, and a variance is the correct answer for it, so the
+ * tests that want that case ask for it with `opening: false`.
+ */
+function seedProduct(
+  db: FakeFirestore,
+  productId: string,
+  quantity: number,
+  options: {opening?: boolean} = {}
+): void {
   db.seed(`tenants/${TENANT}/products/${productId}`, {
     tenantId: TENANT,
     name: productId,
     quantity,
     updatedAt: SETTLED,
+  });
+  if (options.opening === false) return;
+  db.seed(`tenants/${TENANT}/products/${productId}/stock_movements/mv_000`, {
+    tenantId: TENANT,
+    productId,
+    sourceType: "product_created",
+    quantityDelta: quantity,
+    // Before any movement a test seeds by hand, so a replay reaches it first.
+    recordedAt: Timestamp.fromMillis(SETTLED.toMillis() - 60 * 1000),
   });
 }
 
@@ -672,11 +696,14 @@ test("a stock page that ends exactly on its own boundary claims work it has not 
     db.ids(`tenants/${TENANT}/stock_reconciliation_state`),
     productIds(25)
   );
-  // A product no run has carried state for is baselined, not compared, so a
-  // twenty-five product page reports no difference by construction.
+  // **Compared on its first run, not baselined.** A product no run has carried
+  // state for used to have its current figure accepted as the expectation; it is
+  // now added up from its ledger, which for these is one opening balance of ten
+  // against ten held. They agree, so the page reports no difference - but it is
+  // a comparison that reached that answer, not an assumption.
   assert.equal(
     stored(db, `tenants/${TENANT}/stock_reconciliation_state/product-01`).status,
-    "baseline_established"
+    "matched"
   );
 
   assert.deepEqual(
@@ -696,6 +723,76 @@ test("a stock page one short of its boundary reports no more work", async () => 
   );
 });
 
+test("stock no movement accounts for is a variance on the very first check", async () => {
+  // **The defect this closes, stated as the case that used to pass silently.**
+  // A product's first reconciliation read whatever quantity it found and made
+  // that the expectation, so the first thing the system ever did to a product
+  // was agree with it. A shop already seventeen units adrift stayed adrift
+  // forever: every checkpoint after the baseline was sound, and all of them
+  // rested on a number nobody had ever checked.
+  //
+  // Seventeen on the books and an empty ledger is now what it looks like -
+  // seventeen units the product claims that no movement ever put there, which
+  // is `stock_over_ledger`: the books are over what the ledger accounts for.
+  const db = firestoreWithClaimedJob();
+  seedProduct(db, "product-01", 17, {opening: false});
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processStockPage(db.asFirestore(), claimedJob({phase: "stock"})),
+    {processed: 1, varianceCount: 1, hasMore: false, productCursor: "product-01"}
+  );
+
+  const state = stored(db, `tenants/${TENANT}/stock_reconciliation_state/product-01`);
+  assert.equal(state.status, "variance");
+  assert.equal(state.expectedQuantity, 0);
+  assert.equal(state.observedQuantity, 17);
+  assert.equal(state.lastVariance, 17);
+  assert.equal(
+    stored(
+      db,
+      `tenants/${TENANT}/reconciliation_anomalies/stock_${digest(["product-01", JOB])}`
+    ).anomalyType,
+    "stock_over_ledger"
+  );
+});
+
+test("a product whose ledger accounts for it matches on its first check", async () => {
+  // The other half of the same change, and the one that says it is not a way of
+  // manufacturing variances. Ten opened, three sold, seven held: the ledger
+  // reaches the shelf, so the run reports agreement having actually added it up.
+  const db = firestoreWithClaimedJob();
+  seedProduct(db, "product-01", 7, {opening: false});
+  db.seed(`tenants/${TENANT}/products/product-01/stock_movements/mv_000`, {
+    tenantId: TENANT,
+    productId: "product-01",
+    sourceType: "product_created",
+    quantityDelta: 10,
+    recordedAt: Timestamp.fromMillis(SETTLED.toMillis() - 60 * 1000),
+  });
+  db.seed(`tenants/${TENANT}/products/product-01/stock_movements/mv_001`, {
+    tenantId: TENANT,
+    productId: "product-01",
+    sourceType: "sale",
+    quantityDelta: -3,
+    recordedAt: SETTLED,
+  });
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processStockPage(db.asFirestore(), claimedJob({phase: "stock"})),
+    {processed: 1, varianceCount: 0, hasMore: false, productCursor: "product-01"}
+  );
+
+  const state = stored(db, `tenants/${TENANT}/stock_reconciliation_state/product-01`);
+  assert.equal(state.status, "matched");
+  assert.equal(state.expectedQuantity, 7);
+  assert.equal(state.lastVariance, 0);
+  // The cursor sits at the end of the ledger it read, so the next run continues
+  // from there rather than replaying the whole history again.
+  assert.equal(state.lastMovementId, "mv_001");
+});
+
 test("a movement backlog resumes from its cursor rather than re-reading the ledger", async () => {
   // The ledger page is two hundred movements wide. A product with more than that
   // to catch up on is left pending, and the next page has to continue from the
@@ -704,7 +801,12 @@ test("a movement backlog resumes from its cursor rather than re-reading the ledg
   const db = firestoreWithClaimedJob();
   const job = claimedJob({phase: "stock"});
   for (const productId of ["product-01", "product-02", "product-03"]) {
-    seedProduct(db, productId, productId === "product-02" ? 299 : 10);
+    // product-02 carries its own state and its own two hundred and one
+    // movements, so it gets no opening balance: this test is about where the
+    // second page resumes, and an extra movement would only move the arithmetic.
+    seedProduct(db, productId, productId === "product-02" ? 299 : 10, {
+      opening: productId !== "product-02",
+    });
   }
   db.seed(`tenants/${TENANT}/stock_reconciliation_state/product-02`, {
     tenantId: TENANT,
@@ -861,7 +963,10 @@ test("a product this job already finished is counted again but not verified agai
   const statePath = `tenants/${TENANT}/stock_reconciliation_state/product-01`;
 
   const db = firestoreWithClaimedJob();
-  seedProduct(db, "product-01", 10);
+  // No opening balance: the carried state's expectation of seven already stands
+  // for everything the ledger would have said, and this test is about the guard
+  // that stops a settled product being verified twice, not about arithmetic.
+  seedProduct(db, "product-01", 10, {opening: false});
   db.seed(statePath, settled);
   db.clearWrites();
 
@@ -880,7 +985,7 @@ test("a product this job already finished is counted again but not verified agai
   // the beginning: a valid state with no movement cursor has no position to
   // resume from.
   const rerun = firestoreWithClaimedJob(claimedJob({generation: GENERATION + 1}));
-  seedProduct(rerun, "product-01", 10);
+  seedProduct(rerun, "product-01", 10, {opening: false});
   rerun.seed(statePath, settled);
   rerun.clearWrites();
 
@@ -901,7 +1006,8 @@ test("a product this job already finished is counted again but not verified agai
       rerun,
       `tenants/${TENANT}/reconciliation_anomalies/stock_${digest(["product-01", JOB])}`
     ).anomalyType,
-    "stock_variance"
+    // Ten held against seven the ledger accounts for: the books are over.
+    "stock_over_ledger"
   );
 });
 
@@ -998,23 +1104,34 @@ test("carried state that names no ledger position is re-baselined and reported",
 
     const carried = stored(db, `tenants/${TENANT}/stock_reconciliation_state/product-01`);
     assert.equal(carried.status, "baseline_reestablished_invalid_state", reason);
-    // The product's own figure became the expectation, so the comparison agrees
-    // with itself by construction and the variance is zero.
-    assert.equal(carried.expectedQuantity, 10, reason);
-    assert.equal(carried.lastVariance, 0, reason);
+    // **Rebuilt from the ledger, and the rebuild finds the discrepancy.** State
+    // that cannot be trusted used to be replaced by trusting the product's own
+    // figure, which made the comparison agree with itself by construction and
+    // report a variance of zero - so a corrupt state laundered whatever it was
+    // hiding into an accepted number.
+    //
+    // The ledger says ten opened and three left, so seven is accounted for. The
+    // product holds ten. That is a variance of three, and it is a true one:
+    // three units are there that nothing explains.
+    assert.equal(carried.expectedQuantity, 7, reason);
+    assert.equal(carried.lastVariance, 3, reason);
     assert.equal(carried.checkpointChainValid, false, reason);
-    // It resumed past the ledger rather than through it.
+    // It resumed through the ledger rather than past it, so the cursor sits on
+    // the last movement it actually read.
     assert.equal(carried.lastMovementId, "mv_001", reason);
 
     const anomaly = stored(
       db,
       `tenants/${TENANT}/reconciliation_anomalies/stock_${digest(["product-01", JOB])}`
     );
-    // Not a quantity disagreement, because nothing disagreed. What is wrong is
-    // that the figures could not be trusted, which is the distinction the product
-    // stock surface already words differently for this kind.
+    // **The chain is what is reported, even though the quantity disagrees too.**
+    // State that cannot be trusted is the more fundamental thing wrong with this
+    // product, and it is the one to put in front of somebody: a variance read off
+    // a rebuilt expectation is only as good as the rebuild. The disagreement is
+    // still recorded on the anomaly rather than flattened to zero, so whoever
+    // acts on it can see both facts at once.
     assert.equal(anomaly.anomalyType, "checkpoint_chain_invalid", reason);
-    assert.equal(anomaly.variance, 0, reason);
+    assert.equal(anomaly.variance, 3, reason);
   }
 });
 

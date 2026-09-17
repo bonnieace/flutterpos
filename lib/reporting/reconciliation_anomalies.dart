@@ -37,8 +37,22 @@ enum TenantReconciliationAnomalyKind {
   /// longer accounts for everything that moved.
   invalidStockMovement('invalid_stock_movement', 'Stock ledger entry unusable'),
 
-  /// The product's recorded stock and the sum of its ledger disagree.
-  stockVariance('stock_variance', 'Stock does not match its ledger'),
+  /// The product holds fewer units than its ledger accounts for.
+  ///
+  /// **The one worth reading first.** Units left and nothing says why. A sale
+  /// whose ledger entry never landed looks exactly like this, and so does a
+  /// quantity lowered outside the app - `allow update` on `products` admits a
+  /// strictly decreasing quantity with no movement required, because the
+  /// checkout decrement is still written by the till. Neither of those is
+  /// visible anywhere else.
+  stockShortOfLedger('stock_short_of_ledger', 'Stock left without a record'),
+
+  /// The product holds more units than its ledger accounts for.
+  ///
+  /// Rarer, and it points somewhere else. No client write can produce it: the
+  /// rule permits only a decrease. Units the books hold that no movement put
+  /// there say the ledger is incomplete, not that the shelf is.
+  stockOverLedger('stock_over_ledger', 'Stock arrived without a record'),
 
   /// A shift the sales point at is missing, or did not record the totals a
   /// comparison needs.
@@ -342,7 +356,8 @@ final class TenantReconciliationAnomaly {
   bool get isStockAnomaly =>
       kind == TenantReconciliationAnomalyKind.checkpointChainInvalid ||
       kind == TenantReconciliationAnomalyKind.invalidStockMovement ||
-      kind == TenantReconciliationAnomalyKind.stockVariance;
+      kind == TenantReconciliationAnomalyKind.stockShortOfLedger ||
+      kind == TenantReconciliationAnomalyKind.stockOverLedger;
 
   /// True while the record describes a shift whose totals were compared.
   bool get isShiftAnomaly =>
@@ -389,7 +404,8 @@ final class TenantReconciliationAnomaly {
       // own difference is refused.
       case TenantReconciliationAnomalyKind.checkpointChainInvalid:
       case TenantReconciliationAnomalyKind.invalidStockMovement:
-      case TenantReconciliationAnomalyKind.stockVariance:
+      case TenantReconciliationAnomalyKind.stockShortOfLedger:
+      case TenantReconciliationAnomalyKind.stockOverLedger:
         if (productId == null ||
             expectedQuantity == null ||
             observedQuantity == null ||
@@ -397,11 +413,19 @@ final class TenantReconciliationAnomaly {
             quantityVariance != observedQuantity - expectedQuantity) {
           throw const TenantReconciliationException('inconsistent_anomaly');
         }
-        // `stock_variance` is the kind chosen only once the chain is valid and
-        // every movement was readable, which leaves a non-zero variance as the
-        // sole remaining reason the record exists at all.
-        if (kind == TenantReconciliationAnomalyKind.stockVariance &&
-            quantityVariance == 0) {
+        // These two are chosen only once the chain is valid and every movement
+        // was readable, which leaves a non-zero variance as the sole remaining
+        // reason the record exists - and **the sign has to agree with the kind**,
+        // because the kind is the sign. A record calling itself short while its
+        // figures say the shelf is over is not a difference this can draw; it is
+        // a writer and a reader that disagree, and reading it either way would
+        // put a sentence in front of somebody that its own numbers contradict.
+        if (kind == TenantReconciliationAnomalyKind.stockShortOfLedger &&
+            quantityVariance >= 0) {
+          throw const TenantReconciliationException('inconsistent_anomaly');
+        }
+        if (kind == TenantReconciliationAnomalyKind.stockOverLedger &&
+            quantityVariance <= 0) {
           throw const TenantReconciliationException('inconsistent_anomaly');
         }
       // The shift writer computes both variances only when all four figures

@@ -216,14 +216,14 @@ void main() {
       findsOneWidget,
     );
 
-    await _chooseKind(tester, 'stock_variance');
+    await _chooseKind(tester, 'stock_short_of_ledger');
     await _settle(tester);
 
     // A cursor is a position inside one exact query, so the narrowed list
     // starts again rather than resuming from a position it never established.
     expect(reader.queries.last.startAfterDocumentId, isNull);
     expect(reader.queries.last.equalityFilters, {
-      'anomalyType': 'stock_variance',
+      'anomalyType': 'stock_short_of_ledger',
     });
     expect(
       find.byKey(const ValueKey('reconciliation-anomaly-stock_c')),
@@ -249,7 +249,9 @@ void main() {
     );
     expect(
       offered,
-      contains(const ValueKey('reconciliation-anomaly-kind-stock_variance')),
+      contains(
+        const ValueKey('reconciliation-anomaly-kind-stock_short_of_ledger'),
+      ),
     );
     // `other` names every unmodelled kind, so it identifies no stored value.
     expect(
@@ -578,14 +580,8 @@ void main() {
       snackNotice(tester).message,
       contains('this shift cannot be corrected'),
     );
-    expect(
-      snackNotice(tester).status,
-      AppStatus.problem,
-    );
-    expect(
-      snackNotice(tester).status,
-      AppStatus.problem,
-    );
+    expect(snackNotice(tester).status, AppStatus.problem);
+    expect(snackNotice(tester).status, AppStatus.problem);
     expect(reader.queries.length, 1);
     expect(
       find.byKey(const ValueKey('reconciliation-anomaly-shift_b')),
@@ -613,17 +609,11 @@ void main() {
 
     // The shift may or may not have been corrected, and only the server's own
     // record can settle it.
-    expect(
-      snackNotice(tester).message,
-      contains('The result is unknown'),
-    );
+    expect(snackNotice(tester).message, contains('The result is unknown'));
     // **Not `problem`.** The shift may well have been corrected, and the
     // sentence's own instruction is to go and look - which is what §2.1 gives
     // `attention` rather than a failure.
-    expect(
-      snackNotice(tester).status,
-      AppStatus.attention,
-    );
+    expect(snackNotice(tester).status, AppStatus.attention);
     expect(reader.queries.length, 2);
   });
 
@@ -644,10 +634,7 @@ void main() {
     );
     await _amend(tester, 'shift_b', 'Late offline sale');
 
-    expect(
-      snackNotice(tester).message,
-      contains('could not be trusted'),
-    );
+    expect(snackNotice(tester).message, contains('could not be trusted'));
     expect(find.textContaining('tenant-b'), findsNothing);
   });
 
@@ -674,10 +661,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(callable.payloads, isEmpty);
-    expect(
-      find.byType(AppSnackBar),
-      findsNothing,
-    );
+    expect(find.byType(AppSnackBar), findsNothing);
   });
 
   testWidgets('a business switch discards an outstanding correction', (
@@ -709,10 +693,7 @@ void main() {
     await _settle(tester);
 
     // Tenant A's correction must never report itself on tenant B's screen.
-    expect(
-      find.byType(AppSnackBar),
-      findsNothing,
-    );
+    expect(find.byType(AppSnackBar), findsNothing);
   });
 
   testWidgets('a shift difference opens the trail narrowed to that shift', (
@@ -747,10 +728,7 @@ void main() {
     // `PageHeader.subtitle` now — §7's "Title appears once", and the slot step
     // 5a built for exactly this.
     expect(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.text('shift-a'),
-      ),
+      find.descendant(of: find.byType(AppBar), matching: find.text('shift-a')),
       findsOne,
     );
     expect(
@@ -1162,7 +1140,7 @@ Map<String, Object?> _stockAnomaly({Map<String, Object?>? overrides}) =>
       'tenantId': 'tenant-a',
       'productId': 'product-a',
       'jobId': 'rj_abc',
-      'anomalyType': 'stock_variance',
+      'anomalyType': 'stock_short_of_ledger',
       'expectedQuantity': 10,
       'observedQuantity': 7,
       'variance': -3,
