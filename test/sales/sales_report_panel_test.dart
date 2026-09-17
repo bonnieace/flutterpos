@@ -488,10 +488,7 @@ void main() {
       expect(_text(tester, 'sales-report-transactions'), '3');
       // **The figure is netted and nothing explains it, by decision.** What
       // came back is the Returns record's subject, not this card's.
-      expect(
-        find.byKey(const ValueKey('sales-report-returned')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('sales-report-returned')), findsNothing);
     });
 
     testWidgets('a part return badges the sale and takes only its share', (
@@ -591,6 +588,115 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('sales-reprint-co-1')), findsNothing);
       expect(find.byKey(const ValueKey('sales-returns-co-1')), findsOneWidget);
+    });
+
+    testWidgets('the seller can answer a sale that names no method', (
+      tester,
+    ) async {
+      // **The one write this screen makes to a sale.** The register stopped
+      // preselecting a payment method, so a cashier who was never told how the
+      // customer paid saves a sale naming none - honest, and useless unless
+      // they can answer it afterwards. This is that answer, on the card the old
+      // app offered it on, beside Return and Reprint.
+      final callable = _TenderCallable();
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[_sale('co-1')]);
+
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.cashier,
+        tenderCallable: callable,
+      );
+      await tester.tap(find.byKey(const ValueKey('sales-actions-co-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('sales-set-tender-co-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('sale-tender-choice-mpesa')));
+      await tester.pumpAndSettle();
+
+      expect(callable.payloads, hasLength(1));
+      expect(callable.payloads.single['tenantId'], 'tenant-a');
+      expect(callable.payloads.single['saleId'], 'co-1');
+      expect(callable.payloads.single['tender'], 'mpesa');
+    });
+
+    testWidgets('a recorded method offers a correction, named as one', (
+      tester,
+    ) async {
+      // **The verb changes with the sale.** Filling a blank and correcting a
+      // mis-tap are different acts, and a person should know which one they are
+      // about to do. Whether the correction is still allowed depends on the
+      // shift, which this surface cannot see - the server decides.
+      final callable = _TenderCallable();
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale('co-1', tender: 'cash'),
+      ]);
+
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.cashier,
+        tenderCallable: callable,
+      );
+      await tester.tap(find.byKey(const ValueKey('sales-actions-co-1')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('sales-set-tender-co-1')),
+        findsOneWidget,
+      );
+      expect(find.text('Change payment method'), findsOneWidget);
+      expect(find.text('Set payment method'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('sales-set-tender-co-1')));
+      await tester.pumpAndSettle();
+
+      // The dialog says what it is replacing, and what bounds the correction.
+      expect(
+        _text(tester, 'sale-tender-caveat'),
+        contains('This sale says Cash'),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('sale-tender-choice-mpesa')));
+      await tester.pumpAndSettle();
+
+      expect(callable.payloads.single['tender'], 'mpesa');
+    });
+
+    testWidgets('a colleague is not offered another cashiers sale', (
+      tester,
+    ) async {
+      // Only the person who was at the counter knows the answer; anybody else
+      // would be guessing, and the server refuses them regardless.
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale('co-1', soldById: 'user-b'),
+      ]);
+
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.manager,
+        tenderCallable: _TenderCallable(),
+      );
+      await tester.tap(find.byKey(const ValueKey('sales-actions-co-1')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('sales-set-tender-co-1')), findsNothing);
+    });
+
+    testWidgets('no callable leaves the entry off rather than dead', (
+      tester,
+    ) async {
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[_sale('co-1')]);
+
+      await _pump(tester, reader, width: 411, role: TenantRole.cashier);
+      await tester.tap(find.byKey(const ValueKey('sales-actions-co-1')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('sales-set-tender-co-1')), findsNothing);
     });
 
     testWidgets('a manager reprints, and the sentence names the receipt', (
@@ -838,6 +944,7 @@ Future<void> _pump(
   int pageSize = 20,
   SalesTotalsCallable? totalsCallable,
   TenantReceiptReprinter? reprinter,
+  SetSaleTenderCallable? tenderCallable,
 }) async {
   tester.view.physicalSize = Size(width, 2400);
   tester.view.devicePixelRatio = 1;
@@ -855,6 +962,7 @@ Future<void> _pump(
             reportReader: reader,
             totalsCallable: totalsCallable,
             reprinter: reprinter,
+            tenderCallable: tenderCallable,
             clock: () => DateTime.utc(2026, 8, 24, 12),
             pageSize: pageSize,
           ),
@@ -870,6 +978,16 @@ Future<void> _pump(
 /// The point of the split it proves: a callable is the one source on this page
 /// that cannot be served from a cache, so a test that wants to watch the rest
 /// of the page arrive without it has to be able to stop it arriving.
+final class _TenderCallable implements SetSaleTenderCallable {
+  final List<Map<String, Object?>> payloads = <Map<String, Object?>>[];
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    payloads.add(payload);
+    return <String, Object?>{'saleId': payload['saleId']};
+  }
+}
+
 final class _HeldTotalsCallable implements SalesTotalsCallable {
   _HeldTotalsCallable(this._gate);
 
@@ -1018,7 +1136,10 @@ String _text(WidgetTester tester, String key) =>
 
 final class _SalesReader
     implements TenantDataReader, TenantSalesHistoryQueryReader {
-  _SalesReader(this.sales, {this.returns = const <TenantQueryDocumentSnapshot>[]});
+  _SalesReader(
+    this.sales, {
+    this.returns = const <TenantQueryDocumentSnapshot>[],
+  });
 
   final List<TenantQueryDocumentSnapshot> sales;
 

@@ -50,8 +50,11 @@ const String checkoutTenderDisclaimer =
 
 /// What a surface says about a sale that recorded no tender at all.
 ///
-/// Schema v1 sales predate the decision, so this is a statement about the
-/// record, not about the payment: it is never presented as an unpaid sale.
+/// **Two sales reach this sentence and it is true of both.** A schema v1 sale
+/// predates the tender field entirely; a current sale gets here when the
+/// cashier saved without saying how the customer paid. Either way this is a
+/// statement about the record rather than about the payment, and neither is
+/// ever presented as an unpaid sale.
 const String checkoutTenderUnrecordedMessage =
-    'This sale was recorded before payment methods were captured, so it names '
-    'no payment method.';
+    'This sale names no payment method. Either it was recorded before payment '
+    'methods were captured, or nobody said how the customer paid.';

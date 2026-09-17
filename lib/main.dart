@@ -644,6 +644,21 @@ class SpiritPOSApp extends StatelessWidget {
       ),
       verifyCallable: FirebaseVerifyReturnCallable(),
     );
+    // **The one write a sale ever takes after it is created.** The register no
+    // longer preselects a payment method, so a cashier who was never told how
+    // the customer paid saves a sale that names none; this is what lets them
+    // answer it afterwards, from the sale's own card, once. Online only, like
+    // the callable beside it: there is nothing honest to show for an answer
+    // this device has not been able to hand over.
+    final saleTenderCallable = FirebaseSetSaleTenderCallable();
+    // **What a deactivated cashier can still hand over.** Sales that never left
+    // this device are unreachable by every ordinary path once the membership
+    // ends; this is the one door left, and it opens only for sales attributed
+    // to that cashier and dated before their own deactivation.
+    final strandedSalesDrainer = CheckoutStrandedSalesDrainer(
+      outbox: checkoutOutbox,
+      callable: FirebaseDrainStrandedSalesCallable(),
+    );
     // What the business spends outside its stock. Recording is owner and
     // administrator only - the rules enforce it - and the same online check
     // every other client write uses: an expense is recorded on the server, so
@@ -815,6 +830,26 @@ class SpiritPOSApp extends StatelessWidget {
           // three hundred list views can be trusted to remember.
           scrollBehavior: const SpiritScrollBehavior(),
           home: TenantRoutingShell(
+            // **The one chance to settle what this device is still holding.**
+            // A deactivation reaches the app through no channel of its own, so
+            // it finds out by asking - and that ask is online, which is the
+            // whole of the window. Sales the outbox never sent would otherwise
+            // sit on the phone for good: the workers stop at a session that
+            // cannot access the business, and `allow create` refuses the write
+            // regardless. See `CheckoutStrandedSalesDrainer`.
+            onTenantAccessLost: (uid, tenantId) async {
+              final result = await strandedSalesDrainer.drain(
+                uid: uid,
+                tenantId: tenantId,
+              );
+              if (result.attempted) {
+                debugPrint(
+                  'Stranded sales: ${result.handedOver} handed over, '
+                  '${result.alreadyPresent} already held, '
+                  '${result.unreadable} unreadable.',
+                );
+              }
+            },
             // The home's greeting states how today compares with yesterday, and
             // this is what it adds the two days up with. The same callable the
             // sales totals route already uses.
@@ -1071,6 +1106,10 @@ class SpiritPOSApp extends StatelessWidget {
               checkoutOutbox: checkoutOutbox,
               returnActions: returnActions,
               reprinter: receiptReprinter,
+              // Where a sale that names no payment method is given one, by the
+              // cashier who rang it up. The same card the old app offered this
+              // on, beside Return and Reprint.
+              tenderCallable: saleTenderCallable,
               // The same offline catalog the till prices against, so an item row
               // can draw the product's photograph without a read of its own.
               catalog: checkoutCatalogCache,
@@ -1115,6 +1154,15 @@ class SpiritPOSApp extends StatelessWidget {
             // recovered, and every lifecycle change the platform made. It is
             // deliberately narrower than the stock surfaces above.
             auditLogRoute: (reader) => TenantAuditLogScreen(reader: reader),
+            // **On the home since 2026-09-16.** It used to be reached from a
+            // button inside the cash-count sheet, which meant starting a count
+            // to read last week's - and that button popped the sheet and then
+            // pushed against the context it had just destroyed, so it never
+            // arrived at all. It is a report, and it sits with the reports.
+            shiftHistoryRoute: (reader) => TenantShiftHistoryScreen(
+              reader: reader,
+              returnActions: returnActions,
+            ),
             auditLogRoles: TenantAuditLogRepository.allowedRoles,
             // The till, reachable for the first time. Everything below it already
             // existed: the draft service refuses a checkout with no proven open
@@ -1137,7 +1185,6 @@ class SpiritPOSApp extends StatelessWidget {
               // whole pushed page built here; since 2026-09-03 the choice opens
               // the counting sheet itself.
               currency: TenantReportingCurrency.unknown,
-              historyReader: tenantDataReader,
               returnActions: returnActions,
               // **Inside the shift gate, so the count is asked about after the
               // shift is settled.** `TenantShiftGate` renders its child only

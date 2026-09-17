@@ -593,12 +593,18 @@ String _requiredBusinessDate(Map<String, Object?> data) {
   }
 }
 
-/// Reads the tender exactly as the sale's own payload version requires it.
+/// Reads the tender exactly as the sale's own payload version allows it.
 ///
 /// The rule matches the one Firestore Rules apply on create, so a document that
 /// slipped past them - an import, a rule rollback - is still refused here. A v2
 /// sale that names an unmodelled method is not displayed as an unknown payment:
 /// showing a payment method nothing recognises is worse than refusing the row.
+///
+/// **A v2 sale with no tender at all is a different thing and is read.** The
+/// register does not preselect a method, so a cashier who was never told how
+/// the customer paid saves a sale naming none - which this surface shows as
+/// *Not recorded* and offers to complete. Refusing it here would hide the very
+/// rows the completing action exists for.
 CheckoutTender? _tender(Map<String, Object?> data, int schemaVersion) {
   if (schemaVersion < checkoutSaleTenderSchemaVersion) {
     if (data.containsKey('tender')) {
@@ -606,6 +612,7 @@ CheckoutTender? _tender(Map<String, Object?> data, int schemaVersion) {
     }
     return null;
   }
+  if (!data.containsKey('tender')) return null;
   final tender = CheckoutTender.tryParse(data['tender']);
   if (tender == null) throw const TenantSaleException('invalid_sale_tender');
   return tender;

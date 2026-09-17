@@ -96,29 +96,33 @@ final class CheckoutDraftLineRequest {
 /// guarded shift lifecycle so a sale cannot name a shift the cashier does not
 /// hold.
 ///
-/// The tender *is* a caller input, and is required: it is the one thing here
-/// only the person at the till knows. There is no default, because a guessed
-/// payment method would be indistinguishable from an observed one.
+/// The tender *is* a caller input, and it may be absent. It is the one thing
+/// here only the person at the till knows, and there is no default, because a
+/// guessed payment method is indistinguishable from an observed one once it is
+/// written. Absent means the question was not answered at the counter, which is
+/// a fact about the sale rather than a gap in it: nothing is refused for it,
+/// and the method can be set afterwards from the sale's own card.
 final class CheckoutDraftRequest {
   CheckoutDraftRequest({
     required List<CheckoutDraftLineRequest> lines,
-    required this.tender,
+    this.tender,
     this.discountMinor = 0,
   }) : lines = List<CheckoutDraftLineRequest>.unmodifiable(lines);
 
   final List<CheckoutDraftLineRequest> lines;
 
-  /// How the cashier says the customer paid. Nothing verifies the payment.
-  final CheckoutTender tender;
+  /// How the cashier says the customer paid, or null if they did not say.
+  /// Nothing verifies the payment either way.
+  final CheckoutTender? tender;
 
   final int discountMinor;
 }
 
 /// Builds one frozen `CheckoutSalePayload` v2 draft from the offline cache.
 ///
-/// New drafts are always v2 and always record a tender. Version 1 drafts are
-/// never produced here; they only survive as already-persisted evidence, which
-/// [CheckoutSalePayload] still parses and submits unchanged.
+/// New drafts are always v2 and may or may not record a tender. Version 1
+/// drafts are never produced here; they only survive as already-persisted
+/// evidence, which [CheckoutSalePayload] still parses and submits unchanged.
 ///
 /// The service writes only through [HiveCheckoutOutbox.saveOffline]; it never
 /// touches Firestore. Draft creation is serialized by one local lock and bound
@@ -191,7 +195,6 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     required CheckoutShiftBinder shiftBinder,
     CheckoutIdFactory? checkoutIdFactory,
     CheckoutDraftClock? clock,
-    CheckoutBusinessDateResolver? businessDateResolver,
     CheckoutDraftReceiptHook? onSaved,
   }) : _onSaved = onSaved,
        _sessionController = sessionController,
@@ -200,8 +203,7 @@ final class CheckoutDraftService implements CheckoutDraftSink {
        _receipts = receipts,
        _shiftBinder = shiftBinder,
        _checkoutIdFactory = checkoutIdFactory ?? _generateCheckoutId,
-       _clock = clock ?? _utcNow,
-       _businessDateResolver = businessDateResolver ?? checkoutBusinessDate;
+       _clock = clock ?? _utcNow;
 
   final TenantSessionController _sessionController;
   final HiveCheckoutCatalogCache _cache;
@@ -210,7 +212,6 @@ final class CheckoutDraftService implements CheckoutDraftSink {
   final CheckoutShiftBinder _shiftBinder;
   final CheckoutIdFactory _checkoutIdFactory;
   final CheckoutDraftClock _clock;
-  final CheckoutBusinessDateResolver _businessDateResolver;
 
   /// Absent in every build that does not print, which is what keeps this
   /// service free of any dependency on the printing slice.
@@ -347,7 +348,15 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     }
 
     final checkoutId = _validatedCheckoutId();
-    final businessDate = _validatedBusinessDate();
+    // **The shift names the business day; the clock does not.** A night's
+    // trading starts one evening and can run past midnight, which is the whole
+    // reason a shift carries a business date rather than reading one off the
+    // calendar: the day ends when the drawer is counted off, not at 00:00.
+    // Re-deriving it here refused every sale after midnight, and a sale dated
+    // by the clock could not be filed against its shift anyway -
+    // `validSaleShift` requires the two to agree. What bounds a shift left
+    // running is its 24-hour cap, which refuses the sale on its own.
+    final businessDate = _validatedShiftBusinessDate(attribution);
     final deviceId = await _resolvedDeviceId();
     if (!_owns(captured)) {
       throw const CheckoutDraftException('session_changed');
@@ -356,7 +365,6 @@ final class CheckoutDraftService implements CheckoutDraftSink {
       attribution,
       captured: captured,
       deviceId: deviceId,
-      businessDate: businessDate,
     );
 
     // The sequence is allocated last, after every refusable check, so a
@@ -389,7 +397,10 @@ final class CheckoutDraftService implements CheckoutDraftSink {
       'deviceId': deviceId,
       'receiptNumber': receiptNumber,
       'receiptSequence': receiptSequence,
-      'tender': request.tender.wireValue,
+      // Omitted rather than written empty, which is how a sale that names no
+      // method has always been stored - see `_saleFields` and the `unrecorded`
+      // bucket that reads it.
+      if (request.tender != null) 'tender': request.tender!.wireValue,
       'items': items,
       'subtotalMinor': subtotalMinor,
       'discountMinor': request.discountMinor,
@@ -468,14 +479,15 @@ final class CheckoutDraftService implements CheckoutDraftSink {
 
   /// Proves the bound shift describes this exact sale before it is recorded.
   ///
-  /// The business date must agree because nightly reconciliation aggregates
-  /// sales per shift and business date: a sale filed under a shift from another
-  /// day could never match the shift's own closing summary.
+  /// **No business date comparison, deliberately.** The sale takes its date
+  /// from this shift rather than from the clock, so the two cannot disagree -
+  /// see [_validatedShiftBusinessDate]. Nightly reconciliation aggregates
+  /// sales per shift and business date, and filing the sale under the shift's
+  /// own day is exactly what makes that add up across midnight.
   void _assertShiftDescribesThisSale(
     CheckoutShiftAttribution attribution, {
     required TenantSession captured,
     required String deviceId,
-    required String businessDate,
   }) {
     try {
       validateTenantDocumentId(attribution.shiftId, fieldName: 'shiftId');
@@ -486,9 +498,6 @@ final class CheckoutDraftService implements CheckoutDraftSink {
         attribution.tenantId != captured.tenantId ||
         attribution.deviceId != deviceId) {
       throw const CheckoutDraftException('shift_binding_mismatch');
-    }
-    if (attribution.businessDate != businessDate) {
-      throw const CheckoutDraftException('shift_business_date_mismatch');
     }
   }
 
@@ -503,10 +512,16 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     }
   }
 
-  String _validatedBusinessDate() {
-    final businessDate = _businessDateResolver(_clock().toUtc());
+  /// The business date this sale is filed under, taken from its own shift.
+  ///
+  /// Validated rather than trusted: it arrives from durable local state that a
+  /// reinstall or an adopted shift can have written, and every later figure -
+  /// the receipt number, the daily aggregate, the shift expectation - is keyed
+  /// by it. A shift whose date is unreadable refuses the sale rather than
+  /// filing it under a day nothing can reconcile.
+  String _validatedShiftBusinessDate(CheckoutShiftAttribution attribution) {
     try {
-      return validateCheckoutBusinessDate(businessDate);
+      return validateCheckoutBusinessDate(attribution.businessDate);
     } on ArgumentError {
       throw const CheckoutDraftException('invalid_business_date');
     }

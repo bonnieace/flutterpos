@@ -2,6 +2,8 @@ export {adjustStock} from "./stock";
 export {createCategory, renameCategory} from "./categories";
 export {createProduct} from "./productCreate";
 export {setProductRetired} from "./productRetire";
+export {setSaleTender} from "./saleTender";
+export {drainStrandedSales} from "./strandedSales";
 export {submitStockTake} from "./stockTake";
 export {applyStockTake} from "./stockTakeApply";
 export {removeProductBackground} from "./productBackground";

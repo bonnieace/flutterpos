@@ -250,9 +250,10 @@ final class _ShiftTenderSplitBuilder {
   int _unrecognisedCount = 0;
 
   /// Buckets one confirmed sale exactly as the server's `saleTenderBucket`
-  /// does. An absent key and a stored `null` are the same fact - a sale written
-  /// before payment methods existed - so both reach [ShiftTenderSplit
-  /// .unrecorded] through the one `null` this lookup returns for either.
+  /// does. An absent key and a stored `null` are the same fact - either a sale
+  /// written before payment methods existed, or one whose cashier was never
+  /// told how the customer paid - so both reach [ShiftTenderSplit.unrecorded]
+  /// through the one `null` this lookup returns for either.
   void add(Object? storedTender, int totalMinor) {
     if (storedTender == null) {
       _unrecordedMinor += totalMinor;

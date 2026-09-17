@@ -22,7 +22,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting_currency.dart';
 import 'package:flutter_application_1/shift/shift.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/banner.dart';
 import 'package:flutter_application_1/ui/routes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
@@ -580,14 +579,14 @@ void main() {
     expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
   });
 
-  testWidgets('a shift from yesterday stops selling and offers the close', (
-    tester,
-  ) async {
-    // **H3.** The business date freezes when a shift opens and every sale
-    // resolves it afresh, so a shift carried across midnight is refused by the
-    // draft service on every sale. The gate said nothing about it: the till
-    // drew a sellable screen and the cashier met the refusal at the counter,
-    // one sale at a time, with a customer waiting.
+  testWidgets('a shift carried past midnight keeps selling', (tester) async {
+    // **A night is one business day, and the shift is what says so.** A club
+    // opens before midnight and trades past it; the sale takes the shift's
+    // frozen business date, so the register goes on selling and the whole
+    // night reconciles against the drawer that served it. The gate used to
+    // replace the register with a *New business day* dead end here, which made
+    // trading past midnight impossible. What still ends a shift left running
+    // is the 24-hour cap, which has its own surface.
     server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
     // The suite's clock is 2026-07-31; this shift belongs to the day before.
     await state.save(shiftRecord(businessDate: '2026-07-30'));
@@ -595,14 +594,7 @@ void main() {
     await _pumpHome(tester, state, server);
     await _enterTill(tester);
 
-    expect(find.byKey(const ValueKey('shift-gate-day-ended')), findsOneWidget);
-    expect(
-      find.byKey(_till),
-      findsNothing,
-      reason: 'Every sale on this shift would be refused, so none is offered.',
-    );
-    // And the way out is the only one there is, on the surface that says so.
-    expect(find.byKey(const ValueKey('shift-gate-close-day')), findsOneWidget);
+    expect(find.byKey(_till), findsOneWidget);
   });
 
   testWidgets('losing access takes the till away rather than leaving it drawn', (

@@ -66,22 +66,17 @@ void main() {
   });
 
   test('builds a draft the frozen submission parser accepts', () async {
-    final record = await _service(
-      sessions,
-      cache,
-      outbox,
-      receipts,
-      clock,
-    ).createDraft(
-      CheckoutDraftRequest(
-        tender: CheckoutTender.mpesa,
-        lines: const [
-          CheckoutDraftLineRequest(productId: 'product-a', quantity: 2),
-          CheckoutDraftLineRequest(productId: 'product-b', quantity: 3),
-        ],
-        discountMinor: 100,
-      ),
-    );
+    final record = await _service(sessions, cache, outbox, receipts, clock)
+        .createDraft(
+          CheckoutDraftRequest(
+            tender: CheckoutTender.mpesa,
+            lines: const [
+              CheckoutDraftLineRequest(productId: 'product-a', quantity: 2),
+              CheckoutDraftLineRequest(productId: 'product-b', quantity: 3),
+            ],
+            discountMinor: 100,
+          ),
+        );
 
     expect(record.state, CheckoutOutboxState.savedOffline);
     expect(record.uid, 'user-a');
@@ -132,14 +127,15 @@ void main() {
   test('resolves the business date in the Africa/Nairobi day', () async {
     clock.value = DateTime.utc(2026, 7, 31, 22, 30);
 
-    final record = await _service(sessions, cache, outbox, receipts, clock).createDraft(
-      CheckoutDraftRequest(
-        tender: CheckoutTender.mpesa,
-        lines: const [
-          CheckoutDraftLineRequest(productId: 'product-b', quantity: 1),
-        ],
-      ),
-    );
+    final record = await _service(sessions, cache, outbox, receipts, clock)
+        .createDraft(
+          CheckoutDraftRequest(
+            tender: CheckoutTender.mpesa,
+            lines: const [
+              CheckoutDraftLineRequest(productId: 'product-b', quantity: 1),
+            ],
+          ),
+        );
 
     expect(record.payload['businessDate'], '2026-08-01');
     expect(
@@ -187,7 +183,10 @@ void main() {
           ),
         );
 
-    await expectCode(CheckoutDraftRequest(lines: const [], tender: CheckoutTender.mpesa), 'invalid_line_count');
+    await expectCode(
+      CheckoutDraftRequest(lines: const [], tender: CheckoutTender.mpesa),
+      'invalid_line_count',
+    );
     await expectCode(
       CheckoutDraftRequest(
         tender: CheckoutTender.mpesa,
@@ -264,7 +263,13 @@ void main() {
     sessions.open(uid: 'user-a', membership: _membership('tenant-b'));
 
     await expectLater(
-      _service(sessions, cache, outbox, receipts, clock).createDraft(_request()),
+      _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+      ).createDraft(_request()),
       throwsA(
         isA<CheckoutDraftException>().having(
           (error) => error.code,
@@ -280,7 +285,13 @@ void main() {
     sessions.clear();
 
     await expectLater(
-      _service(sessions, cache, outbox, receipts, clock).createDraft(_request()),
+      _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+      ).createDraft(_request()),
       throwsA(
         isA<CheckoutDraftException>().having(
           (error) => error.code,
@@ -312,26 +323,29 @@ void main() {
     expect(outboxBox.keys, hasLength(1));
   });
 
-  test('serializes concurrent drafts so a checkout ID is never reused', () async {
-    // The factory derives the next ID from durable storage, so two overlapping
-    // drafts would collide unless the service holds one local lock.
-    final service = _service(
-      sessions,
-      cache,
-      outbox,
-      receipts,
-      clock,
-      checkoutIdFactory: () => 'co-${outboxBox.keys.length}',
-    );
+  test(
+    'serializes concurrent drafts so a checkout ID is never reused',
+    () async {
+      // The factory derives the next ID from durable storage, so two overlapping
+      // drafts would collide unless the service holds one local lock.
+      final service = _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+        checkoutIdFactory: () => 'co-${outboxBox.keys.length}',
+      );
 
-    final records = await Future.wait<CheckoutOutboxRecord>([
-      service.createDraft(_request()),
-      service.createDraft(_request(quantity: 2)),
-    ]);
+      final records = await Future.wait<CheckoutOutboxRecord>([
+        service.createDraft(_request()),
+        service.createDraft(_request(quantity: 2)),
+      ]);
 
-    expect(records.map((record) => record.checkoutId), ['co-0', 'co-1']);
-    expect(outboxBox.keys, hasLength(2));
-  });
+      expect(records.map((record) => record.checkoutId), ['co-0', 'co-1']);
+      expect(outboxBox.keys, hasLength(2));
+    },
+  );
 
   test('rejects a reused checkout ID', () async {
     // Every draft draws its own receipt, so a second draft for an existing
@@ -501,7 +515,13 @@ void main() {
       reason: 'An empty outbox must not block switching.',
     );
 
-    await _service(sessions, cache, outbox, receipts, clock).createDraft(_request());
+    await _service(
+      sessions,
+      cache,
+      outbox,
+      receipts,
+      clock,
+    ).createDraft(_request());
 
     expect(
       (await source.inspect(session))!.blocker,
@@ -565,6 +585,70 @@ void main() {
     );
   });
 
+  test('files a sale after midnight under the shift that is open', () async {
+    // **A night's trading is one business day, and the shift says which.** A
+    // club opens before midnight and sells past it; the shift froze its date
+    // at open and the sale takes that date rather than resolving a new one, so
+    // the whole night reconciles against the one drawer that served it. The
+    // clock here has crossed into the 31st while the shift still names the
+    // 30th, which used to refuse every sale from midnight until close.
+    clock.value = DateTime.utc(2026, 7, 30, 22, 30);
+    final binder = _Binder(receipts: receipts, clock: clock)
+      ..businessDate = '2026-07-30';
+
+    final record = await _service(
+      sessions,
+      cache,
+      outbox,
+      receipts,
+      clock,
+      shiftBinder: binder,
+    ).createDraft(_request());
+
+    expect(record.payload['businessDate'], '2026-07-30');
+    expect(
+      CheckoutSalePayload.fromOutboxRecord(
+        record,
+        session: sessions.requireSession(),
+      ).businessDate,
+      '2026-07-30',
+    );
+    // The receipt run belongs to the same night rather than restarting at
+    // midnight, because the sequence is allocated against this same date.
+    expect(
+      await receipts.lastSequence(
+        tenantId: 'tenant-a',
+        deviceId: await receipts.resolveDeviceId(),
+        businessDate: '2026-07-30',
+      ),
+      1,
+    );
+  });
+
+  test('refuses a shift whose business date is unreadable', () async {
+    final binder = _Binder(receipts: receipts, clock: clock)
+      ..businessDate = 'not-a-date';
+
+    await expectLater(
+      _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+        shiftBinder: binder,
+      ).createDraft(_request()),
+      throwsA(
+        isA<CheckoutDraftException>().having(
+          (error) => error.code,
+          'code',
+          'invalid_business_date',
+        ),
+      ),
+    );
+    expect(outboxBox.keys, isEmpty);
+  });
+
   test('refuses a shift that does not describe this sale', () async {
     final foreignDevice = 'dev-${'f' * 32}';
     final cases = <String, void Function(_Binder)>{
@@ -572,8 +656,6 @@ void main() {
       'shift_binding_mismatch_tenant': (binder) => binder.tenantId = 'tenant-b',
       'shift_binding_mismatch_device': (binder) =>
           binder.deviceId = foreignDevice,
-      'shift_business_date_mismatch': (binder) =>
-          binder.businessDate = '2026-07-30',
       'invalid_shift_id': (binder) => binder.shiftId = 'shifts/shift-a',
       'checkout_start_unavailable': (binder) =>
           binder.failure = StateError('unreadable'),
@@ -621,7 +703,10 @@ void main() {
   });
 
   test('formats the business date from a fixed Nairobi offset', () {
-    expect(checkoutBusinessDate(DateTime.utc(2026, 1, 1, 20, 59)), '2026-01-01');
+    expect(
+      checkoutBusinessDate(DateTime.utc(2026, 1, 1, 20, 59)),
+      '2026-01-01',
+    );
     expect(checkoutBusinessDate(DateTime.utc(2026, 1, 1, 21)), '2026-01-02');
     expect(checkoutBusinessDate(DateTime.utc(2026, 12, 31, 21)), '2027-01-01');
   });
@@ -641,7 +726,10 @@ void main() {
           CheckoutDraftRequest(
             tender: CheckoutTender.cash,
             lines: [
-              CheckoutDraftLineRequest(productId: productId, quantity: quantity),
+              CheckoutDraftLineRequest(
+                productId: productId,
+                quantity: quantity,
+              ),
             ],
           ),
         );

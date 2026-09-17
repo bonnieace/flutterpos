@@ -282,14 +282,35 @@ test("a schema v2 sale may record any of the three modelled tenders", async () =
   }
 });
 
+// **A v2 sale may name no tender at all, and that is an answer.** The register
+// does not preselect a payment method, so a cashier who was never told how the
+// customer paid saves a sale that names none; `setSaleTender` fills it in
+// afterwards, once. An absent key is the silence. A key that is *present* and
+// names something unmodelled is still denied, below - that is a corrupt record
+// rather than an unanswered question.
+test("a schema v2 sale may record no tender at all", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+
+  await assertSucceeds(
+    checkoutBatch(firestore, {
+      checkoutId: "checkout-tender-unanswered",
+      sale: { tender: undefined },
+    }).commit(),
+  );
+
+  if (!(await saleExists("checkout-tender-unanswered"))) {
+    throw new Error("A sale naming no tender was not written.");
+  }
+});
+
 // The tender is the cashier's assertion, but an unconstrained string would not
 // even be evidence of that: the `sales` create rule does not freeze its key set
 // with `hasOnly`, so without this check a client could write anything at all.
-test("a schema v2 sale cannot record an unmodelled or missing tender", async () => {
+test("a schema v2 sale cannot record an unmodelled tender", async () => {
   await seedCheckoutTenant();
   const firestore = authenticatedFirestore(testEnvironment, "cashier");
   const refused = [
-    ["missing", { tender: undefined }],
     ["empty", { tender: "" }],
     ["capitalised", { tender: "Cash" }],
     ["padded", { tender: " cash" }],

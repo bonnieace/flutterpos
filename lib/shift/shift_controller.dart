@@ -67,7 +67,6 @@ final class TenantShiftState {
     this.otherDeviceShiftId,
     this.sales,
     this.shiftExpired = false,
-    this.shiftDayEnded = false,
   });
 
   const TenantShiftState.unknown() : this(phase: TenantShiftPhase.unknown);
@@ -107,21 +106,6 @@ final class TenantShiftState {
   /// expired shift back its till - close the sheet, sell again, repeat. The
   /// phase describes what the shift is *doing*; this describes what it *is*.
   final bool shiftExpired;
-
-  /// Whether this shift belongs to a business day that has already ended.
-  ///
-  /// **Midnight, and it is the same defect the cap had.** A shift freezes its
-  /// business date when it opens and every sale resolves the date afresh, so a
-  /// shift opened before midnight stops being able to take one after it -
-  /// `CheckoutDraftService` refuses with `shift_business_date_mismatch`, and
-  /// rightly, because a sale filed under another day's shift could never be
-  /// reconciled against it. What was missing is this: the phase said nothing,
-  /// so the till went on drawing a sellable screen and the cashier found out
-  /// one sale at a time.
-  ///
-  /// Distinct from [shiftExpired]: one shift has run too long and the other has
-  /// run past a boundary, they need different words, and a shift can be both.
-  final bool shiftDayEnded;
 
   bool get blocksTenantSwitch =>
       phase == TenantShiftPhase.closing ||
@@ -195,19 +179,6 @@ final class TenantShiftController extends ChangeNotifier {
   bool _hasExpired(TenantShiftLocalRecord record) =>
       _clock().toUtc().difference(record.openedAt) >= maximumShiftDuration;
 
-  /// Whether [record] was opened on a business day that has since ended.
-  ///
-  /// Compared against the same resolver every sale uses, so this surface and
-  /// the refusal can never disagree about which day it is.
-  bool _dayEnded(TenantShiftLocalRecord record) {
-    try {
-      return record.businessDate != _businessDate();
-    } on TenantShiftException {
-      // An unreadable clock is not a reason to take a till out of service.
-      return false;
-    }
-  }
-
   /// The phase a durable record implies, with no server involved.
   ///
   /// A record on disk *is* this device's belief that a shift is open - see
@@ -255,7 +226,6 @@ final class TenantShiftController extends ChangeNotifier {
               phase: _phaseOf(known),
               declaration: known.declaration,
               shiftExpired: _hasExpired(known),
-              shiftDayEnded: _dayEnded(known),
               otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
               sales: await _displaySummary(captured, known.shiftId),
             ),
@@ -627,7 +597,6 @@ final class TenantShiftController extends ChangeNotifier {
         phase: _phaseOf(closed),
         declaration: closed.declaration,
         shiftExpired: _hasExpired(closed),
-        shiftDayEnded: _dayEnded(closed),
         otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
         sales: await _displaySummary(captured, closed.shiftId),
       ),
@@ -737,7 +706,6 @@ final class TenantShiftController extends ChangeNotifier {
         shift: shift,
         declaration: record.declaration,
         shiftExpired: _hasExpired(record),
-        shiftDayEnded: _dayEnded(record),
         errorCode: errorCode,
         otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
         // **Summarized for any open shift, not only during a count.** It was
@@ -817,7 +785,6 @@ final class TenantShiftController extends ChangeNotifier {
           phase: _phaseOf(record),
           shift: shift,
           shiftExpired: _hasExpired(record),
-          shiftDayEnded: _dayEnded(record),
           errorCode: errorCode ?? 'invalid_closing_cash',
           otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
           sales: await _displaySummary(captured, record.shiftId),
@@ -851,7 +818,6 @@ final class TenantShiftController extends ChangeNotifier {
           shift: shift,
           declaration: declaration,
           shiftExpired: _hasExpired(record),
-          shiftDayEnded: _dayEnded(record),
           errorCode: errorCode ?? error.code,
           otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
           sales: await _displaySummary(captured, record.shiftId),
@@ -880,7 +846,6 @@ final class TenantShiftController extends ChangeNotifier {
         shift: shift,
         declaration: declaration,
         shiftExpired: _hasExpired(record),
-        shiftDayEnded: _dayEnded(record),
         errorCode: errorCode ?? result.reasonCode ?? 'shift_close_unconfirmed',
         otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
         sales: await _displaySummary(captured, record.shiftId),
@@ -922,7 +887,6 @@ final class TenantShiftController extends ChangeNotifier {
           phase: _phaseOf(record),
           declaration: record.declaration,
           shiftExpired: _hasExpired(record),
-          shiftDayEnded: _dayEnded(record),
           // The caller's reason wins where it has one: *a shift is already
           // open on this device* answers what the person just tried to do,
           // where the replay's own code only describes this housekeeping.
@@ -947,7 +911,6 @@ final class TenantShiftController extends ChangeNotifier {
         phase: _phaseOf(confirmed),
         declaration: confirmed.declaration,
         shiftExpired: _hasExpired(confirmed),
-        shiftDayEnded: _dayEnded(confirmed),
         errorCode: errorCode,
         otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
         sales: await _displaySummary(captured, confirmed.shiftId),
@@ -1094,7 +1057,6 @@ final class TenantShiftController extends ChangeNotifier {
         phase: phase,
         declaration: record?.declaration,
         shiftExpired: record != null && _hasExpired(record),
-        shiftDayEnded: record != null && _dayEnded(record),
         // The expiry is the more specific truth, and the one the person has to
         // act on: being offline is why they cannot close it, not why they must.
         errorCode: phase == TenantShiftPhase.expired

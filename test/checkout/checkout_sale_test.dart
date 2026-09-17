@@ -154,13 +154,25 @@ void main() {
       'not-a-map': <Object?>['product-a'],
       'zero-quantity': <Object?>[_line(quantity: 0)],
       'negative-quantity': <Object?>[_line(quantity: -1)],
-      'fractional-quantity': <Object?>[_line(overrides: {'quantity': 1.5})],
-      'string-quantity': <Object?>[_line(overrides: {'quantity': '1'})],
-      'negative-price': <Object?>[_line(overrides: {'unitPriceMinor': -1})],
-      'fractional-price': <Object?>[_line(overrides: {'unitPriceMinor': 1.5})],
-      'missing-name': <Object?>[_line(overrides: {'name': null})],
+      'fractional-quantity': <Object?>[
+        _line(overrides: {'quantity': 1.5}),
+      ],
+      'string-quantity': <Object?>[
+        _line(overrides: {'quantity': '1'}),
+      ],
+      'negative-price': <Object?>[
+        _line(overrides: {'unitPriceMinor': -1}),
+      ],
+      'fractional-price': <Object?>[
+        _line(overrides: {'unitPriceMinor': 1.5}),
+      ],
+      'missing-name': <Object?>[
+        _line(overrides: {'name': null}),
+      ],
       'path-product': <Object?>[_line(productId: 'products/product-a')],
-      'unknown-line-field': <Object?>[_line(overrides: {'discount': 1})],
+      'unknown-line-field': <Object?>[
+        _line(overrides: {'discount': 1}),
+      ],
     };
 
     for (final entry in cases.entries) {
@@ -203,7 +215,9 @@ void main() {
   test('rejects malformed envelope metadata', () async {
     final cases = <String, Map<String, Object?>>{
       'currency': _payload(overrides: {'currency': 'kes'}),
-      'business-date-format': _payload(overrides: {'businessDate': '31-07-2026'}),
+      'business-date-format': _payload(
+        overrides: {'businessDate': '31-07-2026'},
+      ),
       'business-date-calendar': _payload(
         overrides: {'businessDate': '2026-02-30'},
       ),
@@ -232,31 +246,54 @@ void main() {
     }
   });
 
-  test('records each modelled tender exactly as the cashier chose it', () async {
-    for (final tender in CheckoutTender.values) {
-      final record = await _save(
-        outbox,
-        _payload(tender: tender.wireValue),
-        checkoutId: 'checkout-${tender.wireValue}',
-      );
+  test(
+    'records each modelled tender exactly as the cashier chose it',
+    () async {
+      for (final tender in CheckoutTender.values) {
+        final record = await _save(
+          outbox,
+          _payload(tender: tender.wireValue),
+          checkoutId: 'checkout-${tender.wireValue}',
+        );
 
-      final payload = CheckoutSalePayload.fromOutboxRecord(
-        record,
-        session: session,
-      );
+        final payload = CheckoutSalePayload.fromOutboxRecord(
+          record,
+          session: session,
+        );
 
-      expect(payload.tender, tender, reason: tender.wireValue);
-      expect(
-        payload.toSubmission().saleFields['tender'],
-        tender.wireValue,
-        reason: tender.wireValue,
-      );
-    }
+        expect(payload.tender, tender, reason: tender.wireValue);
+        expect(
+          payload.toSubmission().saleFields['tender'],
+          tender.wireValue,
+          reason: tender.wireValue,
+        );
+      }
+    },
+  );
+
+  test('reads a v2 payload with no tender as an unanswered question', () async {
+    // **Absent is not malformed.** A cashier may save without saying how the
+    // customer paid, and the sale records that rather than guessing or
+    // refusing. What is still refused is a tender key that is *present* and
+    // names something unmodelled - see the case below, including an explicit
+    // null, which is a corrupt value rather than a silence.
+    final record = await _save(
+      outbox,
+      _payload(tender: null),
+      checkoutId: 'checkout-tender-unanswered',
+    );
+
+    final payload = CheckoutSalePayload.fromOutboxRecord(
+      record,
+      session: session,
+    );
+
+    expect(payload.tender, isNull);
+    expect(payload.schemaVersion, checkoutSalePayloadSchemaVersion);
   });
 
   test('refuses a v2 payload whose tender names no modelled method', () async {
     final cases = <String, Map<String, Object?>>{
-      'missing': _payload(tender: null),
       'empty': _payload(tender: ''),
       'null': _payload(overrides: {'tender': null}),
       'capitalised': _payload(tender: 'Cash'),
@@ -333,25 +370,28 @@ void main() {
     );
   });
 
-  test('accepts a receipt derived from this device, date, and sequence', () async {
-    final record = await _save(outbox, _payload(sequence: 42));
+  test(
+    'accepts a receipt derived from this device, date, and sequence',
+    () async {
+      final record = await _save(outbox, _payload(sequence: 42));
 
-    final payload = CheckoutSalePayload.fromOutboxRecord(
-      record,
-      session: session,
-    );
+      final payload = CheckoutSalePayload.fromOutboxRecord(
+        record,
+        session: session,
+      );
 
-    expect(payload.deviceId, _deviceId);
-    expect(payload.receiptSequence, 42);
-    expect(payload.receiptNumber, matches(checkoutReceiptNumberPattern));
-    expect(payload.receiptNumber.split('-')[2], '20260731');
-    expect(payload.receiptNumber.split('-')[3], '0042');
+      expect(payload.deviceId, _deviceId);
+      expect(payload.receiptSequence, 42);
+      expect(payload.receiptNumber, matches(checkoutReceiptNumberPattern));
+      expect(payload.receiptNumber.split('-')[2], '20260731');
+      expect(payload.receiptNumber.split('-')[3], '0042');
 
-    final fields = payload.toSubmission().saleFields;
-    expect(fields['receiptNumber'], payload.receiptNumber);
-    expect(fields['receiptSequence'], 42);
-    expect(fields['deviceId'], _deviceId);
-  });
+      final fields = payload.toSubmission().saleFields;
+      expect(fields['receiptNumber'], payload.receiptNumber);
+      expect(fields['receiptSequence'], 42);
+      expect(fields['deviceId'], _deviceId);
+    },
+  );
 
   test('rejects a spoofed or missing receipt number', () async {
     final valid = formatCheckoutReceiptNumber(
@@ -393,7 +433,10 @@ void main() {
           ),
         },
       ),
-      'zero-sequence': _payload(sequence: 42, overrides: {'receiptSequence': 0}),
+      'zero-sequence': _payload(
+        sequence: 42,
+        overrides: {'receiptSequence': 0},
+      ),
       'fractional-sequence': _payload(overrides: {'receiptSequence': 1.5}),
       'unbounded-sequence': _payload(
         overrides: {'receiptSequence': maximumCheckoutReceiptSequence + 1},

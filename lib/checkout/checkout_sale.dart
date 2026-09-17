@@ -230,8 +230,9 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
   factory CheckoutSalePayload.fromOutboxRecord(
     CheckoutOutboxRecord record, {
     required TenantSession session,
+    bool requireAccess = true,
   }) {
-    if (!session.canAccess()) {
+    if (requireAccess && !session.canAccess()) {
       throw const CheckoutSaleFormatException(
         'An active canonical session is required to parse a checkout.',
       );
@@ -251,6 +252,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
       checkoutId: record.checkoutId,
       payload: record.payload,
       payloadHash: record.payloadHash,
+      requireAccess: requireAccess,
     );
   }
 
@@ -258,13 +260,24 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
   ///
   /// Draft builders use this to prove the frozen contract holds while the
   /// checkout can still be refused, rather than after it has been persisted.
+  ///
+  /// **[requireAccess] is false on exactly one path, and it is not a
+  /// loosening.** A sale stranded by its seller's deactivation has to be read
+  /// by the very session that can no longer access the business - that is the
+  /// whole of the situation - and refusing to parse it would leave the only
+  /// copy of a taken payment unreadable. Every other check still applies: the
+  /// payload must hash to its own recorded hash, and its `tenantId` and
+  /// `soldById` must still match the session reading it, so this widens who may
+  /// *read* their own evidence and nothing about what may be written with it.
+  /// See `CheckoutStrandedSalesDrainer`.
   factory CheckoutSalePayload.fromLocalPayload({
     required TenantSession session,
     required String checkoutId,
     required Map<String, Object?> payload,
     required String payloadHash,
+    bool requireAccess = true,
   }) {
-    if (!session.canAccess()) {
+    if (requireAccess && !session.canAccess()) {
       throw const CheckoutSaleFormatException(
         'An active canonical session is required to parse a checkout.',
       );
@@ -298,7 +311,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
         'Unsupported checkout payload schema version.',
       );
     }
-    final tender = _requiredTender(payload, schemaVersion);
+    final tender = _declaredTender(payload, schemaVersion);
     if (payload['checkoutId'] != safeCheckoutId) {
       throw const CheckoutSaleFormatException(
         'The payload checkout ID is not the immutable outbox checkout ID.',
@@ -490,14 +503,20 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
   };
 }
 
-/// Reads the tender exactly as the payload's own schema version requires it.
+/// Reads the tender exactly as the payload's own schema version allows it.
 ///
-/// A v2 payload must name one of the three modelled methods; anything else -
-/// absent, misspelled, differently cased, or a type that is not a string - is
-/// refused rather than recorded as an unknown payment. A v1 payload must not
-/// carry the key at all: it was hashed without one, and a v1 draft that grew a
-/// tender locally would be a payload nobody agreed to.
-CheckoutTender? _requiredTender(
+/// **Absent is a legal v2 answer, and a wrong one is still refused.** A cashier
+/// may save without saying how the customer paid - the question goes unanswered
+/// at the counter more often than a till likes to admit - and the method is set
+/// afterwards from the sale's own card. So a missing key reads as *not
+/// answered*. A key that is present and names something else - misspelled,
+/// differently cased, or not a string at all - is still refused rather than
+/// recorded as an unknown payment, because that is a corrupt record rather than
+/// an unanswered question.
+///
+/// A v1 payload must not carry the key at all: it was hashed without one, and a
+/// v1 draft that grew a tender locally would be a payload nobody agreed to.
+CheckoutTender? _declaredTender(
   Map<String, Object?> payload,
   int schemaVersion,
 ) {
@@ -509,6 +528,7 @@ CheckoutTender? _requiredTender(
     }
     return null;
   }
+  if (!payload.containsKey('tender')) return null;
   final tender = CheckoutTender.tryParse(payload['tender']);
   if (tender == null) {
     throw const CheckoutSaleFormatException(

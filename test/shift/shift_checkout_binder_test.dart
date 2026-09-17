@@ -262,28 +262,28 @@ void main() {
     );
   });
 
-  test('refuses a sale filed under another business day', () async {
-    // The shift stayed open across the Africa/Nairobi day boundary. Nightly
-    // reconciliation aggregates per shift and business date, so today's sale
-    // may not be attributed to yesterday's shift.
+  test('sells across midnight under the day the shift named', () async {
+    // The shift stayed open across the Africa/Nairobi day boundary, which is
+    // what a night's trading looks like. Nightly reconciliation aggregates per
+    // shift and business date, and the sale carries the shift's date, so the
+    // whole night lands on the day that drawer was opened for.
     await shiftState.save(
       _record(deviceId: deviceId, businessDate: '2026-07-30'),
     );
 
-    await expectLater(
-      _service(
-        sessions,
-        cache,
-        outbox,
-        receipts,
-        shiftState,
-        clock,
-      ).createDraft(_request()),
-      throwsA(_draftCode('shift_business_date_mismatch')),
-    );
+    final record = await _service(
+      sessions,
+      cache,
+      outbox,
+      receipts,
+      shiftState,
+      clock,
+    ).createDraft(_request());
+
+    expect(record.payload['businessDate'], '2026-07-30');
     expect(
       await outbox.recordsForSession(uid: 'user-a', tenantId: 'tenant-a'),
-      isEmpty,
+      hasLength(1),
     );
   });
 

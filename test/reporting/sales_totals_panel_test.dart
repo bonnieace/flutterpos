@@ -789,12 +789,11 @@ void main() {
     );
   });
 
-  testWidgets('an old sale with no method is never called unpaid', (
-    tester,
-  ) async {
+  testWidgets('a sale with no method is never called unpaid', (tester) async {
     final callable = _Callable(<Object?>[
       _response(
-        // Every sale in the period predates the tender field.
+        // Every sale in the period names no method - some old, some simply
+        // never answered at the counter.
         byTender: _byTender(
           cashSales: 0,
           cashTransactions: 0,
@@ -826,8 +825,13 @@ void main() {
             find.byKey(const ValueKey('sales-totals-tender-unrecorded-note')),
           )
           .data,
-      'Sales recorded before payment methods were captured name none, so they '
-      'are listed separately rather than as unpaid.',
+      // **Two sales reach this sentence now, and it names both.** It used to
+      // say only that a sale predated the tender field, which stopped being
+      // the whole truth when the register stopped preselecting a method: a
+      // current sale lands here whenever nobody said how the customer paid.
+      'Some sales name no payment method: they were recorded before payment '
+      'methods were captured, or nobody said how the customer paid. They are '
+      'listed separately rather than as unpaid.',
     );
     expect(find.textContaining('unpaid sale'), findsNothing);
     // Nothing modelled was recorded, so the verification disclaimer would be

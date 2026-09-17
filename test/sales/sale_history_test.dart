@@ -102,11 +102,24 @@ void main() {
       }
     });
 
+    test('reads a v2 sale with no tender as an unanswered question', () {
+      // **Absent is not malformed.** The register does not preselect a payment
+      // method, so a cashier who was never told how the customer paid saves a
+      // sale that names none. Refusing it here would hide the very rows the
+      // *Set payment method* action exists for. A tender that is present and
+      // names something unmodelled is still refused, below.
+      final sale = TenantSale.fromDocument(
+        path: 'tenants/tenant-a/sales/co-1',
+        data: _sale(overrides: <String, Object?>{'payloadSchemaVersion': 2}),
+      );
+
+      expect(sale.tender, isNull);
+    });
+
     test('refuses a tender its schema version cannot carry', () {
       final refused = <String, Map<String, Object?>>{
         // A v1 sale that grew a tender did not come from this client.
         'v1-with-tender': <String, Object?>{'tender': 'cash'},
-        'v2-without-tender': <String, Object?>{'payloadSchemaVersion': 2},
         'v2-empty': <String, Object?>{'payloadSchemaVersion': 2, 'tender': ''},
         'v2-capitalised': <String, Object?>{
           'payloadSchemaVersion': 2,

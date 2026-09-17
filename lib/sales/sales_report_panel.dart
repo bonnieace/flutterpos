@@ -35,6 +35,7 @@ import '../ui/tokens.dart';
 import '../inventory/product_visual.dart';
 import 'receipt_lookup.dart';
 import 'sale_history.dart';
+import 'sale_tender.dart';
 import 'sale_line_products.dart';
 import 'sale_reprint.dart';
 
@@ -47,6 +48,7 @@ final class TenantSalesReportScreen extends StatelessWidget {
     this.totalsCallable,
     this.returnActions,
     this.reprinter,
+    this.tenderCallable,
     this.checkoutOutbox,
     this.catalog,
     this.clock,
@@ -60,6 +62,10 @@ final class TenantSalesReportScreen extends StatelessWidget {
   /// A second copy of a receipt, audited. Absent, the sale menu offers none -
   /// see [TenantReceiptReprinter].
   final TenantReceiptReprinter? reprinter;
+
+  /// Answers *how was this paid for?* on a sale that did not say. Absent, the
+  /// sale menu offers none - see [TenantSaleTenderGateway].
+  final SetSaleTenderCallable? tenderCallable;
 
   final HiveCheckoutOutbox? checkoutOutbox;
 
@@ -80,6 +86,7 @@ final class TenantSalesReportScreen extends StatelessWidget {
       totalsCallable: totalsCallable,
       returnActions: returnActions,
       reprinter: reprinter,
+      tenderCallable: tenderCallable,
       checkoutOutbox: checkoutOutbox,
       catalog: catalog,
       clock: clock,
@@ -96,6 +103,7 @@ final class TenantSalesReportPanel extends StatefulWidget {
     this.totalsCallable,
     this.returnActions,
     this.reprinter,
+    this.tenderCallable,
     this.checkoutOutbox,
     this.catalog,
     this.clock,
@@ -110,6 +118,9 @@ final class TenantSalesReportPanel extends StatefulWidget {
 
   /// A second copy of a receipt, audited. Absent, the sale menu offers none.
   final TenantReceiptReprinter? reprinter;
+
+  /// Answers *how was this paid for?* on a sale that did not say.
+  final SetSaleTenderCallable? tenderCallable;
 
   final HiveCheckoutOutbox? checkoutOutbox;
 
@@ -615,9 +626,67 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   /// callable enforces, asked here so a cashier is not offered a control that
   /// would refuse them - §2.1's rule that an action a person cannot take is not
   /// drawn.
+  /// Offers the tender answer only where this build can carry it.
+  ///
+  /// The per-sale conditions - no method recorded, and this viewer rang it up -
+  /// are applied by `_SalesPresentation`, which has the sale in hand.
+  ValueChanged<TenantSale>? _setTenderAction(
+    BuildContext context,
+    TenantSession session,
+  ) {
+    final callable = widget.tenderCallable;
+    if (callable == null) return null;
+    return (sale) => unawaited(_setTender(context, session, sale));
+  }
+
+  /// Asks how a sale was paid for, and records the answer.
+  ///
+  /// **The only write this screen makes to a sale, and it is one-way.** A sale
+  /// that already names a method is never offered this and the server refuses
+  /// it regardless: everything downstream of a sale leans on the record not
+  /// moving under it, so completing a blank is allowed and changing an answer
+  /// is not.
+  Future<void> _setTender(
+    BuildContext context,
+    TenantSession session,
+    TenantSale sale,
+  ) async {
+    final callable = widget.tenderCallable;
+    if (callable == null) return;
+    final chosen = await showSaleTenderDialog(context, sale: sale);
+    if (chosen == null || !context.mounted) return;
+
+    try {
+      await TenantSaleTenderGateway(
+        session: session,
+        target: sale,
+        callable: callable,
+      ).record(chosen);
+    } on TenantSaleTenderException catch (error) {
+      if (!context.mounted) return;
+      showAppSnackBar(
+        context,
+        AppNotice.refused(tenantSaleTenderFailureMessage(error.failure)),
+      );
+      // **Re-read even on a refusal.** An ambiguous answer may have been
+      // recorded, and a row that still says *Not recorded* when the server
+      // disagrees is the one thing worse than the refusal itself.
+      if (mounted) _refreshDay();
+      return;
+    }
+    if (!context.mounted) return;
+    showAppSnackBar(
+      context,
+      AppNotice.confirmed('Recorded as ${chosen.label}.'),
+    );
+    if (mounted) _refreshDay();
+  }
+
   ValueChanged<TenantSale>? _reprintAction(TenantSession session) {
     if (widget.reprinter == null) return null;
-    if (!session.canAccess(allowedRoles: tenantReceiptReprintRoles)) return null;
+    if (!session.canAccess(allowedRoles: tenantReceiptReprintRoles)) {
+      return null;
+    }
     return (sale) => unawaited(_reprint(session, sale));
   }
 
@@ -707,6 +776,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           onNext: null,
           onOpenReturns: (sale) => _openReturns(context, sale),
           onReprint: _reprintAction(session),
+          onSetTender: _setTenderAction(context, session),
         ),
         // No session in scope at all is the guard's own `denied` case arriving
         // a frame early. Drawing nothing is what it draws.
@@ -741,6 +811,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           onNext: null,
           onOpenReturns: (sale) => _openReturns(context, sale),
           onReprint: _reprintAction(session),
+          onSetTender: _setTenderAction(context, session),
         ),
         null => const SizedBox.shrink(),
       },
@@ -782,9 +853,11 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
                   selfUid: session.uid,
                   onOpenReturns: (sale) => _openReturns(context, sale),
                   onReprint: _reprintAction(session),
+                  onSetTender: _setTenderAction(context, session),
                 ),
               );
         return _SalesReportContents(
+          onSetTender: _setTenderAction(context, session),
           session: session,
           view: view,
           totalsBand: band,
@@ -900,6 +973,7 @@ final class _SalesReportContents extends StatelessWidget {
     required this.onNext,
     required this.onOpenReturns,
     required this.onReprint,
+    required this.onSetTender,
   });
 
   final TenantSession session;
@@ -940,6 +1014,9 @@ final class _SalesReportContents extends StatelessWidget {
 
   /// Null where this member may not reprint, or this build has no printer.
   final ValueChanged<TenantSale>? onReprint;
+
+  /// Answers *how was this paid for?* on a sale that did not say.
+  final ValueChanged<TenantSale>? onSetTender;
 
   @override
   Widget build(BuildContext context) {
@@ -1001,6 +1078,7 @@ final class _SalesReportContents extends StatelessWidget {
               filtered: loaded.appliedStaffId != null,
               onOpenReturns: onOpenReturns,
               onReprint: onReprint,
+              onSetTender: onSetTender,
             )
           else
             const _SaleCardsSkeleton(key: ValueKey('sales-report-skeleton')),
@@ -1831,6 +1909,7 @@ final class _ReceiptSearchResult extends StatelessWidget {
     required this.selfUid,
     required this.onOpenReturns,
     required this.onReprint,
+    required this.onSetTender,
   });
 
   final TenantReceiptEndingLookupResult result;
@@ -1842,6 +1921,7 @@ final class _ReceiptSearchResult extends StatelessWidget {
   final String selfUid;
   final ValueChanged<TenantSale> onOpenReturns;
   final ValueChanged<TenantSale>? onReprint;
+  final ValueChanged<TenantSale>? onSetTender;
 
   @override
   Widget build(BuildContext context) {
@@ -1883,6 +1963,7 @@ final class _ReceiptSearchResult extends StatelessWidget {
           filtered: true,
           onOpenReturns: onOpenReturns,
           onReprint: onReprint,
+          onSetTender: onSetTender,
         ),
       ],
     );
@@ -1899,6 +1980,7 @@ final class _SalesPresentation extends StatelessWidget {
     required this.filtered,
     required this.onOpenReturns,
     required this.onReprint,
+    required this.onSetTender,
   });
 
   final List<TenantSale> sales;
@@ -1918,6 +2000,10 @@ final class _SalesPresentation extends StatelessWidget {
 
   /// Null where this member may not reprint, or this build has no printer.
   final ValueChanged<TenantSale>? onReprint;
+
+  /// Answers *how was this paid for?* on a sale that did not say. Null where
+  /// this build cannot reach the callable.
+  final ValueChanged<TenantSale>? onSetTender;
 
   @override
   Widget build(BuildContext context) {
@@ -1971,6 +2057,15 @@ final class _SalesPresentation extends StatelessWidget {
               staffLabel: _staffLabel(sale),
               onOpenReturns: () => onOpenReturns(sale),
               onReprint: onReprint == null ? null : () => onReprint!(sale),
+              // **Only the cashier who rang it up.** They are the one person
+              // who was at the counter; anybody else would be guessing, and the
+              // server refuses them regardless. Whether the method may still be
+              // *changed* depends on the shift, which this surface cannot see
+              // without a read of its own - so that one is left to the server,
+              // which says so in words.
+              onSetTender: onSetTender == null || sale.soldById != selfUid
+                  ? null
+                  : () => onSetTender!(sale),
             ),
           ),
       ],
@@ -1988,6 +2083,7 @@ final class _SaleCard extends StatelessWidget {
     required this.staffLabel,
     required this.onOpenReturns,
     required this.onReprint,
+    required this.onSetTender,
   });
 
   final TenantSale sale;
@@ -2004,6 +2100,10 @@ final class _SaleCard extends StatelessWidget {
 
   /// Null where this member may not reprint, or this build has no printer.
   final VoidCallback? onReprint;
+
+  /// Null unless this sale names no payment method and this viewer is the
+  /// cashier who rang it up. See [_SalesPresentation].
+  final VoidCallback? onSetTender;
 
   @override
   Widget build(BuildContext context) {
@@ -2081,6 +2181,7 @@ final class _SaleCard extends StatelessWidget {
                   sale: sale,
                   onOpenReturns: onOpenReturns,
                   onReprint: onReprint,
+                  onSetTender: onSetTender,
                 ),
               ],
             ),
@@ -2265,18 +2366,22 @@ final class _SaleMeta extends StatelessWidget {
 /// that separates them: it is lighter than the `cardEdge` every card already
 /// wears, so the menu reads as the layer in front rather than as another card.
 /// What a sale card's menu offers.
-enum _SaleAction { returns, reprint }
+enum _SaleAction { returns, reprint, setTender }
 
 final class _SaleMenu extends StatelessWidget {
   const _SaleMenu({
     required this.sale,
     required this.onOpenReturns,
     required this.onReprint,
+    required this.onSetTender,
   });
 
   final TenantSale sale;
   final VoidCallback onOpenReturns;
   final VoidCallback? onReprint;
+
+  /// Null unless this sale names no payment method and this viewer rang it up.
+  final VoidCallback? onSetTender;
 
   @override
   Widget build(BuildContext context) {
@@ -2297,6 +2402,7 @@ final class _SaleMenu extends StatelessWidget {
       onSelected: (action) => switch (action) {
         _SaleAction.returns => onOpenReturns(),
         _SaleAction.reprint => onReprint?.call(),
+        _SaleAction.setTender => onSetTender?.call(),
       },
       itemBuilder: (context) => <PopupMenuEntry<_SaleAction>>[
         PopupMenuItem<_SaleAction>(
@@ -2319,6 +2425,25 @@ final class _SaleMenu extends StatelessWidget {
             child: const _SaleMenuLabel(
               icon: Icons.print_outlined,
               label: 'Reprint receipt',
+            ),
+          ),
+        // Absent for the same reason the reprint is: a colleague answering for
+        // somebody else's counter would be guessing, and the server refuses
+        // them - this keeps the entry off a menu where it could not work.
+        //
+        // **The verb changes with the sale**, because filling a blank and
+        // correcting a mis-tap are different acts and a person should know
+        // which one they are about to do.
+        if (onSetTender != null)
+          PopupMenuItem<_SaleAction>(
+            key: ValueKey('sales-set-tender-${sale.id}'),
+            value: _SaleAction.setTender,
+            height: tokens.density.minimumTapTarget.height,
+            child: _SaleMenuLabel(
+              icon: Icons.payments_outlined,
+              label: sale.tender == null
+                  ? 'Set payment method'
+                  : 'Change payment method',
             ),
           ),
       ],
@@ -2361,7 +2486,8 @@ final class _SaleMenuLabel extends StatelessWidget {
 /// out, and on a screen where somebody is waiting to hand a customer a receipt,
 /// a green tick that means "eventually" is the wrong claim.
 AppNotice _reprintNotice(TenantSale sale, TenantReceiptReprintReport report) {
-  final receipt = '#${sale.receiptSequence.toString().padLeft(checkoutReceiptSequenceDigits, '0')}';
+  final receipt =
+      '#${sale.receiptSequence.toString().padLeft(checkoutReceiptSequenceDigits, '0')}';
   return switch (report.outcome) {
     TenantReceiptReprintOutcome.printed => AppNotice.confirmed(
       'Receipt $receipt reprinted.',

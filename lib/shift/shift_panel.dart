@@ -23,21 +23,18 @@ import '../checkout/checkout_tender.dart';
 import '../inventory/catalog_management.dart';
 import '../reporting/reporting_currency.dart';
 import '../returns/return_actions.dart';
-import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/banner.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/illustration.dart';
-import '../ui/routes.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../ui/sheet.dart';
 import 'shift_controller.dart';
 import 'shift_declaration.dart';
-import 'shift_history_panel.dart';
 import 'shift_sales_ledger.dart';
 
 /// Supplies the shift controller belonging to the session controller owned by
@@ -71,7 +68,6 @@ Future<void> showShiftCloseSheet(
   required TenantShiftController shifts,
   required TenantSession session,
   required TenantReportingCurrency currency,
-  TenantDataReader? historyReader,
   TenantReturnActions? returnActions,
 }) async {
   // An expired shift needs the count started exactly as an open one does -
@@ -96,7 +92,6 @@ Future<void> showShiftCloseSheet(
       session: session,
       currency: currency,
       scrollController: controller,
-      historyReader: historyReader,
       returnActions: returnActions,
     ),
   );
@@ -115,7 +110,6 @@ final class _ShiftCloseSheet extends StatefulWidget {
     required this.session,
     required this.currency,
     required this.scrollController,
-    required this.historyReader,
     required this.returnActions,
   });
 
@@ -131,11 +125,7 @@ final class _ShiftCloseSheet extends StatefulWidget {
   /// take it, or dragging the list scrolls the list and the sheet never moves.
   final ScrollController scrollController;
 
-  /// Supplied by the composition root to reach the read-only shift history.
-  /// The route stays unreachable while it is absent.
-  final TenantDataReader? historyReader;
-
-  /// Passed through the history and sales routes to the returns route.
+  /// Passed through to the returns route.
   /// Recording a return stays unavailable while it is absent.
   final TenantReturnActions? returnActions;
 
@@ -392,23 +382,6 @@ final class _ShiftCloseSheetState extends State<_ShiftCloseSheet> {
     if (mounted) Navigator.of(context).pop(true);
   }
 
-  void _history() {
-    final reader = widget.historyReader;
-    if (reader == null) return;
-    Navigator.of(context).pop(true);
-    Navigator.of(context).push(
-      AppPageRoute<void>(
-        builder: (_) => TenantSessionScope(
-          controller: widget.sessions,
-          child: TenantShiftHistoryScreen(
-            reader: reader,
-            returnActions: widget.returnActions,
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.shifts,
@@ -439,7 +412,6 @@ final class _ShiftCloseSheetState extends State<_ShiftCloseSheet> {
               onCancelCashCount: _cancel,
               onRefresh: () =>
                   _dispatch((shifts) => shifts.restore(widget.session)),
-              onViewHistory: widget.historyReader == null ? null : _history,
             ),
         ],
       );
@@ -564,7 +536,6 @@ final class _ShiftCount extends StatelessWidget {
     required this.onCloseOrphanUncounted,
     required this.onCancelCashCount,
     required this.onRefresh,
-    required this.onViewHistory,
   });
 
   final TenantShiftState state;
@@ -582,7 +553,6 @@ final class _ShiftCount extends StatelessWidget {
   final void Function(String shiftId) onCloseOrphanUncounted;
   final VoidCallback onCancelCashCount;
   final VoidCallback onRefresh;
-  final VoidCallback? onViewHistory;
 
   /// Which of design.md 2.1's five this shift's standing is.
   ///
@@ -880,12 +850,6 @@ final class _ShiftCount extends StatelessWidget {
               label: 'Refresh shift',
               onPressed: busy ? null : onRefresh,
             ),
-            if (onViewHistory case final history?)
-              AppButton(
-                key: const ValueKey('view-shift-history'),
-                label: 'View shift history',
-                onPressed: busy ? null : history,
-              ),
           ],
         ),
       ],

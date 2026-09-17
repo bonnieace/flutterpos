@@ -13,14 +13,20 @@ void main() {
     setUp(() => signals = CheckoutSyncSignals());
     tearDown(() => signals.dispose());
 
-    test('hands out one stream object, because the shell compares identity', () {
-      // The routing shell resubscribes when `tenantRecoveryTriggers` changes
-      // identity, and a broadcast controller builds a new stream object on
-      // every read. An uncached stream would cancel and resubscribe on every
-      // rebuild of the composition root.
-      expect(identical(signals.syncRequests, signals.syncRequests), isTrue);
-      expect(identical(signals.evidenceChanges, signals.evidenceChanges), isTrue);
-    });
+    test(
+      'hands out one stream object, because the shell compares identity',
+      () {
+        // The routing shell resubscribes when `tenantRecoveryTriggers` changes
+        // identity, and a broadcast controller builds a new stream object on
+        // every read. An uncached stream would cancel and resubscribe on every
+        // rebuild of the composition root.
+        expect(identical(signals.syncRequests, signals.syncRequests), isTrue);
+        expect(
+          identical(signals.evidenceChanges, signals.evidenceChanges),
+          isTrue,
+        );
+      },
+    );
 
     test('a save asks for a sync and says the evidence moved', () async {
       final requests = <Object?>[];
@@ -84,18 +90,21 @@ void main() {
       expect(changes, isEmpty);
     });
 
-    test('a finished run reports evidence without asking for another run', () async {
-      final requests = <Object?>[];
-      final changes = <Object?>[];
-      signals.syncRequests.listen(requests.add);
-      signals.evidenceChanges.listen(changes.add);
+    test(
+      'a finished run reports evidence without asking for another run',
+      () async {
+        final requests = <Object?>[];
+        final changes = <Object?>[];
+        signals.syncRequests.listen(requests.add);
+        signals.evidenceChanges.listen(changes.add);
 
-      signals.reportEvidenceChanged();
-      await pumpEventQueue();
+        signals.reportEvidenceChanged();
+        await pumpEventQueue();
 
-      expect(requests, isEmpty);
-      expect(changes, hasLength(1));
-    });
+        expect(requests, isEmpty);
+        expect(changes, hasLength(1));
+      },
+    );
 
     test('signalling after disposal is silent rather than fatal', () async {
       await signals.dispose();
@@ -344,7 +353,10 @@ void _seamGroup() {
       );
 
       await sink.saveDraft(_request());
-      sessions.open(uid: 'user-a', membership: _membership(tenantId: 'tenant-b'));
+      sessions.open(
+        uid: 'user-a',
+        membership: _membership(tenantId: 'tenant-b'),
+      );
       // A negative assertion needs the run to be over rather than merely
       // unlikely, which is the other thing counting turns could not give it.
       await _runsFinished(runs, count: 1);
@@ -381,9 +393,11 @@ void _seamGroup() {
       // Exactly what the composition root wires, including the trigger's effect
       // on derived data.
       final passes = <Future<Object?>>[];
-      signals.syncRequests.listen((trigger) => passes.add(pass.run(
-        refreshDerivedData: trigger is! CheckoutSaveSyncRequest,
-      )));
+      signals.syncRequests.listen(
+        (trigger) => passes.add(
+          pass.run(refreshDerivedData: trigger is! CheckoutSaveSyncRequest),
+        ),
+      );
       final sink = CheckoutSyncOnSaveDraftSink(
         delegate: _OutboxSink(outbox),
         signals: signals,
@@ -474,9 +488,11 @@ void _slowDiskGroup() {
         reportEvidenceChanged: () {},
       );
       final passes = <Future<Object?>>[];
-      signals.syncRequests.listen((trigger) => passes.add(pass.run(
-        refreshDerivedData: trigger is! CheckoutSaveSyncRequest,
-      )));
+      signals.syncRequests.listen(
+        (trigger) => passes.add(
+          pass.run(refreshDerivedData: trigger is! CheckoutSaveSyncRequest),
+        ),
+      );
       final sink = CheckoutSyncOnSaveDraftSink(
         delegate: _OutboxSink(outbox),
         signals: signals,
@@ -595,21 +611,22 @@ Future<void> _runsFinished(
 const String _deviceId = 'dev-0123456789abcdef0123456789abcdef';
 final List<int> _encryptionKey = List<int>.generate(32, (index) => index);
 
-TenantMembership _membership({String tenantId = 'tenant-a'}) => TenantMembership(
-  tenantId: tenantId,
-  tenantName: tenantId,
-  tenantSlug: tenantId,
-  role: TenantRole.cashier,
-  membershipStatus: MembershipStatus.active,
-  tenantStatus: TenantStatus.active,
-  isOwner: false,
-  mirrorVersion: 1,
-  createdAt: DateTime.utc(2026, 1, 1),
-  updatedAt: DateTime.utc(2026, 1, 1),
-  serverCanAccess: true,
-  canonicalTenantExists: true,
-  canonicalMembershipExists: true,
-);
+TenantMembership _membership({String tenantId = 'tenant-a'}) =>
+    TenantMembership(
+      tenantId: tenantId,
+      tenantName: tenantId,
+      tenantSlug: tenantId,
+      role: TenantRole.cashier,
+      membershipStatus: MembershipStatus.active,
+      tenantStatus: TenantStatus.active,
+      isOwner: false,
+      mirrorVersion: 1,
+      createdAt: DateTime.utc(2026, 1, 1),
+      updatedAt: DateTime.utc(2026, 1, 1),
+      serverCanAccess: true,
+      canonicalTenantExists: true,
+      canonicalMembershipExists: true,
+    );
 
 /// Writes the frozen payload the submission worker parses, so the seam is
 /// proved over real durable evidence rather than a stubbed save.
@@ -644,7 +661,7 @@ final class _OutboxSink implements CheckoutDraftSink {
         'deviceId': _deviceId,
         'receiptNumber': receiptNumber,
         'receiptSequence': 7,
-        'tender': request.tender.wireValue,
+        if (request.tender != null) 'tender': request.tender!.wireValue,
         'items': <Map<String, Object?>>[
           {
             'productId': request.lines.single.productId,

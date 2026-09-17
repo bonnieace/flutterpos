@@ -97,9 +97,7 @@ void main() {
     );
     await tester.pump();
 
-    await openLandingDrawer(tester);
-    await tester.tap(find.byKey(const ValueKey('make-default-tenant')));
-    await tester.pumpAndSettle();
+    await _openDefaultForm(tester);
     expect(
       find.text('Make Business tenant-a your default business?'),
       findsOneWidget,
@@ -111,9 +109,7 @@ void main() {
     expect(callable.payloads, isEmpty);
     expect(refreshes, 0);
 
-    await openLandingDrawer(tester);
-    await tester.tap(find.byKey(const ValueKey('make-default-tenant')));
-    await tester.pumpAndSettle();
+    await _openDefaultForm(tester);
     await tester.tap(find.byKey(const ValueKey('set-default-tenant-confirm')));
     await tester.pumpAndSettle();
 
@@ -236,6 +232,16 @@ final class _FormFixture {
   );
 }
 
+/// Opens the default-business form the way a person does: through the business
+/// switcher on the title, which is where it moved on 2026-09-16.
+Future<void> _openDefaultForm(WidgetTester tester) async {
+  await openLandingDrawer(tester);
+  await tester.tap(find.byKey(const ValueKey('screen-title-action')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('make-default-tenant')));
+  await tester.pumpAndSettle();
+}
+
 Widget _landingHarness({
   required TenantSessionController controller,
   required SetDefaultTenantCallable callable,
@@ -250,6 +256,14 @@ Widget _landingHarness({
       setDefaultTenantCallable: callable,
       defaultTenantRequestIdFactory: () => 'default-widget-request',
       onDefaultTenantChanged: onSuccess,
+      // **The default control lives in the business switcher since
+      // 2026-09-16**, and the switcher only opens where there is another
+      // business to go to - so reaching it needs both of these.
+      onSwitchTenant: (target) async => TenantSwitchResult.switched(target),
+      switchCandidates: <TenantMembership>[
+        _membership('tenant-a'),
+        _membership('tenant-b'),
+      ],
     ),
   ),
 );

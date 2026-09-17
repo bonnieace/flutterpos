@@ -81,6 +81,7 @@ final class TenantRoutingShell extends StatefulWidget {
     required this.tenantSwitchOnlineCheck,
     this.tenantSessionRecoveryFactory,
     this.tenantRecoveryTriggers,
+    this.onTenantAccessLost,
     this.bootstrapRefreshRequests,
     this.isEmailVerified,
     this.invitationLink,
@@ -148,6 +149,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.stockMovementFeedRoute,
     this.stockMovementFeedRoles = const <TenantRole>[],
     this.auditLogRoute,
+    this.shiftHistoryRoute,
     this.auditLogRoles = const <TenantRole>[],
   });
 
@@ -157,6 +159,22 @@ final class TenantRoutingShell extends StatefulWidget {
   final Widget signedOut;
   final List<TenantSwitchStateSource> tenantSwitchStateSources;
   final TenantSwitchOnlineCheck tenantSwitchOnlineCheck;
+
+  /// Handed the business this device has just been shut out of, at the one
+  /// moment it is worth knowing: the refresh that discovered it came back from
+  /// the server, so this device has a connection right now and whatever it is
+  /// still holding for that business is reachable for as long as it lasts.
+  ///
+  /// **Kept as a callback rather than a dependency on purpose.** What it does -
+  /// hand over sales the outbox never managed to send - belongs to checkout,
+  /// and routing has no business importing it. See
+  /// `CheckoutStrandedSalesDrainer`.
+  ///
+  /// It is awaited before the session is cleared, because clearing it is what
+  /// takes away the identity the work needs. A failure is never allowed to stop
+  /// the shell from shutting the till down.
+  final Future<void> Function(String uid, String tenantId)? onTenantAccessLost;
+
   final TenantSessionRecoveryFactory? tenantSessionRecoveryFactory;
   final Stream<Object?>? tenantRecoveryTriggers;
 
@@ -434,6 +452,14 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// Optional guarded business-wide activity log, injected for the same reason.
   final Widget Function(TenantDataReader reader)? auditLogRoute;
+
+  /// The record of closed shifts: what each drawer was counted at against
+  /// the sales it took, the float it opened with, and any correction made to
+  /// it since. **On the home since 2026-09-16.** It used to be reached from
+  /// inside the cash-count sheet, which meant starting a count to read last
+  /// week's - and the control that did it popped the sheet and then pushed
+  /// against the context it had just destroyed, so it never arrived at all.
+  final Widget Function(TenantDataReader reader)? shiftHistoryRoute;
 
   /// The roles that route is offered to, decided by the audit domain.
   final List<TenantRole> auditLogRoles;
@@ -824,6 +850,22 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       if (currentMatches.length == 1) {
         _openResolvedTenant(uid, currentMatches.single, result, token);
         return;
+      }
+
+      // **The last moment this device can act for that business.** The refresh
+      // above reached the server, so the connection is real, and the identity
+      // the work needs is still in hand until the line below takes it away.
+      // Whatever goes wrong in there is not a reason to leave a till on screen
+      // for a business this person can no longer sell for.
+      final losing = _sessionController.session?.tenantId ?? currentTenantId;
+      final onLost = widget.onTenantAccessLost;
+      if (onLost != null && losing != null) {
+        try {
+          await onLost(uid, losing);
+        } catch (error) {
+          debugPrint('Stranded work could not be handed over: $error');
+        }
+        if (!_isCurrent(uid, token)) return;
       }
 
       // A refresh never silently switches a live till to another business.
@@ -1307,6 +1349,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       stockMovementFeedRoute: widget.stockMovementFeedRoute,
       stockMovementFeedRoles: widget.stockMovementFeedRoles,
       auditLogRoute: widget.auditLogRoute,
+      shiftHistoryRoute: widget.shiftHistoryRoute,
       auditLogRoles: widget.auditLogRoles,
     );
   }
@@ -2587,6 +2630,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.stockMovementFeedRoute,
     this.stockMovementFeedRoles = const <TenantRole>[],
     this.auditLogRoute,
+    this.shiftHistoryRoute,
     this.auditLogRoles = const <TenantRole>[],
     this.clock,
   });
@@ -2724,6 +2768,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// Optional guarded business-wide activity log, opened from this screen as a
   /// sibling of the daily summary. It stays unreachable while it is absent.
   final Widget Function(TenantDataReader reader)? auditLogRoute;
+
+  /// The record of closed shifts: what each drawer was counted at against
+  /// the sales it took, the float it opened with, and any correction made to
+  /// it since. **On the home since 2026-09-16.** It used to be reached from
+  /// inside the cash-count sheet, which meant starting a count to read last
+  /// week's - and the control that did it popped the sheet and then pushed
+  /// against the context it had just destroyed, so it never arrived at all.
+  final Widget Function(TenantDataReader reader)? shiftHistoryRoute;
 
   /// The roles that route is offered to, decided by the audit domain. It is
   /// deliberately narrower than every other route offered here.
@@ -3447,6 +3499,26 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           );
         },
       ),
+    if (shiftHistoryRoute != null)
+      HomeDestination(
+        destinationKey: const ValueKey('shift-history'),
+        label: 'Shift history',
+        description:
+            'What each drawer was counted at, against the sales it took.',
+        group: 'Reports',
+        icon: Icons.inventory_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: shiftHistoryRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
     if (auditLogRoute != null && membership.role.canAccess(auditLogRoles))
       HomeDestination(
         destinationKey: const ValueKey('view-audit-log'),
@@ -3465,31 +3537,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           );
         },
       ),
-    // **The two account controls are last, and §4.4 says so by name.**
-    // Neither of them is where a shop goes to trade; they are where a
-    // person goes once, to change which business this is.
-    // **Changing business is on the business's own name, as of 2026-09-03.**
-    // It was a tile here; the name in the top bar is what a person looks at to
-    // find out which business they are in, so it is also where they reach to
-    // leave it. See `_canSwitchBusiness` and `AppScaffold.onTitlePressed`.
-    if (isDefaultTenant)
-      // The one disabled control on this route, and it is a state rather
-      // than a refusal: this business already is the default, so there is
-      // nothing to press.
-      const HomeDestination(
-        label: 'Default business',
-        group: 'Business',
-        icon: Icons.star,
-        onPressed: null,
-      )
-    else
-      HomeDestination(
-        destinationKey: const ValueKey('make-default-tenant'),
-        label: 'Make default',
-        group: 'Business',
-        icon: Icons.star_outline,
-        onPressed: () => _showDefaultConfirmation(context),
-      ),
+    // **The account controls are not tiles, as of 2026-09-16.**
+    // *Change business* went to the business's own name in the top bar on
+    // 2026-09-03 - the name is what a person looks at to find out which
+    // business they are in, so it is also where they reach to leave it - and
+    // the default-business pair followed it off this grid for the same reason.
+    // Neither is where a shop goes to trade; they are where a person goes once.
+    // See `_canSwitchBusiness` and `AppScaffold.onTitlePressed`.
   ];
 
   /// Whether this person has another business to open.
@@ -3504,17 +3558,54 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             candidate.canAccess() && candidate.tenantId != membership.tenantId,
       );
 
-  Future<void> _showDefaultConfirmation(BuildContext context) async {
+  Future<void> _showBusinessSwitcher(BuildContext context) async {
     final controller = TenantSessionScope.read(context);
+    final session = controller.session;
+    if (session == null ||
+        !session.canAccess() ||
+        session.tenantId != membership.tenantId ||
+        onSwitchTenant == null) {
+      return;
+    }
+    // **Taken before the switcher opens, and used after it closes.** Reaching
+    // for `Navigator.of` on a route that has just been popped is what made
+    // *View shift history* do nothing for as long as it existed: the pop
+    // destroys the element the lookup walks up from, so the push lands nowhere.
+    // A navigator captured while the context is live outlives both dialogs.
+    final navigator = Navigator.of(context);
+    await showAppDialog<void>(
+      context,
+      builder: (dialogContext) => TenantBusinessSwitcher(
+        currentMembership: membership,
+        candidates: switchCandidates,
+        onSwitchTenant: onSwitchTenant!,
+        onCancel: () => Navigator.of(dialogContext).pop(),
+        onMakeDefault: isDefaultTenant
+            ? null
+            : () {
+                Navigator.of(dialogContext).pop();
+                unawaited(_showDefaultConfirmation(navigator, controller));
+              },
+      ),
+    );
+  }
+
+  /// Asks whether this business should be the one that opens on launch.
+  ///
+  /// Takes a navigator rather than a context because the switcher that opened
+  /// it has just been popped - see [_showBusinessSwitcher].
+  Future<void> _showDefaultConfirmation(
+    NavigatorState navigator,
+    TenantSessionController controller,
+  ) async {
     final session = controller.session;
     if (session == null ||
         !session.canAccess() ||
         session.tenantId != membership.tenantId) {
       return;
     }
-    final navigator = Navigator.of(context);
     await showAppDialog<void>(
-      context,
+      navigator.context,
       builder: (dialogContext) => TenantSessionScope(
         controller: controller,
         // No title: `TenantDefaultForm` carries its own heading and its own two
@@ -3530,31 +3621,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             requestIdFactory: defaultTenantRequestIdFactory,
             onCancel: () => Navigator.of(dialogContext).pop(),
             onSuccess: () {
-              navigator.pop();
+              Navigator.of(dialogContext).pop();
               onDefaultTenantChanged?.call();
             },
           ),
         ),
-      ),
-    );
-  }
-
-  Future<void> _showBusinessSwitcher(BuildContext context) async {
-    final controller = TenantSessionScope.read(context);
-    final session = controller.session;
-    if (session == null ||
-        !session.canAccess() ||
-        session.tenantId != membership.tenantId ||
-        onSwitchTenant == null) {
-      return;
-    }
-    await showAppDialog<void>(
-      context,
-      builder: (dialogContext) => TenantBusinessSwitcher(
-        currentMembership: membership,
-        candidates: switchCandidates,
-        onSwitchTenant: onSwitchTenant!,
-        onCancel: () => Navigator.of(dialogContext).pop(),
       ),
     );
   }
@@ -3567,6 +3638,7 @@ final class TenantBusinessSwitcher extends StatefulWidget {
     required this.candidates,
     required this.onSwitchTenant,
     required this.onCancel,
+    this.onMakeDefault,
   });
 
   final TenantMembership currentMembership;
@@ -3574,6 +3646,18 @@ final class TenantBusinessSwitcher extends StatefulWidget {
   final Future<TenantSwitchResult> Function(TenantMembership membership)
   onSwitchTenant;
   final VoidCallback onCancel;
+
+  /// Makes the business that is already open the one that opens on launch.
+  ///
+  /// **Here rather than on the home, as of 2026-09-16.** It was a tile on the
+  /// grid; this is where the question belongs, because it is the same question
+  /// the switcher is already asking - which business - and a default is only
+  /// worth setting when there is more than one to choose between, which is the
+  /// exact condition that opens this dialog at all.
+  ///
+  /// Null when this business is already the default, or when the composition
+  /// root supplies no way to set one.
+  final VoidCallback? onMakeDefault;
 
   @override
   State<TenantBusinessSwitcher> createState() => _TenantBusinessSwitcherState();
@@ -3657,6 +3741,20 @@ final class _TenantBusinessSwitcherState extends State<TenantBusinessSwitcher> {
                 tenantSwitchBlockerMessage(_blocker!),
               ).status,
               message: tenantSwitchBlockerMessage(_blocker!),
+            ),
+          ],
+          if (widget.onMakeDefault case final makeDefault?) ...[
+            SizedBox(height: tokens.spacing.s12),
+            Divider(height: 1, color: tokens.colors.surface.borderSubtle),
+            SizedBox(height: tokens.spacing.s12),
+            // **About the business already open, not the ones listed above.**
+            // The list offers somewhere to go; this says which one to come back
+            // to. Separated by the rule so the two are not read as one list.
+            AppButton(
+              key: const ValueKey('make-default-tenant'),
+              label: 'Make ${widget.currentMembership.tenantName} my default',
+              tier: AppButtonTier.secondary,
+              onPressed: _switching ? null : makeDefault,
             ),
           ],
           if (_switching) ...[

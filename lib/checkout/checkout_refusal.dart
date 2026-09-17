@@ -87,14 +87,6 @@ final class CheckoutRefusal {
           'recorded on it. Count the cash and close it, then open a new one.',
       cashierCanFix: true,
     ),
-    // A shift from another business day could never be reconciled against this
-    // sale, so the shift is ended rather than the sale re-dated.
-    'shift_business_date_mismatch' => const CheckoutRefusal._(
-      'shift_business_date_mismatch',
-      'Your shift belongs to an earlier business day, so a sale today could '
-          'never be balanced against it. Close that shift and open a new one.',
-      cashierCanFix: true,
-    ),
     'invalid_shift_id' => const CheckoutRefusal._(
       'invalid_shift_id',
       'This device holds an unusable shift reference, so a sale cannot be '

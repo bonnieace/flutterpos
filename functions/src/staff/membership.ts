@@ -239,6 +239,13 @@ export const setStaffStatus = onCall<SetStaffStatusRequest, Promise<StaffMutatio
       transaction.update(targetStaffRef, {
         uid: targetUid,
         status,
+        // **When the door closed**, which is what `drainStrandedSales` measures
+        // a stranded sale against: a deactivated cashier may still hand over
+        // sales they rang up *before* this instant, and nothing after it. An
+        // activation clears it, so a rehired member carries no stale window.
+        deactivatedAt: status === "inactive" ?
+          FieldValue.serverTimestamp() :
+          FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       });
       if (preparedRoot) {

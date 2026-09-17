@@ -641,7 +641,15 @@ final class _CartEditorState extends State<_CartEditor> {
   /// ID, because a real category could legitimately be named anything.
   bool _uncachedCategoriesOnly = false;
 
-  CheckoutTender? _tender = CheckoutTender.cash;
+  /// How the cashier said the customer paid, or null if they did not say.
+  ///
+  /// **Nothing is preselected, deliberately.** Cash used to be, and a control
+  /// nobody touched therefore recorded a cash sale whatever had happened at the
+  /// counter - permanently, since no surface could correct a tender, and
+  /// invisibly, since reconciliation agrees on the total alone and a
+  /// miscategorised sale still balances the drawer. An unanswered question now
+  /// records as unanswered, which is both honest and fixable.
+  CheckoutTender? _tender;
   bool _saving = false;
   CheckoutRefusal? _refusal;
 
@@ -731,7 +739,7 @@ final class _CartEditorState extends State<_CartEditor> {
     setState(() {
       _quantities.clear();
       _unusableQuantities.clear();
-      _tender = CheckoutTender.cash;
+      _tender = null;
       _clearRefusal();
     });
   }
@@ -864,7 +872,6 @@ final class _CartEditorState extends State<_CartEditor> {
       return 'This sale is larger than this register can record. Reduce a '
           'quantity.';
     }
-    if (_tender == null) return 'Choose how the customer paid.';
     return null;
   }
 
@@ -872,8 +879,12 @@ final class _CartEditorState extends State<_CartEditor> {
 
   Future<void> _save() async {
     final drafts = widget.drafts;
+    // **A tender of null is an answer, not a missing one**, so it is read here
+    // and passed through rather than guarded against: the customer paid, the
+    // cashier did not say how, and the sale records exactly that. The method
+    // is set afterwards from the sale's card.
     final tender = _tender;
-    if (drafts == null || tender == null || _saving) return;
+    if (drafts == null || _saving) return;
 
     setState(() {
       _saving = true;
@@ -910,7 +921,7 @@ final class _CartEditorState extends State<_CartEditor> {
       if (saved != null) {
         _quantities.clear();
         _unusableQuantities.clear();
-        _tender = CheckoutTender.cash;
+        _tender = null;
         // The till returns to its neutral state for the next customer rather
         // than leaving them a catalog narrowed by somebody else's search.
         _search.clear();
@@ -1685,18 +1696,14 @@ final class _CartEditorState extends State<_CartEditor> {
 
   List<Widget> _tenderSection(BuildContext context, AppTokens tokens) =>
       <Widget>[
-        // **Cash is preselected, chosen by the product owner on 2026-08-23.**
-        // This reverses the panel's original scope decision - "a pre-selected
-        // payment method would be indistinguishable from an observed one" -
-        // in favour of the speed of the common case. The consequence is
-        // recorded rather than hidden: a sale whose tender nobody touched now
-        // records `cash`, so the shift close's cash-against-sales comparison
-        // and everything reconciliation derives from it can no longer tell an
-        // observed cash sale from an unset one.
-        //
-        // `_blocker`'s null branch is kept as a guard rather than deleted: it
-        // is now unreachable from the UI, and is what would still refuse the
-        // save if a future path cleared the tender again.
+        // **Nothing is preselected, and saving without a choice is allowed.**
+        // Cash was the default between 2026-08-23 and this change, which meant
+        // a control nobody touched recorded a cash sale whatever had happened
+        // at the counter. That error was permanent - a sale refuses every
+        // update - and silent, because reconciliation agrees on the total
+        // alone, so a miscategorised sale still balances the drawer. Neither
+        // half of that is true of an unanswered question: it reads as
+        // unanswered, and the sale's card can set it later.
         FilterChipBar<CheckoutTender>(
           semanticLabel: 'How the customer paid',
           selected: _tender,
@@ -1710,6 +1717,20 @@ final class _CartEditorState extends State<_CartEditor> {
               ),
           ],
         ),
+        // **Only while nothing is chosen**, so it reads as an answer to *what
+        // happens if I do not pick one* rather than as a warning about a sale
+        // that is about to be refused. Nothing here is refused.
+        if (_tender == null) ...[
+          SizedBox(height: tokens.spacing.s8),
+          Text(
+            key: const ValueKey('checkout-tender-unset'),
+            'No payment method yet. The sale records that it was not said, and '
+            'you can set it later from the sale.',
+            style: tokens.typography.caption.copyWith(
+              color: tokens.colors.text.tertiary,
+            ),
+          ),
+        ],
         SizedBox(height: tokens.spacing.s20),
       ];
 

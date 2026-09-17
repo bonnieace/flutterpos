@@ -381,62 +381,6 @@ void main() {
     expect(find.byKey(const ValueKey('declared-cash')), findsNothing);
   });
 
-  testWidgets('reaches the read-only shift history from the sheet', (
-    tester,
-  ) async {
-    server.shifts['tenants/tenant-a/shifts/shift-closed'] = shiftDocument(
-      overrides: <String, Object?>{
-        'shiftId': 'shift-closed',
-        'status': 'closed',
-        'endTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 18)),
-        'closingCashMinor': 125000,
-        'closingCash': 1250,
-        'totalSalesMinor': 98750,
-        'totalSales': 987.5,
-        'transactionCount': 3,
-      },
-    );
-
-    // The sheet is reachable only from `Close shift`, so the history it holds
-    // needs an open shift to get to. That is a standing access gap rather than
-    // a new one - the panel this replaced had the same shape.
-    await state.save(shiftRecord());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
-
-    await _pumpPanel(tester, state, server, history: true);
-    await _openShiftSheet(tester);
-    await _tapInSheet(tester, 'view-shift-history');
-    await _settle(tester);
-    await _settle(tester);
-
-    expect(find.text('Shift history'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('shift-history-entry-shift-closed')),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('shift-history-counted-shift-closed')),
-          )
-          .data,
-      '1250.00',
-      reason: 'the recorded figures are shown, never recomputed',
-    );
-  });
-
-  testWidgets('the history route stays unreachable without a reader', (
-    tester,
-  ) async {
-    await state.save(shiftRecord());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
-
-    await _pumpPanel(tester, state, server);
-
-    await _openShiftSheet(tester);
-    expect(find.byKey(const ValueKey('view-shift-history')), findsNothing);
-  });
-
   testWidgets('a tenant switch replaces the surface instead of updating it', (
     tester,
   ) async {
@@ -468,7 +412,6 @@ Future<TenantSessionController> _pumpPanel(
   HiveTenantShiftState state,
   ShiftServer server, {
   ShiftSalesSummary sales = ShiftSalesSummary.empty,
-  bool history = false,
 }) async {
   final sessions = TenantSessionController()
     ..open(uid: 'user-a', membership: shiftMembership('tenant-a'));
@@ -484,7 +427,6 @@ Future<TenantSessionController> _pumpPanel(
               server,
               sales: sales,
             ),
-            historyReader: history ? ShiftReader(server) : null,
           ),
         ),
       ),
@@ -503,10 +445,9 @@ Future<TenantSessionController> _pumpPanel(
 /// asserted on - the phase is readable only from which of the two controls is
 /// on screen, so a case that reads a figure has to open the sheet to find it.
 final class _ShiftHost extends StatefulWidget {
-  const _ShiftHost({required this.controllerFactory, this.historyReader});
+  const _ShiftHost({required this.controllerFactory});
 
   final TenantShiftControllerFactory controllerFactory;
-  final TenantDataReader? historyReader;
 
   @override
   State<_ShiftHost> createState() => _ShiftHostState();
@@ -569,7 +510,6 @@ final class _ShiftHostState extends State<_ShiftHost> {
                   shifts: shifts,
                   session: session,
                   currency: TenantReportingCurrency.unknown,
-                  historyReader: widget.historyReader,
                 ),
               );
             },

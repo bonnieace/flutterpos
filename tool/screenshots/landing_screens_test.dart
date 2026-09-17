@@ -123,7 +123,6 @@ void main() {
         checkoutRoute: (_) => TenantShiftGate(
           controllerFactory: shiftControllerFactory,
           currency: TenantReportingCurrency.unknown,
-          historyReader: reader,
           returnActions: returnActions,
           child: TenantCheckoutScreen(
             cache: FakeCatalogSource(),

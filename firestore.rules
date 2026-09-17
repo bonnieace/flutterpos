@@ -126,12 +126,22 @@ service cloud.firestore {
     // An absent or non-integer `payloadSchemaVersion` now denies the create.
     // The rule previously ignored the field entirely; a sale that does not say
     // which contract it was written under cannot be checked against one.
+    //
+    // **A v2 sale may also carry no tender, and that is an answer.** The
+    // cashier was not always told how the customer paid, and a till that
+    // refuses the sale over it either stops trade or teaches everyone to pick
+    // something untrue. An absent tender records that the question went
+    // unanswered; `setSaleTender` fills it in later, once, from the sale's own
+    // card. A tender that is *present* and names something unmodelled is still
+    // denied - that is a corrupt record rather than an unanswered question.
     function validSaleTender(sale) {
       return (sale.payloadSchemaVersion == 1 && !('tender' in sale))
         || (
           sale.payloadSchemaVersion == 2
-          && 'tender' in sale
-          && sale.tender in ['cash', 'mpesa', 'card']
+          && (
+            !('tender' in sale)
+            || sale.tender in ['cash', 'mpesa', 'card']
+          )
         );
     }
 

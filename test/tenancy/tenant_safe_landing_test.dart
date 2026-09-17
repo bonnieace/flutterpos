@@ -95,15 +95,19 @@ void main() {
     // existing customers the old hub's card grid back. The property that has
     // held throughout every one of them is the one asserted here: no
     // destination is unreachable, and the column they sit in scrolls.
-    await _pumpLanding(tester, panelHeight: 900);
+    await _pumpLanding(
+      tester,
+      panelHeight: 900,
+      shiftHistoryRoute: (_) => const Scaffold(body: Text('History open')),
+    );
 
-    final account = find.byKey(const ValueKey('make-default-tenant'));
-    await _reveal(tester, account);
+    final destination = find.byKey(const ValueKey('shift-history'));
+    await _reveal(tester, destination);
 
     expect(
       find.descendant(
         of: find.byType(SingleChildScrollView),
-        matching: account,
+        matching: destination,
       ),
       findsOne,
     );
@@ -122,10 +126,11 @@ void main() {
       panelHeight: 120,
       role: TenantRole.owner,
       size: const Size(1440, 900),
+      shiftHistoryRoute: (_) => const Scaffold(body: Text('History open')),
     );
 
     final destination = tester.getRect(
-      find.byKey(const ValueKey('make-default-tenant')),
+      find.byKey(const ValueKey('shift-history')),
     );
     final panel = tester.getRect(
       find.byKey(const ValueKey('landing-test-panel')),
@@ -139,12 +144,17 @@ void main() {
     expect(find.byType(HomeNavigation), findsNothing);
   });
 
-  testWidgets('the account controls come last - design.md §4.4', (
+  testWidgets('the account controls are not on the grid - design.md §4.4', (
     tester,
   ) async {
-    // "Remaining cards are ordered by frequency, never alphabetically", with
-    // the two account controls last. Source order is what a grid renders, so
-    // the order is a property of the list the route builds.
+    // **§4.4 put "the two account controls last"; there are none now.**
+    // *Change business* moved onto the business's own name in the top bar on
+    // 2026-09-03, and *Make default* followed it into the same switcher on
+    // 2026-09-16 - it is the same question that dialog already asks, and a
+    // default is only worth setting when there is more than one business to
+    // choose between, which is the condition that opens it. So the rule's
+    // subject is gone rather than reordered, and what is asserted is that the
+    // grid is destinations only.
     await _pumpLanding(
       tester,
       panelHeight: 120,
@@ -157,30 +167,12 @@ void main() {
       ],
     );
 
-    final account = find.byKey(const ValueKey('make-default-tenant'));
-    final catalog = find.byKey(const ValueKey('inventory'));
-    await _reveal(tester, account);
-
-    // **Reading order, not vertical position.** This harness supplies two
-    // destinations, so the grid lays them in one row and both tops are the
-    // same 113.0 - "last" is then to the right rather than below. Comparing
-    // only `top` asserted a row break the route never promised.
-    final accountAt = tester.getRect(account);
-    final catalogAt = tester.getRect(catalog);
-    if (accountAt.top == catalogAt.top) {
-      expect(
-        accountAt.left,
-        greaterThan(catalogAt.left),
-        reason: 'the account control shares the catalog row, so it must sit '
-            'to its right',
-      );
-    } else {
-      expect(
-        accountAt.top,
-        greaterThan(catalogAt.top),
-        reason: 'the account control must sit below the catalog',
-      );
-    }
+    expect(find.byKey(const ValueKey('inventory')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('make-default-tenant')),
+      findsNothing,
+      reason: 'the default-business control belongs to the switcher now',
+    );
   });
 
   testWidgets('the scrollable is given the whole body', (tester) async {
@@ -510,7 +502,10 @@ void main() {
     test('prefers a shorter wording to a smaller size', () {
       // The product owner's ordering: *first name only if suitable* comes
       // before making the whole line smaller.
-      final fitted = fit(texts: <String>['a very long line', 'ab'], maxWidth: 90);
+      final fitted = fit(
+        texts: <String>['a very long line', 'ab'],
+        maxWidth: 90,
+      );
 
       expect(fitted.style, large);
       expect(fitted.text, 'ab');
@@ -520,7 +515,11 @@ void main() {
       // The trend line's arrow sits in the same row and is invisible to a
       // measurement of text.
       final roomy = fit(texts: <String>['abcd'], maxWidth: 200);
-      final crowded = fit(texts: <String>['abcd'], maxWidth: 200, reserved: 190);
+      final crowded = fit(
+        texts: <String>['abcd'],
+        maxWidth: 200,
+        reserved: 190,
+      );
 
       expect(roomy.style, large);
       expect(crowded.style.fontSize, lessThan(roomy.style.fontSize!));
@@ -560,6 +559,7 @@ Future<void> _pumpLanding(
   List<TenantRole> catalogManagementRoles = const <TenantRole>[],
   Widget Function(TenantDataReader reader)? returnFeedRoute,
   List<TenantRole> returnFeedRoles = const <TenantRole>[],
+  Widget Function(TenantDataReader reader)? shiftHistoryRoute,
   SalesTotalsCallable? salesTotalsCallable,
   TenantDataReader? reader,
   bool settle = true,
@@ -590,6 +590,7 @@ Future<void> _pumpLanding(
           catalogManagementRoles: catalogManagementRoles,
           returnFeedRoute: returnFeedRoute,
           returnFeedRoles: returnFeedRoles,
+          shiftHistoryRoute: shiftHistoryRoute,
           // The slot the shift panel occupies on a real device. What the fold
           // depends on is the height of what is in it.
           salesTotalsCallable: salesTotalsCallable,

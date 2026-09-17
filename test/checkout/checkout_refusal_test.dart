@@ -15,7 +15,6 @@ const Map<String, bool> _codes = <String, bool>{
   'other_tenant_shift_open': true,
   'shift_not_confirmed': true,
   'shift_closing': true,
-  'shift_business_date_mismatch': true,
   'invalid_shift_id': false,
   'shift_binding_mismatch': false,
   'catalog_cache_unavailable': true,
@@ -54,7 +53,8 @@ void main() {
       expect(
         seen.containsKey(refusal.message),
         isFalse,
-        reason: '$code repeats the message already used by ${seen[refusal.message]}',
+        reason:
+            '$code repeats the message already used by ${seen[refusal.message]}',
       );
       seen[refusal.message] = code;
     }
@@ -109,7 +109,11 @@ void main() {
     ];
 
     for (final code in unfixable) {
-      expect(CheckoutRefusal.forCode(code).cashierCanFix, isFalse, reason: code);
+      expect(
+        CheckoutRefusal.forCode(code).cashierCanFix,
+        isFalse,
+        reason: code,
+      );
     }
   });
 

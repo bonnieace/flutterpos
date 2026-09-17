@@ -93,6 +93,96 @@ void main() {
     await fixture.dispose(tester);
   });
 
+  testWidgets('losing access hands over what the device still holds', (
+    tester,
+  ) async {
+    // **M5.** A sale is durable in this device's outbox before it reaches the
+    // server, and every path that would send it stops the moment the membership
+    // ends - the workers require a session that can access the business, and
+    // `allow create` requires `activeStaff` in any case. So the money was taken
+    // and the only record is on a phone nobody can act through.
+    //
+    // The one opening is here: the refresh that discovers the deactivation came
+    // back *from the server*, so the connection is real, and the identity the
+    // work needs is still in hand until the session is cleared.
+    final handedOver = <String>[];
+    TenantSession? sessionAtHandover;
+    TenantSessionController? sessions;
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-only')],
+      tenantSessionRecoveryFactory: (controller) {
+        sessions = controller;
+        return (_) async => null;
+      },
+      onTenantAccessLost: (uid, tenantId) async {
+        handedOver.add('$uid:$tenantId');
+        // Recorded rather than asserted here: a failed expectation inside this
+        // callback would be swallowed by the shell's own guard and read as the
+        // callback never running at all.
+        sessionAtHandover = sessions!.session;
+      },
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    expect(sessions!.session, isNotNull);
+
+    // Somebody deactivated this member while the app was in the background.
+    // The membership is still listed and simply cannot be accessed, which is
+    // what a deactivation looks like from here.
+    fixture.gateway.memberships[0] = _membership(
+      'tenant-only',
+      membershipStatus: MembershipStatus.inactive,
+      canAccess: false,
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 2));
+    await _pumpRouting(tester);
+
+    expect(handedOver, <String>['user-a:tenant-only']);
+    // **The session is still open when the hand-over runs**, which is the whole
+    // reason the hook sits before the clear rather than after it: clearing is
+    // what takes away the identity the work needs.
+    expect(sessionAtHandover, isNotNull);
+    // And the till is gone all the same: handing work over is not a reason to
+    // keep a sellable screen for a business this person cannot sell for.
+    expect(sessions!.session, isNull);
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('a hand-over that fails still shuts the till down', (
+    tester,
+  ) async {
+    TenantSessionController? sessions;
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-only')],
+      tenantSessionRecoveryFactory: (controller) {
+        sessions = controller;
+        return (_) async => null;
+      },
+      onTenantAccessLost: (_, _) async => throw StateError('no connection'),
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    fixture.gateway.memberships[0] = _membership(
+      'tenant-only',
+      membershipStatus: MembershipStatus.inactive,
+      canAccess: false,
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 2));
+    await _pumpRouting(tester);
+
+    expect(sessions!.session, isNull);
+    await fixture.dispose(tester);
+  });
+
   testWidgets('a demotion made elsewhere reaches a live session on resume', (
     tester,
   ) async {
@@ -395,7 +485,16 @@ void main() {
         );
       });
       fixture = _ShellFixture(
-        memberships: [_membership('tenant-a')],
+        // **Two businesses, because the default control moved into the
+        // business switcher on 2026-09-16** and the switcher only opens where
+        // there is somewhere else to go. A default is only worth setting when
+        // there is more than one to choose between, so that is the same
+        // condition rather than an extra one.
+        memberships: [_membership('tenant-a'), _membership('tenant-b')],
+        // Remembered locally, so the run opens tenant-a rather than stopping
+        // at the selector - which is what two businesses and no default yet
+        // would otherwise do.
+        localTenantId: 'tenant-a',
         useDefaultRoute: true,
         setDefaultTenantCallable: callable,
       );
@@ -406,6 +505,8 @@ void main() {
       expect(fixture.gateway.rootCalls, 1);
 
       await openLandingDrawer(tester);
+      await tester.tap(find.byKey(const ValueKey('screen-title-action')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('make-default-tenant')));
       await tester.pumpAndSettle();
       expect(fixture.gateway.rootCalls, 1);
@@ -419,11 +520,14 @@ void main() {
         'requestId': 'routing-default-request',
       });
       expect(fixture.gateway.rootCalls, 2);
-      // The drawer shut itself when the destination was pressed, which is what
-      // stops a panel sitting open under the route it just opened. Re-opening
-      // it is how a person would check the label changed.
+      // **And the offer withdraws itself.** This business is the default now,
+      // so the switcher has nothing left to ask about it - which is the same
+      // fact the grid used to state with a disabled *Default business* tile,
+      // read from where the control actually lives.
       await openLandingDrawer(tester);
-      expect(find.text('Default business'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('screen-title-action')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('make-default-tenant')), findsNothing);
       await fixture.dispose(tester);
     },
   );
@@ -1370,6 +1474,7 @@ final class _ShellFixture {
     this.tenantDataReader,
     this.tenantSessionRecoveryFactory,
     this.tenantRecoveryTriggers,
+    this.onTenantAccessLost,
     this.bootstrapRefreshRequests,
     this.pendingCheckoutPanel,
     this.checkoutRoute,
@@ -1421,6 +1526,7 @@ final class _ShellFixture {
   final TenantDataReader? tenantDataReader;
   final TenantSessionRecoveryFactory? tenantSessionRecoveryFactory;
   final Stream<Object?>? tenantRecoveryTriggers;
+  final Future<void> Function(String uid, String tenantId)? onTenantAccessLost;
   final Stream<Object?>? bootstrapRefreshRequests;
   final Widget? pendingCheckoutPanel;
   final Widget Function(TenantSessionController sessions)? checkoutRoute;
@@ -1438,6 +1544,7 @@ final class _ShellFixture {
         tenantSwitchOnlineCheck: tenantSwitchOnlineCheck ?? (() async => true),
         tenantSessionRecoveryFactory: tenantSessionRecoveryFactory,
         tenantRecoveryTriggers: tenantRecoveryTriggers,
+        onTenantAccessLost: onTenantAccessLost,
         bootstrapRefreshRequests: bootstrapRefreshRequests,
         signOut: () async => auth.add(null),
         signedOut: const Scaffold(body: Center(child: Text('Signed out'))),

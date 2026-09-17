@@ -30,7 +30,6 @@ import 'package:flutter/services.dart';
 import '../inventory/catalog_management.dart';
 import '../reporting/reporting_currency.dart';
 import '../returns/return_actions.dart';
-import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
@@ -86,7 +85,6 @@ final class TenantShiftGate extends StatefulWidget {
     required this.controllerFactory,
     required this.currency,
     required this.child,
-    this.historyReader,
     this.returnActions,
   });
 
@@ -98,10 +96,6 @@ final class TenantShiftGate extends StatefulWidget {
   /// What this business calls its money, so the count states amounts the way
   /// every other surface in this app does rather than in raw minor units.
   final TenantReportingCurrency currency;
-
-  /// Reaches the read-only shift history from inside the close sheet. The
-  /// route stays unreachable while it is absent.
-  final TenantDataReader? historyReader;
 
   /// Passed through the history and sales routes to the returns route.
   final TenantReturnActions? returnActions;
@@ -328,7 +322,6 @@ class _TenantShiftGateState extends State<TenantShiftGate>
         shifts: shifts,
         session: session,
         currency: widget.currency,
-        historyReader: widget.historyReader,
         returnActions: widget.returnActions,
       );
     } finally {
@@ -390,20 +383,6 @@ class _TenantShiftGateState extends State<TenantShiftGate>
     final phase = shifts != null && shifts.state.shiftExpired
         ? TenantShiftPhase.expired
         : shifts?.state.phase ?? TenantShiftPhase.unknown;
-    // **Midnight ends a shift as surely as the cap does.** A sale resolves the
-    // business date afresh and the shift froze its own when it opened, so the
-    // draft service refuses every sale across that boundary - correctly, since
-    // a sale filed under yesterday's shift could never be reconciled against
-    // it. Until this, the phase said nothing about it: the till drew a sellable
-    // screen and the refusal arrived one sale at a time, at the counter, with a
-    // customer waiting.
-    //
-    // Only where a till would otherwise be drawn. A shift already being counted
-    // off, closed, or past the cap has its own surface and its own words.
-    final dayEnded =
-        shifts != null &&
-        shifts.state.shiftDayEnded &&
-        (phase == TenantShiftPhase.open || phase == TenantShiftPhase.closing);
     return PopScope(
       // Every way out of the till goes through the exit dialog, including the
       // system back gesture.
@@ -425,38 +404,6 @@ class _TenantShiftGateState extends State<TenantShiftGate>
           const LoadingState(
             key: ValueKey('shift-gate-loading'),
             message: 'Checking your shift.',
-          ),
-        ),
-        // **Past the cap: no sale, and only one way out.** The shift is real
-        // and still owns this device's unsettled sales, so this is not the
-        // *no shift* empty state - there is nothing to open, only something to
-        // close - and since 2026-09-05 that close can be made with no
-        // connection, so nothing here has to send anybody looking for one.
-        // Drawn ahead of the phase switch below, because an open shift whose
-        // day has ended must not fall through to the till.
-        _ when dayEnded => _surface(
-          key: const ValueKey('shift-gate-day-ended'),
-          ErrorState(
-            status: AppStatus.attention,
-            badgeLabel: 'New business day',
-            statement:
-                'This shift belongs to yesterday, so it can no longer take '
-                'sales.',
-            detail:
-                'Count it off and open a new one for today. The count works '
-                'with no connection: it is saved here and reaches the server '
-                'on its own.',
-            stillTrue:
-                'Every sale you have already recorded is saved and will be '
-                'sent.',
-            actions: <Widget>[
-              AppButton(
-                key: const ValueKey('shift-gate-close-day'),
-                label: 'Close shift',
-                tier: AppButtonTier.primary,
-                onPressed: _closeShift,
-              ),
-            ],
           ),
         ),
         TenantShiftPhase.expired => _surface(

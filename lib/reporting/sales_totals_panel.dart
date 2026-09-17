@@ -679,8 +679,9 @@ final class _TenderBreakdown extends StatelessWidget {
             summary: 'Why a sale names no method',
             child: Text(
               key: ValueKey('sales-totals-tender-unrecorded-note'),
-              'Sales recorded before payment methods were captured name none, '
-              'so they are listed separately rather than as unpaid.',
+              'Some sales name no payment method: they were recorded before '
+              'payment methods were captured, or nobody said how the customer '
+              'paid. They are listed separately rather than as unpaid.',
             ),
           ),
         ],

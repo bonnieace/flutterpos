@@ -375,8 +375,9 @@ final class _SaleHistoryContents extends StatelessWidget {
           SizedBox(height: tokens.spacing.s8),
           const Text(
             key: ValueKey('sale-history-tender-unrecorded-note'),
-            'A sale recorded before payment methods were captured names no '
-            'payment method, so its payment is stated as not recorded.',
+            'A sale names no payment method when it was recorded before they '
+            'were captured, or when nobody said how the customer paid, so its '
+            'payment is stated as not recorded.',
           ),
         ],
         SizedBox(height: tokens.spacing.s16),

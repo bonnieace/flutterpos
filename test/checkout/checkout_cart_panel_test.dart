@@ -53,9 +53,7 @@ void main() {
     expect(_text(tester, 'checkout-total'), 'KES 248.00');
   });
 
-  testWidgets('preselects cash and saves without touching the tender', (
-    tester,
-  ) async {
+  testWidgets('preselects no tender and records the silence', (tester) async {
     await _pump(tester, sessions, catalog, drafts);
 
     expect(
@@ -65,11 +63,32 @@ void main() {
 
     await _tap(tester, 'checkout-product-product-b');
 
-    // Cash is preselected as of 2026-08-23, so an item is the only thing the
-    // save was ever waiting for. The consequence this locks in deliberately:
-    // a sale nobody set a tender on records `cash`.
+    // **Nothing is preselected and the save is not held for it.** Cash was the
+    // default from 2026-08-23 until this change, which meant an untouched
+    // control recorded a cash sale whatever happened at the counter - and no
+    // surface could correct it afterwards, while reconciliation agrees on the
+    // total alone, so the error was both permanent and silent. An item is
+    // still the only thing the save waits for; what changed is what an
+    // unanswered question records as.
     expect(find.byKey(const ValueKey('checkout-save-blocked')), findsNothing);
     expect(_save(tester).onPressed, isNotNull);
+    expect(find.byKey(const ValueKey('checkout-tender-unset')), findsOneWidget);
+
+    await _tap(tester, 'checkout-save');
+
+    expect(drafts.requests.single.tender, isNull);
+  });
+
+  testWidgets('the unset notice goes once a method is chosen', (tester) async {
+    await _pump(tester, sessions, catalog, drafts);
+    await _tap(tester, 'checkout-product-product-b');
+    await _tap(tester, 'checkout-tender-mpesa');
+
+    expect(find.byKey(const ValueKey('checkout-tender-unset')), findsNothing);
+
+    await _tap(tester, 'checkout-save');
+
+    expect(drafts.requests.single.tender, CheckoutTender.mpesa);
   });
 
   testWidgets('another tender can still be chosen over the default', (
