@@ -232,7 +232,12 @@ final class _SaleTenderDialog extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return AppDialog(
       key: const ValueKey('sale-tender-dialog'),
-      title: 'Set payment method',
+      // **The same verb the menu used to get here.** §8 rule 4: the heading of
+      // a dialog repeats the control that opened it, and filling a blank and
+      // correcting a mis-tap are offered under different words.
+      title: sale.tender == null
+          ? 'Set payment method'
+          : 'Change payment method',
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
