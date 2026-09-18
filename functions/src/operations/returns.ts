@@ -233,7 +233,25 @@ export const verifyReturnAndRestoreStock = onCall<
       requestId,
       createdAt: FieldValue.serverTimestamp(),
     });
-
+    // **Deliberately does not dirty the day, and that is not an omission.**
+    // Returns count against takings from the moment they are filed, and the
+    // netting arithmetic is status-agnostic - so `pending` to `verified`
+    // moves no financial figure at all. `mergeReturnReconciliationJob`
+    // already dirtied this day when the return was created.
+    //
+    // Dirtying again here would regenerate the day's metrics to the identical
+    // numbers, and because a revision bump changes every
+    // `shift_expectations.generation`, it would re-arm verification for every
+    // shift on the day and re-mint generation-keyed anomaly documents without
+    // deleting the old ones. That is real churn bought for no change.
+    //
+    // What verification *does* change is stock, and stock is reconciled by
+    // the scheduled and manual full runs rather than by a sale-trigger dirty
+    // job - which skips the stock phase outright. So nothing is missed.
+    //
+    // **A reject or cancel transition would be different**: a return that
+    // stops counting changes the net figures, and whatever implements that
+    // must dirty the day.
     return {returnId, verificationId, restoredProducts};
   });
 });

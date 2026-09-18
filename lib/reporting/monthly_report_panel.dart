@@ -31,6 +31,7 @@ import '../ui/tokens.dart';
 import 'monthly_report.dart';
 import 'device_sales_totals.dart';
 import 'profit_report.dart';
+import 'profit_statement.dart';
 import 'reporting_currency.dart';
 import 'sales_totals.dart';
 
@@ -343,7 +344,16 @@ final class _MonthlyReportContents extends StatelessWidget {
       );
     }
 
-    final average = totals.sales / totals.transactions;
+    // Net of returns where the server sent them, and gross where it did not -
+    // which is what this page showed before it did.
+    final monthSales = totals.netOrGrossSales;
+    final monthTransactions = totals.netOrGrossTransactions;
+    final average = monthTransactions == 0
+        ? 0.0
+        : monthSales / monthTransactions;
+    // Asked once, so the tile and the sentence under it cannot disagree about
+    // whether the figure between them may be shown at all.
+    final profit = totals.netOrGrossProfitReport;
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -352,8 +362,9 @@ final class _MonthlyReportContents extends StatelessWidget {
             Padding(
               padding: EdgeInsets.only(bottom: tokens.spacing.s16),
               child: Text(
-                'On this device. Sales from other devices may not be included; '
-                'the server total will replace this when available.',
+                'On this device, less the returns it holds. Sales or returns '
+                'from other devices may not be included; the server total '
+                'will replace this when available.',
                 key: const ValueKey('monthly-report-device-basis'),
                 style: tokens.typography.caption.copyWith(
                   color: tokens.colors.text.secondary,
@@ -391,14 +402,14 @@ final class _MonthlyReportContents extends StatelessWidget {
             tiles: <StatTile>[
               StatTile(
                 label: 'Sales',
-                value: currency.format(totals.sales),
+                value: currency.format(monthSales),
                 valueKey: const ValueKey('monthly-report-sales'),
                 money: true,
                 detail: _changeDetail(report.salesChange),
               ),
               StatTile(
                 label: 'Transactions',
-                value: '${totals.transactions}',
+                value: '$monthTransactions',
                 valueKey: const ValueKey('monthly-report-transactions'),
                 detail: _changeDetail(report.transactionsChange),
               ),
@@ -411,22 +422,36 @@ final class _MonthlyReportContents extends StatelessWidget {
               if (showProfit)
                 StatTile(
                   label: 'Profit',
-                  value: currency.format(totals.profit),
+                  // **Withheld rather than warned about.** This tile used to
+                  // print `totals.profit` whatever its basis and add a sentence
+                  // underneath saying the figure was higher than the truth -
+                  // so the same sales showed no profit on the totals page and a
+                  // knowingly overstated one here. `TenantProfitReport` is the
+                  // single definition of when a figure may be shown, and the
+                  // weekly card already asks it exactly this way.
+                  value: profit.isShowable
+                      ? currency.format(profit.profit)
+                      : '—',
                   valueKey: const ValueKey('monthly-report-profit'),
                   money: true,
-                  detail: _changeDetail(report.profitChange),
+                  // **And the arrow goes with it.** A percentage change is
+                  // computed from this month's profit and last month's, so a
+                  // basis that cannot be shown cannot be compared either - the
+                  // arrow would be the withheld figure, stated as a trend.
+                  detail: profit.isShowable
+                      ? _changeDetail(report.profitChange)
+                      : null,
                 ),
             ],
           ),
-          if (showProfit && totals.incompleteCostLineCount > 0) ...<Widget>[
+          if (showProfit) ...<Widget>[
             SizedBox(height: tokens.spacing.s16),
             Text(
-              // The same disclosure the totals page makes: a line with no cost
-              // contributes its whole price to profit, which overstates it.
-              '${totals.incompleteCostLineCount} sold '
-              '${totals.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
-              'no cost recorded, so the profit above is higher than it was.',
-              key: const ValueKey('monthly-report-incomplete-cost'),
+              // Word for word the statement every other surface makes, because
+              // it is the same fact about the same sale lines over a different
+              // stretch. A second wording here is what let a second rule in.
+              tenantProfitNote(profit),
+              key: const ValueKey('monthly-report-profit-note'),
               style: tokens.typography.caption.copyWith(
                 color: tokens.colors.text.secondary,
               ),

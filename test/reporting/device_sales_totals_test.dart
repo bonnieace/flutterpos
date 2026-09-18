@@ -23,6 +23,141 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
+  test('a return held on this device comes out of its figures', () async {
+    // **The offline path used to report gross**, so the same period read with
+    // signal and without it disagreed by exactly the refunds - and the notice
+    // under the figure blamed sales from other tills, which points the
+    // opposite way from the real cause.
+    final reader = _Reader(
+      <TenantQueryDocumentSnapshot>[
+        _canonicalSale(
+          checkoutId: 'checkout-a',
+          totalMinor: 900,
+          lineTotalMinor: 1000,
+          categoryId: 'drinks',
+          costMinor: 600,
+          tender: 'cash',
+        ),
+        _canonicalSale(
+          checkoutId: 'checkout-b',
+          totalMinor: 500,
+          lineTotalMinor: 500,
+          categoryId: 'food',
+          costMinor: 200,
+          tender: 'card',
+        ),
+      ],
+      returns: <Map<String, Object?>>[
+        _cachedReturn(
+          returnId: 'return-a',
+          saleId: 'checkout-a',
+          productId: 'product-checkout-a',
+        ),
+      ],
+    );
+    final aggregator = TenantDeviceSalesAggregator(
+      session: _session(),
+      cacheReader: reader,
+      cacheReportReader: reader,
+      clock: () => DateTime.utc(2026, 9, 1, 12),
+    );
+
+    final totals = (await aggregator.load(
+      aggregator.createBusinessDateQuery(businessDate: '2026-09-01'),
+    )).totals!;
+
+    // Gross is untouched: both sales happened.
+    expect(totals.sales, 14);
+    expect(totals.transactions, 2);
+    // The single line of checkout-a came back in full, so that sale stops
+    // being a transaction at all.
+    expect(totals.net!.sales, 5);
+    expect(totals.net!.transactions, 1);
+    expect(totals.net!.returnsScanned, 1);
+    expect(totals.netOrGrossSales, 5);
+  });
+
+  test('a day with nothing returned still states that it netted', () async {
+    // Absent and zero are different facts. A period that read its returns and
+    // found none can say so; one that never read them must not.
+    final reader = _Reader(<TenantQueryDocumentSnapshot>[
+      _canonicalSale(
+        checkoutId: 'checkout-a',
+        totalMinor: 900,
+        lineTotalMinor: 1000,
+        categoryId: 'drinks',
+        costMinor: 600,
+        tender: 'cash',
+      ),
+    ]);
+    final aggregator = TenantDeviceSalesAggregator(
+      session: _session(),
+      cacheReader: reader,
+      cacheReportReader: reader,
+      clock: () => DateTime.utc(2026, 9, 1, 12),
+    );
+
+    final totals = (await aggregator.load(
+      aggregator.createBusinessDateQuery(businessDate: '2026-09-01'),
+    )).totals!;
+
+    expect(totals.net, isNotNull);
+    expect(totals.net!.returnsScanned, 0);
+    expect(totals.net!.sales, totals.sales);
+  });
+
+  test('a fully returned costless line stops withholding the margin', () async {
+    // The same rule the server applies: the line contributes no revenue and
+    // no cost to the net figures, so its missing cost cannot move net profit
+    // - and a customer undoing a sale must not leave the report permanently
+    // unable to state one.
+    final reader = _Reader(
+      <TenantQueryDocumentSnapshot>[
+        _canonicalSale(
+          checkoutId: 'checkout-a',
+          totalMinor: 900,
+          lineTotalMinor: 1000,
+          categoryId: 'drinks',
+          costMinor: 600,
+          tender: 'cash',
+        ),
+        _canonicalSale(
+          checkoutId: 'checkout-b',
+          totalMinor: 500,
+          lineTotalMinor: 500,
+          categoryId: 'food',
+          costMinor: null,
+          tender: 'card',
+        ),
+      ],
+      returns: <Map<String, Object?>>[
+        _cachedReturn(
+          returnId: 'return-b',
+          saleId: 'checkout-b',
+          productId: 'product-checkout-b',
+        ),
+      ],
+    );
+    final aggregator = TenantDeviceSalesAggregator(
+      session: _session(),
+      cacheReader: reader,
+      cacheReportReader: reader,
+      clock: () => DateTime.utc(2026, 9, 1, 12),
+    );
+
+    final totals = (await aggregator.load(
+      aggregator.createBusinessDateQuery(businessDate: '2026-09-01'),
+    )).totals!;
+
+    expect(totals.incompleteCostLineCount, 1);
+    expect(
+      totals.net!.incompleteCostLineCount,
+      0,
+      reason: 'the costless goods are entirely out of the net figures',
+    );
+    expect(totals.net!.profitReport.isShowable, isTrue);
+  });
+
   test('matches server revenue, category, cost and tender semantics', () async {
     final reader = _Reader(<TenantQueryDocumentSnapshot>[
       _canonicalSale(
@@ -182,6 +317,28 @@ Future<CheckoutOutboxRecord> _save(
   },
 );
 
+/// One return document, as this device's cache would hold it.
+Map<String, Object?> _cachedReturn({
+  required String returnId,
+  required String saleId,
+  required String productId,
+  int quantity = 1,
+  String businessDate = '2026-09-01',
+}) => <String, Object?>{
+  'returnId': returnId,
+  'tenantId': 'tenant-a',
+  'saleId': saleId,
+  'businessDate': businessDate,
+  'recordedOn': businessDate,
+  'createdBy': 'owner-a',
+  'status': 'pending',
+  'reason': 'Customer changed their mind',
+  'itemsReturned': <Object?>[
+    <String, Object?>{'productId': productId, 'quantity': quantity},
+  ],
+  'createdAt': DateTime.utc(2026, 9, 1, 9),
+};
+
 TenantQueryDocumentSnapshot _canonicalSale({
   required String checkoutId,
   required int totalMinor,
@@ -239,9 +396,13 @@ TenantSession _session() => TenantSession.active(
 const String _deviceId = 'dev-0123456789abcdef0123456789abcdef';
 
 final class _Reader implements TenantDataReader, TenantSalesHistoryQueryReader {
-  _Reader(this.documents);
+  _Reader(this.documents, {this.returns = const <Map<String, Object?>>[]});
 
   final List<TenantQueryDocumentSnapshot> documents;
+
+  /// Return documents this device has in its cache, as the returns collection
+  /// would hold them.
+  final List<Map<String, Object?>> returns;
 
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
@@ -249,7 +410,22 @@ final class _Reader implements TenantDataReader, TenantSalesHistoryQueryReader {
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
-  ) async => const <TenantQueryDocumentSnapshot>[];
+  ) async {
+    if (!query.collectionPath.endsWith('/returns')) {
+      return const <TenantQueryDocumentSnapshot>[];
+    }
+    // The aggregator asks a day at a time, so the day filter is the whole of
+    // the query it issues.
+    final day = query.equalityFilters['businessDate'];
+    return <TenantQueryDocumentSnapshot>[
+      for (final record in returns)
+        if (day == null || record['businessDate'] == day)
+          TenantQueryDocumentSnapshot(
+            path: '${query.collectionPath}/${record['returnId']}',
+            data: record,
+          ),
+    ];
+  }
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(

@@ -158,6 +158,13 @@ final class SalesTotalsChoosers extends StatelessWidget {
                 ),
             ],
           ),
+          if (categories.truncated) ...[
+            SizedBox(height: tokens.spacing.s8),
+            const Text(
+              key: ValueKey('sales-totals-categories-truncated'),
+              'This business has more categories than are listed here.',
+            ),
+          ],
         ],
       ],
     );

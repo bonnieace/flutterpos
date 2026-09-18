@@ -1,6 +1,9 @@
 import '../checkout/checkout_outbox.dart';
+import '../checkout/checkout_receipt.dart';
 import '../checkout/checkout_sale.dart';
 import '../checkout/checkout_tender.dart';
+import '../returns/return_history.dart';
+import '../returns/return_offsets.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
@@ -87,6 +90,10 @@ final class TenantDeviceSalesAggregator {
                  : null),
        ),
        _outbox = outbox,
+       _returns = TenantReturnHistoryRepository(
+         session: session,
+         reader: cacheReader,
+       ),
        _queryFactory = TenantSalesTotalsGateway(
          session: session,
          callable: const _NeverSalesTotalsCallable(),
@@ -98,7 +105,98 @@ final class TenantDeviceSalesAggregator {
   final TenantSession _session;
   final TenantSaleHistoryRepository _repository;
   final HiveCheckoutOutbox? _outbox;
+  final TenantReturnHistoryRepository _returns;
   final TenantSalesTotalsGateway _queryFactory;
+
+  /// The longest stretch this will read returns for.
+  ///
+  /// **A day at a time, because there is no range query to use.**
+  /// `readCollectionPage` takes equality filters only, and the `returns`
+  /// index is on `businessDate` alone - so a range would mean a new reader, a
+  /// new index and a migration for a path that runs against the local cache.
+  /// A month is thirty-one cache reads, which is affordable; a year is not, so
+  /// a longer stretch reports gross rather than paying for it.
+  static const int _returnsDayLimit = 62;
+
+  /// Pages of returns read per day before the day is treated as a fault.
+  static const int _returnsPageLimit = 20;
+
+  /// The period's returns, from the same cache the sales came from.
+  ///
+  /// **Null means "not netted", never "none came back".** A stretch longer
+  /// than [_returnsDayLimit] and a read that failed both land here, and the
+  /// caller reports gross - which is what every figure on this surface did
+  /// before returns were netted at all. So the fallback is the old behaviour
+  /// rather than a new claim.
+  ///
+  /// **What the cache does not hold is simply not subtracted.** A return rung
+  /// on this till is written locally and is present at once; one rung
+  /// elsewhere is present once anything has read it. A device that has never
+  /// seen a colleague's return still overstates the period by it - exactly as
+  /// it did before - and the server's answer corrects the figure as soon as
+  /// there is signal.
+  Future<_DeviceReturns?> _readReturns(TenantSalesTotalsQuery query) async {
+    final dates = _businessDatesBetween(query.startDate, query.endDate);
+    if (dates == null) return null;
+    final units = <String, Map<String, int>>{};
+    var documents = 0;
+    try {
+      for (final date in dates) {
+        String? cursor;
+        for (var page = 0; page < _returnsPageLimit; page++) {
+          final read = await _returns.loadDayReturns(
+            businessDate: date,
+            pageSize: _pageSize,
+            cursor: cursor,
+          );
+          for (final record in read.items) {
+            documents += 1;
+            final bySale = units.putIfAbsent(
+              record.saleId,
+              () => <String, int>{},
+            );
+            for (final line in record.lines) {
+              bySale[line.productId] =
+                  (bySale[line.productId] ?? 0) + line.quantity;
+            }
+          }
+          cursor = read.nextCursor;
+          if (!read.hasMore || cursor == null) break;
+          // A day holding more returns than this is a fault rather than a busy
+          // shop, and a partial read would understate what came back.
+          if (page == _returnsPageLimit - 1) return null;
+        }
+      }
+    } on Object {
+      return null;
+    }
+    return _DeviceReturns(units: units, documentCount: documents);
+  }
+
+  /// Every business date from [start] to [end], or null where there are too
+  /// many to read a day at a time.
+  static List<String>? _businessDatesBetween(String start, String end) {
+    final DateTime first;
+    final DateTime last;
+    try {
+      first = DateTime.parse('${validateCheckoutBusinessDate(start)}T00:00:00Z');
+      last = DateTime.parse('${validateCheckoutBusinessDate(end)}T00:00:00Z');
+    } on Object {
+      return null;
+    }
+    if (last.isBefore(first)) return null;
+    final span = last.difference(first).inDays + 1;
+    if (span > _returnsDayLimit) return null;
+    return <String>[
+      for (var day = 0; day < span; day++)
+        _isoDate(first.add(Duration(days: day))),
+    ];
+  }
+
+  static String _isoDate(DateTime day) =>
+      '${day.year.toString().padLeft(4, '0')}-'
+      '${day.month.toString().padLeft(2, '0')}-'
+      '${day.day.toString().padLeft(2, '0')}';
 
   TenantSalesTotalsQuery createQuery({
     required TenantSalesPeriod period,
@@ -137,6 +235,11 @@ final class TenantDeviceSalesAggregator {
       throw const TenantSaleException('cross_tenant_sale');
     }
     final canonical = <String, _DeviceSale>{};
+    // Kept beside the device projection because `describeReturnOffset` prices
+    // a return against the whole sale - its discount, its subtotal and its
+    // per-line unit prices - and that is the one definition of the
+    // arithmetic, shared with the server through the golden vectors.
+    final canonicalSales = <String, TenantSale>{};
     String? cursor;
     var rawScanned = 0;
     do {
@@ -157,6 +260,7 @@ final class TenantDeviceSalesAggregator {
           );
         }
         canonical[sale.id] = _DeviceSale.fromCanonical(sale);
+        canonicalSales[sale.id] = sale;
       }
       if (canonical.length >= TenantSalesTotals.maximumTransactions &&
           page.hasMore) {
@@ -222,38 +326,100 @@ final class TenantDeviceSalesAggregator {
       TenantSalesTenderBreakdown.unrecordedBucket,
       TenantSalesTenderBreakdown.unrecognisedBucket,
     };
-    final tenderSales = <String, int>{for (final key in buckets) key: 0};
-    final tenderTransactions = <String, int>{for (final key in buckets) key: 0};
-    var revenueMinor = 0;
-    var costMinor = 0;
-    var transactions = 0;
-    var incompleteCosts = 0;
-    for (final sale in merged.values) {
-      if (!sale.matches(query)) continue;
-      final contribution = sale.contribution(query.categoryId);
-      if (!contribution.counted) continue;
-      revenueMinor += contribution.revenueMinor;
-      costMinor += contribution.costMinor;
-      incompleteCosts += contribution.incompleteCostLines;
-      transactions += 1;
-      final bucket =
-          sale.tender?.wireValue ?? TenantSalesTenderBreakdown.unrecordedBucket;
-      final safeBucket = buckets.contains(bucket)
-          ? bucket
-          : TenantSalesTenderBreakdown.unrecognisedBucket;
-      tenderSales[safeBucket] =
-          tenderSales[safeBucket]! + contribution.revenueMinor;
-      tenderTransactions[safeBucket] = tenderTransactions[safeBucket]! + 1;
+    // **Read from the cache the sales came from.** A return rung on this till
+    // is written locally and is there immediately; one rung elsewhere is there
+    // once anything has read it. What the cache does not hold is simply not
+    // subtracted - which is exactly what this surface did for every return
+    // before, so the figure can only move closer to the truth.
+    var returned = await _readReturns(query);
+    final offsets = <String, TenantSaleReturnOffset>{};
+    if (returned != null) {
+      try {
+        for (final entry in returned.units.entries) {
+          final sale = canonicalSales[entry.key];
+          // A return against a sale this read did not cover belongs to another
+          // colleague, another category, or another period. The same scoping
+          // the server gets for free by keying on the sales it already read.
+          if (sale == null) continue;
+          offsets[entry.key] = describeReturnOffset(
+            sale,
+            entry.value,
+            categoryId: query.categoryId,
+          );
+        }
+      } on TenantReturnException {
+        // A return that cannot be valued against its own sale is a fault, not
+        // a smaller number. The period falls back to gross - which is what it
+        // reported before returns were netted at all - rather than publishing
+        // a figure it cannot stand behind.
+        returned = null;
+        offsets.clear();
+      }
     }
+
+    _DeviceAccumulation accumulate({required bool net}) {
+      final tenderSales = <String, int>{for (final key in buckets) key: 0};
+      final tenderTransactions = <String, int>{
+        for (final key in buckets) key: 0,
+      };
+      var revenueMinor = 0;
+      var costMinor = 0;
+      var transactions = 0;
+      var incompleteCosts = 0;
+      for (final sale in merged.values) {
+        if (!sale.matches(query)) continue;
+        final contribution = sale.contribution(
+          query.categoryId,
+          net ? offsets[sale.id] : null,
+        );
+        if (!contribution.counted) continue;
+        revenueMinor += contribution.revenueMinor;
+        costMinor += contribution.costMinor;
+        incompleteCosts += contribution.incompleteCostLines;
+        transactions += 1;
+        final bucket =
+            sale.tender?.wireValue ??
+            TenantSalesTenderBreakdown.unrecordedBucket;
+        final safeBucket = buckets.contains(bucket)
+            ? bucket
+            : TenantSalesTenderBreakdown.unrecognisedBucket;
+        tenderSales[safeBucket] =
+            tenderSales[safeBucket]! + contribution.revenueMinor;
+        tenderTransactions[safeBucket] = tenderTransactions[safeBucket]! + 1;
+      }
+      return _DeviceAccumulation(
+        revenueMinor: revenueMinor,
+        costMinor: costMinor,
+        transactions: transactions,
+        incompleteCostLines: incompleteCosts,
+        tenderSalesMinor: tenderSales,
+        tenderTransactions: tenderTransactions,
+      );
+    }
+
+    final gross = accumulate(net: false);
+    // Two passes over the same sales, the way the callable makes two
+    // aggregate calls: the gross figures stay exactly the expression they
+    // have always been, and only the second one reads the offsets.
+    final netPass = returned == null ? null : accumulate(net: true);
     final totals = TenantSalesTotals.fromDevice(
       query: query,
       scannedTransactions: merged.length,
-      salesMinor: revenueMinor,
-      costMinor: costMinor,
-      transactions: transactions,
-      incompleteCostLineCount: incompleteCosts,
-      tenderSalesMinor: tenderSales,
-      tenderTransactions: tenderTransactions,
+      salesMinor: gross.revenueMinor,
+      costMinor: gross.costMinor,
+      transactions: gross.transactions,
+      incompleteCostLineCount: gross.incompleteCostLines,
+      tenderSalesMinor: gross.tenderSalesMinor,
+      tenderTransactions: gross.tenderTransactions,
+      net: netPass == null
+          ? null
+          : TenantSalesNetTotals.summed(
+              sales: netPass.revenueMinor / 100,
+              profit: (netPass.revenueMinor - netPass.costMinor) / 100,
+              transactions: netPass.transactions,
+              incompleteCostLineCount: netPass.incompleteCostLines,
+              returnsScanned: returned!.documentCount,
+            ),
     );
     return TenantDeviceSalesTotals.complete(
       queryTotals: totals,
@@ -327,11 +493,23 @@ final class _DeviceSale {
       businessDate.compareTo(query.endDate) <= 0 &&
       (query.soldById == null || soldById == query.soldById);
 
-  _DeviceContribution contribution(String? categoryId) {
+  /// What this sale contributes, optionally net of what came back out of it.
+  ///
+  /// **The same shape `saleContribution` has on the server**, including the
+  /// order of its refusals: a sale returned in full is not a transaction that
+  /// happened, and it reports no cost completeness either because it
+  /// contributed nothing to have a cost.
+  _DeviceContribution contribution(
+    String? categoryId, [
+    TenantSaleReturnOffset? offset,
+  ]) {
     final selected = categoryId == null
         ? lines
         : lines.where((line) => line.categoryId == categoryId).toList();
     if (categoryId != null && selected.isEmpty) {
+      return const _DeviceContribution.empty();
+    }
+    if (offset != null && offset.isFullyReturned) {
       return const _DeviceContribution.empty();
     }
     var lineRevenue = 0;
@@ -345,11 +523,25 @@ final class _DeviceSale {
         cost += line.costMinor!;
       }
     }
+    final gross = categoryId == null ? totalMinor : lineRevenue;
+    if (offset == null) {
+      return _DeviceContribution(
+        counted: true,
+        revenueMinor: gross,
+        costMinor: cost,
+        incompleteCostLines: incomplete,
+      );
+    }
+    // Cost comes back with the revenue, or the profit this implies - takings
+    // minus cost - collapses by the whole price of the returned goods rather
+    // than by the margin on them.
     return _DeviceContribution(
       counted: true,
-      revenueMinor: categoryId == null ? totalMinor : lineRevenue,
-      costMinor: cost,
-      incompleteCostLines: incomplete,
+      revenueMinor: _atLeastZero(gross - offset.returnedMinor),
+      costMinor: _atLeastZero(cost - offset.returnedCostMinor),
+      incompleteCostLines: _atLeastZero(
+        incomplete - offset.fullyReturnedCostlessLines,
+      ),
     );
   }
 }
@@ -392,4 +584,36 @@ final class _NeverSalesTotalsCallable implements SalesTotalsCallable {
   @override
   Future<Object?> call(Map<String, Object?> payload) =>
       throw StateError('A device totals query cannot invoke a callable.');
+}
+
+int _atLeastZero(int value) => value < 0 ? 0 : value;
+
+/// One pass over the period's sales.
+final class _DeviceAccumulation {
+  const _DeviceAccumulation({
+    required this.revenueMinor,
+    required this.costMinor,
+    required this.transactions,
+    required this.incompleteCostLines,
+    required this.tenderSalesMinor,
+    required this.tenderTransactions,
+  });
+
+  final int revenueMinor;
+  final int costMinor;
+  final int transactions;
+  final int incompleteCostLines;
+  final Map<String, int> tenderSalesMinor;
+  final Map<String, int> tenderTransactions;
+}
+
+/// What the cache holds about the period's returns.
+final class _DeviceReturns {
+  const _DeviceReturns({required this.units, required this.documentCount});
+
+  /// Units returned per product, grouped by the sale each return reverses.
+  final Map<String, Map<String, int>> units;
+
+  /// How many return documents were read.
+  final int documentCount;
 }

@@ -426,8 +426,9 @@ final class _SalesTotalsContents extends StatelessWidget {
             key: ValueKey('sales-totals-basis'),
             totals?.basis == TenantSalesTotalsBasis.device
                 ? 'On this device. These figures include cached sales and '
-                      'checkouts still waiting to sync. They may not include '
-                      'sales made on other devices.'
+                      'checkouts still waiting to sync, less the returns this '
+                      'device holds. Sales or returns made on other devices '
+                      'may not be included.'
                 : 'The server adds these up from the sales it holds right now. '
                       'They are not the reconciled figures the daily summary '
                       'reports.',
@@ -470,7 +471,7 @@ final class _SalesTotalsContents extends StatelessWidget {
                       StatTile(
                         label: 'Sales',
                         money: true,
-                        value: _currency.format(answer.sales),
+                        value: _currency.format(answer.netOrGrossSales),
                         icon: Icons.payments_outlined,
                         detail: _salesDetail(answer),
                         valueKey: const ValueKey('sales-totals-amount'),
@@ -484,7 +485,7 @@ final class _SalesTotalsContents extends StatelessWidget {
                       // which is the lesson three chunks in a row have paid for.
                       StatTile(
                         label: 'Transactions',
-                        value: '${answer.transactions}',
+                        value: '${answer.netOrGrossTransactions}',
                         icon: Icons.receipt_long_outlined,
                         detail: 'counted in this total',
                         valueKey: const ValueKey('sales-totals-transactions'),
@@ -497,6 +498,23 @@ final class _SalesTotalsContents extends StatelessWidget {
                   // as a whole-business total would be lying by omission - which
                   // is a notice about *this* read, so it is a `Callout` and does
                   // not fold.
+                  // **Said out loud, because the headline figure changed
+                  // meaning.** Takings net of returns and takings gross of
+                  // them are different numbers, and a reader comparing this
+                  // against a till roll needs to know which one this is.
+                  if (answer.net case final net? when net.returnsScanned > 0)
+                    Padding(
+                      padding: EdgeInsets.only(top: tokens.spacing.s8),
+                      child: Text(
+                        key: const ValueKey('sales-totals-returns'),
+                        '${net.returnsScanned} '
+                        '${net.returnsScanned == 1 ? 'return has' : 'returns have'} '
+                        'been taken back out of these figures.',
+                        style: tokens.typography.caption.copyWith(
+                          color: tokens.colors.text.tertiary,
+                        ),
+                      ),
+                    ),
                   if (answer.query.isCategoryFiltered) ...[
                     SizedBox(height: tokens.spacing.s12),
                     Callout(
@@ -520,7 +538,7 @@ final class _SalesTotalsContents extends StatelessWidget {
                   if (showProfit) ...[
                     SizedBox(height: tokens.spacing.s8),
                     TenantProfitStatement(
-                      report: answer.profitReport,
+                      report: answer.netOrGrossProfitReport,
                       currency: _currency,
                       keyPrefix: 'sales-totals',
                       // Null for a filtered view, which is what keeps the
@@ -540,7 +558,9 @@ final class _SalesTotalsContents extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (answer.tenderBreakdown case final breakdown?) ...[
+                  if (answer.net?.tenderBreakdown ??
+                      answer.tenderBreakdown
+                      case final breakdown?) ...[
                     SizedBox(height: tokens.spacing.s12),
                     _TenderBreakdown(breakdown: breakdown, currency: _currency),
                   ],

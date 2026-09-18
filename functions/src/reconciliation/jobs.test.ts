@@ -11,6 +11,7 @@ import {
   createManualJobInTransaction,
   finalizeReconciliationJob,
   recordReconciliationFailure,
+  registerReturnReceipt,
   registerSaleReceipt,
   saleTriggerJobFields,
 } from "./jobs";
@@ -718,4 +719,72 @@ test("a failure from a worker that has lost the job writes nothing", async () =>
   assert.equal(stored.status, "running");
   assert.equal(stored.consecutiveFailureCount, 0);
   assert.equal(stored.leaseToken, owner.leaseToken);
+});
+
+// ---------------------------------------------------------------------------
+// Return receipts
+// ---------------------------------------------------------------------------
+
+function fileReturn(
+  db: FakeFirestore,
+  returnId: string,
+  businessDate = LOCAL_DATE
+): Promise<{task?: unknown}> {
+  return registerReturnReceipt(db.asFirestore(), {
+    tenantId: TENANT,
+    returnId,
+    businessDate,
+    receivedAt: Timestamp.fromMillis(Date.parse("2026-08-06T09:02:00Z")),
+  });
+}
+
+test("a filed return marks its sale's day dirty", async () => {
+  // Returns count against takings from the moment they are filed, and clients
+  // write them directly under `firestore.rules` - so without this the day's
+  // published metrics would go on describing sales that had been handed back.
+  const db = new FakeFirestore();
+
+  await fileReturn(db, "rt-1");
+
+  const dirty = db.read(`tenants/${TENANT}/reconciliation_dirty_days/${LOCAL_DATE}`);
+  assert.ok(dirty !== undefined, "the day was not marked dirty");
+  assert.equal(dirty.status, "dirty");
+  assert.equal(dirty.revision, 1);
+  assert.equal(dirty.dirtyReason, "return_filed");
+});
+
+test("a redelivered return trigger does not bump the revision again", async () => {
+  // **Firestore event triggers retry.** Without an identity to check, every
+  // redelivery would increment the revision, regenerate the day's metrics to
+  // the same numbers, and re-arm every shift expectation on it - unbounded
+  // reconciliation work bought for one return.
+  const db = new FakeFirestore();
+
+  await fileReturn(db, "rt-1");
+  const first = db.read(`tenants/${TENANT}/reconciliation_dirty_days/${LOCAL_DATE}`);
+
+  await fileReturn(db, "rt-1");
+  await fileReturn(db, "rt-1");
+  const afterRetries = db.read(`tenants/${TENANT}/reconciliation_dirty_days/${LOCAL_DATE}`);
+
+  assert.equal(afterRetries?.revision, first?.revision);
+  assert.equal(
+    afterRetries?.revision,
+    1,
+    "three deliveries of one return are still one return"
+  );
+});
+
+test("two different returns on one day each count once", async () => {
+  const db = new FakeFirestore();
+
+  await fileReturn(db, "rt-1");
+  await fileReturn(db, "rt-2");
+
+  const dirty = db.read(`tenants/${TENANT}/reconciliation_dirty_days/${LOCAL_DATE}`);
+  assert.equal(dirty?.revision, 2);
+  assert.deepEqual(
+    db.ids(`tenants/${TENANT}/reconciliation_return_receipts`).sort(),
+    ["rt-1", "rt-2"]
+  );
 });

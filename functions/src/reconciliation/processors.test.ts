@@ -1905,3 +1905,150 @@ test("an expectation whose generation moved is left alone rather than settled", 
   assert.equal("verificationStatus" in expectation, false);
   assert.deepEqual(db.ids(`tenants/${TENANT}/shift_verifications`), []);
 });
+
+// ---------------------------------------------------------------------------
+// Returns
+// ---------------------------------------------------------------------------
+
+/** A sale the returns join can name, with a product id on its line. */
+function seedReturnableSale(
+  db: FakeFirestore,
+  saleId: string,
+  businessDate: string,
+  options: {shiftId?: string; quantity?: number; tender?: string} = {}
+): void {
+  const quantity = options.quantity ?? 2;
+  const unitPriceMinor = 500;
+  const unitCostMinor = 300;
+  db.seed(`tenants/${TENANT}/sales/${saleId}`, {
+    tenantId: TENANT,
+    businessDate,
+    shiftId: options.shiftId ?? "shift-a",
+    tender: options.tender ?? "cash",
+    subtotalMinor: unitPriceMinor * quantity,
+    subtotal: (unitPriceMinor * quantity) / 100,
+    discountMinor: 0,
+    discount: 0,
+    totalMinor: unitPriceMinor * quantity,
+    total: (unitPriceMinor * quantity) / 100,
+    items: [{
+      productId: "prod-a",
+      quantity,
+      unitPriceMinor,
+      lineTotalMinor: unitPriceMinor * quantity,
+      unitPrice: unitPriceMinor / 100,
+      lineTotal: (unitPriceMinor * quantity) / 100,
+      unitCostMinor,
+      costMinor: unitCostMinor * quantity,
+      unitCost: unitCostMinor / 100,
+      cost: (unitCostMinor * quantity) / 100,
+    }],
+  });
+}
+
+function seedDayReturn(
+  db: FakeFirestore,
+  returnId: string,
+  saleId: string,
+  businessDate: string,
+  quantity: number
+): void {
+  db.seed(`tenants/${TENANT}/returns/${returnId}`, {
+    tenantId: TENANT,
+    saleId,
+    businessDate,
+    status: "pending",
+    itemsReturned: [{productId: "prod-a", quantity}],
+  });
+}
+
+test("a day's returns are written beside its gross figures, not instead", async () => {
+  const db = firestoreWithClaimedJob();
+  seedDirtyDay(db, LOCAL_DATE);
+  seedReturnableSale(db, "co-1", LOCAL_DATE);
+  seedDayReturn(db, "rt-1", "co-1", LOCAL_DATE, 1);
+
+  await processMetricsPage(db.asFirestore(), claimedJob());
+  const metric = stored(db, `tenants/${TENANT}/daily_metrics/${LOCAL_DATE}`);
+
+  // Gross is what it always was.
+  assert.equal(metric.sales, 10);
+  assert.equal(metric.profit, 4);
+  assert.equal(metric.transactions, 1);
+  // Net loses one unit of revenue and one unit of cost, so profit falls by
+  // the margin rather than by the whole price.
+  assert.equal(metric.netSales, 5);
+  assert.equal(metric.netProfit, 2);
+  assert.equal(metric.netTransactions, 1);
+  assert.equal(metric.returnedSales, 5);
+  assert.equal(metric.returnCount, 1);
+  assert.equal(metric.netMetricsVersion, 1);
+});
+
+test("a fully returned sale stops being a transaction in the net figures", async () => {
+  const db = firestoreWithClaimedJob();
+  seedDirtyDay(db, LOCAL_DATE);
+  seedReturnableSale(db, "co-1", LOCAL_DATE);
+  seedDayReturn(db, "rt-1", "co-1", LOCAL_DATE, 2);
+
+  await processMetricsPage(db.asFirestore(), claimedJob());
+  const metric = stored(db, `tenants/${TENANT}/daily_metrics/${LOCAL_DATE}`);
+
+  assert.equal(metric.transactions, 1);
+  assert.equal(metric.netTransactions, 0);
+  assert.equal(metric.netSales, 0);
+});
+
+test("a day's returns do not move any shift's expected drawer", async () => {
+  // **The regression test this stage exists around.** A cashier counts the
+  // drawer at close; money that came back a week later did not leave it.
+  // Netting returns into a shift expectation would mark a correct count short
+  // and, through `tenderFiguresMoved`, reopen every difference a manager had
+  // already acknowledged. So the day nets and the shift does not.
+  const withReturn = firestoreWithClaimedJob();
+  seedDirtyDay(withReturn, LOCAL_DATE);
+  seedReturnableSale(withReturn, "co-1", LOCAL_DATE);
+  seedDayReturn(withReturn, "rt-1", "co-1", LOCAL_DATE, 1);
+  await processMetricsPage(withReturn.asFirestore(), claimedJob());
+
+  const withoutReturn = firestoreWithClaimedJob();
+  seedDirtyDay(withoutReturn, LOCAL_DATE);
+  seedReturnableSale(withoutReturn, "co-1", LOCAL_DATE);
+  await processMetricsPage(withoutReturn.asFirestore(), claimedJob());
+
+  const id = shiftExpectationId(LOCAL_DATE, "shift-a");
+  const netted = stored(withReturn, `tenants/${TENANT}/shift_expectations/${id}`);
+  const plain = stored(withoutReturn, `tenants/${TENANT}/shift_expectations/${id}`);
+
+  for (const field of [
+    "expectedCashMinor",
+    "expectedMpesaMinor",
+    "expectedCardMinor",
+    "expectedUnattributedMinor",
+    "sales",
+    "transactions",
+  ]) {
+    assert.equal(
+      netted[field],
+      plain[field],
+      `${field} moved because a return was filed`
+    );
+  }
+});
+
+test("a day with no returns still writes the net block", async () => {
+  // `{merge: false}`, so the shape is the whole shape every time. A reader
+  // must be able to tell "nothing came back" from "written before returns
+  // were counted", and only an always-present block does that.
+  const db = firestoreWithClaimedJob();
+  seedDirtyDay(db, LOCAL_DATE);
+  seedReturnableSale(db, "co-1", LOCAL_DATE);
+
+  await processMetricsPage(db.asFirestore(), claimedJob());
+  const metric = stored(db, `tenants/${TENANT}/daily_metrics/${LOCAL_DATE}`);
+
+  assert.equal(metric.netSales, metric.sales);
+  assert.equal(metric.netTransactions, metric.transactions);
+  assert.equal(metric.returnedSales, 0);
+  assert.equal(metric.returnCount, 0);
+});

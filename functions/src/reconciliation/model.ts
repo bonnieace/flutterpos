@@ -2,6 +2,7 @@ import {createHash} from "node:crypto";
 import {HttpsError} from "firebase-functions/v2/https";
 import {
   PeriodMetrics,
+  PeriodReturns,
   SaleLike,
   aggregateSales,
   minorUnitsToMoney,
@@ -97,6 +98,27 @@ export interface ShiftAggregate {
 
 export interface DailyAggregateResult {
   metrics: DailyMetrics;
+  /**
+   * The same day with its returns taken back out.
+   *
+   * **Separate from [metrics], which stays gross.** The metric document keeps
+   * both so a surface can say which basis it is reading, and so a day
+   * reconciled before returns were counted is distinguishable from a day
+   * nothing came back on.
+   */
+  netMetrics: PeriodMetrics;
+  /** What came back, in major units, over the whole day. */
+  returnedSales: number;
+  /** How many return documents the day held. */
+  returnCount: number;
+  /**
+   * Per-shift figures, deliberately **gross**.
+   *
+   * A cashier counts the drawer at close. Money that came back a week later
+   * did not leave that drawer, so netting it into a shift's expected cash
+   * would mark a correct count short - and `tenderFiguresMoved` would reopen
+   * every difference a manager had already acknowledged.
+   */
   shifts: ShiftAggregate[];
 }
 
@@ -334,7 +356,9 @@ function finiteNonNegative(value: unknown): number {
 export function aggregateDailySales(
   businessDate: string,
   sales: readonly SaleLike[],
-  maximumShifts = 200
+  maximumShifts = 200,
+  returns?: PeriodReturns,
+  returnCount = 0
 ): DailyAggregateResult {
   requireIsoDate(businessDate, "businessDate");
   const shifts = new Map<string, ShiftAggregate>();
@@ -378,6 +402,9 @@ export function aggregateDailySales(
     }
   }
   const period = aggregateSales(sales);
+  // **The one place returns enter this function.** The shift loop above is
+  // untouched; see `DailyAggregateResult.shifts`.
+  const net = aggregateSales(sales, undefined, returns);
   const shiftValues = [...shifts.values()].sort((left, right) =>
     left.shiftId.localeCompare(right.shiftId)
   );
@@ -388,6 +415,11 @@ export function aggregateDailySales(
       transactionCount: period.transactions,
       shiftCount: shiftValues.length,
     },
+    netMetrics: net,
+    returnedSales: minorUnitsToMoney(
+      moneyToMinorUnits(period.sales) - moneyToMinorUnits(net.sales)
+    ),
+    returnCount,
     shifts: shiftValues,
   };
 }

@@ -1,6 +1,7 @@
 export {acknowledgeReconciliationAnomaly} from "./acknowledgements";
 export {amendShiftSummary} from "./amendments";
 export {
+  mergeReturnReconciliationJob,
   mergeSaleReconciliationJob,
   requestTenantReconciliation,
   retryTenantReconciliationTasks,

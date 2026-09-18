@@ -166,9 +166,10 @@ final class WeeklyReportContents extends StatelessWidget {
             status: AppStatus.info,
             title: 'On this device',
             message:
-                'These figures include saved sales on this device. Sales from '
-                'other devices and comparison percentages will appear after '
-                'the server responds.',
+                'These figures include saved sales on this device, less the '
+                'returns it holds. Sales or returns from other devices, and '
+                'comparison percentages, will appear after the server '
+                'responds.',
           ),
           SizedBox(height: tokens.spacing.s24),
         ],
@@ -354,7 +355,9 @@ final class _MetricGrid extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final data = report;
     final previous = data?.previousTotals;
-    final profit = data?.totals?.profitReport;
+    // Net of returns where the server sent them, so this card and TOTAL SALES
+    // describe the same money.
+    final profit = data?.totals?.netOrGrossProfitReport;
     final net = data?.netProfitReport;
     // Both money questions elaborate into the same place: it is the only
     // surface that can answer either.
@@ -373,7 +376,10 @@ final class _MetricGrid extends StatelessWidget {
             ? '—'
             : weeklyReportMoney(currency, data.sales),
         subtitle: _countedHere(data) ? _countedLabel : null,
-        change: TenantWeeklyReport.change(data?.sales ?? 0, previous?.sales),
+        change: TenantWeeklyReport.change(
+          data?.sales ?? 0,
+          previous?.netOrGrossSales,
+        ),
         comparisonLabel: _comparisonLabel,
         icon: Icons.attach_money,
         emphasis: true,
@@ -396,7 +402,10 @@ final class _MetricGrid extends StatelessWidget {
               ? 'Some lines carry no cost'
               : null,
           change: profit != null && profit.isShowable
-              ? TenantWeeklyReport.change(profit.profit, previous?.profit)
+              ? TenantWeeklyReport.change(
+                  profit.profit,
+                  previous?.netOrGrossProfitReport.profit,
+                )
               : null,
           comparisonLabel: _comparisonLabel,
           icon: Icons.trending_up,
@@ -435,7 +444,7 @@ final class _MetricGrid extends StatelessWidget {
         subtitle: _countedHere(data) ? _countedLabel : null,
         change: TenantWeeklyReport.change(
           (data?.transactions ?? 0).toDouble(),
-          previous?.transactions.toDouble(),
+          previous?.netOrGrossTransactions.toDouble(),
         ),
         comparisonLabel: _comparisonLabel,
         icon: Icons.receipt_long,
@@ -901,6 +910,26 @@ final class _FilterBar extends StatelessWidget {
       ],
     );
 
+    // **A filter that lists part of a business must say so.** Both lists are
+    // one bounded page; the totals page has always told a reader when there are
+    // more, and this bar - which offers the same two filters over the same
+    // session context - told them neither. A chooser that looks complete and is
+    // not is worse than one that is plainly partial.
+    final categoryField = _FilterField(
+      field: category,
+      notice: sessionContext.categories.truncated
+          ? 'This business has more categories than are listed here.'
+          : null,
+      noticeKey: const ValueKey('weekly-report-categories-truncated'),
+    );
+    final memberField = _FilterField(
+      field: member,
+      notice: sessionContext.staff.truncated
+          ? 'This business has more members than are listed here.'
+          : null,
+      noticeKey: const ValueKey('weekly-report-staff-truncated'),
+    );
+
     if (stacked) {
       return WeeklyReportCard(
         padding: tokens.spacing.s16,
@@ -909,9 +938,9 @@ final class _FilterBar extends StatelessWidget {
           children: <Widget>[
             Center(child: navigator),
             SizedBox(height: tokens.spacing.s16),
-            category,
+            categoryField,
             SizedBox(height: tokens.spacing.s16),
-            member,
+            memberField,
           ],
         ),
       );
@@ -919,15 +948,53 @@ final class _FilterBar extends StatelessWidget {
     return WeeklyReportCard(
       padding: tokens.spacing.s20,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        // Top rather than centre, since either field can now carry a second
+        // line and a row of two unequal heights should align on the control
+        // they share, not on the middle of whichever grew.
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           navigator,
           SizedBox(width: tokens.spacing.s16),
-          Expanded(child: category),
+          Expanded(child: categoryField),
           SizedBox(width: tokens.spacing.s16),
-          Expanded(child: member),
+          Expanded(child: memberField),
         ],
       ),
+    );
+  }
+}
+
+/// One filter control, and what is known about the list behind it.
+final class _FilterField extends StatelessWidget {
+  const _FilterField({
+    required this.field,
+    required this.notice,
+    required this.noticeKey,
+  });
+
+  final Widget field;
+  final String? notice;
+  final Key noticeKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final notice = this.notice;
+    if (notice == null) return field;
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        field,
+        SizedBox(height: tokens.spacing.s8),
+        Text(
+          notice,
+          key: noticeKey,
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.secondary,
+          ),
+        ),
+      ],
     );
   }
 }

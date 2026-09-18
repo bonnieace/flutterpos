@@ -15,14 +15,25 @@ final class SalesTotalsCategoryOptions {
   const SalesTotalsCategoryOptions({
     required this.items,
     required this.readable,
+    required this.truncated,
   });
 
   const SalesTotalsCategoryOptions.unreadable()
     : items = const <TenantCategory>[],
-      readable = false;
+      readable = false,
+      truncated = false;
 
   final List<TenantCategory> items;
   final bool readable;
+
+  /// Whether the business holds more categories than [items] lists.
+  ///
+  /// **Carried for the same reason `SalesTotalsStaffOptions.truncated` is.** One
+  /// bounded page is read, and a business past that bound had valid categories
+  /// simply absent from the chooser with nothing on the page to say so - which
+  /// is a filter that looks complete and is not. The staff chooser has said this
+  /// since it was written; the categories were never brought into line with it.
+  final bool truncated;
 
   String? nameOf(String categoryId) {
     for (final category in items) {
@@ -192,7 +203,11 @@ final class SalesTotalsSessionContextLoader {
         session: session,
         reader: reader,
       ).loadCategories(pageSize: categoryPageSize);
-      return SalesTotalsCategoryOptions(items: page.items, readable: true);
+      return SalesTotalsCategoryOptions(
+        items: page.items,
+        readable: true,
+        truncated: page.hasMore,
+      );
     } on TenantScopeViolation {
       rethrow;
     } catch (_) {

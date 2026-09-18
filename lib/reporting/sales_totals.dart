@@ -343,6 +343,123 @@ final class TenantSalesTenderBreakdown {
 /// count fewer but can never count more than it read. Either way a count the
 /// query cannot explain describes some other request, and it is refused rather
 /// than shown - this is the surface an owner reads takings from.
+/// One period's takings with its returns taken back out.
+///
+/// **Carried beside the gross figures rather than replacing them**, because
+/// `TenantSalesTotals.fromCallable` refuses an unfiltered answer whose
+/// `transactions` disagrees with `scannedTransactions`. Netting a fully
+/// returned sale out of that count in place would break the identity on every
+/// installed client and blank the report rather than merely date it. So the
+/// server sends both and this holds the second.
+///
+/// Null on the outer object means the server did not send them - an older
+/// deployment, which reported gross and is not wrong, only older.
+final class TenantSalesNetTotals {
+  const TenantSalesNetTotals._({
+    required this.sales,
+    required this.profit,
+    required this.transactions,
+    required this.incompleteCostLineCount,
+    required this.returnsScanned,
+    required this.tenderBreakdown,
+  });
+
+  /// Takings after returns.
+  final double sales;
+
+  /// Profit after both the cost of the goods sold and the returns.
+  ///
+  /// **Cost comes back with the revenue.** Netting takings alone would drive
+  /// the cost this figure implies - takings minus profit - downward and, on a
+  /// low-margin period with a large return, negative; `TenantProfitReport`
+  /// reads that as impossible and withholds the margin.
+  final double profit;
+
+  /// Sales that still happened. A fully returned one no longer did.
+  final int transactions;
+
+  final int incompleteCostLineCount;
+
+  /// How many return documents the period held.
+  final int returnsScanned;
+
+  final TenantSalesTenderBreakdown? tenderBreakdown;
+
+  /// The same question `TenantSalesTotals.profitReport` answers, of the net
+  /// figures - so a surface showing net profit applies the same trust rule.
+  TenantProfitReport get profitReport => TenantProfitReport.from(
+    sales: sales,
+    profit: profit,
+    incompleteCostLineCount: incompleteCostLineCount,
+  );
+
+  /// Adds several days' net figures into one period's.
+  ///
+  /// The tender split is dropped for the reason `TenantSalesTotals.summed`
+  /// drops its own: two breakdowns do not add up without re-checking them
+  /// against the sum, and nothing that sums days draws one.
+  factory TenantSalesNetTotals.summed({
+    required double sales,
+    required double profit,
+    required int transactions,
+    required int incompleteCostLineCount,
+    required int returnsScanned,
+  }) => TenantSalesNetTotals._(
+    sales: sales,
+    profit: profit,
+    transactions: transactions,
+    incompleteCostLineCount: incompleteCostLineCount,
+    returnsScanned: returnsScanned,
+    tenderBreakdown: null,
+  );
+
+  /// Reads the `net` block of one callable answer, or null where it is absent.
+  ///
+  /// **Absent is not a failure; present and wrong is.** The same posture
+  /// `TenantSalesTenderBreakdown.tryDecode` takes, and for the same reason: an
+  /// older server simply does not send this, while a server sending figures
+  /// that contradict the gross ones beside them is describing some other
+  /// period and must not be shown.
+  static TenantSalesNetTotals? tryDecode(
+    Object? value,
+    Object? byTender,
+    Object? returnsScanned, {
+    required double grossSales,
+    required int grossTransactions,
+  }) {
+    if (value == null) return null;
+    if (value is! Map) {
+      throw const FormatException('getSalesComparison sent a malformed net block.');
+    }
+    final net = _strictMap(value, 'net');
+    final sales = _requiredNonNegativeNumber(net, 'sales');
+    final transactions = _requiredCount(net, 'transactions');
+    // Exact, in whole minor units, the way the tender split is checked.
+    if (reportingMinorUnits(sales) > reportingMinorUnits(grossSales) ||
+        transactions > grossTransactions) {
+      throw const FormatException(
+        'getSalesComparison netted a period to more than it took.',
+      );
+    }
+    return TenantSalesNetTotals._(
+      sales: sales,
+      profit: _requiredFiniteNumber(net, 'profit'),
+      transactions: transactions,
+      incompleteCostLineCount: _requiredCount(net, 'incompleteCostLineCount'),
+      returnsScanned: returnsScanned == null
+          ? 0
+          : _requiredCount(<String, Object?>{'v': returnsScanned}, 'v'),
+      // Checked against the *net* figures, so the buckets-sum invariant holds
+      // for both halves of the answer rather than only the gross one.
+      tenderBreakdown: TenantSalesTenderBreakdown.tryDecode(
+        byTender,
+        sales: sales,
+        transactions: transactions,
+      ),
+    );
+  }
+}
+
 final class TenantSalesTotals {
   const TenantSalesTotals._({
     required this.query,
@@ -353,6 +470,7 @@ final class TenantSalesTotals {
     required this.incompleteCostLineCount,
     required this.tenderBreakdown,
     required this.basis,
+    required this.net,
   });
 
   factory TenantSalesTotals.fromCallable(
@@ -401,6 +519,13 @@ final class TenantSalesTotals {
         transactions: transactions,
       ),
       basis: TenantSalesTotalsBasis.server,
+      net: TenantSalesNetTotals.tryDecode(
+        data['net'],
+        data['netByTender'],
+        data['returnsScanned'],
+        grossSales: sales,
+        grossTransactions: transactions,
+      ),
     );
   }
 
@@ -416,6 +541,7 @@ final class TenantSalesTotals {
     required int incompleteCostLineCount,
     required Map<String, int> tenderSalesMinor,
     required Map<String, int> tenderTransactions,
+    TenantSalesNetTotals? net,
   }) {
     if (scannedTransactions < 0 ||
         scannedTransactions > maximumTransactions ||
@@ -441,6 +567,10 @@ final class TenantSalesTotals {
         totalTransactions: transactions,
       ),
       basis: TenantSalesTotalsBasis.device,
+      // Filled by the device aggregator once it reads the cache's returns; a
+      // caller that has not is reporting gross and says so rather than
+      // implying nothing came back.
+      net: net,
     );
   }
 
@@ -463,6 +593,7 @@ final class TenantSalesTotals {
     required int transactions,
     required int incompleteCostLineCount,
     TenantSalesTotalsBasis basis = TenantSalesTotalsBasis.server,
+    TenantSalesNetTotals? net,
   }) => TenantSalesTotals._(
     query: query,
     scannedTransactions: transactions,
@@ -472,6 +603,7 @@ final class TenantSalesTotals {
     incompleteCostLineCount: incompleteCostLineCount,
     tenderBreakdown: null,
     basis: basis,
+    net: net,
   );
 
   /// The server's `SALES_QUERY_LIMIT`; a period holding more is refused
@@ -509,6 +641,28 @@ final class TenantSalesTotals {
   final TenantSalesTenderBreakdown? tenderBreakdown;
 
   final TenantSalesTotalsBasis basis;
+
+  /// The same period with its returns taken back out, or null where the
+  /// answer did not carry them.
+  ///
+  /// **Absent is not zero.** A server that does not net returns and a period
+  /// that had none are different facts, and a surface must be able to say
+  /// "these figures are gross" rather than imply nothing came back.
+  final TenantSalesNetTotals? net;
+
+  /// Whether this answer can state takings after returns at all.
+  bool get hasNet => net != null;
+
+  /// Takings after returns where they are known, and the gross figure where
+  /// they are not - which is what every surface showed before they were.
+  double get netOrGrossSales => net?.sales ?? sales;
+
+  /// The transaction count on the same basis as [netOrGrossSales].
+  int get netOrGrossTransactions => net?.transactions ?? transactions;
+
+  /// The profit report on the same basis as [netOrGrossSales].
+  TenantProfitReport get netOrGrossProfitReport =>
+      net?.profitReport ?? profitReport;
 
   double get averageSale => transactions == 0 ? 0 : sales / transactions;
 

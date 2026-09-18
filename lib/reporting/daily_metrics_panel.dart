@@ -16,6 +16,7 @@ import '../expenses/expense.dart';
 import '../expenses/expense_repository.dart';
 import 'net_profit.dart';
 import 'daily_metrics.dart';
+import 'reconciliation_status.dart';
 import 'profit_report.dart';
 import 'profit_statement.dart';
 import 'reporting_currency.dart';
@@ -366,8 +367,14 @@ final class _DailySummaryContents extends StatelessWidget {
                       // is the document's decision rather than this screen's.
                       // The unreconciled key is the one the sentence carried,
                       // because it states the same fact.
-                      if (day.metrics == null)
-                        StatusBadge(
+                      // **Four readings, because a published figure and a
+                      // current one are different facts.** This used to ask
+                      // `metrics == null` and call everything else
+                      // *Reconciled*, so a day the server had taken more sales
+                      // for - or had stopped working on entirely - kept a green
+                      // badge over figures the intake record knew were stale.
+                      switch (day.standing) {
+                        TenantDailyMetricsStanding.unpublished => StatusBadge(
                           key: ValueKey(
                             'daily-summary-pending-${day.businessDate}',
                           ),
@@ -375,9 +382,8 @@ final class _DailySummaryContents extends StatelessWidget {
                           label: 'Not reconciled yet',
                           semanticLabel:
                               '${day.businessDate} is not reconciled yet',
-                        )
-                      else
-                        StatusBadge(
+                        ),
+                        TenantDailyMetricsStanding.current => StatusBadge(
                           key: ValueKey(
                             'daily-summary-reconciled-${day.businessDate}',
                           ),
@@ -385,6 +391,34 @@ final class _DailySummaryContents extends StatelessWidget {
                           label: 'Reconciled',
                           semanticLabel: '${day.businessDate} is reconciled',
                         ),
+                        TenantDailyMetricsStanding.superseded => StatusBadge(
+                          key: ValueKey(
+                            'daily-summary-superseded-${day.businessDate}',
+                          ),
+                          status: AppStatus.attention,
+                          // The intake record's own word for the state it is
+                          // in, so this screen does not invent a second
+                          // vocabulary for the server's decision.
+                          label:
+                              day.intake?.status ==
+                                  TenantReconciliationIntakeStatus.quarantined
+                              ? 'Stopped'
+                              : 'Waiting to be regenerated',
+                          semanticLabel:
+                              '${day.businessDate} has figures that are out of '
+                              'date',
+                        ),
+                        TenantDailyMetricsStanding.unconfirmed => StatusBadge(
+                          key: ValueKey(
+                            'daily-summary-unconfirmed-${day.businessDate}',
+                          ),
+                          status: AppStatus.attention,
+                          label: 'Not confirmed current',
+                          semanticLabel:
+                              '${day.businessDate} could not be confirmed as '
+                              'current',
+                        ),
+                      },
                     ],
                   ),
                   if (day.metrics case final metrics?) ...[
@@ -398,7 +432,7 @@ final class _DailySummaryContents extends StatelessWidget {
                     StatLine(
                       label: 'Sales',
                       money: true,
-                      value: currency.format(metrics.sales),
+                      value: currency.format(metrics.netOrGrossSales),
                       valueKey: ValueKey(
                         'daily-summary-sales-${day.businessDate}',
                       ),
@@ -428,7 +462,7 @@ final class _DailySummaryContents extends StatelessWidget {
                         money: true,
                         value: _signedCurrency(
                           currency,
-                          metrics.sales - previous,
+                          metrics.netOrGrossSales - previous,
                         ),
                         valueKey: ValueKey(
                           'daily-summary-change-${day.businessDate}',
@@ -436,7 +470,7 @@ final class _DailySummaryContents extends StatelessWidget {
                       ),
                     StatLine(
                       label: 'Transactions',
-                      value: '${metrics.transactions}',
+                      value: '${metrics.netOrGrossTransactions}',
                       valueKey: ValueKey(
                         'daily-summary-transactions-${day.businessDate}',
                       ),
@@ -454,7 +488,7 @@ final class _DailySummaryContents extends StatelessWidget {
                     // it, and saying it twice reads as two different findings.
                     if (showProfit)
                       TenantProfitStatement(
-                        report: metrics.profitReport,
+                        report: metrics.netOrGrossProfitReport,
                         currency: currency,
                         keyPrefix: 'daily-summary-${day.businessDate}',
                         // This day's slice of the span read once above. Null
@@ -464,7 +498,7 @@ final class _DailySummaryContents extends StatelessWidget {
                         net: expenses == null
                             ? null
                             : TenantNetProfitReport.from(
-                                gross: metrics.profitReport,
+                                gross: metrics.netOrGrossProfitReport,
                                 expenses: expenses!.forDate(day.businessDate),
                               ),
                       )
@@ -483,10 +517,52 @@ final class _DailySummaryContents extends StatelessWidget {
                           ),
                         ),
                       ),
+                    // Said where anything came back, for the reason the
+                    // totals page says it: takings net of returns and takings
+                    // gross of them are different numbers, and a reader
+                    // checking against a till roll needs to know which.
+                    if (metrics.net case final net? when net.returnCount > 0)
+                      Padding(
+                        padding: EdgeInsets.only(top: tokens.spacing.s4),
+                        child: Text(
+                          key: ValueKey(
+                            'daily-summary-returns-${day.businessDate}',
+                          ),
+                          '${net.returnCount} '
+                          '${net.returnCount == 1 ? 'return has' : 'returns have'} '
+                          'been taken back out of these figures.',
+                          style: tokens.typography.caption.copyWith(
+                            color: tokens.colors.text.tertiary,
+                          ),
+                        ),
+                      ),
                     SizedBox(height: tokens.spacing.s8),
+                    // **When these figures were made, not when the day was
+                    // settled.** Saying *Reconciled* over a superseded day
+                    // would restate the claim the badge has just withdrawn.
                     ProvenanceLine(
-                      'Reconciled ${_instant(metrics.regeneratedAt)}',
+                      day.standing == TenantDailyMetricsStanding.current
+                          ? 'Reconciled ${_instant(metrics.regeneratedAt)}'
+                          : 'Published ${_instant(metrics.regeneratedAt)}',
                     ),
+                    if (day.standing ==
+                        TenantDailyMetricsStanding.superseded) ...[
+                      SizedBox(height: tokens.spacing.s4),
+                      Text(
+                        key: ValueKey(
+                          'daily-summary-superseded-note-${day.businessDate}',
+                        ),
+                        day.intake?.status ==
+                                TenantReconciliationIntakeStatus.quarantined
+                            ? 'The server stopped working on this day, so these '
+                                  'figures are the last it published.'
+                            : 'Sales have reached the server since these '
+                                  'figures were published.',
+                        style: tokens.typography.caption.copyWith(
+                          color: tokens.colors.text.tertiary,
+                        ),
+                      ),
+                    ],
                   ],
                   if (reconciliationRoute != null) ...[
                     SizedBox(height: tokens.spacing.s8),
@@ -542,7 +618,9 @@ String _instant(DateTime value) {
 /// neither has a figure to compare against.
 double? _previousSales(List<TenantDailyMetricsDay> days, int index) {
   if (index + 1 >= days.length) return null;
-  return days[index + 1].metrics?.sales;
+  // The same basis as the day it is subtracted from, or the delta is a
+  // difference between two different questions.
+  return days[index + 1].metrics?.netOrGrossSales;
 }
 
 /// A signed money delta, with the sign doing the work.

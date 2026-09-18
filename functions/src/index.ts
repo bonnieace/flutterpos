@@ -83,6 +83,7 @@ export {
 export {
   acknowledgeReconciliationAnomaly,
   amendShiftSummary,
+  mergeReturnReconciliationJob,
   mergeSaleReconciliationJob,
   requestTenantReconciliation,
   retryTenantReconciliationTasks,

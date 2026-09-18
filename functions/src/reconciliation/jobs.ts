@@ -370,6 +370,115 @@ export function saleTriggerJobFields(input: {
   };
 }
 
+/**
+ * Marks a day dirty because a return was filed against one of its sales.
+ *
+ * **Why returns dirty a day at all.** Pending returns count against takings -
+ * a report agrees with what the cashier just did rather than with what a
+ * manager has not got to yet - so `daily_metrics` has to be regenerated when
+ * one is filed, not only when one is verified. Nothing else does this:
+ * `mergeSaleReconciliationJob` is an `onDocumentCreated` on `sales`, and a
+ * return is a different collection.
+ *
+ * **Deliberately not `registerSaleReceipt`.** That one also writes the sale's
+ * stock movements and a per-sale receipt document; a return has neither, and
+ * its stock is restored by `verifyReturnAndRestoreStock` on a different
+ * trigger entirely. What is shared is the part that matters - the same dirty
+ * row, the same five-minute job bucket, the same enqueue decision.
+ *
+ * Idempotent per return: the receipt document keyed by `returnId` is created
+ * inside the transaction, so a trigger retry cannot increment the revision
+ * twice and quietly strand the day one revision ahead of its metrics.
+ */
+export async function registerReturnReceipt(
+  db: Firestore,
+  input: {
+    tenantId: string;
+    returnId: string;
+    businessDate: string;
+    receivedAt: Timestamp;
+  }
+): Promise<{task?: ReconciliationTaskPayload}> {
+  const bucket = fiveMinuteBucket(input.receivedAt.toDate());
+  const jobId = `dirty_${bucket}`;
+  const ref = jobRef(db, input.tenantId, jobId);
+  const tenantRef = db.collection("tenants").doc(input.tenantId);
+  const dirtyRef = tenantRef.collection("reconciliation_dirty_days").doc(input.businessDate);
+  const receiptRef = tenantRef.collection("reconciliation_return_receipts").doc(input.returnId);
+
+  return db.runTransaction(async (transaction) => {
+    const [jobSnapshot, dirtySnapshot, receiptSnapshot] = await transaction.getAll(
+      ref,
+      dirtyRef,
+      receiptRef
+    );
+    // Already counted. Returning nothing leaves the day exactly as the first
+    // delivery left it.
+    if (receiptSnapshot.exists) return {};
+
+    // The same bucket a sale in this five minutes would have joined, and the
+    // same refusal if something else already owns it.
+    let existing: DirtyJobInput | undefined;
+    if (jobSnapshot.exists) {
+      const job = parseJob(input.tenantId, jobId, jobSnapshot.data() ?? {});
+      if (job.source !== "sale_trigger" || job.sourceKey !== `${bucket}`) {
+        throw new HttpsError("already-exists", "The dirty bucket belongs to another source.");
+      }
+      existing = {
+        status: job.status,
+        phase: job.phase,
+        generation: job.generation,
+        revision: job.revision,
+        rerunRequested: job.rerunRequested,
+      };
+    }
+    const decision = mergeDirtyJob(existing);
+    const dirtyData: DocumentData = {
+      tenantId: input.tenantId,
+      businessDate: input.businessDate,
+      status: "dirty",
+      revision: nonNegativeInteger(dirtySnapshot.get("revision")) + 1,
+      dirtyReason: "return_filed",
+      lastReturnId: input.returnId,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    if (!dirtySnapshot.exists) dirtyData.createdAt = FieldValue.serverTimestamp();
+    transaction.set(dirtyRef, dirtyData, {merge: true});
+
+    const jobFields = saleTriggerJobFields({
+      tenantId: input.tenantId,
+      bucket,
+      businessDate: input.businessDate,
+      decision,
+    });
+    if (jobSnapshot.exists) {
+      transaction.update(ref, jobFields.update);
+    } else {
+      transaction.create(ref, jobFields.create);
+    }
+
+    transaction.create(receiptRef, {
+      tenantId: input.tenantId,
+      returnId: input.returnId,
+      businessDate: input.businessDate,
+      jobId,
+      generation: decision.generation,
+      revision: decision.revision,
+      receivedAt: input.receivedAt,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return decision.enqueue ? {
+      task: {
+        tenantId: input.tenantId,
+        jobId,
+        generation: decision.generation,
+        revision: decision.revision,
+      },
+    } : {};
+  });
+}
+
 export async function registerSaleReceipt(
   db: Firestore,
   input: {

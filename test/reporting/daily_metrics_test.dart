@@ -134,13 +134,20 @@ void main() {
         '2026-07-29',
       ]);
       // Today is normally unreconciled and must still be listed.
-      expect(days.first.isReconciled, isFalse);
+      expect(days.first.isPublished, isFalse);
       expect(days[1].metrics!.sales, 1250.5);
-      expect(days.last.isReconciled, isFalse);
+      expect(days.last.isPublished, isFalse);
+      // **Every day's metric and its intake record, all started together.**
+      // The intake reads are what tell a published day from a current one, and
+      // the whole page is one batch rather than a document at a time - two
+      // round trips per day, awaited sequentially, is what this replaced.
       expect(reader.requested, <String>[
         'tenants/tenant-a/daily_metrics/2026-07-31',
         'tenants/tenant-a/daily_metrics/2026-07-30',
         'tenants/tenant-a/daily_metrics/2026-07-29',
+        'tenants/tenant-a/reconciliation_dirty_days/2026-07-31',
+        'tenants/tenant-a/reconciliation_dirty_days/2026-07-30',
+        'tenants/tenant-a/reconciliation_dirty_days/2026-07-29',
       ]);
     });
 
@@ -170,13 +177,14 @@ void main() {
       ]) {
         await _repository(reader, role: role).loadRecentDays(days: 1);
       }
-      expect(reader.requested.length, 3);
+      // One day each, and each day is a metric read plus an intake read.
+      expect(reader.requested.length, 6);
 
       await expectLater(
         _repository(reader, role: TenantRole.cashier).loadRecentDays(days: 1),
         throwsA(_metricsCode('metrics_forbidden')),
       );
-      expect(reader.requested.length, 3, reason: 'no forbidden read was issued');
+      expect(reader.requested.length, 6, reason: 'no forbidden read was issued');
     });
 
     test('the number of days is bounded', () async {
@@ -212,6 +220,209 @@ void main() {
       expect(reader.requested, isEmpty);
     });
   });
+
+  group('a day with its returns taken out', () {
+    // The gross fixture is 1250.50 over 12 transactions at 430.25 profit, so
+    // a net block of 900 over 11 leaves 350.50 returned.
+
+    test('a document written before returns were counted has no net block', () {
+      expect(_decode(const <String, Object?>{}).net, isNull);
+      // And the day still reads, on the figures it does have.
+      expect(_decode(const <String, Object?>{}).netOrGrossSales, 1250.5);
+    });
+
+    test('a complete block decodes and drives the net accessors', () {
+      final metrics = _decode(_net());
+
+      expect(metrics.net!.returnedSales, 350.5);
+      expect(metrics.net!.returnCount, 1);
+      expect(metrics.netOrGrossSales, 900);
+      expect(metrics.netOrGrossTransactions, 11);
+      expect(metrics.netOrGrossProfitReport.profit, 300);
+    });
+
+    test('a half-written block is refused', () {
+      // A writer defect, and this decoder refuses a document its writer would
+      // not have produced - the same posture as the `transactionCount`
+      // double-write check beside it.
+      final partial = Map<String, Object?>.of(_net())..remove('returnCount');
+
+      expect(
+        () => _decode(partial),
+        throwsA(isA<TenantDailyMetricsException>()),
+      );
+    });
+
+    test('a future version is refused rather than read as this one', () {
+      expect(
+        () => _decode(_net(version: 2)),
+        throwsA(isA<TenantDailyMetricsException>()),
+      );
+    });
+
+    test('netting a day to more than it took is refused', () {
+      expect(
+        () => _decode(_net(sales: 2000, returnedSales: -749.5)),
+        throwsA(isA<TenantDailyMetricsException>()),
+      );
+      expect(
+        () => _decode(_net(transactions: 13)),
+        throwsA(isA<TenantDailyMetricsException>()),
+      );
+    });
+
+    test('a returned total that is not the difference is refused', () {
+      expect(
+        () => _decode(_net(returnedSales: 10)),
+        throwsA(isA<TenantDailyMetricsException>()),
+      );
+    });
+
+    test('revenue netted without its cost is refused', () {
+      // **The regression this check exists for.** Gross cost is 1250.50 -
+      // 430.25 = 820.25. Netting takings to 900 while leaving profit at
+      // 430.25 implies a net cost of 469.75, which is fine - but leaving
+      // profit at the *gross* figure while netting further drives the implied
+      // cost below zero, which no writer can produce.
+      expect(
+        () => _decode(_net(sales: 300, profit: 430.25, returnedSales: 950.5)),
+        throwsA(isA<TenantDailyMetricsException>()),
+      );
+    });
+  });
+
+  group('what a published day is worth', () {
+    // **The defect this group exists for.** `daily_metrics` is written with
+    // `merge: false` and never deleted, so a later sale that marks the day
+    // dirty again leaves the previous document in place. Reading its mere
+    // existence as *reconciled* is what let the summary badge known-stale
+    // figures green.
+
+    test('a day with no metrics has not been published', () {
+      expect(
+        _day(metrics: null, intake: _intake()).standing,
+        TenantDailyMetricsStanding.unpublished,
+      );
+    });
+
+    test('a clean day at the published revision is current', () {
+      expect(
+        _day(metrics: _publishedMetrics(), intake: _intake()).standing,
+        TenantDailyMetricsStanding.current,
+      );
+    });
+
+    test('a day the server has taken more sales for is superseded', () {
+      expect(
+        _day(
+          metrics: _publishedMetrics(),
+          // The sale trigger bumps the revision and sets the day back to
+          // dirty without touching the metric document.
+          intake: _intake(status: 'dirty', revision: 4, processedRevision: 3),
+        ).standing,
+        TenantDailyMetricsStanding.superseded,
+      );
+    });
+
+    test('a quarantined day is superseded however clean it looks', () {
+      expect(
+        _day(
+          metrics: _publishedMetrics(),
+          intake: _intake(
+            status: 'quarantined',
+            revision: 3,
+            processedRevision: 3,
+            overrides: <String, Object?>{'lastErrorCode': 'metrics_failed'},
+          ),
+        ).standing,
+        TenantDailyMetricsStanding.superseded,
+      );
+    });
+
+    test('a clean day that published a different revision is superseded', () {
+      // Belt and braces against the status alone: a record claiming `clean`
+      // while naming a revision the metric was not built from is not proof.
+      expect(
+        _day(
+          metrics: _publishedMetrics(revision: 2),
+          intake: _intake(revision: 3, processedRevision: 3),
+        ).standing,
+        TenantDailyMetricsStanding.superseded,
+      );
+    });
+
+    test('a published day with no readable intake is not confirmed', () {
+      // **Never [TenantDailyMetricsStanding.current].** Every sale writes an
+      // intake record, so its absence is a read that did not answer - and
+      // treating silence as confirmation is the original defect.
+      expect(
+        _day(metrics: _publishedMetrics(), intake: null).standing,
+        TenantDailyMetricsStanding.unconfirmed,
+      );
+    });
+  });
+}
+
+/// The fields `regenerateDailyMetric` writes beside the gross ones.
+Map<String, Object?> _net({
+  double sales = 900,
+  double profit = 300,
+  int transactions = 11,
+  int incompleteCostLineCount = 0,
+  double returnedSales = 350.5,
+  int returnCount = 1,
+  int version = 1,
+}) => <String, Object?>{
+  'netSales': sales,
+  'netProfit': profit,
+  'netTransactions': transactions,
+  'netIncompleteCostLineCount': incompleteCostLineCount,
+  'returnedSales': returnedSales,
+  'returnCount': returnCount,
+  'netMetricsVersion': version,
+};
+
+TenantDailyMetrics _decode(Map<String, Object?> overrides) =>
+    TenantDailyMetrics.fromDocument(
+      path: 'tenants/tenant-a/daily_metrics/2026-07-31',
+      data: _metrics(overrides: overrides),
+    );
+
+TenantDailyMetricsDay _day({
+  required TenantDailyMetrics? metrics,
+  required TenantReconciliationIntake? intake,
+}) => TenantDailyMetricsDay(
+  businessDate: '2026-07-31',
+  metrics: metrics,
+  intake: intake,
+);
+
+TenantDailyMetrics _publishedMetrics({int revision = 3}) =>
+    TenantDailyMetrics.fromDocument(
+      path: 'tenants/tenant-a/daily_metrics/2026-07-31',
+      data: _metrics(
+        overrides: <String, Object?>{'sourceDirtyRevision': revision},
+      ),
+    );
+
+TenantReconciliationIntake _intake({
+  String status = 'clean',
+  int revision = 3,
+  int? processedRevision,
+  Map<String, Object?>? overrides,
+}) {
+  final data = <String, Object?>{
+    'tenantId': 'tenant-a',
+    'businessDate': '2026-07-31',
+    'status': status,
+    'revision': revision,
+    'processedRevision': processedRevision ?? revision,
+  };
+  if (overrides != null) data.addAll(overrides);
+  return TenantReconciliationIntake.fromDocument(
+    path: 'tenants/tenant-a/reconciliation_dirty_days/2026-07-31',
+    data: data,
+  );
 }
 
 TenantDailyMetricsRepository _repository(

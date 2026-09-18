@@ -28,7 +28,7 @@ import {
  *   does. Each of those is a real refusal this module reproduces, because a
  *   double that is more permissive than Firestore turns a production defect into
  *   a green test.
- * - **Everything else throws.** Any operator but `==`, any `FieldPath` but
+ * - **Everything else throws.** Any operator but `==`, `>=`, `<=`, `>` and `<`, any `FieldPath` but
  *   `documentId()`, any sentinel but the three used, any value type the sort
  *   order does not cover. A silently-ignored `where` clause is the single worst
  *   thing a Firestore double can do, so nothing here is silently ignored.
@@ -50,14 +50,24 @@ interface OrderBy {
   descending: boolean;
 }
 
-interface EqualityFilter {
+/**
+ * One `where` clause.
+ *
+ * **Range operators are supported, equality is not special.** `reports.ts`
+ * reads a period of sales and its returns with `businessDate >=` and `<=`, and
+ * a double that refused those would leave the netting path testable only
+ * through the emulator. They order by the same `compareValues` the sort and
+ * the cursor use, so a range here means exactly what it means there.
+ */
+interface QueryFilter {
   field: string;
+  operator: "==" | ">=" | "<=" | ">" | "<";
   value: unknown;
 }
 
 interface QueryPlan {
   collectionPath: string;
-  filters: readonly EqualityFilter[];
+  filters: readonly QueryFilter[];
   orders: readonly OrderBy[];
   cursor?: readonly unknown[];
   limit?: number;
@@ -235,6 +245,32 @@ function compareValues(left: unknown, right: unknown): number {
   return comparable < other ? -1 : 1;
 }
 
+function isSupportedOperator(
+  operator: string
+): operator is QueryFilter["operator"] {
+  return operator === "==" || operator === ">=" || operator === "<=" ||
+    operator === ">" || operator === "<";
+}
+
+/**
+ * Whether one stored value satisfies one clause.
+ *
+ * A range against a missing field never matches, which is Firestore's own
+ * behaviour: a document with no value at a filtered field is not in the
+ * result.
+ */
+function matchesFilter(stored: unknown, filter: QueryFilter): boolean {
+  if (filter.operator === "==") return valuesEqual(stored, filter.value);
+  if (stored === undefined) return false;
+  const order = compareValues(stored, filter.value);
+  switch (filter.operator) {
+  case ">=": return order >= 0;
+  case "<=": return order <= 0;
+  case ">": return order > 0;
+  case "<": return order < 0;
+  }
+}
+
 function valuesEqual(left: unknown, right: unknown): boolean {
   if (left instanceof Timestamp) return right instanceof Timestamp && left.isEqual(right);
   return left === right;
@@ -293,12 +329,14 @@ export class FakeQuery {
   ) {}
 
   where(field: string | FieldPath, operator: string, value: unknown): FakeQuery {
-    if (operator !== "==") {
-      throw new Error(`fakeFirestore supports only "==" filters, not "${operator}".`);
+    if (!isSupportedOperator(operator)) {
+      throw new Error(
+        `fakeFirestore supports "==", ">=", "<=", ">" and "<" filters, not "${operator}".`
+      );
     }
     return new FakeQuery(this.db, {
       ...this.plan,
-      filters: [...this.plan.filters, {field: fieldName(field), value}],
+      filters: [...this.plan.filters, {field: fieldName(field), operator, value}],
     });
   }
 
@@ -661,7 +699,10 @@ export class FakeFirestore {
     }));
 
     candidates = candidates.filter((candidate) => plan.filters.every(
-      (filter) => valuesEqual(orderValue(candidate.id, candidate.stored, filter.field), filter.value)
+      (filter) => matchesFilter(
+        orderValue(candidate.id, candidate.stored, filter.field),
+        filter
+      )
     ));
     // Firestore returns nothing for a document that has no value at a field the
     // query orders by. A stock movement with no `recordedAt` is therefore

@@ -162,9 +162,26 @@ final class TenantWeeklyReport {
   /// Composed here so the card and any test ask the same question of the same
   /// object, rather than each assembling its own.
   TenantNetProfitReport? get netProfitReport {
-    final gross = totals?.profitReport;
+    // **The returns-net gross figure, not the raw one.** Subtracting the
+    // week's spending from a profit that still counts returned goods as sold
+    // would take the right expenses off the wrong base.
+    final gross = totals?.netOrGrossProfitReport;
     if (gross == null || expenses == null) return null;
     return TenantNetProfitReport.from(gross: gross, expenses: expenses);
+  }
+
+  /// Whether the figures on this week have had their returns taken out.
+  ///
+  /// False means the server did not send them, which is not the same as a
+  /// week nothing came back on - a surface saying "net" has to be able to
+  /// tell those apart.
+  bool get netsReturns => totals?.hasNet ?? false;
+
+  /// What came back over the week, or null where that is not known.
+  double? get returnedSales {
+    final net = totals?.net;
+    if (net == null) return null;
+    return (totals!.sales * 100 - net.sales * 100).round() / 100;
   }
 
   /// Whether there is any basis at all for the takings cards.
@@ -174,16 +191,18 @@ final class TenantWeeklyReport {
   /// nought, and the two must not be printed the same way.
   bool get hasTakings => totals != null;
 
-  double get sales => totals?.sales ?? 0;
-  int get transactions => totals?.transactions ?? 0;
+  // Net of returns wherever the server said so, and the gross figure where it
+  // did not - which is what every surface showed before it did.
+  double get sales => totals?.netOrGrossSales ?? 0;
+  int get transactions => totals?.netOrGrossTransactions ?? 0;
 
   /// The week's takings divided by the sales that produced them.
   double get averageSale => transactions == 0 ? 0 : sales / transactions;
 
   double? get previousAverageSale {
     final previous = previousTotals;
-    if (previous == null || previous.transactions == 0) return null;
-    return previous.sales / previous.transactions;
+    if (previous == null || previous.netOrGrossTransactions == 0) return null;
+    return previous.netOrGrossSales / previous.netOrGrossTransactions;
   }
 
   /// The share of this week over the one before, or null where there is
@@ -307,13 +326,24 @@ final class TenantWeeklyReportLoader {
         soldById: soldById,
         categoryId: categoryId,
       ),
-      if (elapsed.isNotEmpty) _rollUpItems(week, now: now, soldById: soldById),
+      if (elapsed.isNotEmpty)
+        _rollUpItems(
+          week,
+          now: now,
+          soldById: soldById,
+          categoryId: categoryId,
+        ),
       // **In the same batch, and it is the only member of it that is not a
       // callable.** A Firestore range walk serves from the offline cache, so
       // joining the batch costs the week nothing and the net figure lands with
       // the gross one. Its failure is swallowed into a null, like the previous
       // week's, so it can share this list safely.
-      _weekExpenses(week, now: now),
+      _weekExpenses(
+        week,
+        now: now,
+        soldById: soldById,
+        categoryId: categoryId,
+      ),
     ];
     final settled = await Future.wait(pending);
     final byDate = <String, TenantSalesTotals>{
@@ -338,7 +368,7 @@ final class TenantWeeklyReportLoader {
       previousTotals: previous,
       revenueByWeekday: <double>[
         for (final date in week.businessDates)
-          byDate[date]?.sales ??
+          byDate[date]?.netOrGrossSales ??
               (roll.truncated ? 0 : (roll.revenueByDate[date] ?? 0) / 100),
       ],
       topItems: roll.top(topItemCount),
@@ -393,8 +423,18 @@ final class TenantWeeklyReportLoader {
     final settled = await Future.wait<Object?>(<Future<Object?>>[
       totalsFuture,
       Future.wait<TenantDeviceSalesTotals>(dayFutures),
-      _rollUpItems(week, now: now, soldById: soldById),
-      _weekExpenses(week, now: now),
+      _rollUpItems(
+        week,
+        now: now,
+        soldById: soldById,
+        categoryId: categoryId,
+      ),
+      _weekExpenses(
+        week,
+        now: now,
+        soldById: soldById,
+        categoryId: categoryId,
+      ),
     ]);
     final totalResult = settled[0]! as TenantDeviceSalesTotals;
     final totals = totalResult.totals;
@@ -419,7 +459,8 @@ final class TenantWeeklyReportLoader {
       totals: totals,
       previousTotals: null,
       revenueByWeekday: <double>[
-        for (final date in week.businessDates) byDate[date]?.sales ?? 0,
+        for (final date in week.businessDates)
+          byDate[date]?.netOrGrossSales ?? 0,
       ],
       topItems: roll.top(topItemCount),
       recentSales: roll.recent.take(recentSaleCount).toList(growable: false),
@@ -463,9 +504,19 @@ final class TenantWeeklyReportLoader {
   Future<TenantExpensePeriod?> _weekExpenses(
     TenantReportWeek week, {
     required DateTime now,
+    String? soldById,
+    String? categoryId,
   }) async {
     final expenses = _expenses;
     if (expenses == null) return null;
+    // **Never read for a filtered week, and that is a correctness rule rather
+    // than a saving.** An expense belongs to the business and to a date; it
+    // belongs to no colleague and to no product category. Subtracting the whole
+    // shop's rent from one cashier's takings, or from the gross profit of one
+    // category, produces a number that looks like net profit and is not one.
+    // `SalesTotalsView.expenses` has refused this since the totals page learnt
+    // to read spending; the week was simply never brought into line with it.
+    if (soldById != null || categoryId != null) return null;
     try {
       return await expenses.readRange(
         startDate: week.startBusinessDate,
@@ -492,7 +543,7 @@ final class TenantWeeklyReportLoader {
       return await _gateway.load(
         _gateway.createRangeQuery(
           startBusinessDate: before.startBusinessDate,
-          endBusinessDate: before.endBusinessDateAt(now),
+          endBusinessDate: _comparisonEnd(week, before, now: now),
           soldById: soldById,
           categoryId: categoryId,
         ),
@@ -504,17 +555,64 @@ final class TenantWeeklyReportLoader {
     }
   }
 
+  /// The last day of [before] this comparison may read.
+  ///
+  /// **A running week is compared against the same days of the week before it,
+  /// not against the whole of it.** The current week totals only the business
+  /// dates that have elapsed, and `endBusinessDateAt` does not clamp a week
+  /// already finished - so on a Wednesday this page was putting Monday to
+  /// Wednesday beside a full Monday to Sunday and labelling the result *vs last
+  /// week*. Three days against seven reads as a collapse in trade to anybody
+  /// who has not gone looking for the reason, and it is at its most wrong on a
+  /// Monday, when one day is held up against seven.
+  ///
+  /// A week that has finished is compared whole against whole, as it always
+  /// was: there is nothing partial about either side of that.
+  String _comparisonEnd(
+    TenantReportWeek week,
+    TenantReportWeek before, {
+    required DateTime now,
+  }) {
+    if (!week.isCurrent) return before.endBusinessDateAt(now);
+    final elapsed = week.elapsedBusinessDates(now).length;
+    // A week whose first day has not arrived has nothing to compare; the whole
+    // previous week is the only honest answer and the caller draws no arrow
+    // from an empty current side anyway.
+    if (elapsed < 1 || elapsed > 7) return before.endBusinessDateAt(now);
+    return before.businessDates[elapsed - 1];
+  }
+
   /// Sums the single-day answers into the week's own totals.
   TenantSalesTotals _sum(Iterable<TenantSalesTotals> days) {
     var sales = 0.0;
     var profit = 0.0;
     var transactions = 0;
     var incomplete = 0;
+    var netSales = 0.0;
+    var netProfit = 0.0;
+    var netTransactions = 0;
+    var netIncomplete = 0;
+    var returnsScanned = 0;
+    // **The week nets returns only when every one of its days did.** A week
+    // summed from six netted days and one gross one is neither figure, and it
+    // would be wrong in the direction that flatters - so a single day from an
+    // older server leaves the whole week reporting gross, and saying so.
+    var netKnown = true;
     for (final day in days) {
       sales += day.sales;
       profit += day.profit;
       transactions += day.transactions;
       incomplete += day.incompleteCostLineCount;
+      final net = day.net;
+      if (net == null) {
+        netKnown = false;
+        continue;
+      }
+      netSales += net.sales;
+      netProfit += net.profit;
+      netTransactions += net.transactions;
+      netIncomplete += net.incompleteCostLineCount;
+      returnsScanned += net.returnsScanned;
     }
     return TenantSalesTotals.summed(
       query: days.first.query,
@@ -522,14 +620,37 @@ final class TenantWeeklyReportLoader {
       profit: profit,
       transactions: transactions,
       incompleteCostLineCount: incomplete,
+      net: netKnown
+          ? TenantSalesNetTotals.summed(
+              sales: netSales,
+              profit: netProfit,
+              transactions: netTransactions,
+              incompleteCostLineCount: netIncomplete,
+              returnsScanned: returnsScanned,
+            )
+          : null,
     );
   }
 
   /// Pages the week's sales once, and gets both lists out of the one pass.
+  ///
+  /// **[categoryId] is applied here rather than in the query, because there is
+  /// no query that could apply it.** `loadReport` pages by business date and
+  /// colleague; a category lives on the sale *line*, and a sale is not indexed
+  /// by the categories it happens to contain. The lines are already in hand, so
+  /// the filter costs a comparison per line and no extra read.
+  ///
+  /// The rule it applies is the server's own, in `saleContribution`: a sale
+  /// with no line in the category did not happen as far as that category is
+  /// concerned, and is left out of every list - not merely emptied of its
+  /// lines. Before this, the totals and the chart honoured the filter while the
+  /// best sellers, the item count and the recent sales quietly did not, so the
+  /// page contradicted the filter printed at the top of it.
   Future<_ItemRoll> _rollUpItems(
     TenantReportWeek week, {
     required DateTime now,
     String? soldById,
+    String? categoryId,
   }) async {
     final quantities = <String, int>{};
     final revenue = <String, int>{};
@@ -551,10 +672,28 @@ final class TenantWeeklyReportLoader {
         );
         for (final sale in page.items) {
           scanned++;
+          final lines = categoryId == null
+              ? sale.lines
+              : <TenantSaleLine>[
+                  for (final line in sale.lines)
+                    if (line.categoryId == categoryId) line,
+                ];
+          // Counted against the scan cap either way - the read happened - but
+          // present on the page only if it held anything in the category.
+          if (lines.isEmpty) continue;
+          // **The filtered lines, not the sale's own total.** Under a category
+          // the chart has to draw the same money the totals add up, and the
+          // rest of the sale belongs to another category's day.
           revenueByDate[sale.businessDate] =
-              (revenueByDate[sale.businessDate] ?? 0) + sale.totalMinor;
+              (revenueByDate[sale.businessDate] ?? 0) +
+              (categoryId == null
+                  ? sale.totalMinor
+                  : lines.fold<int>(
+                      0,
+                      (total, line) => total + line.lineTotalMinor,
+                    ));
           if (recent.length < recentSaleCount) recent.add(sale);
-          for (final line in sale.lines) {
+          for (final line in lines) {
             quantities[line.productId] =
                 (quantities[line.productId] ?? 0) + line.quantity;
             revenue[line.productId] =

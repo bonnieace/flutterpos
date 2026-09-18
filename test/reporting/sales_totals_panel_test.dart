@@ -1115,6 +1115,60 @@ void main() {
     );
   });
 
+  testWidgets('a category list cut short says so', (tester) async {
+    // One bounded page is read. Before this, a business past that bound had
+    // valid categories simply absent from the chooser with nothing on the page
+    // to say so - a filter that looks complete and is not. The staff chooser
+    // has said this since it was written; the categories never did.
+    final callable = _Callable(<Object?>[_response()]);
+    final reader = _Reader(
+      categories: <String, List<String>>{
+        'tenant-a': <String>[
+          for (var index = 0; index < 51; index++)
+            'cat-${index.toString().padLeft(3, '0')}',
+        ],
+      },
+    );
+
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      callable,
+      reader: reader,
+    );
+
+    expect(find.byKey(const ValueKey('sales-totals-category')), findsOne);
+    expect(
+      find.byKey(const ValueKey('sales-totals-categories-truncated')),
+      findsOne,
+    );
+  });
+
+  testWidgets('a category list that fits says nothing about being cut', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[_response()]);
+    final reader = _Reader(
+      categories: <String, List<String>>{
+        'tenant-a': <String>['drinks', 'food'],
+      },
+    );
+
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      callable,
+      reader: reader,
+    );
+
+    expect(find.byKey(const ValueKey('sales-totals-category')), findsOne);
+    expect(
+      find.byKey(const ValueKey('sales-totals-categories-truncated')),
+      findsNothing,
+      reason: 'A complete list that announces itself as partial is a new lie.',
+    );
+  });
+
   testWidgets('a category this business does not have is never applied', (
     tester,
   ) async {

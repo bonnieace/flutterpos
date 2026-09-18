@@ -92,6 +92,9 @@ void main() {
           'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
             businessDate: '2026-07-30',
           ),
+          'tenants/tenant-a/reconciliation_dirty_days/2026-07-30': _intake(
+            businessDate: '2026-07-30',
+          ),
         }),
       );
 
@@ -115,6 +118,80 @@ void main() {
       );
     });
 
+    testWidgets('a day the server has moved on from is not called reconciled', (
+      tester,
+    ) async {
+      // **The defect.** `daily_metrics` survives a re-dirty, so this day has
+      // real figures and an intake record that has moved past them. It used to
+      // wear a green *Reconciled* badge over totals the server already knew
+      // were short.
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _Reader(<String, Map<String, Object?>>{
+          'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
+            businessDate: '2026-07-30',
+          ),
+          'tenants/tenant-a/reconciliation_dirty_days/2026-07-30': _intake(
+            businessDate: '2026-07-30',
+            status: 'dirty',
+            revision: 4,
+            processedRevision: 3,
+          ),
+        }),
+      );
+
+      expect(
+        find.byKey(const ValueKey('daily-summary-reconciled-2026-07-30')),
+        findsNothing,
+        reason: 'The figures are real; the claim that they are current is not.',
+      );
+      final badge = tester.widget<StatusBadge>(
+        find.byKey(const ValueKey('daily-summary-superseded-2026-07-30')),
+      );
+      expect(badge.status, AppStatus.attention);
+      // §2.1 and rule 4: the word carries the state, never the colour alone.
+      expect(badge.label, 'Waiting to be regenerated');
+      expect(
+        find.byKey(
+          const ValueKey('daily-summary-superseded-note-2026-07-30'),
+        ),
+        findsOne,
+      );
+      // The figures themselves are still drawn - they are what a reader came
+      // for, and withholding them would be a different kind of lie.
+      expect(find.textContaining('1250.50'), findsOne);
+    });
+
+    testWidgets('a day whose intake cannot be read is not called reconciled', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _Reader(<String, Map<String, Object?>>{
+          'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
+            businessDate: '2026-07-30',
+          ),
+        }),
+      );
+
+      expect(
+        find.byKey(const ValueKey('daily-summary-reconciled-2026-07-30')),
+        findsNothing,
+      );
+      expect(
+        tester
+            .widget<StatusBadge>(
+              find.byKey(
+                const ValueKey('daily-summary-unconfirmed-2026-07-30'),
+              ),
+            )
+            .label,
+        'Not confirmed current',
+      );
+    });
+
     testWidgets('a day states the same figures on a phone', (tester) async {
       // §4.1's `compact` band. Every screen swept since the staff directory
       // asserts one of its records at 411, because a layout that has only ever
@@ -124,6 +201,9 @@ void main() {
         _controller(TenantRole.manager),
         _Reader(<String, Map<String, Object?>>{
           'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
+            businessDate: '2026-07-30',
+          ),
+          'tenants/tenant-a/reconciliation_dirty_days/2026-07-30': _intake(
             businessDate: '2026-07-30',
           ),
           'tenants/tenant-a/configuration/checkout': <String, Object?>{
@@ -157,6 +237,9 @@ void main() {
   ) async {
     final reader = _Reader(<String, Map<String, Object?>>{
       'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
+        businessDate: '2026-07-30',
+      ),
+      'tenants/tenant-a/reconciliation_dirty_days/2026-07-30': _intake(
         businessDate: '2026-07-30',
       ),
       'tenants/tenant-a/configuration/checkout': <String, Object?>{
@@ -562,8 +645,9 @@ void main() {
 
     await _pump(tester, controller, reader, settle: false);
     await tester.pump();
-    // Days are read one document at a time, so exactly one read is in flight.
-    expect(reader.pending.length, 1);
+    // Two days, each with a metric and an intake record, all started
+    // together - so four reads are in flight rather than one at a time.
+    expect(reader.pending.length, 4);
 
     controller.open(
       uid: 'user-a',
@@ -671,6 +755,34 @@ Map<String, Object?> _metrics({
     'metricGeneration': 'gen-1',
     'sourceDirtyRevision': 3,
     'regeneratedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 30)),
+  };
+  if (overrides != null) data.addAll(overrides);
+  return data;
+}
+
+/// The intake record a properly reconciled day carries.
+///
+/// **Seeded beside the metrics because a real day has both.** The processor
+/// writes `clean`, `processedRevision` and the metric document in one
+/// transaction, so a published day without an intake row is not a quiet day -
+/// it is a read that did not answer, and the panel now says so rather than
+/// badging it green.
+Map<String, Object?> _intake({
+  String tenantId = 'tenant-a',
+  String businessDate = '2026-07-31',
+  String status = 'clean',
+  int revision = 3,
+  int? processedRevision,
+  Map<String, Object?>? overrides,
+}) {
+  final data = <String, Object?>{
+    'tenantId': tenantId,
+    'businessDate': businessDate,
+    'status': status,
+    'revision': revision,
+    // `clean` is refused outright unless it can name the revision it
+    // published, so the default mirrors `_metrics`' `sourceDirtyRevision`.
+    'processedRevision': processedRevision ?? revision,
   };
   if (overrides != null) data.addAll(overrides);
   return data;

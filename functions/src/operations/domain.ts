@@ -24,21 +24,44 @@ export interface SaleLineLike {
   quantity?: unknown;
   price?: unknown;
   unitPrice?: unknown;
+  unitPriceMinor?: unknown;
   lineTotal?: unknown;
+  lineTotalMinor?: unknown;
   total?: unknown;
   buyingPrice?: unknown;
   unitCost?: unknown;
+  unitCostMinor?: unknown;
   cost?: unknown;
+  costMinor?: unknown;
 }
 
 export interface SaleLike {
+  /**
+   * The sale's own document id, set by the caller from the snapshot.
+   *
+   * Read rather than inferred from `checkoutId`, because an imported sale may
+   * not carry one and the join below has to key on something that always
+   * exists.
+   */
+  saleId?: unknown;
   total?: unknown;
   totalAmount?: unknown;
+  subtotal?: unknown;
+  subtotalMinor?: unknown;
+  discount?: unknown;
+  discountMinor?: unknown;
+  totalMinor?: unknown;
   soldById?: unknown;
   shiftId?: unknown;
   tender?: unknown;
   items?: unknown;
 }
+
+/** Units returned against one sale, by product id. */
+export type ReturnedUnits = ReadonlyMap<string, number>;
+
+/** Every sale a period's returns touched, keyed by sale document id. */
+export type PeriodReturns = ReadonlyMap<string, ReturnedUnits>;
 
 export interface PeriodMetrics {
   sales: number;
@@ -303,6 +326,177 @@ function lineCost(line: SaleLineLike, quantity: number): number | undefined {
   return Number.isFinite(total) && total <= MAX_MONETARY_VALUE ? total : undefined;
 }
 
+/**
+ * What one sale's returns take back out of it.
+ *
+ * **A port of `lib/returns/return_offsets.dart`, and it has to answer
+ * identically.** The same period is read online through this and offline
+ * through that one, and two implementations of one money rule will drift
+ * unless they are pinned - `test/fixtures/return_offset_vectors.json` is run
+ * from both sides for exactly that reason.
+ *
+ * Three details are copied rather than paraphrased:
+ *
+ * - **`grossMinor * (totalMinor / subtotalMinor)` divides first.** The other
+ *   grouping is a different binary64 result on some inputs, and the two
+ *   languages would then disagree about real money.
+ * - **`Math.round`, not `moneyToMinorUnits`.** That helper nudges by
+ *   `Number.EPSILON` before rounding and Dart's `.round()` does not. On a
+ *   non-negative value plain `Math.round` is exactly Dart's half-up.
+ * - **The zero-discount short circuit and the clamp are behaviour**, not
+ *   defensive padding.
+ */
+export interface SaleReturnOffset {
+  /** Revenue to take out, in minor units. */
+  revenueMinor: number;
+  /** Cost of the returned goods, in minor units. Never discount-adjusted. */
+  costMinor: number;
+  /**
+   * How many lines carrying no cost have come back in full.
+   *
+   * **A period subtracts this from its incomplete-cost count.** A costless
+   * line entirely returned contributes no revenue and no cost to the net
+   * figures, so its missing cost cannot move net profit - and going on
+   * withholding the margin over it would let a customer undo a sale and leave
+   * the report unable to state a profit about goods nobody has. A line still
+   * partly sold is not counted: some of its cost is genuinely unknown.
+   */
+  fullyReturnedCostlessLines: number;
+  /** Whether every unit of every line in scope has come back. */
+  fullyReturned: boolean;
+}
+
+const EMPTY_OFFSET: SaleReturnOffset = {
+  revenueMinor: 0,
+  costMinor: 0,
+  fullyReturnedCostlessLines: 0,
+  fullyReturned: false,
+};
+
+/** A stored minor-unit integer, or the major-unit mirror converted. */
+function minorField(
+  minor: unknown,
+  major: unknown
+): number | undefined {
+  const stored = finiteNumber(minor);
+  if (stored !== undefined && Number.isSafeInteger(stored)) return stored;
+  const mirror = finiteNumber(major);
+  return mirror === undefined ? undefined : moneyToMinorUnits(mirror);
+}
+
+/**
+ * Prices [returned] against the sale it came out of.
+ *
+ * `categoryId` narrows it to one category's lines, and changes the basis with
+ * it: a whole-sale figure is the recorded total minus a whole-sale discount,
+ * while a category figure is the sum of its own line totals gross of that
+ * discount - which is what [saleContribution] itself does. Pro-rating a
+ * category's returns against the whole sale's discount would take back money
+ * the category was never credited with.
+ */
+export function describeSaleReturn(
+  sale: SaleLike,
+  returned: ReturnedUnits | undefined,
+  categoryId?: string
+): SaleReturnOffset {
+  if (returned === undefined || returned.size === 0) return EMPTY_OFFSET;
+  const lines = Array.isArray(sale.items) ? sale.items as SaleLineLike[] : [];
+  const sold = new Set<string>();
+  for (const line of lines) {
+    const productId = typeof line.productId === "string" ? line.productId : undefined;
+    if (productId !== undefined) sold.add(productId);
+  }
+  for (const [productId, units] of returned) {
+    if (units <= 0) continue;
+    // A return naming a product the sale never sold cannot be valued at all,
+    // and would silently take nothing off a total it claims to reduce.
+    if (!sold.has(productId)) {
+      throw new HttpsError(
+        "failed-precondition",
+        `A return names product ${productId}, which its sale did not sell.`
+      );
+    }
+  }
+
+  // Every line is checked for an impossible quantity whatever the scope: a
+  // malformed return is malformed in every report that reads it.
+  for (const line of lines) {
+    const quantity = lineQuantity(line);
+    if (quantity === undefined) continue;
+    const productId = typeof line.productId === "string" ? line.productId : undefined;
+    const back = productId === undefined ? 0 : returned.get(productId) ?? 0;
+    if (back > quantity) {
+      throw new HttpsError(
+        "failed-precondition",
+        `A return takes back more of ${productId} than its sale sold.`
+      );
+    }
+  }
+
+  const scoped = categoryId === undefined ?
+    lines :
+    lines.filter((line) => line.categoryId === categoryId);
+
+  let grossMinor = 0;
+  let costMinor = 0;
+  let costlessLinesFullyBack = 0;
+  let fullyReturned = scoped.length > 0;
+  for (const line of scoped) {
+    const quantity = lineQuantity(line);
+    if (quantity === undefined) continue;
+    const productId = typeof line.productId === "string" ? line.productId : undefined;
+    const back = productId === undefined ? 0 : returned.get(productId) ?? 0;
+    if (back < quantity) fullyReturned = false;
+    if (back === 0) continue;
+    // **Per unit, exactly as `describeReturnOffset` does it.** The Dart
+    // decoder refuses a line whose `lineTotalMinor` is not
+    // `unitPriceMinor * quantity`, so on any sale this till wrote the two
+    // bases agree - but an imported sale need not have gone through it, and
+    // the two languages must not pick different halves of that disagreement.
+    const unitPriceMinor = minorField(
+      line.unitPriceMinor,
+      line.unitPrice ?? line.price
+    );
+    if (unitPriceMinor !== undefined) grossMinor += unitPriceMinor * back;
+    // A returned line with no recorded cost takes no cost back out, which is
+    // consistent rather than incomplete: it put none in either. Whether the
+    // *period* can still state a profit is `saleContribution`'s question, and
+    // it asks it per line rather than from a flag here.
+    const unitCostMinor = minorField(
+      line.unitCostMinor,
+      line.unitCost ?? line.buyingPrice
+    );
+    if (unitCostMinor !== undefined) costMinor += unitCostMinor * back;
+    else if (back >= quantity) costlessLinesFullyBack += 1;
+  }
+
+  return {
+    revenueMinor: categoryId === undefined ?
+      wholeSaleReturnMinor(sale, grossMinor, fullyReturned) :
+      grossMinor,
+    costMinor,
+    fullyReturnedCostlessLines: costlessLinesFullyBack,
+    fullyReturned,
+  };
+}
+
+/** The returned share of what was actually charged. */
+function wholeSaleReturnMinor(
+  sale: SaleLike,
+  grossMinor: number,
+  complete: boolean
+): number {
+  const totalMinor = minorField(sale.totalMinor, sale.total ?? sale.totalAmount) ?? 0;
+  if (complete) return totalMinor;
+  const subtotalMinor = minorField(sale.subtotalMinor, sale.subtotal) ?? 0;
+  if (grossMinor <= 0 || subtotalMinor <= 0) return 0;
+  // An imported sale with no discount basis pro-rates to the gross, clamped.
+  const discountMinor = minorField(sale.discountMinor, sale.discount) ?? 0;
+  if (discountMinor === 0) return grossMinor;
+  const share = grossMinor * (totalMinor / subtotalMinor);
+  return Math.min(Math.max(Math.round(share), 0), totalMinor);
+}
+
 interface SaleContribution {
   /** False only when a category was requested and this sale holds no line in it. */
   counted: boolean;
@@ -320,13 +514,25 @@ interface SaleContribution {
  */
 function saleContribution(
   sale: SaleLike,
-  categoryId?: string
+  categoryId?: string,
+  returned?: ReturnedUnits
 ): SaleContribution {
   const lines = Array.isArray(sale.items) ? sale.items as SaleLineLike[] : [];
   const selected = categoryId ?
     lines.filter((line) => line.categoryId === categoryId) :
     lines;
   if (categoryId && selected.length === 0) {
+    return {counted: false, revenue: 0, cost: 0, incompleteCostLines: 0};
+  }
+
+  // **Netted here rather than outside `aggregateSales`, and that is the whole
+  // reason this function exists.** An aggregate and any split of the same
+  // sales have to agree by construction; subtracting returns from one of them
+  // afterwards is the second implementation this was extracted to prevent.
+  const offset = describeSaleReturn(sale, returned, categoryId);
+  // A sale returned in full is not a transaction that happened. It also stops
+  // reporting cost completeness - it contributed nothing to have cost.
+  if (offset.fullyReturned) {
     return {counted: false, revenue: 0, cost: 0, incompleteCostLines: 0};
   }
 
@@ -346,16 +552,60 @@ function saleContribution(
     if (lineCostValue === undefined) incompleteCostLines += 1;
     else cost = addMonetaryValue(cost, lineCostValue);
   }
+  // **Lines that came back in full stop making the basis incomplete.**
+  // Counted once, in the shared arithmetic, so the device aggregator applies
+  // the identical rule rather than a second reading of it - and so the rule
+  // is covered by the golden vectors both sides run.
+  //
+  // The gross pass has no returns, so its count is zero and the gross basis
+  // keeps every costless line exactly as it always did. That is right too:
+  // the goods *were* sold, and gross profit over them is unknowable.
+  incompleteCostLines = Math.max(
+    incompleteCostLines - offset.fullyReturnedCostlessLines,
+    0
+  );
 
   const recordedTotal = nonNegativeNumber(sale.total) ?? nonNegativeNumber(sale.totalAmount);
+  const grossRevenue = categoryId ?
+    lineRevenueTotal :
+    recordedTotal ?? (hasLineRevenue ? lineRevenueTotal : 0);
+  // Whole minor units on both sides, so the subtraction is exact and a netted
+  // period's tender split still sums to its total by integer arithmetic.
+  //
+  // **Cost comes back too.** Revenue netted on its own drives the derived cost
+  // (takings minus profit) down and, on a low-margin period with a large
+  // return, negative - which `TenantProfitReport` reads as an impossible
+  // figure and withholds the margin for. A returned line that carried no cost
+  // is already counted in `incompleteCostLines` above, by the same line.
+  const netRevenueMinor = Math.max(
+    moneyToMinorUnits(grossRevenue) - offset.revenueMinor,
+    0
+  );
+  const netCostMinor = Math.max(moneyToMinorUnits(cost) - offset.costMinor, 0);
   return {
     counted: true,
-    revenue: categoryId ?
-      lineRevenueTotal :
-      recordedTotal ?? (hasLineRevenue ? lineRevenueTotal : 0),
-    cost,
+    revenue: minorUnitsToMoney(netRevenueMinor),
+    cost: minorUnitsToMoney(netCostMinor),
     incompleteCostLines,
   };
+}
+
+/**
+ * What came back out of one sale, from a period's returns.
+ *
+ * **A return whose sale is not in `sales` is not this period's**, and skipping
+ * it is what scopes the join for free. `firestore.rules` binds a return's
+ * `businessDate` to its sale's, so every return in a date window has its sale
+ * in the same window - which means a miss here is a sale another filter
+ * excluded, most often another cashier's.
+ */
+function saleReturns(
+  sale: SaleLike,
+  returns: PeriodReturns | undefined
+): ReturnedUnits | undefined {
+  if (returns === undefined) return undefined;
+  const saleId = typeof sale.saleId === "string" ? sale.saleId : undefined;
+  return saleId === undefined ? undefined : returns.get(saleId);
 }
 
 /**
@@ -364,7 +614,8 @@ function saleContribution(
  */
 export function aggregateSales(
   sales: readonly SaleLike[],
-  categoryId?: string
+  categoryId?: string,
+  returns?: PeriodReturns
 ): PeriodMetrics {
   let revenue = 0;
   let cost = 0;
@@ -372,7 +623,7 @@ export function aggregateSales(
   let incompleteCostLineCount = 0;
 
   for (const sale of sales) {
-    const contribution = saleContribution(sale, categoryId);
+    const contribution = saleContribution(sale, categoryId, saleReturns(sale, returns));
     if (!contribution.counted) continue;
     revenue = addMonetaryValue(revenue, contribution.revenue);
     cost = addMonetaryValue(cost, contribution.cost);
@@ -415,11 +666,12 @@ export function emptyTenderBreakdown(): TenderBreakdown {
  */
 export function aggregateSalesByTender(
   sales: readonly SaleLike[],
-  categoryId?: string
+  categoryId?: string,
+  returns?: PeriodReturns
 ): TenderBreakdown {
   const breakdown = emptyTenderBreakdown();
   for (const sale of sales) {
-    const contribution = saleContribution(sale, categoryId);
+    const contribution = saleContribution(sale, categoryId, saleReturns(sale, returns));
     if (!contribution.counted) continue;
     const totals = breakdown[saleTenderBucket(sale.tender)];
     totals.sales = addMonetaryValue(totals.sales, contribution.revenue);

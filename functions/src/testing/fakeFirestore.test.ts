@@ -293,7 +293,10 @@ test("what the double will not do, it refuses rather than ignores", () => {
   const db = new FakeFirestore();
   const products = db.collection("tenants/tenant-a/products");
 
-  assert.throws(() => products.where("quantity", ">=", 1), /only "==" filters/);
+  // `>=`, `<=`, `>` and `<` are supported now - `reports.ts` reads a period
+  // by business-date range - so the refusal is of the operators that are not.
+  assert.throws(() => products.where("tags", "array-contains", "a"), /filters, not "array-contains"/);
+  assert.throws(() => products.where("quantity", "!=", 1), /filters, not "!="/);
   assert.throws(() => products.orderBy(new FieldPath("a", "b")), /FieldPath.documentId\(\)/);
   assert.throws(() => products.orderBy("nested.field"), /nested field path/);
   assert.throws(() => products.orderBy("quantity", "ascending"), /not a Firestore sort direction/);
@@ -304,6 +307,39 @@ test("what the double will not do, it refuses rather than ignores", () => {
   );
   assert.throws(() => db.doc("tenants/tenant-a/products"), /not a Firestore document path/);
   assert.throws(() => db.collection("tenants/tenant-a/products/product-01"), /collection path/);
+});
+
+test("a range filter selects the same span Firestore would", () => {
+  // The clause `readPeriodReturns` and the sales read both depend on. A double
+  // that answered a range by ignoring it would make the netting path look
+  // correct over every document in the collection.
+  const db = new FakeFirestore();
+  for (const date of ["2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27"]) {
+    db.seed(`tenants/tenant-a/returns/rt_${date}`, {businessDate: date});
+  }
+
+  return db.collection("tenants/tenant-a/returns")
+    .where("businessDate", ">=", "2026-08-25")
+    .where("businessDate", "<=", "2026-08-26")
+    .get()
+    .then((snapshot) => {
+      assert.deepEqual(
+        snapshot.docs.map((document) => document.get("businessDate")).sort(),
+        ["2026-08-25", "2026-08-26"]
+      );
+    });
+});
+
+test("a range filter never matches a document missing the field", () => {
+  // Firestore's own behaviour, and load-bearing: a return with no
+  // `businessDate` is not silently folded into every period.
+  const db = new FakeFirestore();
+  db.seed("tenants/tenant-a/returns/rt_1", {saleId: "co-1"});
+
+  return db.collection("tenants/tenant-a/returns")
+    .where("businessDate", ">=", "2026-08-01")
+    .get()
+    .then((snapshot) => assert.equal(snapshot.size, 0));
 });
 
 test("an unorderable value stops the query instead of sorting by luck", () => {

@@ -935,6 +935,35 @@ void main() {
     viewports: responsiveViewports,
   );
 
+  // **The monthly report, which had never been in a picture at all.** It was
+  // the only routed report screen with neither a widget test nor a capture,
+  // and that is how it came to print a profit the totals page and the weekly
+  // report both withhold. Two cases, because the withheld reading is the one
+  // that was wrong and a picture of the happy path would not have caught it.
+  screenshotCase(
+    '26b-monthly-report',
+    build: () => inSession(
+      TenantMonthlyReportScreen(
+        callable: FakeCallable(seedSalesTotalsResponse()),
+        reader: FakeTenantReader.business(),
+        clock: () => _weeklyReportClock,
+      ),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    '26c-monthly-report-profit-withheld',
+    build: () => inSession(
+      TenantMonthlyReportScreen(
+        callable: FakeCallable(_monthlyIncompleteCostResponse()),
+        reader: FakeTenantReader.business(),
+        clock: () => _weeklyReportClock,
+      ),
+    ),
+    viewports: responsiveViewports,
+  );
+
   screenshotCase(
     '27-reconciliation-status',
     build: () => inSession(
@@ -1263,6 +1292,21 @@ final class _SheetHostState extends State<_SheetHost> {
 
 /// A Thursday, so the captured week has four days behind it and three ahead.
 final DateTime _weeklyReportClock = DateTime.utc(2026, 8, 27, 9);
+
+/// The same month, priced from sale lines that did not all carry a cost.
+///
+/// `TenantProfitBasis.incomplete`, so the profit tile reads `—` and the note
+/// under it says why. Seeded separately from [seedSalesTotalsResponse] because
+/// every other surface wants a figure it can show.
+Map<String, Object?> _monthlyIncompleteCostResponse() => <String, Object?>{
+  'previous': <String, Object?>{
+    'sales': 6420.5,
+    'profit': 1937.25,
+    'transactions': 48,
+    'incompleteCostLineCount': 7,
+  },
+  'scannedTransactions': 48,
+};
 
 /// Takings for the captured week and the one before it, so every card carries
 /// a figure and the chart has a clear best day.

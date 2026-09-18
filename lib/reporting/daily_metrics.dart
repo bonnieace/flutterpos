@@ -7,6 +7,7 @@ import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_types.dart';
 import 'profit_report.dart';
+import 'reconciliation_status.dart';
 
 /// Raised when a canonical daily metric document cannot be trusted.
 final class TenantDailyMetricsException implements Exception {
@@ -68,6 +69,12 @@ final class TenantDailyMetrics {
       incompleteCostLineCount: _requiredInt(data, 'incompleteCostLineCount'),
       metricGeneration: _requiredGeneration(data),
       sourceDirtyRevision: _requiredInt(data, 'sourceDirtyRevision'),
+      net: _optionalNet(
+        data,
+        grossSales: _requiredNonNegativeNumber(data, 'sales'),
+        grossProfit: _requiredFiniteNumber(data, 'profit'),
+        grossTransactions: transactions,
+      ),
       regeneratedAt: _requiredInstant(data, 'regeneratedAt'),
     );
   }
@@ -83,6 +90,7 @@ final class TenantDailyMetrics {
     required this.metricGeneration,
     required this.sourceDirtyRevision,
     required this.regeneratedAt,
+    required this.net,
   });
 
   final String tenantId;
@@ -106,8 +114,25 @@ final class TenantDailyMetrics {
   /// server-owned timestamp is legitimately missing.
   final DateTime regeneratedAt;
 
+  /// The same day with its returns taken back out, or null where it was
+  /// reconciled before returns were counted.
+  ///
+  /// **Absent is not zero.** A day written by an older deployment and a day
+  /// nothing came back on are different facts.
+  final TenantDailyMetricsNet? net;
+
   /// Whether the day's cost data was complete enough to trust a profit figure.
   bool get hasCompleteCostData => incompleteCostLineCount == 0;
+
+  /// Takings after returns where they are known, gross where they are not.
+  double get netOrGrossSales => net?.sales ?? sales;
+
+  /// The transaction count on the same basis as [netOrGrossSales].
+  int get netOrGrossTransactions => net?.transactions ?? transactions;
+
+  /// The profit report on the same basis as [netOrGrossSales].
+  TenantProfitReport get netOrGrossProfitReport =>
+      net?.profitReport ?? profitReport;
 
   /// This day's profit, and whether it may be shown at all.
   ///
@@ -120,7 +145,73 @@ final class TenantDailyMetrics {
   );
 }
 
-/// One business day, reconciled or not.
+/// One reconciled day with its returns taken back out.
+///
+/// **Optional on read, all-or-nothing as a group.** Days reconciled before
+/// returns were counted carry none of these fields, and that is not a failure
+/// - it is a day whose figures are gross, which a surface must be able to say
+/// rather than imply nothing came back. A *half* written block is a different
+/// thing entirely: it is a writer defect, and this decoder's whole posture is
+/// to refuse a document its writer would not have produced.
+final class TenantDailyMetricsNet {
+  const TenantDailyMetricsNet._({
+    required this.sales,
+    required this.profit,
+    required this.transactions,
+    required this.incompleteCostLineCount,
+    required this.returnedSales,
+    required this.returnCount,
+  });
+
+  final double sales;
+  final double profit;
+  final int transactions;
+  final int incompleteCostLineCount;
+
+  /// What came back over the day.
+  final double returnedSales;
+
+  /// How many return documents the day held.
+  final int returnCount;
+
+  /// The same trust question the gross figure answers, of the net one.
+  TenantProfitReport get profitReport => TenantProfitReport.from(
+    sales: sales,
+    profit: profit,
+    incompleteCostLineCount: incompleteCostLineCount,
+  );
+}
+
+/// Where one day's published totals stand against the sales the server holds.
+///
+/// **A published figure is not the same as a current one**, and until this
+/// existed the daily summary could not tell them apart. `daily_metrics` is
+/// written with `merge: false` and is never deleted, so a later sale that marks
+/// the day dirty again leaves the previous document exactly where it was. The
+/// intake record is the only thing that knows the difference.
+enum TenantDailyMetricsStanding {
+  /// Reconciliation has never published this day. Today is normally here.
+  unpublished,
+
+  /// Published, and the intake record proves the figures cover every sale it
+  /// has seen: it is clean, and at the revision the metrics were built from.
+  current,
+
+  /// Published, but the server has since taken more sales for this day, or
+  /// stopped working on it. The figures are real and they are out of date.
+  superseded,
+
+  /// Published, but the intake record could not be read, so nothing here can
+  /// say whether the figures are current.
+  ///
+  /// **Deliberately not folded into [current].** Every sale writes an intake
+  /// record, so a published day without one is not a quiet day - it is a read
+  /// that did not answer, and treating silence as confirmation is the whole
+  /// failure this enum exists to stop.
+  unconfirmed,
+}
+
+/// One business day, and what its published figures are worth.
 ///
 /// An unreconciled day is a first-class result rather than an absence. Today is
 /// normally unreconciled, and a report that silently omitted it would read as
@@ -129,12 +220,40 @@ final class TenantDailyMetricsDay {
   const TenantDailyMetricsDay({
     required this.businessDate,
     required this.metrics,
+    this.intake,
   });
 
   final String businessDate;
   final TenantDailyMetrics? metrics;
 
-  bool get isReconciled => metrics != null;
+  /// The server's own record of what it has taken for this day, or null where
+  /// it does not exist or could not be read.
+  final TenantReconciliationIntake? intake;
+
+  /// Whether anything has been published for this day at all.
+  ///
+  /// **Not a claim that it is current** - that is [standing]. Kept because a
+  /// surface drawing the figures needs to know they exist, which is a different
+  /// question from whether to believe them.
+  bool get isPublished => metrics != null;
+
+  TenantDailyMetricsStanding get standing {
+    final metrics = this.metrics;
+    if (metrics == null) return TenantDailyMetricsStanding.unpublished;
+    final intake = this.intake;
+    if (intake == null) return TenantDailyMetricsStanding.unconfirmed;
+    // Both halves are required. `hasUnpublishedSales` catches a day the server
+    // has taken more sales for; the revision comparison catches a regeneration
+    // that published an older revision than the one the intake now names. A
+    // quarantined day is out of date by definition - the server stopped.
+    if (intake.hasUnpublishedSales ||
+        intake.status == TenantReconciliationIntakeStatus.dirty ||
+        intake.status == TenantReconciliationIntakeStatus.quarantined ||
+        metrics.sourceDirtyRevision != intake.revision) {
+      return TenantDailyMetricsStanding.superseded;
+    }
+    return TenantDailyMetricsStanding.current;
+  }
 }
 
 /// Guarded read boundary over one tenant's regenerated daily metrics.
@@ -190,22 +309,59 @@ final class TenantDailyMetricsRepository extends TenantReadRepository {
       throw RangeError.range(days, 1, maximumDays, 'days');
     }
     final now = _clock().toUtc();
-    final results = <TenantDailyMetricsDay>[];
-    for (var offset = 0; offset < days; offset++) {
-      // Subtracting whole days from the UTC instant is exact for a fixed-offset
-      // business day, so the Africa/Nairobi boundary is respected without any
-      // date arithmetic of our own.
-      final businessDate = checkoutBusinessDate(
-        now.subtract(Duration(days: offset)),
-      );
-      results.add(
+    final dates = <String>[
+      for (var offset = 0; offset < days; offset++)
+        // Subtracting whole days from the UTC instant is exact for a
+        // fixed-offset business day, so the Africa/Nairobi boundary is
+        // respected without any date arithmetic of our own.
+        checkoutBusinessDate(now.subtract(Duration(days: offset))),
+    ];
+    // **Started together rather than one after another.** This awaited one
+    // document at a time, and reading the intake record beside each metric
+    // would have doubled a fourteen-round-trip page to twenty-eight. They do
+    // not depend on each other. `Future.wait` also attaches to every future
+    // before any can complete, so a rejection cannot be left unhandled.
+    final settled = await Future.wait(<Future<Object?>>[
+      for (final date in dates) readDay(date),
+      for (final date in dates) _readIntake(date),
+    ]);
+    return List<TenantDailyMetricsDay>.unmodifiable(<TenantDailyMetricsDay>[
+      for (var index = 0; index < dates.length; index++)
         TenantDailyMetricsDay(
-          businessDate: businessDate,
-          metrics: await readDay(businessDate),
+          businessDate: dates[index],
+          metrics: settled[index] as TenantDailyMetrics?,
+          intake: settled[dates.length + index] as TenantReconciliationIntake?,
         ),
+    ]);
+  }
+
+  /// What the server has taken for one day, or null where it cannot be read.
+  ///
+  /// **Decoded by `TenantReconciliationIntake`, not by anything written here.**
+  /// The reconciliation surface already owns what this document means, down to
+  /// refusing one whose processed revision runs ahead of its own; a second
+  /// decoder is a second opinion about the only record that can say whether
+  /// these figures are current.
+  ///
+  /// A failure degrades to null rather than taking the page. The figures are
+  /// what a reader came for, and a day that cannot prove itself current is
+  /// reported as [TenantDailyMetricsStanding.unconfirmed] - which is a weaker
+  /// claim than the one this surface used to make for free.
+  Future<TenantReconciliationIntake?> _readIntake(String businessDate) async {
+    try {
+      final data = await readDocument(
+        TenantCollection.reconciliationDirtyDays,
+        businessDate,
       );
+      if (data == null) return null;
+      final intake = TenantReconciliationIntake.fromDocument(
+        path: paths.reconciliationDirtyDay(businessDate),
+        data: data,
+      );
+      return intake.tenantId == session.tenantId ? intake : null;
+    } on Object {
+      return null;
     }
-    return List<TenantDailyMetricsDay>.unmodifiable(results);
   }
 }
 
@@ -246,6 +402,73 @@ DateTime _requiredInstant(Map<String, Object?> data, String field) {
   if (value is Timestamp) return value.toDate().toUtc();
   if (value is DateTime) return value.toUtc();
   throw const TenantDailyMetricsException('invalid_metrics_document');
+}
+
+/// The net block of one metric document, or null where it was not written.
+///
+/// Every check here is the same kind the surrounding decoder already makes:
+/// a document that contradicts itself describes some other day, and this is
+/// the surface an owner reads takings from.
+TenantDailyMetricsNet? _optionalNet(
+  Map<String, Object?> data, {
+  required double grossSales,
+  required double grossProfit,
+  required int grossTransactions,
+}) {
+  const fields = <String>[
+    'netSales',
+    'netProfit',
+    'netTransactions',
+    'netIncompleteCostLineCount',
+    'returnedSales',
+    'returnCount',
+    'netMetricsVersion',
+  ];
+  final present = fields.where(data.containsKey).length;
+  // Reconciled before returns were counted. Not a failure; the day's figures
+  // are gross and the surface says so.
+  if (present == 0) return null;
+  if (present != fields.length) {
+    throw const TenantDailyMetricsException('invalid_metrics_document');
+  }
+  // A future shape must not be read as this one.
+  if (_requiredInt(data, 'netMetricsVersion') != 1) {
+    throw const TenantDailyMetricsException('invalid_metrics_document');
+  }
+
+  final sales = _requiredNonNegativeNumber(data, 'netSales');
+  final profit = _requiredFiniteNumber(data, 'netProfit');
+  final transactions = _requiredInt(data, 'netTransactions');
+  final returnedSales = _requiredNonNegativeNumber(data, 'returnedSales');
+  final salesMinor = reportingMinorUnits(sales);
+  final grossSalesMinor = reportingMinorUnits(grossSales);
+  if (salesMinor > grossSalesMinor || transactions > grossTransactions) {
+    throw const TenantDailyMetricsException('invalid_metrics_document');
+  }
+  // Exact, in whole minor units: what came back is the difference, and a
+  // document where it is not is not describing one day.
+  if (grossSalesMinor - salesMinor != reportingMinorUnits(returnedSales)) {
+    throw const TenantDailyMetricsException('invalid_metrics_document');
+  }
+  // **The check that catches a revenue-netted-without-cost regression.**
+  // Cost is derived, so netting takings alone drives it down and eventually
+  // negative - which is exactly the figure `TenantProfitBasis.inconsistent`
+  // exists to refuse, arriving here instead as a document that cannot be
+  // believed.
+  final netCostMinor = salesMinor - reportingMinorUnits(profit);
+  final grossCostMinor = grossSalesMinor - reportingMinorUnits(grossProfit);
+  if (netCostMinor < 0 || netCostMinor > grossCostMinor) {
+    throw const TenantDailyMetricsException('invalid_metrics_document');
+  }
+
+  return TenantDailyMetricsNet._(
+    sales: sales,
+    profit: profit,
+    transactions: transactions,
+    incompleteCostLineCount: _requiredInt(data, 'netIncompleteCostLineCount'),
+    returnedSales: returnedSales,
+    returnCount: _requiredInt(data, 'returnCount'),
+  );
 }
 
 const int _maximumCount = 1000000000;

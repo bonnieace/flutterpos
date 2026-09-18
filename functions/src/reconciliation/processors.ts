@@ -23,9 +23,18 @@ import {
 } from "./model";
 import {ClaimedReconciliationJob} from "./jobs";
 import {SaleLike, moneyToMinorUnits, minorUnitsToMoney} from "../operations/domain";
+import {readPeriodReturns} from "../operations/returnOffsets";
 
 const DAILY_METRICS_PAGE_SIZE = 5;
 const DAILY_SALES_LIMIT = 5_000;
+/**
+ * The most returns one business date may hold before the day is refused.
+ *
+ * Structurally below the sales cap - a return needs a sale - and low enough
+ * that a runaway is a fault rather than a slow day. A partial read would
+ * understate what came back, which is the direction that flatters.
+ */
+const DAILY_RETURNS_LIMIT = 1_000;
 /**
  * How many shift expectations one business date may already hold.
  *
@@ -175,9 +184,26 @@ async function regenerateDailyMetric(
       `Business date ${businessDate} exceeds the bounded daily aggregation limit.`
     );
   }
+  // **The day's returns, read beside its sales and outside the transaction.**
+  // No new index: `returns` is already indexed on `businessDate`. No extra
+  // writes either, so the 402-of-500 budget this function is designed around
+  // is untouched.
+  const {returns, scanned: returnCount} = await readPeriodReturns(
+    db,
+    tenantId,
+    businessDate,
+    businessDate,
+    DAILY_RETURNS_LIMIT
+  );
   const result = aggregateDailySales(
     businessDate,
-    salesSnapshot.docs.map((document) => document.data() as SaleLike)
+    // The document id is carried through because it is what a return names.
+    salesSnapshot.docs.map(
+      (document) => ({...document.data(), saleId: document.id} as SaleLike)
+    ),
+    undefined,
+    returns,
+    returnCount
   );
   const previousExpectationSnapshot = await tenantRef.collection("shift_expectations")
     .where("businessDate", "==", businessDate)
@@ -210,6 +236,18 @@ async function regenerateDailyMetric(
     ) return false;
     transaction.set(tenantRef.collection("daily_metrics").doc(businessDate), {
       ...result.metrics,
+      // **Additive, and the gross figures above are untouched.** A client
+      // that does not read these reports gross, which is what it did before;
+      // a day written before this shipped carries none of them, and the
+      // decoder reads that as "reconciled before returns were counted"
+      // rather than as a day nothing came back on.
+      netSales: result.netMetrics.sales,
+      netProfit: result.netMetrics.profit,
+      netTransactions: result.netMetrics.transactions,
+      netIncompleteCostLineCount: result.netMetrics.incompleteCostLineCount,
+      returnedSales: result.returnedSales,
+      returnCount: result.returnCount,
+      netMetricsVersion: 1,
       tenantId,
       metricGeneration,
       sourceDirtyRevision: revision,

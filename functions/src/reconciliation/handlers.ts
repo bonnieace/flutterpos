@@ -24,6 +24,7 @@ import {
   listRetryableReconciliationTasks,
   processTenantDiscoveryPage,
   recordReconciliationFailure,
+  registerReturnReceipt,
   registerSaleReceipt,
 } from "./jobs";
 import {
@@ -277,6 +278,49 @@ export const mergeSaleReconciliationJob = onDocumentCreated(
       businessDate,
       receivedAt,
       saleData: snapshot.data(),
+    });
+    if (registration.task) await enqueueReconciliationTask(registration.task);
+  }
+);
+
+/**
+ * A return was filed, so the day its sale belongs to is no longer settled.
+ *
+ * **Pending counts.** The standing product decision is that a report agrees
+ * with what the cashier just did rather than with what a manager has not got
+ * to yet, which is what the device already does. `daily_metrics` can only
+ * agree with the live report if a *filed* return regenerates the day, not only
+ * a verified one - and clients write returns directly under `firestore.rules`,
+ * so no callable exists to do it on the way in.
+ *
+ * A rejected return dirties the day too, by the same route: it is a write to
+ * the same document, and takings that stayed depressed after a claim was
+ * thrown out would be the same defect pointing the other way.
+ */
+export const mergeReturnReconciliationJob = onDocumentCreated(
+  {
+    document: "tenants/{tenantId}/returns/{returnId}",
+    retry: true,
+  },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+    const received = new Date(event.time);
+    // The return's own `businessDate` is pinned by rules to its sale's, so it
+    // is the sale's trading day rather than the day the goods came back. A
+    // malformed one falls back to the receipt date, exactly as the sale
+    // trigger does with its own.
+    let businessDate = nairobiDate(received);
+    try {
+      businessDate = requireIsoDate(snapshot.get("businessDate"), "businessDate");
+    } catch {
+      // Imported/legacy malformed dates are reconciled in their receipt date.
+    }
+    const registration = await registerReturnReceipt(getFirestore(), {
+      tenantId: event.params.tenantId,
+      returnId: event.params.returnId,
+      businessDate,
+      receivedAt: Timestamp.fromDate(received),
     });
     if (registration.task) await enqueueReconciliationTask(registration.task);
   }

@@ -145,16 +145,22 @@ final class TenantMonthlyReport {
   /// will read the arrow as a trend.
   final bool isPartial;
 
+  // **Net against net, or gross against gross, never one of each.** Both
+  // sides come through `netOrGross*`, so a month the server netted is never
+  // compared with one it did not - an arrow across two bases is a trend that
+  // did not happen.
   double? get salesChange =>
-      _change(totals?.sales, previousTotals?.sales);
+      _change(totals?.netOrGrossSales, previousTotals?.netOrGrossSales);
 
   double? get transactionsChange => _change(
-    totals?.transactions.toDouble(),
-    previousTotals?.transactions.toDouble(),
+    totals?.netOrGrossTransactions.toDouble(),
+    previousTotals?.netOrGrossTransactions.toDouble(),
   );
 
-  double? get profitChange =>
-      _change(totals?.profit, previousTotals?.profit);
+  double? get profitChange => _change(
+    totals?.netOrGrossProfitReport.profit,
+    previousTotals?.netOrGrossProfitReport.profit,
+  );
 
   /// The share of this month over the one before, or null where there is
   /// nothing to compare against. The same rule the weekly report applies:

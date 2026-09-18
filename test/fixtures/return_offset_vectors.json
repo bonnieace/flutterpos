@@ -1,0 +1,326 @@
+{
+  "$comment": [
+    "Shared by test/returns/return_offset_vectors_test.dart and",
+    "functions/src/operations/returnOffsetVectors.test.ts. One money rule now has two",
+    "implementations - `describeReturnOffset` in Dart and `describeSaleReturn` in",
+    "TypeScript - because a period is read online through the callable and offline",
+    "through the device aggregator, and the two must not disagree about what a",
+    "customer got back.",
+    "",
+    "These do not prove the implementations are identical. They prove the two answer",
+    "the same on the cases anyone thought of, which is what catches a divergent",
+    "rounding or a re-parenthesised multiply - the failures actually at risk here.",
+    "",
+    "Every sale satisfies the Dart decoder's own invariants, so a vector cannot",
+    "describe a sale the app would refuse: lineTotalMinor == unitPriceMinor *",
+    "quantity, costMinor == unitCostMinor * quantity or both absent, the line totals",
+    "sum to subtotalMinor, and totalMinor == subtotalMinor - discountMinor."
+  ],
+  "vectors": [
+    {
+      "name": "a full return is worth exactly what was charged",
+      "categoryId": null,
+      "returnedUnits": { "prod-a": 2 },
+      "expect": {
+        "revenueMinor": 1000,
+        "costMinor": 600,
+        "fullyReturnedCostlessLines": 0,
+        "fullyReturned": true
+      },
+      "sale": {
+        "subtotalMinor": 1000,
+        "discountMinor": 0,
+        "totalMinor": 1000,
+        "items": [
+          {
+            "productId": "prod-a",
+            "name": "Tusker",
+            "categoryId": "drinks",
+            "quantity": 2,
+            "unitPriceMinor": 500,
+            "lineTotalMinor": 1000,
+            "unitCostMinor": 300,
+            "costMinor": 600
+          }
+        ]
+      }
+    },
+    {
+      "name": "a partial return with no discount is worth its list price",
+      "categoryId": null,
+      "returnedUnits": { "prod-a": 1 },
+      "expect": {
+        "revenueMinor": 500,
+        "costMinor": 300,
+        "fullyReturnedCostlessLines": 0,
+        "fullyReturned": false
+      },
+      "sale": {
+        "subtotalMinor": 1000,
+        "discountMinor": 0,
+        "totalMinor": 1000,
+        "items": [
+          {
+            "productId": "prod-a",
+            "name": "Tusker",
+            "categoryId": "drinks",
+            "quantity": 2,
+            "unitPriceMinor": 500,
+            "lineTotalMinor": 1000,
+            "unitCostMinor": 300,
+            "costMinor": 600
+          }
+        ]
+      }
+    },
+    {
+      "name": "a discounted partial return pro-rates, and rounds half up",
+      "$note": "334 * (1500/2000) is exactly 250.5. Dart's .round() and JS Math.round both go to 251; moneyToMinorUnits would not, which is why the port does not use it.",
+      "categoryId": null,
+      "returnedUnits": { "prod-a": 1 },
+      "expect": {
+        "revenueMinor": 251,
+        "costMinor": 100,
+        "fullyReturnedCostlessLines": 0,
+        "fullyReturned": false
+      },
+      "sale": {
+        "subtotalMinor": 2000,
+        "discountMinor": 500,
+        "totalMinor": 1500,
+        "items": [
+          {
+            "productId": "prod-a",
+            "name": "Nyama",
+            "categoryId": "food",
+            "quantity": 3,
+            "unitPriceMinor": 334,
+            "lineTotalMinor": 1002,
+            "unitCostMinor": 100,
+            "costMinor": 300
+          },
+          {
+            "productId": "prod-b",
+            "name": "Shisha",
+            "categoryId": "drinks",
+            "quantity": 1,
+            "unitPriceMinor": 998,
+            "lineTotalMinor": 998,
+            "unitCostMinor": 500,
+            "costMinor": 500
+          }
+        ]
+      }
+    },
+    {
+      "name": "a ratio with no exact binary representation still agrees",
+      "$note": "2000/3000 is 0.6666666666666666 in binary64. This pins the shape of the expression, which is the thing that would silently differ between the two ports.",
+      "categoryId": null,
+      "returnedUnits": { "prod-a": 1 },
+      "expect": {
+        "revenueMinor": 667,
+        "costMinor": 100,
+        "fullyReturnedCostlessLines": 0,
+        "fullyReturned": false
+      },
+      "sale": {
+        "subtotalMinor": 3000,
+        "discountMinor": 1000,
+        "totalMinor": 2000,
+        "items": [
+          {
+            "productId": "prod-a",
+            "name": "Soda",
+            "categoryId": "drinks",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "lineTotalMinor": 1000,
+            "unitCostMinor": 100,
+            "costMinor": 100
+          },
+          {
+            "productId": "prod-b",
+            "name": "Platter",
+            "categoryId": "food",
+            "quantity": 1,
+            "unitPriceMinor": 2000,
+            "lineTotalMinor": 2000,
+            "unitCostMinor": 200,
+            "costMinor": 200
+          }
+        ]
+      }
+    },
+    {
+      "name": "returning a free line takes nothing back",
+      "$note": "The `grossMinor <= 0` short circuit. A line given away has no share of the discount to return.",
+      "categoryId": null,
+      "returnedUnits": { "prod-a": 1 },
+      "expect": {
+        "revenueMinor": 0,
+        "costMinor": 0,
+        "fullyReturnedCostlessLines": 0,
+        "fullyReturned": false
+      },
+      "sale": {
+        "subtotalMinor": 1000,
+        "discountMinor": 100,
+        "totalMinor": 900,
+        "items": [
+          {
+            "productId": "prod-a",
+            "name": "Sample",
+            "categoryId": "food",
+            "quantity": 1,
+            "unitPriceMinor": 0,
+            "lineTotalMinor": 0,
+            "unitCostMinor": 0,
+            "costMinor": 0
+          },
+          {
+            "productId": "prod-b",
+            "name": "Platter",
+            "categoryId": "food",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "lineTotalMinor": 1000,
+            "unitCostMinor": 400,
+            "costMinor": 400
+          }
+        ]
+      }
+    },
+    {
+      "name": "a returned line carrying no cost takes no cost back out",
+      "$note": "Nothing incomplete about it: the line put no cost in either. Whether the period can still state a profit is the aggregator's question - see the incomplete-cost cases in domain.test.ts.",
+      "categoryId": null,
+      "returnedUnits": { "prod-a": 1 },
+      "expect": {
+        "revenueMinor": 500,
+        "costMinor": 0,
+        "fullyReturnedCostlessLines": 1,
+        "fullyReturned": true
+      },
+      "sale": {
+        "subtotalMinor": 500,
+        "discountMinor": 0,
+        "totalMinor": 500,
+        "items": [
+          {
+            "productId": "prod-a",
+            "name": "Unpriced",
+            "categoryId": "food",
+            "quantity": 1,
+            "unitPriceMinor": 500,
+            "lineTotalMinor": 500
+          }
+        ]
+      }
+    },
+    {
+      "name": "a category's full return is worth its own lines, not the sale total",
+      "$note": "The basis changes with the scope. A category figure is the sum of its line totals gross of the whole-sale discount, so pro-rating here would hand back money the category was never credited with.",
+      "categoryId": "food",
+      "returnedUnits": { "prod-a": 2 },
+      "expect": {
+        "revenueMinor": 1000,
+        "costMinor": 600,
+        "fullyReturnedCostlessLines": 0,
+        "fullyReturned": true
+      },
+      "sale": {
+        "subtotalMinor": 2000,
+        "discountMinor": 200,
+        "totalMinor": 1800,
+        "items": [
+          {
+            "productId": "prod-a",
+            "name": "Nyama",
+            "categoryId": "food",
+            "quantity": 2,
+            "unitPriceMinor": 500,
+            "lineTotalMinor": 1000,
+            "unitCostMinor": 300,
+            "costMinor": 600
+          },
+          {
+            "productId": "prod-b",
+            "name": "Tusker",
+            "categoryId": "drinks",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "lineTotalMinor": 1000,
+            "unitCostMinor": 400,
+            "costMinor": 400
+          }
+        ]
+      }
+    },
+    {
+      "name": "a category's partial return is not discount-adjusted either",
+      "categoryId": "food",
+      "returnedUnits": { "prod-a": 1 },
+      "expect": {
+        "revenueMinor": 500,
+        "costMinor": 300,
+        "fullyReturnedCostlessLines": 0,
+        "fullyReturned": false
+      },
+      "sale": {
+        "subtotalMinor": 2000,
+        "discountMinor": 200,
+        "totalMinor": 1800,
+        "items": [
+          {
+            "productId": "prod-a",
+            "name": "Nyama",
+            "categoryId": "food",
+            "quantity": 2,
+            "unitPriceMinor": 500,
+            "lineTotalMinor": 1000,
+            "unitCostMinor": 300,
+            "costMinor": 600
+          },
+          {
+            "productId": "prod-b",
+            "name": "Tusker",
+            "categoryId": "drinks",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "lineTotalMinor": 1000,
+            "unitCostMinor": 400,
+            "costMinor": 400
+          }
+        ]
+      }
+    },
+    {
+      "name": "a sale holding nothing in the category returns nothing to it",
+      "categoryId": "drinks",
+      "returnedUnits": { "prod-a": 1 },
+      "expect": {
+        "revenueMinor": 0,
+        "costMinor": 0,
+        "fullyReturnedCostlessLines": 0,
+        "fullyReturned": false
+      },
+      "sale": {
+        "subtotalMinor": 500,
+        "discountMinor": 0,
+        "totalMinor": 500,
+        "items": [
+          {
+            "productId": "prod-a",
+            "name": "Nyama",
+            "categoryId": "food",
+            "quantity": 1,
+            "unitPriceMinor": 500,
+            "lineTotalMinor": 500,
+            "unitCostMinor": 200,
+            "costMinor": 200
+          }
+        ]
+      }
+    }
+  ]
+}

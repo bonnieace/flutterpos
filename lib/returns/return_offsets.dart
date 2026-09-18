@@ -34,6 +34,8 @@ final class TenantSaleReturnOffset {
     required this.tender,
     required this.returnedUnits,
     required this.returnedMinor,
+    required this.returnedCostMinor,
+    required this.fullyReturnedCostlessLines,
     required this.isFullyReturned,
   });
 
@@ -64,7 +66,36 @@ final class TenantSaleReturnOffset {
   /// pro-rata share of what was actually charged.
   final int returnedMinor;
 
+  /// What those returned units *cost*, in the sale's own currency.
+  ///
+  /// **Not discount-adjusted, and deliberately so.** A discount reduces what
+  /// the customer paid; it does not change what the goods cost this business.
+  /// So revenue comes back pro-rata and cost comes back at list.
+  ///
+  /// **Why this exists at all.** Netting revenue out of a period without
+  /// netting its cost does not leave profit merely unfixed - it corrupts it.
+  /// `TenantProfitReport.from` derives cost as takings minus profit, so a
+  /// takings figure reduced on its own drives the derived cost down and, on a
+  /// low-margin period with a large return, negative - which that model reads
+  /// as `TenantProfitBasis.inconsistent` and withholds the margin for.
+  final int returnedCostMinor;
+
+  /// How many lines carrying no cost have come back in full.
+  ///
+  /// **The period subtracts this from its incomplete-cost count.** A costless
+  /// line that is entirely returned contributes no revenue and no cost to the
+  /// net figures, so its missing cost cannot move net profit by a shilling -
+  /// and going on withholding the margin over it would let a customer undo a
+  /// sale and leave the report permanently unable to state a profit about
+  /// goods nobody has. A line still partly sold is not counted here: some of
+  /// its cost is genuinely unknown.
+  final int fullyReturnedCostlessLines;
+
   /// Whether every unit on every line of the sale has come back.
+  ///
+  /// Under a category scope this is asked of the scoped lines alone: a sale
+  /// whose every drinks line came back has stopped being a drinks transaction
+  /// whatever else it still holds.
   final bool isFullyReturned;
 }
 
@@ -256,10 +287,20 @@ final class TenantDayReturnsLoader extends TenantReadRepository {
 ///
 /// Exposed so the arithmetic has exactly one definition, wherever a caller
 /// already holds both halves.
+///
+/// **[categoryId] narrows the valuation to one category's lines**, for a
+/// report that is already adding up only those lines. The basis changes with
+/// it, and that is not a detail: a whole-sale figure is the recorded total
+/// minus a whole-sale discount, while a category figure is the sum of its own
+/// line totals, gross of that discount - which is exactly what
+/// `saleContribution` does on the server. Pro-rating a category's returns
+/// against the whole sale's discount would take back money the category was
+/// never credited with.
 TenantSaleReturnOffset describeReturnOffset(
   TenantSale sale,
-  Map<String, int> returnedUnits,
-) {
+  Map<String, int> returnedUnits, {
+  String? categoryId,
+}) {
   final units = <String, int>{
     for (final entry in returnedUnits.entries)
       if (entry.value > 0) entry.key: entry.value,
@@ -275,15 +316,40 @@ TenantSaleReturnOffset describeReturnOffset(
     }
   }
 
-  var grossMinor = 0;
-  var complete = sale.lines.isNotEmpty;
+  // Every line is still checked for an impossible quantity, whatever the
+  // scope: a malformed return is malformed in every report that reads it.
   for (final line in sale.lines) {
-    final returned = units[line.productId] ?? 0;
-    if (returned > line.quantity) {
+    if ((units[line.productId] ?? 0) > line.quantity) {
       throw const TenantReturnException('return_exceeds_sale');
     }
+  }
+
+  final scoped = categoryId == null
+      ? sale.lines
+      : <TenantSaleLine>[
+          for (final line in sale.lines)
+            if (line.categoryId == categoryId) line,
+        ];
+
+  var grossMinor = 0;
+  var costMinor = 0;
+  var costlessLinesFullyBack = 0;
+  var complete = scoped.isNotEmpty;
+  for (final line in scoped) {
+    final returned = units[line.productId] ?? 0;
     if (returned < line.quantity) complete = false;
     grossMinor += returned * line.unitPriceMinor;
+    if (returned == 0) continue;
+    // A returned line with no recorded cost takes no cost back out, which is
+    // consistent rather than incomplete: it put none in either. Whether the
+    // *period* can still state a profit is the aggregator's question, asked
+    // per line - a line fully returned stops making the basis incomplete,
+    // because its missing cost can no longer move the net figure.
+    if (line.unitCostMinor case final unitCost?) {
+      costMinor += returned * unitCost;
+    } else if (returned >= line.quantity) {
+      costlessLinesFullyBack += 1;
+    }
   }
 
   return TenantSaleReturnOffset._(
@@ -291,7 +357,14 @@ TenantSaleReturnOffset describeReturnOffset(
     soldById: sale.soldById,
     tender: sale.tender,
     returnedUnits: Map<String, int>.unmodifiable(units),
-    returnedMinor: _returnedMinor(sale, grossMinor, complete),
+    returnedMinor: categoryId == null
+        ? _returnedMinor(sale, grossMinor, complete)
+        // The category basis is the line totals themselves. A full return of
+        // the category's lines is worth what those lines were added up as,
+        // which is what `complete` would otherwise short-circuit past.
+        : grossMinor,
+    returnedCostMinor: costMinor,
+    fullyReturnedCostlessLines: costlessLinesFullyBack,
     isFullyReturned: complete,
   );
 }

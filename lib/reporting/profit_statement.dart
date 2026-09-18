@@ -158,23 +158,33 @@ final class TenantProfitStatement extends StatelessWidget {
           'read, and leaving it out would overstate what was kept.',
   };
 
-  String _note() => switch (report.basis) {
-    // The positive form of the requirement, and the reason it is stated rather
-    // than left to silence: a reader cannot tell a complete figure from an
-    // overstated one by looking at it.
-    TenantProfitBasis.complete => 'Every sale line behind it carries a cost.',
-    TenantProfitBasis.incomplete =>
-      'Profit and margin are not shown: '
-          '${report.incompleteCostLineCount} sale '
-          '${report.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
-          'no cost recorded, and counting '
-          '${report.incompleteCostLineCount == 1 ? 'it' : 'them'} as free '
-          'would overstate both.',
-    // Deliberately not phrased as a data problem the reader caused. Nothing a
-    // business does can produce this; it means the figure disagrees with the
-    // takings it was derived from.
-    TenantProfitBasis.inconsistent =>
-      'Profit and margin are not shown: the reported profit is larger than the '
-          'takings it was computed from, so the figure cannot be trusted.',
-  };
+  String _note() => tenantProfitNote(report);
 }
+
+/// What is known about the cost data behind one profit figure.
+///
+/// **Lifted out of [TenantProfitStatement] so a surface that draws its profit as
+/// a tile rather than a [StatLine] can still say the same sentence.** The
+/// monthly report is that surface: it had a warning of its own, worded
+/// differently, which is how it came to print an overstated figure while every
+/// other surface withheld one. A second wording is a second rule, and there is
+/// only one rule.
+String tenantProfitNote(TenantProfitReport report) => switch (report.basis) {
+  // The positive form of the requirement, and the reason it is stated rather
+  // than left to silence: a reader cannot tell a complete figure from an
+  // overstated one by looking at it.
+  TenantProfitBasis.complete => 'Every sale line behind it carries a cost.',
+  TenantProfitBasis.incomplete =>
+    'Profit and margin are not shown: '
+        '${report.incompleteCostLineCount} sale '
+        '${report.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
+        'no cost recorded, and counting '
+        '${report.incompleteCostLineCount == 1 ? 'it' : 'them'} as free '
+        'would overstate both.',
+  // Deliberately not phrased as a data problem the reader caused. Nothing a
+  // business does can produce this; it means the figure disagrees with the
+  // takings it was derived from.
+  TenantProfitBasis.inconsistent =>
+    'Profit and margin are not shown: the reported profit is larger than the '
+        'takings it was computed from, so the figure cannot be trusted.',
+};
