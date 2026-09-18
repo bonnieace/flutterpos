@@ -1571,16 +1571,42 @@ final class _ManagementSalesSummary extends StatelessWidget {
         message: _totalsFailureMessage(outcome.error!),
       );
     }
+    // **The server's netting where it sends one, this screen's where it does
+    // not.** Both compute the same rule from the same returns, and that is the
+    // problem: two implementations of one money rule drift. The callable now
+    // joins the period's returns itself and reports `net` beside the gross
+    // figures, so that is the answer wherever it arrives - and it is the
+    // better one, being read from Firestore rather than from whatever this
+    // device happened to have cached.
+    //
+    // The local arithmetic stays as the fallback and nothing more. An older
+    // deployment sends no `net`, and this screen netted returns long before
+    // the rest of the reporting stack did; losing that against an old server
+    // would be a regression, not a simplification.
+    final serverNet = totals.net;
     final returnedMinor = returns.returnedMinor;
-    final netSales = _nonNegative(totals.sales - returnedMinor / 100);
-    final netTransactions = (totals.transactions - returns.fullyReturnedSales)
-        .clamp(0, totals.transactions);
-    final breakdown = totals.tenderBreakdown;
+    final netSales =
+        serverNet?.sales ?? _nonNegative(totals.sales - returnedMinor / 100);
+    final netTransactions =
+        serverNet?.transactions ??
+        (totals.transactions - returns.fullyReturnedSales)
+            .clamp(0, totals.transactions);
+    // The split has to describe the same money as the total above it, so it
+    // comes from whichever side that total did.
+    final breakdown = serverNet == null
+        ? totals.tenderBreakdown
+        : serverNet.tenderBreakdown;
+    // A server breakdown arrives already netted, so netting it again here
+    // would take the same returns off the rows twice.
+    TenantSalesTenderTotals row(
+      CheckoutTender? tender,
+      TenantSalesTenderTotals gross,
+    ) => serverNet == null ? _netTender(tender, gross) : gross;
     final paymentRows = breakdown == null
         ? const <_PaymentSummaryEntry>[]
         : <_PaymentSummaryEntry>[
             for (final entry in breakdown.recorded.entries)
-              if (!_netTender(entry.key, entry.value).isEmpty)
+              if (!row(entry.key, entry.value).isEmpty)
                 _PaymentSummaryEntry(
                   label: entry.key.label,
                   icon: switch (entry.key) {
@@ -1588,16 +1614,16 @@ final class _ManagementSalesSummary extends StatelessWidget {
                     CheckoutTender.mpesa => Icons.phone_android_outlined,
                     CheckoutTender.card => Icons.credit_card_outlined,
                   },
-                  totals: _netTender(entry.key, entry.value),
+                  totals: row(entry.key, entry.value),
                 ),
             // A schema v1 sale recorded no tender, so the money that comes back
             // out of one comes off this row rather than off a payment method it
             // never named.
-            if (!_netTender(null, breakdown.unrecorded).isEmpty)
+            if (!row(null, breakdown.unrecorded).isEmpty)
               _PaymentSummaryEntry(
                 label: 'Not recorded',
                 icon: Icons.history_outlined,
-                totals: _netTender(null, breakdown.unrecorded),
+                totals: row(null, breakdown.unrecorded),
               ),
             // Nothing is ever netted off this one: a sale carrying a tender
             // this app does not model is a sale `TenantSale` refuses to decode,
@@ -1744,6 +1770,10 @@ final class _ManagementSalesSummary extends StatelessWidget {
   }
 
   /// One *Paid by* row with its day's returns taken back off it.
+  ///
+  /// **Only reached on the fallback.** When the server sends `netByTender`
+  /// the rows are already netted and are passed through untouched; netting
+  /// them again here would take the same returns off twice.
   TenantSalesTenderTotals _netTender(
     CheckoutTender? tender,
     TenantSalesTenderTotals gross,

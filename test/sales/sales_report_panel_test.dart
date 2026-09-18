@@ -899,6 +899,43 @@ void main() {
       );
     });
   });
+
+  testWidgets('the server netting wins over this screen doing its own', (
+    tester,
+  ) async {
+    // **Two implementations of one money rule drift.** This screen netted
+    // returns long before the rest of the reporting stack did, and the
+    // callable now joins them itself - from Firestore rather than from
+    // whatever this device cached. Where the server states a net figure, that
+    // is the figure, and the local arithmetic is only the fallback for a
+    // deployment too old to send one.
+    final reader = _SalesReader(const <TenantQueryDocumentSnapshot>[]);
+
+    await _pump(
+      tester,
+      reader,
+      width: 1024,
+      role: TenantRole.manager,
+      totalsCallable: _NettingTotalsCallable(),
+    );
+
+    // 90, the server's net - not 100 gross, and not a locally netted figure,
+    // since this reader holds no returns at all and would have left it at 100.
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-report-revenue')))
+          .data,
+      contains('90'),
+    );
+    // Not the gross figure either, which is what a screen ignoring the new
+    // block would have drawn.
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-report-revenue')))
+          .data,
+      isNot(contains('100')),
+    );
+  });
 }
 
 /// The panel on its first frame, before the guard's read has answered.
@@ -998,6 +1035,44 @@ final class _HeldTotalsCallable implements SalesTotalsCallable {
     await _gate.future;
     return _TotalsCallable().call(payload);
   }
+}
+
+/// A server that nets the period's returns itself.
+///
+/// The gross half is `_TotalsCallable`'s; the `net` half says a return of 10
+/// came back, and names one fewer cash sale.
+final class _NettingTotalsCallable implements SalesTotalsCallable {
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async => <String, Object?>{
+    'previous': <String, Object?>{
+      'sales': 100,
+      'profit': 30,
+      'transactions': 4,
+      'incompleteCostLineCount': 0,
+    },
+    'scannedTransactions': 4,
+    'byTender': <String, Object?>{
+      'cash': <String, Object?>{'sales': 50, 'transactions': 1},
+      'mpesa': <String, Object?>{'sales': 30, 'transactions': 1},
+      'card': <String, Object?>{'sales': 15, 'transactions': 1},
+      'unrecorded': <String, Object?>{'sales': 5, 'transactions': 1},
+      'other': <String, Object?>{'sales': 0, 'transactions': 0},
+    },
+    'net': <String, Object?>{
+      'sales': 90,
+      'profit': 26,
+      'transactions': 3,
+      'incompleteCostLineCount': 0,
+    },
+    'netByTender': <String, Object?>{
+      'cash': <String, Object?>{'sales': 40, 'transactions': 0},
+      'mpesa': <String, Object?>{'sales': 30, 'transactions': 1},
+      'card': <String, Object?>{'sales': 15, 'transactions': 1},
+      'unrecorded': <String, Object?>{'sales': 5, 'transactions': 1},
+      'other': <String, Object?>{'sales': 0, 'transactions': 0},
+    },
+    'returnsScanned': 1,
+  };
 }
 
 final class _TotalsCallable implements SalesTotalsCallable {
