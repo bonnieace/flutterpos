@@ -98,6 +98,26 @@ void main() {
     expect(find.textContaining('July 2026'), findsNWidgets(4));
   });
 
+  testWidgets('a trustworthy month against an untrustworthy one shows no arrow', (
+    tester,
+  ) async {
+    // **The denominator was never guarded.** The tile checked this month's
+    // basis and the percentage divided by last month's, so a month whose
+    // profit the app refuses to display still came out as a trend beside a
+    // month whose profit it will.
+    await _pumpMonth(
+      tester,
+      callable: _Callable(
+        _response(),
+        previous: _response(incompleteCostLineCount: 9),
+      ),
+    );
+
+    expect(_profitValue(tester), '1200.00', reason: 'this month is complete');
+    // Sales and transactions keep their arrows; only profit loses one.
+    expect(find.textContaining('July 2026'), findsNWidgets(3));
+  });
+
   testWidgets('a manager reads the month and is shown no profit at all', (
     tester,
   ) async {
@@ -177,15 +197,18 @@ Map<String, Object?> _response({
 /// The loader starts both reads together and asks for the month first, so the
 /// order is the call order.
 final class _Callable implements SalesTotalsCallable {
-  _Callable(this._current);
+  _Callable(this._current, {Map<String, Object?>? previous})
+    : _previous =
+          previous ?? _response(sales: 4000, profit: 900, transactions: 32);
 
   final Map<String, Object?> _current;
+  final Map<String, Object?> _previous;
   int _calls = 0;
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     if (_calls++ == 0) return _current;
-    return _response(sales: 4000, profit: 900, transactions: 32);
+    return _previous;
   }
 }
 

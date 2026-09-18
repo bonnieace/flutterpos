@@ -66,8 +66,9 @@ void main() {
     test('an unfiltered week rolls up every line', () async {
       final report = await _load();
 
-      expect(report.itemsSold, 4);
-      expect(report.recentSales, hasLength(3));
+      // 1 beer + 2 bread + 1 beer, and the mixed receipt's two.
+      expect(report.itemsSold, 6);
+      expect(report.recentSales, hasLength(4));
       expect(
         report.topItems.map((item) => item.productId),
         containsAll(<String>['beer', 'bread']),
@@ -77,9 +78,9 @@ void main() {
     test('a category keeps only the lines in it', () async {
       final report = await _load(categoryId: 'drinks');
 
-      // Two drinks lines over two sales; the food line is not counted and the
-      // sale that held nothing else is not listed.
-      expect(report.itemsSold, 2);
+      // Three drinks lines over three sales - one of them a receipt that also
+      // held food. The food-only sale contributes nothing.
+      expect(report.itemsSold, 3);
       expect(
         report.topItems.map((item) => item.productId),
         <String>['beer'],
@@ -91,13 +92,49 @@ void main() {
       final report = await _load(categoryId: 'drinks');
 
       expect(
-        report.recentSales.map((sale) => sale.id),
+        report.recentSales.map((row) => row.sale.id),
         isNot(contains('co-002')),
         reason:
             'The food-only sale did not happen as far as drinks is concerned - '
             'the same rule `saleContribution` applies on the server.',
       );
-      expect(report.recentSales, hasLength(2));
+      expect(report.recentSales, hasLength(3));
+    });
+
+    test('a mixed receipt is listed by its lines in the category', () async {
+      // **The row used to describe the whole receipt.** It printed whichever
+      // line the till wrote first - here the food one - a count including the
+      // food line, and the whole-sale total. Under a drinks heading that named
+      // another category's product and an amount the drinks figures above it
+      // had never counted, so the rows did not add up to their own total.
+      final report = await _load(categoryId: 'drinks');
+      final mixed = report.recentSales.firstWhere(
+        (row) => row.sale.id == 'co-004',
+      );
+
+      expect(mixed.sale.totalMinor, 2000, reason: 'the receipt is unchanged');
+      expect(
+        mixed.lines.map((line) => line.productId),
+        <String>['beer'],
+        reason: 'the food line is not part of this listing',
+      );
+      expect(
+        mixed.totalMinor,
+        1000,
+        reason: 'the row states the money this category was credited with',
+      );
+    });
+
+    test('an unfiltered receipt is still listed whole', () async {
+      final report = await _load();
+      final mixed = report.recentSales.firstWhere(
+        (row) => row.sale.id == 'co-004',
+      );
+
+      expect(mixed.lines, hasLength(2));
+      // The sale's own total, so a whole-sale discount is still reflected
+      // rather than recomputed from the lines.
+      expect(mixed.totalMinor, 2000);
     });
   });
 
@@ -141,6 +178,12 @@ Future<TenantWeeklyReport> _load({
     _sale(saleId: 'co-001', sequence: 1, businessDate: '2026-08-25', lines: <Map<String, Object?>>[_line(productId: 'beer', categoryId: 'drinks')]),
     _sale(saleId: 'co-002', sequence: 2, businessDate: '2026-08-25', lines: <Map<String, Object?>>[_line(productId: 'bread', categoryId: 'food', quantity: 2)]),
     _sale(saleId: 'co-003', sequence: 3, businessDate: '2026-08-26', lines: <Map<String, Object?>>[_line(productId: 'beer', categoryId: 'drinks')]),
+    // **One receipt holding both categories.** This is the case the first pass
+    // at this page never built, and the one the row rendering got wrong.
+    _sale(saleId: 'co-004', sequence: 4, businessDate: '2026-08-26', lines: <Map<String, Object?>>[
+      _line(productId: 'bread', categoryId: 'food'),
+      _line(productId: 'beer', categoryId: 'drinks'),
+    ]),
   ]);
   final loader = TenantWeeklyReportLoader(
     session: session,

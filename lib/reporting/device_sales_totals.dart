@@ -411,14 +411,19 @@ final class TenantDeviceSalesAggregator {
       incompleteCostLineCount: gross.incompleteCostLines,
       tenderSalesMinor: gross.tenderSalesMinor,
       tenderTransactions: gross.tenderTransactions,
+      // **With its own tender split.** The headline and the payment rows have
+      // to describe the same money; a net total over gross rows is a page
+      // whose own figures do not add up.
       net: netPass == null
           ? null
-          : TenantSalesNetTotals.summed(
-              sales: netPass.revenueMinor / 100,
-              profit: (netPass.revenueMinor - netPass.costMinor) / 100,
+          : TenantSalesNetTotals.fromDeviceMinorUnits(
+              salesMinor: netPass.revenueMinor,
+              costMinor: netPass.costMinor,
               transactions: netPass.transactions,
               incompleteCostLineCount: netPass.incompleteCostLines,
               returnsScanned: returned!.documentCount,
+              tenderSalesMinor: netPass.tenderSalesMinor,
+              tenderTransactions: netPass.tenderTransactions,
             ),
     );
     return TenantDeviceSalesTotals.complete(

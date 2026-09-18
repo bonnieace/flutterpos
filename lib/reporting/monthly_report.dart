@@ -157,10 +157,18 @@ final class TenantMonthlyReport {
     previousTotals?.netOrGrossTransactions.toDouble(),
   );
 
-  double? get profitChange => _change(
-    totals?.netOrGrossProfitReport.profit,
-    previousTotals?.netOrGrossProfitReport.profit,
-  );
+  /// **Both months, not just this one.** A percentage is a figure divided by
+  /// another figure, so an arrow is only as believable as the weaker of the
+  /// two - and a month whose profit may not be shown may not be a denominator
+  /// either. Guarding the tile alone let the withheld number back out as a
+  /// trend.
+  double? get profitChange {
+    final current = totals?.netOrGrossProfitReport;
+    final before = previousTotals?.netOrGrossProfitReport;
+    if (current == null || before == null) return null;
+    if (!current.isShowable || !before.isShowable) return null;
+    return _change(current.profit, before.profit);
+  }
 
   /// The share of this month over the one before, or null where there is
   /// nothing to compare against. The same rule the weekly report applies:

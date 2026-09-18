@@ -77,6 +77,66 @@ void main() {
     expect(totals.netOrGrossSales, 5);
   });
 
+  test('the offline tender rows add up to the offline total', () async {
+    // **They used to not.** `TenantSalesNetTotals.summed` carries no
+    // breakdown, so the totals page drew a net headline and then fell back to
+    // the gross payment rows underneath it - add the rows up and you got more
+    // than the figure above them.
+    final reader = _Reader(
+      <TenantQueryDocumentSnapshot>[
+        _canonicalSale(
+          checkoutId: 'checkout-a',
+          totalMinor: 900,
+          lineTotalMinor: 1000,
+          categoryId: 'drinks',
+          costMinor: 600,
+          tender: 'cash',
+        ),
+        _canonicalSale(
+          checkoutId: 'checkout-b',
+          totalMinor: 500,
+          lineTotalMinor: 500,
+          categoryId: 'food',
+          costMinor: 200,
+          tender: 'card',
+        ),
+      ],
+      returns: <Map<String, Object?>>[
+        _cachedReturn(
+          returnId: 'return-a',
+          saleId: 'checkout-a',
+          productId: 'product-checkout-a',
+        ),
+      ],
+    );
+    final aggregator = TenantDeviceSalesAggregator(
+      session: _session(),
+      cacheReader: reader,
+      cacheReportReader: reader,
+      clock: () => DateTime.utc(2026, 9, 1, 12),
+    );
+
+    final totals = (await aggregator.load(
+      aggregator.createBusinessDateQuery(businessDate: '2026-09-01'),
+    )).totals!;
+
+    final net = totals.net!;
+    expect(net.tenderBreakdown, isNotNull);
+    final rows = net.tenderBreakdown!.recorded;
+    final bucketed = rows.values.fold<double>(
+      0,
+      (total, bucket) => total + bucket.sales,
+    );
+    expect(
+      bucketed,
+      net.sales,
+      reason: 'the payment rows describe the same money as the total',
+    );
+    // The cash sale came back in full, so its row goes with it.
+    expect(rows[CheckoutTender.cash]?.sales, 0);
+    expect(rows[CheckoutTender.card]?.sales, 5);
+  });
+
   test('a day with nothing returned still states that it netted', () async {
     // Absent and zero are different facts. A period that read its returns and
     // found none can say so; one that never read them must not.

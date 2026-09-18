@@ -111,6 +111,41 @@ final class TenantReportItem {
   final int revenueMinor;
 }
 
+/// One sale as a category-filtered page must list it.
+///
+/// **The receipt is not the row.** A mixed receipt belongs in a drinks-filtered
+/// list because it holds a drinks line, but printing its first line's name, its
+/// whole line count and its whole total puts a food item and a food-inclusive
+/// amount under a drinks heading - and the rows then do not add up to the
+/// figure above them. So the sale is carried with the lines the filter
+/// selected, and what is drawn comes from those.
+final class TenantReportSaleRow {
+  const TenantReportSaleRow({
+    required this.sale,
+    required this.lines,
+    required this.totalMinor,
+  });
+
+  /// Unfiltered: the whole receipt is the row.
+  factory TenantReportSaleRow.whole(TenantSale sale) => TenantReportSaleRow(
+    sale: sale,
+    lines: sale.lines,
+    totalMinor: sale.totalMinor,
+  );
+
+  final TenantSale sale;
+
+  /// The lines in scope - every line when nothing is filtered.
+  final List<TenantSaleLine> lines;
+
+  /// What those lines came to.
+  ///
+  /// The sale's own total when nothing is filtered, so a discount is still
+  /// reflected; the sum of the selected line totals under a category, which is
+  /// the same basis the category's takings are added up on.
+  final int totalMinor;
+}
+
 /// Everything the weekly page draws, for one week and one set of filters.
 final class TenantWeeklyReport {
   const TenantWeeklyReport({
@@ -139,7 +174,7 @@ final class TenantWeeklyReport {
   final List<double> revenueByWeekday;
 
   final List<TenantReportItem> topItems;
-  final List<TenantSale> recentSales;
+  final List<TenantReportSaleRow> recentSales;
 
   /// Units sold across the week, from the same pass that built [topItems].
   final int itemsSold;
@@ -397,7 +432,7 @@ final class TenantWeeklyReportLoader {
         previousTotals: null,
         revenueByWeekday: List<double>.filled(7, 0),
         topItems: const <TenantReportItem>[],
-        recentSales: const <TenantSale>[],
+        recentSales: const <TenantReportSaleRow>[],
         itemsSold: 0,
         scanWasTruncated: false,
       );
@@ -655,7 +690,7 @@ final class TenantWeeklyReportLoader {
     final quantities = <String, int>{};
     final revenue = <String, int>{};
     final names = <String, String>{};
-    final recent = <TenantSale>[];
+    final recent = <TenantReportSaleRow>[];
     final revenueByDate = <String, int>{};
     var scanned = 0;
     var truncated = false;
@@ -692,7 +727,22 @@ final class TenantWeeklyReportLoader {
                       0,
                       (total, line) => total + line.lineTotalMinor,
                     ));
-          if (recent.length < recentSaleCount) recent.add(sale);
+          if (recent.length < recentSaleCount) {
+            // The scoped lines and their own total, so a row under a category
+            // heading states that category's item and that category's money.
+            recent.add(
+              categoryId == null
+                  ? TenantReportSaleRow.whole(sale)
+                  : TenantReportSaleRow(
+                      sale: sale,
+                      lines: lines,
+                      totalMinor: lines.fold<int>(
+                        0,
+                        (total, line) => total + line.lineTotalMinor,
+                      ),
+                    ),
+            );
+          }
           for (final line in lines) {
             quantities[line.productId] =
                 (quantities[line.productId] ?? 0) + line.quantity;
@@ -749,7 +799,7 @@ final class _ItemRoll {
     : quantities = const <String, int>{},
       revenue = const <String, int>{},
       names = const <String, String>{},
-      recent = const <TenantSale>[],
+      recent = const <TenantReportSaleRow>[],
       itemsSold = 0,
       truncated = false,
       revenueByDate = const <String, int>{};
@@ -757,7 +807,7 @@ final class _ItemRoll {
   final Map<String, int> quantities;
   final Map<String, int> revenue;
   final Map<String, String> names;
-  final List<TenantSale> recent;
+  final List<TenantReportSaleRow> recent;
   final int itemsSold;
   final bool truncated;
 

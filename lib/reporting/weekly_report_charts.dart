@@ -428,7 +428,7 @@ final class WeeklyRecentTransactions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final sales = report?.recentSales ?? const <TenantSale>[];
+    final rows = report?.recentSales ?? const <TenantReportSaleRow>[];
     return WeeklyReportCard(
       key: const ValueKey('weekly-report-transactions'),
       child: Column(
@@ -455,7 +455,7 @@ final class WeeklyRecentTransactions extends StatelessWidget {
             ],
           ),
           SizedBox(height: tokens.spacing.s16),
-          if (sales.isEmpty)
+          if (rows.isEmpty)
             const EmptyState(
               key: ValueKey('weekly-report-transactions-empty'),
               title: 'No transactions this week',
@@ -463,9 +463,9 @@ final class WeeklyRecentTransactions extends StatelessWidget {
               illustration: 'no-data.svg',
             )
           else
-            for (final sale in sales) ...<Widget>[
-              _SaleRow(sale: sale, currency: currency),
-              if (sale != sales.last) ...<Widget>[
+            for (final row in rows) ...<Widget>[
+              _SaleRow(row: row, currency: currency),
+              if (row != rows.last) ...<Widget>[
                 SizedBox(height: tokens.spacing.s12),
                 Divider(height: 1, color: tokens.colors.surface.borderSubtle),
                 SizedBox(height: tokens.spacing.s12),
@@ -478,16 +478,23 @@ final class WeeklyRecentTransactions extends StatelessWidget {
 }
 
 final class _SaleRow extends StatelessWidget {
-  const _SaleRow({required this.sale, required this.currency});
+  const _SaleRow({required this.row, required this.currency});
 
-  final TenantSale sale;
+  final TenantReportSaleRow row;
   final TenantReportingCurrency? currency;
 
-  /// The old screen's `Item +2 more`.
+  TenantSale get sale => row.sale;
+
+  /// The old screen's `Item +2 more`, over the lines in scope.
+  ///
+  /// **Scoped, because the list it sits in is.** Under a category the receipt
+  /// may hold lines from three others; naming whichever the till happened to
+  /// write first would put another category's product under this one's
+  /// heading.
   String get _preview {
-    if (sale.lines.isEmpty) return 'No items';
-    final first = sale.lines.first.name;
-    final rest = sale.lines.length - 1;
+    if (row.lines.isEmpty) return 'No items';
+    final first = row.lines.first.name;
+    final rest = row.lines.length - 1;
     return rest > 0 ? '$first +$rest more' : first;
   }
 
@@ -543,7 +550,7 @@ final class _SaleRow extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Text(
-              weeklyReportMoney(currency, sale.totalMinor / 100),
+              weeklyReportMoney(currency, row.totalMinor / 100),
               style: tokens.typography.labelMedium.copyWith(
                 color: tokens.colors.text.money,
               ),

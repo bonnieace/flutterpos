@@ -413,6 +413,34 @@ final class TenantSalesNetTotals {
     tenderBreakdown: null,
   );
 
+  /// The net figures a device aggregated from its own cache.
+  ///
+  /// **Carries its tender split, unlike [summed].** A period assembled day by
+  /// day has no breakdown to carry, but one aggregated in a single pass does -
+  /// and without it the totals page drew a net headline over gross payment
+  /// rows that did not add up to it.
+  factory TenantSalesNetTotals.fromDeviceMinorUnits({
+    required int salesMinor,
+    required int costMinor,
+    required int transactions,
+    required int incompleteCostLineCount,
+    required int returnsScanned,
+    required Map<String, int> tenderSalesMinor,
+    required Map<String, int> tenderTransactions,
+  }) => TenantSalesNetTotals._(
+    sales: salesMinor / 100,
+    profit: (salesMinor - costMinor) / 100,
+    transactions: transactions,
+    incompleteCostLineCount: incompleteCostLineCount,
+    returnsScanned: returnsScanned,
+    tenderBreakdown: TenantSalesTenderBreakdown.fromDeviceMinorUnits(
+      salesMinor: tenderSalesMinor,
+      transactions: tenderTransactions,
+      totalSalesMinor: salesMinor,
+      totalTransactions: transactions,
+    ),
+  );
+
   /// Reads the `net` block of one callable answer, or null where it is absent.
   ///
   /// **Absent is not a failure; present and wrong is.** The same posture

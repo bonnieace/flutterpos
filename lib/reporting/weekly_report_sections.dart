@@ -401,7 +401,12 @@ final class _MetricGrid extends StatelessWidget {
           subtitle: profit != null && !profit.isShowable
               ? 'Some lines carry no cost'
               : null,
-          change: profit != null && profit.isShowable
+          // Both weeks, never one of each: a week whose profit may not be
+          // shown may not be the denominator of an arrow either.
+          change:
+              profit != null &&
+                  profit.isShowable &&
+                  (previous?.netOrGrossProfitReport.isShowable ?? false)
               ? TenantWeeklyReport.change(
                   profit.profit,
                   previous?.netOrGrossProfitReport.profit,
