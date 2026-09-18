@@ -230,7 +230,7 @@ void main() {
     server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
       overrides: <String, Object?>{
         'shiftId': 'shift-elsewhere',
-        'deviceId': _deviceOther,
+        'deviceId': _deviceEarlierInstall,
       },
     );
 
@@ -238,10 +238,7 @@ void main() {
     await _enterTill(tester);
 
     expect(
-      find.text(
-        'This shift is open on another device. Close it there, or close it '
-        'from here without its sales.',
-      ),
+      find.text(shiftErrorMessage('shift_open_on_earlier_install')),
       findsOneWidget,
     );
     await _tap(tester, const ValueKey('shift-gate-close-orphan'));
@@ -278,7 +275,7 @@ void main() {
     server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
       overrides: <String, Object?>{
         'shiftId': 'shift-elsewhere',
-        'deviceId': _deviceOther,
+        'deviceId': _deviceEarlierInstall,
       },
     );
     await _pumpHome(tester, state, server);
@@ -306,7 +303,7 @@ void main() {
     server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
       overrides: <String, Object?>{
         'shiftId': 'shift-elsewhere',
-        'deviceId': _deviceOther,
+        'deviceId': _deviceEarlierInstall,
       },
     );
     await _pumpHome(tester, state, server);
@@ -334,7 +331,7 @@ void main() {
     server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
       overrides: <String, Object?>{
         'shiftId': 'shift-elsewhere',
-        'deviceId': _deviceOther,
+        'deviceId': _deviceEarlierInstall,
       },
     );
     await state.save(shiftRecord());
@@ -411,7 +408,7 @@ void main() {
     server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
       overrides: <String, Object?>{
         'shiftId': 'shift-elsewhere',
-        'deviceId': _deviceOther,
+        'deviceId': _deviceEarlierInstall,
       },
     );
 
@@ -433,6 +430,28 @@ void main() {
     expect(find.byKey(const ValueKey('shift-gate-close-orphan')), findsNothing);
     expect(find.byKey(const ValueKey('shift-gate-error')), findsNothing);
     expect(find.byKey(const ValueKey('shift-gate-open')), findsOneWidget);
+  });
+
+  testWidgets("another phone's shift is never offered for closing", (
+    tester,
+  ) async {
+    // **The incident this exists for.** On 2026-09-17 this control closed a
+    // shift on a phone that was not gone at all - it was offline, mid-count,
+    // with one unsent sale left to send - and the count it had taken was
+    // discarded with it. `otherDeviceShiftId` now names a shift only where the
+    // durable half of the device id matches, so a shift like this one names
+    // nothing and the button never appears.
+    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
+      overrides: <String, Object?>{
+        'shiftId': 'shift-elsewhere',
+        'deviceId': _deviceOtherPhone,
+      },
+    );
+
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+
+    expect(find.byKey(const ValueKey('shift-gate-close-orphan')), findsNothing);
   });
 
   testWidgets('a refused open keeps the modal up and states the reason', (
@@ -698,11 +717,17 @@ Future<void> _openCloseSheet(WidgetTester tester) async {
   expect(find.byKey(const ValueKey('declared-cash')), findsOneWidget);
 }
 
-/// A second installation's identity, for the shift this one cannot adopt.
+/// An earlier installation of *this* phone, for the shift this one cannot adopt.
 ///
-/// Its hardware half differs too, so the refusal is the plain
-/// `shift_open_on_other_device` rather than the softer earlier-install wording.
-const String _deviceOther = 'dev-ffffffffffffffffffffffffffffffff';
+/// **The durable half matches `shiftDeviceId` and the install half does not**,
+/// which since 2026-09-17 is the only shape the close control is offered for.
+/// A shift whose durable half differs belongs to another phone that may simply
+/// be offline, and this device no longer offers to close it - see
+/// `_deviceOtherPhone` and the test that proves the button stays away.
+const String _deviceEarlierInstall = 'dev-0123456789abcdef01234567deadbeef';
+
+/// Another phone entirely, which is never offered for closing from here.
+const String _deviceOtherPhone = 'dev-ffffffffffffffffffffffffffffffff';
 
 const Key _home = ValueKey('gate-test-home');
 const Key _till = ValueKey('gate-test-till');

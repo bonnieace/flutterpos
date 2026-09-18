@@ -1737,6 +1737,139 @@ test("an expectation written before the split compares nothing", async () => {
   assert.deepEqual(db.ids(`tenants/${TENANT}/reconciliation_anomalies`), []);
 });
 
+const SETTLEMENT = "st-1789630427-a3f90c1d2e4b6789";
+
+test("one drawer count answers for every shift it settled", async () => {
+  // **The false surplus this removes.** A cashier holds one register and counts
+  // it once; a close that sweeps up a stray shift settles both from that count.
+  // Verified one at a time, the whole drawer was measured against the counted
+  // shift's sales alone - so it was reported as over by exactly what the stray
+  // took, and the stray as unverifiable. The register balanced to the shilling.
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, shiftExpectationId(LOCAL_DATE, "shift-01"), {
+    shiftId: "shift-01",
+    sales: 100,
+    transactions: 1,
+    ...tenderExpectation(10000),
+  });
+  seedExpectation(db, shiftExpectationId(LOCAL_DATE, "shift-02"), {
+    shiftId: "shift-02",
+    sales: 200,
+    transactions: 2,
+    ...tenderExpectation(20000),
+  });
+  // The drawer was counted onto shift-01: 300.00, which is both shifts' cash.
+  seedClosedShift(db, "shift-01", 100, 1, {
+    ...declaredAt(AFTER_CUTOFF),
+    settlementId: SETTLEMENT,
+    declaredCashMinor: 30000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  // Swept up by that same count, so it declares nothing on purpose - asking
+  // again would record one drawer twice.
+  seedClosedShift(db, "shift-02", 200, 2, {
+    settlementId: SETTLEMENT,
+    closedWithoutEvidence: true,
+    totalSales: 0,
+    transactionCount: 0,
+  });
+  db.clearWrites();
+
+  const result = await processShiftPage(
+    db.asFirestore(), claimedJob({phase: "shifts"})
+  );
+  assert.equal(result.tenderVarianceCount, 0);
+
+  // The counted shift is measured against both shifts' takings and agrees.
+  const counted = stored(db, verificationPath(shiftExpectationId(LOCAL_DATE, "shift-01")));
+  assert.equal(counted.tenderStatus, "matched");
+  assert.equal(counted.expectedCashMinor, 30000);
+  assert.equal(counted.cashVarianceMinor, 0);
+
+  // And the swept one is answered elsewhere rather than called unverifiable.
+  const swept = stored(db, verificationPath(shiftExpectationId(LOCAL_DATE, "shift-02")));
+  assert.equal(swept.tenderStatus, "settled_elsewhere");
+
+  // Neither raises a difference, which is the whole point.
+  assert.equal(db.read(tenderAnomalyPath("shift-01")), undefined);
+  assert.equal(db.read(tenderAnomalyPath("shift-02")), undefined);
+});
+
+test("a settlement still reports a drawer that is genuinely short", async () => {
+  // Grouping must not become a way to make a short drawer quiet, which is the
+  // failure `compareShiftTenders` was already fixed for once.
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, shiftExpectationId(LOCAL_DATE, "shift-01"), {
+    shiftId: "shift-01",
+    sales: 100,
+    transactions: 1,
+    ...tenderExpectation(10000),
+  });
+  seedExpectation(db, shiftExpectationId(LOCAL_DATE, "shift-02"), {
+    shiftId: "shift-02",
+    sales: 200,
+    transactions: 2,
+    ...tenderExpectation(20000),
+  });
+  seedClosedShift(db, "shift-01", 100, 1, {
+    ...declaredAt(AFTER_CUTOFF),
+    settlementId: SETTLEMENT,
+    declaredCashMinor: 25000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  seedClosedShift(db, "shift-02", 200, 2, {
+    settlementId: SETTLEMENT,
+    closedWithoutEvidence: true,
+    totalSales: 0,
+    transactionCount: 0,
+  });
+  db.clearWrites();
+
+  await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"}));
+
+  const anomaly = stored(db, tenderAnomalyPath("shift-01"));
+  assert.equal(anomaly.anomalyType, "shift_tender_variance");
+  assert.equal(anomaly.cashVarianceMinor, -5000);
+});
+
+test("a settlement nobody can add up is verified shift by shift", async () => {
+  // **Refuses rather than guesses.** One member's expectation has not been
+  // generated yet, so summing what is there would invent a shortfall in the
+  // other direction. Falling back is merely uninformative, and the next nightly
+  // run asks again.
+  const db = firestoreWithClaimedJob();
+  seedExpectation(db, shiftExpectationId(LOCAL_DATE, "shift-01"), {
+    shiftId: "shift-01",
+    sales: 100,
+    transactions: 1,
+    ...tenderExpectation(10000),
+  });
+  seedClosedShift(db, "shift-01", 100, 1, {
+    ...declaredAt(AFTER_CUTOFF),
+    settlementId: SETTLEMENT,
+    declaredCashMinor: 10000,
+    declaredMpesaMinor: 0,
+    declaredCardMinor: 0,
+  });
+  // In the group and closed, but its expectation is not written yet.
+  seedClosedShift(db, "shift-02", 200, 2, {
+    settlementId: SETTLEMENT,
+    closedWithoutEvidence: true,
+    totalSales: 0,
+    transactionCount: 0,
+  });
+  db.clearWrites();
+
+  await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"}));
+
+  // Compared against its own sales, exactly as before settlements existed.
+  const counted = stored(db, verificationPath(shiftExpectationId(LOCAL_DATE, "shift-01")));
+  assert.equal(counted.tenderStatus, "matched");
+  assert.equal(counted.expectedCashMinor, 10000);
+});
+
 test("a recovery close still has its drawer marked", async () => {
   const db = firestoreWithClaimedJob();
   seedExpectation(db, "exp_recovery", {

@@ -202,6 +202,7 @@ final class TenantShiftCloseIntent {
     required this.transactionCount,
     this.declaration,
     this.closedWithoutEvidence = false,
+    this.settlementId,
   });
 
   final String path;
@@ -228,6 +229,21 @@ final class TenantShiftCloseIntent {
   /// them.
   final bool closedWithoutEvidence;
 
+  /// The one drawer count this close belongs to, shared by every shift it
+  /// settled.
+  ///
+  /// **A cashier holds one register, so they count one drawer.** When a close
+  /// sweeps up shifts left open elsewhere, all of them are settled by that
+  /// single count - and reconciliation has to know, because it builds its
+  /// expectation per shift. Without this it measured a whole drawer against one
+  /// shift's sales and reported the counted shift as over by exactly what the
+  /// others took, while calling the others unverifiable.
+  ///
+  /// **Null is the ordinary close of an ordinary day**, and reads exactly as it
+  /// always has: a shift compared against itself. Nothing is backfilled, so a
+  /// shift closed before this existed keeps the answer it was given.
+  final String? settlementId;
+
   Map<String, Object?> updateData() => <String, Object?>{
     'status': TenantShiftStatus.closed.wireValue,
     'closingCashMinor': closingCashMinor,
@@ -248,6 +264,10 @@ final class TenantShiftCloseIntent {
     // Written only when true. An ordinary close omits it, which is what lets
     // the rules treat its presence as the whole of the claim.
     if (closedWithoutEvidence) 'closedWithoutEvidence': true,
+    // Omitted rather than written null, so a close that settles only itself
+    // costs no field and reconciliation's grouping never has to tell a null
+    // apart from an absence.
+    if (settlementId case final settlement?) 'settlementId': settlement,
   };
 }
 
@@ -316,6 +336,7 @@ final class TenantShiftRepository extends TenantReadRepository {
     required int closingCashMinor,
     required ShiftSalesSummary sales,
     ShiftTenderDeclaration? declaration,
+    String? settlementId,
   }) {
     _assertClosable(shift);
     if (closingCashMinor < 0 || closingCashMinor > maximumShiftCashMinor) {
@@ -347,6 +368,7 @@ final class TenantShiftRepository extends TenantReadRepository {
       totalSalesMinor: sales.totalMinor,
       transactionCount: sales.transactionCount,
       declaration: declaration,
+      settlementId: settlementId,
     );
   }
 
@@ -376,6 +398,7 @@ final class TenantShiftRepository extends TenantReadRepository {
   TenantShiftCloseIntent buildRecoveryCloseIntent({
     required TenantShift shift,
     ShiftTenderDeclaration? declaration,
+    String? settlementId,
   }) {
     _assertClosable(shift);
     return TenantShiftCloseIntent._(
@@ -390,6 +413,7 @@ final class TenantShiftRepository extends TenantReadRepository {
       transactionCount: 0,
       declaration: declaration,
       closedWithoutEvidence: true,
+      settlementId: settlementId,
     );
   }
 

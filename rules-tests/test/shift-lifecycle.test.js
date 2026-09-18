@@ -208,6 +208,28 @@ test("a device holding none of a shift's sales may still close it", async () => 
   }
 });
 
+test("a close may name the drawer count that settled it", async () => {
+  // One cashier holds one register and counts it once, so a close that sweeps
+  // up a shift left open elsewhere settles both from that single count. The
+  // verifier adds up the shifts sharing this name and measures the total
+  // against the one declaration among them; without it, the counted shift was
+  // reported as over by exactly what the other took.
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+  await assertSucceeds(openShift(firestore));
+
+  await assertSucceeds(
+    closeShift(firestore, {
+      overrides: { settlementId: "st-1789630427-a3f90c1d2e4b6789" },
+    }),
+  );
+
+  const closed = await storedShift("shift-a");
+  if (closed.settlementId !== "st-1789630427-a3f90c1d2e4b6789") {
+    throw new Error("The close did not record the settlement it belongs to.");
+  }
+});
+
 test("an empty shift may close with a zero summary", async () => {
   await seedShiftTenant();
   const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
@@ -452,6 +474,14 @@ test("closing may not rewrite the shift envelope or skip the count", async () =>
     // a shift that took nothing.
     ["evidence-flag-false", { closedWithoutEvidence: false }],
     ["evidence-flag-with-sales", { closedWithoutEvidence: true }],
+    // The settlement is a label for grouping, not free text. An unbounded
+    // string on a money document is a place to hide things, and a shape the
+    // reconciliation grouping cannot parse is worse than no grouping at all.
+    ["settlement-not-a-string", { settlementId: 12345 }],
+    ["settlement-wrong-shape", { settlementId: "settlement-1" }],
+    ["settlement-empty", { settlementId: "" }],
+    ["settlement-short-suffix", { settlementId: "st-1789630427-abc" }],
+    ["settlement-uppercase-suffix", { settlementId: "st-1789630427-ABCDEF0123456789" }],
   ];
 
   for (const [name, overrides] of denied) {

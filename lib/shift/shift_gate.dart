@@ -646,9 +646,17 @@ class _ShiftGateDialogState extends State<_ShiftGateDialog> {
             tier: AppButtonTier.secondary,
             onPressed: _busy ? null : () => Navigator.of(context).pop(),
           ),
-          // **Offered only where there is exactly one shift to close.** More
-          // than one and this device cannot tell which, so it says nothing
-          // rather than closing the wrong one.
+          // **Offered only for this phone's own earlier install.**
+          // `otherDeviceShiftId` names one only where the durable half of the
+          // device id matches, so a shift on another phone - which may simply
+          // be offline - can no longer appear behind this button. Where two
+          // installs of this phone both left one open it still says nothing,
+          // because closing the wrong one is worse than closing none.
+          //
+          // It is no longer the way out of a terminal refusal: `Open shift`
+          // beside it now succeeds, and counting off closes every other shift
+          // this cashier holds. It remains the way to settle this phone's own
+          // orphan *with* a count, which the sweep does not do.
           if (widget.shifts.state.otherDeviceShiftId != null)
             AppButton(
               key: const ValueKey('shift-gate-close-orphan'),

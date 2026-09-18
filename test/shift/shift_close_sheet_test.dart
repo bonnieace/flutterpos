@@ -126,6 +126,86 @@ void main() {
     );
   });
 
+  testWidgets("one count closes every other shift this cashier holds", (
+    tester,
+  ) async {
+    // **All of them, not the first one found.** This swept up exactly one shift
+    // until 2026-09-17, taking it from `otherDeviceShiftId` - which names none
+    // at all where two candidates exist, so a cashier holding three shifts had
+    // two quietly left open and no surface offering to close them.
+    //
+    // One is on another phone and one was left by an earlier install of this
+    // phone. Both are the same drawer as far as the cashier is concerned, and
+    // it is counted once, here.
+    server.shifts['tenants/tenant-a/shifts/shift-other-phone'] = shiftDocument(
+      overrides: <String, Object?>{
+        'shiftId': 'shift-other-phone',
+        'deviceId': 'dev-ffffffffffffffffffffffffffffffff',
+      },
+    );
+    server.shifts['tenants/tenant-a/shifts/shift-earlier-install'] =
+        shiftDocument(
+          overrides: <String, Object?>{
+            'shiftId': 'shift-earlier-install',
+            'deviceId': 'dev-0123456789abcdef01234567deadbeef',
+          },
+        );
+
+    await _pumpPanel(tester, state, server);
+    await tester.tap(find.byKey(const ValueKey('open-shift')));
+    await _settle(tester);
+    await _openShiftSheet(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey('declared-cash')),
+      '900.00',
+    );
+    await _tapInSheet(tester, 'close-shift-confirm');
+
+    // Counted, because "a shift" over two of them would understate what was
+    // just done to this person's books.
+    expect(
+      find.textContaining('You also had 2 shifts open on another register'),
+      findsOneWidget,
+    );
+
+    final closed = <String, Map<String, Object?>>{
+      for (final (path, data) in server.updated) path: data,
+    };
+    expect(closed.keys, hasLength(3));
+
+    // The count went onto the shift that was counted, and only that one. The
+    // others state no figures rather than stating zero - which is what
+    // `closedWithoutEvidence` means and what reconciliation reads it as.
+    for (final id in <String>['shift-other-phone', 'shift-earlier-install']) {
+      final other = closed['tenants/tenant-a/shifts/$id'];
+      expect(other, isNotNull, reason: '$id must have been closed');
+      expect(other!['closedWithoutEvidence'], isTrue);
+      expect(other.containsKey('declaredCashMinor'), isFalse);
+      expect(other['status'], 'closed');
+    }
+
+    // **All three wear the same settlement, which is what makes the reporting
+    // add up.** Reconciliation builds its expectation per shift, so without a
+    // shared name it measured this one drawer against the counted shift's sales
+    // alone - reporting it as over by exactly what the other two took, and
+    // those two as unverifiable.
+    // `sharedShiftControllerFactory` numbers the shifts it opens.
+    final settlement =
+        closed['tenants/tenant-a/shifts/shift-1']!['settlementId'];
+    expect(settlement, isA<String>());
+    expect(
+      settlement,
+      matches(RegExp(r'^st-[0-9]{1,15}-[0-9a-f]{16}$')),
+      reason: 'the rules refuse any other shape',
+    );
+    for (final id in <String>['shift-other-phone', 'shift-earlier-install']) {
+      expect(
+        closed['tenants/tenant-a/shifts/$id']!['settlementId'],
+        settlement,
+      );
+    }
+  });
+
   testWidgets('a cash count does not survive a restart', (tester) async {
     await state.save(shiftRecord(countedCashMinor: 900));
     server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
