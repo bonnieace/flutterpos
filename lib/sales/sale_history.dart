@@ -137,6 +137,7 @@ final class TenantSale implements CheckoutReceiptSale {
       schemaVersion: schemaVersion,
       tender: tender,
       recordedAt: _optionalInstant(data, 'createdAt'),
+      rungAt: _optionalClientInstant(data),
       lines: lines,
       subtotalMinor: subtotalMinor,
       discountMinor: discountMinor,
@@ -158,6 +159,7 @@ final class TenantSale implements CheckoutReceiptSale {
     required this.schemaVersion,
     required this.tender,
     required this.recordedAt,
+    required this.rungAt,
     required List<TenantSaleLine> lines,
     required this.subtotalMinor,
     required this.discountMinor,
@@ -190,7 +192,28 @@ final class TenantSale implements CheckoutReceiptSale {
   final CheckoutTender? tender;
 
   /// The server instant, absent only while a local write is still pending.
+  ///
+  /// **When the sale reached the server, which offline is not when it
+  /// happened.** A batch queued with no signal has its server timestamp
+  /// resolved at the moment it lands, so a sale rung at 22:10 and synced the
+  /// next morning carries the morning. It is the trustworthy half - a device
+  /// clock can be wrong and this cannot - so it still orders a day's list.
   final DateTime? recordedAt;
+
+  /// When the till says the customer actually paid.
+  ///
+  /// **The one a person should be shown**, because it is the answer to *when
+  /// did this happen* and [recordedAt] is the answer to *when did we hear
+  /// about it*. On a till that never went offline the two agree to within a
+  /// second; on one that did they can be hours apart, and a day's history that
+  /// shows only the second one reports a night sale as a morning one.
+  ///
+  /// **Never used to order anything.** It comes from the selling device's own
+  /// clock, which nothing has checked, so a till set to the wrong hour must be
+  /// able to mislabel its own row and nothing else.
+  ///
+  /// Null on a sale written before the field existed.
+  final DateTime? rungAt;
 
   @override
   final List<TenantSaleLine> lines;
@@ -682,6 +705,22 @@ void _requireMajorMirror(
     throw const TenantSaleException('invalid_sale_document');
   }
 }
+
+/// The selling device's own instant, from the millisecond stamp it recorded.
+///
+/// Bounded exactly as `CheckoutSalePayload` bounds it on the way in, so a
+/// document that slipped past that check cannot put a year 9999 row on a
+/// screen. Out of range reads as absent rather than refusing the sale: the
+/// figure is a label, and no money depends on it.
+DateTime? _optionalClientInstant(Map<String, Object?> data) {
+  final value = data['clientCreatedAtMs'];
+  if (value is! int || value < 1 || value > _maximumClientCreatedAtMs) {
+    return null;
+  }
+  return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
+}
+
+const int _maximumClientCreatedAtMs = 4102444800000; // 2100-01-01T00:00:00Z.
 
 DateTime? _optionalInstant(Map<String, Object?> data, String field) {
   final value = data[field];

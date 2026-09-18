@@ -2150,7 +2150,7 @@ final class _SaleCard extends StatelessWidget {
                       SizedBox(width: tokens.spacing.s4),
                       Flexible(
                         child: Text(
-                          '#${sale.receiptSequence.toString().padLeft(checkoutReceiptSequenceDigits, '0')}',
+                          _receiptEnding(sale),
                           key: ValueKey('sales-receipt-ending-${sale.id}'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -2207,6 +2207,27 @@ final class _SaleCard extends StatelessWidget {
               children: <Widget>[
                 _SaleMeta(icon: Icons.person_outline, label: staffLabel),
                 _SaleMeta(icon: Icons.payments_outlined, label: _tender(sale)),
+                // **The till, named here because the header has no room.**
+                // The header's `#0001` is the same on every register's first
+                // sale of a day - see `_receiptEnding` for the measurement -
+                // and this foot is a `Wrap` of `MainAxisSize.min` rows, so it
+                // reflows onto another line instead of ellipsizing the way that
+                // slot does.
+                _SaleMeta(
+                  key: ValueKey('sales-receipt-till-${sale.id}'),
+                  icon: Icons.point_of_sale_outlined,
+                  label: _receiptLabel(sale),
+                ),
+                // **Only where the two times disagree.** The header now shows
+                // when the customer paid; this says when the books heard of it,
+                // so a sale that waited out an outage reads as one rather than
+                // as a till with the wrong hour set.
+                if (_syncedLaterAt(sale) case final synced?)
+                  _SaleMeta(
+                    key: ValueKey('sales-synced-later-${sale.id}'),
+                    icon: Icons.cloud_done_outlined,
+                    label: 'Synced ${_clockTime(synced)}',
+                  ),
                 // §9: the standing is a word as well as a colour, and it is
                 // *all* this card says about the return.
                 //
@@ -2325,7 +2346,7 @@ final class _SaleItemRow extends StatelessWidget {
 }
 
 final class _SaleMeta extends StatelessWidget {
-  const _SaleMeta({required this.icon, required this.label});
+  const _SaleMeta({super.key, required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -2486,8 +2507,7 @@ final class _SaleMenuLabel extends StatelessWidget {
 /// out, and on a screen where somebody is waiting to hand a customer a receipt,
 /// a green tick that means "eventually" is the wrong claim.
 AppNotice _reprintNotice(TenantSale sale, TenantReceiptReprintReport report) {
-  final receipt =
-      '#${sale.receiptSequence.toString().padLeft(checkoutReceiptSequenceDigits, '0')}';
+  final receipt = _receiptLabel(sale);
   return switch (report.outcome) {
     TenantReceiptReprintOutcome.printed => AppNotice.confirmed(
       'Receipt $receipt reprinted.',
@@ -2525,6 +2545,40 @@ String _reprintReason(String? code) => switch (code) {
   _ => 'The receipt could not be reprinted.',
 };
 
+/// The receipt as this screen says it: the till's code and the day's sequence.
+///
+/// **The date goes, the device code stays.** The screen is already filtered to
+/// one business date, so repeating it in every row spends width on the one part
+/// that cannot differ - while the code is the part that tells two tills apart,
+/// and every till starts a day at 0001. Printing the sequence alone showed
+/// `#0001` against two different receipts on 2026-09-17, one from each of two
+/// registers, and nothing on the row said which was which.
+///
+/// **Split from the stored number rather than rebuilt from the device id.**
+/// `TenantSale` has already proved the stored number is the one this device,
+/// date and sequence produce, so a split cannot disagree with the paper the
+/// customer is holding, where a second derivation could.
+String _receiptLabel(TenantSale sale) {
+  final parts = sale.receiptNumber.split('-');
+  if (parts.length != 4) return sale.receiptNumber;
+  return '${parts[0]}-${parts[1]}-${parts[3]}';
+}
+
+/// The sequence alone, for the one slot too narrow to name the till.
+///
+/// **It is not enough, and that is measured rather than assumed.** The row
+/// holds the time and this side by side as two equal `Flexible`s inside about
+/// 133 logical pixels at 411, so this slot is roughly 66 - five and a half
+/// characters. `_receiptLabel` needs 131.5 and would be silently ellipsized,
+/// because the row sets `TextOverflow.ellipsis` and nothing throws.
+///
+/// So the till is named in the card's foot instead, where the `Wrap` reflows
+/// rather than truncates - see `_receiptLabel`. Putting it back on this line
+/// means the row giving up the time or the amount, which is a layout decision
+/// and not this change's to make.
+String _receiptEnding(TenantSale sale) =>
+    '#${sale.receiptSequence.toString().padLeft(checkoutReceiptSequenceDigits, '0')}';
+
 String _tender(TenantSale sale) => sale.tender?.label ?? 'Not recorded';
 
 String _saleMoney(TenantSale sale, int minorUnits) =>
@@ -2532,10 +2586,46 @@ String _saleMoney(TenantSale sale, int minorUnits) =>
 
 String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
 
+/// When the customer paid, which offline is not when the server heard of it.
+///
+/// **The till's own stamp is preferred, and that is the whole fix.** A sale
+/// rung with no signal has its server timestamp resolved when the batch finally
+/// lands, so reading that put a 22:10 sale in the next morning's history at the
+/// hour it synced. The selling device recorded the real moment at checkout and
+/// every sale has carried it since; nothing read it.
+///
+/// **It is a label and never an order.** `recordedAt` still sorts the day,
+/// because a till with a wrong clock must be able to mislabel its own row and
+/// nothing else. Falls back to the server stamp for a sale written before the
+/// client one existed.
 String _recordedTime(TenantSale sale) {
-  final value = sale.recordedAt;
+  final value = sale.rungAt ?? sale.recordedAt;
   if (value == null) return 'Awaiting server time';
-  final local = value.toLocal();
+  return _clockTime(value);
+}
+
+String _clockTime(DateTime instant) {
+  final local = instant.toLocal();
   String pad(int part) => part.toString().padLeft(2, '0');
   return '${pad(local.hour)}:${pad(local.minute)}';
+}
+
+/// A sale is long enough after the fact to be worth saying so.
+///
+/// An online commit lands in under a second and a slow one in a few; anything
+/// past this was queued, which is a different fact about the sale.
+const Duration _materialSyncDelay = Duration(minutes: 2);
+
+/// When the server heard about a sale, where that is materially after it was
+/// rung - otherwise null, which is the ordinary case.
+///
+/// **Said out loud so the row is not read as a wrong clock.** Once the time
+/// shown is the till's, a sale can sit in a day's history hours before the
+/// moment it reached the books, and a shopkeeper comparing the two has a right
+/// to know which is which.
+DateTime? _syncedLaterAt(TenantSale sale) {
+  final rung = sale.rungAt;
+  final recorded = sale.recordedAt;
+  if (rung == null || recorded == null) return null;
+  return recorded.difference(rung) >= _materialSyncDelay ? recorded : null;
 }
