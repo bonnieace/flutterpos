@@ -296,44 +296,37 @@ test("an HTTPS image can be added, replaced, and removed without touching money"
   assert.equal(removed.product.image, null);
 });
 
-test("a legacy category alias moves with the field it aliases", () => {
-  // The client's read model refuses a product whose `category` and `categoryId`
-  // name different categories, and one unreadable product misses the whole
-  // cached catalog. Leaving the alias behind would do exactly that.
-  const legacy = storedProduct({category: CATEGORY});
-  const result = plan(legacy, {categoryId: "ct_snacks"});
-
-  assert.deepEqual(result.documentUpdate, {
-    categoryId: "ct_snacks",
-    category: "ct_snacks",
-  });
-  assert.deepEqual(result.changes, [
-    {field: "categoryId", previous: CATEGORY, next: "ct_snacks"},
-  ]);
-});
-
-test("a product filed only under the legacy alias is read through it", () => {
-  const legacyOnly: StoredProductFields = {
+test("a product with no categoryId is refused, not read through an alias", () => {
+  // #109: `category` was the name this field had before `categoryId` and is no
+  // longer read or maintained. A document that carries only the old name is
+  // now unreadable rather than silently understood, which is what normalising
+  // SIT instead of migrating it means.
+  const legacyOnly = {
     name: "Cola 500ml",
     SKU: "CL500",
     price: 19.99,
     quantity: 12,
-    category: CATEGORY,
-  };
-  assert.equal(readSellableProduct(legacyOnly).categoryId, CATEGORY);
-
-  // Asked for the category it already holds, it records no change - so the
-  // request is refused rather than writing an audit row whose before and after
-  // are equal.
+  } as StoredProductFields;
+  // Correcting anything else cannot proceed, because the product itself can no
+  // longer be read. Naming a categoryId in the same request is how it is fixed,
+  // which is what "correct it in the same request" has always meant here.
   assert.equal(
-    refusalCode(() => plan(legacyOnly, {categoryId: CATEGORY})),
+    refusalCode(() => plan(legacyOnly, {name: "Cola"})),
     "failed-precondition"
+  );
+  assert.equal(
+    plan(legacyOnly, {categoryId: CATEGORY}).product.categoryId,
+    CATEGORY
   );
 });
 
-test("a product whose two category fields already disagree is refused", () => {
-  const contradictory = storedProduct({category: "ct_other"});
-  assert.equal(refusalCode(() => plan(contradictory, {name: "Cola"})), "failed-precondition");
+test("changing the category writes the one field it lives in", () => {
+  const result = plan(storedProduct(), {categoryId: "ct_snacks"});
+
+  assert.deepEqual(result.documentUpdate, {categoryId: "ct_snacks"});
+  assert.deepEqual(result.changes, [
+    {field: "categoryId", previous: CATEGORY, next: "ct_snacks"},
+  ]);
 });
 
 test("a category ID that is not a document ID is refused as input", () => {

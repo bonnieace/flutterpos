@@ -83,8 +83,7 @@ export const verifyReturnAndRestoreStock = onCall<
     if (
       returnData.verified === true ||
       returnData.stockRestored === true ||
-      returnData.status === "verified" ||
-      returnData.status === "restored"
+      returnData.status === "verified"
     ) {
       throw new HttpsError("failed-precondition", "This return has already been verified.");
     }

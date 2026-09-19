@@ -962,32 +962,25 @@ int _signedSafeInteger(Map<String, Object?> map, String field) {
   return value;
 }
 
+/// The one field a product files itself under.
+///
+/// **`category` is gone (#109).** It was the name this field had before
+/// `categoryId`, and reading both meant every product carried two answers that
+/// had to be checked against each other. SIT is normalised rather than
+/// migrated, so the current name is the only name.
 String _categoryId(Map<String, Object?> map) {
-  final current = map['categoryId'];
-  final legacy = map['category'];
-  if (current == null && legacy == null) {
+  final value = map['categoryId'];
+  if (value == null) {
     throw const FormatException('categoryId is required.');
   }
-  String validate(Object? value, String field) {
-    if (value is! String) {
-      throw FormatException('$field must be a category document ID.');
-    }
-    try {
-      return validateTenantDocumentId(value, fieldName: field);
-    } on ArgumentError {
-      throw FormatException('$field must be a category document ID.');
-    }
+  if (value is! String) {
+    throw const FormatException('categoryId must be a category document ID.');
   }
-
-  final resolved = current == null
-      ? validate(legacy, 'category')
-      : validate(current, 'categoryId');
-  if (legacy != null && validate(legacy, 'category') != resolved) {
-    throw const FormatException(
-      'category and categoryId must identify the same category.',
-    );
+  try {
+    return validateTenantDocumentId(value, fieldName: 'categoryId');
+  } on ArgumentError {
+    throw const FormatException('categoryId must be a category document ID.');
   }
-  return resolved;
 }
 
 Uri? _optionalHttpsUrl(Map<String, Object?> map, String field) {

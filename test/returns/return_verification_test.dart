@@ -312,6 +312,8 @@ TenantReturn _record({bool verified = false}) => TenantReturn.fromDocument(
   data: <String, Object?>{
     'returnId': 'ret-1',
     'tenantId': 'tenant-a',
+    'businessDate': '2026-07-31',
+    'recordedOn': '2026-07-31',
     'saleId': 'co-1',
     'createdBy': 'user-a',
     'status': verified ? 'verified' : 'pending',

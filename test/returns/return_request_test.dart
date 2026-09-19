@@ -393,6 +393,8 @@ TenantReturn _record(
     'returnId': returnId,
     'tenantId': 'tenant-a',
     'saleId': saleId,
+    'businessDate': '2026-07-31',
+    'recordedOn': '2026-07-31',
     'createdBy': 'user-a',
     'status': verified ? 'verified' : 'pending',
     'reason': 'Earlier return',

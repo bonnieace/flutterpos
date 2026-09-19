@@ -9,25 +9,33 @@ import '../support/landing_drawer.dart';
 
 void main() {
   group('strict catalog models', () {
-    test('decodes current and legacy category references without coercion', () {
+    test('decodes a category reference without coercion', () {
       final current = TenantProduct.fromSnapshot(
         _productSnapshot('tenant-a', 'product-a'),
-      );
-      final legacy = TenantProduct.fromSnapshot(
-        _productSnapshot(
-          'tenant-a',
-          'product-b',
-          data: _productData()
-            ..remove('categoryId')
-            ..['category'] = 'drinks',
-        ),
       );
 
       expect(current.id, 'product-a');
       expect(current.price, 120.5);
       expect(current.quantity, -2);
       expect(current.categoryId, 'drinks');
-      expect(legacy.categoryId, 'drinks');
+    });
+
+    test('a product filed only under the old name is unreadable', () {
+      // #109: `category` was the name `categoryId` had before it. It is no
+      // longer read, so a document carrying only the old name is refused
+      // rather than silently understood - SIT is normalised, not migrated.
+      expect(
+        () => TenantProduct.fromSnapshot(
+          _productSnapshot(
+            'tenant-a',
+            'product-b',
+            data: _productData()
+              ..remove('categoryId')
+              ..['category'] = 'drinks',
+          ),
+        ),
+        throwsFormatException,
+      );
     });
 
     test('an absent buying price is normal, and a broken one is not', () {
@@ -145,8 +153,10 @@ void main() {
         ),
         throwsFormatException,
       );
+      // A stale `category` beside the current field is simply ignored now:
+      // nothing reads it, so it cannot contradict anything.
       expect(
-        () => TenantProduct.fromSnapshot(
+        TenantProduct.fromSnapshot(
           _productSnapshot(
             'tenant-a',
             'product-a',
@@ -154,8 +164,8 @@ void main() {
               ..['categoryId'] = 'drinks'
               ..['category'] = 'food',
           ),
-        ),
-        throwsFormatException,
+        ).categoryId,
+        'drinks',
       );
     });
   });

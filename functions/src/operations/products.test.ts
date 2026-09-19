@@ -217,7 +217,10 @@ test("a category is checked whenever it is named, not only when it moves", async
   assert.deepEqual(orphaned.writtenPaths(), []);
 });
 
-test("a legacy alias is written beside the field it aliases", async () => {
+test("the category is written to the one field it lives in", async () => {
+  // #109: `category` was the name this field had before `categoryId`. It is no
+  // longer written or maintained, so a stale copy is left exactly where it was
+  // rather than being carried forward - SIT is normalised, not migrated.
   const db = seededFirestore({category: CATEGORY});
   db.seed(`tenants/${TENANT}/categories/ct_snacks`, {name: "Snacks"});
   db.clearWrites();
@@ -226,10 +229,7 @@ test("a legacy alias is written beside the field it aliases", async () => {
 
   const product = db.read(productPath());
   assert.equal(product?.categoryId, "ct_snacks");
-  // Leaving the alias behind would make the two disagree, and the client's read
-  // model refuses a product whose `category` and `categoryId` name different
-  // categories.
-  assert.equal(product?.category, "ct_snacks");
+  assert.equal(product?.category, CATEGORY);
 });
 
 test("a second correction under one update ID is refused by the audit entry", async () => {

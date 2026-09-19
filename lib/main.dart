@@ -197,7 +197,6 @@ Future<void> main() async {
         // The platform's own answer to "which device is this", so an identity
         // minted after a reinstall still names the till it is running on.
         hardwareIdentity: const MethodChannelDeviceHardwareIdentity(),
-        canRebind: () => tenantShiftState.isEmpty,
         keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
           storage: secureValueStore,
         ),

@@ -38,16 +38,17 @@ void main() {
       expect(record.verification!.verifiedAt, DateTime.utc(2026, 8, 1, 6));
     });
 
-    test('reads "restored" as the same terminal state the server does', () {
-      // `verifyReturnAndRestoreStock` refuses a return whose status is
-      // `restored` exactly as it refuses `verified`, so this surface must not
-      // offer it as still pending.
-      final record = TenantReturn.fromDocument(
-        path: 'tenants/tenant-a/returns/ret-1',
-        data: _verified(overrides: <String, Object?>{'status': 'restored'}),
+    test('refuses the historical "restored" spelling', () {
+      // #110: the server writes `status: verified` beside `verified: true` and
+      // `stockRestored: true` in one transaction, and no longer reads
+      // `restored`. A document carrying it is a shape SIT does not hold.
+      expect(
+        () => TenantReturn.fromDocument(
+          path: 'tenants/tenant-a/returns/ret-1',
+          data: _verified(overrides: <String, Object?>{'status': 'restored'}),
+        ),
+        _code('invalid_return_document'),
       );
-
-      expect(record.status, TenantReturnStatus.verified);
     });
 
     test('refuses a document that disagrees with its own path', () {
@@ -168,23 +169,39 @@ void main() {
       }
     });
 
-    test('accepts the itemId alias the server also reads', () {
-      // `normalizeReturnStockLines` reads `productId ?? itemId`; a document it
-      // would restore stock from must be one this screen can name.
-      final record = TenantReturn.fromDocument(
-        path: 'tenants/tenant-a/returns/ret-1',
-        data: _pending(
-          overrides: <String, Object?>{
-            'itemsReturned': <Object?>[
-              <String, Object?>{'itemId': 'product-9', 'quantity': 4},
-            ],
-          },
+    test('refuses a line filed under the old itemId name', () {
+      // #110: `normalizeReturnStockLines` no longer reads `itemId`, so a line
+      // under the old name names no product on either side.
+      expect(
+        () => TenantReturn.fromDocument(
+          path: 'tenants/tenant-a/returns/ret-1',
+          data: _pending(
+            overrides: <String, Object?>{
+              'itemsReturned': <Object?>[
+                <String, Object?>{'itemId': 'product-9', 'quantity': 4},
+              ],
+            },
+          ),
         ),
+        // `_requiredDocumentId` answers for the missing field, so the refusal
+        // is the document-level one rather than the line-shape one.
+        _code('invalid_return_document'),
       );
+    });
 
-      expect(record.lines.single.productId, 'product-9');
-      expect(record.lines.single.productName, isNull);
-      expect(record.returnedUnits, 4);
+    test('a return that cannot say which days it belongs to is refused', () {
+      // #110: both were nullable while returns recorded before 2026-09-06 were
+      // still about. SIT holds none.
+      for (final field in <String>['businessDate', 'recordedOn']) {
+        expect(
+          () => TenantReturn.fromDocument(
+            path: 'tenants/tenant-a/returns/ret-1',
+            data: _pending()..remove(field),
+          ),
+          _code('invalid_return_business_date'),
+          reason: '$field is required',
+        );
+      }
     });
   });
 
@@ -332,6 +349,8 @@ Map<String, Object?> _pending({
     'returnId': returnId,
     'tenantId': 'tenant-a',
     'saleId': 'co-1',
+    'businessDate': '2026-07-31',
+    'recordedOn': '2026-07-31',
     'createdBy': 'user-a',
     'status': 'pending',
     'reason': 'Customer returned a damaged bottle',

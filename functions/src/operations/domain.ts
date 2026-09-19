@@ -209,7 +209,7 @@ function readReturnLine(value: unknown, index: number): ReturnStockLine {
     throw new HttpsError("failed-precondition", `Return item ${index} is invalid.`);
   }
   const item = value as Record<string, unknown>;
-  const productId = requireDocumentId(item.productId ?? item.itemId, `itemsReturned[${index}].productId`);
+  const productId = requireDocumentId(item.productId, `itemsReturned[${index}].productId`);
   const quantity = item.quantity;
   if (!Number.isSafeInteger(quantity) || (quantity as number) <= 0 || (quantity as number) > MAX_QUANTITY_DELTA) {
     throw new HttpsError(

@@ -164,14 +164,6 @@ export interface StoredProductFields {
 
   quantity?: unknown;
   categoryId?: unknown;
-
-  /**
-   * The legacy alias for `categoryId`, still accepted by the client's read model
-   * while migration is in progress. When both are present they must name the
-   * same category, which is why a plan that changes one changes both.
-   */
-  category?: unknown;
-
   image?: unknown;
   searchName?: unknown;
   searchPrefixes?: unknown;
@@ -592,26 +584,17 @@ export function readSellableProduct(fields: StoredProductFields): SellableProduc
       "correct. It needs an operator."
     );
   }
-  const hasCurrent = fields.categoryId !== undefined && fields.categoryId !== null;
-  const hasLegacy = fields.category !== undefined && fields.category !== null;
-  if (!hasCurrent && !hasLegacy) {
+  // #109: `category` was the name this field had before `categoryId`, and is
+  // no longer read or maintained. SIT is normalised rather than migrated.
+  if (fields.categoryId === undefined || fields.categoryId === null) {
     throw unusableProduct(
       "This product's categoryId is unreadable. Correct it in the same request."
     );
   }
-  const categoryId = requireReadableString(
-    hasCurrent ? fields.categoryId : fields.category,
-    "categoryId"
-  );
+  const categoryId = requireReadableString(fields.categoryId, "categoryId");
   if (categoryId.includes("/") || categoryId === "." || categoryId === "..") {
     throw unusableProduct(
       "This product's categoryId is unreadable. Correct it in the same request."
-    );
-  }
-  if (hasCurrent && hasLegacy && fields.category !== fields.categoryId) {
-    throw unusableProduct(
-      "This product's categoryId and its legacy category alias name different " +
-      "categories, so no device can read it."
     );
   }
   let image: string | null = null;
@@ -692,13 +675,6 @@ export function planProductUpdate(input: {
   }
   if (requested.categoryId !== undefined) {
     resulting.categoryId = requested.categoryId;
-    // A stored legacy alias moves with it. Leaving it behind would make the two
-    // disagree, and the client's read model refuses a product whose `category`
-    // and `categoryId` name different categories - which would take the whole
-    // cached catalog down with it.
-    if (stored.category !== undefined && stored.category !== null) {
-      resulting.category = requested.categoryId;
-    }
   }
   if (requested.image !== undefined) resulting.image = requested.image;
   const product = readSellableProduct(resulting);
@@ -751,20 +727,13 @@ export function planProductUpdate(input: {
       documentUpdate.cost = product.cost;
     }
   }
-  // Compared against the effective category rather than against `categoryId`
-  // alone, so a legacy-only document asked for the category it already holds
-  // records no change instead of an audit row whose before and after are equal.
-  const storedCategoryId = stored.categoryId ?? stored.category;
-  if (requested.categoryId !== undefined && storedCategoryId !== product.categoryId) {
+  if (requested.categoryId !== undefined && stored.categoryId !== product.categoryId) {
     changes.push({
       field: "categoryId",
-      previous: describePrevious(storedCategoryId),
+      previous: describePrevious(stored.categoryId),
       next: product.categoryId,
     });
     documentUpdate.categoryId = product.categoryId;
-    if (stored.category !== undefined && stored.category !== null) {
-      documentUpdate.category = product.categoryId;
-    }
   }
   if (requested.image !== undefined) {
     const storedImage = typeof stored.image === "string" && stored.image !== "" ?

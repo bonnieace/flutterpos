@@ -19,14 +19,16 @@ final class TenantReturnException implements Exception {
 /// Where a return stands in the server's own verification guard.
 ///
 /// `verifyReturnAndRestoreStock` verifies a return exactly once and only from
-/// `pending`. It treats `verified`, `restored`, `verified == true`, and
-/// `stockRestored == true` as equally terminal, so this surface reads the same
-/// evidence rather than trusting one field.
+/// `pending`. It writes `status`, `verified` and `stockRestored` in one
+/// transaction and treats all three as terminal, so this surface reads the same
+/// evidence rather than trusting one field - a partially written return is a
+/// contradiction worth refusing, not a state worth guessing at.
+///
+/// The historical `restored` spelling is gone (#110).
 enum TenantReturnStatus {
   pending('pending'),
 
-  /// Stock has been restored. `restored` is the second spelling the server's
-  /// guard already treats as terminal, so it is read as the same state.
+  /// Stock has been restored.
   verified('verified');
 
   const TenantReturnStatus(this.wireValue);
@@ -36,9 +38,10 @@ enum TenantReturnStatus {
 
 /// One returned product line, as `normalizeReturnStockLines` reads it.
 ///
-/// The server accepts `itemId` as an alias for `productId`, so this model does
-/// too: a document the server would restore stock from must be a document this
-/// screen can name the products of.
+/// **`itemId` is gone (#110).** It was the name `productId` had before it, and
+/// no current writer emits one; SIT is reset rather than migrated, so a line
+/// names its product under the current name or it is not a line this screen
+/// accepts.
 final class TenantReturnLine {
   const TenantReturnLine._({
     required this.productId,
@@ -109,8 +112,8 @@ final class TenantReturn {
       id: returnId,
       tenantId: tenantId,
       saleId: _requiredDocumentId(data, 'saleId'),
-      businessDate: _optionalBusinessDate(data, 'businessDate'),
-      recordedOn: _optionalBusinessDate(data, 'recordedOn'),
+      businessDate: _requiredBusinessDate(data, 'businessDate'),
+      recordedOn: _requiredBusinessDate(data, 'recordedOn'),
       createdBy: _requiredDocumentId(data, 'createdBy'),
       reason: _requiredReason(data),
       status: _requiredStatus(data),
@@ -142,21 +145,17 @@ final class TenantReturn {
 
   /// The day the reversal itself was taken, from the recording device.
   ///
-  /// **Nullable for the same reason [businessDate] is**: the field was added on
-  /// 2026-09-06 and a return recorded before that carries no day at all. Such a
-  /// return is found under *All dates* and under no particular one.
-  final String? recordedOn;
+  /// **Required (#110).** It was nullable while returns recorded before
+  /// 2026-09-06 were still about; SIT holds none, so a return that cannot say
+  /// when it was taken is not a return this surface accepts.
+  final String recordedOn;
 
   /// The trading day of that sale, which the create rule binds to the sale's
   /// own field.
   ///
-  /// **Nullable, and it has to be**: the field was added on 2026-09-06, and a
-  /// return recorded before that carries no day at all. A read model that
-  /// refused one would take the whole returns history off every screen that
-  /// shows it, to gain a field only the day-scoped query needs - so an older
-  /// return is decoded and displayed exactly as it always was, and is simply
-  /// not found by [TenantReturnHistoryRepository.loadDayReturns].
-  final String? businessDate;
+  /// **Required (#110).** See [recordedOn]: the same 2026-09-06 field, and the
+  /// same reason it no longer needs to be optional.
+  final String businessDate;
 
   /// The cashier who recorded the return. Rules bind it on create.
   final String createdBy;
@@ -188,7 +187,7 @@ final class TenantReturn {
   /// action that cannot succeed. It is refused instead.
   static TenantReturnStatus _requiredStatus(Map<String, Object?> data) {
     final status = data['status'];
-    final terminalStatus = status == 'verified' || status == 'restored';
+    final terminalStatus = status == 'verified';
     if (status != null && status != 'pending' && !terminalStatus) {
       throw const TenantReturnException('invalid_return_document');
     }
@@ -430,6 +429,14 @@ final class TenantReturnHistoryRepository extends TenantReadRepository {
 ///
 /// Anything present but not a valid business date is a refusal rather than a
 /// shrug: a malformed day would be filed against the wrong takings.
+String _requiredBusinessDate(Map<String, Object?> data, String field) {
+  final value = _optionalBusinessDate(data, field);
+  if (value == null) {
+    throw const TenantReturnException('invalid_return_business_date');
+  }
+  return value;
+}
+
 String? _optionalBusinessDate(Map<String, Object?> data, String field) {
   final value = data[field];
   if (value == null) return null;
@@ -459,12 +466,7 @@ List<TenantReturnLine> _parseLines(Object? raw) {
       for (final key in entry.keys)
         if (key is String) key: entry[key],
     };
-    // The server reads `productId ?? itemId`; so does this model, so the two
-    // can never disagree about which product a line names.
-    final productId = _requiredDocumentId(
-      line,
-      line['productId'] != null ? 'productId' : 'itemId',
-    );
+    final productId = _requiredDocumentId(line, 'productId');
     if (!productIds.add(productId)) {
       throw const TenantReturnException('duplicate_return_line');
     }

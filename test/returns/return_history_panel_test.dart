@@ -1189,6 +1189,7 @@ TenantQueryDocumentSnapshot _pending(
     'returnId': returnId,
     'tenantId': tenantId,
     'saleId': 'co-1',
+    'businessDate': _businessDate,
     'recordedOn': _businessDate,
     'createdBy': 'user-a',
     'status': 'pending',

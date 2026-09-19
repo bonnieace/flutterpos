@@ -260,6 +260,7 @@ TenantQueryDocumentSnapshot _record(
     'tenantId': 'tenant-a',
     'saleId': saleId,
     'businessDate': _businessDate,
+    'recordedOn': _businessDate,
     'createdBy': 'user-a',
     'status': 'pending',
     'reason': 'Damaged bottle',

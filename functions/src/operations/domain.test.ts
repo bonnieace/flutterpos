@@ -35,7 +35,7 @@ test("adjustment types enforce semantic direction", () => {
 
 test("return lines are bounded, combined, and deterministically sorted", () => {
   assert.deepEqual(normalizeReturnStockLines([
-    {itemId: "product-b", quantity: 2},
+    {productId: "product-b", quantity: 2},
     {productId: "product-a", quantity: 1},
     {productId: "product-b", quantity: 3},
   ]), [
@@ -43,6 +43,12 @@ test("return lines are bounded, combined, and deterministically sorted", () => {
     {productId: "product-b", quantity: 5},
   ]);
   assert.throws(() => normalizeReturnStockLines([]), HttpsError);
+  // #110: `itemId` was the name `productId` had before it, and is no longer
+  // read. A line under the old name names no product at all.
+  assert.throws(
+    () => normalizeReturnStockLines([{itemId: "product-a", quantity: 1}]),
+    HttpsError
+  );
   assert.throws(
     () => normalizeReturnStockLines([{productId: "product-a", quantity: -1}]),
     HttpsError

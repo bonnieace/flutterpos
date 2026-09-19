@@ -1346,6 +1346,7 @@ TenantQueryDocumentSnapshot _returnRecord(
   path: 'tenants/tenant-a/returns/$id',
   data: <String, Object?>{
     'returnId': id,
+    'recordedOn': '2026-07-31',
     'tenantId': 'tenant-a',
     'saleId': saleId,
     'businessDate': businessDate,

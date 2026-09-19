@@ -241,6 +241,8 @@ TenantReturn _record({
     'returnId': 'rt-1',
     'tenantId': 'tenant-a',
     'saleId': 'sale-1',
+    'businessDate': '2026-07-31',
+    'recordedOn': '2026-07-31',
     'createdBy': 'user-b',
     'status': verified ? 'verified' : 'pending',
     'reason': 'Bottle was corked',
