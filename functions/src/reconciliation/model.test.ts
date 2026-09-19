@@ -127,9 +127,9 @@ test("daily aggregation retains transaction and shift expectations", () => {
     shiftId: "shift-b",
     items: [{quantity: 2, unitPrice: 10, unitCost: 3}],
   }, {
-    totalAmount: 5,
+    total: 5,
     shiftId: "shift-a",
-    items: [{quantity: 1, price: 5, buyingPrice: 2}],
+    items: [{quantity: 1, unitPrice: 5, unitCost: 2}],
   }]);
   assert.equal(result.metrics.sales, 25);
   assert.equal(result.metrics.profit, 17);
@@ -137,21 +137,22 @@ test("daily aggregation retains transaction and shift expectations", () => {
   assert.deepEqual(result.shifts.map((shift) => shift.shiftId), ["shift-a", "shift-b"]);
 });
 
-test("a sale carrying only totalAmount reaches its own shift", () => {
-  // `finiteNonNegative` answers 0 rather than undefined, so the `??` chain this
-  // was written as could never reach its second arm: a schema that names
-  // `totalAmount` counted in full towards the day and contributed *nothing* to
-  // its shift, and the daily metric and the per-shift expectation disagreed
-  // with no way to tell from either which was right.
+test("a sale and its shift are counted from the one total field", () => {
+  // #106: `totalAmount` was the name `total` had before it, and is no longer
+  // read. `finiteNonNegative` answers 0 rather than undefined, so the `??`
+  // chain this was once written as could never reach its second arm - a sale
+  // under the old name counted in full towards the day and contributed
+  // *nothing* to its shift. One field cannot disagree with itself.
   const result = aggregateDailySales("2026-07-29", [{
-    totalAmount: 5,
+    total: 5,
     shiftId: "shift-a",
     tender: "cash",
-    items: [{quantity: 1, price: 5, buyingPrice: 2}],
+    items: [{quantity: 1, unitPrice: 5, unitCost: 2}],
   }]);
   assert.equal(result.metrics.sales, 5);
+  assert.equal(result.shifts.length, 1);
+  assert.equal(result.shifts[0].shiftId, "shift-a");
   assert.equal(result.shifts[0].sales, 5);
-  assert.equal(result.shifts[0].tenders.cashMinor, 500);
 });
 
 test("a shift's tender buckets sum to exactly what the shift took", () => {

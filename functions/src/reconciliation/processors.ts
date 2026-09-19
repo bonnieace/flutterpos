@@ -236,11 +236,10 @@ async function regenerateDailyMetric(
     ) return false;
     transaction.set(tenantRef.collection("daily_metrics").doc(businessDate), {
       ...result.metrics,
-      // **Additive, and the gross figures above are untouched.** A client
-      // that does not read these reports gross, which is what it did before;
-      // a day written before this shipped carries none of them, and the
-      // decoder reads that as "reconciled before returns were counted"
-      // rather than as a day nothing came back on.
+      // **Required, and the gross figures above are untouched.** The client
+      // reads the whole block or refuses the document (#104): this write is
+      // `merge: false`, so every regenerated day carries all of it, and a day
+      // that does not was written by a deployment SIT no longer runs.
       netSales: result.netMetrics.sales,
       netProfit: result.netMetrics.profit,
       netTransactions: result.netMetrics.transactions,

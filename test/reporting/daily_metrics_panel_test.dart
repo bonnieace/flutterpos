@@ -734,8 +734,10 @@ void main() {
       'tenants/tenant-a/daily_metrics/2026-07-31': _metrics(),
       'tenants/tenant-b/daily_metrics/2026-07-31': _metrics(
         tenantId: 'tenant-b',
-        overrides: <String, Object?>{'sales': 7.5, 'transactions': 1,
-          'transactionCount': 1},
+        // The profit moves with the takings: the net cross-check derives cost
+        // from the two, and 430.25 profit on 7.50 of sales is a negative cost.
+        overrides: <String, Object?>{'sales': 7.5, 'profit': 2.5,
+          'transactions': 1, 'transactionCount': 1},
       ),
     }, deferred: true);
 
@@ -853,6 +855,20 @@ Map<String, Object?> _metrics({
     'regeneratedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 30)),
   };
   if (overrides != null) data.addAll(overrides);
+  // #104: reconciliation writes the net block on every run, so every fixture
+  // carries one. A day nothing came back on nets to its own gross figures -
+  // which means an override of the gross side moves both, unless the caller
+  // states the net side itself.
+  data.putIfAbsent('netSales', () => data['sales']);
+  data.putIfAbsent('netProfit', () => data['profit']);
+  data.putIfAbsent('netTransactions', () => data['transactions']);
+  data.putIfAbsent(
+    'netIncompleteCostLineCount',
+    () => data['incompleteCostLineCount'],
+  );
+  data.putIfAbsent('returnedSales', () => 0);
+  data.putIfAbsent('returnCount', () => 0);
+  data.putIfAbsent('netMetricsVersion', () => 1);
   return data;
 }
 

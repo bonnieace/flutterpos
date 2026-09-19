@@ -365,12 +365,7 @@ export function aggregateDailySales(
   for (const sale of sales) {
     const shiftId = typeof sale.shiftId === "string" ? sale.shiftId : undefined;
     if (!shiftId || !DOCUMENT_SEGMENT.test(shiftId)) continue;
-    // `finiteNonNegative` answers 0 rather than undefined, so this was written
-    // as a `??` chain that could never reach its second arm: a sale carrying
-    // only `totalAmount` contributed nothing to its shift while `aggregateSales`
-    // counted it in full, and the daily metric and the per-shift expectation
-    // disagreed with no way to tell from either.
-    const total = finiteNonNegative(sale.total ?? sale.totalAmount);
+    const total = finiteNonNegative(sale.total);
     const current = shifts.get(shiftId) ?? {
       shiftId,
       businessDate,

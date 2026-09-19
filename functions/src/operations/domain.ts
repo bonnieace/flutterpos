@@ -22,13 +22,11 @@ export interface SaleLineLike {
   productId?: unknown;
   categoryId?: unknown;
   quantity?: unknown;
-  price?: unknown;
   unitPrice?: unknown;
   unitPriceMinor?: unknown;
   lineTotal?: unknown;
   lineTotalMinor?: unknown;
   total?: unknown;
-  buyingPrice?: unknown;
   unitCost?: unknown;
   unitCostMinor?: unknown;
   cost?: unknown;
@@ -45,7 +43,6 @@ export interface SaleLike {
    */
   saleId?: unknown;
   total?: unknown;
-  totalAmount?: unknown;
   subtotal?: unknown;
   subtotalMinor?: unknown;
   discount?: unknown;
@@ -310,7 +307,7 @@ function lineRevenue(line: SaleLineLike, quantity: number): number | undefined {
   return nonNegativeNumber(line.lineTotal) ??
     nonNegativeNumber(line.total) ??
     (() => {
-      const unitPrice = nonNegativeNumber(line.unitPrice) ?? nonNegativeNumber(line.price);
+      const unitPrice = nonNegativeNumber(line.unitPrice);
       if (unitPrice === undefined) return undefined;
       const total = unitPrice * quantity;
       return Number.isFinite(total) && total <= MAX_MONETARY_VALUE ? total : undefined;
@@ -320,7 +317,7 @@ function lineRevenue(line: SaleLineLike, quantity: number): number | undefined {
 function lineCost(line: SaleLineLike, quantity: number): number | undefined {
   const explicitCost = nonNegativeNumber(line.cost);
   if (explicitCost !== undefined) return explicitCost;
-  const unitCost = nonNegativeNumber(line.unitCost) ?? nonNegativeNumber(line.buyingPrice);
+  const unitCost = nonNegativeNumber(line.unitCost);
   if (unitCost === undefined) return undefined;
   const total = unitCost * quantity;
   return Number.isFinite(total) && total <= MAX_MONETARY_VALUE ? total : undefined;
@@ -453,19 +450,13 @@ export function describeSaleReturn(
     // `unitPriceMinor * quantity`, so on any sale this till wrote the two
     // bases agree - but an imported sale need not have gone through it, and
     // the two languages must not pick different halves of that disagreement.
-    const unitPriceMinor = minorField(
-      line.unitPriceMinor,
-      line.unitPrice ?? line.price
-    );
+    const unitPriceMinor = minorField(line.unitPriceMinor, line.unitPrice);
     if (unitPriceMinor !== undefined) grossMinor += unitPriceMinor * back;
     // A returned line with no recorded cost takes no cost back out, which is
     // consistent rather than incomplete: it put none in either. Whether the
     // *period* can still state a profit is `saleContribution`'s question, and
     // it asks it per line rather than from a flag here.
-    const unitCostMinor = minorField(
-      line.unitCostMinor,
-      line.unitCost ?? line.buyingPrice
-    );
+    const unitCostMinor = minorField(line.unitCostMinor, line.unitCost);
     if (unitCostMinor !== undefined) costMinor += unitCostMinor * back;
     else if (back >= quantity) costlessLinesFullyBack += 1;
   }
@@ -486,7 +477,7 @@ function wholeSaleReturnMinor(
   grossMinor: number,
   complete: boolean
 ): number {
-  const totalMinor = minorField(sale.totalMinor, sale.total ?? sale.totalAmount) ?? 0;
+  const totalMinor = minorField(sale.totalMinor, sale.total) ?? 0;
   if (complete) return totalMinor;
   const subtotalMinor = minorField(sale.subtotalMinor, sale.subtotal) ?? 0;
   if (grossMinor <= 0 || subtotalMinor <= 0) return 0;
@@ -565,7 +556,7 @@ function saleContribution(
     0
   );
 
-  const recordedTotal = nonNegativeNumber(sale.total) ?? nonNegativeNumber(sale.totalAmount);
+  const recordedTotal = nonNegativeNumber(sale.total);
   const grossRevenue = categoryId ?
     lineRevenueTotal :
     recordedTotal ?? (hasLineRevenue ? lineRevenueTotal : 0);

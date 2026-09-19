@@ -88,8 +88,8 @@ test("sales aggregation uses immutable line snapshots and category scope", () =>
       {categoryId: "food", quantity: 1, unitPrice: 30, unitCost: 12},
     ],
   }, {
-    totalAmount: 12,
-    items: [{categoryId: "beer", quantity: 1, price: 12}],
+    total: 12,
+    items: [{categoryId: "beer", quantity: 1, unitPrice: 12}],
   }];
   assert.deepEqual(aggregateSales(sales), {
     sales: 62,
@@ -107,8 +107,8 @@ test("sales aggregation uses immutable line snapshots and category scope", () =>
 
 test("sales aggregation uses deterministic minor-unit rounding", () => {
   assert.deepEqual(aggregateSales([
-    {total: 0.1, items: [{quantity: 1, price: 0.1, unitCost: 0.03}]},
-    {total: 0.2, items: [{quantity: 1, price: 0.2, unitCost: 0.07}]},
+    {total: 0.1, items: [{quantity: 1, unitPrice: 0.1, unitCost: 0.03}]},
+    {total: 0.2, items: [{quantity: 1, unitPrice: 0.2, unitCost: 0.07}]},
   ]), {
     sales: 0.3,
     profit: 0.2,
@@ -188,7 +188,7 @@ test("a category filter narrows the split exactly as it narrows the total", () =
     // Skipped entirely: it holds no line in the requested category, so it must
     // not appear in any bucket either.
     {tender: "mpesa", total: 30, items: [{categoryId: "food", quantity: 1, unitPrice: 30}]},
-    {tender: "card", total: 12, items: [{categoryId: "beer", quantity: 1, price: 12}]},
+    {tender: "card", total: 12, items: [{categoryId: "beer", quantity: 1, unitPrice: 12}]},
   ];
 
   const breakdown = aggregateSalesByTender(sales, "beer");
@@ -209,9 +209,9 @@ test("a category filter narrows the split exactly as it narrows the total", () =
 
 test("the split rounds in whole minor units, so grouping cannot change it", () => {
   const sales: SaleLike[] = [
-    {tender: "cash", total: 0.1, items: [{quantity: 1, price: 0.1}]},
-    {tender: "mpesa", total: 0.2, items: [{quantity: 1, price: 0.2}]},
-    {tender: "cash", total: 0.2, items: [{quantity: 1, price: 0.2}]},
+    {tender: "cash", total: 0.1, items: [{quantity: 1, unitPrice: 0.1}]},
+    {tender: "mpesa", total: 0.2, items: [{quantity: 1, unitPrice: 0.2}]},
+    {tender: "cash", total: 0.2, items: [{quantity: 1, unitPrice: 0.2}]},
   ];
 
   const breakdown = aggregateSalesByTender(sales);

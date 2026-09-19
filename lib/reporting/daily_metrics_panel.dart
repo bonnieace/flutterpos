@@ -498,7 +498,7 @@ final class _DailySummaryContents extends StatelessWidget {
                     StatLine(
                       label: 'Sales',
                       money: true,
-                      value: currency.format(metrics.netOrGrossSales),
+                      value: currency.format(metrics.netSales),
                       valueKey: ValueKey(
                         'daily-summary-sales-${day.businessDate}',
                       ),
@@ -528,7 +528,7 @@ final class _DailySummaryContents extends StatelessWidget {
                         money: true,
                         value: _signedCurrency(
                           currency,
-                          metrics.netOrGrossSales - previous,
+                          metrics.netSales - previous,
                         ),
                         valueKey: ValueKey(
                           'daily-summary-change-${day.businessDate}',
@@ -536,7 +536,7 @@ final class _DailySummaryContents extends StatelessWidget {
                       ),
                     StatLine(
                       label: 'Transactions',
-                      value: '${metrics.netOrGrossTransactions}',
+                      value: '${metrics.netTransactions}',
                       valueKey: ValueKey(
                         'daily-summary-transactions-${day.businessDate}',
                       ),
@@ -554,7 +554,7 @@ final class _DailySummaryContents extends StatelessWidget {
                     // it, and saying it twice reads as two different findings.
                     if (showProfit)
                       TenantProfitStatement(
-                        report: metrics.netOrGrossProfitReport,
+                        report: metrics.netProfitReport,
                         currency: currency,
                         keyPrefix: 'daily-summary-${day.businessDate}',
                         // This day's slice of the span read once above. Null
@@ -564,7 +564,7 @@ final class _DailySummaryContents extends StatelessWidget {
                         net: expenses == null
                             ? null
                             : TenantNetProfitReport.from(
-                                gross: metrics.netOrGrossProfitReport,
+                                gross: metrics.netProfitReport,
                                 expenses: expenses!.forDate(day.businessDate),
                               ),
                       )
@@ -587,7 +587,7 @@ final class _DailySummaryContents extends StatelessWidget {
                     // totals page says it: takings net of returns and takings
                     // gross of them are different numbers, and a reader
                     // checking against a till roll needs to know which.
-                    if (metrics.net case final net? when net.returnCount > 0)
+                    if (metrics.net case final net when net.returnCount > 0)
                       Padding(
                         padding: EdgeInsets.only(top: tokens.spacing.s4),
                         child: Text(
@@ -750,7 +750,7 @@ double? _previousSales(List<TenantDailyMetricsDay> days, int index) {
   if (index + 1 >= days.length) return null;
   // The same basis as the day it is subtracted from, or the delta is a
   // difference between two different questions.
-  return days[index + 1].metrics?.netOrGrossSales;
+  return days[index + 1].metrics?.netSales;
 }
 
 /// A signed money delta, with the sign doing the work.

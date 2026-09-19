@@ -225,30 +225,35 @@ void main() {
     // The gross fixture is 1250.50 over 12 transactions at 430.25 profit, so
     // a net block of 900 over 11 leaves 350.50 returned.
 
-    test('a document written before returns were counted has no net block', () {
-      expect(_decode(const <String, Object?>{}).net, isNull);
-      // And the day still reads, on the figures it does have.
-      expect(_decode(const <String, Object?>{}).netOrGrossSales, 1250.5);
+    test('a document written before returns were counted is refused', () {
+      // #104: reconciliation writes the whole block on every run with
+      // `merge: false`, so a day without one was written by a deployment SIT
+      // no longer runs. It is regenerated, not read as gross.
+      expect(
+        () => _decode(
+          const <String, Object?>{},
+          omitNet: true,
+        ),
+        _code('invalid_metrics_document'),
+      );
     });
 
     test('a complete block decodes and drives the net accessors', () {
       final metrics = _decode(_net());
 
-      expect(metrics.net!.returnedSales, 350.5);
-      expect(metrics.net!.returnCount, 1);
-      expect(metrics.netOrGrossSales, 900);
-      expect(metrics.netOrGrossTransactions, 11);
-      expect(metrics.netOrGrossProfitReport.profit, 300);
+      expect(metrics.net.returnedSales, 350.5);
+      expect(metrics.net.returnCount, 1);
+      expect(metrics.netSales, 900);
+      expect(metrics.netTransactions, 11);
+      expect(metrics.netProfitReport.profit, 300);
     });
 
     test('a half-written block is refused', () {
       // A writer defect, and this decoder refuses a document its writer would
       // not have produced - the same posture as the `transactionCount`
       // double-write check beside it.
-      final partial = Map<String, Object?>.of(_net())..remove('returnCount');
-
       expect(
-        () => _decode(partial),
+        () => _decode(_net(), omit: const <String>{'returnCount'}),
         throwsA(isA<TenantDailyMetricsException>()),
       );
     });
@@ -382,11 +387,31 @@ Map<String, Object?> _net({
   'netMetricsVersion': version,
 };
 
-TenantDailyMetrics _decode(Map<String, Object?> overrides) =>
-    TenantDailyMetrics.fromDocument(
-      path: 'tenants/tenant-a/daily_metrics/2026-07-31',
-      data: _metrics(overrides: overrides),
-    );
+/// Every field of the net block, which `_metrics` now always supplies.
+const Set<String> _netFields = <String>{
+  'netSales',
+  'netProfit',
+  'netTransactions',
+  'netIncompleteCostLineCount',
+  'returnedSales',
+  'returnCount',
+  'netMetricsVersion',
+};
+
+TenantDailyMetrics _decode(
+  Map<String, Object?> overrides, {
+  bool omitNet = false,
+  Set<String> omit = const <String>{},
+}) {
+  final data = _metrics(overrides: overrides);
+  data.removeWhere(
+    (key, value) => omit.contains(key) || omitNet && _netFields.contains(key),
+  );
+  return TenantDailyMetrics.fromDocument(
+    path: 'tenants/tenant-a/daily_metrics/2026-07-31',
+    data: data,
+  );
+}
 
 TenantDailyMetricsDay _day({
   required TenantDailyMetrics? metrics,
@@ -464,6 +489,20 @@ Map<String, Object?> _metrics({
     'updatedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 30)),
   };
   if (overrides != null) data.addAll(overrides);
+  // #104: reconciliation writes the net block on every run, so every fixture
+  // carries one. A day nothing came back on nets to its own gross figures -
+  // which means an override of the gross side moves both, unless the caller
+  // states the net side itself.
+  data.putIfAbsent('netSales', () => data['sales']);
+  data.putIfAbsent('netProfit', () => data['profit']);
+  data.putIfAbsent('netTransactions', () => data['transactions']);
+  data.putIfAbsent(
+    'netIncompleteCostLineCount',
+    () => data['incompleteCostLineCount'],
+  );
+  data.putIfAbsent('returnedSales', () => 0);
+  data.putIfAbsent('returnCount', () => 0);
+  data.putIfAbsent('netMetricsVersion', () => 1);
   data.removeWhere((key, value) => value == null);
   return data;
 }

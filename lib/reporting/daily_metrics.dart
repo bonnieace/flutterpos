@@ -69,7 +69,7 @@ final class TenantDailyMetrics {
       incompleteCostLineCount: _requiredInt(data, 'incompleteCostLineCount'),
       metricGeneration: _requiredGeneration(data),
       sourceDirtyRevision: _requiredInt(data, 'sourceDirtyRevision'),
-      net: _optionalNet(
+      net: _requiredNet(
         data,
         grossSales: _requiredNonNegativeNumber(data, 'sales'),
         grossProfit: _requiredFiniteNumber(data, 'profit'),
@@ -114,25 +114,25 @@ final class TenantDailyMetrics {
   /// server-owned timestamp is legitimately missing.
   final DateTime regeneratedAt;
 
-  /// The same day with its returns taken back out, or null where it was
-  /// reconciled before returns were counted.
+  /// The same day with its returns taken back out.
   ///
-  /// **Absent is not zero.** A day written by an older deployment and a day
-  /// nothing came back on are different facts.
-  final TenantDailyMetricsNet? net;
+  /// **Required (#104).** It was nullable while days reconciled before returns
+  /// were counted were still about; reconciliation writes the block on every
+  /// run with `merge: false`, and SIT regenerates rather than migrating, so a
+  /// day that cannot state its netting is a document this surface refuses.
+  final TenantDailyMetricsNet net;
 
   /// Whether the day's cost data was complete enough to trust a profit figure.
   bool get hasCompleteCostData => incompleteCostLineCount == 0;
 
-  /// Takings after returns where they are known, gross where they are not.
-  double get netOrGrossSales => net?.sales ?? sales;
+  /// Takings after returns.
+  double get netSales => net.sales;
 
-  /// The transaction count on the same basis as [netOrGrossSales].
-  int get netOrGrossTransactions => net?.transactions ?? transactions;
+  /// The transaction count on the same basis as [netSales].
+  int get netTransactions => net.transactions;
 
-  /// The profit report on the same basis as [netOrGrossSales].
-  TenantProfitReport get netOrGrossProfitReport =>
-      net?.profitReport ?? profitReport;
+  /// The profit report on the same basis as [netSales].
+  TenantProfitReport get netProfitReport => net.profitReport;
 
   /// This day's profit, and whether it may be shown at all.
   ///
@@ -404,12 +404,12 @@ DateTime _requiredInstant(Map<String, Object?> data, String field) {
   throw const TenantDailyMetricsException('invalid_metrics_document');
 }
 
-/// The net block of one metric document, or null where it was not written.
+/// The net block of one metric document.
 ///
 /// Every check here is the same kind the surrounding decoder already makes:
 /// a document that contradicts itself describes some other day, and this is
 /// the surface an owner reads takings from.
-TenantDailyMetricsNet? _optionalNet(
+TenantDailyMetricsNet _requiredNet(
   Map<String, Object?> data, {
   required double grossSales,
   required double grossProfit,
@@ -424,11 +424,9 @@ TenantDailyMetricsNet? _optionalNet(
     'returnCount',
     'netMetricsVersion',
   ];
-  final present = fields.where(data.containsKey).length;
-  // Reconciled before returns were counted. Not a failure; the day's figures
-  // are gross and the surface says so.
-  if (present == 0) return null;
-  if (present != fields.length) {
+  // #104: the whole block or nothing. A day missing any of it was written by
+  // a deployment SIT no longer runs.
+  if (data.keys.where(fields.contains).length != fields.length) {
     throw const TenantDailyMetricsException('invalid_metrics_document');
   }
   // A future shape must not be read as this one.
