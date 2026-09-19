@@ -110,22 +110,15 @@ final class TenantStockTakeReviewPanel extends StatefulWidget {
 class _TenantStockTakeReviewPanelState
     extends State<TenantStockTakeReviewPanel> {
   int _generation = 0;
-  TenantStaffNameResolver? _staffNames;
-  String? _staffNamesSessionKey;
+  final TenantStaffNameResolvers _staffNames = TenantStaffNameResolvers();
 
-  /// One resolver per session, so its cache is discarded the moment the UID,
-  /// business, or epoch changes and can never label the next session's rows.
-  TenantStaffNameResolver _resolverFor(TenantSession session) {
-    final key = '${session.uid}:${session.tenantId}:${session.epoch}';
-    if (key != _staffNamesSessionKey || _staffNames == null) {
-      _staffNamesSessionKey = key;
-      _staffNames = TenantStaffNameResolver(
-        session: session,
-        reader: widget.reader,
-      );
-    }
-    return _staffNames!;
-  }
+  /// One resolver per session **and per pass**, so the cached pass resolves a
+  /// name from this device rather than putting a network read in front of
+  /// records it already holds. An unresolved name degrades to the UID.
+  TenantStaffNameResolver _resolverFor(
+    TenantSession session,
+    TenantDocumentReader reader,
+  ) => _staffNames.of(session: session, reader: reader);
 
   @override
   Widget build(BuildContext context) {
@@ -173,9 +166,7 @@ class _TenantStockTakeReviewPanelState
       // rather than the row.
       return TenantNamedPage<List<TenantStockTakeRecord>>(
         page: takes,
-        names: await _resolverFor(
-          session,
-        ).resolve(takes.map((take) => take.counterUid)),
+        names: await _resolverFor(session, reader).resolve(takes.map((take) => take.counterUid)),
       );
     };
     _loader = readWith(widget.reader);
@@ -341,33 +332,58 @@ class _TenantStockTakeDetailScreenState
     extends State<_TenantStockTakeDetailScreen> {
   bool _applying = false;
   bool _applied = false;
+  String? _loaderKey;
+  TenantGuardedLoader<_TenantStockTakeLines>? _loader;
+  TenantGuardedLoader<_TenantStockTakeLines>? _loaderCached;
 
   @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: 'The count',
-    subtitle: widget.take.businessDate,
-    contentWidth: AppContentWidth.records,
-    body: TenantRouteGuard<_TenantStockTakeLines>(
-      allowedRoles: TenantStockTakeReviewRepository.allowedRoles,
-      load: _loadLines,
-      builder: _buildLines,
-    ),
-  );
+  Widget build(BuildContext context) {
+    _composeLoaders(widget.take.id);
+    return AppScaffold(
+      title: 'The count',
+      subtitle: widget.take.businessDate,
+      contentWidth: AppContentWidth.records,
+      body: TenantRouteGuard<_TenantStockTakeLines>(
+        allowedRoles: TenantStockTakeReviewRepository.allowedRoles,
+        load: _loader!,
+        loadCached: _loaderCached,
+        builder: _buildLines,
+      ),
+    );
+  }
 
   /// The lines, and the names of the products they name.
   ///
   /// Read together rather than drawn from the line documents, because a line
   /// carries no name - see `TenantStockTakeProductNames`.
-  Future<_TenantStockTakeLines> _loadLines(TenantSession session) async {
-    final lines = await TenantStockTakeReviewRepository(
-      session: session,
-      reader: widget.reader,
-    ).loadVarianceLines(widget.take.id, collectionReader: widget.reader);
-    final names = await TenantStockTakeProductNames(
-      session: session,
-      reader: widget.reader,
-    ).resolve(lines.map((line) => line.productId));
-    return _TenantStockTakeLines(lines: lines, names: names);
+  ///
+  /// **Both passes, because the list this was opened from has both.** A count
+  /// reached from a cached list is a count this device already holds, and
+  /// reading its lines through the live reader alone made tapping one wait for
+  /// a network the list in front of it had not needed. Product names follow the
+  /// same reader and degrade to the product ID, exactly as they do on the list.
+  ///
+  /// One loader per count, so a closure rebuilt on `setState` cannot restart
+  /// the read underneath the guard.
+  void _composeLoaders(String key) {
+    if (key == _loaderKey && _loader != null) return;
+    _loaderKey = key;
+    TenantGuardedLoader<_TenantStockTakeLines> readWith(
+      TenantDataReader reader,
+    ) => (session) async {
+      final lines = await TenantStockTakeReviewRepository(
+        session: session,
+        reader: reader,
+      ).loadVarianceLines(widget.take.id, collectionReader: reader);
+      final names = await TenantStockTakeProductNames(
+        session: session,
+        reader: reader,
+      ).resolve(lines.map((line) => line.productId));
+      return _TenantStockTakeLines(lines: lines, names: names);
+    };
+    _loader = readWith(widget.reader);
+    final cache = widget.reader.cached;
+    _loaderCached = cache == null ? null : readWith(cache);
   }
 
   Widget _buildLines(

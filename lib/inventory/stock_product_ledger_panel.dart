@@ -73,8 +73,7 @@ final class _TenantProductLedgerPanelState
     extends State<TenantProductLedgerPanel> {
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
-  TenantStaffNameResolver? _staffNames;
-  String? _staffNamesSessionKey;
+  final TenantStaffNameResolvers _staffNames = TenantStaffNameResolvers();
   String? _loaderKey;
   TenantGuardedLoader<_LedgerView>? _loader;
   TenantGuardedLoader<_LedgerView>? _loaderCached;
@@ -92,22 +91,13 @@ final class _TenantProductLedgerPanelState
     }
   }
 
-  static String _sessionKey(TenantSession session) =>
-      '${session.uid}:${session.tenantId}:${session.epoch}';
-
-  /// One resolver per session, so its cache can never label another session's
-  /// rows. An unresolved name degrades to the authoritative UID.
-  TenantStaffNameResolver _resolverFor(TenantSession session) {
-    final key = _sessionKey(session);
-    if (key != _staffNamesSessionKey || _staffNames == null) {
-      _staffNamesSessionKey = key;
-      _staffNames = TenantStaffNameResolver(
-        session: session,
-        reader: widget.reader,
-      );
-    }
-    return _staffNames!;
-  }
+  /// One resolver per session **and per pass**, so the cached pass resolves a
+  /// name from this device rather than putting a network read in front of
+  /// records it already holds. An unresolved name degrades to the UID.
+  TenantStaffNameResolver _resolverFor(
+    TenantSession session,
+    TenantDocumentReader reader,
+  ) => _staffNames.of(session: session, reader: reader);
 
   void _nextPage(String? cursor) {
     if (cursor == null) return;
@@ -140,7 +130,7 @@ final class _TenantProductLedgerPanelState
           // A sale movement records no actor: nightly reconciliation writes it.
           return _LedgerView(
             ledger: ledger,
-            names: await _resolverFor(session).resolve(<String>[
+            names: await _resolverFor(session, reader).resolve(<String>[
               for (final movement in ledger.movements.items)
                 if (movement.actorUid case final actorUid?) actorUid,
             ]),

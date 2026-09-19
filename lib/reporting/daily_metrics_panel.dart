@@ -16,6 +16,7 @@ import '../expenses/expense.dart';
 import '../expenses/expense_repository.dart';
 import 'net_profit.dart';
 import 'daily_metrics.dart';
+import 'device_sales_totals.dart';
 import 'reconciliation_status.dart';
 import 'profit_report.dart';
 import 'profit_statement.dart';
@@ -90,8 +91,9 @@ final class TenantDailySummaryScreen extends StatelessWidget {
 /// Shows the reconciled figures for the most recent business days.
 ///
 /// The route guard owns authorization and stale-session rejection. The panel
-/// renders what reconciliation recorded and computes nothing: an unreconciled
-/// day says so instead of showing a device-derived total.
+/// renders what reconciliation recorded, and - for a day it has not published
+/// yet - what this device itself holds, labelled as that and never mixed in
+/// with a certified figure.
 final class TenantDailySummaryPanel extends StatefulWidget {
   const TenantDailySummaryPanel({
     super.key,
@@ -142,10 +144,16 @@ final class _DailySummaryView {
     required this.days,
     required this.currency,
     this.expenses,
+    this.deviceDays = const <String, TenantDeviceSalesTotals>{},
   });
 
   final List<TenantDailyMetricsDay> days;
   final TenantReportingCurrency currency;
+
+  /// What this device holds for the days the server has not published,
+  /// by business date. Empty where nothing could be read, which leaves every
+  /// unpublished day saying exactly what it said before.
+  final Map<String, TenantDeviceSalesTotals> deviceDays;
 
   /// Every expense across the days shown, read once and sliced per day, or
   /// null where this session may not read them.
@@ -185,6 +193,56 @@ final class _TenantDailySummaryPanelState
     }
   }
 
+  /// The most recent days this will add up off the device.
+  ///
+  /// **Bounded, because a day is a walk of the cache and not a lookup.** The
+  /// days that are genuinely unpublished are the ones at the top of this page -
+  /// reconciliation runs nightly - so reading the newest few answers the
+  /// question a manager opened this screen with, and a page of seven days
+  /// never turns into seven scans of local storage.
+  static const int _deviceDayLimit = 3;
+
+  /// What this device can add up for the days the server has not published.
+  ///
+  /// **The whole of #115.** This screen knew an unreconciled day was a
+  /// first-class state and treated it as a reason to show nothing, sending the
+  /// reader to Sales Totals for a figure this device could already state. The
+  /// certified result still wins wherever there is one; this only fills the
+  /// days where there is none.
+  ///
+  /// Failure is silent and per-day: a device figure is an addition to this
+  /// page, never a reason to lose the reconciled days above it.
+  Future<Map<String, TenantDeviceSalesTotals>> _readDeviceDays(
+    TenantSession session,
+    List<TenantDailyMetricsDay> days,
+  ) async {
+    final cache = widget.reader.cached;
+    if (cache == null) return const <String, TenantDeviceSalesTotals>{};
+    final unpublished = days
+        .where((day) => day.metrics == null)
+        .take(_deviceDayLimit)
+        .toList();
+    if (unpublished.isEmpty) return const <String, TenantDeviceSalesTotals>{};
+    final aggregator = TenantDeviceSalesAggregator(
+      session: session,
+      cacheReader: cache,
+      // The same clock the days themselves were read against, so the dates
+      // this totals cannot drift from the dates it is labelling.
+      clock: widget.clock,
+    );
+    final totals = <String, TenantDeviceSalesTotals>{};
+    for (final day in unpublished) {
+      try {
+        totals[day.businessDate] = await aggregator.load(
+          aggregator.createBusinessDateQuery(businessDate: day.businessDate),
+        );
+      } catch (_) {
+        // Nothing for this day; the badge says what it always said.
+      }
+    }
+    return totals;
+  }
+
   /// One loader pair per generation, memoised so an unrelated rebuild does not
   /// restart the read. See [TenantRouteGuard.load] for why this shape is what
   /// lets the guard keep the figures on screen while it refreshes them.
@@ -211,6 +269,9 @@ final class _TenantDailySummaryPanelState
         // is taken from the days that came back rather than from the
         // clock, so it can only ever cover dates this page is showing.
         expenses: await _readExpenses(session, days),
+        // Read on both passes, because a day the server has not published is
+        // unpublished whether or not there is a network.
+        deviceDays: await _readDeviceDays(session, days),
       );
     };
     _loader = readWith(widget.reader);
@@ -253,6 +314,7 @@ final class _TenantDailySummaryPanelState
         days: view.days,
         currency: view.currency,
         expenses: view.expenses,
+        deviceDays: view.deviceDays,
         // Profit is cost, and cost is owner/admin everywhere else - a
         // narrower tier than the one that may read this whole summary.
         showProfit: TenantProfitReport.canSeeInSession(session),
@@ -278,6 +340,7 @@ final class _DailySummaryContents extends StatelessWidget {
     required this.currency,
     required this.showProfit,
     this.expenses,
+    this.deviceDays = const <String, TenantDeviceSalesTotals>{},
     this.reconciliationRoute,
     this.salesTotalsRoute,
   });
@@ -287,6 +350,9 @@ final class _DailySummaryContents extends StatelessWidget {
 
   /// Every expense across the days shown, or null where none were read.
   final TenantExpensePeriod? expenses;
+
+  /// What this device holds for the days the server has not published.
+  final Map<String, TenantDeviceSalesTotals> deviceDays;
 
   /// Whether this session may be shown what the business made, rather than
   /// only what it took.
@@ -563,6 +629,70 @@ final class _DailySummaryContents extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ]
+                  // **A day the server has not published, added up here.**
+                  // #115: this screen showed a badge and nothing else, and sent
+                  // the reader to Sales Totals for a figure this device was
+                  // already holding. A certified result still wins wherever
+                  // there is one - this branch is only reachable where there is
+                  // none - and it is labelled as what it is rather than being
+                  // mixed in with a reconciled figure.
+                  else if (deviceDays[day.businessDate]?.displayable
+                      case final counted?) ...[
+                    SizedBox(height: tokens.spacing.s8),
+                    StatLine(
+                      label: 'Sales',
+                      money: true,
+                      value: currency.format(
+                        counted.net?.sales ?? counted.sales,
+                      ),
+                      valueKey: ValueKey(
+                        'daily-summary-device-sales-${day.businessDate}',
+                      ),
+                      emphasis: true,
+                    ),
+                    StatLine(
+                      label: 'Transactions',
+                      value:
+                          '${counted.net?.transactions ?? counted.transactions}',
+                      valueKey: ValueKey(
+                        'daily-summary-device-transactions-${day.businessDate}',
+                      ),
+                    ),
+                    // **No shift count, and no change on the day before.** The
+                    // cache holds this device's sales, not the registers
+                    // another till opened, so a count from here would
+                    // understate exactly the days that had more than one. A
+                    // delta across two different bases would be arithmetic on
+                    // figures that do not mean the same thing.
+                    if (showProfit)
+                      TenantProfitStatement(
+                        report:
+                            counted.net?.profitReport ?? counted.profitReport,
+                        currency: currency,
+                        keyPrefix: 'daily-summary-device-${day.businessDate}',
+                        net: expenses == null
+                            ? null
+                            : TenantNetProfitReport.from(
+                                gross:
+                                    counted.net?.profitReport ??
+                                    counted.profitReport,
+                                expenses: expenses!.forDate(day.businessDate),
+                              ),
+                      ),
+                    SizedBox(height: tokens.spacing.s8),
+                    const ProvenanceLine('Counted on this device'),
+                    SizedBox(height: tokens.spacing.s4),
+                    Text(
+                      key: ValueKey(
+                        'daily-summary-device-basis-${day.businessDate}',
+                      ),
+                      'Rung on this till and not reconciled yet. A sale rung on '
+                      'another register is not in this figure.',
+                      style: tokens.typography.caption.copyWith(
+                        color: tokens.colors.text.tertiary,
+                      ),
+                    ),
                   ],
                   if (reconciliationRoute != null) ...[
                     SizedBox(height: tokens.spacing.s8),

@@ -65,6 +65,28 @@ final class TenantDeviceSalesTotals {
 
   TenantSalesTotalsBasis get basis => TenantSalesTotalsBasis.device;
   bool get canDisplay => totals != null;
+
+  /// The totals a surface may put on screen, or null where this device is not
+  /// in a position to state the day.
+  ///
+  /// **One rule, because two screens reading the same cache must not disagree
+  /// about it.** The home tiles and the daily summary both draw what this
+  /// device holds for a day the server has not published, and a zero guard
+  /// written twice is a zero guard that drifts.
+  ///
+  /// **A total of zero is the one device figure that cannot be told apart from
+  /// ignorance.** *The shop has taken nothing* and *nothing has reached this
+  /// till yet* render identically, and on a morning where another register
+  /// opened first the second is the true one. Every other figure here is
+  /// understated at worst and says so; `0.00` is simply wrong.
+  ///
+  /// A truncated scan and a refusal are withheld for the reason they were
+  /// recorded: neither is a total, and guessing past either would print a
+  /// figure this device has already said it cannot stand behind.
+  TenantSalesTotals? get displayable =>
+      truncated || refusal != null || (totals?.transactions ?? 0) == 0
+      ? null
+      : totals;
 }
 
 /// Cache/outbox aggregator shared by every reporting surface.

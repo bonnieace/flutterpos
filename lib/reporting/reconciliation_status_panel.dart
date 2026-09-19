@@ -114,8 +114,7 @@ final class _TenantReconciliationStatusPanelState
   /// Retained only across an ambiguous attempt, so a retry addresses the same
   /// idempotency record instead of queueing a second run.
   String? _requestId;
-  TenantStaffNameResolver? _staffNames;
-  String? _staffNamesSessionKey;
+  final TenantStaffNameResolvers _staffNames = TenantStaffNameResolvers();
   String? _loaderKey;
   TenantGuardedLoader<_ReconciliationView>? _loader;
   TenantGuardedLoader<_ReconciliationView>? _loaderCached;
@@ -136,19 +135,13 @@ final class _TenantReconciliationStatusPanelState
   static String _sessionKey(TenantSession session) =>
       '${session.uid}:${session.tenantId}:${session.epoch}';
 
-  /// One resolver per session, so its cache can never label another session's
-  /// rows. An unresolved name degrades to the authoritative UID.
-  TenantStaffNameResolver _resolverFor(TenantSession session) {
-    final key = _sessionKey(session);
-    if (key != _staffNamesSessionKey || _staffNames == null) {
-      _staffNamesSessionKey = key;
-      _staffNames = TenantStaffNameResolver(
-        session: session,
-        reader: widget.reader,
-      );
-    }
-    return _staffNames!;
-  }
+  /// One resolver per session **and per pass**, so the cached pass resolves a
+  /// name from this device rather than putting a network read in front of
+  /// records it already holds. An unresolved name degrades to the UID.
+  TenantStaffNameResolver _resolverFor(
+    TenantSession session,
+    TenantDocumentReader reader,
+  ) => _staffNames.of(session: session, reader: reader);
 
   void _nextPage(String? cursor) {
     if (cursor == null) return;
@@ -250,7 +243,7 @@ final class _TenantReconciliationStatusPanelState
       // A scheduled sweep and a sale trigger name no member of the business.
       return _ReconciliationView(
         day: day,
-        names: await _resolverFor(session).resolve(<String>[
+        names: await _resolverFor(session, reader).resolve(<String>[
           for (final run in day.runs.items)
             if (run.actorUid case final actorUid?) actorUid,
         ]),

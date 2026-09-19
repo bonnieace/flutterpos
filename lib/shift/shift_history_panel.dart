@@ -74,22 +74,15 @@ final class _TenantShiftHistoryPanelState
   /// The cursor that opened each visited page. The first page has none.
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
-  TenantStaffNameResolver? _staffNames;
-  String? _staffNamesSessionKey;
+  final TenantStaffNameResolvers _staffNames = TenantStaffNameResolvers();
 
-  /// One resolver per session, so its cache is discarded the moment the UID,
-  /// business, or epoch changes and can never label the next session's rows.
-  TenantStaffNameResolver _resolverFor(TenantSession session) {
-    final key = '${session.uid}:${session.tenantId}:${session.epoch}';
-    if (key != _staffNamesSessionKey || _staffNames == null) {
-      _staffNamesSessionKey = key;
-      _staffNames = TenantStaffNameResolver(
-        session: session,
-        reader: widget.reader,
-      );
-    }
-    return _staffNames!;
-  }
+  /// One resolver per session **and per pass**, so the cached pass resolves a
+  /// name from this device rather than putting a network read in front of
+  /// records it already holds. An unresolved name degrades to the UID.
+  TenantStaffNameResolver _resolverFor(
+    TenantSession session,
+    TenantDocumentReader reader,
+  ) => _staffNames.of(session: session, reader: reader);
 
   void _setScope(TenantShiftHistoryScope scope) {
     if (scope == _scope) return;
@@ -128,9 +121,7 @@ final class _TenantShiftHistoryPanelState
       ).loadPage(scope: _scope, pageSize: widget.pageSize, cursor: cursor);
       return TenantNamedPage<TenantShiftHistoryPage>(
         page: page,
-        names: await _resolverFor(
-          session,
-        ).resolve(page.items.map((entry) => entry.staffId)),
+        names: await _resolverFor(session, reader).resolve(page.items.map((entry) => entry.staffId)),
       );
     };
     _loader = readWith(widget.reader);

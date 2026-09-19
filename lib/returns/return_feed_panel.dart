@@ -196,8 +196,7 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
   /// saying what is wrong with what was typed into it.
   void _report(AppNotice notice) => showAppSnackBar(context, notice);
 
-  TenantStaffNameResolver? _staffNames;
-  String? _staffNamesSessionKey;
+  final TenantStaffNameResolvers _staffNames = TenantStaffNameResolvers();
   String? _loaderKey;
   TenantGuardedLoader<_ReturnFeedView>? _loader;
   TenantGuardedLoader<_ReturnFeedView>? _loaderCached;
@@ -205,17 +204,13 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
   static String _sessionKey(TenantSession session) =>
       '${session.uid}:${session.tenantId}:${session.epoch}';
 
-  TenantStaffNameResolver _resolverFor(TenantSession session) {
-    final key = _sessionKey(session);
-    if (key != _staffNamesSessionKey || _staffNames == null) {
-      _staffNamesSessionKey = key;
-      _staffNames = TenantStaffNameResolver(
-        session: session,
-        reader: widget.reader,
-      );
-    }
-    return _staffNames!;
-  }
+  /// One resolver per session **and per pass**, so the cached pass resolves a
+  /// name from this device rather than putting a network read in front of
+  /// records it already holds. An unresolved name degrades to the UID.
+  TenantStaffNameResolver _resolverFor(
+    TenantSession session,
+    TenantDocumentReader reader,
+  ) => _staffNames.of(session: session, reader: reader);
 
   bool _stillCurrent(String capturedKey) {
     if (!mounted) return false;
@@ -263,7 +258,7 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
                 : recordedOn,
             status: standing,
           );
-          final names = await _resolverFor(session).resolve(
+          final names = await _resolverFor(session, reader).resolve(
             page.items.expand(
               (record) => <String>[
                 record.createdBy,

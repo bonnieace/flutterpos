@@ -3161,20 +3161,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // one kind this tile has always refused to print. Both fall back to the em
     // dash, exactly as before.
     final device = overview.deviceToday;
-    // **A day this device counted nothing for is still an em dash.** A total
-    // of zero is the one device figure that cannot be told apart from
-    // ignorance: *the shop has taken nothing* and *nothing has reached this
-    // till yet* render identically, and on a morning where another register
-    // opened first the second is the true one. Every other figure here is
-    // understated at worst and says so; `KES 0.00` is simply wrong, which is
-    // the reading this tile has always refused.
-    final counted =
-        device == null ||
-            device.truncated ||
-            device.refusal != null ||
-            (device.totals?.transactions ?? 0) == 0
-        ? null
-        : device.totals;
+    // **A day this device counted nothing for is still an em dash**, for the
+    // reasons `TenantDeviceSalesTotals.displayable` records. The rule lives
+    // there rather than here so this tile and the daily summary cannot come to
+    // disagree about the same cache.
+    final counted = device?.displayable;
     // Net of returns where the cache held them, gross where it did not -
     // `TenantSalesTotals.net` is null rather than zero when returns could not
     // be read, so this falls back to the figure every surface showed before

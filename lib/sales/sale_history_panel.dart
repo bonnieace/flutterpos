@@ -129,23 +129,15 @@ final class TenantSaleHistoryPanel extends StatefulWidget {
 final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
-  TenantStaffNameResolver? _staffNames;
-  String? _staffNamesSessionKey;
+  final TenantStaffNameResolvers _staffNames = TenantStaffNameResolvers();
 
-  /// One resolver per session, so its cache can never label another session's
-  /// rows. See [TenantStaffNameResolver] for why an unresolved name degrades
-  /// to the UID instead of failing the page.
-  TenantStaffNameResolver _resolverFor(TenantSession session) {
-    final key = '${session.uid}:${session.tenantId}:${session.epoch}';
-    if (key != _staffNamesSessionKey || _staffNames == null) {
-      _staffNamesSessionKey = key;
-      _staffNames = TenantStaffNameResolver(
-        session: session,
-        reader: widget.reader,
-      );
-    }
-    return _staffNames!;
-  }
+  /// One resolver per session **and per pass**, so the cached pass resolves a
+  /// name from this device rather than putting a network read in front of
+  /// records it already holds. An unresolved name degrades to the UID.
+  TenantStaffNameResolver _resolverFor(
+    TenantSession session,
+    TenantDocumentReader reader,
+  ) => _staffNames.of(session: session, reader: reader);
 
   void _nextPage(String? cursor) {
     if (cursor == null) return;
@@ -188,9 +180,7 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
       };
       return TenantNamedPage<TenantSalePage>(
         page: page,
-        names: await _resolverFor(
-          session,
-        ).resolve(page.items.map((sale) => sale.soldById)),
+        names: await _resolverFor(session, reader).resolve(page.items.map((sale) => sale.soldById)),
       );
     };
     _loader = readWith(widget.reader);

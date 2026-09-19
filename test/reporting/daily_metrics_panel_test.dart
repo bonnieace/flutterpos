@@ -2,12 +2,106 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('an unreconciled day says what this device holds', () {
+    testWidgets('a day the server has not published is added up here', (
+      tester,
+    ) async {
+      // #115: the screen knew an unreconciled day was a first-class state and
+      // treated it as a reason to show nothing, sending the reader to Sales
+      // Totals for a figure this device was already holding.
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _CachedSalesReader(<TenantQueryDocumentSnapshot>[
+          _cachedSale(checkoutId: 'sale-a', sequence: 1, totalMinor: 30000),
+          _cachedSale(checkoutId: 'sale-b', sequence: 2, totalMinor: 12500),
+        ]),
+      );
+
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('daily-summary-device-sales-2026-07-31'),
+              ),
+            )
+            .data,
+        // No currency document in this device copy, so the figure is stated
+        // without a code - exactly as an unpublished currency is everywhere
+        // else on this screen.
+        '425.00',
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('daily-summary-device-transactions-2026-07-31'),
+              ),
+            )
+            .data,
+        '2',
+      );
+    });
+
+    testWidgets('the figure says it is this device, and what it leaves out', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _CachedSalesReader(<TenantQueryDocumentSnapshot>[
+          _cachedSale(checkoutId: 'sale-a', sequence: 1, totalMinor: 30000),
+        ]),
+      );
+
+      // The badge stays independent of the amount: the day is still not
+      // reconciled and still says so.
+      expect(
+        find.byKey(const ValueKey('daily-summary-pending-2026-07-31')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('daily-summary-device-basis-2026-07-31'),
+              ),
+            )
+            .data,
+        'Rung on this till and not reconciled yet. A sale rung on another '
+        'register is not in this figure.',
+      );
+    });
+
+    testWidgets('a day this device holds nothing for still shows no figure', (
+      tester,
+    ) async {
+      // A total of zero cannot be told apart from ignorance, so it is withheld
+      // rather than printed as a confident nothing.
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _CachedSalesReader(const <TenantQueryDocumentSnapshot>[]),
+      );
+
+      expect(
+        find.byKey(const ValueKey('daily-summary-device-sales-2026-07-31')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('daily-summary-pending-2026-07-31')),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('design.md §11 step 8: the money surface', () {
     testWidgets('the screen\'s title is the header\'s and is not drawn twice', (
       tester,
@@ -682,7 +776,7 @@ Future<void> _drain(
 Future<void> _pump(
   WidgetTester tester,
   TenantSessionController controller,
-  _Reader reader, {
+  TenantDocumentReader reader, {
   bool settle = true,
   TenantReconciliationRouteBuilder? reconciliationRoute,
   List<TenantRole> reconciliationRoles = const <TenantRole>[],
@@ -788,6 +882,111 @@ Map<String, Object?> _intake({
   };
   if (overrides != null) data.addAll(overrides);
   return data;
+}
+
+/// A reader whose device copy holds a day's sales and no reconciled day.
+///
+/// `_Reader` is a bare [TenantDocumentReader], so `cached` is null for it and
+/// the device branch is unreachable from every test above - which is why they
+/// all keep the behaviour they were written for.
+final class _CachedSalesReader
+    implements
+        TenantDataReader,
+        TenantSalesHistoryQueryReader,
+        TenantCacheReadable {
+  _CachedSalesReader(this.sales);
+
+  final List<TenantQueryDocumentSnapshot> sales;
+
+  @override
+  TenantDataReader get cacheOnly => this;
+
+  /// Absent: an unreconciled day, which is the state this is about.
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+
+  /// No returns held, so the day reports gross - the same fallback every other
+  /// surface makes.
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async => const <TenantQueryDocumentSnapshot>[];
+
+  /// Ordered and paged, because `loadReport` refuses an unstably ordered page.
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
+    TenantSalesHistoryQuery query,
+  ) async {
+    final matches =
+        sales.where((document) {
+          final date = document.data['businessDate']! as String;
+          return date.compareTo(query.startBusinessDate) >= 0 &&
+              date.compareTo(query.endBusinessDate) <= 0;
+        }).toList()..sort((left, right) {
+          final leftDate = left.data['businessDate']! as String;
+          final rightDate = right.data['businessDate']! as String;
+          final byDate = rightDate.compareTo(leftDate);
+          return byDate != 0 ? byDate : right.path.compareTo(left.path);
+        });
+    final cursor = query.startAfter;
+    final after = cursor == null
+        ? matches
+        : matches.where((document) {
+            final date = document.data['businessDate']! as String;
+            final id = document.path.split('/').last;
+            return date.compareTo(cursor.businessDate) < 0 ||
+                date == cursor.businessDate &&
+                    id.compareTo(cursor.documentId) < 0;
+          }).toList();
+    return after.take(query.limit).toList(growable: false);
+  }
+}
+
+TenantQueryDocumentSnapshot _cachedSale({
+  required String checkoutId,
+  required int sequence,
+  required int totalMinor,
+  String businessDate = '2026-07-31',
+}) {
+  const deviceId = 'dev-0123456789abcdef0123456789abcdef';
+  return TenantQueryDocumentSnapshot(
+    path: 'tenants/tenant-a/sales/$checkoutId',
+    data: <String, Object?>{
+      'checkoutId': checkoutId,
+      'tenantId': 'tenant-a',
+      'soldById': 'user-a',
+      'payloadHash': 'a'.padRight(64, 'a'),
+      'payloadSchemaVersion': 2,
+      'tender': 'cash',
+      'currency': 'KES',
+      'businessDate': businessDate,
+      'shiftId': 'shift-a',
+      'deviceId': deviceId,
+      'receiptNumber': formatCheckoutReceiptNumber(
+        deviceId: deviceId,
+        businessDate: businessDate,
+        sequence: sequence,
+      ),
+      'receiptSequence': sequence,
+      'items': <Object?>[
+        <String, Object?>{
+          'productId': 'product-$checkoutId',
+          'name': 'Item',
+          'categoryId': 'category-a',
+          'quantity': 1,
+          'unitPriceMinor': totalMinor,
+          'lineTotalMinor': totalMinor,
+        },
+      ],
+      'subtotalMinor': totalMinor,
+      'subtotal': totalMinor / 100,
+      'discountMinor': 0,
+      'discount': 0,
+      'totalMinor': totalMinor,
+      'total': totalMinor / 100,
+      'createdAt': DateTime.utc(2026, 7, 31, 9),
+    },
+  );
 }
 
 final class _Reader implements TenantDocumentReader {
