@@ -175,9 +175,39 @@ final class TenantShiftController extends ChangeNotifier {
 
   TenantShiftState get state => _state;
 
-  /// Whether this shift has outlived [maximumShiftDuration].
+  /// Whether this shift may no longer take sales, for either reason.
+  ///
+  /// Both land on [TenantShiftPhase.expired] because the till does the same
+  /// thing in each case: it stops selling and offers only a close.
   bool _hasExpired(TenantShiftLocalRecord record) =>
+      _outlivedItsDuration(record) || _isFutureDated(record);
+
+  /// Whether this shift has outlived [maximumShiftDuration].
+  bool _outlivedItsDuration(TenantShiftLocalRecord record) =>
       _clock().toUtc().difference(record.openedAt) >= maximumShiftDuration;
+
+  /// Whether this shift is filed under a day that has not arrived yet.
+  ///
+  /// **The clock moved backwards and the shift kept its day.** A shift owns the
+  /// business date every sale rung through it is filed under - deliberately, so
+  /// a till trading past midnight keeps one day's takings together, and
+  /// `CheckoutDraft` takes the date from the shift rather than from the clock.
+  /// The corollary is that a device whose clock was wrong when the shift opened
+  /// goes on stamping sales with a date that has not happened once the clock is
+  /// corrected. The takings land on a day the shop has not traded, and the
+  /// home, the daily summary and reconciliation are all reading a different
+  /// one - so the figures never move and nothing says why.
+  ///
+  /// **[_outlivedItsDuration] cannot catch this.** `Duration.difference` is
+  /// signed, so a record opened in the future reads as a negative age and never
+  /// reaches [maximumShiftDuration]: that shift would sell indefinitely.
+  ///
+  /// **Compared as business dates, not as instants**, because that is the harm.
+  /// A shift opened minutes ahead files under the same day and is nobody's
+  /// problem; one opened yesterday is still honestly yesterday's, and must keep
+  /// selling. Only a date the shop has not reached is refused.
+  bool _isFutureDated(TenantShiftLocalRecord record) =>
+      record.businessDate.compareTo(checkoutBusinessDate(_clock().toUtc())) > 0;
 
   /// The phase a durable record implies, with no server involved.
   ///

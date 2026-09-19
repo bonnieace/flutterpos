@@ -991,6 +991,52 @@ void main() {
       expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNotNull);
     });
 
+    test('a shift filed under a day that has not arrived stops selling', () async {
+      // **The clock was wrong when this opened and has since been corrected.**
+      // `CheckoutDraft` takes a sale's business date from its shift, so this
+      // one would go on stamping sales two days ahead - onto a day the shop has
+      // not traded, which is not the day the home, the daily summary or
+      // reconciliation are reading. The figures would never move and nothing
+      // would say why.
+      //
+      // The age rule cannot catch it: `difference` is signed, so an `openedAt`
+      // in the future reads as a negative age and never reaches the cap.
+      await state.save(
+        _record(
+          businessDate: '2026-08-02',
+          openedAt: DateTime.utc(2026, 8, 2, 9),
+        ),
+      );
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      final controller = _controller(sessions, state, server);
+
+      final restored = await controller.restore(sessions.requireSession());
+
+      expect(restored.phase, TenantShiftPhase.expired);
+      expect(restored.shiftExpired, isTrue);
+      // Still this device's to finish, exactly as a shift past the cap is.
+      expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNotNull);
+    });
+
+    test('yesterday is not the future, and keeps selling', () async {
+      // The guard is about a day the shop has not reached, never about a shift
+      // that legitimately owns an earlier day - which is the whole point of
+      // letting a till trade past midnight.
+      await state.save(
+        _record(
+          businessDate: '2026-07-30',
+          openedAt: DateTime.utc(2026, 7, 31, 2),
+        ),
+      );
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      final controller = _controller(sessions, state, server);
+
+      final restored = await controller.restore(sessions.requireSession());
+
+      expect(restored.phase, TenantShiftPhase.open);
+      expect(restored.shiftExpired, isFalse);
+    });
+
     test('a shift within the cap is untouched', () async {
       await state.save(_record(openedAt: DateTime.utc(2026, 7, 30, 10)));
       server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
@@ -1230,11 +1276,12 @@ TenantShiftLocalRecord _record({
   int? countedCashMinor,
   ShiftTenderDeclaration? declaration,
   DateTime? openedAt,
+  String businessDate = _businessDate,
 }) => TenantShiftLocalRecord(
   uid: uid,
   tenantId: tenantId,
   shiftId: shiftId,
-  businessDate: _businessDate,
+  businessDate: businessDate,
   deviceId: _deviceA,
   serverConfirmedOpen: serverConfirmedOpen,
   closeInProgress: closeInProgress,

@@ -411,9 +411,15 @@ class _TenantShiftGateState extends State<TenantShiftGate>
           ErrorState(
             status: AppStatus.attention,
             badgeLabel: 'Shift over',
-            statement:
-                'This shift has been open for more than a day, so it can no '
-                'longer take sales.',
+            // **Two things reach this state and the copy must be true of
+            // both.** One shift has been open past its day; the other is filed
+            // under a day that has not arrived, because the device's clock was
+            // wrong when it opened and has since been corrected. Naming the
+            // duration was false for the second, and the second is the one
+            // where a wrong figure had already been written - so this says the
+            // part that always holds, and the count below is the way out of
+            // either.
+            statement: 'This shift can no longer take sales.',
             detail:
                 'Count it off to finish it. That works with no connection: '
                 'the count is saved here and reaches the server on its own.',
