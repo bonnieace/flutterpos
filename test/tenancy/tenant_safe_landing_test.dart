@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/home_navigation.dart';
+import 'package:flutter_application_1/ui/stats.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -534,6 +537,206 @@ void main() {
       expect(fitted.text, 'second');
     });
   });
+
+  testWidgets('coming back from a module re-reads the day', (tester) async {
+    // **The defect this covers was reported from a till.** Sales were being
+    // rung and the home never moved, because every module is pushed over this
+    // route: returning is a pop, a pop is not a rebuild, and `TenantRouteGuard`
+    // re-reads only when its loader changes identity. The figures on screen
+    // were the ones read on the way in, with nothing saying so.
+    final reader = _CountingReader();
+    await _pumpLanding(
+      tester,
+      panelHeight: 120,
+      role: TenantRole.owner,
+      reader: reader,
+    );
+    final onArrival = reader.documentReads;
+    expect(onArrival, greaterThan(0));
+
+    // Stand in for any module: what matters is that it is pushed over the home
+    // and then popped, which is what every destination on this page does.
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    unawaited(
+      navigator.push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('a module')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    navigator.pop();
+    await tester.pumpAndSettle();
+
+    expect(
+      reader.documentReads,
+      greaterThan(onArrival),
+      reason: 'the home should ask again once it is back on top',
+    );
+  });
+
+  group('an unreconciled day says what this device can already add up', () {
+    // Reconciliation qualifies the figure; it does not unlock it. Before
+    // 2026-09-19 every tile here read an em dash over *Not reconciled yet*
+    // until the nightly run published - and today is normally unreconciled,
+    // so the home routinely hid a morning's trade it could already state.
+
+    testWidgets('the takings are drawn from the cache and marked as such', (
+      tester,
+    ) async {
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        reader: _CachedSalesReader(<TenantQueryDocumentSnapshot>[
+          _cachedSale(checkoutId: 'checkout-a', sequence: 1, totalMinor: 3000),
+          _cachedSale(checkoutId: 'checkout-b', sequence: 2, totalMinor: 1500),
+        ]),
+      );
+
+      final sales = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-sales')),
+      );
+      // 30.00 and 15.00, the two the cache holds.
+      expect(sales.value, contains('45'));
+      // **Never presented as reconciled.** The basis is stated under the
+      // figure and the standing is a badge of its own, in words rather than
+      // in colour.
+      expect(sales.detail, 'On this device');
+      expect(sales.status, AppStatus.attention);
+      expect(sales.statusLabel, 'Not reconciled');
+
+      final transactions = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-transactions')),
+      );
+      expect(transactions.value, '2');
+      expect(transactions.detail, 'On this device');
+    });
+
+    testWidgets('the shift count still waits, and says which figure does', (
+      tester,
+    ) async {
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        reader: _CachedSalesReader(<TenantQueryDocumentSnapshot>[
+          _cachedSale(checkoutId: 'checkout-a', sequence: 1, totalMinor: 3000),
+        ]),
+      );
+
+      // The cache holds this device's sales, not the business's shifts, so
+      // standing in for this one would understate it on exactly the days more
+      // than one till traded.
+      final shifts = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-shifts')),
+      );
+      expect(shifts.value, '—');
+      expect(shifts.detail, 'Counted at reconciliation');
+    });
+
+    testWidgets('a day this device counted nothing for stays an em dash', (
+      tester,
+    ) async {
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        reader: _CachedSalesReader(const <TenantQueryDocumentSnapshot>[]),
+      );
+
+      // Zero is the one device figure that cannot be told apart from
+      // ignorance, so it is not published as the day's takings.
+      final sales = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-sales')),
+      );
+      expect(sales.value, '—');
+      expect(sales.detail, 'Not reconciled yet');
+      expect(sales.status, isNull);
+    });
+
+    testWidgets('a sale the server has not counted wins over the published day', (
+      tester,
+    ) async {
+      // The server has counted two; this device holds three, because one was
+      // rung offline and has not synced. Reconciliation cannot know about it,
+      // so the published figure is simply behind - and the till that rang the
+      // sale is the one surface that can say so.
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        reader: _BehindReader(
+          publishedTransactions: 2,
+          sales: <TenantQueryDocumentSnapshot>[
+            _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
+            _cachedSale(checkoutId: 'b', sequence: 2, totalMinor: 3000),
+            _cachedSale(checkoutId: 'c', sequence: 3, totalMinor: 3000),
+          ],
+        ),
+      );
+
+      final transactions = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-transactions')),
+      );
+      expect(transactions.value, '3');
+      expect(transactions.detail, 'On this device');
+      expect(transactions.statusLabel, 'Not reconciled');
+
+      final sales = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-sales')),
+      );
+      expect(sales.value, contains('90'));
+    });
+
+    testWidgets('a second till that sold more keeps the published figure', (
+      tester,
+    ) async {
+      // The mirror case, and the reason this is decided on the count rather
+      // than on whether a cache read succeeded: another register's sales are in
+      // `daily_metrics` and were never on this device, so here the published
+      // figure is the more complete of the two and must win.
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        reader: _BehindReader(
+          publishedTransactions: 9,
+          sales: <TenantQueryDocumentSnapshot>[
+            _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
+          ],
+        ),
+      );
+
+      final transactions = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-transactions')),
+      );
+      expect(transactions.value, '9');
+      expect(transactions.detail, 'Counted today');
+      expect(transactions.statusLabel, isNull);
+    });
+
+    testWidgets('a reader with no cache is left exactly as it was', (
+      tester,
+    ) async {
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        reader: _EmptyReader(),
+      );
+
+      // `TenantDataReader.cached` is null for a reader that is not
+      // `TenantCacheReadable`, which is every other fake in this suite - so
+      // the fallback cannot fire and the em dash is still the honest answer.
+      final sales = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-sales')),
+      );
+      expect(sales.value, '—');
+      expect(sales.detail, 'Not reconciled yet');
+      expect(sales.status, isNull);
+    });
+  });
 }
 
 const ValueKey<String> _greetingKey = ValueKey<String>('home-greeting');
@@ -578,6 +781,9 @@ Future<void> _pumpLanding(
 
   await tester.pumpWidget(
     MaterialApp(
+      // What `_RereadOnReturn` subscribes to. Without it a pop is silence and
+      // the home keeps the figures it read on the way in.
+      navigatorObservers: <NavigatorObserver>[tenantRouteObserver],
       home: TenantSessionScope(
         controller: controller,
         child: TenantSafeLandingScreen(
@@ -653,6 +859,215 @@ final class _BrandedReader implements TenantDataReader {
           data: <String, Object?>{'companyName': companyName},
         )
       : null;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async => const <TenantQueryDocumentSnapshot>[];
+}
+
+/// A reader with a reconciled day *and* a cache that holds more than it.
+///
+/// This is the shape of the defect reported from a till: a sale rung while the
+/// device was offline sits in the cache and cannot be in `daily_metrics`, so
+/// the Sales route counted it and the home did not. Two totals, no way to
+/// square them, and the shopkeeper concludes the app is broken.
+final class _BehindReader
+    implements
+        TenantDataReader,
+        TenantSalesHistoryQueryReader,
+        TenantCacheReadable {
+  _BehindReader({required this.sales, required this.publishedTransactions});
+
+  final List<TenantQueryDocumentSnapshot> sales;
+
+  /// What the server has counted, deliberately fewer than [sales] holds.
+  final int publishedTransactions;
+
+  @override
+  TenantDataReader get cacheOnly => this;
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    if (!path.contains('daily_metrics')) return null;
+    // Whatever day the repository asked for, so the fixture cannot drift from
+    // the clock the page is reading.
+    final businessDate = path.split('/').last;
+    return TenantDocumentSnapshot(
+      path: path,
+      data: <String, Object?>{
+        'tenantId': 'tenant-a',
+        'businessDate': businessDate,
+        'sales': 30.0 * publishedTransactions,
+        'profit': 0.0,
+        'transactions': publishedTransactions,
+        'transactionCount': publishedTransactions,
+        'shiftCount': 1,
+        'incompleteCostLineCount': 0,
+        'metricGeneration': 'gen-1',
+        'sourceDirtyRevision': 1,
+        'regeneratedAt': DateTime.utc(2026, 9, 10, 6),
+      },
+    );
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async => const <TenantQueryDocumentSnapshot>[];
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
+    TenantSalesHistoryQuery query,
+  ) async {
+    final matches =
+        sales.where((document) {
+          final date = document.data['businessDate']! as String;
+          return date.compareTo(query.startBusinessDate) >= 0 &&
+              date.compareTo(query.endBusinessDate) <= 0;
+        }).toList()..sort((left, right) {
+          final leftDate = left.data['businessDate']! as String;
+          final rightDate = right.data['businessDate']! as String;
+          final byDate = rightDate.compareTo(leftDate);
+          return byDate != 0 ? byDate : right.path.compareTo(left.path);
+        });
+    final cursor = query.startAfter;
+    final after = cursor == null
+        ? matches
+        : matches.where((document) {
+            final date = document.data['businessDate']! as String;
+            final id = document.path.split('/').last;
+            return date.compareTo(cursor.businessDate) < 0 ||
+                date == cursor.businessDate &&
+                    id.compareTo(cursor.documentId) < 0;
+          }).toList();
+    return after.take(query.limit).toList(growable: false);
+  }
+}
+
+/// A reader whose cache holds today's sales and no reconciled day.
+///
+/// **`cacheOnly` answering with itself is the whole point.**
+/// `TenantDataReader.cached` is null for every fake that is not
+/// [TenantCacheReadable], so without this the home's device fallback is not
+/// reachable from a test at all - and every other suite keeps the behaviour it
+/// had before the fallback existed, which is why nothing else needed changing.
+final class _CachedSalesReader
+    implements
+        TenantDataReader,
+        TenantSalesHistoryQueryReader,
+        TenantCacheReadable {
+  _CachedSalesReader(this.sales);
+
+  final List<TenantQueryDocumentSnapshot> sales;
+
+  @override
+  TenantDataReader get cacheOnly => this;
+
+  /// Absent, which is what an unreconciled day looks like: `readDay` answers
+  /// null and `TenantDailyMetricsDay.metrics` is null with it.
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+
+  /// No returns in the cache, so the day is reported gross - the same
+  /// fallback `TenantSalesTotals.net` makes everywhere else.
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async => const <TenantQueryDocumentSnapshot>[];
+
+  /// **Ordered and paged, because the repository checks.** Answering the same
+  /// unsorted list to every page reads as an unstable query and
+  /// `TenantSaleHistoryRepository.loadReport` refuses it outright - which is
+  /// the right refusal, and cost this test an afternoon to learn.
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
+    TenantSalesHistoryQuery query,
+  ) async {
+    final matches =
+        sales.where((document) {
+          final date = document.data['businessDate']! as String;
+          return date.compareTo(query.startBusinessDate) >= 0 &&
+              date.compareTo(query.endBusinessDate) <= 0;
+        }).toList()..sort((left, right) {
+          final leftDate = left.data['businessDate']! as String;
+          final rightDate = right.data['businessDate']! as String;
+          final byDate = rightDate.compareTo(leftDate);
+          return byDate != 0 ? byDate : right.path.compareTo(left.path);
+        });
+    final cursor = query.startAfter;
+    final after = cursor == null
+        ? matches
+        : matches.where((document) {
+            final date = document.data['businessDate']! as String;
+            final id = document.path.split('/').last;
+            return date.compareTo(cursor.businessDate) < 0 ||
+                date == cursor.businessDate &&
+                    id.compareTo(cursor.documentId) < 0;
+          }).toList();
+    return after.take(query.limit).toList(growable: false);
+  }
+}
+
+/// One sale this device holds, on the business day [_nineInTheMorning] falls
+/// in - derived the way the code derives it, so the test does not assume the
+/// machine's time zone.
+TenantQueryDocumentSnapshot _cachedSale({
+  required String checkoutId,
+  required int sequence,
+  required int totalMinor,
+}) {
+  const deviceId = 'dev-0123456789abcdef0123456789abcdef';
+  final businessDate = checkoutBusinessDate(_nineInTheMorning().toUtc());
+  return TenantQueryDocumentSnapshot(
+    path: 'tenants/tenant-a/sales/$checkoutId',
+    data: <String, Object?>{
+      'checkoutId': checkoutId,
+      'tenantId': 'tenant-a',
+      'soldById': 'user-a',
+      'payloadHash': 'a'.padRight(64, 'a'),
+      'payloadSchemaVersion': 2,
+      'tender': 'cash',
+      'currency': 'KES',
+      'businessDate': businessDate,
+      'shiftId': 'shift-a',
+      'deviceId': deviceId,
+      'receiptNumber': formatCheckoutReceiptNumber(
+        deviceId: deviceId,
+        businessDate: businessDate,
+        sequence: sequence,
+      ),
+      'receiptSequence': sequence,
+      'items': <Object?>[
+        <String, Object?>{
+          'productId': 'product-$checkoutId',
+          'name': 'Item',
+          'categoryId': 'category-a',
+          'quantity': 1,
+          'unitPriceMinor': totalMinor,
+          'lineTotalMinor': totalMinor,
+        },
+      ],
+      'subtotalMinor': totalMinor,
+      'subtotal': totalMinor / 100,
+      'discountMinor': 0,
+      'discount': 0,
+      'totalMinor': totalMinor,
+      'total': totalMinor / 100,
+      'createdAt': _nineInTheMorning().toUtc(),
+    },
+  );
+}
+
+/// Counts the reads the page makes, so a test can say whether it asked again.
+final class _CountingReader implements TenantDataReader {
+  int documentReads = 0;
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    documentReads += 1;
+    return null;
+  }
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(

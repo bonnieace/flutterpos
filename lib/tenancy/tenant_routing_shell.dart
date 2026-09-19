@@ -6,6 +6,7 @@ import '../checkout/checkout_draft.dart';
 import '../expenses/expense.dart';
 import '../expenses/expense_repository.dart';
 import '../reporting/daily_metrics.dart';
+import '../reporting/device_sales_totals.dart';
 import '../reporting/net_profit.dart';
 import '../reporting/reporting_currency.dart';
 import '../reporting/profit_report.dart';
@@ -2036,6 +2037,7 @@ final class _HomeOverview {
     this.trend,
     this.currency,
     this.expenses,
+    this.deviceToday,
     this.showProfit = false,
   });
 
@@ -2074,6 +2076,23 @@ final class _HomeOverview {
   /// It is also why net profit works with no signal at all: both halves of the
   /// subtraction are cached reads.
   final TenantExpensePeriod? expenses;
+
+  /// What this device can already add up for today, read **only when the day
+  /// is not reconciled**.
+  ///
+  /// **Reconciliation qualifies the figure; it does not unlock it.** Today is
+  /// normally unreconciled, so a home that waits for `daily_metrics` hides a
+  /// morning's trade it could already state - which is what it did until
+  /// 2026-09-19. This is the same cache-only aggregator every other reporting
+  /// surface falls back to, so the number here is the number the Sales route
+  /// shows, arrived at the same way.
+  ///
+  /// Null where the day is reconciled (the published figures are better and
+  /// this costs nothing to skip), where the session may not read revenue, or
+  /// where no cache-only reader was available. A truncated or refused read is
+  /// carried through rather than flattened: a partial day must not be drawn as
+  /// the day's total, and `_figures` is where that is decided.
+  final TenantDeviceSalesTotals? deviceToday;
 
   /// Whether this member may be shown the margin at all.
   ///
@@ -2586,6 +2605,68 @@ final class _LandingTrendLine extends StatelessWidget {
   static const double _glyphSize = 18;
 }
 
+/// Watches the navigator so the home can be told when it is on top again.
+///
+/// **Registered in `main.dart`, and a test that omits it simply never
+/// re-reads** - `RouteAware` is a subscription, so an absent observer is
+/// silence rather than an error.
+final RouteObserver<PageRoute<dynamic>> tenantRouteObserver =
+    RouteObserver<PageRoute<dynamic>>();
+
+/// Rebuilds its child when a route pushed above it is popped.
+///
+/// **The home was reading its figures once and keeping them.** Every module is
+/// pushed over this route, so returning from one does not rebuild the page -
+/// and `TenantRouteGuard` only re-reads when its loader changes identity, which
+/// is what a rebuild produces. A shopkeeper who rang a sale and came back to
+/// the menu therefore saw the takings from before the sale, with nothing to say
+/// they were stale and no way to refresh but to restart the app.
+///
+/// **`didPopNext` is the exact moment**, rather than a timer or a listener on
+/// every write: it fires when this route becomes the top one again, which is
+/// when what is drawn here is about to be looked at.
+final class _RereadOnReturn extends StatefulWidget {
+  const _RereadOnReturn({required this.builder});
+
+  final WidgetBuilder builder;
+
+  @override
+  State<_RereadOnReturn> createState() => _RereadOnReturnState();
+}
+
+final class _RereadOnReturnState extends State<_RereadOnReturn> with RouteAware {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic>) {
+      // Subscribing twice for the same route is a no-op in `RouteObserver`, so
+      // this stays correct across the dependency changes that bring us here.
+      tenantRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    tenantRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  /// A module that was pushed over the home has been popped.
+  ///
+  /// The rebuild is the whole of it: [TenantSafeLandingScreen] builds a fresh
+  /// loader closure, the guard sees a loader it has not run, and re-reads while
+  /// keeping the figures already on screen - so the page does not blink back to
+  /// a spinner over data the device is still holding.
+  @override
+  void didPopNext() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context);
+}
+
 final class TenantSafeLandingScreen extends StatelessWidget {
   const TenantSafeLandingScreen({
     super.key,
@@ -2782,7 +2863,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   final List<TenantRole> auditLogRoles;
 
   @override
-  Widget build(BuildContext context) => TenantRouteGuard<_HomeOverview>(
+  Widget build(BuildContext context) => _RereadOnReturn(
+    builder: (context) => _guard(context),
+  );
+
+  Widget _guard(BuildContext context) => TenantRouteGuard<_HomeOverview>(
     load: (session) => _readOverviewWith(reader, session),
     // **The front door draws from this device's own copy first.** Every read
     // below already degrades to nothing on its own, so the home never showed an
@@ -2831,6 +2916,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             () => TenantDailyMetricsRepository(
               session: session,
               reader: reader,
+              // **One clock for the whole page.** The device aggregator below
+              // reads the screen's, and a home whose published day and whose
+              // own reading of that day come from two different clocks can
+              // compare them and reach any answer at all.
+              clock: clock,
             ).loadRecentDays(days: 1),
           )
         : Future<List<TenantDailyMetricsDay>?>.value();
@@ -2866,7 +2956,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // and a Firestore read, so it is cached like the rest of this set.
     final expenses = TenantExpenseRepository.canSeeInSession(session)
         ? _quiet(() {
-            final today = checkoutBusinessDate(DateTime.now().toUtc());
+            final today = checkoutBusinessDate(
+              (clock ?? DateTime.now)().toUtc(),
+            );
             return TenantExpenseRepository(
               session: session,
               reader: reader,
@@ -2874,15 +2966,46 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           })
         : Future<TenantExpensePeriod?>.value();
     final days = await recentDays ?? const <TenantDailyMetricsDay>[];
+    final today = days.isEmpty ? null : days.first;
+    // **Read only for a day reconciliation has not published.** A reconciled
+    // day already has better figures than this device can assemble, and the
+    // read is several cached pages - so the common case pays nothing for it.
+    //
+    // **Awaited with the cached reads, not handed on like [trend].** It is
+    // Firestore served from the cache, which is why it works with no signal at
+    // all; waiting for it costs the page what `expenses` costs it and lets the
+    // figures land in one frame rather than appearing after it.
+    // **Read whether or not the day is reconciled.** It used to be skipped once
+    // `daily_metrics` existed, on the reasoning that a published figure is the
+    // better one. That is true right up until this device holds a sale the
+    // server has never seen - an offline sale, or one still in the outbox -
+    // and then the published figure is simply behind, and the till that rang
+    // the sale is the one surface that can say so.
+    final cache = mayReadRevenue && today != null ? reader.cached : null;
+    final deviceToday = cache == null
+        ? null
+        : await _quiet(() {
+            final aggregator = TenantDeviceSalesAggregator(
+              session: session,
+              cacheReader: cache,
+              // The same clock the rest of this screen reads, so the day it
+              // totals is the day the greeting asked for.
+              clock: clock,
+            );
+            return aggregator.load(
+              aggregator.createQuery(period: TenantSalesPeriod.today),
+            );
+          });
     // **The trend is handed on rather than awaited**, for the reason
     // `_HomeOverview.trend` gives. It is already in flight; what changes is
     // that the rest of the home no longer waits on it.
     return _HomeOverview(
       branding: await branding,
-      today: days.isEmpty ? null : days.first,
+      today: today,
       trend: trend,
       currency: await currency,
       expenses: await expenses,
+      deviceToday: deviceToday,
       showProfit: TenantProfitReport.canSeeInSession(session),
     );
   }
@@ -3027,7 +3150,61 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final day = overview.today;
     final metrics = day?.metrics;
-    final report = metrics?.profitReport;
+    // **What this device can state about an unreconciled day.** Null once
+    // reconciliation has published, because the server's figures are better
+    // and the loader does not even read this for a reconciled day.
+    //
+    // **A partial day is not a day.** A truncated read has scanned only the
+    // first pages of the day's sales and a refused one nothing at all; either
+    // drawn as *Today's sales* would be a plausible wrong figure, which is the
+    // one kind this tile has always refused to print. Both fall back to the em
+    // dash, exactly as before.
+    final device = overview.deviceToday;
+    // **A day this device counted nothing for is still an em dash.** A total
+    // of zero is the one device figure that cannot be told apart from
+    // ignorance: *the shop has taken nothing* and *nothing has reached this
+    // till yet* render identically, and on a morning where another register
+    // opened first the second is the true one. Every other figure here is
+    // understated at worst and says so; `KES 0.00` is simply wrong, which is
+    // the reading this tile has always refused.
+    final counted =
+        device == null ||
+            device.truncated ||
+            device.refusal != null ||
+            (device.totals?.transactions ?? 0) == 0
+        ? null
+        : device.totals;
+    // Net of returns where the cache held them, gross where it did not -
+    // `TenantSalesTotals.net` is null rather than zero when returns could not
+    // be read, so this falls back to the figure every surface showed before
+    // returns were netted at all.
+    final countedNet = counted?.net;
+    // **Whether this device knows of sales the published figure cannot hold.**
+    // A sale rung here and not yet synced is in the cache and not in
+    // `daily_metrics`, so the till shows more than the home does - and a
+    // shopkeeper who rings a sale and watches the total refuse to move
+    // concludes the app is broken, which is the more expensive failure.
+    //
+    // **Counted in transactions, not in money**, because that is the question:
+    // does this device hold a sale the server has not counted. Comparing
+    // takings would also fire on a rounding difference.
+    //
+    // **The published figure still wins where it is ahead**, which is the
+    // ordinary case of a second till trading: its sales are in `daily_metrics`
+    // and were never on this device, so the device total is the smaller and
+    // less complete of the two. The limitation that leaves is a device holding
+    // one unsynced sale while another till has sold more - the published count
+    // is higher, so this keeps it, and the unsynced sale stays invisible until
+    // it syncs.
+    final deviceCount = countedNet?.transactions ?? counted?.transactions;
+    final deviceSales = countedNet?.sales ?? counted?.sales;
+    final deviceKnowsMore =
+        deviceCount != null &&
+        (metrics == null || deviceCount > metrics.transactions);
+    final deviceReport = countedNet?.profitReport ?? counted?.profitReport;
+    final report = deviceKnowsMore
+        ? deviceReport
+        : metrics?.profitReport ?? deviceReport;
     final currency = overview.currency ?? TenantReportingCurrency.unknown;
     // Composed here rather than on the server: `daily_metrics.profit` is
     // revenue minus the cost of the goods sold and stays that way, so nothing
@@ -3047,26 +3224,57 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           // no takings in it - today is normally unreconciled, and printing
           // `KES 0.00` over a morning's trade would be the worst kind of
           // wrong figure: a plausible one.
-          value: metrics == null ? '—' : currency.format(metrics.sales),
-          money: metrics != null,
+          //
+          // **But a figure this device can already prove is not a guess.**
+          // Where the day is unreconciled and the cache holds its sales, that
+          // total is shown and marked as what it is. Reconciliation then
+          // certifies the value rather than releasing it.
+          value: deviceKnowsMore && deviceSales != null
+              ? currency.format(deviceSales)
+              : metrics != null
+              ? currency.format(metrics.sales)
+              : '—',
+          money: deviceKnowsMore || metrics != null,
           icon: Icons.payments_outlined,
-          detail: metrics == null
-              ? 'Not reconciled yet'
-              : 'Reconciled ${day.businessDate}',
+          // Never colour alone: the badge carries its own words, and the
+          // detail underneath names the basis in full.
+          status: deviceKnowsMore ? AppStatus.attention : null,
+          statusLabel: deviceKnowsMore ? 'Not reconciled' : null,
+          detail: deviceKnowsMore
+              ? 'On this device'
+              : metrics != null
+              ? 'Reconciled ${day.businessDate}'
+              : 'Not reconciled yet',
         ),
         StatTile(
           key: const ValueKey('home-today-transactions'),
           label: 'Transactions',
-          value: metrics == null ? '—' : '${metrics.transactions}',
+          value: deviceKnowsMore
+              ? '$deviceCount'
+              : metrics != null
+              ? '${metrics.transactions}'
+              : '—',
           icon: Icons.receipt_long_outlined,
-          detail: metrics == null ? 'Not reconciled yet' : 'Counted today',
+          status: deviceKnowsMore ? AppStatus.attention : null,
+          statusLabel: deviceKnowsMore ? 'Not reconciled' : null,
+          detail: deviceKnowsMore
+              ? 'On this device'
+              : metrics != null
+              ? 'Counted today'
+              : 'Not reconciled yet',
         ),
         StatTile(
           key: const ValueKey('home-today-shifts'),
           label: 'Shifts',
           value: metrics == null ? '—' : '${metrics.shiftCount}',
           icon: Icons.schedule_outlined,
-          detail: metrics == null ? 'Not reconciled yet' : 'Closed today',
+          // **The one figure this device cannot stand in for.** The cache
+          // holds this device's own sales, which is enough to total a day's
+          // takings; it does not hold the business's shifts, and counting the
+          // ones this register happens to know about would understate the
+          // number on exactly the days more than one till traded. So this tile
+          // still waits, and names which figure is waiting.
+          detail: metrics == null ? 'Counted at reconciliation' : 'Closed today',
         ),
         // **Profit, which is the fourth figure this app actually holds.** The
         // export's fourth tile is *Low stock — 5 items* and there is no
@@ -3087,16 +3295,38 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             // spending could be read this is the only profit the home shows,
             // and calling it gross would imply a second figure that is absent.
             label: net == null ? 'Profit' : 'Gross profit',
-            value: report == null || !report.isShowable
+            // **Shown as a ceiling rather than withheld.** A line with no cost
+            // recorded is counted as costing nothing, so this figure is an
+            // upper bound - but a shopkeeper who is shown nothing at all
+            // concludes the app cannot do it, and the caption below already
+            // carries the caveat. What is refused is the *inconsistent* basis,
+            // where the cost came out negative: that is not an optimistic
+            // figure, it is an impossible one, and there is no honest caption
+            // for it.
+            value: report == null || report.basis == TenantProfitBasis.inconsistent
                 ? '—'
                 : currency.format(report.profit),
-            money: report != null && report.isShowable,
+            money: report != null && report.basis != TenantProfitBasis.inconsistent,
             icon: Icons.trending_up,
-            detail: metrics == null
+            status: report != null && !report.isShowable
+                ? AppStatus.attention
+                : deviceKnowsMore
+                ? AppStatus.attention
+                : null,
+            statusLabel: report != null && !report.isShowable
+                ? 'At most'
+                : deviceKnowsMore
+                ? 'Not reconciled'
+                : null,
+            detail: report == null
                 ? 'Not reconciled yet'
-                : report != null && report.isShowable
-                ? 'After cost of goods'
-                : 'Some lines carry no cost',
+                : report.basis == TenantProfitBasis.inconsistent
+                ? 'The cost of these sales does not add up'
+                : report.basis == TenantProfitBasis.incomplete
+                ? 'At most: some lines carry no cost'
+                : deviceKnowsMore
+                ? 'On this device'
+                : 'After cost of goods',
           ),
         // **A second tile rather than one relabelled figure.** A tile whose
         // meaning changes with whether a read succeeded is worse than a tile
@@ -3107,18 +3337,26 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           StatTile(
             key: const ValueKey('home-today-net-profit'),
             label: 'Net profit',
-            value: net.isShowable ? currency.format(net.netProfit) : '—',
-            money: net.isShowable,
+            value: report?.basis == TenantProfitBasis.inconsistent
+                ? '—'
+                : currency.format(net.netProfit),
+            money: report?.basis != TenantProfitBasis.inconsistent,
             icon: Icons.account_balance_wallet_outlined,
             // A loss is the one reading this whole feature exists to make
             // possible, so it is marked rather than left to the minus sign.
             status: net.isLoss ? AppStatus.problem : null,
             statusLabel: net.isLoss ? 'Loss' : null,
-            detail: metrics == null
-                ? 'Not reconciled yet'
-                : net.isShowable
-                ? 'After cost of goods and expenses'
-                : 'Some spending is not counted',
+            // Each cause named, because they are different missing things and
+            // the shopkeeper can act on one of them.
+            detail: report?.basis == TenantProfitBasis.inconsistent
+                ? 'The cost of these sales does not add up'
+                : net.basis == TenantNetProfitBasis.expensesUnread
+                ? 'At most: some spending is not counted'
+                : net.basis == TenantNetProfitBasis.grossWithheld
+                ? 'At most: some lines carry no cost'
+                : deviceKnowsMore
+                ? 'On this device'
+                : 'After cost of goods and expenses',
           ),
       ],
       // **Receipts waiting is not a figure tile either.** The count is on the

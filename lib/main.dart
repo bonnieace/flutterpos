@@ -824,6 +824,11 @@ class SpiritPOSApp extends StatelessWidget {
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: spiritTheme,
+          // **What tells the home it is back on top.** Every module is pushed
+          // over the landing route, so returning from one is a pop rather than
+          // a rebuild - and without this the figures stay as they were read on
+          // the way in. See `_RereadOnReturn`.
+          navigatorObservers: <NavigatorObserver>[tenantRouteObserver],
           // `design.md` §2.4: bouncing scroll physics everywhere, on both
           // platforms, and no Material overscroll glow. It belongs on the app
           // rather than on each scrollable, because "everywhere" is not a rule
