@@ -268,7 +268,7 @@ Map<String, Object?> _sale({
     'tenantId': _tenant,
     'soldById': _uid,
     'payloadHash': 'a' * 64,
-    'payloadSchemaVersion': 1,
+    'payloadSchemaVersion': 2,
     'currency': 'KES',
     'businessDate': businessDate,
     'clientCreatedAtMs': 1785484800000,

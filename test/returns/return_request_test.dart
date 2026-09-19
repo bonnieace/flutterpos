@@ -419,7 +419,7 @@ TenantSale _sale({String tenantId = 'tenant-a'}) => TenantSale.fromDocument(
     'tenantId': tenantId,
     'soldById': 'user-a',
     'payloadHash': _payloadHash,
-    'payloadSchemaVersion': 1,
+    'payloadSchemaVersion': 2,
     'currency': 'KES',
     'businessDate': _businessDate,
     'shiftId': 'shift-a',

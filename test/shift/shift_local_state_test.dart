@@ -53,7 +53,14 @@ void main() {
 
     test('survives a restart with the same encrypted box', () async {
       await state.save(
-        _record(closeInProgress: true, countedCashMinor: 125000),
+        _record(
+          closeInProgress: true,
+          declaration: ShiftTenderDeclaration.tryParse(
+            cash: 125000,
+            mpesa: 0,
+            card: 0,
+          ),
+        ),
       );
       await state.close();
 
@@ -64,7 +71,7 @@ void main() {
       expect(restored, isNotNull);
       expect(restored!.shiftId, 'shift-a');
       expect(restored.closeInProgress, isTrue);
-      expect(restored.countedCashMinor, 125000);
+      expect(restored.declaration?.cashMinor, 125000);
       expect(restored.serverConfirmedOpen, isTrue);
       expect(restored.deviceId, _deviceA);
       expect(restored.updatedAt, DateTime.utc(2026, 7, 31, 9));
@@ -78,13 +85,61 @@ void main() {
       expect(await state.recordsForUid('user-a'), isEmpty);
     });
 
-    test('reads a record written before openedAt existed', () async {
-      // **The upgrade this file had to survive.** A version mismatch raises
+    test('a record written by an earlier build is refused', () async {
+      // #107: versions 1 and 2 stayed readable because a mismatch raises
       // `malformed_shift_state`, which the controller turns into a till that
-      // refuses to open - so rejecting the old shape would have shut every
-      // register holding an open shift at the moment it updated.
+      // refuses to open - so a bare bump would have shut every register
+      // holding an open shift at the moment it updated. SIT clears local shift
+      // state instead, so there is no such record to strand.
+      for (final legacy in <Map<String, Object?>>[
+        // Version 1: no `openedAtMs` at all.
+        <String, Object?>{
+          'schemaVersion': 1,
+          'uid': 'user-a',
+          'tenantId': 'tenant-a',
+          'shiftId': 'shift-a',
+          'businessDate': _businessDate,
+          'deviceId': _deviceA,
+          'serverConfirmedOpen': true,
+          'closeInProgress': false,
+          'updatedAtMs': 100,
+        },
+        // Version 2: one `countedCashMinor` and no declared triple.
+        <String, Object?>{
+          'schemaVersion': 2,
+          'uid': 'user-a',
+          'tenantId': 'tenant-a',
+          'shiftId': 'shift-a',
+          'businessDate': _businessDate,
+          'deviceId': _deviceA,
+          'serverConfirmedOpen': true,
+          'closeInProgress': true,
+          'countedCashMinor': 125000,
+          'updatedAtMs': 100,
+          'openedAtMs': 100,
+        },
+      ]) {
+        await box.put('user-a:tenant-a', legacy);
+
+        await expectLater(
+          state.read(uid: 'user-a', tenantId: 'tenant-a'),
+          throwsA(
+            isA<TenantShiftStateException>().having(
+              (error) => error.code,
+              'code',
+              'malformed_shift_state',
+            ),
+          ),
+          reason: 'schema v${legacy['schemaVersion']} is no longer readable',
+        );
+      }
+    });
+
+    test('a record with no openedAtMs is refused at the current version', () async {
+      // The fallback that dated an opening to its last touch is gone with the
+      // shapes that needed it, so the field is simply required.
       await box.put('user-a:tenant-a', <String, Object?>{
-        'schemaVersion': HiveTenantShiftState.legacySchemaVersion,
+        'schemaVersion': HiveTenantShiftState.schemaVersion,
         'uid': 'user-a',
         'tenantId': 'tenant-a',
         'shiftId': 'shift-a',
@@ -95,44 +150,10 @@ void main() {
         'updatedAtMs': 100,
       });
 
-      final restored = await state.read(uid: 'user-a', tenantId: 'tenant-a');
-
-      expect(restored, isNotNull);
-      // Dated to its last touch, which can only ever under-state its age.
-      expect(
-        restored!.openedAt,
-        DateTime.fromMillisecondsSinceEpoch(100, isUtc: true),
+      await expectLater(
+        state.read(uid: 'user-a', tenantId: 'tenant-a'),
+        throwsA(isA<TenantShiftStateException>()),
       );
-    });
-
-    test('a record written by the previous build still reads', () async {
-      // **The half of a schema bump that can shut a till.** A version mismatch
-      // raises `malformed_shift_state`, which the controller turns into a
-      // register that refuses to open a shift - so version 2, which carried one
-      // `countedCashMinor` and no declared triple, has to keep reading rather
-      // than merely keep existing.
-      await box.put('user-a:tenant-a', <String, Object?>{
-        'schemaVersion': 2,
-        'uid': 'user-a',
-        'tenantId': 'tenant-a',
-        'shiftId': 'shift-a',
-        'businessDate': _businessDate,
-        'deviceId': _deviceA,
-        'serverConfirmedOpen': true,
-        'closeInProgress': true,
-        'countedCashMinor': 125000,
-        'updatedAtMs': 100,
-        'openedAtMs': 100,
-      });
-
-      final restored = await state.read(uid: 'user-a', tenantId: 'tenant-a');
-
-      expect(restored, isNotNull);
-      expect(restored!.countedCashMinor, 125000);
-      // **Not turned into a declaration.** Reading it as one would invent two
-      // zeros the cashier never typed, and the replay would write them to the
-      // server as figures they declared.
-      expect(restored.declaration, isNull);
     });
 
     test('the declared triple round-trips through the box', () async {
@@ -151,7 +172,6 @@ void main() {
       final restored = await state.read(uid: 'user-a', tenantId: 'tenant-a');
 
       expect(restored!.declaration, declaration);
-      expect(restored.countedCashMinor, isNull);
     });
 
     test('the opening float round-trips through the box', () async {
@@ -185,11 +205,10 @@ void main() {
       },
     );
 
-    test('abandoning a count clears both figures together', () async {
+    test('abandoning a count clears the declaration', () async {
       final saved = await state.save(
         _record(
           closeInProgress: true,
-          countedCashMinor: 900,
           declaration: ShiftTenderDeclaration.zero,
         ),
       );
@@ -199,10 +218,9 @@ void main() {
         clearDeclaration: true,
       );
 
-      // One fact, so one clear. A record that dropped the declaration and kept
-      // the legacy figure would claim a close had been counted when none had.
+      // A record that kept a declaration through an abandoned count would
+      // claim a close had been counted when none had.
       expect(cancelled.declaration, isNull);
-      expect(cancelled.countedCashMinor, isNull);
     });
 
     test('raises on malformed durable state instead of failing open', () async {
@@ -243,7 +261,7 @@ void main() {
             (record) => record..['businessDate'] = '31 July 2026',
             (record) => record..['serverConfirmedOpen'] = 'yes',
             (record) => record..['closeInProgress'] = 1,
-            (record) => record..['countedCashMinor'] = -5,
+            (record) => record..['declaredCashMinor'] = -5,
             // A partial declared triple is refused rather than read with the
             // missing methods as zero. This record is what an unsent close is
             // replayed from, so a figure invented here reaches the server as
@@ -358,7 +376,6 @@ TenantShiftLocalRecord _record({
   String shiftId = 'shift-a',
   bool serverConfirmedOpen = true,
   bool closeInProgress = false,
-  int? countedCashMinor,
   ShiftTenderDeclaration? declaration,
   DateTime? openedAt,
   int openingFloatMinor = 0,
@@ -370,7 +387,6 @@ TenantShiftLocalRecord _record({
   deviceId: _deviceA,
   serverConfirmedOpen: serverConfirmedOpen,
   closeInProgress: closeInProgress,
-  countedCashMinor: countedCashMinor,
   declaration: declaration,
   openingFloatMinor: openingFloatMinor,
   updatedAt: DateTime.utc(2026, 7, 31, 9),

@@ -122,9 +122,9 @@ TenantShiftLocalRecord shiftRecord({
   String tenantId = 'tenant-a',
   String shiftId = 'shift-a',
   bool closeInProgress = false,
-  int? countedCashMinor,
   DateTime? openedAt,
   int openingFloatMinor = 0,
+  ShiftTenderDeclaration? declaration,
 
   /// The day this shift belongs to. Named for the midnight case, where a shift
   /// from yesterday must stop selling today.
@@ -137,7 +137,7 @@ TenantShiftLocalRecord shiftRecord({
   deviceId: shiftDeviceId,
   serverConfirmedOpen: true,
   closeInProgress: closeInProgress,
-  countedCashMinor: countedCashMinor,
+  declaration: declaration,
   openingFloatMinor: openingFloatMinor,
   updatedAt: DateTime.utc(2026, 7, 31, 9),
   openedAt: openedAt ?? DateTime.utc(2026, 7, 31, 9),

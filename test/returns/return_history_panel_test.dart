@@ -1122,7 +1122,7 @@ TenantSale _sale() => TenantSale.fromDocument(
     'tenantId': 'tenant-a',
     'soldById': 'user-a',
     'payloadHash': _payloadHash,
-    'payloadSchemaVersion': 1,
+    'payloadSchemaVersion': 2,
     'currency': 'KES',
     'businessDate': _businessDate,
     'shiftId': 'shift-a',

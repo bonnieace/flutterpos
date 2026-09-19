@@ -207,7 +207,15 @@ void main() {
   });
 
   testWidgets('a cash count does not survive a restart', (tester) async {
-    await state.save(shiftRecord(countedCashMinor: 900));
+    await state.save(
+      shiftRecord(
+        declaration: ShiftTenderDeclaration.tryParse(
+          cash: 900,
+          mpesa: 0,
+          card: 0,
+        ),
+      ),
+    );
     server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(tester, state, server);

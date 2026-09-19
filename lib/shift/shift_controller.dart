@@ -859,13 +859,8 @@ final class TenantShiftController extends ChangeNotifier {
     TenantShift shift, {
     String? errorCode,
   }) async {
-    // **A record left by the previous build replays in its own shape.** It
-    // carries one cash figure and no declaration, and reading that as
-    // `{cash: n, mpesa: 0, card: 0}` would send two figures the cashier never
-    // declared to the surface a difference is settled from. So the cash goes
-    // and the declared keys are omitted, exactly as that build wrote them.
     final declaration = record.declaration;
-    final countedCashMinor = declaration?.cashMinor ?? record.countedCashMinor;
+    final countedCashMinor = declaration?.cashMinor;
     if (countedCashMinor == null) {
       // A closed record with no figures at all cannot be turned into a close.
       // It should not exist - `closeShift` writes them with the close - so this

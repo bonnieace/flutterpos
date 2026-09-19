@@ -1296,7 +1296,9 @@ TenantQueryDocumentSnapshot _sale(
     'tenantId': tenantId,
     'soldById': soldById,
     'payloadHash': _hash,
-    'payloadSchemaVersion': tender == null ? 1 : 2,
+    // #105: an absent tender no longer implies v1. A v2 sale may carry none -
+    // that is the question going unanswered.
+    'payloadSchemaVersion': 2,
     if (tender != null) 'tender': tender,
     'currency': 'KES',
     'businessDate': businessDate,

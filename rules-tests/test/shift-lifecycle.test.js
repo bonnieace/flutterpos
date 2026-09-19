@@ -150,18 +150,17 @@ test("a cashier opens and closes exactly one server-timed shift", async () => {
   }
 });
 
-test("a close made by a build that cannot declare is still accepted", async () => {
-  // **The back-compat guarantee, for one release.** Making the declaration
-  // mandatory now would deny the close to every un-updated device in the field
-  // - including the replay of a close one of them recorded offline, which the
-  // controller would then retry forever with no way out. The server treats a
-  // close made after the rollout with no declaration as a difference of its own,
-  // so omission is caught without shutting a till.
+test("an ordinary close must declare its tender", async () => {
+  // #107: the declaration was optional for one release so that a device still
+  // running the previous build could close - including the replay of a close it
+  // recorded offline, which the controller would otherwise retry forever with
+  // no way out. SIT clears local shift state instead, so the close that cannot
+  // say how the drawer was made up is now refused at the rule.
   await seedShiftTenant();
   const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
   await assertSucceeds(openShift(firestore));
 
-  await assertSucceeds(
+  await assertFails(
     closeShift(firestore, {
       overrides: {
         declaredCashMinor: deleteField(),
@@ -172,8 +171,38 @@ test("a close made by a build that cannot declare is still accepted", async () =
   );
 
   const closed = await storedShift("shift-a");
-  if (closed.status !== "closed" || closed.closingCashMinor !== 125000) {
-    throw new Error("A close with no declaration was refused.");
+  if (closed.status === "closed") {
+    throw new Error("A close with no declaration was accepted.");
+  }
+});
+
+test("a recovery close may omit the declaration when another drawer holds it", async () => {
+  // #107: the one close that still carries no declaration. Two open shifts for
+  // one cashier mean one till and one count, so the drawer is declared onto the
+  // shift that was counted and this one records none - asking twice would put
+  // the same money against both. Reconciliation reads it as unverifiable rather
+  // than as a missing declaration.
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+  await assertSucceeds(openShift(firestore));
+
+  await assertSucceeds(
+    closeShift(firestore, {
+      overrides: {
+        closedWithoutEvidence: true,
+        totalSalesMinor: 0,
+        totalSales: 0,
+        transactionCount: 0,
+        declaredCashMinor: deleteField(),
+        declaredMpesaMinor: deleteField(),
+        declaredCardMinor: deleteField(),
+      },
+    }),
+  );
+
+  const closed = await storedShift("shift-a");
+  if (closed.status !== "closed" || closed.declaredCashMinor !== undefined) {
+    throw new Error("A recovery close with no declaration was refused.");
   }
 });
 

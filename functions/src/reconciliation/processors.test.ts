@@ -10,7 +10,6 @@ import {
   shiftExpectationId,
   shiftTenderAnomalyId,
   trailingIsoDates,
-  TENDER_DECLARATION_REQUIRED_FROM,
 } from "./model";
 import {
   initializeFullReconciliationWindow,
@@ -1187,13 +1186,13 @@ function tenderExpectation(
   };
 }
 
-/** A close made after the rollout, so an absent declaration is itself a fault. */
+/** When a shift was closed. An absent declaration is a fault whenever it was. */
 function declaredAt(millis: number): DocumentData {
   return {endTime: Timestamp.fromMillis(millis)};
 }
 
-const AFTER_CUTOFF = TENDER_DECLARATION_REQUIRED_FROM + 86_400_000;
-const BEFORE_CUTOFF = TENDER_DECLARATION_REQUIRED_FROM - 86_400_000;
+/** Any closing instant; #107 removed the dated cutoff that used to matter. */
+const CLOSED_AT = Date.UTC(2026, 8, 20);
 
 function tenderAnomalyPath(shiftId: string): string {
   return `tenants/${TENANT}/reconciliation_anomalies/${shiftTenderAnomalyId(shiftId)}`;
@@ -1322,7 +1321,7 @@ test("a declaration that disagrees with the sales is recorded once, with both si
   // The drawer is 50.00 short on cash and 9.00 over on card. Sales and count
   // agree, so this is a difference the sales check could never have found.
   seedClosedShift(db, "shift-01", 300, 3, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     declaredCashMinor: 20000,
     declaredMpesaMinor: 5000,
     declaredCardMinor: 900,
@@ -1363,7 +1362,7 @@ test("a miscategorised tender balances out rather than raising a difference", as
   // never edited afterwards; the cashier counting the drawer is the better
   // witness to the split, so their answer is taken rather than marked.
   seedClosedShift(db, "shift-01", 500, 4, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     declaredCashMinor: 50000,
     declaredMpesaMinor: 0,
     declaredCardMinor: 0,
@@ -1398,7 +1397,7 @@ test("a floated drawer counts its change back rather than declaring a surplus", 
   // Without the float term this shift reported a 2,000.00 surplus every day it
   // traded, against a drawer that balanced to the shilling.
   seedClosedShift(db, "shift-01", 500, 4, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     openingFloatMinor: 200000,
     declaredCashMinor: 250000,
     declaredMpesaMinor: 0,
@@ -1434,7 +1433,7 @@ test("a float does not hide money missing from the drawer it floated", async () 
   });
   // The same float, and 100.00 of the drawer genuinely absent.
   seedClosedShift(db, "shift-01", 500, 4, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     openingFloatMinor: 200000,
     declaredCashMinor: 240000,
     declaredMpesaMinor: 0,
@@ -1465,7 +1464,7 @@ test("a negative float is not believed, because it would lower the count", async
   // a dishonest figure is worth writing in - so it reads as no float, and the
   // 100.00 short stays short.
   seedClosedShift(db, "shift-01", 500, 4, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     openingFloatMinor: -10000,
     declaredCashMinor: 40000,
     declaredMpesaMinor: 0,
@@ -1496,7 +1495,7 @@ test("a total that disagrees still raises, whatever the split does", async () =>
   });
   // The same miscategorisation, and 100.00 of the drawer genuinely absent.
   seedClosedShift(db, "shift-01", 500, 4, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     declaredCashMinor: 40000,
     declaredMpesaMinor: 0,
     declaredCardMinor: 0,
@@ -1528,7 +1527,7 @@ test("a declaration that agrees deletes a difference that no longer holds", asyn
     ...tenderExpectation(20000),
   });
   seedClosedShift(db, "shift-01", 200, 2, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     declaredCashMinor: 20000,
     declaredMpesaMinor: 0,
     declaredCardMinor: 0,
@@ -1572,7 +1571,7 @@ test("an acknowledged difference survives a re-verify that changes nothing", asy
     ...tenderExpectation(25000),
   });
   seedClosedShift(db, "shift-01", 250, 2, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     declaredCashMinor: 20000,
     declaredMpesaMinor: 0,
     declaredCardMinor: 0,
@@ -1622,7 +1621,7 @@ test("adding the opening float does not reopen differences already accepted", as
   // No `openingFloatMinor` anywhere on the shift, which is every shift closed
   // before this release and every shift of every shop that keeps no change.
   seedClosedShift(db, "shift-01", 250, 2, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     declaredCashMinor: 20000,
     declaredMpesaMinor: 0,
     declaredCardMinor: 0,
@@ -1652,7 +1651,7 @@ test("a difference whose figures move is reopened", async () => {
     ...tenderExpectation(40000),
   });
   seedClosedShift(db, "shift-01", 400, 3, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     declaredCashMinor: 20000,
     declaredMpesaMinor: 0,
     declaredCardMinor: 0,
@@ -1665,7 +1664,7 @@ test("a difference whose figures move is reopened", async () => {
   assert.equal(stored(db, tenderAnomalyPath("shift-01")).cashVarianceMinor, -20000);
 });
 
-test("a shift closed before the rollout is never asked for a declaration", async () => {
+test("a close that declares nothing raises the difference, whenever it was", async () => {
   const db = firestoreWithClaimedJob();
   seedExpectation(db, "exp_legacy", {
     shiftId: "shift-01",
@@ -1673,21 +1672,21 @@ test("a shift closed before the rollout is never asked for a declaration", async
     transactions: 1,
     ...tenderExpectation(10000),
   });
-  seedClosedShift(db, "shift-01", 100, 1, declaredAt(BEFORE_CUTOFF));
+  // #107: this used to be the migration guarantee - a build that closed a shift
+  // with nowhere to type a declaration said nothing about the shop, so its
+  // absence raised nothing below a dated cutoff. SIT holds no such shift, and
+  // the cutoff was still shielding closes being taken today.
+  seedClosedShift(db, "shift-01", 100, 1, declaredAt(Date.UTC(2026, 8, 1)));
   db.clearWrites();
 
-  // **The migration guarantee, proved rather than argued.** The build that
-  // closed this shift had nowhere to type a declaration, so its absence says
-  // nothing about the shop and must raise nothing.
   assert.deepEqual(
     await processShiftPage(db.asFirestore(), claimedJob({phase: "shifts"})),
-    {processed: 1, varianceCount: 0, tenderVarianceCount: 0, hasMore: false}
+    {processed: 1, varianceCount: 0, tenderVarianceCount: 1, hasMore: false}
   );
   assert.equal(
     stored(db, verificationPath("exp_legacy")).tenderStatus,
-    "not_declared_legacy"
+    "missing"
   );
-  assert.deepEqual(db.ids(`tenants/${TENANT}/reconciliation_anomalies`), []);
 });
 
 test("a shift closed after the rollout with no declaration is itself a difference", async () => {
@@ -1698,7 +1697,7 @@ test("a shift closed after the rollout with no declaration is itself a differenc
     transactions: 1,
     ...tenderExpectation(10000),
   });
-  seedClosedShift(db, "shift-01", 100, 1, declaredAt(AFTER_CUTOFF));
+  seedClosedShift(db, "shift-01", 100, 1, declaredAt(CLOSED_AT));
   db.clearWrites();
 
   assert.deepEqual(
@@ -1719,7 +1718,7 @@ test("an expectation written before the split compares nothing", async () => {
   const db = firestoreWithClaimedJob();
   seedExpectation(db, "exp_pre_deploy", {shiftId: "shift-01", sales: 100, transactions: 1});
   seedClosedShift(db, "shift-01", 100, 1, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     declaredCashMinor: 1,
     declaredMpesaMinor: 0,
     declaredCardMinor: 0,
@@ -1760,7 +1759,7 @@ test("one drawer count answers for every shift it settled", async () => {
   });
   // The drawer was counted onto shift-01: 300.00, which is both shifts' cash.
   seedClosedShift(db, "shift-01", 100, 1, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     settlementId: SETTLEMENT,
     declaredCashMinor: 30000,
     declaredMpesaMinor: 0,
@@ -1813,7 +1812,7 @@ test("a settlement still reports a drawer that is genuinely short", async () => 
     ...tenderExpectation(20000),
   });
   seedClosedShift(db, "shift-01", 100, 1, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     settlementId: SETTLEMENT,
     declaredCashMinor: 25000,
     declaredMpesaMinor: 0,
@@ -1847,7 +1846,7 @@ test("a settlement nobody can add up is verified shift by shift", async () => {
     ...tenderExpectation(10000),
   });
   seedClosedShift(db, "shift-01", 100, 1, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     settlementId: SETTLEMENT,
     declaredCashMinor: 10000,
     declaredMpesaMinor: 0,
@@ -1881,7 +1880,7 @@ test("a recovery close still has its drawer marked", async () => {
   // Closed by a device holding none of the shift's sales: the zero summary
   // describes what that device could prove, not what the shift took.
   seedClosedShift(db, "shift-01", 0, 0, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     closedWithoutEvidence: true,
     declaredCashMinor: 9900,
     declaredMpesaMinor: 0,
@@ -1936,7 +1935,7 @@ test("a recovery close whose drawer balances raises no difference for it", async
   // it is right. The sales figure remains uncheckable, which is honest, but
   // nobody is asked to look into money that is all there.
   seedClosedShift(db, "shift-01", 0, 0, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     closedWithoutEvidence: true,
     declaredCashMinor: 10000,
     declaredMpesaMinor: 0,
@@ -1971,7 +1970,7 @@ test("a recovery close with nothing declared is still only unverifiable", async 
   // declares nothing rather than repeating a figure. The absence must not read
   // as a missing declaration a current build should have recorded.
   seedClosedShift(db, "shift-01", 0, 0, {
-    ...declaredAt(AFTER_CUTOFF),
+    ...declaredAt(CLOSED_AT),
     closedWithoutEvidence: true,
   });
   db.clearWrites();

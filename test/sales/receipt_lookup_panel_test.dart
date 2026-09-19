@@ -90,7 +90,9 @@ void main() {
     expect(label, contains(checkoutTenderDisclaimer));
   });
 
-  testWidgets('a sale recorded before tenders says so plainly', (tester) async {
+  testWidgets('a sale whose tender went unanswered says so plainly', (
+    tester,
+  ) async {
     final reader = _Reader()
       ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
         _snapshot('co-1', sequence: 42),
@@ -280,7 +282,10 @@ TenantQueryDocumentSnapshot _snapshot(
     'tenantId': tenantId,
     'soldById': 'user-a',
     'payloadHash': _payloadHash,
-    'payloadSchemaVersion': tender == null ? 1 : 2,
+    // #105: v1 is gone, and an absent tender no longer implies it. A v2 sale
+    // may carry no tender - that is the question going unanswered, which
+    // `setSaleTender` fills in later.
+    'payloadSchemaVersion': 2,
     if (tender != null) 'tender': tender.wireValue,
     'currency': 'KES',
     'businessDate': _businessDate,

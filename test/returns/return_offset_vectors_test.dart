@@ -90,7 +90,7 @@ TenantSale _saleOf(Map<String, Object?> spec) {
       'tenantId': _tenant,
       'soldById': _uid,
       'payloadHash': 'a' * 64,
-      'payloadSchemaVersion': 1,
+      'payloadSchemaVersion': 2,
       'currency': 'KES',
       'businessDate': _businessDate,
       'clientCreatedAtMs': 1785484800000,

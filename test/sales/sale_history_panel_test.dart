@@ -674,7 +674,7 @@ TenantQueryDocumentSnapshot _snapshot(
     'tenantId': tenantId,
     'soldById': 'user-a',
     'payloadHash': _payloadHash,
-    'payloadSchemaVersion': 1,
+    'payloadSchemaVersion': 2,
     'currency': 'KES',
     'businessDate': _businessDate,
     'clientCreatedAtMs': 1785484800000,

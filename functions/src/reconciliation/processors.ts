@@ -19,7 +19,6 @@ import {
   stockCheckpointHash,
   stockComparisonOutcome,
   trailingIsoDates,
-  TENDER_DECLARATION_REQUIRED_FROM,
 } from "./model";
 import {ClaimedReconciliationJob} from "./jobs";
 import {SaleLike, moneyToMinorUnits, minorUnitsToMoney} from "../operations/domain";
@@ -1191,11 +1190,11 @@ function compareShiftTenders(
     if (evidenceFree) {
       return {status: "unverifiable", figures: {}};
     }
-    const endTime = shift.get("endTime");
-    const closedAt = endTime instanceof Timestamp ? endTime.toMillis() : undefined;
-    if (closedAt === undefined || closedAt < TENDER_DECLARATION_REQUIRED_FROM) {
-      return {status: "not_declared_legacy", figures: {}};
-    }
+    // #107: a close that declares nothing raises the difference. There used to
+    // be a `not_declared_legacy` answer below a dated cutoff, so that shifts
+    // closed before the declaration existed did not each raise one; SIT holds
+    // no such shift, and a cutoff a week out was still shielding closes being
+    // taken today.
     return {
       status: "missing",
       anomalyType: "missing_tender_declaration",

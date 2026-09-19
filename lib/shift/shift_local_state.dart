@@ -37,7 +37,6 @@ final class TenantShiftLocalRecord {
     required this.updatedAt,
     required this.openedAt,
     this.openingFloatMinor = 0,
-    this.countedCashMinor,
     this.declaration,
     this.closedAt,
   });
@@ -87,7 +86,6 @@ final class TenantShiftLocalRecord {
   /// `{cash: n, mpesa: 0, card: 0}` would invent two zeros the cashier never
   /// typed and `TenantShiftController._replayUnsentClose` would then write them
   /// to the server as a declaration. The replay sends the legacy shape instead.
-  final int? countedCashMinor;
 
   /// What the cashier declared the till held, by payment method.
   ///
@@ -127,10 +125,6 @@ final class TenantShiftLocalRecord {
     // Fixed at open, like the shift document's own copy: no later edit to this
     // record may change what the drawer is said to have started with.
     openingFloatMinor: openingFloatMinor,
-    // **Both figures clear together, because they are one fact.** An abandoned
-    // count that dropped the declaration but kept the legacy cash number would
-    // leave the record claiming a close was counted when nothing was.
-    countedCashMinor: clearDeclaration ? null : countedCashMinor,
     declaration: clearDeclaration ? null : declaration ?? this.declaration,
     // Never cleared through `copyWith`: a close this device has recorded is
     // undone only by the record itself going, which is what a confirmed close
@@ -149,10 +143,6 @@ final class TenantShiftLocalRecord {
     'serverConfirmedOpen': serverConfirmedOpen,
     'closeInProgress': closeInProgress,
     if (openingFloatMinor > 0) 'openingFloatMinor': openingFloatMinor,
-    // The legacy figure is preserved on a record that still carries one, so a
-    // close counted by the previous build survives this one's first save and
-    // can still be replayed. Nothing writes it fresh.
-    if (countedCashMinor != null) 'countedCashMinor': countedCashMinor,
     if (declaration case final declared?) ...<String, Object?>{
       'declaredCashMinor': declared.cashMinor,
       'declaredMpesaMinor': declared.mpesaMinor,
@@ -193,22 +183,16 @@ final class HiveTenantShiftState {
 
   /// The shape this writes.
   ///
-  /// **Reading still accepts every earlier shape, and must.** A version
-  /// mismatch raises `malformed_shift_state`, which `TenantShiftController`
-  /// turns into a till that refuses to open - so a bare bump would have shut
-  /// every register that happened to hold an open shift at the moment it
-  /// updated. See [readableSchemaVersions] and [_parse].
+  /// **One shape, read and written (#107).** Versions 1 and 2 were accepted so
+  /// that a bump could not shut a register holding an open shift at the moment
+  /// it updated - a mismatch raises `malformed_shift_state`, which
+  /// `TenantShiftController` turns into a till that refuses to open. SIT clears
+  /// local shift state instead of carrying it forward, so there is no earlier
+  /// record to strand.
   static const schemaVersion = 3;
 
-  /// The shape before `openedAtMs` existed.
-  static const legacySchemaVersion = 1;
-
   /// Every shape [_parse] accepts.
-  ///
-  /// 1 predates `openedAtMs`; 2 carried a single `countedCashMinor`; 3 carries
-  /// the declared tender triple. A record is migrated on its next save, so the
-  /// set only ever has to cover shapes still sitting on a device.
-  static const readableSchemaVersions = <int>{legacySchemaVersion, 2, 3};
+  static const readableSchemaVersions = <int>{schemaVersion};
   static const encryptionKeyBytes = HiveCheckoutOutbox.encryptionKeyBytes;
 
   static final Map<String, Future<void>> _operationTails =
@@ -309,22 +293,13 @@ final class HiveTenantShiftState {
     final deviceId = map['deviceId'];
     final serverConfirmedOpen = map['serverConfirmedOpen'];
     final closeInProgress = map['closeInProgress'];
-    final countedCashMinor = map['countedCashMinor'];
     final openingFloatMinor = map['openingFloatMinor'];
     final updatedAtMs = map['updatedAtMs'];
     final openedAtMs = map['openedAtMs'];
     final closedAtMs = map['closedAtMs'];
     final version = map['schemaVersion'];
-    // **Every shape is read; only the current one is written.** A record saved
-    // before `openedAtMs` existed is still a real open shift, and refusing it
-    // would close a till in the middle of a trading day purely because the app
-    // updated. Such a record is migrated on its next save.
-    //
-    // `openedAtMs` is required from version 2 on rather than at the current
-    // version alone: written the narrower way, each bump would silently stop
-    // requiring it of the shape that introduced it.
     if (!readableSchemaVersions.contains(version) ||
-        ((version is int && version >= 2) && openedAtMs is! int) ||
+        openedAtMs is! int ||
         uid is! String ||
         tenantId is! String ||
         shiftId is! String ||
@@ -333,8 +308,6 @@ final class HiveTenantShiftState {
         serverConfirmedOpen is! bool ||
         closeInProgress is! bool ||
         updatedAtMs is! int ||
-        (countedCashMinor != null &&
-            (countedCashMinor is! int || countedCashMinor < 0)) ||
         (openingFloatMinor != null &&
             (openingFloatMinor is! int ||
                 openingFloatMinor < 0 ||
@@ -361,9 +334,8 @@ final class HiveTenantShiftState {
       deviceId: deviceId,
       serverConfirmedOpen: serverConfirmedOpen,
       closeInProgress: closeInProgress,
-      countedCashMinor: countedCashMinor as int?,
-      // Absent reads as no float, which is what every shift opened before the
-      // field existed meant.
+      // Absent reads as no float, which is what `toStorage` writes for a
+      // drawer opened with nothing in it.
       openingFloatMinor: (openingFloatMinor as int?) ?? 0,
       // Absent on every record written before an offline close was possible,
       // which reads correctly as "this shift was not closed here".
@@ -371,14 +343,7 @@ final class HiveTenantShiftState {
           ? DateTime.fromMillisecondsSinceEpoch(closedAtMs, isUtc: true)
           : null,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedAtMs, isUtc: true),
-      // **A legacy record dates its opening to its last touch.** That is the
-      // conservative reading: `updatedAt` is never earlier than the true
-      // opening, so the age this yields is never an over-estimate and the
-      // 24-hour rule can only ever be lenient towards a shift already running.
-      openedAt: DateTime.fromMillisecondsSinceEpoch(
-        openedAtMs is int ? openedAtMs : updatedAtMs,
-        isUtc: true,
-      ),
+      openedAt: DateTime.fromMillisecondsSinceEpoch(openedAtMs, isUtc: true),
     );
   }
 

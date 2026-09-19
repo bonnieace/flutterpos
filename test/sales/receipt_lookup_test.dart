@@ -364,7 +364,7 @@ Map<String, Object?> _sale({
   'tenantId': 'tenant-a',
   'soldById': soldById,
   'payloadHash': _payloadHash,
-  'payloadSchemaVersion': 1,
+  'payloadSchemaVersion': 2,
   'currency': 'KES',
   'businessDate': _businessDate,
   'shiftId': 'shift-a',

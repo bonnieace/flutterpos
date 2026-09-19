@@ -53,7 +53,8 @@ void main() {
         ),
         _code('invalid_sale_path'),
       );
-      for (final version in <Object?>[3, 0, '2', 2.0]) {
+      // #105: v1 is no longer a contract this client reads.
+      for (final version in <Object?>[1, 3, 0, '2', 2.0]) {
         expect(
           () => TenantSale.fromDocument(
             path: 'tenants/tenant-a/sales/co-1',
@@ -77,16 +78,7 @@ void main() {
       );
     });
 
-    test('reads the tender exactly as its own schema version allows', () {
-      final v1 = TenantSale.fromDocument(
-        path: 'tenants/tenant-a/sales/co-1',
-        data: _sale(),
-      );
-      expect(v1.schemaVersion, 1);
-      // A sale recorded before the decision names no payment method. That is a
-      // statement about the record, never about whether the customer paid.
-      expect(v1.tender, isNull);
-
+    test('reads every tender the current schema names', () {
       for (final tender in CheckoutTender.values) {
         final sale = TenantSale.fromDocument(
           path: 'tenants/tenant-a/sales/co-1',
@@ -116,10 +108,8 @@ void main() {
       expect(sale.tender, isNull);
     });
 
-    test('refuses a tender its schema version cannot carry', () {
+    test('refuses a tender it cannot name', () {
       final refused = <String, Map<String, Object?>>{
-        // A v1 sale that grew a tender did not come from this client.
-        'v1-with-tender': <String, Object?>{'tender': 'cash'},
         'v2-empty': <String, Object?>{'payloadSchemaVersion': 2, 'tender': ''},
         'v2-capitalised': <String, Object?>{
           'payloadSchemaVersion': 2,
@@ -425,7 +415,7 @@ Map<String, Object?> _sale({
     'tenantId': 'tenant-a',
     'soldById': 'user-a',
     'payloadHash': _payloadHash,
-    'payloadSchemaVersion': 1,
+    'payloadSchemaVersion': 2,
     'currency': 'KES',
     'businessDate': businessDate,
     'clientCreatedAtMs': 1785484800000,

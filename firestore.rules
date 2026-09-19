@@ -489,18 +489,22 @@ service cloud.firestore {
           //
           // **`declaredCashMinor` restates `closingCashMinor` rather than
           // replacing it**, so no reader can be shown two cash figures for one
-          // drawer that disagree, and every surface built on the older name
-          // keeps working.
+          // drawer that disagree.
           //
-          // Optional for this release, and deliberately: making it mandatory
-          // now would deny the close to every device still running the previous
-          // build, including the replay of a close one of them recorded offline
-          // - which would retry forever with no way out. The server treats a
-          // close made after the rollout with no declaration as a difference of
-          // its own, so omission is caught without breaking anyone.
+          // **Required of an ordinary close (#107).** It was optional so that a
+          // device still running the previous build could close - including the
+          // replay of a close it recorded offline, which would otherwise retry
+          // forever with no way out. SIT clears local shift state instead.
+          //
+          // **Absent only under `closedWithoutEvidence`**, which is the shape a
+          // second shift is closed in once one drawer has been counted onto
+          // another - see `closeShiftWithoutEvidence`. Asking twice would record
+          // the same money against both shifts, so reconciliation reads that
+          // one as unverifiable rather than as a missing declaration.
           && (
             (
-              !('declaredCashMinor' in request.resource.data)
+              request.resource.data.closedWithoutEvidence == true
+              && !('declaredCashMinor' in request.resource.data)
               && !('declaredMpesaMinor' in request.resource.data)
               && !('declaredCardMinor' in request.resource.data)
             ) || (

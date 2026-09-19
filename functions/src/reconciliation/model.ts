@@ -192,8 +192,6 @@ export function shiftTenderAnomalyId(shiftId: string): string {
  * against the close rather than the business date, because a shift opened
  * offline last week is declared by whoever closes it today.
  */
-export const TENDER_DECLARATION_REQUIRED_FROM = Date.UTC(2026, 8, 26);
-
 export function reconciliationTaskId(payload: ReconciliationTaskPayload): string {
   return `rt_${digest([
     payload.tenantId,
