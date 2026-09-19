@@ -117,7 +117,13 @@ final class FirebaseTenantProductImageStore implements TenantProductImageStore {
     } on FirebaseException catch (error) {
       if (error.code != 'object-not-found') rethrow;
     } on ArgumentError {
-      // A legacy external HTTPS image is not owned by this store.
+      // **Not legacy tolerance - the contract.** `refFromURL` throws for any
+      // URL that is not a Storage reference, and an external HTTPS image is
+      // current product behaviour: `normalizeProductImage` on the server and
+      // `_optionalHttpsUrl` on the client both accept one, so a product may
+      // legitimately carry an image this store does not own. Removing a
+      // product must not fail because its picture lives somewhere else, and
+      // this method only ever promised to remove what is owned.
     }
   }
 

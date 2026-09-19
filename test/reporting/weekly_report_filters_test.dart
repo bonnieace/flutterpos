@@ -228,6 +228,12 @@ final class _Callable implements SalesTotalsCallable {
         'transactions': 1,
         'incompleteCostLineCount': 0,
       },
+      'net': <String, Object?>{
+        'sales': 10.0,
+        'profit': 4.0,
+        'transactions': 1,
+        'incompleteCostLineCount': 0,
+      },
     };
   }
 }

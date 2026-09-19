@@ -190,6 +190,14 @@ Map<String, Object?> _response({
     'transactions': transactions,
     'incompleteCostLineCount': incompleteCostLineCount,
   },
+  // The canonical answer always carries `net`; no returns in the
+  // period means it is the gross figures again.
+  'net': <String, Object?>{
+    'sales': sales,
+    'profit': profit,
+    'transactions': transactions,
+    'incompleteCostLineCount': incompleteCostLineCount,
+  },
   'scannedTransactions': transactions,
 };
 

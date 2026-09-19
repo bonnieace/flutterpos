@@ -441,21 +441,32 @@ final class TenantSalesNetTotals {
     ),
   );
 
-  /// Reads the `net` block of one callable answer, or null where it is absent.
+  /// Reads the `net` block of one callable answer.
   ///
-  /// **Absent is not a failure; present and wrong is.** The same posture
-  /// `TenantSalesTenderBreakdown.tryDecode` takes, and for the same reason: an
-  /// older server simply does not send this, while a server sending figures
-  /// that contradict the gross ones beside them is describing some other
-  /// period and must not be shown.
-  static TenantSalesNetTotals? tryDecode(
+  /// **Required, because the current server always sends it.**
+  /// `SalesComparison.net` is not optional in `reports.ts` and every answer
+  /// carries it, so an answer without one is not an older deployment being
+  /// tolerated - it is a malformed answer, and reading it as *no returns* would
+  /// quietly overstate the period by every return in it. This is #103: the
+  /// fallback existed to let a new app talk to an old deployment, which SIT
+  /// does not need because it is redeployed whole.
+  ///
+  /// A `net` that contradicts the gross figures beside it is still a failure,
+  /// for the reason it always was: it describes some other period.
+  ///
+  /// This is the callable path only. `TenantSalesTotals.net` stays nullable
+  /// because the device path genuinely has no netting to report when the cache
+  /// could not be read for returns.
+  static TenantSalesNetTotals decode(
     Object? value,
     Object? byTender,
     Object? returnsScanned, {
     required double grossSales,
     required int grossTransactions,
   }) {
-    if (value == null) return null;
+    if (value == null) {
+      throw const FormatException('getSalesComparison sent no net block.');
+    }
     if (value is! Map) {
       throw const FormatException('getSalesComparison sent a malformed net block.');
     }
@@ -547,7 +558,7 @@ final class TenantSalesTotals {
         transactions: transactions,
       ),
       basis: TenantSalesTotalsBasis.server,
-      net: TenantSalesNetTotals.tryDecode(
+      net: TenantSalesNetTotals.decode(
         data['net'],
         data['netByTender'],
         data['returnsScanned'],

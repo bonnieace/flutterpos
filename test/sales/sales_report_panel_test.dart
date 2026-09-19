@@ -282,7 +282,7 @@ void main() {
         reader,
         width: 411,
         role: TenantRole.manager,
-        totalsCallable: _TotalsCallable(),
+        totalsCallable: const _TotalsCallable(),
       );
 
       final receipt = tester.getRect(
@@ -568,7 +568,14 @@ void main() {
         reader,
         width: 1024,
         role: TenantRole.manager,
-        totalsCallable: _TotalsCallable(),
+        totalsCallable: const _TotalsCallable(
+          netSales: 91,
+          netProfit: 26,
+          netTransactions: 3,
+          netCashSales: 41,
+          netCashTransactions: 0,
+          returnsScanned: 1,
+        ),
       );
 
       // The sale that came back is gone; the one that did not is not.
@@ -600,7 +607,12 @@ void main() {
         reader,
         width: 1024,
         role: TenantRole.manager,
-        totalsCallable: _TotalsCallable(),
+        totalsCallable: const _TotalsCallable(
+          netSales: 95.50,
+          netProfit: 28,
+          netCashSales: 45.50,
+          returnsScanned: 1,
+        ),
       );
 
       expect(find.byKey(const ValueKey('sales-record-co-1')), findsOneWidget);
@@ -916,7 +928,7 @@ void main() {
       await _pumpUnsettled(
         tester,
         role: TenantRole.owner,
-        totalsCallable: _TotalsCallable(),
+        totalsCallable: const _TotalsCallable(),
       );
 
       expect(find.byKey(const ValueKey('sales-report-skeleton')), findsOne);
@@ -1178,7 +1190,33 @@ final class _NettingTotalsCallable implements SalesTotalsCallable {
   };
 }
 
+/// The day's takings as the current server states them.
+///
+/// **`net` is not optional** - `SalesComparison.net` is required in
+/// `reports.ts`, so a fixture without one is not an older deployment to
+/// tolerate but an answer this app refuses (#103). The defaults net to the
+/// gross figures, which is what a day nothing came back from looks like; a
+/// test with a return states the netted figures the server would have sent.
 final class _TotalsCallable implements SalesTotalsCallable {
+  const _TotalsCallable({
+    this.netSales = 100,
+    this.netProfit = 30,
+    this.netTransactions = 4,
+    this.netCashSales = 50,
+    this.netCashTransactions = 1,
+    this.returnsScanned = 0,
+  });
+
+  final double netSales;
+  final double netProfit;
+  final int netTransactions;
+
+  /// The returned sales in these fixtures are all cash, so the cash bucket is
+  /// the only one that moves and the five still sum to [netSales].
+  final double netCashSales;
+  final int netCashTransactions;
+  final int returnsScanned;
+
   @override
   Future<Object?> call(Map<String, Object?> payload) async => <String, Object?>{
     'previous': <String, Object?>{
@@ -1195,6 +1233,23 @@ final class _TotalsCallable implements SalesTotalsCallable {
       'unrecorded': <String, Object?>{'sales': 5, 'transactions': 1},
       'other': <String, Object?>{'sales': 0, 'transactions': 0},
     },
+    'net': <String, Object?>{
+      'sales': netSales,
+      'profit': netProfit,
+      'transactions': netTransactions,
+      'incompleteCostLineCount': 0,
+    },
+    'netByTender': <String, Object?>{
+      'cash': <String, Object?>{
+        'sales': netCashSales,
+        'transactions': netCashTransactions,
+      },
+      'mpesa': <String, Object?>{'sales': 30, 'transactions': 1},
+      'card': <String, Object?>{'sales': 15, 'transactions': 1},
+      'unrecorded': <String, Object?>{'sales': 5, 'transactions': 1},
+      'other': <String, Object?>{'sales': 0, 'transactions': 0},
+    },
+    'returnsScanned': returnsScanned,
   };
 }
 

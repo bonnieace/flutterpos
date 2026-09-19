@@ -209,10 +209,17 @@ final class _Callable implements SalesTotalsCallable {
       throw FirebaseException(plugin: 'functions', code: 'unavailable');
     }
     // The shape `TenantSalesTotals.fromCallable` insists on: a `previous`
-    // block, and a scanned count the figures inside it can account for.
+    // block, a `net` block, and a scanned count the figures inside can
+    // account for.
     return <String, Object?>{
       'scannedTransactions': 1,
       'previous': <String, Object?>{
+        'sales': _salesMinor / 100,
+        'profit': 0,
+        'transactions': 1,
+        'incompleteCostLineCount': 0,
+      },
+      'net': <String, Object?>{
         'sales': _salesMinor / 100,
         'profit': 0,
         'transactions': 1,

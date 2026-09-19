@@ -651,6 +651,10 @@ Map<String, Object?> _response({
   if (overrides != null) previous.addAll(overrides);
   return <String, Object?>{
     'previous': previous,
+    // **The canonical answer carries `net`.** `SalesComparison.net` is not
+    // optional in `reports.ts`, so every answer has one; a period nothing
+    // came back from nets to its own gross figures.
+    'net': Map<String, Object?>.of(previous),
     'scannedTransactions': scanned,
     if (byTender != null) 'byTender': byTender,
   };
