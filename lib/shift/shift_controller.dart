@@ -283,6 +283,10 @@ final class TenantShiftController extends ChangeNotifier {
           final adopted = await _adoptDiscoveredShift(
             captured,
             adoptedErrorCode: 'shift_already_open',
+            // Adopting this device's own canonical shift still wins over
+            // creating a duplicate. Only the refusal for somebody else's is
+            // gone; `restore` still reports one so the surface can say so.
+            refuseOnOtherDevice: false,
           );
           if (adopted != null) return adopted;
           if (!_owns(captured)) return _staleView();
@@ -403,8 +407,12 @@ final class TenantShiftController extends ChangeNotifier {
   /// left holding an open shift over a discrepancy that closing is how you
   /// report. Reconciliation makes the comparison later, from the sales the
   /// server holds.
+  /// [settlementId] names the one drawer count this close belongs to, so the
+  /// shifts it sweeps up afterwards can be recognised as settled by it. See
+  /// [newSettlementId]; null closes this shift alone, exactly as before.
   Future<TenantShiftState> closeShift({
     required ShiftTenderDeclaration declaration,
+    String? settlementId,
   }) => _run(_sessionController.session, (captured) async {
     final record = await _localState.read(
       uid: captured.uid,
@@ -479,6 +487,7 @@ final class TenantShiftController extends ChangeNotifier {
       closingCashMinor: declaration.cashMinor,
       sales: sales,
       declaration: declaration,
+      settlementId: settlementId,
     );
     final result = online
         ? await _writer.closeShift(intent)
@@ -526,9 +535,13 @@ final class TenantShiftController extends ChangeNotifier {
   /// Two open shifts for one cashier still mean one till and one count - see
   /// `TenantShiftRepository.buildRecoveryCloseIntent`. Asking twice would record
   /// the same money against both.
+  /// [settlementId] is the count this shift is being settled by, where one
+  /// exists - see [closeShift]. Null is a shift closed on its own terms, which
+  /// is what the recovery controls on the close sheet do.
   Future<TenantShiftState> closeShiftWithoutEvidence({
     required String shiftId,
     ShiftTenderDeclaration? declaration,
+    String? settlementId,
   }) => _run(_sessionController.session, (captured) async {
     if (!await _online()) {
       return _offlineView(captured, errorCode: 'orphan_close_needs_connection');
@@ -558,6 +571,7 @@ final class TenantShiftController extends ChangeNotifier {
         repository.buildRecoveryCloseIntent(
           shift: matches.single,
           declaration: declaration,
+          settlementId: settlementId,
         ),
       );
     } on TenantShiftException catch (error) {
@@ -574,6 +588,53 @@ final class TenantShiftController extends ChangeNotifier {
           : result.reasonCode ?? 'shift_close_unconfirmed',
     );
   });
+
+  /// A fresh name for one drawer count, to be worn by every shift it settles.
+  ///
+  /// **Minted before the count is sent, not after.** The counted shift is
+  /// closed first and the swept ones follow, so the name has to exist before
+  /// the first write or the two halves cannot be recognised as one settlement.
+  ///
+  /// It is a label for grouping and never an identifier anything is fetched by,
+  /// so it needs to be unique among this cashier's closes and nothing more.
+  String newSettlementId() => _generateSettlementId();
+
+  /// Every open shift of this cashier's that this exact installation is not
+  /// holding, so all of them can be closed onto one count.
+  ///
+  /// **Enumerated rather than singled out, which is what
+  /// [_adoptDiscoveredShift] does and cannot stop doing.** That one names at
+  /// most one shift and deliberately names none where more than one candidate
+  /// exists, because closing the wrong one is worse than closing none. Closing
+  /// *all* of them has no wrong one to pick, so what it needs is the list -
+  /// and a caller reading `otherDeviceShiftId` was silently settling for the
+  /// first of several.
+  ///
+  /// **Online only, and empty rather than throwing when it cannot ask.**
+  /// [closeShiftWithoutEvidence] is online-only itself, and a list read off the
+  /// cache would name shifts that have since been closed elsewhere. Failing to
+  /// enumerate is not the same as there being none, but the caller's next
+  /// restore asks again and each id is re-proved at the close in any case.
+  Future<List<String>> otherOpenShiftIds() async {
+    final captured = _sessionController.session;
+    if (captured == null || !captured.canAccess()) return const <String>[];
+    if (!await _online()) return const <String>[];
+    final List<TenantShift> shifts;
+    try {
+      shifts = await TenantShiftRepository(
+        session: captured,
+        reader: _reader,
+      ).findOpenShifts(collectionReader: _reader);
+    } catch (_) {
+      return const <String>[];
+    }
+    if (!_owns(captured)) return const <String>[];
+    return List<String>.unmodifiable(
+      shifts
+          .where((shift) => shift.deviceId != _deviceId)
+          .map((shift) => shift.id),
+    );
+  }
 
   /// Remembers a close this device made but could not confirm.
   ///
@@ -943,6 +1004,7 @@ final class TenantShiftController extends ChangeNotifier {
   Future<TenantShiftState?> _adoptDiscoveredShift(
     TenantSession captured, {
     String? adoptedErrorCode,
+    bool refuseOnOtherDevice = true,
   }) async {
     final shifts = await TenantShiftRepository(
       session: captured,
@@ -965,6 +1027,15 @@ final class TenantShiftController extends ChangeNotifier {
     // decides what the refusal says and which shift it offers to close.
     final mine = shifts.where(_openedHere).toList(growable: false);
     if (local.isEmpty) {
+      // **A shift elsewhere no longer stops one being opened here.** The two
+      // guards this used to stand beside read only this device, and this one
+      // is skipped entirely with no network - so two open shifts for one
+      // cashier is a state opening offline already produces by design. What
+      // enforcing it online bought was not an invariant; it was a refusal with
+      // a force-close hanging off it, and that close took a live till's
+      // counted drawer away on 2026-09-17. Opening alongside is what the
+      // offline path has always done, and the count that follows closes both.
+      if (!refuseOnOtherDevice) return null;
       return _publish(
         captured,
         TenantShiftState(
@@ -979,25 +1050,19 @@ final class TenantShiftController extends ChangeNotifier {
               ? 'shift_open_on_earlier_install'
               : 'shift_open_on_other_device',
           otherDeviceShiftOpen: true,
-          // **Named so the refusal has a way out.** Until this carried an id
-          // the state was terminal: the till reported a shift it could not
-          // adopt, the open control repeated the refusal, and the only remedy
-          // was an edit to the database. One shift can be closed from here
-          // without its sales - see [closeShiftWithoutEvidence].
+          // **Only ever an earlier install of this same phone.** The durable
+          // half is the whole test: a shift sharing it was left by a copy of
+          // the app that no longer exists on this device, so closing it here
+          // takes nothing away from anyone. A shift that does not share it
+          // belongs to a phone that may simply be offline - which is what a
+          // till mid-count looks like from the outside - and it used to be
+          // offered here anyway whenever it happened to be the only one found.
+          // That fallback closed a live till's counted drawer on 2026-09-17.
           //
-          // **This device's own past installs are preferred over a bare count.**
-          // A cashier who works two tills can have an open shift on each; the
-          // one *this* phone left behind is the one it can speak for, and
-          // offering it is better than offering nothing because a colleague's
-          // till happens to be open too. Where that does not single one out, a
-          // lone discovered shift still does - and where neither does, this
-          // stays null, because closing the wrong shift is worse than closing
-          // none.
-          otherDeviceShiftId: mine.length == 1
-              ? mine.single.id
-              : shifts.length == 1
-              ? shifts.single.id
-              : null,
+          // Nothing is stranded by its absence. Opening no longer waits on this
+          // shift, and the count that closes the one opened here closes every
+          // other the cashier holds - see `otherOpenShiftIds`.
+          otherDeviceShiftId: mine.length == 1 ? mine.single.id : null,
           otherTenantShiftOpen: await _otherTenantShiftOpen(captured),
         ),
       );
@@ -1342,6 +1407,15 @@ final class TenantShiftCheckoutBinder implements CheckoutShiftBinder {
       ),
     );
   }
+}
+
+String _generateSettlementId() {
+  final random = Random.secure();
+  final suffix = List<String>.generate(
+    4,
+    (_) => random.nextInt(0x10000).toRadixString(16).padLeft(4, '0'),
+  ).join();
+  return 'st-${DateTime.now().toUtc().millisecondsSinceEpoch}-$suffix';
 }
 
 String _generateShiftId() {

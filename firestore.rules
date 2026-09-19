@@ -536,12 +536,35 @@ service cloud.firestore {
               && request.resource.data.transactionCount == 0
             )
           )
+          // The one drawer count this close belongs to, worn by every shift
+          // that count settled.
+          //
+          // **A label for grouping, never a path or a lookup.** Reconciliation
+          // adds up the shifts that share it and measures the total against the
+          // single declaration among them - which is the whole point, because a
+          // cashier holds one register and counts it once. Before this, a close
+          // that swept up a second shift reported the counted one as over by
+          // exactly what the other took and the other as unverifiable.
+          //
+          // Bounded and shaped, because an unbounded free-text field on a money
+          // document is a place to hide things. Optional, because a close that
+          // settles only itself needs no name for the group, and every shift
+          // closed before this existed has none.
+          && (
+            !('settlementId' in request.resource.data)
+            || (
+              request.resource.data.settlementId is string
+              && request.resource.data.settlementId.matches(
+                '^st-[0-9]{1,15}-[0-9a-f]{16}$'
+              )
+            )
+          )
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly([
               'status', 'endTime', 'closingCashMinor', 'closingCash',
               'totalSales', 'totalSalesMinor', 'transactionCount',
               'declaredCashMinor', 'declaredMpesaMinor', 'declaredCardMinor',
-              'closedWithoutEvidence'
+              'closedWithoutEvidence', 'settlementId'
             ]);
         allow delete: if false;
       }

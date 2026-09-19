@@ -161,21 +161,114 @@ void main() {
         );
         expect(tester.widget<Text>(time).data, isNot(contains('UTC')));
         expect(tester.widget<Text>(time).style?.fontWeight, FontWeight.w800);
+        // **Still the bare sequence, and still ambiguous.** Every register
+        // starts a business date at 0001, so this named two different receipts
+        // on 2026-09-17 - one from each of two tills - and the row cannot tell
+        // them apart. Naming the till here needs the row to give up something;
+        // the width check below is the measurement that says so.
+        final full = formatCheckoutReceiptNumber(
+          deviceId: _deviceId,
+          businessDate: _businessDate,
+          sequence: 1,
+        );
         expect(find.text('#0001'), findsOneWidget);
+        expect(find.text(full), findsNothing);
+
+        // **The till is named in the foot instead.** `#0001` above is the same
+        // on every register's first sale of a day, which is how two receipts
+        // read alike on 2026-09-17. The foot is a `Wrap`, so it reflows rather
+        // than ellipsizing the way the header slot does.
+        final parts = full.split('-');
+        final till = find.byKey(ValueKey('sales-receipt-till-co-1'));
+        expect(till, findsOneWidget);
         expect(
-          find.text(
-            formatCheckoutReceiptNumber(
-              deviceId: _deviceId,
-              businessDate: _businessDate,
-              sequence: 1,
-            ),
+          find.descendant(
+            of: till,
+            matching: find.text('${parts[0]}-${parts[1]}-${parts[3]}'),
           ),
-          findsNothing,
+          findsOneWidget,
+        );
+
+        // **Proved here because nothing else can prove it.** The label sits in
+        // a `Flexible` with `maxLines: 1` and an ellipsis, so a row too narrow
+        // for it truncates silently rather than overflowing - no test throws,
+        // and the screenshot harness has no case for this screen. This slot is
+        // about 66 logical pixels at 411, which is five and a half characters:
+        // `#0001` fits and `CT-882-0001`, at 131.5, was cut in half.
+        final label = tester.widget<Text>(receipt);
+        final painter = TextPainter(
+          text: TextSpan(text: label.data, style: label.style),
+          textDirection: TextDirection.ltr,
+          maxLines: 1,
+        )..layout();
+        expect(
+          tester.getSize(receipt).width,
+          greaterThanOrEqualTo(painter.width - 0.5),
+          reason: 'the receipt label must not be ellipsized at 411px',
         );
         expect(find.text('Long-life whole milk 500 ml'), findsOneWidget);
         expect(find.text('View sale details'), findsNothing);
       },
     );
+
+    testWidgets("a sale rung offline shows when it was rung, not when it synced", (
+      tester,
+    ) async {
+      // **The night sale that read as a morning one.** A batch queued with no
+      // signal has its server timestamp resolved when it finally lands, so this
+      // sale - rung at 22:10, synced at 10:25 the next morning - used to sit in
+      // the day's history at 10:25. It is filed under the right trading day
+      // either way; it was the hour that lied.
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale(
+          'co-1',
+          tender: 'cash',
+          rungAt: DateTime.utc(2026, 8, 23, 19, 10),
+          createdAt: DateTime.utc(2026, 8, 24, 7, 25),
+        ),
+      ]);
+      await _pump(tester, reader, width: 411, role: TenantRole.cashier);
+
+      final time = find.byKey(const ValueKey('sales-recorded-time-co-1'));
+      expect(
+        tester.widget<Text>(time).data,
+        _localClock(DateTime.utc(2026, 8, 23, 19, 10)),
+      );
+
+      // And the gap is said out loud, so the row is not read as a wrong clock.
+      final synced = find.byKey(const ValueKey('sales-synced-later-co-1'));
+      expect(synced, findsOneWidget);
+      expect(
+        find.descendant(
+          of: synced,
+          matching: find.text(
+            'Synced ${_localClock(DateTime.utc(2026, 8, 24, 7, 25))}',
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets("a sale that never waited says nothing about syncing", (
+      tester,
+    ) async {
+      // Seconds apart is what an online commit looks like, and a note on every
+      // ordinary sale would be noise that teaches people to stop reading it.
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale(
+          'co-1',
+          tender: 'cash',
+          rungAt: DateTime.utc(2026, 8, 24, 9, 0, 58),
+          createdAt: DateTime.utc(2026, 8, 24, 9, 1, 0),
+        ),
+      ]);
+      await _pump(tester, reader, width: 411, role: TenantRole.cashier);
+
+      expect(
+        find.byKey(const ValueKey('sales-synced-later-co-1')),
+        findsNothing,
+      );
+    });
 
     testWidgets('the compact controls and payment mix use one summary card', (
       tester,
@@ -718,7 +811,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(reprinter.sales.single.id, 'co-1');
-      expect(snackNotice(tester).message, 'Receipt #0001 reprinted.');
+      // Named by till and sequence, as the row is: a reprint confirmation
+      // saying `#0001` on a two-register day names two different receipts.
+      final parts = formatCheckoutReceiptNumber(
+        deviceId: _deviceId,
+        businessDate: _businessDate,
+        sequence: 1,
+      ).split('-');
+      expect(
+        snackNotice(tester).message,
+        'Receipt ${parts[0]}-${parts[1]}-${parts[3]} reprinted.',
+      );
       expect(snackNotice(tester).status, AppStatus.ok);
     });
 
@@ -1115,6 +1218,13 @@ TenantMembership _membership(TenantRole role, {String tenantId = 'tenant-a'}) =>
       canonicalMembershipExists: true,
     );
 
+/// The panel prints local time, and this suite must not assume a zone.
+String _localClock(DateTime instant) {
+  final local = instant.toLocal();
+  String pad(int part) => part.toString().padLeft(2, '0');
+  return '${pad(local.hour)}:${pad(local.minute)}';
+}
+
 TenantQueryDocumentSnapshot _sale(
   String id, {
   int sequence = 1,
@@ -1123,6 +1233,8 @@ TenantQueryDocumentSnapshot _sale(
   String? tender,
   String businessDate = _businessDate,
   String deviceId = _deviceId,
+  DateTime? rungAt,
+  DateTime? createdAt,
 }) {
   final data = <String, Object?>{
     'checkoutId': id,
@@ -1156,7 +1268,11 @@ TenantQueryDocumentSnapshot _sale(
     'discount': 1.0,
     'totalMinor': 900,
     'total': 9.0,
-    'createdAt': Timestamp.fromDate(DateTime.utc(2026, 8, 24, 9, sequence)),
+    'createdAt': Timestamp.fromDate(
+      createdAt ?? DateTime.utc(2026, 8, 24, 9, sequence),
+    ),
+    if (rungAt != null)
+      'clientCreatedAtMs': rungAt.toUtc().millisecondsSinceEpoch,
   };
   return TenantQueryDocumentSnapshot(
     path: 'tenants/$tenantId/sales/$id',

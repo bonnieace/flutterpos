@@ -714,13 +714,36 @@ void main() {
 
       final result = await controller.openShift();
 
-      // The closing summary is built from local sale evidence, which only the
-      // issuing device holds, so a second device must not open or adopt one.
-      expect(result.phase, TenantShiftPhase.none);
-      expect(result.errorCode, 'shift_open_on_other_device');
+      // **Opened alongside rather than refused, as of 2026-09-17.** The closing
+      // summary is still built from local sale evidence, so this device still
+      // cannot adopt that shift - but refusing bought no invariant, because the
+      // same two shifts appear whenever a till opens offline, and the refusal
+      // carried a force-close that took a live register's counted drawer away.
+      expect(result.phase, TenantShiftPhase.open);
+      expect(result.errorCode, isNull);
+      expect(server.created.single.$1, 'tenants/tenant-a/shifts/shift-1');
+      expect(server.created.single.$2['deviceId'], _deviceA);
+      final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+      expect(record!.shiftId, 'shift-1');
+    });
+
+    test('never offers to close a shift on another phone', () async {
+      server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = _document(
+        overrides: <String, Object?>{
+          'shiftId': 'shift-elsewhere',
+          'deviceId': 'dev-fedcba9876543210fedcba9876543210',
+        },
+      );
+      final controller = _controller(sessions, state, server);
+
+      final result = await controller.restore(sessions.requireSession());
+
+      // It is said out loud - it is a fact about this cashier's day - but it is
+      // never named as closeable. That phone may simply be offline, which is
+      // what a till mid-count looks like from here.
       expect(result.otherDeviceShiftOpen, isTrue);
-      expect(server.created, isEmpty);
-      expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
+      expect(result.errorCode, 'shift_open_on_other_device');
+      expect(result.otherDeviceShiftId, isNull);
     });
 
     test('names an earlier installation of this same device', () async {
@@ -734,11 +757,12 @@ void main() {
       );
       final controller = _controller(sessions, state, server);
 
-      final result = await controller.openShift();
+      final result = await controller.restore(sessions.requireSession());
 
-      // Still refused - the closing summary comes from local sale evidence,
-      // which that installation took with it - but "close it there first"
-      // would send a cashier to the device in their own hand.
+      // Still named - the closing summary comes from local sale evidence, which
+      // that installation took with it, so it is this phone's own orphan to
+      // settle - but it is `restore` that reports it now, because opening no
+      // longer waits on it.
       expect(result.phase, TenantShiftPhase.none);
       expect(result.errorCode, 'shift_open_on_earlier_install');
       expect(result.otherDeviceShiftOpen, isTrue);
@@ -764,7 +788,7 @@ void main() {
       );
       final controller = _controller(sessions, state, server);
 
-      final result = await controller.openShift();
+      final result = await controller.restore(sessions.requireSession());
 
       expect(result.errorCode, 'shift_open_on_earlier_install');
       expect(result.otherDeviceShiftId, 'shift-before');
@@ -783,7 +807,7 @@ void main() {
       }
       final controller = _controller(sessions, state, server);
 
-      final result = await controller.openShift();
+      final result = await controller.restore(sessions.requireSession());
 
       expect(result.errorCode, 'shift_open_on_earlier_install');
       expect(result.otherDeviceShiftId, isNull);
@@ -826,6 +850,86 @@ void main() {
       await controller.restore(sessions.requireSession());
 
       expect(server.queries, isEmpty);
+    });
+  });
+
+  group("sweeping up a cashier's other open shifts", () {
+    test('names every shift this installation is not holding', () async {
+      // One on another phone, one left by an earlier install of this phone, and
+      // this device's own. The sweep takes the first two and never the third:
+      // the cashier is about to count the drawer onto that one.
+      server.shifts['tenants/tenant-a/shifts/shift-other-phone'] = _document(
+        overrides: <String, Object?>{
+          'shiftId': 'shift-other-phone',
+          'deviceId': 'dev-fedcba9876543210fedcba9876543210',
+        },
+      );
+      server.shifts['tenants/tenant-a/shifts/shift-earlier-install'] =
+          _document(
+            overrides: <String, Object?>{
+              'shiftId': 'shift-earlier-install',
+              'deviceId': 'dev-0123456789abcdef01234567deadbeef',
+            },
+          );
+      server.shifts['tenants/tenant-a/shifts/shift-mine'] = _document(
+        overrides: <String, Object?>{'shiftId': 'shift-mine'},
+      );
+      final controller = _controller(sessions, state, server);
+
+      final ids = await controller.otherOpenShiftIds();
+
+      expect(
+        ids,
+        unorderedEquals(<String>['shift-other-phone', 'shift-earlier-install']),
+      );
+    });
+
+    test('names more than one, where the old surface named none', () async {
+      // `otherDeviceShiftId` answers null for two candidates on purpose -
+      // closing the wrong one is worse than closing none - so a cashier holding
+      // three shifts had two of them silently left open. Closing all of them
+      // has no wrong one to pick.
+      for (final install in <String>['deadbeef', 'feedface']) {
+        server.shifts['tenants/tenant-a/shifts/shift-$install'] = _document(
+          overrides: <String, Object?>{
+            'shiftId': 'shift-$install',
+            'deviceId': 'dev-0123456789abcdef01234567$install',
+          },
+        );
+      }
+      final controller = _controller(sessions, state, server);
+
+      final restored = await controller.restore(sessions.requireSession());
+      final ids = await controller.otherOpenShiftIds();
+
+      expect(restored.otherDeviceShiftId, isNull);
+      expect(
+        ids,
+        unorderedEquals(<String>['shift-deadbeef', 'shift-feedface']),
+      );
+    });
+
+    test('names nothing rather than guessing when offline', () async {
+      server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = _document(
+        overrides: <String, Object?>{
+          'shiftId': 'shift-elsewhere',
+          'deviceId': 'dev-fedcba9876543210fedcba9876543210',
+        },
+      );
+      final offline = _controller(sessions, state, server, online: false);
+
+      // A list read off the cache would name shifts closed elsewhere since, and
+      // the close it feeds is online-only anyway. The next sweep asks again.
+      expect(await offline.otherOpenShiftIds(), isEmpty);
+    });
+
+    test('names nothing where the cashier holds only this one', () async {
+      server.shifts['tenants/tenant-a/shifts/shift-mine'] = _document(
+        overrides: <String, Object?>{'shiftId': 'shift-mine'},
+      );
+      final controller = _controller(sessions, state, server);
+
+      expect(await controller.otherOpenShiftIds(), isEmpty);
     });
   });
 

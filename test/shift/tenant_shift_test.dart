@@ -253,6 +253,41 @@ void main() {
       );
     });
 
+    test('names the one drawer count a close and its sweep share', () {
+      // A cashier holds one register and counts it once. The counted close and
+      // every shift it sweeps up wear the same name, which is what lets
+      // reconciliation add their takings up and measure the total against the
+      // single declaration - instead of reporting the counted shift as over by
+      // exactly what the others took.
+      final repository = _repository(_Reader(const {}));
+      final open = TenantShift.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _document(),
+      );
+      const settlement = 'st-1789630427-a3f90c1d2e4b6789';
+
+      final counted = repository.buildCloseIntent(
+        shift: open,
+        closingCashMinor: 125000,
+        sales: const ShiftSalesSummary(
+          transactionCount: 3,
+          totalMinor: 98750,
+          unsettledCount: 0,
+        ),
+        settlementId: settlement,
+      );
+      final swept = repository.buildRecoveryCloseIntent(
+        shift: open,
+        settlementId: settlement,
+      );
+
+      expect(counted.updateData()['settlementId'], settlement);
+      expect(swept.updateData()['settlementId'], settlement);
+      // The swept one still declares nothing: the drawer is already counted.
+      expect(swept.updateData().containsKey('declaredCashMinor'), isFalse);
+      expect(swept.updateData()['closedWithoutEvidence'], isTrue);
+    });
+
     test('builds a close intent only for this cashier\'s open shift', () {
       final repository = _repository(_Reader(const {}));
       final open = TenantShift.fromDocument(
@@ -278,6 +313,11 @@ void main() {
         'totalSales': 987.5,
         'transactionCount': 3,
       });
+
+      // **Omitted rather than written null when a close settles only itself**,
+      // so an ordinary day costs no field and reconciliation's grouping never
+      // has to tell an absence from a null.
+      expect(intent.updateData().containsKey('settlementId'), isFalse);
 
       expect(
         () => repository.buildCloseIntent(
