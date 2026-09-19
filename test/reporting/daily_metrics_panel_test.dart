@@ -364,7 +364,7 @@ void main() {
     );
   });
 
-  testWidgets('an owner is told why an incomplete day has no figure', (
+  testWidgets('an owner is told which way an incomplete day is wrong', (
     tester,
   ) async {
     final reader = _Reader(<String, Map<String, Object?>>{
@@ -381,9 +381,12 @@ void main() {
       find.byKey(const ValueKey('daily-summary-cost-2026-07-31')),
       findsNothing,
     );
+    // Drawn as a bound rather than withheld: the note below says which way it
+    // is wrong, and a reader shown nothing at all concludes the app cannot
+    // work a profit out.
     expect(
       find.byKey(const ValueKey('daily-summary-2026-07-31-profit')),
-      findsNothing,
+      findsOneWidget,
     );
     expect(
       tester
@@ -391,10 +394,9 @@ void main() {
             find.byKey(const ValueKey('daily-summary-2026-07-31-profit-note')),
           )
           .data,
-      'Profit and margin are not shown: 4 sale lines have no cost recorded, '
-      'and counting them as free would overstate both.',
+      'Profit is at most this figure: 4 sale lines have no cost recorded, '
+      'and counting them as free overstates it. The margin is not shown.',
     );
-    expect(find.textContaining('430.25'), findsNothing);
   });
 
   testWidgets('a day with one of everything states three plain figures', (

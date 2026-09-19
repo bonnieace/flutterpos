@@ -116,8 +116,29 @@ final class TenantProfitReport {
   /// division by zero, not a figure of zero.
   final double? marginPercent;
 
-  /// Whether a figure may be put in front of somebody at all.
+  /// Whether the figure is exact, and so may carry a margin or a comparison.
+  ///
+  /// **Narrower than [isDrawable] on purpose.** A percentage and an arrow are
+  /// the most believed numbers on any report and neither carries a unit to warn
+  /// a reader, so they are reserved for a figure that is the profit rather than
+  /// a bound on it.
   bool get isShowable => basis == TenantProfitBasis.complete;
+
+  /// Whether the figure may be drawn at all, captioned where it is not exact.
+  ///
+  /// **An overstated figure beats no figure.** A line carrying no cost is
+  /// counted as costing nothing, so an incomplete basis is an upper bound - and
+  /// this used to be refused outright, on the reasoning that an unmeasurable
+  /// overstatement is not a smaller version of the truth. What that left out is
+  /// the reader: somebody shown an em dash where a profit belongs concludes the
+  /// app cannot work it out, and stops trusting the figures that *are* exact.
+  /// Drawn with `tenantProfitCeilingNote` beside it, which says which way it is
+  /// wrong, it is worth more than silence.
+  ///
+  /// **[TenantProfitBasis.inconsistent] is still refused**, because it is not
+  /// an optimistic figure but an impossible one: the profit exceeds the takings
+  /// it came from, and there is no caption that makes that readable.
+  bool get isDrawable => basis != TenantProfitBasis.inconsistent;
 }
 
 /// Whole minor units, rounded exactly as the server rounds.

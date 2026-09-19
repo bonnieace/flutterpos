@@ -422,25 +422,25 @@ final class _MonthlyReportContents extends StatelessWidget {
               if (showProfit)
                 StatTile(
                   label: 'Profit',
-                  // **Withheld rather than warned about.** This tile used to
-                  // print `totals.profit` whatever its basis and add a sentence
-                  // underneath saying the figure was higher than the truth -
-                  // so the same sales showed no profit on the totals page and a
-                  // knowingly overstated one here. `TenantProfitReport` is the
-                  // single definition of when a figure may be shown, and the
-                  // weekly card already asks it exactly this way.
-                  value: profit.isShowable
+                  // **Drawn as a ceiling, refused only where it is
+                  // impossible.** This tile once printed `totals.profit`
+                  // whatever its basis with a sentence underneath, then
+                  // withheld it entirely to match the totals page. Both were
+                  // one rule applied differently; `TenantProfitReport` is that
+                  // rule, and `isDrawable` is the question this asks now.
+                  value: profit.isDrawable
                       ? currency.format(profit.profit)
                       : '—',
                   valueKey: const ValueKey('monthly-report-profit'),
                   money: true,
-                  // **And the arrow goes with it.** A percentage change is
-                  // computed from this month's profit and last month's, so a
-                  // basis that cannot be shown cannot be compared either - the
-                  // arrow would be the withheld figure, stated as a trend.
+                  // **The arrow still needs an exact figure.** A percentage
+                  // change is computed from this month's profit and last
+                  // month's, and a bound compared against a bound is not a
+                  // trend. Where there is no arrow to draw, the caption says
+                  // which way the figure is wrong instead.
                   detail: profit.isShowable
                       ? _changeDetail(report.profitChange)
-                      : null,
+                      : tenantProfitCeilingNote(profit),
                 ),
             ],
           ),

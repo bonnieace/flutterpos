@@ -10,6 +10,7 @@ import '../reporting/device_sales_totals.dart';
 import '../reporting/net_profit.dart';
 import '../reporting/reporting_currency.dart';
 import '../reporting/profit_report.dart';
+import '../reporting/profit_statement.dart';
 import '../reporting/sales_totals.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
@@ -3303,10 +3304,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             // where the cost came out negative: that is not an optimistic
             // figure, it is an impossible one, and there is no honest caption
             // for it.
-            value: report == null || report.basis == TenantProfitBasis.inconsistent
+            value: report == null || !report.isDrawable
                 ? '—'
                 : currency.format(report.profit),
-            money: report != null && report.basis != TenantProfitBasis.inconsistent,
+            money: report != null && report.isDrawable,
             icon: Icons.trending_up,
             status: report != null && !report.isShowable
                 ? AppStatus.attention
@@ -3320,10 +3321,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 : null,
             detail: report == null
                 ? 'Not reconciled yet'
-                : report.basis == TenantProfitBasis.inconsistent
-                ? 'The cost of these sales does not add up'
-                : report.basis == TenantProfitBasis.incomplete
-                ? 'At most: some lines carry no cost'
+                : !report.isShowable
+                ? tenantProfitCeilingNote(report)
                 : deviceKnowsMore
                 ? 'On this device'
                 : 'After cost of goods',
@@ -3337,10 +3336,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           StatTile(
             key: const ValueKey('home-today-net-profit'),
             label: 'Net profit',
-            value: report?.basis == TenantProfitBasis.inconsistent
-                ? '—'
-                : currency.format(net.netProfit),
-            money: report?.basis != TenantProfitBasis.inconsistent,
+            value: net.isDrawable ? currency.format(net.netProfit) : '—',
+            money: net.isDrawable,
             icon: Icons.account_balance_wallet_outlined,
             // A loss is the one reading this whole feature exists to make
             // possible, so it is marked rather than left to the minus sign.
@@ -3348,12 +3345,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             statusLabel: net.isLoss ? 'Loss' : null,
             // Each cause named, because they are different missing things and
             // the shopkeeper can act on one of them.
-            detail: report?.basis == TenantProfitBasis.inconsistent
-                ? 'The cost of these sales does not add up'
+            detail: !net.isDrawable
+                ? tenantProfitCeilingNote(net.gross)
                 : net.basis == TenantNetProfitBasis.expensesUnread
                 ? 'At most: some spending is not counted'
                 : net.basis == TenantNetProfitBasis.grossWithheld
-                ? 'At most: some lines carry no cost'
+                ? tenantProfitCeilingNote(net.gross)
                 : deviceKnowsMore
                 ? 'On this device'
                 : 'After cost of goods and expenses',

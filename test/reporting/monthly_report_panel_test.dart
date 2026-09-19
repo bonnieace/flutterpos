@@ -35,21 +35,23 @@ void main() {
     );
   });
 
-  testWidgets('a month with a costless line shows no profit figure', (
+  testWidgets('a month with a costless line draws the figure as a ceiling', (
     tester,
   ) async {
-    // **The defect.** This printed `totals.profit` and added a sentence saying
-    // the number above was higher than the truth, while the totals page and
-    // the weekly report withheld the same figure computed from the same sales.
+    // **One rule, and this page asks it the same way as the rest.** It once
+    // printed the figure with a sentence of its own wording, then withheld it
+    // entirely to match the others; both were the single rule in
+    // `TenantProfitReport` applied twice. It is drawn now, as a bound, and the
+    // sentence underneath is still the one every other surface makes.
     await _pumpMonth(
       tester,
       callable: _Callable(_response(incompleteCostLineCount: 4)),
     );
 
-    expect(_profitValue(tester), '—');
+    expect(_profitValue(tester), isNot('—'));
     expect(
       _noteText(tester),
-      startsWith('Profit and margin are not shown: 4 sale lines have'),
+      startsWith('Profit is at most this figure: 4 sale lines have'),
       reason: 'Word for word the sentence every other surface makes.',
     );
   });

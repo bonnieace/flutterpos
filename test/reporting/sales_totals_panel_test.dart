@@ -498,7 +498,15 @@ void main() {
           .toList(),
       <String>['tenants/tenant-a/categories', 'tenants/tenant-a/staff'],
     );
-    expect(find.textContaining('KES 4820.75'), findsOne);
+    // **Asserted against the takings tile rather than counted across the
+    // page.** The point here is that the currency was read and applied, and
+    // counting occurrences made that hostage to how many other figures happen
+    // to share the number - the profit is drawn now, and it is the same 4820.75
+    // because nothing was subtracted from it.
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('sales-totals-amount'))).data,
+      contains('KES 4820.75'),
+    );
   });
 
   testWidgets('a cashier is denied and nothing is asked for', (tester) async {
@@ -633,7 +641,7 @@ void main() {
     expect(find.byKey(const ValueKey('sales-totals-cost')), findsNothing);
   });
 
-  testWidgets('an owner is told why an incomplete period has no figure', (
+  testWidgets('an owner is told which way an incomplete period is wrong', (
     tester,
   ) async {
     // The default response is the shape every period before products carried
@@ -642,17 +650,19 @@ void main() {
 
     await _pump(tester, _controller(TenantRole.owner), callable);
 
-    expect(find.byKey(const ValueKey('sales-totals-profit')), findsNothing);
-    expect(find.byKey(const ValueKey('sales-totals-cost')), findsNothing);
+    // Drawn as a bound rather than withheld, with the note saying which way it
+    // is wrong. The margin, which carries no such warning, stays absent.
+    expect(find.byKey(const ValueKey('sales-totals-profit')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sales-totals-margin')), findsNothing);
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('sales-totals-profit-note')))
           .data,
-      'Profit and margin are not shown: 96 sale lines have no cost recorded, '
-      'and counting them as free would overstate both.',
+      'Profit is at most this figure: 96 sale lines have no cost recorded, '
+      'and counting them as free overstates it. The margin is not shown.',
     );
-    // The takings are unaffected: what is refused is the profit, not the total
-    // the manager and the owner both came for.
+    // The takings are unaffected either way: this was always about the profit,
+    // not the total the manager and the owner both came for.
     expect(find.byKey(const ValueKey('sales-totals-amount')), findsOne);
   });
 

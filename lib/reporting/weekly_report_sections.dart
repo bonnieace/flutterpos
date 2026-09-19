@@ -22,6 +22,8 @@ import '../ui/status.dart';
 import '../ui/rolling_number.dart';
 import '../ui/skeleton.dart';
 import '../ui/tokens.dart';
+import 'net_profit.dart';
+import 'profit_statement.dart';
 import 'reporting_currency.dart';
 import 'sales_totals.dart';
 import 'sales_totals_session_context.dart';
@@ -393,13 +395,15 @@ final class _MetricGrid extends StatelessWidget {
           cardKey: const ValueKey('weekly-report-profit'),
           title: 'GROSS PROFIT',
           reading: reading,
-          // An unshowable basis says so rather than printing a figure the
-          // server computed out of lines that carried no cost.
-          value: profit == null || !profit.isShowable
+          // Drawn as a ceiling where it is not exact, and refused only where
+          // the arithmetic is impossible - see `TenantProfitReport.isDrawable`.
+          // The comparison below stays on `isShowable`: a bound may be read,
+          // but it may not become a percentage.
+          value: profit == null || !profit.isDrawable
               ? '—'
               : weeklyReportMoney(currency, profit.profit),
           subtitle: profit != null && !profit.isShowable
-              ? 'Some lines carry no cost'
+              ? tenantProfitCeilingNote(profit)
               : null,
           // Both weeks, never one of each: a week whose profit may not be
           // shown may not be the denominator of an arrow either.
@@ -427,12 +431,14 @@ final class _MetricGrid extends StatelessWidget {
           cardKey: const ValueKey('weekly-report-net-profit'),
           title: 'NET PROFIT',
           reading: reading,
-          value: net.isShowable
+          value: net.isDrawable
               ? weeklyReportMoney(currency, net.netProfit)
               : '—',
           subtitle: net.isShowable
               ? 'After expenses'
-              : 'Some spending is not counted',
+              : net.basis == TenantNetProfitBasis.expensesUnread
+              ? 'At most: some spending is not counted'
+              : tenantProfitCeilingNote(net.gross),
           // **No comparison arrow.** The week before was not read for
           // spending, so there is no prior net profit to compare against, and
           // an arrow drawn from the gross figures would describe a different

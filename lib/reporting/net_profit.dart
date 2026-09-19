@@ -103,8 +103,16 @@ final class TenantNetProfitReport {
   /// not be shown.
   final double? netMarginPercent;
 
-  /// Whether a figure may be put in front of somebody at all.
+  /// Whether the figure is exact, and so may carry a margin or a comparison.
   bool get isShowable => basis == TenantNetProfitBasis.complete;
+
+  /// Whether the figure may be drawn at all, captioned where it is not exact.
+  ///
+  /// **Follows the gross figure it was derived from.** An unread expense total
+  /// makes net profit look better than it was, which is the same direction the
+  /// gross overstates in - so both are ceilings and both say so. An impossible
+  /// gross carries nothing derived from it.
+  bool get isDrawable => gross.isDrawable;
 
   /// Whether the business spent more than it earned over this period.
   ///

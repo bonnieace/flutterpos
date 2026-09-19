@@ -78,7 +78,7 @@ void main() {
     expect(_text(tester, 'day-margin'), '34.4%');
   });
 
-  testWidgets('uncosted lines withhold the figure and name the count', (
+  testWidgets('uncosted lines draw the figure as a ceiling and name the count', (
     tester,
   ) async {
     await _pump(
@@ -91,14 +91,17 @@ void main() {
       currency: 'KES',
     );
 
-    // No figure at all: the count is not a caveat beside a number, it is the
-    // reason there is no number.
-    expect(find.byKey(const ValueKey('day-profit')), findsNothing);
-    expect(find.textContaining('4820.75'), findsNothing);
+    // **Drawn, where it used to be withheld.** An uncosted line is counted as
+    // costing nothing, so this is an upper bound - but a reader shown an em
+    // dash concludes the app cannot work a profit out at all, and stops
+    // trusting the figures that are exact. The caption says which way it is
+    // wrong; the margin, which would carry no such warning, stays absent.
+    expect(find.byKey(const ValueKey('day-profit')), findsOneWidget);
+    expect(find.byKey(const ValueKey('day-margin')), findsNothing);
     expect(
       _text(tester, 'day-profit-note'),
-      'Profit and margin are not shown: 96 sale lines have no cost recorded, '
-      'and counting them as free would overstate both.',
+      'Profit is at most this figure: 96 sale lines have no cost recorded, '
+      'and counting them as free overstates it. The margin is not shown.',
     );
   });
 
@@ -115,8 +118,8 @@ void main() {
 
     expect(
       _text(tester, 'day-profit-note'),
-      'Profit and margin are not shown: 1 sale line has no cost recorded, and '
-      'counting it as free would overstate both.',
+      'Profit is at most this figure: 1 sale line has no cost recorded, and '
+      'counting it as free overstates it. The margin is not shown.',
     );
   });
 

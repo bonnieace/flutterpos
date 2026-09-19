@@ -68,12 +68,15 @@ final class TenantProfitStatement extends StatelessWidget {
     // expenses were read. A partial expense total subtracts too little, which
     // makes what the business kept look *better* than it was - the same
     // overstatement `TenantProfitBasis.incomplete` refuses a gross figure for.
-    final showsNet = net != null && net.isShowable;
+    // Drawn as a ceiling where it is not exact, for the reason
+    // `TenantProfitReport.isDrawable` gives. The long note below still states
+    // the whole of it; this block is what a reader looks at first.
+    final showsNet = net != null && net.isDrawable;
     final netMargin = net?.netMarginPercent;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (report.isShowable) ...[
+        if (report.isDrawable) ...[
           StatLine(
             // Renamed only where there is a second figure to tell it apart
             // from. On a surface reading no expenses this is the only profit
@@ -82,7 +85,11 @@ final class TenantProfitStatement extends StatelessWidget {
             money: true,
             value: currency.format(report.profit),
             valueKey: ValueKey('$keyPrefix-profit'),
-            detail: net == null ? null : 'After the cost of the goods sold',
+            detail: !report.isShowable
+                ? tenantProfitCeilingNote(report)
+                : net == null
+                ? null
+                : 'After the cost of the goods sold',
           ),
           if (margin != null)
             StatLine(
@@ -107,6 +114,11 @@ final class TenantProfitStatement extends StatelessWidget {
               emphasis: true,
               value: currency.format(net.netProfit),
               valueKey: ValueKey('$keyPrefix-net-profit'),
+              detail: net.isShowable
+                  ? null
+                  : net.basis == TenantNetProfitBasis.expensesUnread
+                  ? 'At most: some spending is not counted'
+                  : tenantProfitCeilingNote(net.gross),
             ),
             if (netMargin != null)
               StatLine(
@@ -154,8 +166,8 @@ final class TenantProfitStatement extends StatelessWidget {
       'Net profit is what was left after the spending recorded for this '
           'period.',
     TenantNetProfitBasis.expensesUnread =>
-      'Net profit is not shown: some of what this business spent could not be '
-          'read, and leaving it out would overstate what was kept.',
+      'Net profit is at most this figure: some of what this business spent '
+          'could not be read, and leaving it out overstates what was kept.',
   };
 
   String _note() => tenantProfitNote(report);
@@ -169,18 +181,32 @@ final class TenantProfitStatement extends StatelessWidget {
 /// differently, which is how it came to print an overstated figure while every
 /// other surface withheld one. A second wording is a second rule, and there is
 /// only one rule.
+/// The caption that must accompany a figure drawn under
+/// [TenantProfitReport.isDrawable] but not [TenantProfitReport.isShowable].
+///
+/// Short enough for a tile, and it names the direction the figure is wrong in.
+/// **One wording, for the reason [tenantProfitNote] gives**: a second wording
+/// is a second rule, and there is only one rule.
+String tenantProfitCeilingNote(TenantProfitReport report) =>
+    switch (report.basis) {
+      TenantProfitBasis.complete => 'After cost of goods',
+      TenantProfitBasis.incomplete => 'At most: some lines carry no cost',
+      TenantProfitBasis.inconsistent =>
+        'The cost of these sales does not add up',
+    };
+
 String tenantProfitNote(TenantProfitReport report) => switch (report.basis) {
   // The positive form of the requirement, and the reason it is stated rather
   // than left to silence: a reader cannot tell a complete figure from an
   // overstated one by looking at it.
   TenantProfitBasis.complete => 'Every sale line behind it carries a cost.',
   TenantProfitBasis.incomplete =>
-    'Profit and margin are not shown: '
+    'Profit is at most this figure: '
         '${report.incompleteCostLineCount} sale '
         '${report.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
         'no cost recorded, and counting '
         '${report.incompleteCostLineCount == 1 ? 'it' : 'them'} as free '
-        'would overstate both.',
+        'overstates it. The margin is not shown.',
   // Deliberately not phrased as a data problem the reader caused. Nothing a
   // business does can produce this; it means the figure disagrees with the
   // takings it was derived from.
