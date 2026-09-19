@@ -372,6 +372,16 @@ Map<String, Map<String, Object?>> seedSales() {
     'quantity': quantity,
     'unitPriceMinor': unitPriceMinor,
     if (unitCostMinor != null) 'unitCostMinor': unitCostMinor,
+    // **Both or neither, because that is what a real sale line carries.**
+    // `CheckoutSaleLine.toSaleLineFields` derives the extended cost from the
+    // unit cost and writes the pair together, and `_parseLines` requires
+    // exactly that - a line naming one without the other is
+    // `inconsistent_sale_line_cost`. This seeded only the unit cost, so every
+    // sale with a cost was a document shape the app never writes, the whole
+    // report failed to read, and the list sat in a skeleton that sweeps on a
+    // repeating controller - which reached the harness as `pumpAndSettle timed
+    // out` rather than as the parse error it was.
+    if (unitCostMinor != null) 'costMinor': unitCostMinor * quantity,
     'lineTotalMinor': unitPriceMinor * quantity,
   };
 

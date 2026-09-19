@@ -41,7 +41,11 @@ final class _Host extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     return DefaultTabController(
-      length: 4,
+      // Two, because two is what `AppTabs` below is given. This said four, and
+      // `TabBar` asserts the controller's length against the tabs it is handed:
+      // "Controller's length property (4) does not match the number of tabs
+      // (2)". The comment above has always said two.
+      length: 2,
       initialIndex: initialIndex,
       child: Scaffold(
         backgroundColor: tokens.colors.surface.base,

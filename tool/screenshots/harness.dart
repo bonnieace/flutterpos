@@ -46,6 +46,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_application_1/inventory/product_image_provider.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -371,6 +372,50 @@ Future<void> captureScreen(
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: screenshotTheme(),
+          // **Animations off, and it has to sit inside `MaterialApp`.** A
+          // skeleton sweeps on a repeating controller and `pumpAndSettle` waits
+          // for a tree to stop animating, so any screen still drawing one when
+          // it is captured is a screen the settle never returns from.
+          //
+          // `_resolveImages` below closes that for a *picture* still in flight.
+          // It cannot close it for a *read* still in flight, which is what the
+          // sales report draws `_SaleCardsSkeleton` for - and that is why
+          // sixteen of its captures timed out while everything around them
+          // passed.
+          //
+          // `AppSkeleton` already stops repeating under reduced motion, and
+          // says why in as many words: "a controller left repeating would keep
+          // the tree from ever settling". This is the switch it was written to
+          // respect; the harness simply never set it. It goes here rather than
+          // around the outside because `MaterialApp` installs a `MediaQuery` of
+          // its own, which would shadow one wrapped above it.
+          //
+          // Nothing is lost by it. These are still pictures of a settled tree -
+          // the harness cannot show motion either way.
+          // **`builder`, not a wrapper around `home`, and the difference is
+          // dialogs.** `builder` wraps the `Navigator`; `home` sits inside it.
+          // Half of these captures are taken with a sheet or a dialog open, and
+          // a pushed route is a sibling of `home` rather than a descendant - so
+          // anything installed around `home` is exactly what an overlay does not
+          // inherit. One `operations` capture kept failing on an unreachable
+          // picture for that reason alone after the store was installed.
+          builder: (context, navigator) => MediaQuery(
+            // A skeleton sweeps on a repeating controller and `pumpAndSettle`
+            // waits for a tree to stop animating, so a screen still drawing one
+            // when it is captured is a screen the settle never returns from.
+            // `AppSkeleton` stops repeating under reduced motion and says why:
+            // "a controller left repeating would keep the tree from ever
+            // settling". This is the switch it was written to respect.
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            // **The catalog's own image path, which the `NetworkImage` stub
+            // never covered.** See `ScreenshotImageCache`: a published picture
+            // is read from its store before it is fetched, so installing one
+            // answers every photograph without reaching for a socket.
+            child: TenantImageCacheScope(
+              cache: screenshotImageCache(),
+              child: navigator ?? const SizedBox.shrink(),
+            ),
+          ),
           home: child,
         ),
       ),

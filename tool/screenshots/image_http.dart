@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
+import 'package:flutter_application_1/inventory/product_image_cache.dart';
 
 /// Draws a deterministic product photograph used by the screenshot catalog.
 Future<Uint8List> screenshotProductImage() async {
@@ -82,6 +83,40 @@ Future<void> loadScreenshotProductImages() async {
 }
 
 Uint8List? _bytes;
+
+/// A store that answers every picture with the screenshot photograph.
+///
+/// **The catalog does not fetch through `NetworkImage`.**
+/// `TenantCachedNetworkImage` reads its store first and falls back to a plain
+/// `package:http` GET, and `debugNetworkImageHttpClientProvider` above is a seam
+/// `NetworkImage` alone consults - so the operations captures went to a real
+/// socket, got nothing, and raised `image_unreachable`. `precacheImage` reports
+/// that to `FlutterError.onError` as well as throwing it, and `flutter_test`
+/// fails a test on any reported error, so the harness's own `catch` around the
+/// precache could not swallow it.
+///
+/// Answering from the store instead means the fetch never happens. It also
+/// matches what a device does on the second run, which is the state these
+/// pictures should show.
+final class ScreenshotImageCache implements TenantImageCache {
+  const ScreenshotImageCache(this.bytes);
+
+  final Uint8List bytes;
+
+  @override
+  Future<Uint8List?> read(Uri url) async => bytes;
+
+  /// The harness keeps nothing: every read is already a hit.
+  @override
+  Future<void> write(Uri url, Uint8List bytes) async {}
+}
+
+/// The store to install over a capture, once [loadScreenshotProductImages] has
+/// drawn the photograph. Null before then, which installs no scope at all.
+ScreenshotImageCache? screenshotImageCache() {
+  final bytes = _bytes;
+  return bytes == null ? null : ScreenshotImageCache(bytes);
+}
 
 final class _ImageHttpClient implements io.HttpClient {
   _ImageHttpClient(this.bytes);
