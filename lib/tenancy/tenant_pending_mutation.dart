@@ -21,9 +21,8 @@ enum TenantPendingMutationKind {
   /// `allow create` on `products` is now `if false`. It had to become one: a
   /// create may carry an opening quantity, and the `stock_adjustments` record
   /// and `stock_movements` entry saying where those units came from cannot be
-  /// written by any client. The payload is unchanged - the drain builds the
-  /// callable's envelope from `targetPath` - so a record queued by an older
-  /// build still replays.
+  /// written by any client. The queued payload is the document a device
+  /// composed; the drain builds the callable's envelope from `targetPath`.
   productCreate,
 
   /// Taking a product out of it. **Also a callable, and no longer a delete.**

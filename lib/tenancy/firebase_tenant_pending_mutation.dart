@@ -12,10 +12,6 @@ import 'tenant_pending_mutation.dart';
 /// the document a device composed - unchanged from when this kind was a
 /// Firestore `set` - and the business and the product come from the path the
 /// record already targets. So a create queued by a build that wrote the document
-/// directly, one carrying no `quantity` at all, drains through the callable
-/// untouched and is read as opening nothing. Nothing durable on anybody's phone
-/// had to be migrated.
-///
 /// The product ID is also the idempotency key. It is already a digest of the
 /// request ID that minted it, so a replay answers off the server's own record
 /// instead of stocking the shelf twice.
@@ -30,12 +26,11 @@ Map<String, Object?> tenantProductCreateCallablePayload(
 /// The `createCategory` or `renameCategory` request one queued write describes.
 ///
 /// Derived from the record rather than stored in it, exactly as
-/// [tenantProductCreateCallablePayload] is and for the same reason: the payload
-/// is the document a device composed - unchanged from when these kinds were
-/// Firestore writes - and the business and the category come from the path the
-/// record already targets. So a category queued by a build that wrote the
-/// document directly drains through the callable untouched, and nothing durable
-/// on anybody's phone had to be migrated when the rule closed.
+/// [tenantProductCreateCallablePayload] is and for the same reason: the queued
+/// payload is the document a device composed, which is also what the local
+/// overlay merges into the cache, and the business and the category come from
+/// the path the record already targets. Storing the envelope instead would mean
+/// keeping two shapes of the same write in the queue.
 ///
 /// For a create the category ID is also the idempotency key. It is already a
 /// digest of the request ID that minted it, so a replay answers off the server's
@@ -137,12 +132,11 @@ final class FirebaseTenantMutationGateway
         // the whole reason this stopped being a `set`.
         //
         // **The envelope is rebuilt from the record, not stored in it.** The
-        // payload is the document a device composed, exactly as it always was,
-        // and the tenant and product come from `targetPath`. So a record queued
-        // by a build that wrote this document directly - one carrying no
-        // `quantity` at all, which the callable reads as zero - drains through
-        // here unchanged. That is what let `allow create` close in the same
-        // release without stranding work already durable on somebody's phone.
+        // queued payload is the document a device composed, which is also what
+        // `_projected` merges into the cache while the record is in flight, and
+        // the tenant and product come from `targetPath`. Storing the envelope
+        // as well would put two shapes of one write in the queue and give the
+        // overlay a second thing to read.
         //
         // The product ID is the idempotency key. It is already a digest of the
         // request ID that minted it, so a replay answers off the server's record

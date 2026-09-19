@@ -338,30 +338,26 @@ test("a schema v2 sale cannot record an unmodelled tender", async () => {
   }
 });
 
-// The case that decided v1 stays supported: a device holding an unsubmitted v1
-// draft across the upgrade must still commit it. Its payload hash covers the
-// whole payload, so a draft migrated to v2 would no longer match the server
-// sale that an awaiting-confirmation record is waiting on.
-test("an unmigrated schema v1 sale still commits, but cannot carry a tender", async () => {
+// #105: v1 stayed accepted so a device holding an unsubmitted v1 draft across
+// the upgrade could still commit it - its payload hash covers the whole
+// payload, so migrating the draft would break the hash the server sale is
+// matched against. SIT clears app data instead, so there is no such draft.
+test("a schema v1 sale is refused, with or without a tender", async () => {
   await seedCheckoutTenant();
   const firestore = authenticatedFirestore(testEnvironment, "cashier");
 
-  await assertSucceeds(
-    checkoutBatch(firestore, {
-      checkoutId: "checkout-v1",
-      decrements: [["tenants/tenant-a/products/product-a", -1]],
-      sale: { payloadSchemaVersion: 1, tender: undefined },
-    }).commit(),
-  );
-  await assertFails(
-    checkoutBatch(firestore, {
-      checkoutId: "checkout-v1-tender",
-      sale: { payloadSchemaVersion: 1, tender: "cash" },
-    }).commit(),
-  );
-
-  if (await saleExists("checkout-v1-tender")) {
-    throw new Error("A schema v1 sale carrying a tender was accepted.");
+  for (const [name, tender] of [["none", undefined], ["cash", "cash"]]) {
+    const checkoutId = `checkout-v1-${name}`;
+    await assertFails(
+      checkoutBatch(firestore, {
+        checkoutId,
+        decrements: [["tenants/tenant-a/products/product-a", -1]],
+        sale: { payloadSchemaVersion: 1, tender },
+      }).commit(),
+    );
+    if (await saleExists(checkoutId)) {
+      throw new Error(`A schema v1 sale was accepted (${name}).`);
+    }
   }
 });
 

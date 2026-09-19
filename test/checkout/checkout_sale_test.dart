@@ -330,44 +330,25 @@ void main() {
     }
   });
 
-  // The case that decided whether v1 stays supported: a device that saved a
-  // draft before the upgrade must still be able to submit it. Its hash covers
-  // the whole payload, so a migrated draft would no longer match the server
-  // sale an awaiting-confirmation record is waiting on.
-  test('still parses and submits an unmigrated v1 draft', () async {
-    final record = await _save(
-      outbox,
-      _payload(schemaVersion: 1, tender: null),
-      checkoutId: 'checkout-legacy',
-    );
+  // #105: v1 stayed supported so a device holding a draft saved before the
+  // upgrade could still submit it - the hash covers the whole payload, so a
+  // migrated draft would no longer match the server sale an
+  // awaiting-confirmation record waits on. SIT clears app data instead, so
+  // there is no such draft to strand and one contract to check against.
+  test('refuses a v1 draft, with or without a tender', () async {
+    for (final tender in <String?>[null, 'cash']) {
+      final record = await _save(
+        outbox,
+        _payload(schemaVersion: 1, tender: tender),
+        checkoutId: 'checkout-legacy-${tender ?? 'none'}',
+      );
 
-    final payload = CheckoutSalePayload.fromOutboxRecord(
-      record,
-      session: session,
-    );
-    final fields = payload.toSubmission().saleFields;
-
-    expect(payload.schemaVersion, 1);
-    expect(payload.tender, isNull);
-    // The sale describes the contract it was actually written under.
-    expect(fields['payloadSchemaVersion'], 1);
-    expect(fields.containsKey('tender'), isFalse);
-    // The hash the server sale will be matched against is unchanged.
-    expect(fields['payloadHash'], record.payloadHash);
-    expect(payload.totalMinor, 65000);
-  });
-
-  test('refuses a v1 payload that grew a tender locally', () async {
-    final record = await _save(
-      outbox,
-      _payload(schemaVersion: 1, tender: 'cash'),
-      checkoutId: 'checkout-legacy-tender',
-    );
-
-    expect(
-      () => CheckoutSalePayload.fromOutboxRecord(record, session: session),
-      _throwsSaleFormat,
-    );
+      expect(
+        () => CheckoutSalePayload.fromOutboxRecord(record, session: session),
+        _throwsSaleFormat,
+        reason: 'schema v1 is no longer a contract this build accepts',
+      );
+    }
   });
 
   test(

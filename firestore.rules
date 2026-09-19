@@ -116,16 +116,14 @@ service cloud.firestore {
     // with `hasOnly`, so an unconstrained tender would be an arbitrary
     // client-chosen string and therefore evidence of nothing at all.
     //
-    // Schema v1 predates the decision and must carry no tender. That version
-    // stays accepted on purpose: a device holding an unsubmitted v1 draft
-    // across the upgrade must still be able to commit it, and its payload hash
-    // covers the whole payload, so rewriting the draft to v2 would break the
-    // hash the server sale is matched against during confirmation. Refusing v1
-    // here would strand exactly that evidence.
+    // **Schema v1 is no longer accepted (#105).** It predated the decision and
+    // stayed accepted so a device holding an unsubmitted v1 draft across the
+    // upgrade could still commit it; SIT clears app data instead, so there is
+    // no such draft to strand.
     //
-    // An absent or non-integer `payloadSchemaVersion` now denies the create.
-    // The rule previously ignored the field entirely; a sale that does not say
-    // which contract it was written under cannot be checked against one.
+    // An absent or non-integer `payloadSchemaVersion` denies the create. A sale
+    // that does not say which contract it was written under cannot be checked
+    // against one.
     //
     // **A v2 sale may also carry no tender, and that is an answer.** The
     // cashier was not always told how the customer paid, and a till that
@@ -135,13 +133,10 @@ service cloud.firestore {
     // card. A tender that is *present* and names something unmodelled is still
     // denied - that is a corrupt record rather than an unanswered question.
     function validSaleTender(sale) {
-      return (sale.payloadSchemaVersion == 1 && !('tender' in sale))
-        || (
-          sale.payloadSchemaVersion == 2
-          && (
-            !('tender' in sale)
-            || sale.tender in ['cash', 'mpesa', 'card']
-          )
+      return sale.payloadSchemaVersion == 2
+        && (
+          !('tender' in sale)
+          || sale.tender in ['cash', 'mpesa', 'card']
         );
     }
 

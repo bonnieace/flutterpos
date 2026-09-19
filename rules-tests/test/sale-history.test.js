@@ -47,7 +47,7 @@ function saleDocument({ saleId, soldById, shiftId, sequence }) {
     tenantId: "tenant-a",
     soldById,
     payloadHash: "a".repeat(64),
-    payloadSchemaVersion: 1,
+    payloadSchemaVersion: 2,
     currency: "KES",
     businessDate: BUSINESS_DATE,
     clientCreatedAtMs: 1785484800000,

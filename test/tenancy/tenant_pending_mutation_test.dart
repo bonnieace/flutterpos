@@ -509,12 +509,11 @@ void main() {
       expect(payload.keys, <String>['tenantId', 'productId', 'document']);
     });
 
-    test('a create queued before this callable existed still drains', () async {
-      // **The whole migration argument, as a test.** A build that wrote this
-      // document directly queued a payload with no `quantity` key at all. It has
-      // to reach `createProduct` untouched and be read as opening nothing - if it
-      // did not, closing `allow create` in the same release would have stranded
-      // work already durable on somebody's phone.
+    test('a create that opens no stock carries no quantity key', () async {
+      // A product brought in with nothing on the shelf queues a document with
+      // no `quantity` at all, and it must reach `createProduct` untouched and be
+      // read as opening nothing. Absent is not zero anywhere else in this
+      // system either, and the envelope must not invent one here.
       final payload = tenantProductCreateCallablePayload(
         await queued(quantity: null),
       );

@@ -13,14 +13,15 @@ const int checkoutSaleTenderSchemaVersion = 2;
 
 /// Every payload version this client can still parse and submit.
 ///
-/// Version 1 predates the tender decision and stays supported on purpose. The
-/// payload hash is a SHA-256 over the *whole* payload, so migrating a stored
-/// draft to v2 would change its hash - and an outbox record already in
-/// `awaiting_confirmation` was hashed under v1 and is waiting on a server sale
-/// that carries exactly that hash. Rewriting it would break the only evidence
-/// that can settle it. So a v1 payload is never rewritten, never re-versioned,
-/// and submits unchanged; only new drafts are v2.
-const Set<int> supportedCheckoutSalePayloadSchemaVersions = <int>{1, 2};
+/// **Version 1 is gone (#105).** It predated the tender decision and stayed
+/// supported so that a device holding an unsubmitted v1 draft across the
+/// upgrade could still commit it - the payload hash covers the whole payload,
+/// so re-versioning a stored draft would break the hash the server sale is
+/// matched against. SIT clears app data instead, so there is no such draft to
+/// strand and one contract to check against.
+const Set<int> supportedCheckoutSalePayloadSchemaVersions = <int>{
+  checkoutSaleTenderSchemaVersion,
+};
 
 /// Firestore Rules validate at most sixteen explicit sale lines.
 const int maximumCheckoutSaleLines = 16;
@@ -311,7 +312,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
         'Unsupported checkout payload schema version.',
       );
     }
-    final tender = _declaredTender(payload, schemaVersion);
+    final tender = _declaredTender(payload);
     if (payload['checkoutId'] != safeCheckoutId) {
       throw const CheckoutSaleFormatException(
         'The payload checkout ID is not the immutable outbox checkout ID.',
@@ -513,21 +514,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
 /// differently cased, or not a string at all - is still refused rather than
 /// recorded as an unknown payment, because that is a corrupt record rather than
 /// an unanswered question.
-///
-/// A v1 payload must not carry the key at all: it was hashed without one, and a
-/// v1 draft that grew a tender locally would be a payload nobody agreed to.
-CheckoutTender? _declaredTender(
-  Map<String, Object?> payload,
-  int schemaVersion,
-) {
-  if (schemaVersion < checkoutSaleTenderSchemaVersion) {
-    if (payload.containsKey('tender')) {
-      throw const CheckoutSaleFormatException(
-        'A schema v1 checkout cannot record a tender.',
-      );
-    }
-    return null;
-  }
+CheckoutTender? _declaredTender(Map<String, Object?> payload) {
   if (!payload.containsKey('tender')) return null;
   final tender = CheckoutTender.tryParse(payload['tender']);
   if (tender == null) {
