@@ -558,8 +558,7 @@ final class _SalesTotalsContents extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (answer.net?.tenderBreakdown ??
-                      answer.tenderBreakdown
+                  if (answer.net?.tenderBreakdown ?? answer.tenderBreakdown
                       case final breakdown?) ...[
                     SizedBox(height: tokens.spacing.s12),
                     _TenderBreakdown(breakdown: breakdown, currency: _currency),

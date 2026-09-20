@@ -367,12 +367,27 @@ final class AppSelect<T> extends StatefulWidget {
     this.helper,
     this.error,
     this.leading,
+    this.dense = false,
     this.enabled = true,
   });
 
   /// See [AppFieldWell.leading]. Offered here so the two controls cannot drift
   /// apart, which is what "one pattern, everywhere" means at this level.
   final IconData? leading;
+
+  /// Draws the control without its caption above it.
+  ///
+  /// **The label is hidden, never removed.** It stays the control's accessible
+  /// name, so a screen reader announces it exactly as it does at full size and
+  /// DESIGN RULES 4 is satisfied rather than argued around. What goes is the
+  /// visible caption, and only where the surface has already said what these
+  /// controls are - a filter strip whose two chips sit under a week stepper
+  /// does not need two more lines of type to introduce them, and on a phone
+  /// those lines cost a third of the room the figures need.
+  ///
+  /// The [leading] glyph carries what the caption did, so a dense control
+  /// without one says nothing about itself: pass both or neither.
+  final bool dense;
 
   final String label;
   final T value;
@@ -423,6 +438,7 @@ class _AppSelectState<T> extends State<AppSelect<T>> {
         : tokens.colors.action.disabledLabel;
     return AppFieldWell(
       label: widget.label,
+      showsLabel: !widget.dense,
       helper: widget.helper,
       error: widget.error,
       enabled: enabled,
@@ -483,6 +499,7 @@ final class AppFieldWell extends StatelessWidget {
     super.key,
     required this.label,
     required this.child,
+    this.showsLabel = true,
     this.helper,
     this.error,
     this.showsErrorText = true,
@@ -522,6 +539,20 @@ final class AppFieldWell extends StatelessWidget {
   /// field is for is noise in a form of six, so most fields carry none and the
   /// label above the well is what names them.
   final IconData? leading;
+
+  /// Draws the control without its caption above it.
+  ///
+  /// **The label is hidden, never removed.** It stays the control's accessible
+  /// name, so a screen reader announces it exactly as it does at full size and
+  /// DESIGN RULES 4 is satisfied rather than argued around. What goes is the
+  /// visible caption, and only where the surface has already said what these
+  /// controls are - a filter strip whose two chips sit under a week stepper
+  /// does not need two more lines of type to introduce them, and on a phone
+  /// those lines cost a third of the room the figures need.
+  ///
+  /// The [leading] glyph carries what the caption did, so a dense control
+  /// without one says nothing about itself: pass both or neither.
+  final bool showsLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -670,7 +701,7 @@ final class AppFieldWell extends StatelessWidget {
         // itself - so that one caller labels the whole control and passes none
         // here. An empty string that still reserved sixteen pixels put its two
         // buttons above the number they change; the picture is what caught it.
-        if (label.isNotEmpty)
+        if (label.isNotEmpty && showsLabel)
           Padding(
             // The label sits over the well's own gutter, so the gap a person sees
             // between the two is `space.4` plus the ring's 4 rather than a
@@ -689,7 +720,7 @@ final class AppFieldWell extends StatelessWidget {
               ),
             ),
           ),
-        well,
+        if (showsLabel) well else Semantics(label: label, child: well),
         if (footnote != null || counter != null)
           Padding(
             padding: EdgeInsets.only(

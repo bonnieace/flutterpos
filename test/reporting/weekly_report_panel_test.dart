@@ -155,11 +155,13 @@ void main() {
       find.byKey(const ValueKey('weekly-report-stock-movements')),
       findsOneWidget,
     );
-    // §9: the count is said in words rather than left as a bare number.
-    expect(
-      find.text('2 differences are open and have not been resolved.'),
-      findsOneWidget,
-    );
+    // **DESIGN RULES 4, at the tile's length rather than the card's.** These
+    // were paragraph cards in the figure grid until 2026-09-20; as tiles they
+    // say where they go and what is waiting, and the sentence about what the
+    // page is for belongs on the page. What has not changed is that the
+    // standing is in a word: `2` in amber would be a status told in a tint,
+    // and `2 open` is a status told in language that happens to be tinted.
+    expect(find.text('2 open'), findsOneWidget);
   });
 
   testWidgets('a role that may not read a report is not shown its card', (

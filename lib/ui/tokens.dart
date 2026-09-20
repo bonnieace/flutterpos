@@ -1691,6 +1691,21 @@ final class AppRadii {
   /// controls are circles. Where the design states a shape, the shape is a role
   /// above. Where it states none, this is the app's own and is recorded as such
   /// in `docs/stitch/OPEN_QUESTIONS.md`.
+  /// Large panels: a reporting dashboard's cards, its hero figure, its tiles.
+  /// **16, added 2026-09-20.**
+  ///
+  /// **A role above [lg] rather than a repoint of [md], and the difference is
+  /// the point.** [md] is the shape of a *row* - a button, a field, a list
+  /// item, a thing in a stack of like things - and Profound Verdant measures
+  /// it at 8 in every one of those. A dashboard card is not one of those: it
+  /// is a panel with a figure in it, several to a screen, and at 8 a grid of
+  /// them reads as a table of cells rather than as cards. The product owner
+  /// called the row shape too rigid for that grid on 2026-09-20.
+  ///
+  /// Nothing is taken off [md]; a surface that is a row keeps it. A surface
+  /// that is a panel asks for this.
+  double get xl => 16;
+
   double get pill => 999;
 }
 

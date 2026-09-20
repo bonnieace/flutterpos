@@ -372,10 +372,12 @@ final class _ReportsFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppScaffold(
-    title: 'Reports & Analytics',
-    subtitle:
-        'Overview of sales performance, inventory levels, and transaction '
-        'history.',
+    // **One word, and no subtitle.** The old pair cost two lines at the top of
+    // a phone to say what the tiles below were about to show - and the subtitle
+    // never fitted, so it ended in an ellipsis on every handset this app runs
+    // on. The week stepper directly beneath says what the page is scoped to,
+    // which is the part a person needs at the top.
+    title: 'Reports',
     contentWidth: AppContentWidth.records,
     body: body,
   );
@@ -404,6 +406,28 @@ String weeklyReportAxisMoney(TenantReportingCurrency? currency, double amount) {
 /// published. The old screen's `_formatCurrency`.
 String weeklyReportMoney(TenantReportingCurrency? currency, double amount) =>
     (currency ?? TenantReportingCurrency.unknown).format(amount);
+
+/// The takings, grouped in thousands, with the code the tiles leave off.
+///
+/// **Grouped only here.** `17000.00` is read digit by digit; `17,000.00` is
+/// read at a glance, which is the whole job of the one figure a dashboard
+/// leads with. Every other amount on the page is in a list or a tile where a
+/// separator is noise, and `TenantReportingCurrency.format` stays as it is so
+/// nothing else on the page changes shape.
+String weeklyReportHeroMoney(TenantReportingCurrency? currency, double amount) {
+  final grouped = NumberFormat('#,##0.00').format(amount);
+  final code = currency?.code;
+  return code == null ? grouped : '$code $grouped';
+}
+
+/// The same figure with no currency code.
+///
+/// **For the tiles under the takings, which state the code once between
+/// them.** Repeating `KES` on five figures spends the width they have least of
+/// - at two across on a phone a coded amount in the 22-point mono face does
+/// not fit its cell - and says nothing the card above it has not. A surface
+/// that does not carry [weeklyReportMoney] somewhere must not use this.
+String weeklyReportAmount(double amount) => amount.toStringAsFixed(2);
 
 /// The old screen's `MMM d` week ends, and its `MMM dd, yyyy - hh:mm a` rows.
 final DateFormat weeklyReportDayFormat = DateFormat('MMM d');

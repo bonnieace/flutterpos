@@ -123,8 +123,9 @@ final class _TenantReconciliationRunPanelState
   void _composeLoaders(String key) {
     if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
-    TenantGuardedLoader<_RunView> readWith(TenantDataReader reader) =>
-        (session) async {
+    TenantGuardedLoader<_RunView> readWith(
+      TenantDataReader reader,
+    ) => (session) async {
       final run = await TenantReconciliationStatusRepository(
         session: session,
         reader: reader,

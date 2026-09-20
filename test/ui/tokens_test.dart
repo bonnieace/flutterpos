@@ -708,6 +708,27 @@ void main() {
       expect(tokens.radius.pill, 999);
     });
 
+    test('the panel radius is above the design scale, and says why', () {
+      // **`xl` is this app's own, added 2026-09-20, and the one radius no
+      // Profound Verdant value backs.** The product owner called the row shape
+      // too rigid for a dashboard of cards; a panel with a figure in it is not
+      // a row in a stack of like things, and at 8 a grid of them reads as a
+      // table of cells. Recorded as the app's own rather than smuggled in as a
+      // repoint of `md`, which would have restyled every button and field in
+      // the product to soften four cards on one screen.
+      expect(tokens.radius.xl, 16);
+      expect(
+        tokens.radius.xl,
+        greaterThan(tokens.radius.lg),
+        reason: 'a panel is softer than a dialog, or it would not be a role',
+      );
+      expect(
+        tokens.radius.xl,
+        lessThan(tokens.radius.pill),
+        reason: 'a card is a corner, not a stadium',
+      );
+    });
+
     test('every radius the design states is inside its 4-8px claim', () {
       // `DESIGN_RULES.md`: "Corners are compact (generally 4-8 px in the Stitch
       // system)". The three surface radii bracket that, and the old scale did

@@ -133,8 +133,9 @@ final class _TenantShiftAmendmentPanelState
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
     final shiftId = _shiftId;
-    TenantGuardedLoader<TenantShiftAmendmentRecordPage> readWith(TenantDataReader reader) =>
-        (session) {
+    TenantGuardedLoader<TenantShiftAmendmentRecordPage> readWith(
+      TenantDataReader reader,
+    ) => (session) {
       final repository = TenantShiftAmendmentFeedRepository(
         session: session,
         reader: reader,

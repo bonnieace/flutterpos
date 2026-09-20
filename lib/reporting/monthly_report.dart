@@ -57,11 +57,15 @@ final class TenantReportMonth {
 
   bool get isCurrent => offset == 0;
 
-  TenantReportMonth get previous =>
-      TenantReportMonth._(offset - 1, DateTime.utc(_first.year, _first.month - 1, 1));
+  TenantReportMonth get previous => TenantReportMonth._(
+    offset - 1,
+    DateTime.utc(_first.year, _first.month - 1, 1),
+  );
 
-  TenantReportMonth get next =>
-      TenantReportMonth._(offset + 1, DateTime.utc(_first.year, _first.month + 1, 1));
+  TenantReportMonth get next => TenantReportMonth._(
+    offset + 1,
+    DateTime.utc(_first.year, _first.month + 1, 1),
+  );
 
   String get startBusinessDate => _dateOf(_first);
   String get endBusinessDate => _dateOf(last);
@@ -220,12 +224,11 @@ final class TenantMonthlyReportLoader {
     // Started together rather than one after another, and gathered with
     // `Future.wait` so that a rejection cannot be stranded without a listener -
     // the reasoning `TenantWeeklyReportLoader.load` sets out at length.
-    final results = await Future.wait<TenantSalesTotals?>(<
-      Future<TenantSalesTotals?>
-    >[
-      _totals(month, soldById: soldById, categoryId: categoryId),
-      _previousTotals(month, soldById: soldById, categoryId: categoryId),
-    ]);
+    final results =
+        await Future.wait<TenantSalesTotals?>(<Future<TenantSalesTotals?>>[
+          _totals(month, soldById: soldById, categoryId: categoryId),
+          _previousTotals(month, soldById: soldById, categoryId: categoryId),
+        ]);
 
     return TenantMonthlyReport(
       month: month,

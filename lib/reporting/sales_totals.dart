@@ -468,7 +468,9 @@ final class TenantSalesNetTotals {
       throw const FormatException('getSalesComparison sent no net block.');
     }
     if (value is! Map) {
-      throw const FormatException('getSalesComparison sent a malformed net block.');
+      throw const FormatException(
+        'getSalesComparison sent a malformed net block.',
+      );
     }
     final net = _strictMap(value, 'net');
     final sales = _requiredNonNegativeNumber(net, 'sales');

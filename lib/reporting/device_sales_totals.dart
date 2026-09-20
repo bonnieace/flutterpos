@@ -223,7 +223,9 @@ final class TenantDeviceSalesAggregator {
     final DateTime first;
     final DateTime last;
     try {
-      first = DateTime.parse('${validateCheckoutBusinessDate(start)}T00:00:00Z');
+      first = DateTime.parse(
+        '${validateCheckoutBusinessDate(start)}T00:00:00Z',
+      );
       last = DateTime.parse('${validateCheckoutBusinessDate(end)}T00:00:00Z');
     } on Object {
       return null;

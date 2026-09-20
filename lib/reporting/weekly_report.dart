@@ -160,6 +160,7 @@ final class TenantWeeklyReport {
     required this.itemsSold,
     required this.scanWasTruncated,
     this.netsItemsSold = false,
+    this.returnedUnits,
     this.expenses,
   });
 
@@ -181,6 +182,14 @@ final class TenantWeeklyReport {
 
   /// Units sold across the week, from the same pass that built [topItems].
   final int itemsSold;
+
+  /// How many units [itemsSold] has had taken out of it, or null where the
+  /// returns were not read.
+  ///
+  /// **The figure beside the count, not a second count.** `17` net of `4` back
+  /// is a different week from `17` with nothing returned, and until the tile
+  /// could say which it printed the same number for both.
+  final int? returnedUnits;
 
   /// Whether [itemsSold] and [topItems] have had returned units taken out of
   /// them.
@@ -428,6 +437,7 @@ final class TenantWeeklyReportLoader {
       itemsSold: roll.itemsSold,
       scanWasTruncated: roll.truncated,
       netsItemsSold: roll.netsReturns,
+      returnedUnits: roll.netsReturns ? roll.returnedUnits : null,
       expenses: expenses,
     );
   }
@@ -510,6 +520,7 @@ final class TenantWeeklyReportLoader {
       itemsSold: roll.itemsSold,
       scanWasTruncated: roll.truncated,
       netsItemsSold: roll.netsReturns,
+      returnedUnits: roll.netsReturns ? roll.returnedUnits : null,
       expenses: settled[3] as TenantExpensePeriod?,
     );
   }
@@ -709,6 +720,7 @@ final class TenantWeeklyReportLoader {
     var scanned = 0;
     var truncated = false;
     var itemsSold = 0;
+    var returnedUnits = 0;
     String? cursor;
     try {
       while (scanned < saleScanCap) {
@@ -812,6 +824,7 @@ final class TenantWeeklyReportLoader {
         offset.returnedUnitsInScope.forEach((productId, units) {
           quantities[productId] = (quantities[productId] ?? 0) - units;
           itemsSold -= units;
+          returnedUnits += units;
         });
         offset.returnedMinorByProduct.forEach((productId, minor) {
           revenue[productId] = (revenue[productId] ?? 0) - minor;
@@ -829,6 +842,7 @@ final class TenantWeeklyReportLoader {
       truncated: truncated,
       revenueByDate: revenueByDate,
       netsReturns: returns != null,
+      returnedUnits: returnedUnits,
     );
   }
 
@@ -906,6 +920,7 @@ final class _ItemRoll {
     required this.truncated,
     this.revenueByDate = const <String, int>{},
     this.netsReturns = false,
+    this.returnedUnits = 0,
   });
 
   const _ItemRoll.empty()
@@ -916,7 +931,8 @@ final class _ItemRoll {
       itemsSold = 0,
       truncated = false,
       revenueByDate = const <String, int>{},
-      netsReturns = false;
+      netsReturns = false,
+      returnedUnits = 0;
 
   final Map<String, int> quantities;
   final Map<String, int> revenue;
@@ -931,6 +947,9 @@ final class _ItemRoll {
 
   /// Whether the week's returns were read and taken out of these figures.
   final bool netsReturns;
+
+  /// How many units were taken out.
+  final int returnedUnits;
 
   /// The best sellers by revenue, which is what the old page ordered by.
   List<TenantReportItem> top(int count) {
