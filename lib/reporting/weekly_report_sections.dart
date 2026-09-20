@@ -12,6 +12,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
@@ -147,6 +148,28 @@ final class WeeklyReportContents extends StatelessWidget {
   final VoidCallback onRetry;
   final String? failureMessage;
 
+  /// Whether the server has been asked for this week and could not answer.
+  ///
+  /// **A cache hit is not evidence of an outage**, and the callout below used
+  /// to treat it as though it were. The guard runs the device read beside the
+  /// server read so the page draws immediately; the device read usually wins,
+  /// because a disk beats a network. So on every single open this page raised
+  /// a banner announcing that it was working from this device, and withdrew it
+  /// half a second later when the server answered - an outage it had no
+  /// grounds for, taken back before anybody finished reading it.
+  ///
+  /// `TenantRouteGuard` already draws exactly this distinction and publishes
+  /// it: `fromCache` without `stale` is *the server has not answered yet*,
+  /// which is a moment, and `stale` is *the server was asked and could not be
+  /// reached*, which is the standing condition the sentence was written for.
+  /// The shell's own offline card learned this in the same words - see
+  /// `_worksFromSavedData` - and this page was never brought into line with it.
+  ///
+  /// Outside a guard there is nothing to ask, and the figures on screen really
+  /// were counted here, so the callout stands.
+  static bool serverCouldNotBeReached(BuildContext context) =>
+      TenantReadFreshness.maybeOf(context)?.stale ?? true;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -162,16 +185,17 @@ final class WeeklyReportContents extends StatelessWidget {
       key: const ValueKey('weekly-report-body'),
       padding: EdgeInsets.symmetric(vertical: tokens.spacing.s8),
       children: <Widget>[
-        if (report?.totals?.basis == TenantSalesTotalsBasis.device) ...<Widget>[
+        if (report?.totals?.basis == TenantSalesTotalsBasis.device &&
+            serverCouldNotBeReached(context)) ...<Widget>[
           const Callout(
             key: ValueKey('weekly-report-device-basis'),
             status: AppStatus.info,
             title: 'On this device',
             message:
-                'These figures include saved sales on this device, less the '
-                'returns it holds. Sales or returns from other devices, and '
-                'comparison percentages, will appear after the server '
-                'responds.',
+                'The server could not be reached, so this is counted from the '
+                'sales saved here, less the returns this device holds. Sales '
+                'or returns from other devices, and comparison percentages, '
+                'are not in it.',
           ),
           SizedBox(height: tokens.spacing.s24),
         ],
@@ -324,8 +348,15 @@ final class _MetricGrid extends StatelessWidget {
   /// when they come from the sale records on the device instead, that is a
   /// different claim about the same week and a shopkeeper is entitled to know
   /// which one they are reading.
-  static bool _countedHere(TenantWeeklyReport? data) =>
-      data?.totals?.basis == TenantSalesTotalsBasis.device;
+  ///
+  /// **Not while the server is still answering, which is the whole of the
+  /// 2026-09-20 report.** The guard draws the device figures first on purpose,
+  /// so on every open three cards grew an amber label and the callout above
+  /// them a paragraph, and half a second later all four went away again. The
+  /// same rule as the callout: see [WeeklyReportContents.serverCouldNotBeReached].
+  static bool _countedHere(BuildContext context, TenantWeeklyReport? data) =>
+      data?.totals?.basis == TenantSalesTotalsBasis.device &&
+      WeeklyReportContents.serverCouldNotBeReached(context);
 
   static const String _countedLabel = 'On this device';
 
@@ -377,7 +408,7 @@ final class _MetricGrid extends StatelessWidget {
         value: data == null || !data.hasTakings
             ? '—'
             : weeklyReportMoney(currency, data.sales),
-        subtitle: _countedHere(data) ? _countedLabel : null,
+        subtitle: _countedHere(context, data) ? _countedLabel : null,
         change: TenantWeeklyReport.change(
           data?.sales ?? 0,
           previous?.netOrGrossSales,
@@ -452,7 +483,7 @@ final class _MetricGrid extends StatelessWidget {
         title: 'TRANSACTIONS',
         reading: reading,
         value: data == null || !data.hasTakings ? '—' : '${data.transactions}',
-        subtitle: _countedHere(data) ? _countedLabel : null,
+        subtitle: _countedHere(context, data) ? _countedLabel : null,
         change: TenantWeeklyReport.change(
           (data?.transactions ?? 0).toDouble(),
           previous?.netOrGrossTransactions.toDouble(),
@@ -472,7 +503,7 @@ final class _MetricGrid extends StatelessWidget {
         value: data == null || !data.hasTakings || data.transactions == 0
             ? '—'
             : weeklyReportMoney(currency, data.averageSale),
-        subtitle: _countedHere(data) ? _countedLabel : null,
+        subtitle: _countedHere(context, data) ? _countedLabel : null,
         change: data == null
             ? null
             : TenantWeeklyReport.change(
