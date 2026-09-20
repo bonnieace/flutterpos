@@ -54,11 +54,7 @@ final class TenantReturnFeedScreen extends StatelessWidget {
     title: 'Returns',
     subtitle: 'All returns recorded by this business',
     contentWidth: AppContentWidth.records,
-    body: TenantReturnFeedPanel(
-      reader: reader,
-      actions: actions,
-      clock: clock,
-    ),
+    body: TenantReturnFeedPanel(reader: reader, actions: actions, clock: clock),
   );
 }
 
@@ -247,17 +243,18 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
     final standing = _standing;
     TenantGuardedLoader<_ReturnFeedView> readWith(TenantDataReader reader) =>
         (session) async {
-          final page = await TenantReturnHistoryRepository(
-            session: session,
-            reader: reader,
-          ).loadReturns(
-            pageSize: widget.pageSize,
-            cursor: cursor,
-            recordedOn: recordedOn == tenantReturnFeedAllDates
-                ? null
-                : recordedOn,
-            status: standing,
-          );
+          final page =
+              await TenantReturnHistoryRepository(
+                session: session,
+                reader: reader,
+              ).loadReturns(
+                pageSize: widget.pageSize,
+                cursor: cursor,
+                recordedOn: recordedOn == tenantReturnFeedAllDates
+                    ? null
+                    : recordedOn,
+                status: standing,
+              );
           final names = await _resolverFor(session, reader).resolve(
             page.items.expand(
               (record) => <String>[
@@ -301,15 +298,13 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
     );
     final sales = <String, TenantSale>{};
     final read = await Future.wait<TenantSale?>(
-      saleIds.map(
-        (id) async {
-          try {
-            return await repository.readSale(id);
-          } catch (_) {
-            return null;
-          }
-        },
-      ),
+      saleIds.map((id) async {
+        try {
+          return await repository.readSale(id);
+        } catch (_) {
+          return null;
+        }
+      }),
     );
     for (final (index, sale) in read.indexed) {
       if (sale != null) sales[saleIds[index]] = sale;
@@ -331,7 +326,8 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
         productNames: <String, String>{
           for (final line in sale.lines) line.productId: line.name,
         },
-        receipt: '#'
+        receipt:
+            '#'
             '${sale.receiptSequence.toString().padLeft(checkoutReceiptSequenceDigits, '0')}',
         soldAt: sale.recordedAt,
         returnedMinor: returnedMinor,
@@ -608,8 +604,7 @@ final class _ReturnFeedContents extends StatelessWidget {
             record: record,
             staffNames: view.names,
             productNames:
-                view.facts[record.id]?.productNames ??
-                const <String, String>{},
+                view.facts[record.id]?.productNames ?? const <String, String>{},
             receipt: view.facts[record.id]?.receipt,
             selfUid: selfUid,
             onVerify: !record.isVerified && canVerify && !busy
@@ -969,27 +964,42 @@ final class _ReturnCard extends StatelessWidget {
                     // **The receipt, not the sale's document ID.** A person
                     // holding the paper can match this; nobody can match a
                     // `co_1f3a…`.
-                    Row(
+                    // **Three facts that flow, rather than three that
+                    // compete.** These were a `Row` whose only flexible child
+                    // was the receipt, so on a phone the receipt was the one
+                    // thing that gave way - a card reading `#0` and an ellipsis
+                    // beside a whole unit count and a whole amount. It is the
+                    // fact somebody holding the paper is matching against, and
+                    // the shortest of the three; it must never be the one that
+                    // is cut. A `Wrap` takes a second line instead, and still
+                    // bounds each child to the card, so the long fallback below
+                    // cannot run off the edge either.
+                    Wrap(
+                      spacing: tokens.spacing.s8,
+                      runSpacing: tokens.spacing.s4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: <Widget>[
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 14,
-                          color: tokens.colors.text.tertiary,
-                        ),
-                        SizedBox(width: tokens.spacing.s4),
-                        Flexible(
-                          child: Text(
-                            sale?.receipt ?? record.saleId,
-                            key: ValueKey('return-feed-sale-${record.id}'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: tokens.typography.mono.copyWith(
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Icon(
+                              Icons.receipt_long_outlined,
+                              size: 14,
                               color: tokens.colors.text.tertiary,
-                              fontSize: tokens.typography.caption.fontSize,
                             ),
-                          ),
+                            SizedBox(width: tokens.spacing.s4),
+                            Text(
+                              sale?.receipt ?? record.saleId,
+                              key: ValueKey('return-feed-sale-${record.id}'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tokens.typography.mono.copyWith(
+                                color: tokens.colors.text.tertiary,
+                                fontSize: tokens.typography.caption.fontSize,
+                              ),
+                            ),
+                          ],
                         ),
-                        SizedBox(width: tokens.spacing.s8),
                         Text(
                           '${record.returnedUnits} '
                           '${record.returnedUnits == 1 ? 'unit' : 'units'}',
@@ -998,8 +1008,7 @@ final class _ReturnCard extends StatelessWidget {
                             color: tokens.colors.text.tertiary,
                           ),
                         ),
-                        if (sale?.returnedMinor case final minor?) ...<Widget>[
-                          SizedBox(width: tokens.spacing.s8),
+                        if (sale?.returnedMinor case final minor?)
                           Text(
                             '${sale!.currency} ${_money(minor)}',
                             key: ValueKey('return-feed-value-${record.id}'),
@@ -1008,7 +1017,6 @@ final class _ReturnCard extends StatelessWidget {
                               fontSize: tokens.typography.caption.fontSize,
                             ),
                           ),
-                        ],
                       ],
                     ),
                   ],
@@ -1033,26 +1041,38 @@ final class _ReturnCard extends StatelessWidget {
           // "did this come back the same evening or three weeks later" - the
           // question a shopkeeper actually asks of a return - could not be
           // answered from the list at all.
-          Row(
+          // **It flows for the same reason the facts line above it does.**
+          // Two labelled instants and an arrow do not fit across a phone, and
+          // as a `Row` they did not ellipsize - they ran off the edge, which
+          // takes one of the two hours out of sight entirely. The arrow leads
+          // the second run rather than ending the first, so a wrapped card
+          // still reads *Sold ... -> Returned ...* in that order.
+          Wrap(
             key: ValueKey('return-feed-recorded-${record.id}'),
+            spacing: tokens.spacing.s8,
+            runSpacing: tokens.spacing.s4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
               _Moment(
                 icon: Icons.shopping_bag_outlined,
                 label: 'Sold',
                 at: sale?.soldAt,
               ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s8),
-                child: Icon(
-                  Icons.arrow_forward,
-                  size: 14,
-                  color: tokens.colors.text.tertiary,
-                ),
-              ),
-              _Moment(
-                icon: Icons.assignment_return_outlined,
-                label: 'Returned',
-                at: record.recordedAt,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(
+                    Icons.arrow_forward,
+                    size: 14,
+                    color: tokens.colors.text.tertiary,
+                  ),
+                  SizedBox(width: tokens.spacing.s8),
+                  _Moment(
+                    icon: Icons.assignment_return_outlined,
+                    label: 'Returned',
+                    at: record.recordedAt,
+                  ),
+                ],
               ),
             ],
           ),
@@ -1066,6 +1086,40 @@ final class _ReturnCard extends StatelessWidget {
               color: tokens.colors.text.secondary,
             ),
           ),
+          // **A pending return has already moved the money and has not yet
+          // moved the stock, and only one of those halves was ever on screen.**
+          // The takings net a return the moment a cashier files it - the
+          // product owner's call of 2026-09-06, so the figures agree with what
+          // the cashier just did - while the server restores stock only once a
+          // manager has verified the goods really are back. Both halves are
+          // right. What is wrong is the reading a person forms from watching
+          // the amount come off and assuming the shelf came with it, and the
+          // cure for that is to say so on the card where the belief is formed,
+          // not to move stock nobody has confirmed.
+          if (!record.isVerified) ...<Widget>[
+            SizedBox(height: tokens.spacing.s8),
+            Row(
+              key: ValueKey('return-feed-stock-note-${record.id}'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(
+                  Icons.inventory_2_outlined,
+                  size: 14,
+                  color: tokens.colors.status.attention.fg,
+                ),
+                SizedBox(width: tokens.spacing.s4),
+                Expanded(
+                  child: Text(
+                    'Already off the takings. The stock comes back when this '
+                    'is verified.',
+                    style: tokens.typography.caption.copyWith(
+                      color: tokens.colors.status.attention.fg,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           SizedBox(height: tokens.spacing.s12),
           Row(
             children: <Widget>[

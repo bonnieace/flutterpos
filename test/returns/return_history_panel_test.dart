@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_application_1/checkout/checkout_receipt.dart';
 import 'package:flutter_application_1/returns/returns.dart';
 import 'package:flutter_application_1/sales/sales.dart';
@@ -517,10 +518,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('sale-returns-confirm')));
     await tester.pumpAndSettle();
 
-    expect(
-      snackNotice(tester).message,
-      startsWith('The result is unknown.'),
-    );
+    expect(snackNotice(tester).message, startsWith('The result is unknown.'));
 
     // The retry reuses the same deterministic document, so the create-only rule
     // refuses a replay instead of recording the reversal twice.
@@ -586,10 +584,7 @@ void main() {
       'returnId': 'ret-1',
       'requestId': 'verify-return-abcdefgh',
     });
-    expect(
-      snackNotice(tester).message,
-      'Restored 3 units across 2 products.',
-    );
+    expect(snackNotice(tester).message, 'Restored 3 units across 2 products.');
   });
 
   testWidgets('a cashier is never offered the restore action', (tester) async {
@@ -861,9 +856,7 @@ void main() {
       ]);
 
     await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
-    await tester.tap(
-      find.byKey(const ValueKey('return-feed-standing-filter')),
-    );
+    await tester.tap(find.byKey(const ValueKey('return-feed-standing-filter')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Pending').last);
     await tester.pumpAndSettle();
@@ -890,7 +883,10 @@ void main() {
     // **The escape a return recorded before this field existed depends on.**
     // Such a record carries no day, so a query that always named one would put
     // the whole history before 2026-09-06 out of reach of its own screen.
-    expect(reader.queries.last.equalityFilters.containsKey('recordedOn'), isFalse);
+    expect(
+      reader.queries.last.equalityFilters.containsKey('recordedOn'),
+      isFalse,
+    );
     expect(find.byKey(const ValueKey('return-feed-entry-ret-1')), findsOne);
   });
 
@@ -909,6 +905,66 @@ void main() {
     // a screen that says otherwise is lying about its own controls.
     expect(find.byKey(const ValueKey('return-feed-no-matches')), findsOne);
     expect(find.byKey(const ValueKey('return-feed-empty')), findsNothing);
+  });
+
+  testWidgets('a narrow card never cuts the receipt off', (tester) async {
+    // **The reported defect.** The receipt, the unit count and the amount were
+    // one `Row` in which only the receipt could shrink, so on a phone it was
+    // the receipt that lost - a card reading `#0` and an ellipsis, which is
+    // the one fact on the line somebody holding the paper is matching against.
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-1'),
+      ])
+      ..documents['tenants/tenant-a/sales/co-1'] = _expensiveSale;
+
+    await _pumpFeed(
+      tester,
+      _controller(role: TenantRole.manager),
+      reader,
+      width: 360,
+    );
+
+    final receipt = tester.renderObject<RenderParagraph>(
+      find.byKey(const ValueKey('return-feed-sale-ret-1')),
+    );
+    expect(receipt.didExceedMaxLines, isFalse);
+    // Still the receipt rather than the document ID, so the assertion above is
+    // about the line that was breaking and not about a fallback.
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('return-feed-sale-ret-1')))
+          .data,
+      '#0001',
+    );
+    // And the amount it was competing with is still drawn in full.
+    expect(find.byKey(const ValueKey('return-feed-value-ret-1')), findsOne);
+  });
+
+  testWidgets('a pending return says the stock has not moved yet', (
+    tester,
+  ) async {
+    // The takings net a return as soon as it is filed; the server restores
+    // stock only on verification. The card has to carry both halves, or a
+    // person reads the amount coming off as the shelf coming back.
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _verified('ret-2'),
+        _pending('ret-1'),
+      ]);
+
+    await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
+
+    expect(
+      find.byKey(const ValueKey('return-feed-stock-note-ret-1')),
+      findsOne,
+    );
+    // A verified return has already put the stock back, so saying it has not
+    // would be the same defect pointing the other way.
+    expect(
+      find.byKey(const ValueKey('return-feed-stock-note-ret-2')),
+      findsNothing,
+    );
   });
 
   testWidgets('the home feed displays returns from every sale', (tester) async {
@@ -941,9 +997,10 @@ void main() {
 Future<void> _pumpFeed(
   WidgetTester tester,
   TenantSessionController controller,
-  _Reader reader,
-) async {
-  tester.view.physicalSize = const Size(1400, 4000);
+  _Reader reader, {
+  double width = 1400,
+}) async {
+  tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -1155,6 +1212,45 @@ TenantSale _sale() => TenantSale.fromDocument(
   },
 );
 
+/// The same sale, priced so its returned value is a long string. The facts
+/// line only misbehaves when the amount beside the receipt is wide.
+final Map<String, Object?> _expensiveSale = <String, Object?>{
+  'checkoutId': 'co-1',
+  'tenantId': 'tenant-a',
+  'soldById': 'user-a',
+  'payloadHash': _payloadHash,
+  'payloadSchemaVersion': 2,
+  'currency': 'KES',
+  'businessDate': _businessDate,
+  'shiftId': 'shift-a',
+  'deviceId': _deviceA,
+  'receiptNumber': _receipt(1),
+  'receiptSequence': 1,
+  'items': <Object?>[
+    <String, Object?>{
+      'productId': 'product-1',
+      'name': 'Tusker',
+      'quantity': 4,
+      'unitPriceMinor': 6225000,
+      'lineTotalMinor': 24900000,
+    },
+    <String, Object?>{
+      'productId': 'product-2',
+      'name': 'Water',
+      'quantity': 5,
+      'unitPriceMinor': 100,
+      'lineTotalMinor': 500,
+    },
+  ],
+  'subtotalMinor': 24900500,
+  'subtotal': 249005.0,
+  'discountMinor': 0,
+  'discount': 0.0,
+  'totalMinor': 24900500,
+  'total': 249005.0,
+  'createdAt': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 12)),
+};
+
 TenantSessionController _controller({TenantRole role = TenantRole.cashier}) =>
     TenantSessionController()..open(
       uid: 'user-a',
@@ -1259,8 +1355,16 @@ final class _Reader implements TenantDataReader {
     pending.removeAt(0).complete(_deferredResults.removeAt(0));
   }
 
+  /// Documents this reader serves outright, by path. Used for the sale
+  /// behind a return, which is what puts a receipt and an amount on the card.
+  final Map<String, Map<String, Object?>> documents =
+      <String, Map<String, Object?>>{};
+
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    if (documents[path] case final data?) {
+      return TenantDocumentSnapshot(path: path, data: data);
+    }
     if (deniedStaff) throw StateError('permission-denied');
     final uid = path.split('/').last;
     final name = staffNames[uid];
