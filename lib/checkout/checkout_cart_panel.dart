@@ -285,13 +285,23 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
   String? _loaderKey;
   TenantGuardedLoader<CheckoutCatalogSnapshot>? _loader;
 
+  /// Bumped by a sale, so the next build composes a loader the guard has not
+  /// run and the catalog is read again.
+  ///
+  /// **The stock under each product moves when a sale is rung, and the till is
+  /// the surface watching it.** `CheckoutCatalogLocalSales` takes the units
+  /// sold off what the cache reports, but nothing was asking the cache again:
+  /// the loader is memoised per session, so the figure on screen stayed the one
+  /// read when the till was opened until somebody left and came back.
+  int _generation = 0;
+
   static String _sessionKey(TenantSession session) =>
       '${session.uid}:${session.tenantId}:${session.epoch}';
 
   TenantGuardedLoader<CheckoutCatalogSnapshot> _loaderFor(
     TenantSession session,
   ) {
-    final key = _sessionKey(session);
+    final key = '${_sessionKey(session)}:$_generation';
     if (key == _loaderKey && _loader != null) return _loader!;
     _loaderKey = key;
     return _loader = (session) async {
@@ -334,6 +344,9 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
           key: ValueKey('checkout-editor-${_sessionKey(session)}'),
           snapshot: snapshot,
           drafts: widget.drafts,
+          onSaved: () {
+            if (mounted) setState(() => _generation++);
+          },
         ),
       );
 }
@@ -613,7 +626,15 @@ final class _ProductTileSkeleton extends StatelessWidget {
 
 /// The editable cart for one loaded catalog snapshot and one live session.
 final class _CartEditor extends StatefulWidget {
-  const _CartEditor({super.key, required this.snapshot, required this.drafts});
+  const _CartEditor({
+    super.key,
+    required this.snapshot,
+    required this.drafts,
+    this.onSaved,
+  });
+
+  /// Told once a sale is durable, so the till can read the stock again.
+  final VoidCallback? onSaved;
 
   final CheckoutCatalogSnapshot snapshot;
   final CheckoutDraftSink? drafts;
@@ -939,6 +960,10 @@ final class _CartEditorState extends State<_CartEditor> {
     if (navigator != null && navigator.canPop()) navigator.pop();
     if (!mounted) return;
     _reportSave(context, saved);
+    // **After the outcome is reported, not before.** Re-reading the catalog
+    // rebuilds this editor, and a rebuild mid-report would pull the sheet and
+    // the snack bar out from under the sentence they are carrying.
+    widget.onSaved?.call();
   }
 
   // --- Rendering --------------------------------------------------------
