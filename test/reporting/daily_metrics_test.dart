@@ -151,6 +151,69 @@ void main() {
       ]);
     });
 
+    test('a day that cannot be read does not take the others with it', () async {
+      // **The offline case.** Firestore refuses a document `get` it holds no
+      // cached copy of rather than reporting the document absent, so on the
+      // first business day of a stretch with no signal this threw - and
+      // `Future.wait` fails the whole set on the first rejection. The home
+      // swallows that and draws no figures at all, which is the one state that
+      // page is built never to be in.
+      final reader = _UnreachableReader(
+        <String, Map<String, Object?>>{
+          'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
+            businessDate: '2026-07-30',
+          ),
+        },
+        unreachable: <String>{'tenants/tenant-a/daily_metrics/2026-07-31'},
+      );
+
+      final days = await _repository(reader).loadRecentDays(days: 3);
+
+      expect(days.map((day) => day.businessDate), <String>[
+        '2026-07-31',
+        '2026-07-30',
+        '2026-07-29',
+      ]);
+      // The unreadable day reads exactly as an unpublished one, which is what
+      // every surface already draws as "not reconciled".
+      expect(days.first.metrics, isNull);
+      expect(days.first.isPublished, isFalse);
+      // And the day that did read is still reported, rather than being lost
+      // to its neighbour's failure.
+      expect(days[1].metrics!.sales, 1250.5);
+    });
+
+    test('a day that answered with nonsense is still a fault', () async {
+      // The other half of the distinction, and the reason the guard is around
+      // the read rather than around `readDay`: a document that answered and
+      // does not add up is not a gap. The daily summary fails closed on it and
+      // offers a retry, rather than drawing a day as unreconciled that the
+      // server has in fact reconciled.
+      final reader = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/daily_metrics/2026-07-31': _metrics(
+          overrides: <String, Object?>{'transactionCount': 99},
+        ),
+      });
+
+      await expectLater(
+        _repository(reader).loadRecentDays(days: 1),
+        throwsA(_metricsCode('inconsistent_metrics')),
+      );
+    });
+
+    test('being refused the figures is still an answer, not a gap', () async {
+      // The mirror of the case above, and the reason the degradation is per
+      // day rather than around the whole call: a cashier asking for figures
+      // they may not see must be told so, not handed a week of empty days.
+      await expectLater(
+        _repository(
+          _Reader(const <String, Map<String, Object?>>{}),
+          role: TenantRole.cashier,
+        ).loadRecentDays(days: 3),
+        throwsA(_metricsCode('metrics_forbidden')),
+      );
+    });
+
     test('the business day boundary follows the +03:00 offset', () async {
       final reader = _Reader(const <String, Map<String, Object?>>{});
 
@@ -451,7 +514,7 @@ TenantReconciliationIntake _intake({
 }
 
 TenantDailyMetricsRepository _repository(
-  _Reader reader, {
+  TenantDocumentReader reader, {
   TenantRole role = TenantRole.manager,
 }) => TenantDailyMetricsRepository(
   session: _session(role),
@@ -505,6 +568,24 @@ Map<String, Object?> _metrics({
   data.putIfAbsent('netMetricsVersion', () => 1);
   data.removeWhere((key, value) => value == null);
   return data;
+}
+
+/// A reader that cannot answer for some paths, the way an offline Firestore
+/// cannot answer for a document it has never cached.
+final class _UnreachableReader implements TenantDocumentReader {
+  _UnreachableReader(this._documents, {required this.unreachable});
+
+  final Map<String, Map<String, Object?>> _documents;
+  final Set<String> unreachable;
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    if (unreachable.contains(path)) {
+      throw StateError('offline: $path has no cached copy');
+    }
+    final data = _documents[path];
+    return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
+  }
 }
 
 final class _Reader implements TenantDocumentReader {

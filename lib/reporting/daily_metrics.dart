@@ -282,13 +282,24 @@ final class TenantDailyMetricsRepository extends TenantReadRepository {
 
   /// Reads one exact business day, or `null` when it is not reconciled yet.
   Future<TenantDailyMetrics?> readDay(String businessDate) async {
-    final String safeDate;
+    final safeDate = _validatedDate(businessDate);
+    return _decodeDay(
+      safeDate,
+      await readDocument(TenantCollection.dailyMetrics, safeDate),
+    );
+  }
+
+  String _validatedDate(String businessDate) {
     try {
-      safeDate = validateCheckoutBusinessDate(businessDate);
+      return validateCheckoutBusinessDate(businessDate);
     } on ArgumentError {
       throw const TenantDailyMetricsException('invalid_business_date');
     }
-    final data = await readDocument(TenantCollection.dailyMetrics, safeDate);
+  }
+
+  /// Turns what the document said into metrics, refusing anything that does
+  /// not describe this business coherently.
+  TenantDailyMetrics? _decodeDay(String safeDate, Map<String, Object?>? data) {
     if (data == null) return null;
     final metrics = TenantDailyMetrics.fromDocument(
       path: paths.dailyMetric(safeDate),
@@ -322,7 +333,7 @@ final class TenantDailyMetricsRepository extends TenantReadRepository {
     // not depend on each other. `Future.wait` also attaches to every future
     // before any can complete, so a rejection cannot be left unhandled.
     final settled = await Future.wait(<Future<Object?>>[
-      for (final date in dates) readDay(date),
+      for (final date in dates) _readPublishedDay(date),
       for (final date in dates) _readIntake(date),
     ]);
     return List<TenantDailyMetricsDay>.unmodifiable(<TenantDailyMetricsDay>[
@@ -333,6 +344,41 @@ final class TenantDailyMetricsRepository extends TenantReadRepository {
           intake: settled[dates.length + index] as TenantReconciliationIntake?,
         ),
     ]);
+  }
+
+  /// [readDay], except that a day this device could not reach reads as one
+  /// with nothing published.
+  ///
+  /// **It is the offline case that made this necessary.** Firestore refuses a
+  /// document `get` it holds no cached copy of rather than answering that the
+  /// document is absent, so the first business day of a stretch with no signal
+  /// throws - and `Future.wait` fails the whole set on the first rejection, so
+  /// one unreachable day took every other day with it. The home swallows that
+  /// and draws no figures at all, which is the one state that page is built
+  /// never to be in; the daily summary loses the week.
+  ///
+  /// **The guard is around the read and never around the decode**, which is
+  /// the whole of the distinction. *This device could not ask* is a gap, and a
+  /// gap is what `TenantDailyMetricsDay.metrics` being null already means.
+  /// *The document answered, and what it said does not add up* is a fault, and
+  /// the daily summary fails closed on it with a retry rather than drawing a
+  /// day as unreconciled that the server has in fact reconciled - see
+  /// `daily_metrics_panel.dart`. Deciding that by exception type would mean
+  /// enumerating every way a decoder can fail; deciding it by which half threw
+  /// cannot drift.
+  ///
+  /// **Per day rather than around the whole set**, so a day that did read is
+  /// still reported. The role gate in [loadRecentDays] is outside this too:
+  /// being refused the figures is an answer, not a gap.
+  Future<TenantDailyMetrics?> _readPublishedDay(String businessDate) async {
+    final safeDate = _validatedDate(businessDate);
+    final Map<String, Object?>? data;
+    try {
+      data = await readDocument(TenantCollection.dailyMetrics, safeDate);
+    } on Object {
+      return null;
+    }
+    return _decodeDay(safeDate, data);
   }
 
   /// What the server has taken for one day, or null where it cannot be read.
