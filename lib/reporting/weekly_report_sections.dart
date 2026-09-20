@@ -83,6 +83,13 @@ abstract final class WeeklyReportMetrics {
   /// Headroom above the tallest bar, so it never touches the top rule.
   static const double ceilingHeadroom = 1.2;
 
+  /// The rank number's column in the top-items list, wide enough for two
+  /// digits so a tenth row does not shunt the names right.
+  static const double rankColumn = 24;
+
+  /// The share bar under one top item.
+  static const double shareBarHeight = 4;
+
   /// The square holding a top item's glyph. The old screen's 48.
   static const double itemGlyph = 48;
 
@@ -106,10 +113,13 @@ abstract final class WeeklyReportMetrics {
   /// tile grows past this where its figure wraps; what it may not do is be
   /// shorter than its neighbours for want of a caveat to print.
   ///
-  /// Measured from the tile's own parts at the size they are set in: the
-  /// eyebrow line, the figure in `numericCompact`, and one caption - so a tile
-  /// with nothing to add reserves the line a tile with something to add uses.
-  static const double tileHeight = 132;
+  /// Measured from the tile's ordinary parts at the size they are set in: the
+  /// eyebrow line, the figure in `numericCompact`, and one caption. **Not from
+  /// its largest possible self** - sized for a tile carrying a comparison chip
+  /// *and* a detail *and* a caveat, every ordinary tile stood half empty, which
+  /// is a worse fault than an uneven row. A tile that does carry all three
+  /// grows, and its row grows with it.
+  static const double tileHeight = 76;
 
   // -- the week strip under the takings --------------------------------------
 
@@ -552,12 +562,13 @@ final class _MetricGrid extends StatelessWidget {
             subtitle: spend.truncated
                 ? 'Counted from the newest records only'
                 : null,
-            // **`emphasis: false`, which paints the glyph in the problem
-            // colour.** This is the one figure on the grid where a larger number
-            // is worse news, and the card already had a way to say so - the old
-            // screen turned the profit glyph red on a loss.
+            // **`emphasis: true`, after seeing it on a device.** The card's
+            // other setting paints the glyph in the problem colour, which was
+            // written for a profit card showing a loss - and spending is not a
+            // loss. A red mark beside an ordinary week's rent reads as
+            // something being wrong when nothing is.
             icon: Icons.account_balance_wallet_outlined,
-            emphasis: false,
+            emphasis: true,
           ),
       ],
       // **Where the old page's *Low stock* card was.** This product has no
@@ -578,6 +589,15 @@ final class _MetricGrid extends StatelessWidget {
                 data.previousAverageSale,
               ),
         comparisonLabel: _comparisonLabel,
+        // **What it is an average of.** Every other tile carries a supporting
+        // line and this one had none, so it sat visibly emptier than the tile
+        // beside it - and a mean with no count under it is the one figure on
+        // this grid a person is entitled to distrust.
+        detail: data == null || !data.hasTakings || data.transactions == 0
+            ? null
+            : data.transactions == 1
+            ? 'Over 1 sale'
+            : 'Over ${data.transactions} sales',
         icon: Icons.receipt,
         emphasis: true,
       ),
@@ -1040,9 +1060,21 @@ final class _ReportLinks extends StatelessWidget {
     // heading over nothing is worse than no heading.
     if (cards.isEmpty) return const SizedBox.shrink();
 
+    // **The heading sits on the tiles' own left edge, not the list's.**
+    // `PressSurface` reserves a gutter around every card it paints so the focus
+    // ring has somewhere to go, so a card is inset by that much and a bare
+    // `Text` beside it is not - which put this label a few pixels left of
+    // everything it introduces, hard against the edge of the screen. Read from
+    // the ring rather than guessed, so it follows if the ring ever changes.
+    final ring = tokens.colors.action.focusRing;
+    final gutter = ring.width + ring.offset;
     final rows = <Widget>[
       Padding(
-        padding: EdgeInsets.only(bottom: tokens.spacing.s12),
+        padding: EdgeInsets.only(
+          left: gutter,
+          right: gutter,
+          bottom: tokens.spacing.s12,
+        ),
         child: Text(
           'MORE REPORTS',
           key: const ValueKey('weekly-report-links-heading'),

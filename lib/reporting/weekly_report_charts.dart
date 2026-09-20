@@ -275,8 +275,15 @@ final class WeeklyTopItems extends StatelessWidget {
               illustration: 'no-data.svg',
             )
           else
-            for (final item in items) ...<Widget>[
-              _TopItemRow(item: item, currency: currency),
+            for (final (index, item) in items.indexed) ...<Widget>[
+              _TopItemRow(
+                item: item,
+                rank: index + 1,
+                // The list is already sorted by revenue, so the first row is
+                // the week's best and every bar is a share of it.
+                peakMinor: items.first.revenueMinor,
+                currency: currency,
+              ),
               if (item != items.last) SizedBox(height: tokens.spacing.s16),
             ],
           if (report?.scanWasTruncated ?? false) ...<Widget>[
@@ -352,35 +359,56 @@ final class _ReadingItemRow extends StatelessWidget {
 }
 
 final class _TopItemRow extends StatelessWidget {
-  const _TopItemRow({required this.item, required this.currency});
+  const _TopItemRow({
+    required this.item,
+    required this.rank,
+    required this.peakMinor,
+    required this.currency,
+  });
 
   final TenantReportItem item;
+
+  /// Where this sits in the week, from 1.
+  ///
+  /// **A list in revenue order is not a ranking until it says so.** The rows
+  /// were a product, a count and an amount, which reads as four unrelated
+  /// products that happen to be in this order - the number is what makes the
+  /// order the point.
+  final int rank;
+
+  /// The best seller's revenue, which every bar is drawn as a share of.
+  final int peakMinor;
+
   final TenantReportingCurrency? currency;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return Row(
+    // A returned-out product can end a week at or below nothing, and a bar
+    // cannot be a negative share of anything.
+    final share = peakMinor <= 0
+        ? 0.0
+        : (item.revenueMinor / peakMinor).clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Container(
-          width: WeeklyReportMetrics.itemGlyph,
-          height: WeeklyReportMetrics.itemGlyph,
-          decoration: BoxDecoration(
-            color: tokens.colors.surface.field,
-            borderRadius: BorderRadius.circular(tokens.radius.sm),
-          ),
-          child: Icon(
-            Icons.inventory_2_outlined,
-            color: tokens.colors.text.secondary,
-          ),
-        ),
-        SizedBox(width: tokens.spacing.s12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            SizedBox(
+              width: WeeklyReportMetrics.rankColumn,
+              child: Text(
+                '$rank',
+                style: tokens.typography.numericBody.copyWith(
+                  color: rank == 1
+                      ? tokens.colors.status.ok.fg
+                      : tokens.colors.text.tertiary,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
                 item.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -388,23 +416,51 @@ final class _TopItemRow extends StatelessWidget {
                   color: tokens.colors.text.primary,
                 ),
               ),
-              Text(
-                // The old screen printed a category here too; a sale line
-                // records no category, and reading one back per product would
-                // be a read per row to fill in a subtitle.
-                '${item.quantity} sold',
-                style: tokens.typography.caption.copyWith(
-                  color: tokens.colors.text.tertiary,
-                ),
+            ),
+            SizedBox(width: tokens.spacing.s8),
+            Text(
+              // The old screen printed a category here too; a sale line records
+              // no category, and reading one back per product would be a read
+              // per row to fill in a subtitle.
+              '${item.quantity} sold',
+              style: tokens.typography.caption.copyWith(
+                color: tokens.colors.text.tertiary,
               ),
-            ],
-          ),
+            ),
+            SizedBox(width: tokens.spacing.s12),
+            Text(
+              weeklyReportMoney(currency, item.revenueMinor / 100),
+              style: tokens.typography.labelMedium.copyWith(
+                color: tokens.colors.text.money,
+              ),
+            ),
+          ],
         ),
-        SizedBox(width: tokens.spacing.s8),
-        Text(
-          weeklyReportMoney(currency, item.revenueMinor / 100),
-          style: tokens.typography.labelMedium.copyWith(
-            color: tokens.colors.text.money,
+        SizedBox(height: tokens.spacing.s8),
+        // **The bar is the comparison the amounts make you do in your head.**
+        // Four money figures in a column are four figures; four bars are a
+        // shape, and the shape is the answer to *what is carrying this week*.
+        Padding(
+          padding: EdgeInsets.only(left: WeeklyReportMetrics.rankColumn),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(tokens.radius.sm),
+            child: LinearProgressIndicator(
+              value: share,
+              minHeight: WeeklyReportMetrics.shareBarHeight,
+              backgroundColor: tokens.colors.surface.field,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                rank == 1
+                    ? tokens.colors.status.ok.fg
+                    : Color.lerp(
+                        tokens.colors.status.ok.fg,
+                        tokens.colors.surface.raised,
+                        WeeklyReportMetrics.quietBarRecession,
+                      )!,
+              ),
+              // A ranking read by eye, said in full to anything that is not an
+              // eye: the row above already carries the count and the amount.
+              semanticsLabel: '${item.name}, number $rank this week',
+            ),
           ),
         ),
       ],

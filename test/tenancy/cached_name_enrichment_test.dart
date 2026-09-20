@@ -143,8 +143,10 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.byKey(ValueKey('stock-take-open-$_takeId')), findsOneWidget);
-    await tester.tap(find.byKey(ValueKey('stock-take-open-$_takeId')));
+    // The card itself opens the count - there is no separate `Open` button on
+    // it any more, so this taps the record rather than an action inside it.
+    expect(find.byKey(ValueKey('stock-take-$_takeId')), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('stock-take-$_takeId')));
     await tester.pumpAndSettle();
 
     // The differing line is on screen, named, with the live reader still

@@ -27,6 +27,7 @@ import '../ui/snackbar.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import 'stock_take_card.dart';
 import 'stock_take_review.dart';
 
 /// The reading route for this business's counts.
@@ -200,94 +201,34 @@ class _TenantStockTakeReviewPanelState
             'who counts what in Settings.',
       );
     }
-    // **A `ListView`, not a `Padding`.** `RecordList` is a bare `Column`, so
-    // the scroll is the caller's to supply; without it a third count overflows
-    // the viewport instead of scrolling, which is what the device run found.
-    return ListView(
+    // **A `ListView`, and the scroll is still the caller's.** It was a
+    // `RecordList` inside one, because that component is a bare `Column`; it is
+    // now a list of `TenantStockTakeCard`, which is a bare card for the same
+    // reason. Without the scroll a third count overflows the viewport instead
+    // of scrolling, which is what the device run found.
+    return ListView.separated(
       key: const ValueKey('stock-take-review-list'),
       padding: EdgeInsets.all(tokens.spacing.s16),
-      children: <Widget>[
-        RecordList(
-          identityLabel: 'Count',
-          items: <RecordItem>[
-            for (final take in takes) _takeItem(session, take, named.names),
-          ],
-        ),
-      ],
+      itemCount: takes.length,
+      separatorBuilder: (context, index) =>
+          SizedBox(height: tokens.spacing.s12),
+      itemBuilder: (context, index) {
+        final take = takes[index];
+        return TenantStockTakeCard(
+          // The key the record card carried, kept so a test written against
+          // this list keeps addressing the same count.
+          key: ValueKey<String>('stock-take-${take.id}'),
+          take: take,
+          counterLabel: tenantStaffLabel(
+            take.counterUid,
+            names: named.names,
+            selfUid: session.uid,
+          ),
+          onOpen: () => _open(session, take),
+        );
+      },
     );
   }
-
-  RecordItem _takeItem(
-    TenantSession session,
-    TenantStockTakeRecord take,
-    Map<String, String> names,
-  ) => RecordItem(
-    id: take.id,
-    recordKey: ValueKey('stock-take-${take.id}'),
-    title: take.categoryId == null ? 'Whole catalog' : 'One category',
-    subtitle: take.businessDate,
-    status: _standing(take),
-    attributes: <RecordAttribute>[
-      RecordAttribute(
-        label: 'Counted by',
-        value: tenantStaffLabel(
-          take.counterUid,
-          names: names,
-          selfUid: session.uid,
-        ),
-      ),
-      RecordAttribute(
-        label: 'Counted',
-        value: '${take.countedLineCount} of ${take.productsInScope}',
-      ),
-      RecordAttribute(
-        label: 'Differences',
-        value: take.varianceLineCount == 0
-            ? 'None'
-            : '${take.varianceLineCount}, '
-                  '${take.absoluteVarianceUnits} units',
-      ),
-      // Never folded into the difference count. Nothing is known about an
-      // uncounted product one way or the other, and saying otherwise would
-      // invent a fact about a shelf nobody looked at.
-      if (take.uncountedLineCount > 0)
-        RecordAttribute(
-          label: 'Not counted',
-          value: '${take.uncountedLineCount}',
-        ),
-      if (take.unmatchedLineCount > 0)
-        RecordAttribute(
-          label: 'Unmatched',
-          value: '${take.unmatchedLineCount}',
-        ),
-    ],
-    actions: <RecordAction>[
-      RecordAction(
-        label: 'Open',
-        actionKey: ValueKey('stock-take-open-${take.id}'),
-        onPressed: () => _open(session, take),
-      ),
-    ],
-  );
-
-  RecordStatus _standing(TenantStockTakeRecord take) => switch (take.status) {
-    // Not an error. It means the device that counted has not finished sending,
-    // and the server refuses to apply a count it has only part of.
-    TenantStockTakeStatus.submitting => const RecordStatus(
-      label: 'Still arriving',
-      status: AppStatus.attention,
-    ),
-    TenantStockTakeStatus.applied => const RecordStatus(
-      label: 'Accepted',
-      status: AppStatus.ok,
-    ),
-    TenantStockTakeStatus.submitted when take.varianceLineCount == 0 =>
-      const RecordStatus(label: 'All agreed', status: AppStatus.ok),
-    TenantStockTakeStatus.submitted => const RecordStatus(
-      label: 'Needs review',
-      status: AppStatus.info,
-    ),
-  };
 
   Future<void> _open(TenantSession session, TenantStockTakeRecord take) async {
     final sessions = TenantSessionScope.of(context);

@@ -25,6 +25,7 @@ export 'stock_movement_labels.dart';
 export 'stock_movements.dart';
 export 'stock_product_ledger_panel.dart';
 export 'stock_take.dart';
+export 'stock_take_card.dart';
 export 'stock_take_draft_store.dart';
 export 'stock_take_gate.dart';
 export 'stock_take_panel.dart';
