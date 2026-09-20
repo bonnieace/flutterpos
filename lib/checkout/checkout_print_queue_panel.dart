@@ -41,9 +41,25 @@ typedef PrintJobRetry = Future<String?> Function(String receiptNumber);
 /// **While absent, [onRetry] leaves the queue a read-only statement of what is
 /// waiting.** Every other injected capability in this app behaves the same way.
 final class TenantPrintQueuePanel extends StatefulWidget {
-  const TenantPrintQueuePanel({super.key, required this.queue, this.onRetry});
+  const TenantPrintQueuePanel({
+    super.key,
+    required this.queue,
+    required this.tenantId,
+    this.onRetry,
+  });
 
   final HivePrintJobQueue queue;
+
+  /// Whose receipts these are.
+  ///
+  /// **Required rather than inferred, because the queue cannot infer it.**
+  /// That box is the device's and holds the jobs of every business this device
+  /// has served, keyed by receipt number; a job records the tenant it was rung
+  /// for, and until 2026-09-19 nothing read it. A caller that does not say
+  /// whose receipts it wants would get all of them, with a *Send again* beside
+  /// each - so this asks rather than defaulting.
+  final String tenantId;
+
   final PrintJobRetry? onRetry;
 
   @override
@@ -64,7 +80,12 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
   /// durable box that the sale path and the recovery pass both write to, so a
   /// cached list would go stale the moment a sale was rung up behind this
   /// screen. It is a synchronous read of an open box, not a query.
-  PrintJobListing get _listing => widget.queue.pending();
+  ///
+  /// **Narrowed to [TenantPrintQueuePanel.tenantId]**, because that box is the
+  /// device's and holds the jobs of every business this device has served. See
+  /// `HivePrintJobQueue.pending`.
+  PrintJobListing get _listing =>
+      widget.queue.pending(tenantId: widget.tenantId);
 
   Future<void> _retry(PrintJobRecord job) async {
     final onRetry = widget.onRetry;

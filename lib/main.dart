@@ -325,9 +325,9 @@ Future<void> main() async {
 /// the drawer; the tile and the sentence are both gone, and the receipts
 /// themselves are a section of the notifications page. A queue that cannot be
 /// listed is a queue with no figure rather than a queue with none in it.
-int? _printQueueCount(HivePrintJobQueue queue) {
+int? _printQueueCount(HivePrintJobQueue queue, {String? tenantId}) {
   try {
-    return queue.pending().jobs.length;
+    return queue.pending(tenantId: tenantId).jobs.length;
   } catch (_) {
     return null;
   }
@@ -1578,12 +1578,20 @@ class SpiritPOSApp extends StatelessWidget {
               // The badge is about everything this device still owes, so it counts
               // the receipts that never printed along with the sales that never
               // sent. Both are on the page it opens.
-              alsoWaiting: () => _printQueueCount(checkoutPrintJobs) ?? 0,
+              alsoWaiting: (tenantId) =>
+                  _printQueueCount(checkoutPrintJobs, tenantId: tenantId) ?? 0,
               // **This device's unsent receipts, and the one control that can move
               // one: *Send again*.** It rebuilds nothing - the bytes on the job are
               // the ones the sale produced, so a receipt retried after a price
               // change still prints what was charged.
               notificationsRoute: (context) => TenantNotificationsScreen(
+                // **Read here rather than inside the page.** This builder runs
+                // under the `TenantSessionScope` the glyph pushes, so the
+                // business is known at the one point that knows it - and the
+                // page is left stating what it was given instead of hiding
+                // every receipt when a lookup fails.
+                tenantId:
+                    TenantSessionScope.of(context).session?.tenantId ?? '',
                 evidenceSource: CombinedLocalWorkEvidenceSource(
                   checkouts: CheckoutOutboxEvidenceSource(checkoutOutbox),
                   mutations: tenantMutationStore,

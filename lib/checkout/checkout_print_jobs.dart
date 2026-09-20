@@ -348,7 +348,19 @@ final class HivePrintJobQueue {
   /// So the listing carries both, and the surface states both. It is exactly
   /// the shape the profit display already uses: a figure, plus the count of the
   /// lines it could not use, and never a figure that quietly excludes them.
-  PrintJobListing pending() {
+  ///
+  /// **[tenantId] narrows it to one business, and every surface should pass
+  /// one.** This box is keyed by receipt number and is the device's, not a
+  /// tenant's - so an unfiltered listing shows the receipts of whichever
+  /// businesses this device has served. A queued job records the tenant it was
+  /// rung for; until 2026-09-19 nothing read it, and switching business left
+  /// the badge counting, and the notifications page naming, another shop's
+  /// receipt numbers - with a *Send again* beside each one.
+  ///
+  /// Null lists every job, which is what the queue's own tests and the
+  /// device-wide recovery pass want. A surface a person is looking at is not
+  /// one of those.
+  PrintJobListing pending({String? tenantId}) {
     final records = <PrintJobRecord>[];
     var unreadable = 0;
     for (final key in _box.keys) {
@@ -357,12 +369,16 @@ final class HivePrintJobQueue {
       try {
         record = _read(key);
       } on PrintJobException {
-        // Counted, never repaired by guessing, and never silently dropped.
+        // **Counted for every business, because it cannot be attributed to
+        // one.** A record that will not parse cannot be asked whose it is, and
+        // a corrupt job hidden from every surface is the failure this listing
+        // exists to prevent. The count is a number, never a receipt.
         unreadable++;
         continue;
       }
       if (record == null) continue;
       if (record.state == PrintJobState.printed) continue;
+      if (tenantId != null && record.tenantId != tenantId) continue;
       records.add(record);
     }
     records.sort((a, b) => a.createdAt.compareTo(b.createdAt));

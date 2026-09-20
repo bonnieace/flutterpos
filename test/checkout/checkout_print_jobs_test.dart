@@ -35,8 +35,9 @@ void main() {
   Future<PrintJobRecord> enqueue({
     String receiptNumber = _receipt,
     PrinterEndpoint? at,
+    String tenantId = _tenant,
   }) => queue.enqueue(
-    tenantId: _tenant,
+    tenantId: tenantId,
     receiptNumber: receiptNumber,
     endpoint: at ?? endpoint,
     bytes: _payload,
@@ -389,6 +390,49 @@ void main() {
 
       expect(pending.jobs.map((job) => job.receiptNumber), <String>[_receipt]);
       expect(pending.unreadable, 1);
+    });
+
+    test('one business is never shown another\'s receipts', () async {
+      // **This box is the device's, not a business's.** A phone that has served
+      // two shops holds both their jobs, keyed by receipt number - and until
+      // 2026-09-19 nothing read the `tenantId` each job records, so switching
+      // business left the badge counting, and the notifications page naming,
+      // the other shop's receipt numbers with a *Send again* beside each.
+      await enqueue();
+      await enqueue(receiptNumber: _otherReceipt, tenantId: 'tenant-elsewhere');
+
+      expect(
+        queue.pending(tenantId: _tenant).jobs.map((job) => job.receiptNumber),
+        <String>[_receipt],
+      );
+      expect(
+        queue
+            .pending(tenantId: 'tenant-elsewhere')
+            .jobs
+            .map((job) => job.receiptNumber),
+        <String>[_otherReceipt],
+      );
+      // Unfiltered still means the device's whole queue, which is what the
+      // recovery pass and these tests want.
+      expect(queue.pending().jobs, hasLength(2));
+    });
+
+    test('an unreadable record is counted for whoever asks', () async {
+      // It cannot be asked whose it is, and a corrupt job hidden from every
+      // surface is the failure this listing exists to prevent. A number is not
+      // a receipt, so nothing about another business escapes with it.
+      await enqueue();
+      await box.put('CT-A7F-20260729-0044', <String, Object?>{
+        'schemaVersion': 1,
+      });
+
+      final mine = queue.pending(tenantId: _tenant);
+      expect(mine.jobs.map((job) => job.receiptNumber), <String>[_receipt]);
+      expect(mine.unreadable, 1);
+
+      final theirs = queue.pending(tenantId: 'tenant-elsewhere');
+      expect(theirs.jobs, isEmpty);
+      expect(theirs.unreadable, 1);
     });
 
     test('an empty queue is empty, and a queue of only rubbish is not', () async {

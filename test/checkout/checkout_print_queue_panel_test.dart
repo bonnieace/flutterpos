@@ -46,10 +46,11 @@ void main() {
   Future<void> seed(
     WidgetTester tester, {
     String receiptNumber = _receipt,
+    String tenantId = 'tenant-a',
     String? failWith,
   }) => tester.runAsync(() async {
     await queue.enqueue(
-      tenantId: 'tenant-a',
+      tenantId: tenantId,
       receiptNumber: receiptNumber,
       endpoint: endpoint,
       bytes: _payload,
@@ -88,6 +89,27 @@ void main() {
     // at all is waiting.
     expect(find.byKey(const ValueKey('print-queue-empty')), findsOne);
     expect(find.text('No receipts are waiting.'), findsOne);
+  });
+
+  testWidgets('another business\'s receipts are not this one\'s to see', (
+    tester,
+  ) async {
+    // **The queue is the device's, not a business's.** A phone that has served
+    // two shops holds both their jobs in one box, keyed by receipt number, and
+    // until 2026-09-19 nothing read the tenant each job records - so switching
+    // business left this list naming the other shop's receipt numbers with a
+    // *Send again* beside each one.
+    await seed(tester);
+    await seed(
+      tester,
+      receiptNumber: _otherReceipt,
+      tenantId: 'tenant-elsewhere',
+    );
+
+    await _pump(tester, queue);
+
+    expect(find.text(_receipt), findsWidgets);
+    expect(find.text(_otherReceipt), findsNothing);
   });
 
   testWidgets('a failed receipt is listed with the transports own sentence', (
@@ -291,6 +313,7 @@ Future<void> _pump(
   WidgetTester tester,
   HivePrintJobQueue queue, {
   PrintJobRetry? onRetry,
+  String tenantId = 'tenant-a',
 }) async {
   tester.view.physicalSize = const Size(1400, 2400);
   tester.view.devicePixelRatio = 1;
@@ -300,7 +323,11 @@ Future<void> _pump(
     MaterialApp(
       theme: spiritTheme,
       home: Scaffold(
-        body: TenantPrintQueuePanel(queue: queue, onRetry: onRetry),
+        body: TenantPrintQueuePanel(
+          queue: queue,
+          tenantId: tenantId,
+          onRetry: onRetry,
+        ),
       ),
     ),
   );

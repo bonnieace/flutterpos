@@ -41,6 +41,7 @@ final class TenantNotificationsScreen extends StatelessWidget {
     super.key,
     required this.evidenceSource,
     required this.printQueue,
+    required this.tenantId,
     this.refreshSignals,
     this.onRetryPrint,
     this.abandonedShifts,
@@ -63,6 +64,17 @@ final class TenantNotificationsScreen extends StatelessWidget {
 
   final HivePrintJobQueue printQueue;
 
+  /// Whose receipts to list.
+  ///
+  /// **Required rather than read from the session scope here.** That box is the
+  /// device's and holds the jobs of every business this device has served; a
+  /// job records the tenant it was rung for, and until 2026-09-19 nothing read
+  /// it, so switching business left this page naming the other shop's receipt
+  /// numbers with a *Send again* beside each. Passed in rather than looked up
+  /// because the lookup would sit inside the `catch` below, where a missing
+  /// scope would hide every receipt instead of saying anything.
+  final String tenantId;
+
   /// While absent the receipts are a read-only statement of what is waiting.
   final PrintJobRetry? onRetryPrint;
 
@@ -76,6 +88,7 @@ final class TenantNotificationsScreen extends StatelessWidget {
       builder: (context, summary, {required rereading, onAcknowledge}) => _Page(
         summary: summary,
         printQueue: printQueue,
+        tenantId: tenantId,
         onRetryPrint: onRetryPrint,
         abandonedShifts: abandonedShifts,
         onCloseAbandonedShift: onCloseAbandonedShift,
@@ -88,6 +101,7 @@ final class _Page extends StatefulWidget {
   const _Page({
     required this.summary,
     required this.printQueue,
+    required this.tenantId,
     required this.onRetryPrint,
     required this.abandonedShifts,
     required this.onCloseAbandonedShift,
@@ -95,6 +109,9 @@ final class _Page extends StatefulWidget {
 
   final CheckoutEvidenceSummary summary;
   final HivePrintJobQueue printQueue;
+
+  /// See `TenantNotificationsScreen.tenantId`.
+  final String tenantId;
   final PrintJobRetry? onRetryPrint;
   final Future<List<AbandonedShift>> Function()? abandonedShifts;
   final Future<void> Function(AbandonedShift shift)? onCloseAbandonedShift;
@@ -180,7 +197,10 @@ class _PageState extends State<_Page> {
   /// sale path writes to, so a cached listing goes stale behind this page.
   PrintJobListing _listing() {
     try {
-      return widget.printQueue.pending();
+      // **Narrowed to the signed-in business.** The queue is the device's, so
+      // an unfiltered read lists the receipts of every business this phone has
+      // served - and offers to reprint them.
+      return widget.printQueue.pending(tenantId: widget.tenantId);
     } catch (_) {
       // A queue that cannot be listed is not a queue that is empty. The
       // unreadable count carries that, and this stands in only for a read that

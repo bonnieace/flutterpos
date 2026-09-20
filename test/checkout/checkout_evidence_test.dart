@@ -306,7 +306,10 @@ void main() {
                 source: const _FakeSource(
                   CheckoutEvidenceSummary(savedOffline: 2, confirmed: 9),
                 ),
-                alsoWaiting: () => 3,
+                // Asked for the signed-in business by name: the box it
+                // counts is the device's and spans every business this device
+                // has served.
+                alsoWaiting: (tenantId) => tenantId == 'tenant-a' ? 3 : 0,
                 notificationsRoute: (_) =>
                     const Scaffold(body: Text('Notifications')),
               ),

@@ -444,7 +444,12 @@ final class CheckoutPendingEvidencePanel extends StatelessWidget {
   /// durable box on this device rather than checkout evidence, and they left
   /// the home's grid on 2026-09-03 - so the badge that carries everything else
   /// this device still owes carries them too, or nothing does.
-  final int Function()? alsoWaiting;
+  ///
+  /// **Asked for one business by name**, because that box is the device's and
+  /// spans every business this device has served. A badge counting another
+  /// shop's receipts is a number nobody here can act on, and the page this
+  /// opens lists the same set.
+  final int Function(String tenantId)? alsoWaiting;
 
   @override
   Widget build(BuildContext context) => CheckoutEvidenceScope(
@@ -455,7 +460,12 @@ final class CheckoutPendingEvidencePanel extends StatelessWidget {
       final route = notificationsRoute;
       return SyncIndicator(
         key: const ValueKey('pending-checkout-evidence'),
-        waiting: checkoutWaitingCount(summary) + (alsoWaiting?.call() ?? 0),
+        waiting:
+            checkoutWaitingCount(summary) +
+            switch (sessions.session?.tenantId) {
+              final tenantId? => alsoWaiting?.call(tenantId) ?? 0,
+              null => 0,
+            },
         needsAttention:
             summary.needsAttention > 0 || summary.mutations.failures > 0,
         // A reload line, at the product owner's direction on 2026-09-03. The
