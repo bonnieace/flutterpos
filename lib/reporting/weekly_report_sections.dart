@@ -488,9 +488,19 @@ final class _MetricGrid extends StatelessWidget {
         cardKey: const ValueKey('weekly-report-items'),
         title: 'ITEMS SOLD',
         value: data == null ? '—' : '${data.itemsSold}',
-        subtitle: data != null && data.scanWasTruncated
+        // **Truncation first, because it is the larger caveat**, and then the
+        // basis. This card counted every unit that crossed the counter while
+        // every figure around it had its returns taken off, so a week with
+        // returns read more items than its takings implied and said nothing
+        // about why. It nets now; where the returns could not be read it is
+        // still gross, and that is what the second line is for.
+        subtitle: data == null
+            ? null
+            : data.scanWasTruncated
             ? 'Counted from the newest sales only'
-            : null,
+            : data.netsItemsSold
+            ? null
+            : 'Before returns',
         icon: Icons.inventory_2_outlined,
         emphasis: true,
       ),

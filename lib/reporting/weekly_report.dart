@@ -23,6 +23,8 @@ import '../sales/sale_history.dart';
 import '../tenancy/tenant_session.dart';
 import '../expenses/expense.dart';
 import '../expenses/expense_repository.dart';
+import '../returns/return_history.dart';
+import '../returns/return_offsets.dart';
 import 'net_profit.dart';
 import 'device_sales_totals.dart';
 import 'sales_totals.dart';
@@ -157,6 +159,7 @@ final class TenantWeeklyReport {
     required this.recentSales,
     required this.itemsSold,
     required this.scanWasTruncated,
+    this.netsItemsSold = false,
     this.expenses,
   });
 
@@ -178,6 +181,16 @@ final class TenantWeeklyReport {
 
   /// Units sold across the week, from the same pass that built [topItems].
   final int itemsSold;
+
+  /// Whether [itemsSold] and [topItems] have had returned units taken out of
+  /// them.
+  ///
+  /// **False is not the same as a week nothing came back on.** It means the
+  /// returns were not read - by wiring, or because the read failed - so the
+  /// item figures are on a different basis from the takings beside them and
+  /// have to say so. See [netsReturns], which asks the same question of the
+  /// money.
+  final bool netsItemsSold;
 
   /// Whether the sale scan hit its cap, so [topItems] and [itemsSold] describe
   /// part of the week rather than all of it.
@@ -261,6 +274,7 @@ final class TenantWeeklyReportLoader {
     required SalesTotalsCallable callable,
     required TenantSaleHistoryRepository sales,
     TenantExpenseRepository? expenses,
+    TenantReturnHistoryRepository? returns,
     DateTime Function()? clock,
     this.recentSaleCount = 8,
     this.topItemCount = 5,
@@ -273,12 +287,14 @@ final class TenantWeeklyReportLoader {
        ),
        _sales = sales,
        _expenses = expenses,
+       _returns = returns,
        _clock = clock ?? _utcNow;
 
   TenantWeeklyReportLoader.device({
     required TenantSession session,
     required TenantSaleHistoryRepository sales,
     TenantExpenseRepository? expenses,
+    TenantReturnHistoryRepository? returns,
     DateTime Function()? clock,
     this.recentSaleCount = 8,
     this.topItemCount = 5,
@@ -291,11 +307,17 @@ final class TenantWeeklyReportLoader {
        ),
        _sales = sales,
        _expenses = expenses,
+       _returns = returns,
        _clock = clock ?? _utcNow;
 
   final TenantSession _session;
   final TenantSalesTotalsGateway _gateway;
   final TenantSaleHistoryRepository _sales;
+
+  /// Reads what came back over the week, so the item figures can be stated on
+  /// the same basis as the money. Absent where returns are not wired in, which
+  /// leaves those figures gross and saying so.
+  final TenantReturnHistoryRepository? _returns;
 
   /// Reads what the business spent over the same week, or null where this
   /// session may not be shown it.
@@ -373,12 +395,7 @@ final class TenantWeeklyReportLoader {
       // joining the batch costs the week nothing and the net figure lands with
       // the gross one. Its failure is swallowed into a null, like the previous
       // week's, so it can share this list safely.
-      _weekExpenses(
-        week,
-        now: now,
-        soldById: soldById,
-        categoryId: categoryId,
-      ),
+      _weekExpenses(week, now: now, soldById: soldById, categoryId: categoryId),
     ];
     final settled = await Future.wait(pending);
     final byDate = <String, TenantSalesTotals>{
@@ -410,6 +427,7 @@ final class TenantWeeklyReportLoader {
       recentSales: roll.recent.take(recentSaleCount).toList(growable: false),
       itemsSold: roll.itemsSold,
       scanWasTruncated: roll.truncated,
+      netsItemsSold: roll.netsReturns,
       expenses: expenses,
     );
   }
@@ -458,18 +476,8 @@ final class TenantWeeklyReportLoader {
     final settled = await Future.wait<Object?>(<Future<Object?>>[
       totalsFuture,
       Future.wait<TenantDeviceSalesTotals>(dayFutures),
-      _rollUpItems(
-        week,
-        now: now,
-        soldById: soldById,
-        categoryId: categoryId,
-      ),
-      _weekExpenses(
-        week,
-        now: now,
-        soldById: soldById,
-        categoryId: categoryId,
-      ),
+      _rollUpItems(week, now: now, soldById: soldById, categoryId: categoryId),
+      _weekExpenses(week, now: now, soldById: soldById, categoryId: categoryId),
     ]);
     final totalResult = settled[0]! as TenantDeviceSalesTotals;
     final totals = totalResult.totals;
@@ -501,6 +509,7 @@ final class TenantWeeklyReportLoader {
       recentSales: roll.recent.take(recentSaleCount).toList(growable: false),
       itemsSold: roll.itemsSold,
       scanWasTruncated: roll.truncated,
+      netsItemsSold: roll.netsReturns,
       expenses: settled[3] as TenantExpensePeriod?,
     );
   }
@@ -692,6 +701,11 @@ final class TenantWeeklyReportLoader {
     final names = <String, String>{};
     final recent = <TenantReportSaleRow>[];
     final revenueByDate = <String, int>{};
+    // **Kept so the returns below cost no reads of their own.** A return is
+    // valued against the sale it came out of, and every sale this roll counted
+    // is already in hand. Keyed by the sales that *contributed*, so a return
+    // against a sale this scope left out cannot take anything off it.
+    final counted = <String, TenantSale>{};
     var scanned = 0;
     var truncated = false;
     var itemsSold = 0;
@@ -716,6 +730,7 @@ final class TenantWeeklyReportLoader {
           // Counted against the scan cap either way - the read happened - but
           // present on the page only if it held anything in the category.
           if (lines.isEmpty) continue;
+          counted[sale.id] = sale;
           // **The filtered lines, not the sale's own total.** Under a category
           // the chart has to draw the same money the totals add up, and the
           // rest of the sale belongs to another category's day.
@@ -763,6 +778,48 @@ final class TenantWeeklyReportLoader {
       // No sales-report reader is composed in. The same treatment.
       return const _ItemRoll.empty();
     }
+    // **Netted after the scan, not during it.** A return is a separate
+    // document from the sale it reverses, so nothing read above could have
+    // mentioned it; the units have to come off once every sale that might own
+    // one has been seen.
+    final returns = await _weekReturns(week, now: now);
+    if (returns != null) {
+      for (final record in returns) {
+        final sale = counted[record.saleId];
+        // Either another colleague's or another category's sale, or one past
+        // the scan cap. The first two are correctly none of this scope's
+        // business; the third is what `truncated` already says out loud.
+        if (sale == null) continue;
+        final TenantSaleReturnOffset offset;
+        try {
+          offset = describeReturnOffset(sale, <String, int>{
+            for (final line in record.lines) line.productId: line.quantity,
+          }, categoryId: categoryId);
+        } on TenantReturnException {
+          // A return this device cannot value against its own sale. Netting a
+          // guess off the week is worse than leaving the week gross, so the
+          // whole netting is dropped and the card says it is gross.
+          return _ItemRoll(
+            quantities: quantities,
+            revenue: revenue,
+            names: names,
+            recent: recent,
+            itemsSold: itemsSold,
+            truncated: truncated,
+            revenueByDate: revenueByDate,
+          );
+        }
+        offset.returnedUnitsInScope.forEach((productId, units) {
+          quantities[productId] = (quantities[productId] ?? 0) - units;
+          itemsSold -= units;
+        });
+        offset.returnedMinorByProduct.forEach((productId, minor) {
+          revenue[productId] = (revenue[productId] ?? 0) - minor;
+        });
+        revenueByDate[sale.businessDate] =
+            (revenueByDate[sale.businessDate] ?? 0) - offset.returnedMinor;
+      }
+    }
     return _ItemRoll(
       quantities: quantities,
       revenue: revenue,
@@ -771,7 +828,62 @@ final class TenantWeeklyReportLoader {
       itemsSold: itemsSold,
       truncated: truncated,
       revenueByDate: revenueByDate,
+      netsReturns: returns != null,
     );
+  }
+
+  /// Every return filed against a sale that traded this week, or null where
+  /// they could not be read.
+  ///
+  /// **Null is the honest answer to a failure, and a partial list is not.**
+  /// Returns that went unread would be units left in the count, which is the
+  /// gross figure this whole change exists to stop printing beside net money -
+  /// only silently, and wearing the net label. So a day that refuses, or one
+  /// holding more returns than [_returnsPageCap] pages, drops the netting for
+  /// the week rather than netting part of it.
+  ///
+  /// The query is by the *sale's* business date rather than the day the
+  /// reversal was taken: a return recorded on Monday against Saturday's sale
+  /// belongs to the week whose items it takes back. That is the same field
+  /// `TenantDayReturnsLoader` nets a day's takings by.
+  Future<List<TenantReturn>?> _weekReturns(
+    TenantReportWeek week, {
+    required DateTime now,
+  }) async {
+    final returns = _returns;
+    if (returns == null) return null;
+    final dates = week.elapsedBusinessDates(now).toList(growable: false);
+    if (dates.isEmpty) return const <TenantReturn>[];
+    try {
+      final days = await Future.wait<List<TenantReturn>>(
+        dates.map((date) => _dayReturns(returns, date)),
+        eagerError: true,
+      );
+      return <TenantReturn>[for (final day in days) ...day];
+    } on TenantReturnException {
+      return null;
+    } on StateError {
+      return null;
+    }
+  }
+
+  Future<List<TenantReturn>> _dayReturns(
+    TenantReturnHistoryRepository returns,
+    String businessDate,
+  ) async {
+    final records = <TenantReturn>[];
+    String? cursor;
+    for (var page = 0; page < _returnsPageCap; page++) {
+      final read = await returns.loadDayReturns(
+        businessDate: businessDate,
+        pageSize: _returnsPageSize,
+        cursor: cursor,
+      );
+      records.addAll(read.items);
+      cursor = read.nextCursor;
+      if (!read.hasMore || cursor == null) return records;
+    }
+    throw const TenantReturnException('returns_day_too_large');
   }
 }
 
@@ -793,6 +905,7 @@ final class _ItemRoll {
     required this.itemsSold,
     required this.truncated,
     this.revenueByDate = const <String, int>{},
+    this.netsReturns = false,
   });
 
   const _ItemRoll.empty()
@@ -802,7 +915,8 @@ final class _ItemRoll {
       recent = const <TenantReportSaleRow>[],
       itemsSold = 0,
       truncated = false,
-      revenueByDate = const <String, int>{};
+      revenueByDate = const <String, int>{},
+      netsReturns = false;
 
   final Map<String, int> quantities;
   final Map<String, int> revenue;
@@ -814,6 +928,9 @@ final class _ItemRoll {
   /// The same takings split by business date, so the chart has a bar per day
   /// without a second pass over the same records.
   final Map<String, int> revenueByDate;
+
+  /// Whether the week's returns were read and taken out of these figures.
+  final bool netsReturns;
 
   /// The best sellers by revenue, which is what the old page ordered by.
   List<TenantReportItem> top(int count) {
@@ -829,5 +946,14 @@ final class _ItemRoll {
     return items.take(count).toList(growable: false);
   }
 }
+
+/// How many returns are read per query. 50 is the page bound
+/// `TenantReadRepository` enforces; asking for more is a `RangeError`.
+const int _returnsPageSize = 50;
+
+/// The bound on one day's returns. `_returnsPageCap * _returnsPageSize` in a
+/// single trading day is a fault rather than a busy shop, and the week is left
+/// gross rather than netted by part of it.
+const int _returnsPageCap = 20;
 
 DateTime _utcNow() => DateTime.now().toUtc();

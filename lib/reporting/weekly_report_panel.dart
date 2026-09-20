@@ -27,6 +27,7 @@ import '../checkout/checkout_outbox.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
 import '../expenses/expense_repository.dart';
+import '../returns/return_history.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -193,11 +194,22 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
       final expenses = TenantExpenseRepository.canSeeInSession(session)
           ? TenantExpenseRepository(session: session, reader: reader)
           : null;
+      // **Unguarded by role, unlike the spending above it.** Every active
+      // member may read this business's returns - see
+      // `TenantReturnHistoryRepository.allowedRoles` - and this is not an
+      // extra figure on the page, it is the basis of two that are already on
+      // it. Withholding it would leave a manager reading gross items beside
+      // net money, which is the defect rather than a narrower view of it.
+      final returns = TenantReturnHistoryRepository(
+        session: session,
+        reader: reader,
+      );
       final loader = deviceOnly
           ? TenantWeeklyReportLoader.device(
               session: session,
               sales: sales,
               expenses: expenses,
+              returns: returns,
               clock: widget.clock == null ? null : _now,
             )
           : TenantWeeklyReportLoader(
@@ -209,6 +221,7 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
               // read this report. A manager sees the week's gross figures and no net
               // card, which is the same boundary the margin already sits behind.
               expenses: expenses,
+              returns: returns,
               clock: widget.clock == null ? null : _now,
             );
       // A stale selection is dropped rather than sent: the same rule the totals

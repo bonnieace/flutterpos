@@ -27,13 +27,10 @@ void main() {
     test('a return of every unit is worth the sale, not its lines', () {
       // 2500 of lines, discounted to 2200. Priced line by line a full return
       // would hand back 2500 - three hundred shillings the customer never paid.
-      final offset = describeReturnOffset(_sale(discountMinor: 300), <
-        String,
-        int
-      >{
-        'product-1': 4,
-        'product-2': 5,
-      });
+      final offset = describeReturnOffset(
+        _sale(discountMinor: 300),
+        <String, int>{'product-1': 4, 'product-2': 5},
+      );
 
       expect(offset.isFullyReturned, isTrue);
       expect(offset.returnedMinor, 2200);
@@ -41,15 +38,49 @@ void main() {
 
     test('a discount is shared pro rata across a partial return', () {
       // 1000 of a 2500 subtotal, on a sale charged at 2200: 1000 * 2200/2500.
-      final offset = describeReturnOffset(_sale(discountMinor: 300), <
-        String,
-        int
-      >{
-        'product-1': 2,
-      });
+      final offset = describeReturnOffset(
+        _sale(discountMinor: 300),
+        <String, int>{'product-1': 2},
+      );
 
       expect(offset.returnedMinor, 880);
       expect(offset.isFullyReturned, isFalse);
+    });
+
+    test('the per-product split adds up to the figure beside it', () {
+      // 2500 of lines discounted to 2200, every unit back: 4 x 500 and 5 x 100
+      // apportioned over 2200. Neither share divides cleanly, and the two of
+      // them still have to be the 2200 printed above them.
+      final offset = describeReturnOffset(
+        _sale(discountMinor: 300),
+        <String, int>{'product-1': 4, 'product-2': 5},
+      );
+
+      expect(
+        offset.returnedMinorByProduct.values.fold<int>(
+          0,
+          (total, share) => total + share,
+        ),
+        offset.returnedMinor,
+      );
+      expect(offset.returnedMinorByProduct['product-1'], 1760);
+      expect(offset.returnedMinorByProduct['product-2'], 440);
+    });
+
+    test('a category scope counts only the units it valued', () {
+      // `returnedUnits` names everything the return covers whatever scope it
+      // was priced under. A report netting a category's item count has to
+      // subtract what that category added, which is the narrower map.
+      final offset = describeReturnOffset(_sale(), <String, int>{
+        'product-1': 2,
+        'product-2': 1,
+      }, categoryId: 'drinks');
+
+      expect(offset.returnedUnits, <String, int>{
+        'product-1': 2,
+        'product-2': 1,
+      });
+      expect(offset.returnedUnitsInScope, <String, int>{'product-1': 2});
     });
 
     test('more units than the sale sold is refused, never clamped', () {
@@ -70,15 +101,21 @@ void main() {
   group('a trading day of returns', () {
     test('is read by the sale it reverses, and priced against it', () async {
       final reader = _Reader(
-        sales: <String, TenantSale>{'co-1': _sale(), 'co-2': _sale(id: 'co-2')},
+        sales: <String, TenantSale>{
+          'co-1': _sale(),
+          'co-2': _sale(id: 'co-2'),
+        },
         returns: <TenantQueryDocumentSnapshot>[
-          _record('rt-1', saleId: 'co-1', quantities: <String, int>{
-            'product-1': 4,
-            'product-2': 5,
-          }),
-          _record('rt-2', saleId: 'co-2', quantities: <String, int>{
-            'product-2': 1,
-          }),
+          _record(
+            'rt-1',
+            saleId: 'co-1',
+            quantities: <String, int>{'product-1': 4, 'product-2': 5},
+          ),
+          _record(
+            'rt-2',
+            saleId: 'co-2',
+            quantities: <String, int>{'product-2': 1},
+          ),
         ],
       );
 
@@ -101,28 +138,35 @@ void main() {
       });
     });
 
-    test('two returns against one sale add up before they are priced', () async {
-      final reader = _Reader(
-        sales: <String, TenantSale>{'co-1': _sale()},
-        returns: <TenantQueryDocumentSnapshot>[
-          _record('rt-1', saleId: 'co-1', quantities: <String, int>{
-            'product-1': 4,
-          }),
-          _record('rt-2', saleId: 'co-1', quantities: <String, int>{
-            'product-2': 5,
-          }),
-        ],
-      );
+    test(
+      'two returns against one sale add up before they are priced',
+      () async {
+        final reader = _Reader(
+          sales: <String, TenantSale>{'co-1': _sale()},
+          returns: <TenantQueryDocumentSnapshot>[
+            _record(
+              'rt-1',
+              saleId: 'co-1',
+              quantities: <String, int>{'product-1': 4},
+            ),
+            _record(
+              'rt-2',
+              saleId: 'co-1',
+              quantities: <String, int>{'product-2': 5},
+            ),
+          ],
+        );
 
-      final day = await TenantDayReturnsLoader(
-        session: _session(),
-        reader: reader,
-      ).load(_businessDate);
+        final day = await TenantDayReturnsLoader(
+          session: _session(),
+          reader: reader,
+        ).load(_businessDate);
 
-      // Neither return covers the sale on its own; together they do.
-      expect(day.covers(_sale()), isTrue);
-      expect(day.returnedMinor, 2500);
-    });
+        // Neither return covers the sale on its own; together they do.
+        expect(day.covers(_sale()), isTrue);
+        expect(day.returnedMinor, 2500);
+      },
+    );
 
     test('narrows to one colleague by who sold, not by who refunded', () async {
       final reader = _Reader(
@@ -133,12 +177,16 @@ void main() {
         returns: <TenantQueryDocumentSnapshot>[
           // Recorded by user-a against a sale user-b rang up: it comes out of
           // user-b's day.
-          _record('rt-1', saleId: 'co-2', quantities: <String, int>{
-            'product-1': 2,
-          }),
-          _record('rt-2', saleId: 'co-1', quantities: <String, int>{
-            'product-2': 1,
-          }),
+          _record(
+            'rt-1',
+            saleId: 'co-2',
+            quantities: <String, int>{'product-1': 2},
+          ),
+          _record(
+            'rt-2',
+            saleId: 'co-1',
+            quantities: <String, int>{'product-2': 1},
+          ),
         ],
       );
 
@@ -157,18 +205,21 @@ void main() {
       final reader = _Reader(
         sales: const <String, TenantSale>{},
         returns: <TenantQueryDocumentSnapshot>[
-          _record('rt-1', saleId: 'co-1', quantities: <String, int>{
-            'product-1': 1,
-          }),
+          _record(
+            'rt-1',
+            saleId: 'co-1',
+            quantities: <String, int>{'product-1': 1},
+          ),
         ],
       );
 
       // Under-netting a day's takings by the one return it could not price is
       // exactly the wrong figure this whole model exists to remove.
       await expectLater(
-        TenantDayReturnsLoader(session: _session(), reader: reader).load(
-          _businessDate,
-        ),
+        TenantDayReturnsLoader(
+          session: _session(),
+          reader: reader,
+        ).load(_businessDate),
         _code('return_sale_missing'),
       );
     });
@@ -227,6 +278,9 @@ TenantSale _sale({
       <String, Object?>{
         'productId': 'product-1',
         'name': 'Tusker',
+        // Two categories, so a scoped valuation has one line to keep and one
+        // to leave out. Nothing above reads these unless it passes a scope.
+        'categoryId': 'drinks',
         'quantity': 4,
         'unitPriceMinor': 500,
         'lineTotalMinor': 2000,
@@ -234,6 +288,7 @@ TenantSale _sale({
       <String, Object?>{
         'productId': 'product-2',
         'name': 'Water',
+        'categoryId': 'food',
         'quantity': 5,
         'unitPriceMinor': 100,
         'lineTotalMinor': 500,

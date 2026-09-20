@@ -33,7 +33,9 @@ final class TenantSaleReturnOffset {
     required this.soldById,
     required this.tender,
     required this.returnedUnits,
+    required this.returnedUnitsInScope,
     required this.returnedMinor,
+    required this.returnedMinorByProduct,
     required this.returnedCostMinor,
     required this.fullyReturnedCostlessLines,
     required this.isFullyReturned,
@@ -56,6 +58,15 @@ final class TenantSaleReturnOffset {
   /// Units returned per product, summed across every return against the sale.
   final Map<String, int> returnedUnits;
 
+  /// The same, restricted to the lines this offset was actually valued over.
+  ///
+  /// **The one to count with.** [returnedUnits] is every unit the return
+  /// names, whatever scope the valuation ran under; under a category scope
+  /// that includes units from lines this offset deliberately took no money
+  /// back for. A report netting its item count has to subtract the units it
+  /// added, which are these.
+  final Map<String, int> returnedUnitsInScope;
+
   /// What those units are worth, in the sale's own currency.
   ///
   /// **Discount-adjusted, and exact at the boundary.** A sale's total is its
@@ -65,6 +76,14 @@ final class TenantSaleReturnOffset {
   /// worth precisely [TenantSale.totalMinor] and a partial one worth its
   /// pro-rata share of what was actually charged.
   final int returnedMinor;
+
+  /// [returnedMinor], split across the products it came back out of.
+  ///
+  /// **Split here so it sums to [returnedMinor] exactly**, whatever rounding
+  /// the discount ratio does at the edges: the shares are allocated in order
+  /// and the last one absorbs the remainder. A per-product figure derived
+  /// anywhere else would be free to disagree with the total printed above it.
+  final Map<String, int> returnedMinorByProduct;
 
   /// What those returned units *cost*, in the sale's own currency.
   ///
@@ -335,11 +354,17 @@ TenantSaleReturnOffset describeReturnOffset(
   var costMinor = 0;
   var costlessLinesFullyBack = 0;
   var complete = scoped.isNotEmpty;
+  final unitsInScope = <String, int>{};
+  final grossByProduct = <String, int>{};
   for (final line in scoped) {
     final returned = units[line.productId] ?? 0;
     if (returned < line.quantity) complete = false;
     grossMinor += returned * line.unitPriceMinor;
     if (returned == 0) continue;
+    unitsInScope[line.productId] =
+        (unitsInScope[line.productId] ?? 0) + returned;
+    grossByProduct[line.productId] =
+        (grossByProduct[line.productId] ?? 0) + returned * line.unitPriceMinor;
     // A returned line with no recorded cost takes no cost back out, which is
     // consistent rather than incomplete: it put none in either. Whether the
     // *period* can still state a profit is the aggregator's question, asked
@@ -352,21 +377,52 @@ TenantSaleReturnOffset describeReturnOffset(
     }
   }
 
+  final returnedMinor = categoryId == null
+      ? _returnedMinor(sale, grossMinor, complete)
+      // The category basis is the line totals themselves. A full return of
+      // the category's lines is worth what those lines were added up as,
+      // which is what `complete` would otherwise short-circuit past.
+      : grossMinor;
+
   return TenantSaleReturnOffset._(
     saleId: sale.id,
     soldById: sale.soldById,
     tender: sale.tender,
     returnedUnits: Map<String, int>.unmodifiable(units),
-    returnedMinor: categoryId == null
-        ? _returnedMinor(sale, grossMinor, complete)
-        // The category basis is the line totals themselves. A full return of
-        // the category's lines is worth what those lines were added up as,
-        // which is what `complete` would otherwise short-circuit past.
-        : grossMinor,
+    returnedUnitsInScope: Map<String, int>.unmodifiable(unitsInScope),
+    returnedMinor: returnedMinor,
+    returnedMinorByProduct: _split(returnedMinor, grossByProduct, grossMinor),
     returnedCostMinor: costMinor,
     fullyReturnedCostlessLines: costlessLinesFullyBack,
     isFullyReturned: complete,
   );
+}
+
+/// Allocates [total] across [grossByProduct] in proportion to it.
+///
+/// **The parts sum to [total] and not to a rounding of it.** Each share but
+/// the last is rounded on its own and the last takes what is left, so a
+/// discount ratio that does not divide cleanly cannot leave a per-product list
+/// that adds up to a different figure from the one beside it.
+Map<String, int> _split(int total, Map<String, int> grossByProduct, int gross) {
+  if (grossByProduct.isEmpty) return const <String, int>{};
+  // Nothing to apportion by. Every line came back at no charge, so every share
+  // is nought - which is the truth, not a division this declines to do.
+  if (gross <= 0) {
+    return Map<String, int>.unmodifiable(<String, int>{
+      for (final productId in grossByProduct.keys) productId: 0,
+    });
+  }
+  final shares = <String, int>{};
+  var allocated = 0;
+  final productIds = grossByProduct.keys.toList(growable: false);
+  for (final productId in productIds.take(productIds.length - 1)) {
+    final share = (grossByProduct[productId]! * total / gross).round();
+    shares[productId] = share;
+    allocated += share;
+  }
+  shares[productIds.last] = total - allocated;
+  return Map<String, int>.unmodifiable(shares);
 }
 
 /// The returned share of what was actually charged.
