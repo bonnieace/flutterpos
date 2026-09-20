@@ -8,6 +8,7 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import 'checkout_configuration.dart';
+import 'checkout_catalog_local_sales.dart';
 import 'checkout_outbox.dart';
 
 /// Raised when the local catalog cache cannot be opened or written safely.
@@ -110,7 +111,7 @@ abstract interface class CheckoutCatalogSource {
 }
 
 final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
-  HiveCheckoutCatalogCache._(this._box, this._clock);
+  HiveCheckoutCatalogCache._(this._box, this._clock, this._localSales);
 
   static const boxName = 'checkout-catalog-cache-v1';
 
@@ -122,12 +123,25 @@ final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
   static const encryptionKeyBytes = HiveCheckoutOutbox.encryptionKeyBytes;
 
   final Box<dynamic> _box;
+
+  /// What this device has sold since this catalog was written, subtracted on
+  /// read. Absent in a build that does not track it, which leaves every figure
+  /// exactly as the stored snapshot recorded it.
+  final CheckoutCatalogLocalSales? _localSales;
+
+  /// The tally this cache subtracts, for whoever records into it.
+  ///
+  /// **Exposed so the pairing cannot drift.** A sale is recorded by the draft
+  /// service and subtracted here; handing both the same object through the
+  /// composition root twice is two chances to hand over two.
+  CheckoutCatalogLocalSales? get localSales => _localSales;
   final CheckoutCatalogCacheClock _clock;
 
   static Future<HiveCheckoutCatalogCache> open({
     required CheckoutOutboxEncryptionKeyProvider keyProvider,
     HiveInterface? hive,
     CheckoutCatalogCacheClock? clock,
+    CheckoutCatalogLocalSales? localSales,
   }) async {
     final key = await keyProvider.loadOrCreateKey();
     if (key.length != encryptionKeyBytes) {
@@ -138,14 +152,39 @@ final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
       encryptionCipher: HiveAesCipher(List<int>.from(key)),
       crashRecovery: false,
     );
-    return HiveCheckoutCatalogCache._(box, clock ?? _utcNow);
+    return HiveCheckoutCatalogCache._(box, clock ?? _utcNow, localSales);
   }
 
   /// Test and composition boundary for an already encrypted Hive box.
   factory HiveCheckoutCatalogCache.fromBox(
     Box<dynamic> box, {
     CheckoutCatalogCacheClock? clock,
-  }) => HiveCheckoutCatalogCache._(box, clock ?? _utcNow);
+    CheckoutCatalogLocalSales? localSales,
+  }) => HiveCheckoutCatalogCache._(box, clock ?? _utcNow, localSales);
+
+  /// The stored quantity, less what this device has sold since it was stored.
+  ///
+  /// **Applied here rather than in the register**, so every surface reading
+  /// this catalog gets one answer, and so the figure still passes through
+  /// `TenantProduct`'s strict read model exactly as the stored one did.
+  ///
+  /// A non-integer is handed back untouched for that model to refuse - guessing
+  /// at a malformed figure is how a cache starts widening what a repository
+  /// already accepted. The result is allowed to go negative, because
+  /// `-3 in stock` is a real state this till already states in words: it means
+  /// more was sold than the books knew about, which is exactly what a person
+  /// needs to see.
+  Object? _quantityOnHand({
+    required String uid,
+    required String tenantId,
+    required String productId,
+    required Object? stored,
+  }) {
+    final sales = _localSales;
+    if (sales == null || stored is! int) return stored;
+    return stored -
+        sales.soldFor(uid: uid, tenantId: tenantId, productId: productId);
+  }
 
   /// Returns the cached snapshot, or `null` for a miss.
   ///
@@ -210,6 +249,10 @@ final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
       });
     }
 
+    // **The tally is settled by the write, not by a timer.** This snapshot came
+    // from the server, which has already counted every sale this device made
+    // before it - so keeping the tally would subtract them a second time.
+    _localSales?.clearFor(uid: uid, tenantId: tenantId);
     await _box.put(key, <String, Object?>{
       'schemaVersion': schemaVersion,
       'uid': uid,
@@ -291,7 +334,12 @@ final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
             'SKU': entry['SKU'],
             'price': entry['price'],
             if (entry['cost'] != null) 'cost': entry['cost'],
-            'quantity': entry['quantity'],
+            'quantity': _quantityOnHand(
+              uid: uid,
+              tenantId: tenantId,
+              productId: _entryPath(entry).split('/').last,
+              stored: entry['quantity'],
+            ),
             'categoryId': entry['categoryId'],
             if (entry['image'] != null) 'image': entry['image'],
           },

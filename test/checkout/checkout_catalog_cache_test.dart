@@ -28,6 +28,107 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
+  group('what this device has sold since the catalog was read', () {
+    late CheckoutCatalogLocalSales sold;
+    late HiveCheckoutCatalogCache tallied;
+
+    setUp(() {
+      sold = CheckoutCatalogLocalSales();
+      tallied = HiveCheckoutCatalogCache.fromBox(
+        box,
+        clock: clock.call,
+        localSales: sold,
+      );
+    });
+
+    Future<void> storeTen() => tallied.write(
+      uid: 'user-a',
+      tenantId: 'tenant-a',
+      configuration: _configuration,
+      categories: [_category('tenant-a', 'drinks')],
+      products: [_product('tenant-a', 'product-a', quantity: 10)],
+      complete: true,
+    );
+
+    test('a sale on this device comes off the figure the register reads', () async {
+      // **The reported defect.** A sale deliberately does not refresh the
+      // catalog, so the register went on reporting the stock the last refresh
+      // saw - seen on a device reading `84 in stock` against an Inventory
+      // reading `82`, and still `84` after two more sales.
+      await storeTen();
+      sold.recordSale(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        unitsByProduct: <String, int>{'product-a': 3},
+      );
+
+      final snapshot = await tallied.read(uid: 'user-a', tenantId: 'tenant-a');
+
+      expect(snapshot!.productById('product-a')!.quantity, 7);
+    });
+
+    test('writing a fresh catalog settles the tally', () async {
+      // The server counted these sales before it answered, so subtracting them
+      // from what it said would take them off twice.
+      await storeTen();
+      sold.recordSale(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        unitsByProduct: <String, int>{'product-a': 3},
+      );
+      await storeTen();
+
+      final snapshot = await tallied.read(uid: 'user-a', tenantId: 'tenant-a');
+
+      expect(snapshot!.productById('product-a')!.quantity, 10);
+      expect(sold.hasSalesFor(uid: 'user-a', tenantId: 'tenant-a'), isFalse);
+    });
+
+    test('one business never subtracts another\'s sales', () async {
+      await storeTen();
+      sold.recordSale(
+        uid: 'user-a',
+        tenantId: 'tenant-elsewhere',
+        unitsByProduct: <String, int>{'product-a': 3},
+      );
+
+      final snapshot = await tallied.read(uid: 'user-a', tenantId: 'tenant-a');
+
+      expect(snapshot!.productById('product-a')!.quantity, 10);
+    });
+
+    test('more sold than the books knew about reads as a negative', () async {
+      // `-3 in stock` is a real state this till already states in words: it
+      // means the shelf owed more than the books recorded. Clamping it at zero
+      // would hide exactly the case somebody needs to see.
+      await storeTen();
+      sold.recordSale(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        unitsByProduct: <String, int>{'product-a': 13},
+      );
+
+      final snapshot = await tallied.read(uid: 'user-a', tenantId: 'tenant-a');
+
+      expect(snapshot!.productById('product-a')!.quantity, -3);
+    });
+
+    test('a cache told nothing reports the stored figure unchanged', () async {
+      await cache.write(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        configuration: _configuration,
+        categories: [_category('tenant-a', 'drinks')],
+        products: [_product('tenant-a', 'product-a', quantity: 10)],
+        complete: true,
+      );
+
+      final snapshot = await cache.read(uid: 'user-a', tenantId: 'tenant-a');
+
+      expect(snapshot!.productById('product-a')!.quantity, 10);
+    });
+  });
+
   group('encrypted cache storage', () {
     test('isolates snapshots by both UID and tenant', () async {
       await cache.write(

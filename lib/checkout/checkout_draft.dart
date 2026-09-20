@@ -6,6 +6,7 @@ import '../tenancy/tenant_access.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import 'checkout_catalog_cache.dart';
+import 'checkout_catalog_local_sales.dart';
 import 'checkout_outbox.dart';
 import 'checkout_receipt.dart';
 import 'checkout_sale.dart';
@@ -196,7 +197,9 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     CheckoutIdFactory? checkoutIdFactory,
     CheckoutDraftClock? clock,
     CheckoutDraftReceiptHook? onSaved,
+    CheckoutCatalogLocalSales? localSales,
   }) : _onSaved = onSaved,
+       _localSales = localSales,
        _sessionController = sessionController,
        _cache = cache,
        _outbox = outbox,
@@ -217,6 +220,11 @@ final class CheckoutDraftService implements CheckoutDraftSink {
   /// service free of any dependency on the printing slice.
   final CheckoutDraftReceiptHook? _onSaved;
 
+  /// Told what left the shelf, so the register can stop reporting a figure a
+  /// refresh ago. Absent in a build that does not track it - see
+  /// [CheckoutCatalogLocalSales].
+  final CheckoutCatalogLocalSales? _localSales;
+
   Future<void> _tail = Future<void>.value();
 
   /// Saves one deterministic offline checkout for the selected session.
@@ -228,11 +236,43 @@ final class CheckoutDraftService implements CheckoutDraftSink {
   @override
   Future<CheckoutSavedDraft> saveDraft(CheckoutDraftRequest request) async {
     final record = await createDraft(request);
+    // **Told here, after the sale is durable and before anything can fail.**
+    // A sale deliberately does not refresh the catalog, so without this the
+    // register goes on reporting the stock the last refresh saw - and the
+    // device has just proved it wrong. Read from the recorded payload rather
+    // than the request, so what is subtracted is what was actually filed.
+    _recordUnitsSold(record);
     final receiptNumber = record.payload['receiptNumber'];
     return CheckoutSavedDraft(
       checkoutId: record.checkoutId,
       receiptNumber: receiptNumber is String ? receiptNumber : null,
       receiptPrintFailure: await _queueReceipt(record),
+    );
+  }
+
+  /// Subtracts one durable sale's units from what the register reports.
+  ///
+  /// **Nothing here may throw.** The sale is already written; a tally is a
+  /// convenience over it, and a malformed line is a figure not subtracted
+  /// rather than a sale undone. A line the payload does not describe as a
+  /// whole number is skipped for the same reason.
+  void _recordUnitsSold(CheckoutOutboxRecord record) {
+    final sales = _localSales;
+    if (sales == null) return;
+    final items = record.payload['items'];
+    if (items is! List) return;
+    final units = <String, int>{};
+    for (final item in items) {
+      if (item is! Map) continue;
+      final productId = item['productId'];
+      final quantity = item['quantity'];
+      if (productId is! String || quantity is! int) continue;
+      units[productId] = (units[productId] ?? 0) + quantity;
+    }
+    sales.recordSale(
+      uid: record.uid,
+      tenantId: record.tenantId,
+      unitsByProduct: units,
     );
   }
 

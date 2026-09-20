@@ -120,12 +120,21 @@ Future<void> main() async {
               .tenantMutationStorageKey,
         ),
       );
+      // **What the till has sold since the catalog was last read.** A sale
+      // does not refresh the catalog - that would re-read every product in the
+      // business on every customer - so without this the register reports the
+      // stock some earlier refresh saw and drifts all day. Held in memory: a
+      // refresh happens whenever a session opens or connectivity returns, so
+      // the tally never needs to outlive the process. One instance, because
+      // the cache subtracts what the draft service records.
+      final checkoutCatalogLocalSales = CheckoutCatalogLocalSales();
       final checkoutCatalogCache = await HiveCheckoutCatalogCache.open(
         keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
           storage: secureValueStore,
           storageKey:
               SecureCheckoutOutboxEncryptionKeyProvider.catalogCacheStorageKey,
         ),
+        localSales: checkoutCatalogLocalSales,
       );
       // Product photographs waiting for Storage. Its own box and its own key
       // for the reasons `productImageDraftStorageKey` gives: these are
@@ -1226,6 +1235,7 @@ class SpiritPOSApp extends StatelessWidget {
                     delegate: CheckoutDraftService(
                       sessionController: sessions,
                       cache: checkoutCatalogCache,
+                      localSales: checkoutCatalogCache.localSales,
                       outbox: checkoutOutbox,
                       receipts: checkoutReceiptCounters,
                       // The frozen restriction that a cashier cannot open checkout in a
