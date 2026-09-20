@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_application_1/ui/stats.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive/hive.dart';
 
 /// A typical phone in logical pixels. The landing route's fold is a property of
 /// the space it is given, so these tests state the space.
@@ -655,6 +657,115 @@ void main() {
       expect(sales.status, isNull);
     });
 
+    testWidgets('a sale held only in the outbox still reaches the tiles', (
+      tester,
+    ) async {
+      // **The reported defect, reproduced.** A sale rung with no network is
+      // never handed to the Firestore SDK - the submission gateway refuses
+      // while `isOnline` is false - so it is not a pending write and the cache
+      // does not hold it either. The outbox is the only place it exists, and
+      // the home was not reading one: its device pass saw the single synced
+      // sale, tied with the published count at one, and drew the published
+      // figure while the till went on trading. Which is a shopkeeper ringing a
+      // sale and watching the total refuse to move.
+      final outbox = await _offlineOutbox('landing-outbox-a', count: 1);
+      addTearDown(outbox.close);
+
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        checkoutOutbox: outbox,
+        reader: _BehindReader(
+          publishedTransactions: 1,
+          sales: <TenantQueryDocumentSnapshot>[
+            _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
+          ],
+        ),
+      );
+
+      final transactions = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-transactions')),
+      );
+      expect(transactions.value, '2');
+      expect(transactions.detail, 'On this device');
+      expect(transactions.statusLabel, 'Not reconciled');
+
+      final sales = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-sales')),
+      );
+      // 30.00 counted by the server plus 60.00 this device is still holding.
+      expect(sales.value, contains('90'));
+      expect(sales.detail, 'On this device');
+    });
+
+    testWidgets('a busier till keeps its figure, and the tile says what is not in it', (
+      tester,
+    ) async {
+      // **Both halves matter, and the first is the one easy to get wrong.**
+      // The cache holds a subset of what the server has, so this device can
+      // only ever say `cached + unsent` - and against a register that has sold
+      // nine, that is the smaller and further-off number. Preferring it because
+      // this device happens to hold unsent work would replace 9 with 2 on a day
+      // that truly took 10.
+      //
+      // So the published figure stays, and what was wrong before is only that
+      // it said nothing about the sale this device is still carrying.
+      final outbox = await _offlineOutbox('landing-outbox-b', count: 1);
+      addTearDown(outbox.close);
+
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        checkoutOutbox: outbox,
+        reader: _BehindReader(
+          publishedTransactions: 9,
+          sales: <TenantQueryDocumentSnapshot>[
+            _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
+          ],
+        ),
+      );
+
+      final transactions = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-transactions')),
+      );
+      expect(transactions.value, '9');
+      expect(transactions.detail, 'Counted today');
+      // Never colour alone: the badge carries the words.
+      expect(transactions.status, AppStatus.attention);
+      expect(transactions.statusLabel, '1 not sent');
+    });
+
+    testWidgets('a published day this device owes nothing on says so plainly', (
+      tester,
+    ) async {
+      // The control for the badge above: an empty outbox must leave the tile
+      // exactly as it was, or every reconciled day grows a warning.
+      final outbox = await _offlineOutbox('landing-outbox-c', count: 0);
+      addTearDown(outbox.close);
+
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        checkoutOutbox: outbox,
+        reader: _BehindReader(
+          publishedTransactions: 9,
+          sales: <TenantQueryDocumentSnapshot>[
+            _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
+          ],
+        ),
+      );
+
+      final transactions = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-transactions')),
+      );
+      expect(transactions.value, '9');
+      expect(transactions.status, isNull);
+      expect(transactions.statusLabel, isNull);
+    });
+
     testWidgets('a sale the server has not counted wins over the published day', (
       tester,
     ) async {
@@ -765,6 +876,7 @@ Future<void> _pumpLanding(
   Widget Function(TenantDataReader reader)? shiftHistoryRoute,
   SalesTotalsCallable? salesTotalsCallable,
   TenantDataReader? reader,
+  HiveCheckoutOutbox? checkoutOutbox,
   bool settle = true,
   Size size = _phone,
   DateTime Function() clock = _nineInTheMorning,
@@ -791,6 +903,7 @@ Future<void> _pumpLanding(
           memberName: memberName,
           clock: clock,
           reader: reader ?? _EmptyReader(),
+          checkoutOutbox: checkoutOutbox,
           onSignOut: () async {},
           catalogManagementRoute: catalogManagementRoute,
           catalogManagementRoles: catalogManagementRoles,
@@ -1019,6 +1132,79 @@ final class _CachedSalesReader
 /// One sale this device holds, on the business day [_nineInTheMorning] falls
 /// in - derived the way the code derives it, so the test does not assume the
 /// machine's time zone.
+/// An outbox holding [count] sales this device has never sent.
+///
+/// **In memory, because a widget test has no real clock to wait on.**
+/// `pumpAndSettle` advances a fake one while a Hive box backed by a file
+/// answers on the real event loop, so a disk-backed box here never settles and
+/// the test hangs rather than failing. Passing `bytes` keeps it off the
+/// filesystem; the reads the home makes of it are synchronous either way.
+Future<HiveCheckoutOutbox> _offlineOutbox(
+  String name, {
+  required int count,
+}) async {
+  final outbox = HiveCheckoutOutbox.fromBox(
+    await Hive.openBox<dynamic>(name, bytes: Uint8List(0)),
+  );
+  for (var index = 0; index < count; index++) {
+    await outbox.saveOffline(
+      uid: 'user-a',
+      tenantId: 'tenant-a',
+      checkoutId: 'checkout-offline-$index',
+      payload: _offlineSalePayload(
+        checkoutId: 'checkout-offline-$index',
+        sequence: 100 + index,
+        totalMinor: 6000,
+      ),
+    );
+  }
+  return outbox;
+}
+
+/// One sale as the outbox holds it, never having reached Firestore.
+///
+/// Mirrors [_cachedSale] deliberately: the same day, the same device and the
+/// same shape, so the only thing separating them in a test is where they live.
+Map<String, Object?> _offlineSalePayload({
+  required String checkoutId,
+  required int sequence,
+  required int totalMinor,
+}) {
+  const deviceId = 'dev-0123456789abcdef0123456789abcdef';
+  final businessDate = checkoutBusinessDate(_nineInTheMorning().toUtc());
+  return <String, Object?>{
+    'schemaVersion': checkoutSalePayloadSchemaVersion,
+    'checkoutId': checkoutId,
+    'tenantId': 'tenant-a',
+    'soldById': 'user-a',
+    'currency': 'KES',
+    'businessDate': businessDate,
+    'createdAtMs': _nineInTheMorning().toUtc().millisecondsSinceEpoch,
+    'shiftId': 'shift-a',
+    'deviceId': deviceId,
+    'receiptNumber': formatCheckoutReceiptNumber(
+      deviceId: deviceId,
+      businessDate: businessDate,
+      sequence: sequence,
+    ),
+    'receiptSequence': sequence,
+    'tender': 'cash',
+    'items': <Object?>[
+      <String, Object?>{
+        'productId': 'product-$checkoutId',
+        'name': 'Item',
+        'categoryId': 'category-a',
+        'quantity': 1,
+        'unitPriceMinor': totalMinor,
+        'unitCostMinor': 0,
+      },
+    ],
+    'subtotalMinor': totalMinor,
+    'discountMinor': 0,
+    'totalMinor': totalMinor,
+  };
+}
+
 TenantQueryDocumentSnapshot _cachedSale({
   required String checkoutId,
   required int sequence,

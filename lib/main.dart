@@ -1037,6 +1037,7 @@ class SpiritPOSApp extends StatelessWidget {
                 dailySummary: WeeklyReportDestination(
                   build: () => TenantDailySummaryScreen(
                     reader: reader,
+                    checkoutOutbox: checkoutOutbox,
                     reconciliationRoute: (businessDate) =>
                         TenantReconciliationStatusScreen(
                           reader: reader,
@@ -1558,6 +1559,11 @@ class SpiritPOSApp extends StatelessWidget {
             ),
             catalogManagementRoles:
                 TenantCatalogManagementRepository.allowedRoles,
+            // **The sales this device has not sent.** The badge beside the
+            // title already counts them; without this the home's own figures
+            // could not, so a shopkeeper who rang one offline watched the
+            // total refuse to move.
+            checkoutOutbox: checkoutOutbox,
             pendingCheckoutPanel: CheckoutPendingEvidencePanel(
               source: CombinedLocalWorkEvidenceSource(
                 checkouts: CheckoutOutboxEvidenceSource(checkoutOutbox),

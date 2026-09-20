@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../checkout/checkout_draft.dart';
+import '../checkout/checkout_outbox.dart';
 import '../expenses/expense.dart';
 import '../expenses/expense_repository.dart';
 import '../reporting/daily_metrics.dart';
@@ -135,6 +136,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.memberName,
     this.salesTotalsCallable,
     this.pendingCheckoutPanel,
+    this.checkoutOutbox,
     this.shiftPanel,
     this.dailySummaryRoute,
     this.dailySummaryRoles = const <TenantRole>[],
@@ -321,6 +323,10 @@ final class TenantRoutingShell extends StatefulWidget {
   final String? Function()? memberName;
 
   final Widget? pendingCheckoutPanel;
+
+  /// Handed to the landing screen so the home's own figures can include a sale
+  /// this device has not sent. See `TenantSafeLandingScreen.checkoutOutbox`.
+  final HiveCheckoutOutbox? checkoutOutbox;
 
   /// Optional point-of-sale route, injected for the same reason. It takes no
   /// reader: a sale is built from the device's own offline catalog, not from a
@@ -1322,6 +1328,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       onSwitchTenant: _switchTenant,
       memberName: widget.memberName?.call(),
       salesTotalsCallable: widget.salesTotalsCallable,
+      checkoutOutbox: widget.checkoutOutbox,
       checkoutRoute: widget.checkoutRoute,
       settingsRoute: widget.settingsRoute,
       settingsRoles: widget.settingsRoles,
@@ -2714,8 +2721,18 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.auditLogRoute,
     this.shiftHistoryRoute,
     this.auditLogRoles = const <TenantRole>[],
+    this.checkoutOutbox,
     this.clock,
   });
+
+  /// The sales this device has rung and not yet sent.
+  ///
+  /// **Without it the front door cannot see an offline sale at all.** A sale
+  /// rung with no network never reaches the Firestore SDK - the submission
+  /// gateway refuses to hand it over while `isOnline` is false - so it is not a
+  /// pending write and the cache does not hold it. The outbox is the only place
+  /// it exists, and the device total below is assembled from both.
+  final HiveCheckoutOutbox? checkoutOutbox;
 
   /// The clock the greeting's salutation reads. Absent means the real one.
   final DateTime Function()? clock;
@@ -2989,6 +3006,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             final aggregator = TenantDeviceSalesAggregator(
               session: session,
               cacheReader: cache,
+              // **The cache alone cannot answer this.** An offline sale is
+              // never handed to Firestore, so it is in neither the cache nor
+              // the server - and the home is the surface a shopkeeper watches
+              // after ringing one.
+              outbox: checkoutOutbox,
               // The same clock the rest of this screen reads, so the day it
               // totals is the day the greeting asked for.
               clock: clock,
@@ -3184,15 +3206,36 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // **The published figure still wins where it is ahead**, which is the
     // ordinary case of a second till trading: its sales are in `daily_metrics`
     // and were never on this device, so the device total is the smaller and
-    // less complete of the two. The limitation that leaves is a device holding
-    // one unsynced sale while another till has sold more - the published count
-    // is higher, so this keeps it, and the unsynced sale stays invisible until
-    // it syncs.
+    // less complete of the two.
+    //
+    // **And comparing counts is the right test, not a weaker stand-in for
+    // one.** Write what each figure knows: the cache holds some subset `C` of
+    // the sales the server has, the outbox holds `U` sales the server has
+    // none of, and the day truly took `S + U`. The published figure is `S`;
+    // this device can say `C + U`. Since `C <= S`, both are under the truth,
+    // and whichever is larger is the nearer of the two - every time. So the
+    // larger wins, and preferring this device merely because it holds unsent
+    // work would print `C + U` on a day when a busier till had already pushed
+    // `S` far above it.
+    //
+    // What that leaves is a published figure that is ahead and still short by
+    // the sales in `U`. The number is the best available; it is the silence
+    // about `U` that misleads, and [unsentTransactions] is what the tiles say
+    // instead of nothing.
     final deviceCount = countedNet?.transactions ?? counted?.transactions;
     final deviceSales = countedNet?.sales ?? counted?.sales;
     final deviceKnowsMore =
         deviceCount != null &&
         (metrics == null || deviceCount > metrics.transactions);
+    // Sales this device is still carrying, said out loud on a published figure
+    // that cannot include them. Zero whenever the device figure won, because
+    // that one already counts them and says so in its own words.
+    final unsentTransactions = deviceKnowsMore
+        ? 0
+        : device?.unsentTransactions ?? 0;
+    final unsentLabel = unsentTransactions == 1
+        ? '1 not sent'
+        : '$unsentTransactions not sent';
     final deviceReport = countedNet?.profitReport ?? counted?.profitReport;
     final report = deviceKnowsMore
         ? deviceReport
@@ -3230,8 +3273,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           icon: Icons.payments_outlined,
           // Never colour alone: the badge carries its own words, and the
           // detail underneath names the basis in full.
-          status: deviceKnowsMore ? AppStatus.attention : null,
-          statusLabel: deviceKnowsMore ? 'Not reconciled' : null,
+          status: deviceKnowsMore || unsentTransactions > 0
+              ? AppStatus.attention
+              : null,
+          statusLabel: deviceKnowsMore
+              ? 'Not reconciled'
+              : unsentTransactions > 0
+              ? unsentLabel
+              : null,
           detail: deviceKnowsMore
               ? 'On this device'
               : metrics != null
@@ -3247,8 +3296,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               ? '${metrics.transactions}'
               : '—',
           icon: Icons.receipt_long_outlined,
-          status: deviceKnowsMore ? AppStatus.attention : null,
-          statusLabel: deviceKnowsMore ? 'Not reconciled' : null,
+          status: deviceKnowsMore || unsentTransactions > 0
+              ? AppStatus.attention
+              : null,
+          statusLabel: deviceKnowsMore
+              ? 'Not reconciled'
+              : unsentTransactions > 0
+              ? unsentLabel
+              : null,
           detail: deviceKnowsMore
               ? 'On this device'
               : metrics != null

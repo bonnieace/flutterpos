@@ -301,8 +301,93 @@ void main() {
       expect(result.scannedRecordCount, 2);
       expect(result.totals!.transactions, 2);
       expect(result.totals!.sales, 20);
+      // Only `checkout-b`. `checkout-a` is in the cache, which is how it got
+      // there: the server has it, so a published figure for the day counts it.
+      expect(result.unsentTransactions, 1);
     },
   );
+
+  test('a confirmed record is not work the server is missing', () async {
+    // **The distinction the home's tiles turn on.** A published day that is
+    // behind by an unsent sale has to lose to this device; one that already
+    // holds every sale here must not, or a second till's takings are dropped
+    // for no reason. `confirmed` means the server acknowledged it.
+    final record = await _save(outbox, checkoutId: 'checkout-a', sequence: 1);
+    await outbox.beginSubmission(
+      uid: 'owner-a',
+      tenantId: 'tenant-a',
+      checkoutId: 'checkout-a',
+      leaseOwner: 'worker-a',
+      leaseDuration: const Duration(minutes: 5),
+    );
+    await outbox.markAwaitingConfirmation(
+      uid: 'owner-a',
+      tenantId: 'tenant-a',
+      checkoutId: 'checkout-a',
+      leaseOwner: 'worker-a',
+    );
+    await outbox.recordConfirmation(
+      uid: 'owner-a',
+      tenantId: 'tenant-a',
+      checkoutId: 'checkout-a',
+      observedPayloadHash: record.payloadHash,
+    );
+
+    // The cache has not caught up with it, so it is still counted - the figure
+    // is right either way. What it is not is evidence against the server.
+    final reader = _Reader(const <TenantQueryDocumentSnapshot>[]);
+    final aggregator = TenantDeviceSalesAggregator(
+      session: _session(),
+      cacheReader: reader,
+      cacheReportReader: reader,
+      outbox: outbox,
+      clock: () => DateTime.utc(2026, 9, 1, 12),
+    );
+
+    final result = await aggregator.load(
+      aggregator.createBusinessDateQuery(businessDate: '2026-09-01'),
+    );
+    expect(result.totals!.transactions, 1);
+    expect(result.unsentTransactions, 0);
+  });
+
+  test('a day this device only holds offline is all unsent', () async {
+    await _save(outbox, checkoutId: 'checkout-a', sequence: 1);
+    await _save(outbox, checkoutId: 'checkout-b', sequence: 2);
+    final reader = _Reader(const <TenantQueryDocumentSnapshot>[]);
+    final aggregator = TenantDeviceSalesAggregator(
+      session: _session(),
+      cacheReader: reader,
+      cacheReportReader: reader,
+      outbox: outbox,
+      clock: () => DateTime.utc(2026, 9, 1, 12),
+    );
+
+    final result = await aggregator.load(
+      aggregator.createBusinessDateQuery(businessDate: '2026-09-01'),
+    );
+    expect(result.totals!.transactions, 2);
+    expect(result.unsentTransactions, 2);
+  });
+
+  test('a day outside the query contributes no unsent work', () async {
+    // The count has to be scoped the way the total is, or a sale saved on
+    // Monday would argue that Tuesday's published figure is short.
+    await _save(outbox, checkoutId: 'checkout-a', sequence: 1);
+    final reader = _Reader(const <TenantQueryDocumentSnapshot>[]);
+    final aggregator = TenantDeviceSalesAggregator(
+      session: _session(),
+      cacheReader: reader,
+      cacheReportReader: reader,
+      outbox: outbox,
+      clock: () => DateTime.utc(2026, 9, 2, 12),
+    );
+
+    final result = await aggregator.load(
+      aggregator.createBusinessDateQuery(businessDate: '2026-09-02'),
+    );
+    expect(result.unsentTransactions, 0);
+  });
 
   test('withholds a provisional figure when hashes conflict', () async {
     final record = await _save(outbox, checkoutId: 'checkout-a', sequence: 1);

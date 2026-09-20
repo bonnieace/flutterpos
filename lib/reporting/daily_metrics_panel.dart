@@ -12,6 +12,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_types.dart';
+import '../checkout/checkout_outbox.dart';
 import '../expenses/expense.dart';
 import '../expenses/expense_repository.dart';
 import 'net_profit.dart';
@@ -47,6 +48,7 @@ final class TenantDailySummaryScreen extends StatelessWidget {
     this.reconciliationRoles = const <TenantRole>[],
     this.salesTotalsRoute,
     this.salesTotalsRoles = const <TenantRole>[],
+    this.checkoutOutbox,
   });
 
   /// Only document reads are needed: a day is read by exact path.
@@ -73,6 +75,10 @@ final class TenantDailySummaryScreen extends StatelessWidget {
   /// The roles that route is offered to, decided by the reporting domain.
   final List<TenantRole> salesTotalsRoles;
 
+  /// The sales this device has rung and not yet sent. See
+  /// [TenantDailySummaryPanel.checkoutOutbox].
+  final HiveCheckoutOutbox? checkoutOutbox;
+
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Daily summary',
@@ -84,6 +90,7 @@ final class TenantDailySummaryScreen extends StatelessWidget {
       reconciliationRoles: reconciliationRoles,
       salesTotalsRoute: salesTotalsRoute,
       salesTotalsRoles: salesTotalsRoles,
+      checkoutOutbox: checkoutOutbox,
     ),
   );
 }
@@ -105,6 +112,7 @@ final class TenantDailySummaryPanel extends StatefulWidget {
     this.reconciliationRoles = const <TenantRole>[],
     this.salesTotalsRoute,
     this.salesTotalsRoles = const <TenantRole>[],
+    this.checkoutOutbox,
   });
 
   /// Only document reads are needed: a day is read by exact path.
@@ -132,6 +140,14 @@ final class TenantDailySummaryPanel extends StatefulWidget {
 
   /// The roles that route is offered to, decided by the reporting domain.
   final List<TenantRole> salesTotalsRoles;
+
+  /// The sales this device has rung and not yet sent.
+  ///
+  /// **The cache cannot stand in for it.** A sale rung offline is never handed
+  /// to the Firestore SDK, so it is neither a pending write nor a server
+  /// document - and an unpublished day drawn without it understates exactly the
+  /// day this surface exists to describe.
+  final HiveCheckoutOutbox? checkoutOutbox;
 
   @override
   State<TenantDailySummaryPanel> createState() =>
@@ -226,6 +242,9 @@ final class _TenantDailySummaryPanelState
     final aggregator = TenantDeviceSalesAggregator(
       session: session,
       cacheReader: cache,
+      // Without this an unpublished day is drawn from the cache alone, which
+      // is precisely the evidence an offline sale is missing from.
+      outbox: widget.checkoutOutbox,
       // The same clock the days themselves were read against, so the dates
       // this totals cannot drift from the dates it is labelling.
       clock: widget.clock,

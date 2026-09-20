@@ -19,6 +19,7 @@ final class TenantDeviceSalesTotals {
     required this.query,
     required this.totals,
     required this.scannedRecordCount,
+    required this.unsentTransactions,
     required this.truncated,
     required this.refusal,
   });
@@ -26,10 +27,12 @@ final class TenantDeviceSalesTotals {
   factory TenantDeviceSalesTotals.complete({
     required TenantSalesTotals queryTotals,
     required int scannedRecordCount,
+    required int unsentTransactions,
   }) => TenantDeviceSalesTotals._(
     query: queryTotals.query,
     totals: queryTotals,
     scannedRecordCount: scannedRecordCount,
+    unsentTransactions: unsentTransactions,
     truncated: false,
     refusal: null,
   );
@@ -41,6 +44,7 @@ final class TenantDeviceSalesTotals {
     query: query,
     totals: null,
     scannedRecordCount: scannedRecordCount,
+    unsentTransactions: 0,
     truncated: true,
     refusal: null,
   );
@@ -53,6 +57,7 @@ final class TenantDeviceSalesTotals {
     query: query,
     totals: null,
     scannedRecordCount: scannedRecordCount,
+    unsentTransactions: 0,
     truncated: false,
     refusal: reason,
   );
@@ -60,6 +65,23 @@ final class TenantDeviceSalesTotals {
   final TenantSalesTotalsQuery query;
   final TenantSalesTotals? totals;
   final int scannedRecordCount;
+
+  /// How many of the counted sales the server cannot yet have seen.
+  ///
+  /// **Only the outbox states that are still owed**, which is why a `confirmed`
+  /// record does not count: the server holds that sale, so a published figure
+  /// covering this day already includes it. A record the cache also held is not
+  /// counted either - it reached the server to get there.
+  ///
+  /// **It says a figure is short, never which figure to draw.** Which one to
+  /// draw is settled by size - the cache holds a subset of what the server has,
+  /// so both totals are under the truth and the larger is always the nearer.
+  /// What size cannot say is that the winner is still missing something, and on
+  /// a day where a busier till carries the published figure past this one, that
+  /// is the only thing left to tell somebody. Zero for a truncated or refused
+  /// scan, which state no total to qualify.
+  final int unsentTransactions;
+
   final bool truncated;
   final TenantDeviceSalesRefusal? refusal;
 
@@ -295,6 +317,9 @@ final class TenantDeviceSalesAggregator {
     } while (cursor != null);
 
     final merged = <String, _DeviceSale>{...canonical};
+    // Sales this device is still carrying, which is what makes a published
+    // figure for the same day provably short. See [unsentTransactions].
+    var unsent = 0;
     if (_outbox != null) {
       final records = await _outbox.recordsForSession(
         uid: _session.uid,
@@ -334,6 +359,11 @@ final class TenantDeviceSalesAggregator {
           continue;
         }
         merged[record.checkoutId] = candidate;
+        // Counted here rather than after the accumulation: a sale the server
+        // has never seen is evidence whether or not it survives a return, and
+        // the question this answers is what the server can know, not what the
+        // day came to.
+        if (_unsentOutboxStates.contains(record.state)) unsent += 1;
         if (merged.length > TenantSalesTotals.maximumTransactions) {
           return TenantDeviceSalesTotals.truncated(
             query: query,
@@ -451,6 +481,7 @@ final class TenantDeviceSalesAggregator {
     return TenantDeviceSalesTotals.complete(
       queryTotals: totals,
       scannedRecordCount: merged.length,
+      unsentTransactions: unsent,
     );
   }
 }
@@ -460,6 +491,15 @@ const Set<CheckoutOutboxState> _includedOutboxStates = <CheckoutOutboxState>{
   CheckoutOutboxState.submitting,
   CheckoutOutboxState.awaitingConfirmation,
   CheckoutOutboxState.confirmed,
+};
+
+/// The states in which this device, and not the server, is the only holder of
+/// the sale. [CheckoutOutboxState.confirmed] is deliberately absent: the server
+/// acknowledged that one, so a published figure already counts it.
+const Set<CheckoutOutboxState> _unsentOutboxStates = <CheckoutOutboxState>{
+  CheckoutOutboxState.savedOffline,
+  CheckoutOutboxState.submitting,
+  CheckoutOutboxState.awaitingConfirmation,
 };
 
 final class _DeviceSale {
