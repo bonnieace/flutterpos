@@ -294,3 +294,70 @@ final class _InstantSimulation extends Simulation {
   @override
   bool isDone(double time) => true;
 }
+
+/// Watches the navigator so a screen can be told when it is on top again.
+///
+/// **Registered in `main.dart`, and a test that omits it simply never
+/// re-reads** - `RouteAware` is a subscription, so an absent observer is
+/// silence rather than an error.
+///
+/// **It lives here rather than beside the home**, which is where it was first
+/// written. Every screen that pushes another over itself has the same problem,
+/// and a mechanism only the home could reach is one the next screen solves
+/// again by hand - see [RereadOnReturn].
+final RouteObserver<PageRoute<dynamic>> tenantRouteObserver =
+    RouteObserver<PageRoute<dynamic>>();
+
+/// Re-reads a screen when a route pushed above it is popped.
+///
+/// **A screen that writes a record does not re-read it.** Pushing a module over
+/// a page and coming back is a pop, not a rebuild, and a guard re-reads only
+/// when its loader changes identity - which is what a rebuild produces. So a
+/// list that sent somebody off to add a row showed the list without the row,
+/// with nothing to say it was stale. The home fixed this for itself in
+/// September 2026; the expenses list and the stock counts list each had the
+/// same defect, and each would have had to fix it again.
+///
+/// **`didPopNext` is the exact moment**, rather than a timer or a listener on
+/// every write: it fires when this route becomes the top one again, which is
+/// when what is drawn here is about to be looked at.
+///
+/// A sheet is not a [PageRoute], so it does not reach this. A screen that
+/// writes through a sheet re-reads when the sheet answers - see
+/// `TenantExpensesPanel`.
+mixin RereadOnReturn<T extends StatefulWidget> on State<T> implements RouteAware {
+  /// Re-read whatever this screen shows. Usually a `setState` that changes the
+  /// key its loader is composed from.
+  void rereadAfterReturn();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic>) {
+      // Subscribing twice for the same route is a no-op in `RouteObserver`, so
+      // this stays correct across the dependency changes that bring us here.
+      tenantRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    tenantRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    if (mounted) rereadAfterReturn();
+  }
+
+  @override
+  void didPush() {}
+
+  @override
+  void didPop() {}
+
+  @override
+  void didPushNext() {}
+}

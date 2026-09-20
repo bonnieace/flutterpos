@@ -58,6 +58,34 @@ void main() {
     expect(opened, 1);
   });
 
+  testWidgets('a count handed in on the pushed route is there on return', (
+    tester,
+  ) async {
+    // **The reported defect.** *Count stock* is pushed from the screen above
+    // this panel, which cannot reach the panel's generation, so nothing
+    // re-read when it popped: a person handed a count in and came straight
+    // back to "No counts yet", which reads as the count having been lost.
+    final server = _Server();
+    await _pumpScreenWithRoutes(tester, server: server);
+    expect(find.textContaining('No counts yet'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stock-take-review-count')));
+    await tester.pumpAndSettle();
+
+    // What handing a count in does, from the pushed route: the record exists
+    // before this route pops.
+    _seedTake(server);
+    await tester.tap(find.byKey(const ValueKey('hand-it-in')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('No counts yet'),
+      findsNothing,
+      reason: 'the count handed in is the whole reason for coming back here',
+    );
+    expect(find.textContaining('Whole catalog'), findsOneWidget);
+  });
+
   testWidgets('no count is offered where no counting route is wired', (
     tester,
   ) async {
@@ -119,6 +147,62 @@ Future<void> _pumpScreen(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// [_pumpScreen], with the observer the app registers and a count route that
+/// behaves like one - a page that writes and then pops.
+Future<void> _pumpScreenWithRoutes(
+  WidgetTester tester, {
+  required _Server server,
+}) async {
+  tester.view.physicalSize = const Size(1400, 3600);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(
+    MaterialApp(
+      navigatorObservers: <NavigatorObserver>[tenantRouteObserver],
+      home: TenantSessionScope(
+        controller: TenantSessionController()..open(
+          uid: 'staff-owner',
+          membership: _membership(),
+        ),
+        child: TenantStockTakeReviewScreen(
+          reader: _Reader(server),
+          countRoute: (routeContext) => Scaffold(
+            body: Center(
+              child: TextButton(
+                key: const ValueKey('hand-it-in'),
+                onPressed: () => Navigator.of(routeContext).pop(),
+                child: const Text('Hand it in'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// One handed-in count, as the server holds it.
+void _seedTake(_Server server) {
+  server.staff['tenants/tenant-a/staff/staff-cashier'] = <String, Object?>{
+    'uid': 'staff-cashier',
+    'name': 'Wamweki Njoroge',
+  };
+  final id = 'st_2026-09-20_${'a' * 40}';
+  server.takes['tenants/tenant-a/stock_takes/$id'] = <String, Object?>{
+    'tenantId': 'tenant-a',
+    'counterUid': 'staff-owner',
+    'businessDate': '2026-09-20',
+    'status': 'submitted',
+    'productsInScope': 1,
+    'countedLineCount': 1,
+    'varianceLineCount': 0,
+    'absoluteVarianceUnits': 0,
+    'unmatchedLineCount': 0,
+  };
 }
 
 Future<void> _pump(

@@ -198,6 +198,41 @@ void main() {
     );
   });
 
+  testWidgets('an expense still in flight re-reads the period too', (
+    tester,
+  ) async {
+    // **The reported defect.** This re-read only on `AppStatus.ok`, which is
+    // the committed write alone - a queued one answers `AppNotice.offline`,
+    // whose status is `info`. So an expense recorded while the write was still
+    // going left the list reading "Nothing recorded last 30 days" over the
+    // expense just entered, and the obvious response to that is to enter it a
+    // second time.
+    final writer = _Writer(result: const TenantExpenseWriteResult.queued());
+    final reader = _Reader();
+    await _pump(tester, reader: reader, writer: writer);
+    final before = reader.reads;
+
+    await tester.tap(find.byKey(const ValueKey('expenses-record')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('expense-category')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('expense-category-rent')).last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('expense-description')),
+      'August rent',
+    );
+    await tester.enterText(find.byKey(const ValueKey('expense-amount')), '300');
+    await tester.tap(find.byKey(const ValueKey('expense-submit')));
+    await tester.pumpAndSettle();
+
+    expect(
+      reader.reads,
+      greaterThan(before),
+      reason: 'A queued expense is a record this list has to show.',
+    );
+  });
+
   testWidgets('an expense with no category chosen is not submitted', (
     tester,
   ) async {

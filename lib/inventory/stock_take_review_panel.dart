@@ -108,7 +108,17 @@ final class TenantStockTakeReviewPanel extends StatefulWidget {
 }
 
 class _TenantStockTakeReviewPanelState
-    extends State<TenantStockTakeReviewPanel> {
+    extends State<TenantStockTakeReviewPanel>
+    with RereadOnReturn<TenantStockTakeReviewPanel> {
+  /// **Handing a count in left this list showing "No counts yet".** *Count
+  /// stock* is pushed from the screen above this panel, which cannot reach
+  /// [_generation], so nothing re-read when it popped - and the count a person
+  /// had just handed in was missing from the only list that shows it. Opening
+  /// one for review had the same shape and was fixed by hand in [_open]; this
+  /// covers both, and anything else pushed from here.
+  @override
+  void rereadAfterReturn() => setState(() => _generation++);
+
   int _generation = 0;
   final TenantStaffNameResolvers _staffNames = TenantStaffNameResolvers();
 

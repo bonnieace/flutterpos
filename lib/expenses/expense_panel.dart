@@ -182,9 +182,11 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
     );
     if (!mounted || answer == null) return false;
     showAppSnackBar(context, answer);
-    if (answer.status != AppStatus.ok) return false;
+    // Reloaded for a queued void as well as a committed one, for the reason
+    // `_record` gives. The caller is told only about a void that is settled,
+    // because it closes a page over a record that is now gone.
     _reload();
-    return true;
+    return answer.status == AppStatus.ok;
   }
 
   /// Opens one category on its own, carrying the period already read.
@@ -226,7 +228,15 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
     );
     if (!mounted || answer == null) return;
     showAppSnackBar(context, answer);
-    if (answer.status == AppStatus.ok) _reload();
+    // **Any answer at all means a record now exists to show.** This read
+    // `status == ok`, which is the *committed* write only: a queued one
+    // answers `AppNotice.offline`, whose status is `info`, so recording an
+    // expense with the write still in flight left the list reading "Nothing
+    // recorded last 30 days" over the expense just entered - and the obvious
+    // response to that is to enter it again. The outcomes that did not write
+    // anything - unavailable, rejected, ambiguous - keep the sheet open and
+    // never answer, so they are not reached from here.
+    _reload();
   }
 
   @override

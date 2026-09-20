@@ -18,6 +18,7 @@ import '../ui/dialogs.dart';
 import '../ui/home_navigation.dart';
 import '../ui/measure.dart';
 import '../ui/routes.dart';
+export '../ui/routes.dart' show tenantRouteObserver;
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/stats.dart';
@@ -2613,14 +2614,6 @@ final class _LandingTrendLine extends StatelessWidget {
   static const double _glyphSize = 18;
 }
 
-/// Watches the navigator so the home can be told when it is on top again.
-///
-/// **Registered in `main.dart`, and a test that omits it simply never
-/// re-reads** - `RouteAware` is a subscription, so an absent observer is
-/// silence rather than an error.
-final RouteObserver<PageRoute<dynamic>> tenantRouteObserver =
-    RouteObserver<PageRoute<dynamic>>();
-
 /// Rebuilds its child when a route pushed above it is popped.
 ///
 /// **The home was reading its figures once and keeping them.** Every module is
@@ -2630,9 +2623,10 @@ final RouteObserver<PageRoute<dynamic>> tenantRouteObserver =
 /// the menu therefore saw the takings from before the sale, with nothing to say
 /// they were stale and no way to refresh but to restart the app.
 ///
-/// **`didPopNext` is the exact moment**, rather than a timer or a listener on
-/// every write: it fires when this route becomes the top one again, which is
-/// when what is drawn here is about to be looked at.
+/// The rebuild is the whole of it: [TenantSafeLandingScreen] builds a fresh
+/// loader closure, the guard sees a loader it has not run, and re-reads while
+/// keeping the figures already on screen - so the page does not blink back to
+/// a spinner over data the device is still holding.
 final class _RereadOnReturn extends StatefulWidget {
   const _RereadOnReturn({required this.builder});
 
@@ -2642,34 +2636,10 @@ final class _RereadOnReturn extends StatefulWidget {
   State<_RereadOnReturn> createState() => _RereadOnReturnState();
 }
 
-final class _RereadOnReturnState extends State<_RereadOnReturn> with RouteAware {
+final class _RereadOnReturnState extends State<_RereadOnReturn>
+    with RereadOnReturn<_RereadOnReturn> {
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final route = ModalRoute.of(context);
-    if (route is PageRoute<dynamic>) {
-      // Subscribing twice for the same route is a no-op in `RouteObserver`, so
-      // this stays correct across the dependency changes that bring us here.
-      tenantRouteObserver.subscribe(this, route);
-    }
-  }
-
-  @override
-  void dispose() {
-    tenantRouteObserver.unsubscribe(this);
-    super.dispose();
-  }
-
-  /// A module that was pushed over the home has been popped.
-  ///
-  /// The rebuild is the whole of it: [TenantSafeLandingScreen] builds a fresh
-  /// loader closure, the guard sees a loader it has not run, and re-reads while
-  /// keeping the figures already on screen - so the page does not blink back to
-  /// a spinner over data the device is still holding.
-  @override
-  void didPopNext() {
-    if (mounted) setState(() {});
-  }
+  void rereadAfterReturn() => setState(() {});
 
   @override
   Widget build(BuildContext context) => widget.builder(context);
