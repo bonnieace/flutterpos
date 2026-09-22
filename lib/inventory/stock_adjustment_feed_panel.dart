@@ -123,7 +123,10 @@ final class _TenantStockAdjustmentFeedPanelState
                 );
           return _FeedView(
             page: page,
-            names: await _resolverFor(session, reader).resolve(page.items.map((record) => record.actorUid)),
+            names: await _resolverFor(
+              session,
+              reader,
+            ).resolve(page.items.map((record) => record.actorUid)),
           );
         };
     _loader = readWith(widget.reader);
@@ -179,9 +182,17 @@ final class _AdjustmentFeedContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      key: const ValueKey('stock-adjustments'),
+    return PagedListView(
+      listKey: const ValueKey('stock-adjustments'),
       padding: EdgeInsets.all(tokens.spacing.s20),
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('stock-adjustments-previous'),
+        nextKey: const ValueKey('stock-adjustments-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
+        endOfList: !page.hasMore,
+      ),
       children: [
         // §7's "Title appears once": the `AppScaffold` above says `Stock
         // adjustments`, or names the product when the feed is narrowed to one,
@@ -227,14 +238,6 @@ final class _AdjustmentFeedContents extends StatelessWidget {
                 ? 'No manual adjustment has been recorded for this product.'
                 : 'No manual adjustment has been recorded in this business.',
           ),
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('stock-adjustments-previous'),
-          nextKey: const ValueKey('stock-adjustments-next'),
-          onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: page.hasMore ? onNextPage : null,
         ),
       ],
     );

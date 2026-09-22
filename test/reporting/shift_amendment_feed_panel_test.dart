@@ -275,10 +275,7 @@ void main() {
       findsOne,
     );
     expect(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.text('shift-1'),
-      ),
+      find.descendant(of: find.byType(AppBar), matching: find.text('shift-1')),
       findsOne,
     );
   });
@@ -299,7 +296,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(tester.widget<AppScaffold>(find.byType(AppScaffold)).subtitle, isNull);
+    expect(
+      tester.widget<AppScaffold>(find.byType(AppScaffold)).subtitle,
+      isNull,
+    );
   });
 
   testWidgets('an empty scoped trail says it is about one shift', (

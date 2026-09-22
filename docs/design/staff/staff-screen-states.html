@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff — screen states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, input { font: inherit; }
+input::placeholder { color: #869585; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Staff artboards</a></nav>
+<div class="page-stage">
+<div style="width: 1280px; height: 1320px; box-sizing: border-box; padding: 40px; background: #071610; display: flex; flex-direction: column; gap: 24px;">
+
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <h2 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600; color: #D4E7DD;">Every state the screen can be in</h2>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #BCCBB9;">The toolbar is drawn for real in all of them; only the body below it changes.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px;">
+
+    <section style="display: flex; flex-direction: column; gap: 6px;">
+      <h3 style="margin: 0; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.8px; color: #869585;">LOADING</h3>
+      <div style="height: 440px; box-sizing: border-box; padding: 20px; background: #071610; border: 1px solid #283831; border-radius: 12px; display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-radius: 12px; background: #132A1F; border: 1px solid #283831;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+          <span style="font-size: 15px; color: #869585;">Search by name or email</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <span style="height: 40px; width: 120px; border-radius: 999px; background: #132A1F;"></span>
+          <span style="height: 40px; width: 96px; border-radius: 999px; background: #132A1F;"></span>
+          <span style="height: 40px; width: 104px; border-radius: 999px; background: #132A1F;"></span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;" role="status" aria-label="Loading staff">
+          <div style="display: flex; align-items: center; gap: 16px; padding: 16px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px;">
+            <span style="width: 48px; height: 48px; border-radius: 12px; background: #1C3328;"></span>
+            <span style="flex-grow: 1; display: flex; flex-direction: column; gap: 8px;">
+              <span style="height: 14px; width: 62%; border-radius: 4px; background: #1C3328;"></span>
+              <span style="height: 12px; width: 84%; border-radius: 4px; background: #132A1F;"></span>
+            </span>
+            <span style="width: 86px; height: 26px; border-radius: 8px; background: #1C3328;"></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 16px; padding: 16px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px;">
+            <span style="width: 48px; height: 48px; border-radius: 12px; background: #1C3328;"></span>
+            <span style="flex-grow: 1; display: flex; flex-direction: column; gap: 8px;">
+              <span style="height: 14px; width: 48%; border-radius: 4px; background: #1C3328;"></span>
+              <span style="height: 12px; width: 70%; border-radius: 4px; background: #132A1F;"></span>
+            </span>
+            <span style="width: 86px; height: 26px; border-radius: 8px; background: #1C3328;"></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 16px; padding: 16px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px;">
+            <span style="width: 48px; height: 48px; border-radius: 12px; background: #1C3328;"></span>
+            <span style="flex-grow: 1; display: flex; flex-direction: column; gap: 8px;">
+              <span style="height: 14px; width: 55%; border-radius: 4px; background: #1C3328;"></span>
+              <span style="height: 12px; width: 76%; border-radius: 4px; background: #132A1F;"></span>
+            </span>
+            <span style="width: 86px; height: 26px; border-radius: 8px; background: #1C3328;"></span>
+          </div>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #869585;">Three rows, the height the real ones settle at, so nothing below them jumps when the read lands.</p>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 6px;">
+      <h3 style="margin: 0; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.8px; color: #869585;">READ-ONLY — A MANAGER IS LOOKING</h3>
+      <div style="height: 440px; box-sizing: border-box; padding: 20px; background: #071610; border: 1px solid #283831; border-radius: 12px; display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 12px; background: rgba(176, 205, 189, 0.10); border: 1px solid rgba(176, 205, 189, 0.30);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B0CDBD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;" aria-hidden="true"><path d="M7 11V8a5 5 0 0110 0v3"></path><path d="M5 11h14v9H5z"></path></svg>
+          <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+            <p style="margin: 0; font-size: 15px; font-weight: 600; color: #D4E7DD;">You can see who works here, not change it.</p>
+            <p style="margin: 0; font-size: 13px; line-height: 19px; color: #BCCBB9;">Ask Asha Mwangi, the owner, to add somebody or take their access away.</p>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 16px; padding: 16px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px;">
+            <span style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 12px; background: #132A1F; border: 2px solid #EC407A; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; color: #D4E7DD;">AM</span>
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 16px; font-weight: 600; color: #D4E7DD;">Asha Mwangi</span>
+              <span style="font-size: 13px; color: #869585;">Owner · asha@mwangihardware.co.ke</span>
+            </div>
+            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; background: rgba(75, 226, 119, 0.10); border: 1px solid rgba(75, 226, 119, 0.30); color: #4BE277; font-size: 13px; font-weight: 600;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8.5 12.5l2.5 2.5 4.5-5"></path></svg>
+              Active
+            </span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 16px; padding: 16px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px;">
+            <span style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 12px; background: #132A1F; border: 2px solid #26A69A; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; color: #D4E7DD;">LA</span>
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 16px; font-weight: 600; color: #D4E7DD;">Lydia Achieng</span>
+              <span style="font-size: 13px; color: #869585;">Cashier · lydia.achieng@gmail.com</span>
+            </div>
+            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; background: rgba(242, 193, 78, 0.10); border: 1px solid rgba(242, 193, 78, 0.30); color: #F2C14E; font-size: 13px; font-weight: 600;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+              Invited
+            </span>
+          </div>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #869585;">No Invite button, no menu on any row. An action that is not permitted is absent, never present and refusing.</p>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 6px;">
+      <h3 style="margin: 0; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.8px; color: #869585;">NOBODY INVITED YET</h3>
+      <div style="height: 440px; box-sizing: border-box; padding: 20px; background: #071610; border: 1px solid #283831; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center;">
+        <span style="width: 64px; height: 64px; border-radius: 999px; background: #132A1F; border: 1px solid #283831; display: flex; align-items: center; justify-content: center;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20a6 6 0 0112 0"></path><path d="M19 8v6"></path><path d="M16 11h6"></path></svg>
+        </span>
+        <h4 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; color: #D4E7DD;">You are the only person who can sign in</h4>
+        <p style="margin: 0; max-width: 360px; font-size: 14px; line-height: 21px; color: #BCCBB9;">Invite the people who will work the till. Each one gets an email with a link that puts them on the roster.</p>
+        <button type="button" style="display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 20px; border: 0; border-radius: 12px; background: #4BE277; color: #003915; font-size: 15px; font-weight: 600; cursor: pointer;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+          Invite your first colleague
+        </button>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #869585;">The one empty state with an action in it, because there is exactly one thing to do here.</p>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 6px;">
+      <h3 style="margin: 0; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.8px; color: #869585;">SEARCH FOUND NOBODY</h3>
+      <div style="height: 440px; box-sizing: border-box; padding: 20px; background: #071610; border: 1px solid #283831; border-radius: 12px; display: flex; flex-direction: column; gap: 20px;">
+        <label for="empty-search" class="sr-only">Search staff</label>
+        <div style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-radius: 12px; background: #132A1F; border: 1px solid #3D4A3D;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+          <input id="empty-search" type="search" value="wanjiku" style="flex-grow: 1; min-width: 0; height: 46px; border: 0; background: transparent; color: #D4E7DD; font-size: 15px; outline: none;">
+        </div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center;">
+          <span style="width: 56px; height: 56px; border-radius: 999px; background: #132A1F; border: 1px solid #283831; display: flex; align-items: center; justify-content: center;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+          </span>
+          <h4 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; color: #D4E7DD;">Nobody here is called wanjiku</h4>
+          <p style="margin: 0; max-width: 340px; font-size: 14px; line-height: 21px; color: #BCCBB9;">Search reads names and email addresses. The Cashier filter is still on, and it hides 6 people.</p>
+          <button type="button" style="height: 44px; padding: 0 16px; border-radius: 12px; background: transparent; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 14px; font-weight: 600; cursor: pointer;">Clear the search and the filter</button>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #869585;">It names the filter that is still on. An empty list with a filter nobody remembers setting is the commonest false negative here.</p>
+    </section>
+
+  </div>
+
+  <section style="display: flex; flex-direction: column; gap: 6px;">
+    <h3 style="margin: 0; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.8px; color: #869585;">NO CONNECTION — READING WHAT THIS DEVICE KEPT</h3>
+    <div style="display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 12px; background: rgba(176, 205, 189, 0.10); border: 1px solid rgba(176, 205, 189, 0.30);">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B0CDBD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;" aria-hidden="true"><path d="M5 18a4 4 0 011-7.9A6 6 0 0117.7 9 3.5 3.5 0 0118 18z"></path><path d="M9 21l6-6"></path></svg>
+      <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+        <p style="margin: 0; font-size: 15px; font-weight: 600; color: #D4E7DD;">This is the roster as this device last saw it, at 09:12 today.</p>
+        <p style="margin: 0; font-size: 13px; line-height: 19px; color: #BCCBB9;">Somebody may have been added or removed since. Inviting and changing people need the connection back.</p>
+      </div>
+      <button type="button" disabled style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 20px; border: 1px solid #283831; border-radius: 12px; background: transparent; color: #5D7468; font-size: 15px; font-weight: 600;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+        Invite staff
+      </button>
+    </div>
+  </section>
+
+</div>
+</div>
+</body>
+</html>

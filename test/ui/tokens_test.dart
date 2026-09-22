@@ -468,15 +468,16 @@ void main() {
   });
 
   group('type roles - design.md §2.2', () {
-    test('all fourteen roles exist under their specification names', () {
+    test('all fifteen roles exist under their specification names', () {
       // Twelve until 2026-08-22, when `display.compact` was added for Profound
       // Verdant's `headline-lg-mobile` - the first breakpoint-aware type value
       // any source this app has had actually states. Thirteen until
       // 2026-08-23, when `numeric.compact` joined it as the second: the export
       // draws a headline figure at `text-4xl` on a reporting page and at
       // `section-title` on a card, and 30 is wide enough to force a phone's
-      // grid of figures into one column.
-      expect(type.all, hasLength(14));
+      // grid of figures into one column. Fourteen until 2026-09-22, when
+      // `mono.caption` put a SKU under a product name at `caption`'s size.
+      expect(type.all, hasLength(15));
       expect(type.all.keys, <String>[
         'display',
         'display.compact',
@@ -492,6 +493,7 @@ void main() {
         'numeric.compact',
         'numeric.body',
         'mono',
+        'mono.caption',
       ]);
     });
 
@@ -517,6 +519,8 @@ void main() {
         'numeric.compact': (22, 30.8, FontWeight.w500),
         'numeric.body': (14, 20, FontWeight.w500), // unchanged
         'mono': (14, 14, FontWeight.w500), // data-mono
+        // `caption`'s size and leading in `data-mono`'s face and weight.
+        'mono.caption': (12, 16, FontWeight.w500),
       };
       for (final entry in table.entries) {
         final style = type.all[entry.key]!;
@@ -607,6 +611,7 @@ void main() {
       // prose is still the interface face.
       const monoRoles = <String>{
         'mono',
+        'mono.caption',
         'numeric.hero',
         'numeric.compact',
         'numeric.body',

@@ -696,17 +696,11 @@ void main() {
         'mode': 'full',
         'requestId': 'reconcile-fixed-1',
       });
-      expect(
-        snackNotice(tester).message,
-        startsWith('Queued as rj_abc.'),
-      );
+      expect(snackNotice(tester).message, startsWith('Queued as rj_abc.'));
       // **The notice says which kind of answer it is**, which a bare sentence in
       // this position never did: "Queued as rj_abc" and "Only an owner can ask
       // for a check" were the same black paragraph until read.
-      expect(
-        snackNotice(tester).status,
-        AppStatus.ok,
-      );
+      expect(snackNotice(tester).status, AppStatus.ok);
       // The page is re-read so what is shown is the server's own record.
       expect(reader.queries.length, greaterThan(readsBefore));
     });
@@ -726,10 +720,7 @@ void main() {
       await _tap(tester, 'reconciliation-request-cancel');
 
       expect(callable.payloads, isEmpty);
-      expect(
-        find.byType(AppSnackBar),
-        findsNothing,
-      );
+      expect(find.byType(AppSnackBar), findsNothing);
     });
 
     testWidgets('a cooldown refusal names both allowances', (tester) async {
@@ -756,10 +747,7 @@ void main() {
         'queued. The server allows one catch-up every 5 minutes and one full '
         'check every 24 hours.',
       );
-      expect(
-        snackNotice(tester).status,
-        AppStatus.problem,
-      );
+      expect(snackNotice(tester).status, AppStatus.problem);
     });
 
     testWidgets('an unknown outcome reloads and keeps its request ID', (
@@ -790,17 +778,11 @@ void main() {
         'reconcile-first11',
         'reconcile-first11',
       ]);
-      expect(
-        snackNotice(tester).message,
-        startsWith('The result is unknown.'),
-      );
+      expect(snackNotice(tester).message, startsWith('The result is unknown.'));
       // **Not `problem`.** A job may well have been queued and the sentence's own
       // instruction is to go and look, which is what §2.1 gives `attention`.
       // Painting it red would report a failure the app has no evidence of.
-      expect(
-        snackNotice(tester).status,
-        AppStatus.attention,
-      );
+      expect(snackNotice(tester).status, AppStatus.attention);
       expect(reader.queries.length, greaterThan(readsBefore));
     });
 

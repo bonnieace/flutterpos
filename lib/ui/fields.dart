@@ -59,6 +59,7 @@ final class AppTextField extends StatefulWidget {
   const AppTextField({
     super.key,
     required this.label,
+    this.dense = false,
     this.controller,
     this.placeholder,
     this.helper,
@@ -85,6 +86,7 @@ final class AppTextField extends StatefulWidget {
     this.leading,
     this.trailing,
     this.validator,
+    this.figure = false,
   });
 
   /// §5.2's optional leading icon. See [AppFieldWell.leading] for when a field
@@ -95,6 +97,41 @@ final class AppTextField extends StatefulWidget {
   /// `text.secondary`, and it is required because a field without one is what
   /// this component exists to remove.
   final String label;
+
+  /// Draws the control without its caption above it.
+  ///
+  /// **The label is hidden, never removed** - `AppSelect.dense`'s own words,
+  /// and this is the same flag for the same reason. It stays the field's
+  /// accessible name, so a screen reader announces it exactly as it does at
+  /// full size and DESIGN RULES 4 is satisfied rather than argued around.
+  ///
+  /// **Where it is for: a filter strip, never a form.** A form field's caption
+  /// is the only thing naming it, and §5.2's "the label is above the field and
+  /// is always there" holds there without exception. A filter already says what
+  /// it is in the control - *All roles*, *All statuses*, a search well whose
+  /// placeholder reads *Name or email* - so the caption above it is the same
+  /// word twice, and three of them stacked over a phone's list is a third of
+  /// the screen spent introducing controls that introduce themselves.
+  ///
+  /// The [leading] glyph carries what the caption did, so a dense control
+  /// without one says nothing about itself: pass both or neither.
+  ///
+  /// **The one other place: a row that names the field beside it.** A stock
+  /// count is one number per product, and the product's name is printed at
+  /// full weight on the same row as its box. That is the caption, moved from
+  /// above the well to beside it - still visible, still the accessible name
+  /// through [label] - so the well needs neither a caption nor a glyph.
+  final bool dense;
+
+  /// Draws the value as one figure: `numericCompact`, tabular, at the trailing
+  /// edge, where a column of counts lines up digit under digit.
+  ///
+  /// **For a field that holds a single number and nothing else** - a count of
+  /// units - where the number is the whole of what a person is checking.
+  /// Prose, names and money in flow keep the density's body role. The well
+  /// around it is a box sized to the figure, inset by half - see
+  /// [AppFieldWell.figure].
+  final bool figure;
 
   final TextEditingController? controller;
 
@@ -255,6 +292,7 @@ class _AppTextFieldState extends State<AppTextField> {
     final tokens = AppTokens.componentOf(context);
     return AppFieldWell(
       label: widget.label,
+      showsLabel: !widget.dense,
       helper: widget.helper,
       error: error,
       showsErrorText: widget.showsErrorText,
@@ -262,6 +300,7 @@ class _AppTextFieldState extends State<AppTextField> {
       focused: _focused,
       counter: _counterFor(tokens),
       leading: widget.leading,
+      figure: widget.figure,
       child: Row(
         children: <Widget>[
           Expanded(
@@ -293,13 +332,12 @@ class _AppTextFieldState extends State<AppTextField> {
                 widget.onChanged?.call(value);
               },
               onSubmitted: widget.onSubmitted,
-              style: tokens.density
-                  .body(tokens.typography)
-                  .copyWith(
-                    color: widget.enabled
-                        ? tokens.colors.text.primary
-                        : tokens.colors.action.disabledLabel,
-                  ),
+              textAlign: widget.figure ? TextAlign.end : TextAlign.start,
+              style: _valueStyle(tokens).copyWith(
+                color: widget.enabled
+                    ? tokens.colors.text.primary
+                    : tokens.colors.action.disabledLabel,
+              ),
               cursorColor: tokens.colors.action.focusRing.color,
               // Every part of the well is drawn by `AppFieldWell`, so the
               // decoration here is stripped to nothing rather than restyled.
@@ -322,9 +360,9 @@ class _AppTextFieldState extends State<AppTextField> {
                 // page, and §9's floor for body text is 4.5. §5.2 records the
                 // figure. It is still visibly dimmer than a typed value, which
                 // is `text.primary` at 12.4 on the same well.
-                hintStyle: tokens.density
-                    .body(tokens.typography)
-                    .copyWith(color: tokens.colors.text.secondary),
+                hintStyle: _valueStyle(
+                  tokens,
+                ).copyWith(color: tokens.colors.text.secondary),
               ),
             ),
           ),
@@ -336,6 +374,12 @@ class _AppTextFieldState extends State<AppTextField> {
       ),
     );
   }
+
+  /// The value's type role: the density's body, or one figure. See
+  /// [AppTextField.figure].
+  TextStyle _valueStyle(AppTokens tokens) => widget.figure
+      ? tokens.typography.numericCompact
+      : tokens.density.body(tokens.typography);
 
   /// §5.2: "Counters (`0/120`) render only above 80% of the limit."
   String? _counterFor(AppTokens tokens) {
@@ -507,6 +551,7 @@ final class AppFieldWell extends StatelessWidget {
     this.leading,
     this.enabled = true,
     this.focused = false,
+    this.figure = false,
   });
 
   final String label;
@@ -553,6 +598,16 @@ final class AppFieldWell extends StatelessWidget {
   /// The [leading] glyph carries what the caption did, so a dense control
   /// without one says nothing about itself: pass both or neither.
   final bool showsLabel;
+
+  /// Whether the well is a box sized to one figure. See [AppTextField.figure].
+  ///
+  /// **`space.8` from the outline to the value rather than `space.16`.** The
+  /// input rule's 16 is for a line of text that can run the width of a form. A
+  /// count box is a few figures wide, and 16 each side of a 96-wide box is a
+  /// third of it spent on nothing. The caret's own gap at the trailing edge
+  /// makes it 12 to the last figure, which is where the stock count design
+  /// puts it.
+  final bool figure;
 
   @override
   Widget build(BuildContext context) {
@@ -636,8 +691,10 @@ final class AppFieldWell extends StatelessWidget {
           // The design's input rule is `padding: 12px 16px`; the vertical half
           // is the well's own 48 minimum, and this is the horizontal one. It
           // was `space.20` while the well was a pill and content had to clear
-          // the curve.
-          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s16),
+          // the curve. A figure box takes half - see [figure].
+          padding: EdgeInsets.symmetric(
+            horizontal: figure ? tokens.spacing.s8 : tokens.spacing.s16,
+          ),
           child: Center(
             heightFactor: 1,
             child: leading == null

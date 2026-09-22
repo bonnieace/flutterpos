@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home &#8212; desktop</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+.card { display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #132A1F; border: 1px solid #283831; border-radius: 16px; text-align: left; cursor: pointer; }
+.card:hover { border-color: #3D4A3D; }
+.card-chip { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; position: relative; }
+.card-title { font-size: 18px; font-weight: 600; color: #D4E7DD; }
+.card-desc { font-size: 13px; line-height: 19px; color: #BCCBB9; }
+.stat { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 0 16px; }
+.stat-head { display: flex; align-items: center; gap: 10px; }
+.stat-chip { width: 32px; height: 32px; flex-shrink: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.stat-label { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #BCCBB9; }
+.stat-value { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; color: #D4E7DD; }
+.stat-value.money { color: #45F28D; }
+.stat-detail { font-size: 12px; color: #869585; }
+.vdiv { width: 1px; align-self: stretch; background: linear-gradient(to bottom, transparent, #3D4A3D, transparent); }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Home artboards</a></nav>
+<div class="page-stage">
+<div style="width: 1280px; height: 1080px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column;">
+
+  <div style="height: 72px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 40px;">
+    <button type="button" style="display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 10px; background: transparent; border: 0; color: #D4E7DD; font-size: 26px; font-weight: 700; letter-spacing: -0.4px; cursor: pointer;">
+      Mwangi Hardware
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+    </button>
+    <span style="flex-grow: 1;"></span>
+    <button type="button" aria-label="4 waiting to send" style="width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #D4E7DD; position: relative; cursor: pointer;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"></path><path d="M10.5 20a2 2 0 003 0"></path></svg>
+      <span style="position: absolute; top: 4px; right: 4px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: #EF4444; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;">4</span>
+    </button>
+    <button type="button" aria-label="Sign out" style="width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #4BE277; cursor: pointer;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"></path></svg>
+    </button>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; padding: 24px 40px 40px;">
+  <div style="width: 1200px; max-width: 100%; margin: 0 auto; display: flex; flex-direction: column;">
+
+    <div style="display: flex; flex-direction: column; align-items: center;">
+      <span style="font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px; color: #D4E7DD;">Good evening, Amina</span>
+      <span style="height: 8px;"></span>
+      <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 16px; line-height: 22px; color: #BCCBB9;">
+        Store performance is down
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l7 7 3-3 6 6"></path><path d="M20 18v-5h-5"></path></svg>
+        <span style="color: #EF4444; font-weight: 600;">26%</span>
+        today.
+      </span>
+      <span style="height: 4px;"></span>
+      <span style="font-size: 16px; line-height: 22px; color: #BCCBB9;">Select a module to begin.</span>
+    </div>
+
+    <span style="height: 40px;"></span>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+      <button type="button" class="card">
+        <span class="card-chip" style="background: rgba(66, 165, 245, 0.14); border: 1px solid rgba(66, 165, 245, 0.38);" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#42A5F5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"></rect><path d="M7 8V5h10v3"></path><path d="M7 12h4"></path><path d="M7 16h4"></path><path d="M15 12h2v4h-2z"></path></svg></span>
+        <span class="card-title">Register</span>
+        <span class="card-desc">Process sales, manage orders, and handle customer transactions.</span>
+      </button>
+      <button type="button" class="card">
+        <span class="card-chip" style="background: rgba(38, 166, 154, 0.14); border: 1px solid rgba(38, 166, 154, 0.38);" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#26A69A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10"></path><path d="M12 20V4"></path><path d="M19 20v-7"></path></svg></span>
+        <span class="card-title">Sales</span>
+        <span class="card-desc">View sales, payment breakdowns, and transaction history.</span>
+      </button>
+      <button type="button" class="card">
+        <span class="card-chip" style="background: rgba(255, 167, 38, 0.14); border: 1px solid rgba(255, 167, 38, 0.38);" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFA726" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l-4-4 4-4"></path><path d="M5 10h9a5 5 0 015 5v4"></path></svg></span>
+        <span class="card-title">Returns</span>
+        <span class="card-desc">Manage product returns and process refunds.</span>
+      </button>
+      <button type="button" class="card">
+        <span class="card-chip" style="background: rgba(171, 71, 188, 0.14); border: 1px solid rgba(171, 71, 188, 0.38);" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#AB47BC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"></path><path d="M3 7l9 4 9-4"></path><path d="M12 11v10"></path></svg></span>
+        <span class="card-title">Inventory</span>
+        <span class="card-desc">View all products, manage SKUs, pricing, and categories.</span>
+      </button>
+      <button type="button" class="card">
+        <span class="card-chip" style="background: rgba(171, 71, 188, 0.14); border: 1px solid rgba(171, 71, 188, 0.38);" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#AB47BC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9z"></path><path d="M15 5h2a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h2"></path><path d="M9 12h6"></path><path d="M9 16h4"></path></svg>
+          <span style="position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: #EF4444; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;">3</span>
+        </span>
+        <span class="card-title">Stock counts</span>
+        <span class="card-desc">Differences found at the last count, and what is still open.</span>
+      </button>
+      <button type="button" class="card">
+        <span class="card-chip" style="background: rgba(102, 187, 106, 0.14); border: 1px solid rgba(102, 187, 106, 0.38);" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#66BB6A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-6 4 3 6-8"></path><path d="M19 6h-4"></path><path d="M19 6v4"></path></svg></span>
+        <span class="card-title">Reports</span>
+        <span class="card-desc">Sales analytics, end-of-day reports, and staff performance.</span>
+      </button>
+    </div>
+
+    <span style="height: 32px;"></span>
+
+    <div style="padding: 20px 8px; background: #0D1F16; border: 1px solid #283831; border-radius: 16px; display: flex; align-items: stretch; gap: 16px;">
+      <div class="stat">
+        <div class="stat-head"><span class="stat-chip" style="background: rgba(69, 242, 141, 0.15);" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#45F28D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle></svg></span><span class="stat-label">Today&#8217;s sales</span></div>
+        <span class="stat-value money">KES 910.00</span>
+        <span class="stat-detail">Reconciled 2026-09-19</span>
+      </div>
+      <div class="vdiv" aria-hidden="true"></div>
+      <div class="stat">
+        <div class="stat-head"><span class="stat-chip" style="background: rgba(66, 165, 245, 0.15);" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#42A5F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg></span><span class="stat-label">Transactions</span></div>
+        <span class="stat-value">23</span>
+        <span class="stat-detail">Counted today</span>
+      </div>
+      <div class="vdiv" aria-hidden="true"></div>
+      <div class="stat">
+        <div class="stat-head"><span class="stat-chip" style="background: rgba(176, 205, 189, 0.15);" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BCCBB9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span><span class="stat-label">Shifts</span></div>
+        <span class="stat-value">2</span>
+        <span class="stat-detail">Closed today</span>
+      </div>
+      <div class="vdiv" aria-hidden="true"></div>
+      <div class="stat">
+        <div class="stat-head"><span class="stat-chip" style="background: rgba(102, 187, 106, 0.15);" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#66BB6A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-6 4 3 6-8"></path><path d="M19 6h-4"></path><path d="M19 6v4"></path></svg></span><span class="stat-label">Net profit</span></div>
+        <span class="stat-value money">KES 241.50</span>
+        <span class="stat-detail">After cost of goods and expenses</span>
+      </div>
+    </div>
+
+  </div>
+  </div>
+</div>
+</div>
+</body>
+</html>

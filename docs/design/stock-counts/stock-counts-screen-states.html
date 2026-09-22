@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock counts &#8212; screen states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, select { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #45F28D; }
+strong { color: #D4E7DD; font-weight: 600; }
+
+.sheet { width: 1280px; box-sizing: border-box; padding: 40px 48px 56px; background: #071610; display: flex; flex-direction: column; gap: 18px; }
+.sheet > header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.sheet > header h1 { margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.5px; color: #D4E7DD; }
+.sheet > header p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; max-width: 860px; }
+.group-title { margin: 16px 0 0; font-size: 13px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #869585; }
+.entry { display: grid; grid-template-columns: 672px 1fr; gap: 32px; align-items: center; }
+.why { display: flex; flex-direction: column; gap: 6px; }
+.why h3 { margin: 0; font-size: 15px; font-weight: 600; color: #D4E7DD; }
+.why p { margin: 0; font-size: 13px; line-height: 19px; color: #BCCBB9; }
+
+/* Callout: radius.md, space.16, glyph 18, space.12; titleMedium over the density body. */
+.callout { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; }
+.callout > svg { flex-shrink: 0; }
+.callout-title { margin: 0 0 4px; font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+.callout-text { margin: 0; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+
+/* One rota row inside its card. */
+.row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.who { flex: 3 1 0; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.av { width: 40px; height: 40px; flex-shrink: 0; box-sizing: border-box; border-radius: 12px; background: #132A1F; border: 2px solid; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; letter-spacing: 0.7px; color: #D4E7DD; }
+.idn { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.line { display: flex; align-items: center; gap: 8px; }
+.name { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; white-space: nowrap; }
+.role { font-size: 12px; line-height: 16px; color: #869585; }
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 24px; box-sizing: border-box; padding: 0 8px; border-radius: 8px; background: #283831; border: 1px solid #3D4A3D; color: #BCCBB9; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.note { display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; }
+.slot { flex: 2 1 0; min-width: 0; display: block; }
+.pick { position: relative; display: block; margin: 4px; }
+.pick select { display: block; appearance: none; -webkit-appearance: none; width: 100%; height: 48px; padding: 0 44px 0 48px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 16px; cursor: pointer; }
+.pick .lead { position: absolute; left: 16px; top: 14px; pointer-events: none; color: #869585; }
+.pick .drop { position: absolute; right: 12px; top: 12px; pointer-events: none; color: #BCCBB9; }
+.pick-hover select { background: #1A3026; }
+.pick-focus { outline: 2px solid #4BE277; outline-offset: 2px; border-radius: 8px; }
+.value { display: flex; align-items: center; gap: 12px; margin: 4px; font-size: 16px; line-height: 24px; color: #D4E7DD; }
+.value svg { flex-shrink: 0; }
+
+/* ChoiceCardGroup */
+.opt { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 12px; background: #0D1F16; border: 1px solid #283831; }
+.opt-hover { border-color: #3D4A3D; background: #121F18; }
+.opt-pressed { background: #14231B; transform: scale(0.97); }
+.opt-on { background: rgba(75, 226, 119, 0.10); border-color: #4BE277; box-shadow: inset 0 0 0 1px #4BE277; }
+.opt-focus { outline: 2px solid #4BE277; outline-offset: 2px; }
+.opt-ro { background: transparent; }
+.radio { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; box-sizing: border-box; border-radius: 50%; border: 2px solid #869585; display: flex; align-items: center; justify-content: center; }
+.opt-on .radio { border-color: #4BE277; }
+.opt-on .radio::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: #4BE277; }
+.opt-body { display: flex; flex-direction: column; min-width: 0; }
+.opt-title { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; }
+.opt-text { margin-top: 4px; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.opt-till { margin-top: 8px; display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 16px; color: #869585; }
+.opt-till svg { flex-shrink: 0; margin-top: 1px; }
+.opt-till em { font-style: normal; color: #BCCBB9; }
+
+/* AppToggleButton */
+.days { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+.days > div { display: flex; flex-direction: column; align-items: center; }
+.day { width: 89px; height: 48px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; }
+.day-narrow { width: 45px; flex-direction: column; gap: 0; }
+.day-on { background: #4BE277; border-color: #4BE277; color: #003915; }
+.day-hover { background: #243A30; }
+.day-on-hover { background: #46D06F; border-color: #46D06F; color: #003915; }
+.day-focus { outline: 2px solid #4BE277; outline-offset: 2px; }
+.day-disabled { background: #1E3A2B; border-color: #1E3A2B; color: #5D7468; }
+.day-label { display: block; margin-top: 8px; font-size: 12px; color: #869585; text-align: center; }
+
+/* Screen states */
+.pair { display: flex; gap: 40px; align-items: flex-start; }
+.state { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.state > h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase; color: #869585; }
+.state > p { margin: 0; font-size: 13px; line-height: 19px; color: #869585; }
+.frame { box-sizing: border-box; padding: 20px; background: #071610; border: 1px solid #283831; border-radius: 12px; display: flex; flex-direction: column; gap: 12px; }
+.frame-title { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.h { margin: 4px 0 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.sbadge { display: inline-flex; align-items: center; gap: 4px; height: 24px; box-sizing: border-box; padding: 0 8px; border-radius: 8px; border: 1px solid; font-size: 14px; font-weight: 600; width: fit-content; }
+.statement { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+.still { margin: 0; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.rota { margin: 0; padding: 0; list-style: none; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.rota > li { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.rota > li + li { border-top: 1px solid #132A1F; }
+.snack { display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; }
+.snack svg { flex-shrink: 0; }
+.snack p { margin: 0; font-size: 16px; line-height: 24px; color: #D4E7DD; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Stock counts artboards</a></nav>
+<div class="page-stage">
+<div class="sheet">
+  <header>
+    <h1>Screen states</h1>
+    <p>Before the schedule has been read, when it cannot be, when the published document is damaged, when this build may not write, while a save is on its way, and what it says when it lands. Every sentence the app already said is quoted from <code>stock_take_settings_panel.dart</code> or <code>tenant_route_guard.dart</code> and none is rewritten; the one new line is the read-only board&#8217;s list of days. Photographed in the harness as <code>16f-stock-counts-read-only</code> and <code>16g-stock-counts-damaged</code>.</p>
+  </header>
+
+  <div class="pair">
+    <section class="state">
+      <h2>Loading</h2>
+      <div class="frame" style="min-height: 240px; align-items: center; justify-content: center; gap: 16px;">
+        <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="none" stroke="#283831" stroke-width="2"></circle><path d="M16 1a15 15 0 0115 15" fill="none" stroke="#4BE277" stroke-width="2" stroke-linecap="round"></path></svg>
+        <p style="margin: 0; font-size: 16px; line-height: 24px; color: #BCCBB9;">Reading this page.</p>
+      </div>
+      <p><code>LoadingState</code>, the guard&#8217;s own default, unchanged. The guard answers from cache first, so this is only seen on a first open with nothing cached.</p>
+    </section>
+    <section class="state">
+      <h2>Could not be read</h2>
+      <div class="frame" style="min-height: 240px; justify-content: center; gap: 0; padding: 24px;">
+        <span class="sbadge" style="background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); color: #EF4444;"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg>Not read</span>
+        <div style="height: 16px;"></div>
+        <p class="statement">This page could not be read.</p>
+        <div style="height: 8px;"></div>
+        <p class="still">Nothing was changed.</p>
+      </div>
+      <p><code>ErrorState</code>. Three reads feed this screen &#8212; the schedule, the staff page and every category &#8212; and any one failing lands here. Unchanged.</p>
+    </section>
+  </div>
+
+  <div class="pair">
+    <section class="state">
+      <h2>Not allowed</h2>
+      <div class="frame" style="min-height: 200px; justify-content: center; gap: 0; padding: 24px;">
+        <span class="sbadge" style="background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); color: #EF4444;"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg>Not allowed</span>
+        <div style="height: 16px;"></div>
+        <p class="statement">Only an owner or administrator may decide when stock is counted.</p>
+      </div>
+      <p>The panel&#8217;s own refusal, unchanged. Nobody meets it in normal use: the Settings index lists only the rows a role may open, and <code>TenantStockTakeSettingsScreen</code>, the standalone wrapper, has no callers. It is the second line behind the index.</p>
+    </section>
+    <section class="state">
+      <h2>Nobody to ask yet</h2>
+      <div class="frame" style="min-height: 200px; justify-content: center; align-items: center; text-align: center; gap: 0; padding: 24px;">
+        <p class="statement">Nobody to ask yet</p>
+        <div style="height: 8px;"></div>
+        <p class="still">Invite the people who work here, then set the rota.</p>
+      </div>
+      <p><code>EmptyState</code>, kept and very nearly unreachable: <code>loadPage</code> throws unless the owner&#8217;s own staff record exists, and that record is in the page it reads. Not worth redesigning.</p>
+    </section>
+  </div>
+
+  <div class="pair">
+    <section class="state">
+      <h2>The published setting is damaged</h2>
+      <div class="frame">
+        <div class="frame-title">Stock counts</div>
+        <div class="callout" style="background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30);"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><div><p class="callout-title">This setting could not be read</p><p class="callout-text">Nobody is being asked to count while it stays that way, and the register is unaffected. Choosing below replaces it.</p></div></div>
+        <p class="h">What happens when a count is due</p>
+        <div class="opt opt-on"><span class="radio" aria-hidden="true"></span><span class="opt-body"><span class="opt-title">Nothing</span><span class="opt-text">The rota below is recorded and nobody is interrupted.</span></span></div>
+        <div class="opt "><span class="radio" aria-hidden="true"></span><span class="opt-body"><span class="opt-title">Ask at the register</span><span class="opt-text">Whoever owes a count is asked once when they open the register, and may carry on selling.</span></span></div>
+      </div>
+      <p>The form seeds from <code>TenantStockTakeSchedule.none</code>, so <em>Nothing</em> is lit &#8212; which is also exactly what the till is doing. Drawn short; the capture has the whole page.</p>
+    </section>
+    <section class="state">
+      <h2>This build cannot write</h2>
+      <div class="frame">
+        <div class="frame-title">Stock counts</div>
+        <div class="callout" style="background: rgba(176, 205, 189, 0.10); border-color: rgba(176, 205, 189, 0.30);"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><div><p class="callout-title">Read-only on this device</p><p class="callout-text">This build cannot publish settings changes.</p></div></div>
+        <p class="h">What happens when a count is due</p>
+        <div class="opt opt-ro"><span class="opt-body"><span class="opt-title">Ask at the register</span><span class="opt-text">Whoever owes a count is asked once when they open the register, and may carry on selling.</span></span></div>
+        <p class="h">Which days</p>
+        <p style="margin: 0; font-size: 16px; line-height: 24px; color: #D4E7DD;">Monday and Thursday</p>
+        <p class="h">Who counts what</p>
+        <ul class="rota"><li><span class="av" style="border-color: #66BB6A;" aria-hidden="true">GW</span><span style="flex: 3 1 0; font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD;">Grace Wanjiru</span><span style="flex: 2 1 0; display: flex; align-items: center; gap: 12px; font-size: 16px; color: #D4E7DD;"><svg width="18" height="18" viewBox="0 0 24 24" fill="#869585" aria-hidden="true"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7-.25c.41 0 .75.34.75.75s-.34.75-.75.75-.75-.34-.75-.75.34-.75.75-.75zM19 19H5V5h14v14zM7 15h7v2H7zm0-4h10v2H7zm0-4h10v2H7z"></path></svg>Power tools</span></li><li><span class="av" style="border-color: #AB47BC;" aria-hidden="true">PK</span><span style="flex: 3 1 0; font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD;">Peter Kamau</span><span style="flex: 2 1 0; display: flex; align-items: center; gap: 12px; font-size: 16px; color: #D4E7DD;"><svg width="18" height="18" viewBox="0 0 24 24" fill="#869585" aria-hidden="true"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7-.25c.41 0 .75.34.75.75s-.34.75-.75.75-.75-.34-.75-.75.34-.75.75-.75zM19 19H5V5h14v14zM7 15h7v2H7zm0-4h10v2H7zm0-4h10v2H7z"></path></svg>Hand tools</span></li><li><span class="av" style="border-color: #26A69A;" aria-hidden="true">AM</span><span style="flex: 3 1 0; font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD;">Asha Mwangi</span><span style="flex: 2 1 0; display: flex; align-items: center; gap: 12px; font-size: 16px; color: #BCCBB9;"><svg width="18" height="18" viewBox="0 0 24 24" fill="#869585" aria-hidden="true"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7-.25c.41 0 .75.34.75.75s-.34.75-.75.75-.75-.34-.75-.75.34-.75.75-.75zM19 19H5V5h14v14zM7 15h7v2H7zm0-4h10v2H7zm0-4h10v2H7z"></path></svg>Not counting</span></li></ul>
+      </div>
+      <p>The answers as text, not controls nobody can press, and no Save. Before this the day buttons and Save were disabled but every chip was drawn live with an <code>onSelected</code> that did nothing.</p>
+    </section>
+  </div>
+
+  <div class="pair">
+    <section class="state">
+      <h2>Somebody is down twice</h2>
+      <div class="frame">
+        <div class="callout" style="background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30);"><svg width="18" height="18" viewBox="0 0 24 24" fill="#F2C14E" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg><div><p class="callout-title">Somebody is down for more than one category</p><p class="callout-text">This screen records one choice each. Saving here will leave 1 person counting only the first category they are listed against.</p></div></div>
+      </div>
+      <p>Quoted as built, with <code>attention</code>&#8217;s own clock. <strong style="color: #F2C14E;">&#8220;The first&#8221; is not what the form keeps</strong> &#8212; see the README. The row itself names the listing saving drops.</p>
+    </section>
+    <section class="state">
+      <h2>Saving</h2>
+      <div class="frame" style="min-height: 140px; justify-content: center;">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <p style="margin: 0; flex-grow: 1; font-size: 12px; line-height: 16px; color: #869585;">Devices pick this up the next time they open the register.</p>
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 73px; height: 48px; border-radius: 8px; background: #4BE277;" role="status" aria-label="Saving">
+            <svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="rgba(0, 57, 21, 0.3)" stroke-width="4"></circle><path d="M16 3a13 13 0 0113 13" fill="none" stroke="#003915" stroke-width="4" stroke-linecap="round"></path></svg>
+          </span>
+        </div>
+      </div>
+      <p><code>AppButton.loading</code>, as before: same width, so nothing beside it moves. The form stays editable underneath &#8212; the panel never locked it, and this does not start to.</p>
+    </section>
+  </div>
+
+  <section class="state">
+    <h2>What a save says, once it lands</h2>
+    <div class="frame" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div class="snack" style="background: linear-gradient(rgba(75, 226, 119, 0.10), rgba(75, 226, 119, 0.10)), #132A1F; border-color: rgba(75, 226, 119, 0.30);"><svg width="18" height="18" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><p>Saved. Devices pick this up the next time they open the register.</p></div>
+      <div class="snack" style="background: linear-gradient(rgba(176, 205, 189, 0.10), rgba(176, 205, 189, 0.10)), #132A1F; border-color: rgba(176, 205, 189, 0.30);"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><p>This device is offline, so nothing was published.</p></div>
+      <div class="snack" style="background: linear-gradient(rgba(147, 0, 10, 0.20), rgba(147, 0, 10, 0.20)), #132A1F; border-color: rgba(239, 68, 68, 0.30);"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><p>Choose at least one day, or set this to Nothing. A rota with no days would read as switched on and behave as switched off.</p></div>
+      <div class="snack" style="background: linear-gradient(rgba(147, 0, 10, 0.20), rgba(147, 0, 10, 0.20)), #132A1F; border-color: rgba(239, 68, 68, 0.30);"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><p>Choose who counts, or set this to Nothing.</p></div>
+      <div class="snack" style="background: linear-gradient(rgba(176, 205, 189, 0.10), rgba(176, 205, 189, 0.10)), #132A1F; border-color: rgba(176, 205, 189, 0.30);"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><p>That is already what is set, so nothing was sent.</p></div>
+      <div class="snack" style="background: linear-gradient(rgba(242, 193, 78, 0.10), rgba(242, 193, 78, 0.10)), #132A1F; border-color: rgba(242, 193, 78, 0.30);"><svg width="18" height="18" viewBox="0 0 24 24" fill="#F2C14E" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg><p>This has not settled yet. Reopen the screen to see what is stored.</p></div>
+    </div>
+    <p><code>AppSnackBar</code>: the status triple over <code>surface.overlay</code>, <code>radius.md</code>, each on its <code>AppNotice</code> tier&#8217;s default glyph. All quoted from <code>_outcome</code> and <code>_refusal</code>, every one unchanged. <em>Saved on this device and on its way to the others</em> is left off on purpose: <code>QueuedTenantConfigurationWriter</code> queues only <code>branding</code> and <code>printer</code>, so a rota change never comes back <em>queued</em>.</p>
+  </section>
+
+</div>
+</div>
+</body>
+</html>

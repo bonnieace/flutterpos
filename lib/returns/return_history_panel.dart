@@ -679,14 +679,14 @@ final class _SaleReturnsContents extends StatelessWidget {
               'No returns were recorded against this sale.',
             ),
           ),
-          SizedBox(height: tokens.spacing.s16),
-          Pagination(
+          ...Pagination(
             pageNumber: pageIndex + 1,
             previousKey: const ValueKey('sale-returns-previous'),
             nextKey: const ValueKey('sale-returns-next'),
             onPrevious: pageIndex > 0 ? onPreviousPage : null,
             onNext: page.hasMore ? onNextPage : null,
-          ),
+            endOfList: !page.hasMore,
+          ).withGapAbove(tokens.spacing.s16),
           if (!canVerify) ...[
             SizedBox(height: tokens.spacing.s12),
             Text(
@@ -920,7 +920,10 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
       cancelKey: const ValueKey('sale-returns-cancel-confirm'),
     );
     if (!confirmed || !mounted) return;
-    widget.onRecord(Map<String, int>.unmodifiable(_quantities), _resolvedReason);
+    widget.onRecord(
+      Map<String, int>.unmodifiable(_quantities),
+      _resolvedReason,
+    );
   }
 
   @override
@@ -995,8 +998,7 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
               label: 'Other',
             ),
           ],
-          onChanged: (value) =>
-              setState(() => _choice = value ?? _noReason),
+          onChanged: (value) => setState(() => _choice = value ?? _noReason),
         ),
         // **Present only for *Other*, and it keeps what was typed.** The
         // controller is not cleared when the choice moves off *Other*, so a

@@ -34,9 +34,9 @@ void main() {
       // fact about the day, not a defect in the record.
       final incomplete = TenantDailyMetrics.fromDocument(
         path: 'tenants/tenant-a/daily_metrics/2026-07-31',
-        data: _metrics(overrides: <String, Object?>{
-          'incompleteCostLineCount': 4,
-        }),
+        data: _metrics(
+          overrides: <String, Object?>{'incompleteCostLineCount': 4},
+        ),
       );
       expect(incomplete.profit, 430.25);
       expect(incomplete.profitReport.basis, TenantProfitBasis.incomplete);
@@ -101,7 +101,9 @@ void main() {
         'string-regenerated-at': <String, Object?>{'regeneratedAt': 'today'},
         'fractional-transactions': <String, Object?>{'transactions': 1.5},
         'negative-shift-count': <String, Object?>{'shiftCount': -1},
-        'missing-cost-count': <String, Object?>{'incompleteCostLineCount': null},
+        'missing-cost-count': <String, Object?>{
+          'incompleteCostLineCount': null,
+        },
         'infinite-sales': <String, Object?>{'sales': double.infinity},
       };
 
@@ -247,7 +249,11 @@ void main() {
         _repository(reader, role: TenantRole.cashier).loadRecentDays(days: 1),
         throwsA(_metricsCode('metrics_forbidden')),
       );
-      expect(reader.requested.length, 6, reason: 'no forbidden read was issued');
+      expect(
+        reader.requested.length,
+        6,
+        reason: 'no forbidden read was issued',
+      );
     });
 
     test('the number of days is bounded', () async {
@@ -293,10 +299,7 @@ void main() {
       // `merge: false`, so a day without one was written by a deployment SIT
       // no longer runs. It is regenerated, not read as gross.
       expect(
-        () => _decode(
-          const <String, Object?>{},
-          omitNet: true,
-        ),
+        () => _decode(const <String, Object?>{}, omitNet: true),
         _code('invalid_metrics_document'),
       );
     });
@@ -522,14 +525,14 @@ TenantDailyMetricsRepository _repository(
   clock: () => DateTime.utc(2026, 7, 31, 9),
 );
 
-TenantSession _session(TenantRole role) => TenantSession.active(
-  uid: 'user-a',
-  tenantId: 'tenant-a',
-  role: role,
-);
+TenantSession _session(TenantRole role) =>
+    TenantSession.active(uid: 'user-a', tenantId: 'tenant-a', role: role);
 
-Matcher _metricsCode(String code) =>
-    isA<TenantDailyMetricsException>().having((error) => error.code, 'code', code);
+Matcher _metricsCode(String code) => isA<TenantDailyMetricsException>().having(
+  (error) => error.code,
+  'code',
+  code,
+);
 
 Matcher _code(String code) => throwsA(_metricsCode(code));
 

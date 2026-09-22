@@ -4,6 +4,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
+import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -62,6 +64,27 @@ Widget _sales({required TenantRole role, required String uid}) {
       returnActions: fakeReturnActions(),
     ),
     controller: seedSession(role: role, uid: uid),
+  );
+}
+
+/// The Sales Report as its screen composes it, paged two sales at a time so
+/// the day runs past one page and the pager has something to say.
+Widget _pagedSales() {
+  final reader = _businessWithLongContent();
+  return inSession(
+    AppScaffold(
+      title: 'Sales Report',
+      subtitle: 'Review transactions, receipts, and returns.',
+      contentWidth: AppContentWidth.records,
+      body: TenantSalesReportPanel(
+        reader: reader,
+        reportReader: reader,
+        totalsCallable: FakeCallable(seedSalesTotalsResponse()),
+        returnActions: fakeReturnActions(),
+        pageSize: 2,
+      ),
+    ),
+    controller: seedSession(role: TenantRole.manager, uid: managerUid),
   );
 }
 
@@ -138,6 +161,32 @@ void main() {
         maxScrolls: 30,
       );
       await tester.ensureVisible(result);
+      await tester.pumpAndSettle();
+    },
+    viewports: responsiveViewports,
+  );
+
+  // The pager on the screen it was designed on: the first of two pages, with
+  // the range, and then the second, told it is the last.
+  screenshotCase(
+    'sales-report-paged',
+    build: _pagedSales,
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    'sales-report-paged-last',
+    build: _pagedSales,
+    afterPump: (tester) async {
+      final next = find.byKey(const ValueKey('sales-report-next-page'));
+      await tester.scrollUntilVisible(
+        next,
+        300,
+        scrollable: find.byType(Scrollable).first,
+        maxScrolls: 30,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(next);
       await tester.pumpAndSettle();
     },
     viewports: responsiveViewports,

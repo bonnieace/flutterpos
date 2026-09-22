@@ -108,10 +108,7 @@ void main() {
         mode: TenantReconciliationMode.incremental,
       );
 
-      await expectLater(
-        _gateway(callable).submit(intent),
-        throwsStateError,
-      );
+      await expectLater(_gateway(callable).submit(intent), throwsStateError);
       expect(callable.payloads, isEmpty);
     });
   });
@@ -138,10 +135,7 @@ void main() {
       test('${entry.key} is ${entry.value.name}', () async {
         final gateway = _gateway(
           _Callable.failing(
-            FirebaseFunctionsException(
-              code: entry.key,
-              message: 'refused',
-            ),
+            FirebaseFunctionsException(code: entry.key, message: 'refused'),
           ),
         );
 

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
-import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:flutter_application_1/ui/press.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/collection_pages.dart';
@@ -324,7 +324,7 @@ void main() {
     // and this is the stronger assertion of the two.
     expect(
       tester
-          .widget<AppButton>(
+          .widget<PressSurface>(
             find.byKey(const ValueKey('product-ledger-previous')),
           )
           .onPressed,
@@ -342,7 +342,9 @@ void main() {
     expect(find.byKey(const ValueKey('product-ledger-entry-mv-1')), findsOne);
     expect(
       tester
-          .widget<AppButton>(find.byKey(const ValueKey('product-ledger-next')))
+          .widget<PressSurface>(
+            find.byKey(const ValueKey('product-ledger-next')),
+          )
           .onPressed,
       isNull,
     );

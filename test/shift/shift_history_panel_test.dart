@@ -6,7 +6,7 @@ import 'package:flutter_application_1/shift/shift.dart';
 import 'package:flutter_application_1/shift/shift_history_card.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
-import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:flutter_application_1/ui/press.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
@@ -55,156 +55,180 @@ void main() {
       status: AppStatus.problem,
     );
     _expectText(tester, 'shift-history-variance-shift-a', '87.50');
-    // Only management may look beyond its own shifts.
-    expect(find.byKey(const ValueKey('shift-history-scope')), findsNothing);
-    expect(reader.queries.single.equalityFilters, <String, Object?>{
-      'status': 'closed',
+    // Only management may look beyond its own shifts, so a cashier's row is
+    // the day and nothing else - and the read is theirs whatever it asks.
+    expect(find.byKey(const ValueKey('shift-history-date-filter')), findsOne);
+    expect(
+      find.byKey(const ValueKey('shift-history-staff-filter')),
+      findsNothing,
+    );
+    expect(_shiftQueries(reader).single.equalityFilters, <String, Object?>{
+      'businessDate': _businessDate,
       'staffId': 'user-a',
     });
   });
 
-  testWidgets('the page states what it adds up to before the first shift', (
+  testWidgets('the day and whose shifts are one row, where the band was', (
     tester,
   ) async {
-    // The screen's whole reason for existing, answered above the list rather
-    // than left to be read off twenty badges. It is the *page's* answer and the
-    // range strip says so: `loadPage` takes a cursor and equality filters, so
-    // there is no honest way for this to be the week's.
+    // At the product owner's direction, 2026-09-22: the scope toggle, the
+    // range strip, the tiles, the notice and the chips went, and the sales
+    // report's pair took their place.
     final reader = _Reader()
       ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
-        _snapshot('shift-c'),
-        _snapshot(
-          'shift-b',
-          overrides: <String, Object?>{'closingCashMinor': 90000},
-        ),
-        _snapshot(
-          'shift-a',
-          overrides: <String, Object?>{'closingCashMinor': 98750},
-        ),
+        _snapshot('shift-a'),
       ]);
 
     await _pumpPanel(tester, _controller(TenantRole.manager), reader);
 
-    _expectText(tester, 'shift-history-tally-closed', '3');
-    _expectText(tester, 'shift-history-tally-settled', '1');
-    _expectText(tester, 'shift-history-tally-unresolved', '2');
-    // Two differences in opposite directions are two problems. Netting them
-    // would print zero over a page holding both.
+    final date = find.byKey(const ValueKey('shift-history-date-filter'));
+    final staff = find.byKey(const ValueKey('shift-history-staff-filter'));
+    expect(date, findsOne);
+    expect(staff, findsOne);
+    expect(tester.getRect(date).top, closeTo(tester.getRect(staff).top, 1));
+    // It opens on today, as the sales report does, and on everyone.
     expect(
-      tester
-          .widget<Callout>(
-            find.byKey(const ValueKey('shift-history-unresolved')),
-          )
-          .message,
-      '2 shifts on this page need attention: short 87.50 and over 262.50.',
+      find.descendant(of: date, matching: find.text(_businessDate)),
+      findsOne,
     );
-    _expectContains(tester, 'shift-history-range', 'this page');
+    expect(_shiftQueries(reader).single.equalityFilters, <String, Object?>{
+      'businessDate': _businessDate,
+    });
+    for (final gone in <String>[
+      'shift-history-scope',
+      'shift-history-range',
+      'shift-history-tally-closed',
+      'shift-history-unresolved',
+      'shift-history-filter',
+    ]) {
+      expect(find.byKey(ValueKey<String>(gone)), findsNothing, reason: gone);
+    }
   });
 
-  testWidgets('a settled page says so instead of an empty attention notice', (
+  testWidgets('picking another day reads that day and keeps the filters', (
     tester,
   ) async {
-    final reader = _Reader()
+    final reader = _Reader(deferred: true)
       ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
-        _snapshot(
-          'shift-a',
-          overrides: <String, Object?>{'closingCashMinor': 98750},
-        ),
+        _snapshot('shift-a'),
       ]);
 
     await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
+    reader.completeFirst();
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsOne);
 
-    _expectText(tester, 'shift-history-tally-unresolved', '0');
+    await tester.tap(find.byKey(const ValueKey('shift-history-date-picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('30'));
+    await tester.tap(find.text('OK'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(_shiftQueries(reader).last.equalityFilters, <String, Object?>{
+      'businessDate': '2026-07-30',
+      'staffId': 'user-a',
+    });
+    // **The row outlives the read**, the sales report's call: a person whose
+    // day is still loading - or failed to - can already ask for another.
+    expect(find.byKey(const ValueKey('shift-history-date-filter')), findsOne);
     expect(
-      find.byKey(const ValueKey('shift-history-unresolved')),
+      find.descendant(
+        of: find.byKey(const ValueKey('shift-history-date-filter')),
+        matching: find.text('2026-07-30'),
+      ),
+      findsOne,
+    );
+
+    reader.completeFirst();
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('shift-history-empty')), findsOne);
+    expect(
+      find.byKey(const ValueKey('shift-history-entry-shift-a')),
       findsNothing,
     );
   });
 
-  testWidgets('the filter narrows the page in hand and says which page', (
-    tester,
-  ) async {
-    final reader = _Reader()
-      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
-        _snapshot('shift-b'),
-        _snapshot(
-          'shift-a',
-          overrides: <String, Object?>{'closingCashMinor': 98750},
-        ),
-      ]);
+  testWidgets('a manager narrows the day to one person', (tester) async {
+    final reader =
+        _Reader(
+            documents: <String, Map<String, Object?>>{
+              'tenants/tenant-a': <String, Object?>{'ownerUid': 'owner-a'},
+              'tenants/tenant-a/staff/owner-a': _staffSnapshot(
+                'owner-a',
+                name: 'Owner',
+                role: 'owner',
+              ).data,
+            },
+          )
+          ..respond('tenants/tenant-a/staff', <TenantQueryDocumentSnapshot>[
+            _staffSnapshot('user-a', name: 'Amina'),
+            _staffSnapshot('user-b', name: 'Brian'),
+          ])
+          ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+            _snapshot(
+              'shift-b',
+              overrides: <String, Object?>{'staffId': 'user-b'},
+            ),
+            _snapshot('shift-a'),
+          ]);
 
-    await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
+    await _pumpPanel(tester, _controller(TenantRole.manager), reader);
+    await tester.tap(find.byKey(const ValueKey('shift-history-staff-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Brian (user-b)').last);
+    await tester.pumpAndSettle();
 
-    expect(find.text('All 2'), findsOne);
-    expect(find.text('Needs attention 1'), findsOne);
-    expect(find.text('Settled 1'), findsOne);
-
-    await tester.tap(find.text('Needs attention 1'));
-    await tester.pump();
-
-    // It narrows what has been read and reads nothing more: a chip that looked
-    // like a query while meaning "of the two in hand" would be the worst of both.
-    expect(reader.queries.length, 1);
+    expect(_shiftQueries(reader).last.equalityFilters, <String, Object?>{
+      'businessDate': _businessDate,
+      'staffId': 'user-b',
+    });
     expect(find.byKey(const ValueKey('shift-history-entry-shift-b')), findsOne);
     expect(
       find.byKey(const ValueKey('shift-history-entry-shift-a')),
       findsNothing,
     );
+    // One person's shifts are told apart by their hours; the filter already
+    // says whose they are.
+    _expectText(
+      tester,
+      'shift-history-subject-shift-b',
+      shiftWindowLabelFor(
+        DateTime.utc(2026, 7, 31, 6),
+        DateTime.utc(2026, 7, 31, 18),
+      ),
+    );
+    // The roster is read once, however many days and people are asked for.
+    expect(
+      reader.queries.where(
+        (query) => query.collectionPath == 'tenants/tenant-a/staff',
+      ),
+      hasLength(1),
+    );
+  });
 
-    await tester.tap(find.text('Settled 1'));
-    await tester.pump();
+  testWidgets('a shift still running that day is left out, not refused', (
+    tester,
+  ) async {
+    // The day's query has no status filter - that is what lets it ride the
+    // indexes the sales totals already use - so the shift being worked comes
+    // back with the closed ones. It is not history yet, and not an error.
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-a'),
+        _snapshot('shift-b', overrides: _stillOpen()),
+      ]);
+
+    await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
+
     expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsOne);
     expect(
       find.byKey(const ValueKey('shift-history-entry-shift-b')),
       findsNothing,
     );
-  });
-
-  testWidgets('a filter that empties the list says the good news it is', (
-    tester,
-  ) async {
-    // An empty *read* means nothing has been closed. An empty *filter* on this
-    // screen means everything that was is fine, which is not the same fact and
-    // must not borrow the other one's words.
-    final reader = _Reader()
-      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
-        _snapshot('shift-b'),
-        _snapshot(
-          'shift-a',
-          overrides: <String, Object?>{'closingCashMinor': 98750},
-        ),
-      ]);
-
-    await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
-    await tester.tap(find.text('Needs attention 1'));
-    await tester.pump();
-    // The one unresolved shift is `shift-b`; filtering to settled leaves one
-    // too, so force the empty case by clearing the page of anything settled.
-    await tester.tap(find.text('All 2'));
-    await tester.pump();
-    expect(
-      find.byKey(const ValueKey('shift-history-nothing-matches')),
-      findsNothing,
-    );
-  });
-
-  testWidgets('a page with nothing to chase offers no attention filter', (
-    tester,
-  ) async {
-    final reader = _Reader()
-      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
-        _snapshot(
-          'shift-a',
-          overrides: <String, Object?>{'closingCashMinor': 98750},
-        ),
-      ]);
-
-    await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
-
-    // A chip that would empty the list is a dead end with a number on it.
-    await tester.tap(find.text('Needs attention 0'));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsOne);
+    expect(find.byKey(const ValueKey('shift-history-failure')), findsNothing);
   });
 
   testWidgets('a shift closed without a summary states that plainly', (
@@ -330,9 +354,8 @@ void main() {
     );
 
     for (final key in <String>[
-      'shift-history-range',
-      'shift-history-tally-closed',
-      'shift-history-filter',
+      'shift-history-date-filter',
+      'shift-history-staff-filter',
       'shift-history-day-2026-07-31',
       'shift-history-entry-shift-a',
       'shift-history-subject-shift-a',
@@ -350,7 +373,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a manager may page every cashier and label its own shifts', (
+  testWidgets('a manager starts on everyone and names its own shifts', (
     tester,
   ) async {
     final controller = _controller(TenantRole.manager);
@@ -361,29 +384,30 @@ void main() {
       ]);
 
     await _pumpPanel(tester, controller, reader, tall: true);
-    expect(reader.queries.single.equalityFilters, <String, Object?>{
-      'status': 'closed',
-      'staffId': 'user-a',
-    });
-
-    await tester.tap(find.text('Every cashier'));
-    await tester.pump();
-    await tester.pump();
-
-    expect(reader.queries.length, 2);
-    expect(reader.queries.last.equalityFilters, <String, Object?>{
-      'status': 'closed',
+    expect(_shiftQueries(reader).single.equalityFilters, <String, Object?>{
+      'businessDate': _businessDate,
     });
     // **The day is the group above the cards, not a prefix on every title.**
     // `2026-07-31 - Brian (user-b)` said the date once per row on a page where
     // every row shared it. A resolved colleague keeps the UID beside the name;
     // an unresolved one falls back to the UID alone.
-    expect(find.text('Brian (user-b)'), findsOne);
-    expect(find.text('You'), findsOne);
+    _expectText(tester, 'shift-history-subject-shift-b', 'Brian (user-b)');
+    _expectText(tester, 'shift-history-subject-shift-a', 'You');
     expect(
       find.byKey(const ValueKey('shift-history-day-2026-07-31')),
       findsOne,
     );
+
+    // Its own shifts are on offer with no roster read at all: the UID is the
+    // session's.
+    await tester.tap(find.byKey(const ValueKey('shift-history-staff-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('You').last);
+    await tester.pumpAndSettle();
+    expect(_shiftQueries(reader).last.equalityFilters, <String, Object?>{
+      'businessDate': _businessDate,
+      'staffId': 'user-a',
+    });
   });
 
   testWidgets('one cashier reading their own shifts is named by the hours', (
@@ -419,11 +443,8 @@ void main() {
       ]);
 
     await _pumpPanel(tester, _controller(TenantRole.manager), reader);
-    await tester.tap(find.text('Every cashier'));
-    await tester.pump();
-    await tester.pump();
 
-    expect(find.text('user-b'), findsOne);
+    _expectText(tester, 'shift-history-subject-shift-b', 'user-b');
     expect(find.byKey(const ValueKey('shift-history-failure')), findsNothing);
   });
 
@@ -431,14 +452,16 @@ void main() {
     final controller = _controller(TenantRole.cashier);
     final reader = _Reader()
       ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
-        _snapshot('shift-c'),
-        _snapshot('shift-b'),
         _snapshot('shift-a'),
+        _snapshot('shift-b'),
+        _snapshot('shift-c'),
       ]);
 
     await _pumpPanel(tester, controller, reader, pageSize: 2);
+    // A day reads in the order it was worked, so the last shift opened is the
+    // one on the next page.
     expect(
-      find.byKey(const ValueKey('shift-history-entry-shift-a')),
+      find.byKey(const ValueKey('shift-history-entry-shift-c')),
       findsNothing,
     );
     // Present and disabled rather than absent, since `Pagination` - see the
@@ -449,7 +472,7 @@ void main() {
     );
     expect(
       tester
-          .widget<AppButton>(
+          .widget<PressSurface>(
             find.byKey(const ValueKey('shift-history-previous')),
           )
           .onPressed,
@@ -468,8 +491,8 @@ void main() {
     await tester.pump();
 
     expect(reader.queries.last.startAfterDocumentId, 'shift-b');
-    expect(reader.queries.last.descending, isTrue);
-    expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsOne);
+    expect(reader.queries.last.descending, isFalse);
+    expect(find.byKey(const ValueKey('shift-history-entry-shift-c')), findsOne);
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('shift-history-previous')),
       200,
@@ -519,44 +542,39 @@ void main() {
     );
   });
 
-  testWidgets('a closed shift links to the sales it recorded', (tester) async {
+  testWidgets('a shift opens the Sales report on its day and cashier', (
+    tester,
+  ) async {
+    // Since 2026-09-22, at the product owner's direction: the report a person
+    // already reads a day's sales on, rather than a page of one shift's.
+    final opened = <(String, String)>[];
     final reader = _Reader()
       ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
-        _snapshot('shift-a'),
-      ])
-      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[]);
+        _snapshot('shift-b', overrides: <String, Object?>{'staffId': 'user-b'}),
+      ]);
 
     await _pumpPanel(
       tester,
-      _controller(TenantRole.cashier),
+      _controller(TenantRole.manager),
       reader,
       tall: true,
+      salesReport: ({required businessDate, required staffId}) {
+        opened.add((businessDate, staffId));
+        return const Scaffold(body: Text('The sales report'));
+      },
     );
     // The whole card body is the control. Twenty rows each carrying a `View
     // sales` button spent a 48-high band of the screen saying one word twenty
     // times.
     await tester.tap(
-      find.byKey(const ValueKey('shift-history-sales-link-shift-a')),
+      find.byKey(const ValueKey('shift-history-sales-link-shift-b')),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Shift sales'), findsOne);
-    // The sales page is scoped to this exact shift, and carries the figures
-    // the shift recorded rather than reading them again.
-    expect(reader.queries.last.equalityFilters, <String, Object?>{
-      'shiftId': 'shift-a',
-      // **The cashier attribution rides with the shift.** loadShiftSales
-      // filters on soldById too: Firestore permits a cashier's collection
-      // query only where the result set is provably their own, and
-      // management uses the same narrower shape.
-      'soldById': 'user-a',
-    });
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sale-history-recorded')))
-          .data,
-      'Recorded: 987.50 over 3 transactions. Counted cash was 1250.00.',
-    );
+    expect(find.text('The sales report'), findsOne);
+    // The shift's own day, and the member who ran it - not the session's.
+    expect(opened.last, (_businessDate, 'user-b'));
+    expect(find.text('Shift sales'), findsNothing);
   });
 
   testWidgets('the cashier reaches its own recent sales', (tester) async {
@@ -756,10 +774,9 @@ void main() {
     await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
 
     expect(find.byKey(const ValueKey('shift-history-empty')), findsOne);
-    // The band, the range and the filter are all statements about shifts, and
-    // there are none.
-    expect(find.byKey(const ValueKey('shift-history-range')), findsNothing);
-    expect(find.byKey(const ValueKey('shift-history-filter')), findsNothing);
+    // An empty day is a question with an answer, and the way to ask another
+    // one is still there.
+    expect(find.byKey(const ValueKey('shift-history-date-filter')), findsOne);
   });
 
   testWidgets('no session renders the denied state and starts no load', (
@@ -829,19 +846,17 @@ Future<void> _pumpPanel(
   bool settle = true,
   double? width,
   bool tall = false,
+  ShiftSalesReportRoute? salesReport,
 }) async {
   // The default surface is 800 x 600, which is §4.1's `medium` band. A case
   // that wants another band asks for it by width rather than every case being
   // rewritten to one.
   //
-  // `tall` keeps the band and lifts only the height. This page answers itself
-  // before it lists anything - range, tally, the attention line, the filters -
-  // and that band measures 502 high, with the first card 229 under it. On a 600
-  // surface that is the header, a day heading and the top third of one shift.
-  // `ListView` builds what it can show, so a case reaching for a second card,
-  // or tapping the first (whose centre lands at y=616), asserts against elements
-  // the list has correctly declined to build. Such a case asks for the room; the
-  // screen is not made shorter to fit a test window.
+  // `tall` keeps the band and lifts only the height. `ListView` builds what it
+  // can show, so a case reaching for a second card, or tapping a control low on
+  // the first, asserts against elements the list has correctly declined to
+  // build. Such a case asks for the room; the screen is not made shorter to fit
+  // a test window.
   if (width != null || tall) {
     tester.view.physicalSize = Size(width ?? 800, 4000);
     tester.view.devicePixelRatio = 1;
@@ -855,7 +870,18 @@ Future<void> _pumpPanel(
     MaterialApp(
       home: TenantSessionScope(
         controller: controller,
-        child: TenantShiftHistoryScreen(reader: reader, pageSize: pageSize),
+        child: TenantShiftHistoryScreen(
+          reader: reader,
+          pageSize: pageSize,
+          // The fixtures' own day, so the screen opens on the shifts they hold.
+          clock: () => DateTime.utc(2026, 7, 31, 12),
+          // A page that says where the card went; the report itself is its
+          // own screen's to test.
+          salesReportRoute:
+              salesReport ??
+              ({required businessDate, required staffId}) =>
+                  const Scaffold(body: Text('The sales report')),
+        ),
       ),
     ),
   );
@@ -863,6 +889,42 @@ Future<void> _pumpPanel(
   await tester.pump();
   await tester.pump();
 }
+
+/// The shift reads alone: a manager's session also reads the staff roster.
+List<TenantCollectionQuery> _shiftQueries(_Reader reader) =>
+    <TenantCollectionQuery>[
+      for (final query in reader.queries)
+        if (query.collectionPath == 'tenants/tenant-a/shifts') query,
+    ];
+
+/// The fields a shift still being worked has: none of the close's.
+Map<String, Object?> _stillOpen() => <String, Object?>{
+  'status': 'open',
+  'endTime': null,
+  'closingCashMinor': null,
+  'closingCash': null,
+  'totalSalesMinor': null,
+  'totalSales': null,
+  'transactionCount': null,
+};
+
+/// One canonical staff record, as the roster read accepts it.
+TenantQueryDocumentSnapshot _staffSnapshot(
+  String uid, {
+  String? name,
+  String role = 'cashier',
+}) => TenantQueryDocumentSnapshot(
+  path: 'tenants/tenant-a/staff/$uid',
+  data: <String, Object?>{
+    'uid': uid,
+    'email': '$uid@example.test',
+    if (name != null) 'name': name,
+    'phone': '+254700000000',
+    'role': role,
+    'status': 'active',
+    'invitationStatus': 'accepted',
+  },
+);
 
 TenantSessionController _controller(TenantRole role) =>
     TenantSessionController()..open(
@@ -995,13 +1057,21 @@ TenantQueryDocumentSnapshot _amendmentSnapshot() => TenantQueryDocumentSnapshot(
 );
 
 final class _Reader implements TenantDataReader {
-  _Reader({this.deferred = false, this.deniedStaff = false});
+  _Reader({
+    this.deferred = false,
+    this.deniedStaff = false,
+    this.documents = const <String, Map<String, Object?>>{},
+  });
 
   final bool deferred;
 
   /// Stands in for the narrowed canonical staff read: a cashier, and any role
   /// the rule refuses, gets no name and must still see the page.
   final bool deniedStaff;
+
+  /// Documents read by path ahead of the default staff names - the tenant
+  /// root and its owner's record, which the roster read proves itself against.
+  final Map<String, Map<String, Object?>> documents;
   final Map<String, List<TenantQueryDocumentSnapshot>> _pages =
       <String, List<TenantQueryDocumentSnapshot>>{};
   final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
@@ -1022,6 +1092,9 @@ final class _Reader implements TenantDataReader {
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
     if (deniedStaff) throw StateError('permission-denied');
+    if (documents[path] case final data?) {
+      return TenantDocumentSnapshot(path: path, data: data);
+    }
     final uid = path.split('/').last;
     return path.startsWith('tenants/tenant-a/staff/') && uid != 'user-a'
         ? TenantDocumentSnapshot(
@@ -1036,12 +1109,26 @@ final class _Reader implements TenantDataReader {
     TenantCollectionQuery query,
   ) {
     queries.add(query);
-    final all = _pages[query.collectionPath] ?? const [];
+    String idOf(TenantQueryDocumentSnapshot snapshot) =>
+        snapshot.path.split('/').last;
+    // In the order the query asks for, as Firestore answers: the read boundary
+    // proves the order and fails closed on a page that breaks it.
+    final all = <TenantQueryDocumentSnapshot>[...?_pages[query.collectionPath]]
+      ..sort(
+        (left, right) => query.descending
+            ? idOf(right).compareTo(idOf(left))
+            : idOf(left).compareTo(idOf(right)),
+      );
     final cursor = query.startAfterDocumentId;
     final matches = <TenantQueryDocumentSnapshot>[];
     for (final snapshot in all) {
-      final id = snapshot.path.split('/').last;
-      if (cursor != null && id.compareTo(cursor) >= 0) continue;
+      final id = idOf(snapshot);
+      if (cursor != null &&
+          (query.descending
+              ? id.compareTo(cursor) >= 0
+              : id.compareTo(cursor) <= 0)) {
+        continue;
+      }
       final matchesFilters = query.equalityFilters.entries.every(
         (filter) => snapshot.data[filter.key] == filter.value,
       );

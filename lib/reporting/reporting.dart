@@ -21,6 +21,7 @@ export 'sales_totals_choosers.dart';
 export 'sales_totals_panel.dart';
 export 'sales_totals_session_context.dart';
 export 'shift_amendment.dart';
+export 'shift_comparison_chart.dart';
 export 'shift_amendment_feed.dart';
 export 'shift_amendment_feed_panel.dart';
 export 'weekly_report.dart';

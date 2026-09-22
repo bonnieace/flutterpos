@@ -474,9 +474,17 @@ final class _AnomalyContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      key: const ValueKey('reconciliation-anomalies'),
+    return PagedListView(
+      listKey: const ValueKey('reconciliation-anomalies'),
       padding: EdgeInsets.all(tokens.spacing.s20),
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('reconciliation-anomalies-previous'),
+        nextKey: const ValueKey('reconciliation-anomalies-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
+        endOfList: !page.hasMore,
+      ),
       children: [
         // §7's "Title appears once": the `AppScaffold` above carries this exact
         // string in its `PageHeader`. The only literal repeat of the fourteen.
@@ -562,14 +570,6 @@ final class _AnomalyContents extends StatelessWidget {
           label: 'View shift corrections already made',
           icon: Icons.history_edu_outlined,
           onPressed: () => onOpenAmendments(null),
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('reconciliation-anomalies-previous'),
-          nextKey: const ValueKey('reconciliation-anomalies-next'),
-          onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: page.hasMore ? onNextPage : null,
         ),
       ],
     );
@@ -806,6 +806,7 @@ final class _KindChips extends StatelessWidget {
       AppSelect<TenantReconciliationAnomalyKind?>(
         key: const ValueKey('reconciliation-anomaly-kind'),
         label: 'Kind',
+        dense: true,
         leading: Icons.filter_alt_outlined,
         value: selected,
         onChanged: onNarrow,

@@ -121,9 +121,7 @@ void main() {
       // neither may be presented as an ordinary correction.
       for (final value in <Object?>[true, null, 'false', 0]) {
         expect(
-          () => _record(
-            data: _amendmentData()..['mutatesCountedCash'] = value,
-          ),
+          () => _record(data: _amendmentData()..['mutatesCountedCash'] = value),
           _code('amendment_mutates_cash'),
           reason: '$value',
         );
@@ -347,12 +345,9 @@ void main() {
     test('a filtered page answering for another shift fails closed', () async {
       // A page narrowed to one shift that returns another one is a broken
       // boundary, not a row to quietly skip past.
-      final reader = _FeedReader(
-        <String, Map<String, Object?>>{
-          'amend_abc': _amendmentData()..['shiftId'] = 'shift-9',
-        },
-        ignoreFilters: true,
-      );
+      final reader = _FeedReader(<String, Map<String, Object?>>{
+        'amend_abc': _amendmentData()..['shiftId'] = 'shift-9',
+      }, ignoreFilters: true);
 
       await expectLater(
         _repository(reader).loadShiftAmendments(shiftId: 'shift-1'),
@@ -369,10 +364,7 @@ void main() {
       final repository = _repository(reader);
 
       final page = await repository.loadAmendments(pageSize: 2);
-      expect(page.items.map((item) => item.id), <String>[
-        'amend_1',
-        'amend_2',
-      ]);
+      expect(page.items.map((item) => item.id), <String>['amend_1', 'amend_2']);
       expect(page.hasMore, isTrue);
       expect(page.nextCursor, 'amend_2');
 
@@ -454,11 +446,7 @@ Map<String, Object?> _amendmentData() => <String, Object?>{
 };
 
 final class _FeedReader implements TenantDataReader {
-  _FeedReader(
-    this.amendments, {
-    this.overridePath,
-    this.ignoreFilters = false,
-  });
+  _FeedReader(this.amendments, {this.overridePath, this.ignoreFilters = false});
 
   final Map<String, Map<String, Object?>> amendments;
 

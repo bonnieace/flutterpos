@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home screen &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Home screen</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Four artboards, drawn on <code class="mono">AppTokens.profoundVerdant</code>. The phone tile grid is kept exactly as built; what changes is the screen around it. Read <a href="README.md">README.md</a> for what moves, why, and which two of the four are not restyles.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="home-phone.html">
+      <h2>Home &#8212; phone</h2>
+      <p>An ordinary day for an owner, and a business approved this morning. The grid untouched, a greeting that stops repeating the title, four figures instead of five.</p>
+      <span class="size">390</span>
+    </a>
+
+    <a class="board" href="home-figures.html">
+      <h2>The figures band</h2>
+      <p>2&#215;2 on a phone and one divided row above 768, the rule that collapses two profit tiles into one, and what a tile says when it has no figure to give.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="home-states.html">
+      <h2>Screen states</h2>
+      <p>The greeting with and without a name, then a cashier, a page still loading, and a device with no connection.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="home-desktop.html">
+      <h2>Home &#8212; desktop</h2>
+      <p>The same page at <code class="mono">expanded</code>: three module cards across, the figures in one row with the inspiration&#8217;s hairline dividers.</p>
+      <span class="size">1280</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

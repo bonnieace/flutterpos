@@ -115,7 +115,10 @@ void main() {
     test('a manager cannot correct a shift even though it reads the list', () {
       // The server's SHIFT_AMENDMENT_ROLES is narrower than the roles that read
       // the differences, and the client refuses first.
-      final gateway = _gateway(_Callable(_response()), role: TenantRole.manager);
+      final gateway = _gateway(
+        _Callable(_response()),
+        role: TenantRole.manager,
+      );
 
       expect(
         () => gateway.createIntent(shiftId: 'shift-a', reason: 'Late sale'),

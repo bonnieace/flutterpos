@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings &#8212; row standings</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+.pair { display: flex; align-items: center; gap: 40px; }
+.row { display: flex; align-items: center; gap: 16px; width: 720px; box-sizing: border-box; padding: 16px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.row-icon { width: 48px; height: 48px; flex-shrink: 0; border-radius: 12px; background: #132A1F; border: 1px solid #283831; display: flex; align-items: center; justify-content: center; color: #BCCBB9; }
+.row-body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.row-title { font-size: 16px; font-weight: 600; color: #D4E7DD; }
+.row-value { font-size: 13px; line-height: 19px; color: #869585; }
+.row-note { font-size: 13px; line-height: 19px; color: #BCCBB9; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.badge-problem { background: rgba(147, 0, 10, 0.20); border: 1px solid rgba(239, 68, 68, 0.30); color: #EF4444; }
+.badge-await { background: rgba(242, 193, 78, 0.10); border: 1px solid rgba(242, 193, 78, 0.30); color: #F2C14E; }
+.chev { flex-shrink: 0; color: #869585; }
+.cond { width: 360px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+.cond code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; line-height: 18px; color: #45F28D; }
+.cond span { font-size: 13px; line-height: 19px; color: #869585; }
+h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #869585; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Settings artboards</a></nav>
+<div class="page-stage">
+<div style="width: 1280px; height: 1560px; box-sizing: border-box; padding: 40px 80px; background: #071610; display: flex; flex-direction: column; gap: 28px;">
+
+  <header style="display: flex; flex-direction: column; gap: 6px;">
+    <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.5px; color: #D4E7DD;">Row standings</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #BCCBB9;">Every state each row can be in, and the condition on the published document that produces it. Colour marks a fault; a choice is stated plainly however consequential it is.</p>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 12px;">
+    <h2>Business details</h2>
+
+    <div class="pair">
+      <div class="row">
+        <span class="row-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"></path><path d="M3 9h18v11H3z"></path><path d="M3 9a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0"></path></svg></span>
+        <span class="row-body"><span class="row-title">Business details</span><span class="row-value">Mwangi Hardware &middot; Quality tools since 1998 &middot; logo set</span></span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>branding.isUsable</code><span>The three fields the document holds, in the order a receipt prints them. The slogan and the logo are omitted when absent.</span></div>
+    </div>
+
+    <div class="pair">
+      <div class="row">
+        <span class="row-icon" style="border-color: rgba(242, 193, 78, 0.30); color: #F2C14E;" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"></path><path d="M3 9h18v11H3z"></path><path d="M3 9a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0"></path></svg></span>
+        <span class="row-body"><span class="row-title">Business details</span><span class="row-note">The home and its receipts carry no name yet.</span></span>
+        <span class="badge badge-await"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Not set up</span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>!branding.isUsable</code><span>Awaiting, not a problem: nothing stops, the name is simply blank where it would have printed.</span></div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px;">
+    <h2>Currency</h2>
+
+    <div class="pair">
+      <div class="row">
+        <span class="row-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle><path d="M6 12h.01"></path><path d="M18 12h.01"></path></svg></span>
+        <span class="row-body"><span class="row-title">Currency</span><span class="row-value">KES &middot; recorded on every sale priced with it</span></span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>state == published</code><span>The three letters, and the one thing about them that surprises people: the code labels, it never converts.</span></div>
+    </div>
+
+    <div class="pair">
+      <div class="row" style="border-color: rgba(239, 68, 68, 0.30);">
+        <span class="row-icon" style="border-color: rgba(239, 68, 68, 0.30); color: #EF4444;" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle><path d="M6 12h.01"></path><path d="M18 12h.01"></path></svg></span>
+        <span class="row-body"><span class="row-title">Currency</span><span class="row-note">No sale can be rung up on any device.</span></span>
+        <span class="badge badge-problem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z"></path><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>Not published</span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>state == absent</code><span>The only standing here that also raises the callout above the list, because it is the only one that stops the till outright.</span></div>
+    </div>
+
+    <div class="pair">
+      <div class="row" style="border-color: rgba(239, 68, 68, 0.30);">
+        <span class="row-icon" style="border-color: rgba(239, 68, 68, 0.30); color: #EF4444;" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle><path d="M6 12h.01"></path><path d="M18 12h.01"></path></svg></span>
+        <span class="row-body"><span class="row-title">Currency</span><span class="row-note">The published settings cannot be read, so no sale can be rung up. Publishing here replaces them.</span></span>
+        <span class="badge badge-problem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z"></path><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>Unreadable</span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>state == malformed</code><span>A state rather than a failure, so the one person who can overwrite it sees it instead of the refusal the cashier gets.</span></div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px;">
+    <h2>Printer</h2>
+
+    <div class="pair">
+      <div class="row">
+        <span class="row-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9V3h10v6"></path><path d="M7 19H5a2 2 0 01-2-2v-5a2 2 0 012-2h14a2 2 0 012 2v5a2 2 0 01-2 2h-2"></path><path d="M7 15h10v6H7z"></path></svg></span>
+        <span class="row-body"><span class="row-title">Printer</span><span class="row-value">192.168.1.50:9100 &middot; 58mm roll &middot; cuts the paper</span></span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>state == configured</code><span>The roll a shopkeeper buys, not the column count the transport works in &#8212; the same naming the paper-width control already uses.</span></div>
+    </div>
+
+    <div class="pair">
+      <div class="row">
+        <span class="row-icon" style="border-color: rgba(242, 193, 78, 0.30); color: #F2C14E;" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9V3h10v6"></path><path d="M7 19H5a2 2 0 01-2-2v-5a2 2 0 012-2h14a2 2 0 012 2v5a2 2 0 01-2 2h-2"></path><path d="M7 15h10v6H7z"></path></svg></span>
+        <span class="row-body"><span class="row-title">Printer</span><span class="row-note">Receipts are not sent anywhere. Sales are still recorded.</span></span>
+        <span class="badge badge-await"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Not set up</span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>state == absent</code><span>Awaiting, and the second sentence is why: no paper is an inconvenience, not a stoppage. No callout above the list for this one.</span></div>
+    </div>
+
+    <div class="pair">
+      <div class="row" style="border-color: rgba(239, 68, 68, 0.30);">
+        <span class="row-icon" style="border-color: rgba(239, 68, 68, 0.30); color: #EF4444;" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9V3h10v6"></path><path d="M7 19H5a2 2 0 01-2-2v-5a2 2 0 012-2h14a2 2 0 012 2v5a2 2 0 01-2 2h-2"></path><path d="M7 15h10v6H7z"></path></svg></span>
+        <span class="row-body"><span class="row-title">Printer</span><span class="row-note">The saved settings cannot be read, so receipts are not sent anywhere. Saving here replaces them.</span></span>
+        <span class="badge badge-problem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z"></path><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>Unreadable</span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>state == malformed</code><span>Problem rather than awaiting: somebody published something, and what is there now cannot be acted on.</span></div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px;">
+    <h2>Stock counts</h2>
+
+    <div class="pair">
+      <div class="row">
+        <span class="row-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9z"></path><path d="M15 5h2a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h2"></path><path d="M9 12h6"></path><path d="M9 16h4"></path></svg></span>
+        <span class="row-body"><span class="row-title">Stock counts</span><span class="row-value">Nobody is interrupted &middot; Mon, Thu &middot; 4 people counting</span></span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>enforcement == off</code><span>The rota is still recorded and still shown, because it is still what the panel will open on.</span></div>
+    </div>
+
+    <div class="pair">
+      <div class="row">
+        <span class="row-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9z"></path><path d="M15 5h2a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h2"></path><path d="M9 12h6"></path><path d="M9 16h4"></path></svg></span>
+        <span class="row-body"><span class="row-title">Stock counts</span><span class="row-value">Ask at the register &middot; Mon, Thu &middot; 4 people counting</span></span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>enforcement == prompt</code><span>Asked once on opening the register, and free to carry on selling.</span></div>
+    </div>
+
+    <div class="pair">
+      <div class="row">
+        <span class="row-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9z"></path><path d="M15 5h2a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h2"></path><path d="M9 12h6"></path><path d="M9 16h4"></path></svg></span>
+        <span class="row-body"><span class="row-title">Stock counts</span><span class="row-value">Hold the register &middot; Mon, Thu &middot; 4 people counting</span></span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>enforcement == block</code><span>The setting here that can stop a shop trading, and still drawn as a set value: somebody chose it deliberately. Colour would read as a fault to repair.</span></div>
+    </div>
+
+    <div class="pair">
+      <div class="row" style="border-color: rgba(239, 68, 68, 0.30);">
+        <span class="row-icon" style="border-color: rgba(239, 68, 68, 0.30); color: #EF4444;" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9z"></path><path d="M15 5h2a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h2"></path><path d="M9 12h6"></path><path d="M9 16h4"></path></svg></span>
+        <span class="row-body"><span class="row-title">Stock counts</span><span class="row-note">Nobody is being asked to count while it stays that way, and the register is unaffected.</span></span>
+        <span class="badge badge-problem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z"></path><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>Unreadable</span>
+        <span class="chev" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span>
+      </div>
+      <div class="cond"><code>state == malformed</code><span>Quoted from the panel that owns it, which already says both halves: nobody is asked, and nothing at the register changes.</span></div>
+    </div>
+  </section>
+
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day &#8212; screen states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 24px 64px; }
+h1 { margin: 0 0 8px; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.56px; }
+p.lead { margin: 0 0 24px; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 720px; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+.grid { display: flex; gap: 24px; flex-wrap: wrap; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+figcaption { font-size: 13px; line-height: 19px; color: #869585; max-width: 268px; }
+figcaption b { color: #BCCBB9; font-weight: 600; display: block; margin-bottom: 2px; }
+.card { box-sizing: border-box; width: 268px; padding: 16px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; display: flex; flex-direction: column; gap: 8px; }
+.card-title { font-size: 14px; font-weight: 600; color: #BCCBB9; }
+.figure-xl { font-size: 34px; line-height: 38px; font-weight: 800; letter-spacing: -0.8px; color: #D4E7DD; }
+.sub { font-size: 13px; line-height: 19px; color: #869585; }
+.note { font-size: 13px; line-height: 19px; color: #BCCBB9; margin: 0; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 8px; font-size: 12px; font-weight: 600; align-self: flex-start; }
+.b-warn { background: rgba(242, 193, 78, 0.10); border: 1px solid rgba(242, 193, 78, 0.30); color: #F2C14E; }
+.b-ok { background: rgba(75, 226, 119, 0.10); border: 1px solid rgba(75, 226, 119, 0.30); color: #4BE277; }
+.b-bad { background: rgba(147, 0, 10, 0.20); border: 1px solid rgba(239, 68, 68, 0.30); color: #EF4444; }
+.skl { border-radius: 8px; background: linear-gradient(90deg, #132A1F 0%, #1C3A2A 50%, #132A1F 100%); }
+.ghost { width: 100%; height: 44px; border: 1px solid #283831; border-radius: 12px; background: transparent; color: #D4E7DD; font-size: 14px; font-weight: 600; cursor: pointer; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Reports artboards</a></nav>
+<div class="wrap">
+
+<h1>Day &#8212; what the takings card can say</h1>
+<p class="lead">Every state below is a real one the data model produces. <span class="mono">TenantDailyMetricsStanding</span> has four values and its own doc comment says <em>&#8220;today is normally&#8221;</em> unpublished &#8212; so the common case for a Day report is the one with no certified figure in it.</p>
+
+<div class="grid">
+
+<figure>
+  <div class="card">
+    <span class="card-title">Takings</span>
+    <span class="figure-xl">KES 48,250<span style="font-size: 20px; color: #869585;">.00</span></span>
+    <span class="badge b-warn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"></rect><path d="M11 18h2"></path></svg>
+      Counted on this phone
+    </span>
+    <p class="note">Today has not been reconciled yet. A second till&#8217;s sales are not in this.</p>
+  </div>
+  <figcaption><b>Today &#183; unpublished</b>The normal case. <span class="mono">TenantDeviceSalesAggregator</span> adds up this device&#8217;s cache plus the outbox &#8212; zero Firestore reads, and it includes sales that have not sent yet.</figcaption>
+</figure>
+
+<figure>
+  <div class="card">
+    <span class="card-title">Takings</span>
+    <span class="figure-xl">KES 51,900<span style="font-size: 20px; color: #869585;">.00</span></span>
+    <span class="badge b-ok">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+      Reconciled
+    </span>
+    <p class="note">Settled overnight, across every till. Checked 03:14.</p>
+  </div>
+  <figcaption><b>A past day &#183; current</b>One document read, and it serves from cache offline. This is the figure a PDF can be handed to an accountant on.</figcaption>
+</figure>
+
+<figure>
+  <div class="card">
+    <span class="card-title">Takings</span>
+    <span class="figure-xl">KES 51,900<span style="font-size: 20px; color: #869585;">.00</span></span>
+    <span class="badge b-warn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+      Out of date
+    </span>
+    <p class="note">More sales have reached the server for this day since it was settled. The figure is real; it is not the whole day.</p>
+  </div>
+  <figcaption><b>Superseded</b>A late-arriving offline sale marks the day dirty again, and <span class="mono">merge: false</span> means the old document stays exactly where it was. Only the intake record knows.</figcaption>
+</figure>
+
+<figure>
+  <div class="card">
+    <span class="card-title">Takings</span>
+    <span class="figure-xl">KES 51,900<span style="font-size: 20px; color: #869585;">.00</span></span>
+    <span class="badge b-warn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3"></path><circle cx="12" cy="13" r="8"></circle><path d="M12 10v4"></path></svg>
+      Cannot confirm
+    </span>
+    <p class="note">The record that would say whether this is current could not be read.</p>
+  </div>
+  <figcaption><b>Unconfirmed</b>Deliberately not folded into <em>Reconciled</em>. Every sale writes an intake record, so a published day without one is a read that did not answer &#8212; not a quiet day.</figcaption>
+</figure>
+
+<figure>
+  <div class="card">
+    <span class="card-title">Takings</span>
+    <span class="figure-xl" style="color: #869585;">Not known</span>
+    <span class="badge b-bad">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z"></path><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>
+      Evidence disagrees
+    </span>
+    <p class="note">This device holds records that contradict each other for today, so no total is stated.</p>
+    <button class="ghost">See today&#8217;s sales</button>
+  </div>
+  <figcaption><b>Refused</b><span class="mono">TenantDeviceSalesRefusal</span> is a real enum with two values. Showing <span class="mono">KES 0.00</span> here would be the plausible wrong figure this screen can do the most damage with.</figcaption>
+</figure>
+
+<figure>
+  <div class="card">
+    <span class="card-title">Takings</span>
+    <span class="figure-xl">KES 0<span style="font-size: 20px; color: #869585;">.00</span></span>
+    <span class="badge b-ok">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+      Reconciled
+    </span>
+    <p class="note">Nothing was sold on this day. No shift was opened.</p>
+  </div>
+  <figcaption><b>A genuinely empty day</b>Zero is only ever printed where a reconciled document actually says zero. That is the whole distinction the refused state above protects.</figcaption>
+</figure>
+
+<figure>
+  <div class="card">
+    <div class="skl" style="width: 64px; height: 14px;"></div>
+    <div class="skl" style="width: 180px; height: 34px;"></div>
+    <div class="skl" style="width: 120px; height: 22px; border-radius: 8px;"></div>
+    <div class="skl" style="width: 100%; height: 14px;"></div>
+    <div class="skl" style="width: 70%; height: 14px;"></div>
+  </div>
+  <figcaption><b>Loading</b>The shape of the card that is coming, not a spinner. On a reconciled day this is one document read and usually resolves before it is seen.</figcaption>
+</figure>
+
+<figure>
+  <div class="card">
+    <span class="card-title">Takings</span>
+    <span class="figure-xl">KES 48,250<span style="font-size: 20px; color: #869585;">.00</span></span>
+    <span class="badge b-warn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8.8a16 16 0 0120 0"></path><path d="M5 12.5a11 11 0 0114 0"></path><path d="M8.5 16a6 6 0 017 0"></path><path d="M12 20h.01"></path><path d="M3 3l18 18"></path></svg>
+      Counted on this phone &#183; offline
+    </span>
+    <p class="note">No connection. This is the same figure as always &#8212; it was never asked of the server.</p>
+  </div>
+  <figcaption><b>Offline</b>The one state where Day is stronger than Week. Day reads local evidence, so it answers with no network at all; Week is nine callables and cannot.</figcaption>
+</figure>
+
+</div>
+
+<h1 style="margin-top: 48px; font-size: 22px;">What was left out, and why</h1>
+<p class="lead" style="margin-bottom: 8px;"><b style="color: #D4E7DD;">No hourly curve.</b> Nothing in <span class="mono">daily_metrics</span> or on a sale carries time-of-day in a form anything aggregates. Drawing one would mean inventing it. <em>Across the day</em> uses shifts instead, which are the day&#8217;s real buckets and carry a per-shift total already.</p>
+<p class="lead" style="margin-bottom: 8px;"><b style="color: #D4E7DD;">No top items for a day.</b> The week gets its best-sellers from a capped sale-line walk. Paying that on every Day open, for the report most likely to be opened several times a day, is the wrong trade &#8212; and the expand arrow on a card is where it belongs if it is wanted.</p>
+<p class="lead"><b style="color: #D4E7DD;">No target or comparison.</b> There is no per-day target field anywhere in the model, and yesterday is a second read. A <em>vs yesterday</em> line is one extra document read if you want it &#8212; worth deciding deliberately rather than assuming.</p>
+
+</div>
+</body>
+</html>

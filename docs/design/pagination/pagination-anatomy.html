@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pagination &#8212; anatomy</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+/* Every app value on this board is the token the build would read, named beside it.
+   Magenta (#FF6BD6) is annotation only - it is not an app colour. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+
+/* ---- Pagination: the pager group ------------------------------------------
+   One container: AppButtonSize.lg 48, radius.md 8, action.secondary's container
+   #132A1F and border #3D4A3D. PressSurface's 4px focus-ring gutter goes round the
+   group, as it goes round every pressable surface. */
+.pager { display: inline-flex; align-items: stretch; margin: 4px; min-height: 48px; box-sizing: border-box; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; vertical-align: top; }
+.pager.fill { display: flex; }                        /* compact band: the group takes the row */
+.pager.fill .nav { flex: 1 1 0; min-width: 48px; }
+.seg { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; box-sizing: border-box; margin: 0; border: 0; background: transparent; color: #D4E7DD; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; }   /* label.lg; space.16 with an icon, space.8 to it */
+.seg + .seg { border-left: 1px solid #3D4A3D; }        /* divider: surface.borderStrong */
+.seg:first-child { border-radius: 7px 0 0 7px; }
+.seg:last-child { border-radius: 0 7px 7px 0; }
+.nav { min-width: 48px; cursor: pointer; }
+.nav svg { width: 18px; height: 18px; flex-shrink: 0; fill: currentColor; }   /* AppButton.iconSize */
+.nav:hover, .nav.is-hover { background: rgba(212, 231, 221, 0.08); }         /* label @ 8% = #22392E */
+.nav:active, .nav.is-pressed { background: rgba(212, 231, 221, 0.12); }      /* label @ 12% = #2A4136 */
+.nav:focus-visible, .nav.is-focus { outline: 2px solid #4BE277; outline-offset: 2px; z-index: 1; }   /* action.focusRing */
+.nav:disabled, .nav.is-disabled { color: #5D7468; background: transparent; cursor: default; }        /* action.disabledLabel; the container stays the group's */
+.nav.glyph { padding: 0; }
+.pager:not(.fill) .nav.glyph { width: 48px; }
+.pos { gap: 4px; min-width: 94px; color: #BCCBB9; font-weight: 600; letter-spacing: 0; cursor: default; }   /* label.md, text.secondary; min width measured from 'Page 000' */
+.pos b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-variant-numeric: tabular-nums; color: #D4E7DD; }   /* numeric.body, text.primary */
+
+/* ---- The bar as built today, for the before rows ---- */
+.old { display: flex; align-items: center; }
+.old-side { flex: 1 1 0; display: flex; }
+.old-side.end { justify-content: flex-end; }
+.old-btn { margin: 4px; height: 48px; padding: 0 20px; box-sizing: border-box; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; }
+.old-btn.dis { background: #1E3A2B; border-color: #1E3A2B; color: #5D7468; }   /* disabledContainer, disabledLabel */
+.old-page { margin: 0 12px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; white-space: nowrap; }
+
+/* ---- Board furniture ---- */
+.board { width: 1280px; box-sizing: border-box; padding: 40px; background: #071610; display: flex; flex-direction: column; gap: 48px; }
+h1 { margin: 0; font-size: 32px; line-height: 38.4px; font-weight: 700; letter-spacing: -0.64px; }
+h2 { margin: 0 0 4px; font-size: 22px; line-height: 30.8px; font-weight: 600; }
+.lede { margin: 8px 0 0; max-width: 820px; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.sub { margin: 0 0 20px; max-width: 820px; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.eyebrow { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #869585; }
+.pair { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.pair .strip + .tag { margin-top: 14px; }
+.strip { position: relative; box-sizing: border-box; padding: 16px 0; border-top: 1px dashed #283831; border-bottom: 1px dashed #283831; }
+.strip.w1136 { width: 1136px; }
+.strip.w371 { width: 371px; }
+.tag { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
+.tag.before { background: #28321D; border: 1px solid #5A4C24; color: #F2C14E; }
+.tag.after { background: rgba(75, 226, 119, 0.10); border: 1px solid rgba(75, 226, 119, 0.30); color: #4BE277; }
+.facts { margin: 16px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 21px; color: #BCCBB9; max-width: 1000px; }
+.facts li::before { content: '\2014\00a0'; color: #869585; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+.phones { display: flex; gap: 48px; }
+.phones figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+
+/* Anatomy at 2x - CSS zoom doubles layout, so the numbering follows the parts. */
+.zoom { zoom: 2; }
+.anat { display: flex; flex-direction: column; gap: 32px; align-items: flex-start; }
+.anat-draw { position: relative; padding: 36px 24px 48px; background: #03110B; border: 1px solid #132A1F; border-radius: 12px; }
+.num { position: absolute; top: -26px; left: 50%; transform: translateX(-50%); width: 16px; height: 16px; border-radius: 50%; background: #FF6BD6; color: #03110B; font: 700 10px/16px 'Hanken Grotesk'; letter-spacing: 0; text-align: center; }
+.num::after { content: ''; position: absolute; left: 7.5px; top: 16px; width: 1px; height: 10px; background: #FF6BD6; }
+.num.low { top: auto; bottom: -26px; }
+.num.low::after { top: -10px; }
+.legend { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 20px; }
+.legend th { text-align: left; padding: 0 12px 10px 0; font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #869585; }
+.legend td { padding: 10px 12px 10px 0; border-top: 1px solid #132A1F; vertical-align: top; color: #BCCBB9; }
+.legend td:first-child { width: 28px; }
+.legend td b { color: #D4E7DD; font-weight: 600; }
+.legend code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #D4E7DD; }
+.dot { display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: #FF6BD6; color: #03110B; font: 700 11px/18px 'Hanken Grotesk'; text-align: center; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid #3D4A3D; vertical-align: -1px; margin-right: 6px; }
+
+/* Redlines, at 2x */
+.red { position: relative; padding: 44px 64px 56px 72px; background: #03110B; border: 1px solid #132A1F; border-radius: 12px; display: inline-block; }
+.hatch { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(45deg, rgba(255, 107, 214, 0.35) 0 1px, transparent 1px 3px); }
+.box { outline: 0.5px solid #FF6BD6; }
+.dim { position: absolute; color: #FF6BD6; font: 700 6px/8px 'Hanken Grotesk'; letter-spacing: 0; white-space: nowrap; }
+.dim.h { height: 0; border-top: 0.5px solid #FF6BD6; }
+.dim.v { width: 0; border-left: 0.5px solid #FF6BD6; }
+.gutter { position: absolute; inset: -4px; border: 0.5px dashed #FF6BD6; border-radius: 12px; pointer-events: none; }
+
+.bands { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.band { padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; display: flex; flex-direction: column; gap: 12px; }
+.band h3 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.band p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.frame { box-sizing: border-box; padding: 12px 0; background: #071610; border: 1px dashed #283831; border-radius: 4px; }
+.frame.end { display: flex; justify-content: flex-end; padding-right: 16px; }
+
+.a11y { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.a11y table { width: 100%; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Pagination artboards</a></nav>
+<div class="page-stage">
+<div class="board">
+
+  <header>
+    <h1>Pagination &#8212; anatomy</h1>
+    <p class="lede">The bar under seventeen record lists, redrawn as <strong>one pager</strong>: the way back, where you are, and the way on, joined in a single container that sits at the end of the list on a monitor and takes the row on a phone. Same three inputs, same three keys, same callbacks.</p>
+  </header>
+
+  <!-- ===================================================== Before / after -->
+  <section>
+    <h2>Before and after</h2>
+    <p class="sub">The bar as the harness captures it today, against the redesign, at the two widths it spends most of its life at. Both are the first page of a list with more to come.</p>
+
+    <div class="pair">
+      <span class="tag before">Before</span>
+      <div class="strip w1136">
+        <div class="old">
+          <div class="old-side"><button class="old-btn dis" type="button" disabled>Previous page</button></div>
+          <span class="old-page">Page 1</span>
+          <div class="old-side end"><button class="old-btn" type="button">Next page</button></div>
+        </div>
+      </div>
+      <span class="tag after">After</span>
+      <div class="strip w1136" style="display: flex; justify-content: flex-end;">
+        <nav class="pager" aria-label="Pages">
+          <button class="seg nav" type="button" disabled aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>Previous</button>
+          <span class="seg pos" aria-live="polite">Page <b>1</b></span>
+          <button class="seg nav" type="button" aria-label="Next page">Next<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button>
+        </nav>
+      </div>
+    </div>
+    <ul class="facts">
+      <li>In the catalog column at 1440, the two controls sit <strong>881px apart</strong> and the page statement is a lone word between them (<span class="mono">web-full/18-manage-catalog</span>). In the harness&#8217;s own full-width capture it is 1,137px.</li>
+      <li><strong>The disabled control out-paints the live one.</strong> Its fill, <span class="mono">#1E3A2B</span>, stands 1.50:1 off the page; the enabled fill, <span class="mono">#132A1F</span>, stands 1.22:1. The eye lands on the button that does nothing.</li>
+      <li>After: a disabled segment keeps the group&#8217;s container and only its ink steps down, to <span class="mono">#5D7468</span> at 3.02:1 &#8212; quieter than the live segment beside it, and still legible as <em>Previous</em>.</li>
+    </ul>
+
+    <div class="phones" style="margin-top: 28px;">
+      <figure>
+        <span class="tag before" style="align-self: flex-start;">Before &#183; 371</span>
+        <div class="strip w371">
+          <div class="old">
+            <div class="old-side"><button class="old-btn dis" type="button" disabled>Previous page</button></div>
+            <span class="old-page">Page 1</span>
+            <div class="old-side end"><button class="old-btn dis" type="button" disabled>Next page</button></div>
+          </div>
+        </div>
+      </figure>
+      <figure>
+        <span class="tag after" style="align-self: flex-start;">After &#183; 371</span>
+        <div class="strip w371">
+          <nav class="pager fill" aria-label="Pages">
+            <button class="seg nav" type="button" disabled aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>Previous</button>
+            <span class="seg pos">Page <b>1</b></span>
+            <button class="seg nav" type="button" disabled aria-label="Next page">Next<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button>
+          </nav>
+        </div>
+      </figure>
+    </div>
+    <ul class="facts">
+      <li>The most common real case: <strong>a list that fits on one page</strong>. Shift history, the Sales Report and Inventory Manager all draw it in their captures &#8212; two dead slabs, brighter than the live buttons on the card above them.</li>
+      <li>After: the same two disabled controls, because a restyle cannot tell <em>no more records</em> from <em>paused while a write is in flight</em> &#8212; both arrive as a null <code class="mono">onNext</code>. The states board draws what one more input would let it say instead.</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== Anatomy -->
+  <section>
+    <h2>Anatomy</h2>
+    <p class="sub">A middle page, drawn at twice size. Four parts, and only two of them can be pressed.</p>
+    <div class="anat">
+      <div class="anat-draw">
+        <div class="zoom">
+          <nav class="pager" aria-label="Pages" style="position: relative;">
+            <button class="seg nav" type="button" aria-label="Previous page"><span class="num">1</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>Previous</button>
+            <span class="seg pos"><span class="num">2</span>Page <b>4</b></span>
+            <button class="seg nav" type="button" aria-label="Next page"><span class="num">3</span>Next<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button>
+            <span class="num low" style="left: auto; right: -2px; transform: none;">4</span>
+          </nav>
+        </div>
+      </div>
+      <table class="legend">
+        <thead><tr><th></th><th>Part</th><th>Drawn with</th></tr></thead>
+        <tbody>
+          <tr><td><span class="dot">1</span></td><td><b>Previous</b> &#8212; a pressable segment. Chevron leads, the word follows. Announced as <em>Previous page</em>, because a screen reader hears it without the bar round it.</td><td><code>label.lg</code> 14/20 700 +0.7 in <span class="sw" style="background:#D4E7DD"></span><code>text.primary</code>; glyph 18 (<code>AppButton.iconSize</code>), <code>space.8</code> to the word, <code>space.16</code> each side</td></tr>
+          <tr><td><span class="dot">2</span></td><td><b>Where you are</b> &#8212; not pressable, never shortens. The word is quieter than the figure, so the eye reads <em>4</em>. Reserves the width of <em>Page 000</em>, so going from page 9 to page 10 does not nudge <em>Previous</em> sideways.</td><td>&#8220;Page&#8221; in <code>label.md</code> 14/20 600, <span class="sw" style="background:#BCCBB9"></span><code>text.secondary</code>; the figure in <code>numeric.body</code> 14/20 500 tabular, <code>text.primary</code>, via <code>RollingNumber</code>; <code>space.4</code> between</td></tr>
+          <tr><td><span class="dot">3</span></td><td><b>Next</b> &#8212; the mirror of 1. The chevron <em>trails</em>, which is why these segments are drawn on <code>PressSurface</code> rather than being <code>AppButton</code>s: that component offers a leading icon only.</td><td>As 1</td></tr>
+          <tr><td><span class="dot">4</span></td><td><b>The group</b> &#8212; one container and two hairlines. A segment&#8217;s hover, press and disabled states happen <em>inside</em> it; the container itself never changes colour.</td><td><span class="sw" style="background:#132A1F"></span><code>action.secondary</code> container, <span class="sw" style="background:#3D4A3D"></span>1px <code>surface.borderStrong</code> edge and dividers, <code>radius.md</code> 8, <code>AppButtonSize.lg</code> 48 high</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================================================== Measurements -->
+  <section>
+    <h2>Measurements</h2>
+    <p class="sub">Twice size. Every figure is on the spacing scale or is a component constant the app already has.</p>
+    <div class="red">
+      <div class="zoom" style="position: relative;">
+        <nav class="pager" aria-label="Pages" style="position: relative;">
+          <span class="gutter"></span>
+          <button class="seg nav" type="button" aria-label="Previous page" style="gap: 0;">
+            <span class="hatch" style="left: 0; width: 16px;"></span>
+            <svg class="box" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            <span style="position: relative; width: 8px; align-self: stretch;"><span class="hatch" style="left: 0; right: 0;"></span></span>
+            Previous
+            <span class="hatch" style="right: 0; width: 16px;"></span>
+          </button>
+          <span class="seg pos">Page <b>4</b></span>
+          <button class="seg nav" type="button" aria-label="Next page">Next<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button>
+          <!-- dimension labels -->
+          <span class="dim v" style="left: -14px; top: 0; height: 48px;"></span>
+          <span class="dim" style="left: -30px; top: 20px;">48</span>
+          <span class="dim" style="left: 1px; top: -12px;">16</span>
+          <span class="dim" style="left: 20px; top: -12px;">18</span>
+          <span class="dim" style="left: 37px; top: -12px;">8</span>
+          <span class="dim" style="left: 91px; top: -12px;">16</span>
+          <span class="dim" style="left: -2px; top: 52px;">r 8</span>
+          <span class="dim" style="left: 112px; top: 52px;">1px divider</span>
+          <span class="dim" style="right: -2px; top: 52px;">4 focus gutter</span>
+        </nav>
+      </div>
+    </div>
+    <ul class="facts">
+      <li>Group <strong>48</strong> high: <code class="mono">AppButtonSize.lg</code>, the only size §5.2 gives a touch surface, and the 48dp target with nothing added.</li>
+      <li>Nav segment: <strong>16</strong> + glyph <strong>18</strong> + <strong>8</strong> + word + <strong>16</strong> &#8212; <code class="mono">AppButtonSize.horizontalPadding(hasIcon: true)</code>, <code class="mono">AppButton.iconSize</code>, <code class="mono">space.8</code>. Never narrower than 48.</li>
+      <li>Outer corners <strong>8</strong> (<code class="mono">radius.md</code>, as every button); inner corners square; dividers <strong>1</strong>, painted rather than laid out, as <code class="mono">AppButton</code>&#8217;s border is.</li>
+      <li>The dashed line is <code class="mono">PressSurface</code>&#8217;s <strong>4</strong> focus-ring gutter, reserved round the group whether or not a ring is showing &#8212; which is why the group&#8217;s outer edge sits 4 in from the list&#8217;s edge above it.</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== Layout by width -->
+  <section>
+    <h2>Layout by width</h2>
+    <p class="sub">Decided the way the bar decides it today &#8212; by measuring what the labels need, not by looking up a band &#8212; with one tier added at the bottom.</p>
+    <div class="bands">
+      <div class="band">
+        <span class="eyebrow">Medium and expanded &#183; from 768</span>
+        <h3>At its own width, at the end of the list</h3>
+        <div class="frame end">
+          <nav class="pager" aria-label="Pages">
+            <button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>Previous</button>
+            <span class="seg pos">Page <b>4</b></span>
+            <button class="seg nav" type="button" aria-label="Next page">Next<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button>
+          </nav>
+        </div>
+        <p>End-aligned under the list, where a table&#8217;s actions column already is. The two controls are a thumb&#8217;s width apart instead of the width of the window.</p>
+      </div>
+      <div class="band">
+        <span class="eyebrow">Compact &#183; below 768</span>
+        <h3>Across the row</h3>
+        <div class="frame" style="padding-left: 0; padding-right: 0;">
+          <nav class="pager fill" aria-label="Pages">
+            <button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>Previous</button>
+            <span class="seg pos">Page <b>4</b></span>
+            <button class="seg nav" type="button" aria-label="Next page">Next<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button>
+          </nav>
+        </div>
+        <p>The two nav segments split what the position leaves, so each is a wide, easy target under a thumb and the figure sits in the middle of the screen.</p>
+      </div>
+      <div class="band">
+        <span class="eyebrow">Too narrow for the words</span>
+        <h3>Glyphs, and the words move to semantics</h3>
+        <div class="frame" style="padding-left: 0; padding-right: 0; width: 196px;">
+          <nav class="pager fill" aria-label="Pages">
+            <button class="seg nav glyph" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
+            <span class="seg pos">Page <b>4</b></span>
+            <button class="seg nav glyph" type="button" aria-label="Next page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button>
+          </nav>
+        </div>
+        <p>Where today&#8217;s bar ellipsizes to <em>Prev&#8230;</em>. Reached at 200% text on a phone. The position is the part that never gives up room &#8212; it is what the bar is for.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================== Accessibility -->
+  <section>
+    <h2>Accessibility, measured</h2>
+    <p class="sub">WCAG 2.x contrast, computed from the token hex values, with overlays composited over the segment.</p>
+    <div class="a11y">
+      <table class="legend">
+        <thead><tr><th>Ink</th><th>On</th><th>Ratio</th></tr></thead>
+        <tbody>
+          <tr><td style="width:auto"><b>Label</b> <code>#D4E7DD</code></td><td>segment <code>#132A1F</code></td><td><b>11.80:1</b></td></tr>
+          <tr><td style="width:auto"><b>Label</b></td><td>hovered <code>#22392E</code></td><td><b>9.61:1</b></td></tr>
+          <tr><td style="width:auto"><b>Label</b></td><td>pressed <code>#2A4136</code></td><td><b>8.53:1</b></td></tr>
+          <tr><td style="width:auto"><b>&#8220;Page&#8221;</b> <code>#BCCBB9</code></td><td>segment</td><td><b>8.98:1</b></td></tr>
+          <tr><td style="width:auto"><b>Disabled</b> <code>#5D7468</code></td><td>segment</td><td>3.02:1 &#8212; exempt; was 2.46:1 on its old fill</td></tr>
+          <tr><td style="width:auto"><b>Focus ring</b> <code>#4BE277</code></td><td>page <code>#071610</code></td><td><b>11.00:1</b></td></tr>
+        </tbody>
+      </table>
+      <table class="legend">
+        <thead><tr><th>Rule</th><th>How the pager answers it</th></tr></thead>
+        <tbody>
+          <tr><td style="width:auto"><b>48dp</b></td><td>Every nav segment is 48 high and at least 48 wide, including glyph-only.</td></tr>
+          <tr><td style="width:auto"><b>Focus</b></td><td>Tab reaches Previous, then Next. The position is not a stop. The ring is drawn round the one segment, 2px at 2px offset.</td></tr>
+          <tr><td style="width:auto"><b>Names</b></td><td><em>Previous page</em> and <em>Next page</em> at every width, even where only a chevron shows. While a page reads, the name gains &#8220;working&#8221;, as <code>AppButton</code>&#8217;s does.</td></tr>
+          <tr><td style="width:auto"><b>Not colour alone</b></td><td>Direction is a word and a glyph. Disabled is announced as disabled; where the next page is the last, the position can say so in words (proposal P3).</td></tr>
+          <tr><td style="width:auto"><b>Announced</b></td><td>The position is a polite live region, so a page change is heard, not only seen.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+</div>
+</body>
+</html>

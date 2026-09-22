@@ -533,6 +533,139 @@ void main() {
       );
     });
   });
+
+  group('a day of shifts', () {
+    test(
+      'reads one day oldest first, for everyone or for one member',
+      () async {
+        final reader = _Reader(<String, Map<String, Object?>>{
+          'tenants/tenant-a/shifts/shift-a': _closed(),
+          'tenants/tenant-a/shifts/shift-b': _closed(
+            shiftId: 'shift-b',
+            overrides: <String, Object?>{'staffId': 'user-b'},
+          ),
+          'tenants/tenant-a/shifts/shift-c': _closed(
+            shiftId: 'shift-c',
+            overrides: <String, Object?>{'businessDate': '2026-07-30'},
+          ),
+        });
+        final manager = _repository(reader, role: TenantRole.manager);
+
+        final everyone = await manager.loadDayPage(businessDate: _businessDate);
+        expect(everyone.items.map((entry) => entry.id), <String>[
+          'shift-a',
+          'shift-b',
+        ]);
+        expect(everyone.scope, TenantShiftHistoryScope.everyCashier);
+        // The day's own indexes: no status filter, oldest first.
+        expect(reader.queries.last.equalityFilters, <String, Object?>{
+          'businessDate': _businessDate,
+        });
+        expect(reader.queries.last.descending, isFalse);
+
+        final colleague = await manager.loadDayPage(
+          businessDate: _businessDate,
+          staffId: 'user-b',
+        );
+        expect(colleague.items.map((entry) => entry.id), <String>['shift-b']);
+        expect(reader.queries.last.equalityFilters, <String, Object?>{
+          'businessDate': _businessDate,
+          'staffId': 'user-b',
+        });
+
+        final own = await manager.loadDayPage(
+          businessDate: _businessDate,
+          staffId: 'user-a',
+        );
+        expect(own.scope, TenantShiftHistoryScope.ownShifts);
+      },
+    );
+
+    test('a cashier reads their own day and nobody else\'s', () async {
+      final reader = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/shifts/shift-a': _closed(),
+      });
+      final cashier = _repository(reader);
+
+      final own = await cashier.loadDayPage(
+        businessDate: _businessDate,
+        staffId: 'user-a',
+      );
+      expect(own.items.single.id, 'shift-a');
+
+      await expectLater(
+        cashier.loadDayPage(businessDate: _businessDate),
+        throwsA(_shiftCode('shift_history_forbidden')),
+      );
+      await expectLater(
+        cashier.loadDayPage(businessDate: _businessDate, staffId: 'user-b'),
+        throwsA(_shiftCode('shift_history_forbidden')),
+      );
+      expect(reader.queries, hasLength(1), reason: 'no forbidden query issued');
+    });
+
+    test(
+      'leaves out a shift still running rather than refusing the day',
+      () async {
+        // The day's query cannot exclude it - it has no status filter - and it is
+        // not history yet. Refusing the page over it would hide the whole day.
+        final reader = _Reader(<String, Map<String, Object?>>{
+          'tenants/tenant-a/shifts/shift-a': _closed(),
+          'tenants/tenant-a/shifts/shift-b': _closed(
+            shiftId: 'shift-b',
+            overrides: <String, Object?>{
+              'status': 'open',
+              'endTime': null,
+              'closingCashMinor': null,
+              'closingCash': null,
+              'totalSalesMinor': null,
+              'totalSales': null,
+              'transactionCount': null,
+            },
+          ),
+        });
+
+        final page = await _repository(
+          reader,
+        ).loadDayPage(businessDate: _businessDate, staffId: 'user-a');
+        expect(page.items.map((entry) => entry.id), <String>['shift-a']);
+      },
+    );
+
+    test('fails closed on another day or another member', () async {
+      final otherDay = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/shifts/shift-a': _closed(
+          overrides: <String, Object?>{'businessDate': '2026-07-30'},
+        ),
+      }, ignoreFilters: true);
+      await expectLater(
+        _repository(
+          otherDay,
+        ).loadDayPage(businessDate: _businessDate, staffId: 'user-a'),
+        throwsA(_shiftCode('foreign_business_date')),
+      );
+
+      // Proved before the status is read: a colleague's shift still running is
+      // as far outside a cashier's read as a closed one.
+      final otherMember = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/shifts/shift-a': _closed(
+          overrides: <String, Object?>{
+            'staffId': 'user-b',
+            'status': 'open',
+            'endTime': null,
+            'closingCashMinor': null,
+            'closingCash': null,
+          },
+        ),
+      }, ignoreFilters: true);
+      await expectLater(
+        _repository(
+          otherMember,
+        ).loadDayPage(businessDate: _businessDate, staffId: 'user-a'),
+        throwsA(_shiftCode('foreign_shift')),
+      );
+    });
+  });
 }
 
 TenantShiftHistoryRepository _repository(

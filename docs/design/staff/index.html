@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff screen — design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Staff screen</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Five artboards, drawn on <code style="font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D;">AppTokens.profoundVerdant</code>. A visual proposal for <code style="font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D;">TenantStaffDirectoryPanel</code> — nothing here is wired to anything. Read <a href="README.md">README.md</a> for what changes and why.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="staff-desktop.html">
+      <h2>Staff — desktop</h2>
+      <p>The screen as proposed: the two failed invitations called out at the top, standing on every row, filters that count.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="staff-phone.html">
+      <h2>Staff — phone</h2>
+      <p>The same screen at 390. The row folds to two lines and the promoted action goes full width.</p>
+      <span class="size">390</span>
+    </a>
+
+    <a class="board" href="staff-row-standings.html">
+      <h2>Row standings</h2>
+      <p>All seven standings out of <code style="font-family: ui-monospace, monospace; font-size: 13px;">MembershipStatus</code> × <code style="font-family: ui-monospace, monospace; font-size: 13px;">TenantStaffInvitationState</code>, each with the condition that produces it.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="staff-row-menu.html">
+      <h2>Row menu, confirm</h2>
+      <p>The action menu open, and the deactivate confirmation that names the person and says what survives.</p>
+      <span class="size">520</span>
+    </a>
+
+    <a class="board" href="staff-screen-states.html">
+      <h2>Screen states</h2>
+      <p>Loading, read-only, nobody invited yet, search found nobody, and reading from cache with no connection.</p>
+      <span class="size">1280</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

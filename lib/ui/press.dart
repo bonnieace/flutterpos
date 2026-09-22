@@ -57,6 +57,7 @@ final class PressSurface extends StatefulWidget {
     this.excludeSemantics = false,
     this.fillWidth = false,
     this.fillHeight = false,
+    this.reservesRingGutter = true,
   });
 
   /// The surface itself, drawing its own container, border and label.
@@ -124,6 +125,17 @@ final class PressSurface extends StatefulWidget {
   /// side under an `IntrinsicHeight` and needs the painted surfaces to be the
   /// same height, not merely the slots they sit in.
   final bool fillHeight;
+
+  /// Whether this surface reserves the focus ring's gutter around itself.
+  ///
+  /// **Off only for a segment of a joined group**, which is `Pagination`'s
+  /// pager: three segments share one container, and a gutter round each would
+  /// pull them 8 apart. The group reserves one gutter round all of them
+  /// instead, and a segment's ring is painted outside its own box - into that
+  /// gutter at the group's ends, and over the neighbour's edge between
+  /// segments. The ring is the same ring, at the same place against the
+  /// surface; only where its room comes from moves.
+  final bool reservesRingGutter;
 
   @override
   State<PressSurface> createState() => _PressSurfaceState();
@@ -260,30 +272,36 @@ class _PressSurfaceState extends State<PressSurface>
 
     // The ring is drawn outside the surface, in a gutter reserved whether it is
     // visible or not, so tabbing into a row cannot reflow it.
-    Widget framed = Padding(
-      padding: EdgeInsets.all(gutter),
-      child: surface,
-    );
+    Widget framed = widget.reservesRingGutter
+        ? Padding(padding: EdgeInsets.all(gutter), child: surface)
+        : surface;
     if (_focusVisible) {
+      // Where the ring's box sits against [framed]: inside the reserved
+      // gutter, or - with no gutter of its own - the same distance outside the
+      // surface, in room the caller reserved. Both put the ring in one place.
+      final inset = widget.reservesRingGutter
+          ? ring.offset
+          : ring.offset - gutter;
       framed = Stack(
+        clipBehavior: Clip.none,
         children: <Widget>[
           framed,
-          Positioned.fill(
+          Positioned(
+            left: inset,
+            top: inset,
+            right: inset,
+            bottom: inset,
             child: IgnorePointer(
-              child: Padding(
-                padding: EdgeInsets.all(ring.offset),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: ring.color, width: ring.width),
-                    // The ring sits outside the shape, so its corners are the
-                    // shape's plus the offset. On a pill both are already past
-                    // any real dimension and it makes no difference; on a chip
-                    // at `radius.sm` it is the difference between a ring that
-                    // follows the corner and one that cuts across it.
-                    borderRadius:
-                        widget.borderRadius +
-                        BorderRadius.circular(ring.offset),
-                  ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: ring.color, width: ring.width),
+                  // The ring sits outside the shape, so its corners are the
+                  // shape's plus the offset. On a pill both are already past
+                  // any real dimension and it makes no difference; on a chip
+                  // at `radius.sm` it is the difference between a ring that
+                  // follows the corner and one that cuts across it.
+                  borderRadius:
+                      widget.borderRadius + BorderRadius.circular(ring.offset),
                 ),
               ),
             ),
@@ -329,7 +347,8 @@ class _PressSurfaceState extends State<PressSurface>
     );
 
     result = MouseRegion(
-      cursor: widget.mouseCursor ??
+      cursor:
+          widget.mouseCursor ??
           (_enabled ? SystemMouseCursors.click : SystemMouseCursors.basic),
       onEnter: (_) => _setHovered(true),
       onExit: (_) => _setHovered(false),

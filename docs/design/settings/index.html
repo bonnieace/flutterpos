@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings screen &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Settings screen</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Five artboards, drawn on <code class="mono">AppTokens.profoundVerdant</code>. A visual proposal for <code class="mono">TenantSettingsScreen</code> &#8212; nothing here is wired to anything. Read <a href="README.md">README.md</a> for what changes, why, and the one thing it cannot ship as.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="settings-index.html">
+      <h2>Settings &#8212; index</h2>
+      <p>The tab strip replaced by a list of what is set and what is not, with the one fault that stops the till named above it.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="settings-phone.html">
+      <h2>Settings &#8212; phone</h2>
+      <p>The index at 390, and one setting opened from it. The badge moves under the title and the callout&#8217;s button goes full width.</p>
+      <span class="size">390</span>
+    </a>
+
+    <a class="board" href="settings-row-standings.html">
+      <h2>Row standings</h2>
+      <p>All twelve standings the four rows can be in, each with the condition on the published document that produces it.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="settings-detail.html">
+      <h2>One setting open</h2>
+      <p>The printer panel reached from a row: its standing, its four controls, and a test that prints against what is typed.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="settings-screen-states.html">
+      <h2>Screen states</h2>
+      <p>Loading, a shop with nothing wrong, a role that may see none of it, a build that may not write, no connection &#8212; and what was deliberately left out.</p>
+      <span class="size">1280</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

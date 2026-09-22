@@ -238,7 +238,7 @@ void main() {
       // asserted are the same two; only the rendering moved, twice.
       expect(find.byKey(const ValueKey('staff-role-owner-a')), findsOneWidget);
       expect(
-        find.byKey(const ValueKey('staff-status-owner-a')),
+        find.byKey(const ValueKey('staff-standing-owner-a')),
         findsOneWidget,
       );
       expect(find.text('Owner'), findsWidgets);
@@ -259,14 +259,19 @@ void main() {
       // Step 4: standing is one of design.md §2.1's five statuses rather than a
       // chip whose colour was `colors.error` or nothing. Active is `ok`.
       final standing = tester.widget<StatusBadge>(
-        find.byKey(const ValueKey('staff-status-owner-a')),
+        find.byKey(const ValueKey('staff-standing-owner-a')),
       );
       expect(standing.status, AppStatus.ok);
       // The badge announces a sentence and shows a word, because "Active" on
       // its own is not what a screen reader should read out of a staff row.
-      // Step 11: the word is the shopkeeper's rather than the wire's, and the
-      // announcement names the record it is a standing of.
-      expect(standing.semanticLabel, 'Membership: Active');
+      //
+      // **The `Membership:` prefix went when the badge stopped being one.** It
+      // named the field the word came out of, which was the right thing to do
+      // while the word was a bare `MembershipStatus`. `StaffStanding` is not a
+      // field - it is `status` and the invitation resolved together - so a
+      // prefix naming either one would name the wrong half for five of the
+      // seven standings. Each label is a sentence on its own instead.
+      expect(standing.semanticLabel, 'Active, can sign in');
       // Step 6: one key addresses the record whichever of §4.3's three forms
       // the band resolved to, where this screen used to key a card and a table
       // row separately.
@@ -572,6 +577,182 @@ void main() {
       await tester.pump();
       expect(find.text('Current Staff'), findsOneWidget);
       expect(find.text('Stale Staff'), findsNothing);
+    });
+  });
+
+  group('access standing', () {
+    // The seven answers `status` and the invitation produce between them. The
+    // table is the whole of the mapping, so a new membership status or a new
+    // invitation state cannot be added without one of these failing.
+    test('resolves every membership and invitation pair', () {
+      expect(
+        StaffStanding.resolved(
+          MembershipStatus.active,
+          TenantStaffInvitationState.accepted,
+        ),
+        StaffStanding.active,
+      );
+      // **The membership outranks the invitation.** An active member is active
+      // however their invitation was delivered, so a stale `failed` delivery
+      // must not speak over a membership that has moved on.
+      expect(
+        StaffStanding.resolved(
+          MembershipStatus.active,
+          TenantStaffInvitationState.undeliverable,
+        ),
+        StaffStanding.active,
+      );
+      expect(
+        StaffStanding.resolved(
+          MembershipStatus.inactive,
+          TenantStaffInvitationState.accepted,
+        ),
+        StaffStanding.deactivated,
+      );
+      expect(
+        StaffStanding.resolved(
+          MembershipStatus.pending,
+          TenantStaffInvitationState.sent,
+        ),
+        StaffStanding.invited,
+      );
+      expect(
+        StaffStanding.resolved(
+          MembershipStatus.pending,
+          TenantStaffInvitationState.notSent,
+        ),
+        StaffStanding.notSent,
+      );
+      expect(
+        StaffStanding.resolved(
+          MembershipStatus.pending,
+          TenantStaffInvitationState.expired,
+        ),
+        StaffStanding.linkExpired,
+      );
+      expect(
+        StaffStanding.resolved(
+          MembershipStatus.pending,
+          TenantStaffInvitationState.undeliverable,
+        ),
+        StaffStanding.emailRejected,
+      );
+      expect(
+        StaffStanding.resolved(
+          MembershipStatus.pending,
+          TenantStaffInvitationState.cancelled,
+        ),
+        StaffStanding.invitationCancelled,
+      );
+    });
+
+    test('only the two dead ends need attention', () {
+      expect(
+        StaffStanding.values.where((s) => s.needsAttention).toSet(),
+        <StaffStanding>{
+          StaffStanding.linkExpired,
+          StaffStanding.emailRejected,
+        },
+      );
+      // *Not sent yet* is deliberately out: delivery has not run, and it
+      // usually runs. Nobody has to do anything about it.
+      expect(StaffStanding.notSent.needsAttention, isFalse);
+    });
+
+    test('the two dead ends promote different actions', () {
+      // Resending to an address the mail server already refused bounces again,
+      // so a rejected email reaches for the replacement and never the resend.
+      expect(
+        StaffStanding.linkExpired.promotedActionKeyFor('staff-a'),
+        'resend-staff-invitation-staff-a',
+      );
+      expect(
+        StaffStanding.emailRejected.promotedActionKeyFor('staff-a'),
+        'replace-staff-email-staff-a',
+      );
+      expect(StaffStanding.linkExpired.promotedActionLabel, 'Resend');
+      expect(StaffStanding.emailRejected.promotedActionLabel, 'Replace email');
+      // A standing nobody has to act on promotes nothing.
+      expect(StaffStanding.active.promotedActionKeyFor('staff-a'), isNull);
+      expect(StaffStanding.active.promotedActionLabel, isNull);
+    });
+
+    test('every standing carries a container, a glyph and a word', () {
+      // §9: a status is never conveyed by hue alone. Nothing may be added to
+      // this enum without all three.
+      for (final standing in StaffStanding.values) {
+        expect(standing.label, isNotEmpty, reason: '$standing has no word');
+        expect(
+          standing.semanticLabel,
+          isNotEmpty,
+          reason: '$standing announces nothing',
+        );
+        // The announcement is a sentence rather than the visible word, or a
+        // screen reader is told exactly what the eye could already see.
+        expect(standing.semanticLabel, isNot(standing.label));
+      }
+    });
+
+    testWidgets('an invitation in trouble is named above the list, with no '
+        'total', (tester) async {
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      final reader = _StaffReader(
+        queryHandler: (_) async => [
+          _staffSnapshot('tenant-a', 'owner-a', role: TenantRole.owner),
+          _staffSnapshot(
+            'tenant-a',
+            'staff-a',
+            name: 'Njeri Kariuki',
+            status: MembershipStatus.pending,
+            invitationStatus: TenantStaffInvitationStatus.sent,
+            invitationDelivery: TenantStaffInvitationDelivery.sent,
+            invitationExpiresAt: DateTime.utc(2026, 9, 1),
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _staffApp(
+          controller: controller,
+          reader: reader,
+          clock: () => DateTime.utc(2026, 9, 15),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('staff-invitations-in-trouble')),
+        findsOneWidget,
+      );
+      // The person is named. **No count is stated anywhere**, which is the
+      // whole reason this is allowed to sit where the four page-scoped counters
+      // were removed from: a name read off this page is exact on any page.
+      expect(
+        find.textContaining("Njeri Kariuki's invitation link has expired."),
+        findsOneWidget,
+      );
+      expect(find.textContaining('1 invitation'), findsNothing);
+      expect(find.textContaining('One invitation'), findsNothing);
+    });
+
+    testWidgets('a settled directory raises no callout', (tester) async {
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      final reader = _StaffReader(
+        queryHandler: (_) async => [
+          _staffSnapshot('tenant-a', 'owner-a', role: TenantRole.owner),
+          _staffSnapshot('tenant-a', 'staff-a', name: 'Active Person'),
+        ],
+      );
+      await tester.pumpWidget(
+        _staffApp(controller: controller, reader: reader),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('staff-invitations-in-trouble')),
+        findsNothing,
+      );
     });
   });
 }

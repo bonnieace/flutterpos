@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expenses screens &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) {
+  .board { flex-direction: column; gap: 6px; }
+  .board h2 { width: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Expenses screens</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Five artboards for <code class="mono">TenantExpensesPanel</code>, <code class="mono">TenantExpenseCategoryScreen</code> and the two sheets they open. <strong>A proposal, drawn on 2026-09-22 and not built.</strong> Every value is a token the app already has. Read <a href="README.md">README.md</a> for what changes, what is a restyle and what is not, and a bug in the void flow found while drawing it.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="expenses-phone.html">
+      <h2>Expenses &#8212; phone</h2>
+      <p>The list, one heading&#8217;s screen, and a record&#8217;s row menu open. A labelled <em>Record expense</em>, a total that draws at its full size, headings that say they open, and the void moved into a menu.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="expenses-desktop.html">
+      <h2>Expenses &#8212; desktop</h2>
+      <p>The ring beside its legend instead of above 1,152-wide bars, and one heading&#8217;s screen at the <code class="mono">records</code> width.</p>
+      <span class="size">1440</span>
+    </a>
+
+    <a class="board" href="expenses-record.html">
+      <h2>Record an expense</h2>
+      <p>The sheet opened, filled in and refused, then the list it lands back on. Eight headings as one choice on screen, fields in the order they are checked, each complaint under its own field.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="expenses-void.html">
+      <h2>Void an expense</h2>
+      <p>Asking why, refusing no reason, and where the person ends up &#8212; which today is not where the code means them to.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="expenses-states.html">
+      <h2>States</h2>
+      <p>Every phase of the list, both kinds of row in each of their states, the ring&#8217;s eight colours measured against the page, and every sentence the sheets can come back with, marked reachable or not.</p>
+      <span class="size">1280</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

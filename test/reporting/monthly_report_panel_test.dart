@@ -100,25 +100,26 @@ void main() {
     expect(find.textContaining('July 2026'), findsNWidgets(4));
   });
 
-  testWidgets('a trustworthy month against an untrustworthy one shows no arrow', (
-    tester,
-  ) async {
-    // **The denominator was never guarded.** The tile checked this month's
-    // basis and the percentage divided by last month's, so a month whose
-    // profit the app refuses to display still came out as a trend beside a
-    // month whose profit it will.
-    await _pumpMonth(
-      tester,
-      callable: _Callable(
-        _response(),
-        previous: _response(incompleteCostLineCount: 9),
-      ),
-    );
+  testWidgets(
+    'a trustworthy month against an untrustworthy one shows no arrow',
+    (tester) async {
+      // **The denominator was never guarded.** The tile checked this month's
+      // basis and the percentage divided by last month's, so a month whose
+      // profit the app refuses to display still came out as a trend beside a
+      // month whose profit it will.
+      await _pumpMonth(
+        tester,
+        callable: _Callable(
+          _response(),
+          previous: _response(incompleteCostLineCount: 9),
+        ),
+      );
 
-    expect(_profitValue(tester), '1200.00', reason: 'this month is complete');
-    // Sales and transactions keep their arrows; only profit loses one.
-    expect(find.textContaining('July 2026'), findsNWidgets(3));
-  });
+      expect(_profitValue(tester), '1200.00', reason: 'this month is complete');
+      // Sales and transactions keep their arrows; only profit loses one.
+      expect(find.textContaining('July 2026'), findsNWidgets(3));
+    },
+  );
 
   testWidgets('a manager reads the month and is shown no profit at all', (
     tester,
@@ -159,7 +160,10 @@ Future<void> _pumpMonth(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final controller = TenantSessionController()
-    ..open(uid: 'user-a', membership: _membership(role: role));
+    ..open(
+      uid: 'user-a',
+      membership: _membership(role: role),
+    );
   addTearDown(controller.dispose);
   await tester.pumpWidget(
     MaterialApp(

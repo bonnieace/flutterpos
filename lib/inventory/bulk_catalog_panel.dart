@@ -1378,15 +1378,15 @@ final class _BulkCatalogContents extends StatelessWidget {
               '${product.cost == null ? '' : ' • costs ${product.cost!.toStringAsFixed(2)}'}',
             ),
           ),
-      SizedBox(height: tokens.spacing.s12),
-      Pagination(
+      ...Pagination(
         pageNumber: pageIndex + 1,
         previousKey: const ValueKey('bulk-catalog-previous-page'),
         pageKey: const ValueKey('bulk-catalog-page'),
         nextKey: const ValueKey('bulk-catalog-next-page'),
         onPrevious: pageIndex == 0 || busy ? null : onPreviousPage,
         onNext: view.products.hasMore && !busy ? onNextPage : null,
-      ),
+        endOfList: !view.products.hasMore,
+      ).withGapAbove(tokens.spacing.s12),
     ];
   }
 

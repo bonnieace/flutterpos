@@ -202,9 +202,17 @@ final class _AmendmentContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      key: const ValueKey('shift-amendments'),
+    return PagedListView(
+      listKey: const ValueKey('shift-amendments'),
       padding: EdgeInsets.all(tokens.spacing.s20),
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('shift-amendments-previous'),
+        nextKey: const ValueKey('shift-amendments-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
+        endOfList: !page.hasMore,
+      ),
       children: [
         // §7's "Title appears once", in both of this route's two forms: unscoped
         // it repeated the `AppScaffold` title exactly, and scoped it named
@@ -257,14 +265,6 @@ final class _AmendmentContents extends StatelessWidget {
           style: tokens.typography.caption.copyWith(
             color: tokens.colors.text.tertiary,
           ),
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('shift-amendments-previous'),
-          nextKey: const ValueKey('shift-amendments-next'),
-          onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: page.hasMore ? onNextPage : null,
         ),
       ],
     );

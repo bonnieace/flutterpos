@@ -381,9 +381,17 @@ final class _ReconciliationContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      key: const ValueKey('reconciliation-status'),
+    return PagedListView(
+      listKey: const ValueKey('reconciliation-status'),
       padding: EdgeInsets.all(tokens.spacing.s20),
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('reconciliation-status-previous'),
+        nextKey: const ValueKey('reconciliation-status-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: day.runs.hasMore ? onNextPage : null,
+        endOfList: !day.runs.hasMore,
+      ),
       children: [
         // §7's "Title appears once". This one named *which* day rather than
         // repeating the title, so the date moved to `PageHeader.subtitle` — the
@@ -581,14 +589,6 @@ final class _ReconciliationContents extends StatelessWidget {
           label: 'View unresolved differences',
           icon: Icons.report_gmailerrorred_outlined,
           onPressed: onOpenAnomalies,
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('reconciliation-status-previous'),
-          nextKey: const ValueKey('reconciliation-status-next'),
-          onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: day.runs.hasMore ? onNextPage : null,
         ),
       ],
     );

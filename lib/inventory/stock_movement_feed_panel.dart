@@ -255,9 +255,17 @@ final class _MovementFeedContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      key: const ValueKey('stock-movements-feed'),
+    return PagedListView(
+      listKey: const ValueKey('stock-movements-feed'),
       padding: EdgeInsets.all(tokens.spacing.s20),
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('stock-movements-feed-previous'),
+        nextKey: const ValueKey('stock-movements-feed-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
+        endOfList: !page.hasMore,
+      ),
       children: [
         // §7's "Title appears once": the `AppScaffold` above says `Stock
         // movements`, and this said the same thing at greater length under it.
@@ -283,6 +291,7 @@ final class _MovementFeedContents extends StatelessWidget {
           key: const ValueKey('stock-movements-feed-filter'),
           value: page.source,
           label: 'Show',
+          dense: true,
           leading: Icons.filter_list,
           items: <AppSelectItem<TenantStockMovementSource?>>[
             const AppSelectItem<TenantStockMovementSource?>(
@@ -319,14 +328,6 @@ final class _MovementFeedContents extends StatelessWidget {
                       'business.'
                 : 'No stock movement has been recorded for this business.',
           ),
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('stock-movements-feed-previous'),
-          nextKey: const ValueKey('stock-movements-feed-next'),
-          onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: page.hasMore ? onNextPage : null,
         ),
       ],
     );

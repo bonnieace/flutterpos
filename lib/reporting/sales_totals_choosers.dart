@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_staff_names.dart';
 import '../ui/fields.dart';
+import '../ui/press.dart';
 import '../ui/tokens.dart';
 import 'sales_totals.dart';
 import 'sales_totals_session_context.dart';
@@ -60,88 +61,16 @@ final class SalesTotalsChoosers extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final staff = sessionContext.staff;
     final categories = sessionContext.categories;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // The period is never null - there is no "no period" reading of a
-        // totals page - so a null answer is impossible and is refused rather
-        // than silently mapped onto a default.
-        AppSelect<TenantSalesPeriod>(
-          key: const ValueKey('sales-totals-period'),
-          label: 'Period',
-          leading: Icons.date_range_outlined,
-          value: period,
-          onChanged: (value) => onChoosePeriod(value!),
-          items: <AppSelectItem<TenantSalesPeriod>>[
-            for (final option in TenantSalesPeriod.values)
-              AppSelectItem<TenantSalesPeriod>(
-                key: ValueKey('sales-totals-period-${option.name}'),
-                value: option,
-                label: option.label,
-              ),
-          ],
-        ),
-        SizedBox(height: tokens.spacing.s12),
-        AppSelect<String?>(
-          key: const ValueKey('sales-totals-member'),
-          label: 'Member',
-          leading: Icons.person_outline,
-          value: soldById,
-          onChanged: onChooseMember,
-          items: <AppSelectItem<String?>>[
-            const AppSelectItem<String?>(
-              key: ValueKey('sales-totals-member-all'),
-              value: null,
-              label: 'Whole business',
-            ),
-            // The signed-in member is always offered, directory or not: its UID
-            // comes from the session, which no read can make unavailable.
-            if (selfUid case final uid?)
-              AppSelectItem<String?>(
-                key: const ValueKey('sales-totals-member-self'),
-                value: uid,
-                label: tenantStaffLabel(uid, names: staff.names, selfUid: uid),
-              ),
-            for (final uid in staff.uids)
-              if (uid != selfUid)
-                AppSelectItem<String?>(
-                  key: ValueKey('sales-totals-member-$uid'),
-                  value: uid,
-                  label: tenantStaffLabel(
-                    uid,
-                    names: staff.names,
-                    selfUid: selfUid,
-                  ),
-                ),
-          ],
-        ),
-        if (!staff.readable) ...[
-          SizedBox(height: tokens.spacing.s8),
-          const Text(
-            key: ValueKey('sales-totals-staff-unavailable'),
-            'The staff list could not be read, so only your own sales can be '
-            'separated out.',
-          ),
-        ] else if (staff.truncated) ...[
-          SizedBox(height: tokens.spacing.s8),
-          const Text(
-            key: ValueKey('sales-totals-staff-truncated'),
-            'This business has more members than are listed here.',
-          ),
-        ],
-        if (!categories.readable) ...[
-          SizedBox(height: tokens.spacing.s12),
-          const Text(
-            key: ValueKey('sales-totals-categories-unavailable'),
-            'The category list could not be read, so only the whole-catalog '
-            'total is available.',
-          ),
-        ] else if (categories.items.isNotEmpty) ...[
-          SizedBox(height: tokens.spacing.s12),
-          AppSelect<String?>(
+    final index = TenantSalesPeriod.values.indexOf(period);
+    // **A stepper rather than a menu, and the order is the enum's.** The four
+    // periods are a ladder - today, a week, a month, a quarter - so stepping
+    // along it is one tap where opening a menu and picking was three, and the
+    // reading stays on screen while it changes. A menu was also the only
+    // control on this page that hid its own current value behind a tap.
+    final categorySelect = categories.readable && categories.items.isNotEmpty
+        ? AppSelect<String?>(
             key: const ValueKey('sales-totals-category'),
             label: 'Category',
-            leading: Icons.category_outlined,
             value: categoryId,
             onChanged: onChooseCategory,
             items: <AppSelectItem<String?>>[
@@ -157,16 +86,171 @@ final class SalesTotalsChoosers extends StatelessWidget {
                   label: category.name,
                 ),
             ],
+          )
+        : null;
+    final memberSelect = AppSelect<String?>(
+      key: const ValueKey('sales-totals-member'),
+      label: 'Member',
+      value: soldById,
+      onChanged: onChooseMember,
+      items: <AppSelectItem<String?>>[
+        const AppSelectItem<String?>(
+          key: ValueKey('sales-totals-member-all'),
+          value: null,
+          label: 'All members',
+        ),
+        // The signed-in member is always offered, directory or not: its UID
+        // comes from the session, which no read can make unavailable.
+        if (selfUid case final uid?)
+          AppSelectItem<String?>(
+            // **Keyed by role, not by UID.** A test and the home both reach
+            // "only mine" without knowing whose session it is.
+            key: const ValueKey('sales-totals-member-self'),
+            value: uid,
+            label: tenantStaffLabel(uid, names: staff.names, selfUid: uid),
           ),
-          if (categories.truncated) ...[
-            SizedBox(height: tokens.spacing.s8),
-            const Text(
-              key: ValueKey('sales-totals-categories-truncated'),
-              'This business has more categories than are listed here.',
+        for (final uid in staff.uids)
+          if (uid != selfUid)
+            AppSelectItem<String?>(
+              key: ValueKey('sales-totals-member-$uid'),
+              value: uid,
+              label: tenantStaffLabel(
+                uid,
+                names: staff.names,
+                selfUid: selfUid,
+              ),
+            ),
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            _PeriodStep(
+              semanticLabel: 'Earlier period',
+              icon: Icons.chevron_left,
+              // The enum runs shortest first, so *earlier* is forward along it.
+              onPressed: index < TenantSalesPeriod.values.length - 1
+                  ? () => onChoosePeriod(TenantSalesPeriod.values[index + 1])
+                  : null,
+            ),
+            Expanded(
+              child: Text(
+                period.label,
+                key: const ValueKey('sales-totals-period'),
+                textAlign: TextAlign.center,
+                style: tokens.typography.titleMedium.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+            ),
+            _PeriodStep(
+              semanticLabel: 'Shorter period',
+              icon: Icons.chevron_right,
+              // There is nothing shorter than today, and a control that looks
+              // pressable and does nothing is worse than one that says it
+              // cannot.
+              onPressed: index > 0
+                  ? () => onChoosePeriod(TenantSalesPeriod.values[index - 1])
+                  : null,
             ),
           ],
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        // **Two filters, one row.** They qualify the same figure and are read
+        // together; stacked, they pushed the takings below the fold on a phone
+        // for no reading they gave back.
+        //
+        // **Captioned rather than dense, which is the opposite of what half
+        // width suggests.** `AppSelect.dense` trades the caption for a leading
+        // glyph, and at 183 logical pixels the glyph, its gap and the well's
+        // padding leave about ten characters - so both columns read *All
+        // memb...* and *All catego...*, naming neither the filter nor its
+        // value. The caption costs one line of height once and gives the value
+        // the width back.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: memberSelect),
+            if (categorySelect case final select?) ...[
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(child: select),
+            ],
+          ],
+        ),
+        if (!staff.readable) ...[
+          SizedBox(height: tokens.spacing.s8),
+          const Text(
+            key: ValueKey('sales-totals-staff-unavailable'),
+            'The colleague list could not be read, so only the whole-business '
+            'total is available.',
+          ),
+        ] else if (staff.truncated) ...[
+          SizedBox(height: tokens.spacing.s8),
+          const Text(
+            key: ValueKey('sales-totals-staff-truncated'),
+            'This business has more members than are listed here.',
+          ),
+        ],
+        if (!categories.readable) ...[
+          SizedBox(height: tokens.spacing.s8),
+          const Text(
+            key: ValueKey('sales-totals-categories-unavailable'),
+            'The category list could not be read, so only the whole-catalog '
+            'total is available.',
+          ),
+        ] else if (categories.truncated) ...[
+          SizedBox(height: tokens.spacing.s8),
+          const Text(
+            key: ValueKey('sales-totals-categories-truncated'),
+            'This business has more categories than are listed here.',
+          ),
         ],
       ],
+    );
+  }
+}
+
+/// One end of the period stepper.
+final class _PeriodStep extends StatelessWidget {
+  const _PeriodStep({
+    required this.semanticLabel,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String semanticLabel;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final size = tokens.density.minimumTapTarget;
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: semanticLabel,
+      excludeSemantics: true,
+      child: PressSurface(
+        borderRadius: BorderRadius.circular(tokens.radius.pill),
+        onPressed: onPressed,
+        hoverOverlay: tokens.colors.action.secondary.hoverFill(),
+        pressedOverlay: tokens.colors.action.secondary.pressedFill(),
+        excludeSemantics: true,
+        child: SizedBox(
+          width: size.width,
+          height: size.height,
+          child: Icon(
+            icon,
+            color: onPressed == null
+                ? tokens.colors.text.disabled
+                : tokens.colors.text.secondary,
+          ),
+        ),
+      ),
     );
   }
 }

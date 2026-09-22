@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Record an expense</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, input { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; flex-wrap: wrap; gap: 32px; padding: 20px 24px 48px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.page-stage > figure > .phone, .page-stage > figure > .desk { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+figcaption { font-size: 13px; color: #869585; max-width: 411px; text-align: center; line-height: 19px; }
+.desk + figcaption { max-width: 900px; }
+figcaption em { color: #BCCBB9; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #45F28D; }
+.m { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-feature-settings: 'tnum'; }
+
+.phone { position: relative; width: 411px; height: 891px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+.desk { position: relative; width: 1440px; height: 900px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+
+/* AppScaffold's toolbar with a subtitle: 68 high. A pushed route's back button is the 56 leading slot and
+   the title follows it with no spacing. The trailing action sits in AppBar's actions with no end inset;
+   PressSurface's 4px gutter is the only gap to the glass. */
+.bar { height: 68px; flex-shrink: 0; display: flex; align-items: center; }
+.bar .back { width: 56px; height: 68px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; color: #D4E7DD; }
+.bar .words { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.bar .t { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar .st { font-size: 14px; line-height: 21px; color: #BCCBB9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar .act { flex-shrink: 0; margin: 0 4px 0 8px; }
+.bar .glyph { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #4BE277; padding: 0; margin: 0 4px 0 8px; }
+
+/* AppButton: 48 high, radius.md, labelLarge; 16 either side with an icon, 20 without. */
+.btn { height: 48px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 20px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; cursor: pointer; }
+.btn-icon { padding: 0 16px; }
+.btn-primary { background: #4BE277; border-color: #4BE277; color: #003915; }
+.btn-secondary { background: #132A1F; border-color: #3D4A3D; color: #D4E7DD; }
+.btn-destructive { background: transparent; border-color: #EF4444; color: #EF4444; }
+.btn-block { display: flex; width: calc(100% - 8px); margin: 4px; }
+
+.body { flex: 1 1 auto; min-height: 0; padding: 20px; display: flex; flex-direction: column; }
+.body > * { flex-shrink: 0; }
+.gap { flex-shrink: 0; }
+
+/* FilterChipBar: 32 high inside a 48 target, radius.lg, labelMedium. */
+.chips { display: flex; align-items: center; height: 48px; margin-top: 8px; }
+.chip { margin: 0 4px; height: 32px; box-sizing: border-box; padding: 0 12px; display: inline-flex; align-items: center; gap: 4px; border-radius: 12px; border: 1px solid #3D4A3D; background: transparent; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; }
+.chips .chip + .chip { margin-left: 12px; }
+.chip-on { background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30); color: #4BE277; }
+
+/* The composition ring: 200 box, hole 68, ring 32, 2 between slices. */
+.ring { position: relative; height: 200px; }
+.ring svg { position: absolute; left: 50%; top: 0; margin-left: -100px; }
+.hole { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 112px; display: flex; flex-direction: column; align-items: center; }
+.hole .code { font-size: 12px; line-height: 16px; color: #869585; letter-spacing: 0.6px; }
+.hole .fig { font-size: 22px; line-height: 30.8px; color: #45F28D; white-space: nowrap; }
+
+/* One heading's share: a PressSurface row, 48 minimum, 4 gutter. */
+.shares { display: flex; flex-direction: column; gap: 16px; }
+.share { margin: 0 4px; min-height: 48px; box-sizing: border-box; padding: 6px 0; display: flex; align-items: center; gap: 12px; border-radius: 8px; cursor: pointer; }
+.share .col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.share .top { display: flex; align-items: center; }
+.share .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-right: 8px; }
+.share .name { flex: 1 1 auto; min-width: 0; font-size: 14px; line-height: 20px; font-weight: 600; color: #D4E7DD; }
+.share .pc { margin-left: 12px; font-size: 12px; line-height: 16px; color: #869585; }
+.share .amt { margin-left: 12px; font-size: 14px; line-height: 20px; color: #45F28D; }
+.share .track { height: 8px; border-radius: 2px; background: #132A1F; overflow: hidden; }
+.share .fill { height: 8px; }
+.share .chev { flex-shrink: 0; color: #869585; display: flex; }
+.share-hover { background: rgba(212, 231, 221, 0.08); }
+.share-pressed { background: rgba(212, 231, 221, 0.12); transform: scale(0.98); }
+.share-focus { outline: 2px solid #4BE277; outline-offset: 2px; }
+.count { text-align: center; font-size: 12px; line-height: 16px; color: #869585; }
+
+.hero { text-align: center; font-size: 30px; line-height: 36px; color: #45F28D; }
+.summary { text-align: center; font-size: 12px; line-height: 16px; color: #869585; }
+.h-md { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+
+/* ExpenseRow: 16 above and below, a hairline between rows. */
+.rows { display: flex; flex-direction: column; }
+.xrow { display: flex; align-items: flex-start; padding: 16px 0; }
+.xrow + .xrow { border-top: 1px solid #132A1F; }
+.xrow .w { flex-shrink: 0; margin-top: 4px; margin-right: 12px; display: flex; }
+.xrow .txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.xrow .d { font-size: 16px; line-height: 24px; color: #D4E7DD; }
+.xrow .when { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 16px; color: #869585; }
+.xrow .why { font-size: 12px; line-height: 16px; color: #BCCBB9; }
+.xrow .amt { flex-shrink: 0; margin-left: 16px; font-size: 14px; line-height: 20px; color: #45F28D; }
+.xrow .slot { flex-shrink: 0; width: 48px; height: 48px; margin-left: 8px; margin-top: -12px; display: flex; align-items: center; justify-content: center; }
+.xrow .slot button { width: 48px; height: 48px; border: 0; padding: 0; background: transparent; color: #BCCBB9; display: flex; align-items: center; justify-content: center; border-radius: 8px; cursor: pointer; }
+.xrow-void .d, .xrow-void .amt { color: #869585; }
+.xrow-void .amt { text-decoration: line-through; }
+
+/* StatusBadge: 24 high, radius 8, 14px 600, a glyph. */
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 24px; box-sizing: border-box; padding: 0 8px; border-radius: 8px; background: #283831; border: 1px solid #3D4A3D; color: #BCCBB9; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.badge-problem { background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); color: #EF4444; }
+
+/* The row menu: PopupMenuButton on surface.overlay, 48 rows. */
+.menu { position: absolute; z-index: 5; margin: 0; padding: 8px 0; list-style: none; background: #132A1F; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+.menu li { display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 16px; font-size: 14px; line-height: 21px; color: #D4E7DD; }
+
+/* Callout: radius.md, space.16, glyph 18, space.12; titleMedium over the density body. */
+.callout { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; }
+.callout > svg { flex-shrink: 0; margin-top: 3px; }
+.callout-title { margin: 0 0 4px; font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+.callout-text { margin: 0; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.c-info { background: rgba(176, 205, 189, 0.10); border-color: rgba(176, 205, 189, 0.30); }
+.c-att { background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30); }
+.c-problem { background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); }
+
+/* AppSnackBar: floating, 16 in from every edge, a status tint over surface.overlay. */
+.snack { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 6; display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.snack p { margin: 0; font-size: 16px; line-height: 24px; color: #D4E7DD; }
+.snack svg { flex-shrink: 0; }
+.snack-ok { background: linear-gradient(rgba(75, 226, 119, 0.10), rgba(75, 226, 119, 0.10)), #132A1F; border-color: rgba(75, 226, 119, 0.30); }
+.snack-info { background: linear-gradient(rgba(176, 205, 189, 0.10), rgba(176, 205, 189, 0.10)), #132A1F; border-color: rgba(176, 205, 189, 0.30); }
+
+/* showAppSheet: surface.overlay, radius.lg on top, a 32x4 handle 12 clear above and below, content 24 in. */
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 3; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; background: #132A1F; border-radius: 12px 12px 0 0; display: flex; flex-direction: column; }
+.handle { flex-shrink: 0; height: 28px; display: flex; align-items: center; justify-content: center; }
+.handle span { width: 32px; height: 4px; border-radius: 999px; background: #3D4A3D; }
+.sheet-body { padding: 24px; display: flex; flex-direction: column; }
+.sheet-body > * { flex-shrink: 0; }
+.cap { margin: 0; font-size: 12px; line-height: 16px; color: #869585; }
+.lead { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+
+/* AppTextField: label over a 48 well on surface.field, radius.md, border.strong; focus is one 2px accent edge. */
+.field { display: flex; flex-direction: column; }
+.field .lbl { margin: 0 4px 4px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; }
+.field .well { margin: 0 4px; height: 48px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; font-size: 16px; line-height: 24px; color: #D4E7DD; }
+.field .ph { color: #BCCBB9; }
+.field .well-focus { border-color: #4BE277; box-shadow: 0 0 0 1px #4BE277; }
+.field .well-error { border-color: #EF4444; }
+.field .foot { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #869585; }
+.field .foot-error { color: #EF4444; }
+.caret { display: inline-block; width: 2px; height: 20px; background: #4BE277; margin-left: 1px; vertical-align: middle; }
+
+/* The category group: AppToggleButton in a grid, one choice. */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; }
+.tile { margin: 4px; height: 48px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; }
+.tile-on { background: #4BE277; border-color: #4BE277; color: #003915; }
+.tile-error { border-color: #EF4444; }
+
+/* Skeleton */
+.sk { background: #132A1F; border-radius: 8px; }
+
+
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Expenses artboards</a></nav>
+<div class="page-stage">
+
+<figure>
+<div class="phone"><div class="bar"><button type="button" class="back" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button><span class="words"><span class="t">Expenses</span><span class="st">Spending beyond stock</span></span><button type="button" class="btn btn-primary btn-icon act"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></svg>Record expense</button></div><div class="scrim"></div><div class="sheet" style="top: 45px;" role="dialog" aria-label="Record an expense"><div class="handle"><span></span></div><div class="sheet-body"><h2 class="h-md">Record an expense</h2><div class="gap" style="height: 8px;"></div><p class="cap">It counts against profit for today, 22 Sep 2026. Stock bought to sell is not an expense &#8212; its cost is counted when it sells.</p><div class="gap" style="height: 24px;"></div><div class="field"><span class="lbl">What for</span><div class="tiles" role="radiogroup" aria-label="What for"><button type="button" class="tile" role="radio" aria-checked="false">Rent</button><button type="button" class="tile" role="radio" aria-checked="false">Wages</button><button type="button" class="tile" role="radio" aria-checked="false">Utilities</button><button type="button" class="tile" role="radio" aria-checked="false">Transport</button><button type="button" class="tile" role="radio" aria-checked="false">Supplies</button><button type="button" class="tile" role="radio" aria-checked="false">Repairs</button><button type="button" class="tile" role="radio" aria-checked="false">Licences</button><button type="button" class="tile" role="radio" aria-checked="false">Other</button></div></div><div class="gap" style="height: 16px;"></div><label class="field"><span class="lbl">Amount in KES</span><span class="well"></span></label><div class="gap" style="height: 20px;"></div><label class="field"><span class="lbl">Description</span><span class="well"><span class="ph">August rent</span></span></label><div class="gap" style="height: 32px;"></div><button type="button" class="btn btn-primary btn-block">Record expense</button><div class="gap" style="height: 12px;"></div><button type="button" class="btn btn-secondary btn-block">Cancel</button></div></div></div>
+<figcaption>Just opened &#8212; 411, the sheet at its full detent. All eight headings are on screen at once, as one choice, with none chosen. The fields follow the order <code>_submit</code> checks them in, so the first complaint is always about the top-most gap.</figcaption>
+</figure>
+
+<figure>
+<div class="phone"><div class="bar"><button type="button" class="back" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button><span class="words"><span class="t">Expenses</span><span class="st">Spending beyond stock</span></span><button type="button" class="btn btn-primary btn-icon act"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></svg>Record expense</button></div><div class="scrim"></div><div class="sheet" style="top: 45px;" role="dialog" aria-label="Record an expense"><div class="handle"><span></span></div><div class="sheet-body"><h2 class="h-md">Record an expense</h2><div class="gap" style="height: 8px;"></div><p class="cap">It counts against profit for today, 22 Sep 2026. Stock bought to sell is not an expense &#8212; its cost is counted when it sells.</p><div class="gap" style="height: 24px;"></div><div class="field"><span class="lbl">What for</span><div class="tiles" role="radiogroup" aria-label="What for"><button type="button" class="tile" role="radio" aria-checked="false">Rent</button><button type="button" class="tile" role="radio" aria-checked="false">Wages</button><button type="button" class="tile" role="radio" aria-checked="false">Utilities</button><button type="button" class="tile" role="radio" aria-checked="false">Transport</button><button type="button" class="tile tile-on" role="radio" aria-checked="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>Supplies</button><button type="button" class="tile" role="radio" aria-checked="false">Repairs</button><button type="button" class="tile" role="radio" aria-checked="false">Licences</button><button type="button" class="tile" role="radio" aria-checked="false">Other</button></div></div><div class="gap" style="height: 16px;"></div><label class="field"><span class="lbl">Amount in KES</span><span class="well">680.00</span></label><div class="gap" style="height: 20px;"></div><label class="field"><span class="lbl">Description</span><span class="well well-focus">Till roll and carrier bags<span class="caret"></span></span></label><div class="gap" style="height: 32px;"></div><button type="button" class="btn btn-primary btn-block">Record expense</button><div class="gap" style="height: 12px;"></div><button type="button" class="btn btn-secondary btn-block">Cancel</button></div></div></div>
+<figcaption>Filled in &#8212; 411. A chosen heading is an <code>AppToggleButton</code> in its <em>on</em> state: the primary fill and the check glyph. The amount field says which currency it is in.</figcaption>
+</figure>
+
+<figure>
+<div class="phone"><div class="bar"><button type="button" class="back" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button><span class="words"><span class="t">Expenses</span><span class="st">Spending beyond stock</span></span><button type="button" class="btn btn-primary btn-icon act"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></svg>Record expense</button></div><div class="scrim"></div><div class="sheet" style="top: 45px;" role="dialog" aria-label="Record an expense"><div class="handle"><span></span></div><div class="sheet-body"><h2 class="h-md">Record an expense</h2><div class="gap" style="height: 8px;"></div><p class="cap">It counts against profit for today, 22 Sep 2026. Stock bought to sell is not an expense &#8212; its cost is counted when it sells.</p><div class="gap" style="height: 24px;"></div><div class="field"><span class="lbl">What for</span><div class="tiles" role="radiogroup" aria-label="What for"><button type="button" class="tile" role="radio" aria-checked="false">Rent</button><button type="button" class="tile" role="radio" aria-checked="false">Wages</button><button type="button" class="tile" role="radio" aria-checked="false">Utilities</button><button type="button" class="tile tile-on" role="radio" aria-checked="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>Transport</button><button type="button" class="tile" role="radio" aria-checked="false">Supplies</button><button type="button" class="tile" role="radio" aria-checked="false">Repairs</button><button type="button" class="tile" role="radio" aria-checked="false">Licences</button><button type="button" class="tile" role="radio" aria-checked="false">Other</button></div></div><div class="gap" style="height: 16px;"></div><label class="field"><span class="lbl">Amount in KES</span><span class="well well-error"></span><span class="foot foot-error">Enter an amount greater than zero.</span></label><div class="gap" style="height: 20px;"></div><label class="field"><span class="lbl">Description</span><span class="well">Delivery to Kitengela</span></label><div class="gap" style="height: 32px;"></div><button type="button" class="btn btn-primary btn-block">Record expense</button><div class="gap" style="height: 12px;"></div><button type="button" class="btn btn-secondary btn-block">Cancel</button></div></div></div>
+<figcaption>A check failed &#8212; 411. The sentence goes under the field it is about, in the field's own error slot, instead of a callout above the buttons two fields away. The wording is unchanged.</figcaption>
+</figure>
+
+<figure>
+<div class="phone"><div class="bar"><button type="button" class="back" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button><span class="words"><span class="t">Expenses</span><span class="st">Spending beyond stock</span></span><button type="button" class="btn btn-primary btn-icon act"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></svg>Record expense</button></div><div class="body"><div class="chips" role="group" aria-label="The stretch of days these expenses cover"><button type="button" class="chip" aria-pressed="false">Today</button><button type="button" class="chip" aria-pressed="false">Last 7 days</button><button type="button" class="chip chip-on" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>Last 30 days</button></div><div class="gap" style="height: 20px;"></div><div class="ring" role="img" aria-label="Spending by category as a ring. Every category and its amount is listed below."><svg width="200" height="200" viewBox="0 0 200 200" aria-hidden="true"><path d="M 101.000 0.005 A 100.0 100.0 0 1 1 25.518 166.726 L 49.566 145.612 A 68.0 68.0 0 1 0 101.000 32.007 Z" fill="#45F28D"></path><path d="M 24.198 165.224 A 100.0 100.0 0 0 1 35.228 23.812 L 55.712 48.400 A 68.0 68.0 0 0 0 48.247 144.109 Z" fill="#6FB7F2"></path><path d="M 36.765 22.532 A 100.0 100.0 0 0 1 59.158 8.720 L 71.936 38.061 A 68.0 68.0 0 0 0 57.249 47.120 Z" fill="#B8D6C5"></path><path d="M 60.992 7.922 A 100.0 100.0 0 0 1 80.236 1.972 L 86.247 33.405 A 68.0 68.0 0 0 0 73.770 37.263 Z" fill="#34B169"></path><path d="M 82.201 1.597 A 100.0 100.0 0 0 1 92.974 0.247 L 94.903 32.191 A 68.0 68.0 0 0 0 88.211 33.030 Z" fill="#849E8F"></path><path d="M 94.970 0.127 A 100.0 100.0 0 0 1 99.000 0.005 L 99.000 32.007 A 68.0 68.0 0 0 0 96.899 32.071 Z" fill="#2C5340"></path></svg><div class="hole"><span class="code">KES</span><span class="fig m">70830.00</span></div></div><div class="gap" style="height: 20px;"></div><div class="shares"><div class="share " role="button" tabindex="0" aria-label="Open Rent, KES 45000.00, 64 per cent of what was spent."><div class="col"><div class="top"><span class="dot" style="background: #45F28D;"></span><span class="name">Rent</span><span class="pc">64%</span><span class="amt m">KES 45000.00</span></div><div class="track"><div class="fill" style="width: 63.53%; background: #45F28D;"></div></div></div><span class="chev"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></div><div class="share " role="button" tabindex="0" aria-label="Open Wages, KES 18000.00, 25 per cent of what was spent."><div class="col"><div class="top"><span class="dot" style="background: #6FB7F2;"></span><span class="name">Wages</span><span class="pc">25%</span><span class="amt m">KES 18000.00</span></div><div class="track"><div class="fill" style="width: 25.41%; background: #6FB7F2;"></div></div></div><span class="chev"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></div><div class="share " role="button" tabindex="0" aria-label="Open Utilities, KES 3200.00, 5 per cent of what was spent."><div class="col"><div class="top"><span class="dot" style="background: #B8D6C5;"></span><span class="name">Utilities</span><span class="pc">5%</span><span class="amt m">KES 3200.00</span></div><div class="track"><div class="fill" style="width: 4.52%; background: #B8D6C5;"></div></div></div><span class="chev"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></div><div class="share " role="button" tabindex="0" aria-label="Open Repairs, KES 2500.00, 4 per cent of what was spent."><div class="col"><div class="top"><span class="dot" style="background: #34B169;"></span><span class="name">Repairs</span><span class="pc">4%</span><span class="amt m">KES 2500.00</span></div><div class="track"><div class="fill" style="width: 3.53%; background: #34B169;"></div></div></div><span class="chev"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></div><div class="share " role="button" tabindex="0" aria-label="Open Transport, KES 1450.00, 2 per cent of what was spent."><div class="col"><div class="top"><span class="dot" style="background: #849E8F;"></span><span class="name">Transport</span><span class="pc">2%</span><span class="amt m">KES 1450.00</span></div><div class="track"><div class="fill" style="width: 2.05%; background: #849E8F;"></div></div></div><span class="chev"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></div><div class="share " role="button" tabindex="0" aria-label="Open Supplies, KES 680.00, 1 per cent of what was spent."><div class="col"><div class="top"><span class="dot" style="background: #2C5340;"></span><span class="name">Supplies</span><span class="pc">1%</span><span class="amt m">KES 680.00</span></div><div class="track"><div class="fill" style="width: 0.96%; background: #2C5340;"></div></div></div><span class="chev"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></div></div><div class="gap" style="height: 12px;"></div><p class="count" style="margin: 0;">7 records, last 30 days</p></div><div class="snack snack-ok" role="status"><svg width="18" height="18" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><p>Expense recorded.</p></div></div>
+<figcaption>Back on the list &#8212; 411. The queued write is treated as done, the way the catalog treats it (<em>Category added.</em>). Today every expense answers <em>Saved on this device; waiting to sync.</em>, even with a full signal, because the app's writer always queues.</figcaption>
+</figure>
+
+</div>
+</body>
+</html>

@@ -304,6 +304,143 @@ void main() {
     viewports: responsiveViewports,
   );
 
+  // **The index the settings strip became**, photographed for the reason `16b`
+  // above records one screen over: a surface that appears in no capture is a
+  // surface nobody is checking. The index is where every standing is stated, so
+  // it is the one place a wrong standing would be visible at all.
+  screenshotCase(
+    '16c-settings-index',
+    build: () {
+      final reader = FakeTenantReader.business();
+      return inSession(
+        TenantSettingsScreen(
+          standings: (session) => TenantSettingsStandingsRepository(
+            session: session,
+            reader: reader,
+          ).read(collectionReader: reader),
+          destinations: _settingsDestinations(reader),
+        ),
+      );
+    },
+    viewports: responsiveViewports,
+  );
+
+  // The one standing that raises a callout above the list. A business with no
+  // published currency cannot ring up a sale on any device, which is a
+  // different kind of fact from a printer nobody has set up - and this is the
+  // only capture in which that callout exists.
+  screenshotCase(
+    '16d-settings-index-no-currency',
+    build: () {
+      final reader = FakeTenantReader(
+        documents: const <String, Map<String, Object?>>{},
+        collections: <String, Map<String, Map<String, Object?>>>{
+          'tenants/$seedTenantId/configuration': <String, Map<String, Object?>>{
+            'branding': <String, Object?>{'companyName': seedTenantName},
+          },
+        },
+      );
+      return inSession(
+        TenantSettingsScreen(
+          standings: (session) => TenantSettingsStandingsRepository(
+            session: session,
+            reader: reader,
+          ).read(collectionReader: reader),
+          destinations: _settingsDestinations(reader),
+        ),
+      );
+    },
+    viewports: responsiveViewports,
+  );
+
+  // **Stock counts, opened from the index**, drawn to `docs/design/stock-counts/`
+  // and photographed with that design's own shop so the two can be laid side
+  // by side: six categories, eight people, and a rota with one gap and one
+  // category down to somebody who has been deactivated. It goes through
+  // `TenantSettingPage`, so the toolbar, the inset and the scroll are the
+  // host's and not a stand-in.
+  screenshotCase(
+    '16e-stock-counts',
+    build: () => inSession(
+      _stockCountsPage(
+        _stockCountsReader(schedule: _stockCountsSchedule),
+        writer: FakeConfigurationDocumentWriter(),
+      ),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  // A build with no writer: the answers as text, only the chosen card, and no
+  // Save - rather than controls that look editable and are not.
+  screenshotCase(
+    '16f-stock-counts-read-only',
+    build: () => inSession(
+      _stockCountsPage(_stockCountsReader(schedule: _stockCountsSchedule)),
+    ),
+  );
+
+  // A published document nobody can parse. The form seeds from the schedule
+  // that interrupts nobody, which is also exactly what the till is doing.
+  screenshotCase(
+    '16g-stock-counts-damaged',
+    build: () => inSession(
+      _stockCountsPage(
+        _stockCountsReader(
+          schedule: const <String, Object?>{'enforcement': 'sometimes'},
+        ),
+        writer: FakeConfigurationDocumentWriter(),
+      ),
+    ),
+  );
+
+  // One person's choice open on a phone: `AppSelect`'s own menu, with the
+  // current answer marked.
+  screenshotCase(
+    '16h-stock-counts-choice-open',
+    build: () => inSession(
+      _stockCountsPage(
+        _stockCountsReader(schedule: _stockCountsSchedule),
+        writer: FakeConfigurationDocumentWriter(),
+      ),
+    ),
+    viewports: const <ScreenshotViewport>[mobileViewport],
+    fullPage: false,
+    afterPump: (tester) async {
+      final select = find.byKey(const ValueKey('stock-take-assign-st-peter'));
+      await tester.ensureVisible(select);
+      await tester.pumpAndSettle();
+      await tester.tap(select);
+      await tester.pumpAndSettle();
+    },
+  );
+
+  // **Counting the shelf**, photographed with the shop the stock count design
+  // shows: 240 products, 118 counted, one a zero, one left empty, and one box
+  // holding a number that is not a count. The invalid figure is typed after
+  // the pump, because an invalid number is never recorded - it exists only in
+  // the box, which is exactly what the row is saying.
+  screenshotCase(
+    '16i-stock-count',
+    build: () => inSession(
+      _stockCountScreen(),
+      controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
+    ),
+    viewports: const <ScreenshotViewport>[webViewport, mobileViewport],
+    fullPage: false,
+    afterPump: (tester) async {
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const ValueKey('stock-take-line-pd-fanta')),
+          matching: find.byType(TextField),
+        ),
+        '1000001',
+      );
+      await tester.pumpAndSettle();
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+    },
+  );
+
   // -------------------------------------------------------------------------
   // Catalog and stock
   // -------------------------------------------------------------------------
@@ -1076,12 +1213,27 @@ void main() {
   screenshotCase(
     '32-shift-history',
     build: () => inSession(
-      TenantShiftHistoryScreen(
-        reader: FakeTenantReader.business(),
-        returnActions: fakeReturnActions(),
-      ),
+      _shiftHistory(),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
+    viewports: responsiveViewports,
+  );
+
+  // **Where a card goes since 2026-09-22**: the Sales report, on the shift's
+  // day and narrowed to whoever ran it - the morning shift is the cashier's, so
+  // the staff select reads their name rather than *All staff*.
+  screenshotCase(
+    '32b-shift-history-to-sales',
+    build: () => inSession(
+      _shiftHistory(),
+      controller: seedSession(role: TenantRole.manager, uid: managerUid),
+    ),
+    afterPump: (tester) async {
+      await tester.tap(
+        find.byKey(const ValueKey('shift-history-sales-link-shift-morning')),
+      );
+      await tester.pumpAndSettle();
+    },
     viewports: responsiveViewports,
   );
 
@@ -1319,3 +1471,251 @@ Map<String, double> _weeklyReportSeed() {
     before.startBusinessDate: 96000,
   };
 }
+
+/// The counting screen over the stock count design's shop.
+///
+/// Five named products head the list in name order; 235 more follow them, so
+/// the progress card can say *118 of 240* and mean it. The draft resumes 118
+/// counts on today's business date, which is the case the screen is opened
+/// in most: part-way down an aisle.
+Widget _stockCountScreen() {
+  const businessDate = '2026-09-22';
+  TenantProduct product(String id, String name, String sku) =>
+      TenantProduct.fromDocument(
+        path: 'tenants/$seedTenantId/products/$id',
+        data: <String, Object?>{
+          'name': name,
+          'SKU': sku,
+          'price': 120,
+          'quantity': 30,
+          'categoryId': 'cat-household',
+        },
+      );
+  final products = <TenantProduct>[
+    product('pd-blue-band', 'Blue Band 250g', 'SKU-00108'),
+    product('pd-fanta', 'Fanta Orange 300ml', 'SKU-00233'),
+    product('pd-kericho', 'Kericho Gold 100s', 'SKU-00301'),
+    product('pd-omo', 'Omo Fast Action 1kg', 'SKU-00377'),
+    product('pd-tusker', 'Tusker Lager 500ml', 'SKU-00412'),
+    for (var i = 1; i <= 235; i++)
+      product(
+        'pd-shelf-$i',
+        'Zz shelf item ${i.toString().padLeft(3, '0')}',
+        'SKU-${(500 + i).toString().padLeft(5, '0')}',
+      ),
+  ];
+  TenantStockTakeCount counted(int units) => TenantStockTakeCount(
+    counted: units,
+    seenQuantity: 30,
+    countedAt: DateTime.utc(2026, 9, 22, 8),
+  );
+  final draft = TenantStockTakeDraft(
+    takeId: tenantStockTakeId(
+      tenantId: seedTenantId,
+      counterUid: cashierUid,
+      requestId: 'stocktake-screenshot',
+      businessDate: businessDate,
+    ),
+    tenantId: seedTenantId,
+    businessDate: businessDate,
+    scope: const TenantStockTakeEverything(),
+    productsInScope: products.length,
+    startedAt: DateTime.utc(2026, 9, 22, 7),
+    counts: <String, TenantStockTakeCount>{
+      'pd-blue-band': counted(19),
+      'pd-kericho': counted(0),
+      'pd-tusker': counted(41),
+      for (var i = 1; i <= 115; i++) 'pd-shelf-$i': counted(i % 17),
+    },
+  );
+  return TenantStockTakeScreen(
+    catalog: FakeCatalogSource(
+      snapshot: CheckoutCatalogSnapshot.forTesting(
+        uid: cashierUid,
+        tenantId: seedTenantId,
+        configuration: TenantCheckoutConfiguration(currency: seedCurrency),
+        categories: seedCatalogCategories(),
+        products: products,
+      ),
+    ),
+    drafts: _ScreenshotStockTakeDrafts(draft),
+    writer: _ScreenshotStockTakeWriter(),
+    businessDate: () => businessDate,
+  );
+}
+
+/// Holds one resumed count and forgets nothing, which is all a capture needs.
+final class _ScreenshotStockTakeDrafts implements TenantStockTakeDraftSource {
+  _ScreenshotStockTakeDrafts(this._draft);
+
+  TenantStockTakeDraft? _draft;
+
+  @override
+  TenantStockTakeDraft? draftFor({
+    required String uid,
+    required String tenantId,
+  }) => _draft;
+
+  @override
+  Future<void> save({
+    required String uid,
+    required TenantStockTakeDraft draft,
+  }) async => _draft = draft;
+
+  @override
+  Future<void> clear({required String uid, required String tenantId}) async =>
+      _draft = null;
+}
+
+final class _ScreenshotStockTakeWriter implements TenantStockTakeWriter {
+  @override
+  Future<TenantStockTakeWriteResult> submitPage(
+    TenantStockTakePageIntent intent,
+  ) async => TenantStockTakeWriteResult.queued(intent.operationId);
+}
+
+/// The published rota the stock count captures draw: *Ask at the register* on
+/// Monday and Thursday, five people down for a category each.
+const Map<String, Object?> _stockCountsSchedule = <String, Object?>{
+  'enforcement': 'prompt',
+  'weekdays': <int>[DateTime.monday, DateTime.thursday],
+  'assignments': <Map<String, Object?>>[
+    <String, Object?>{'uid': 'st-boniface', 'categoryId': 'cat-paint'},
+    <String, Object?>{'uid': 'st-david', 'categoryId': 'cat-plumbing'},
+    <String, Object?>{'uid': 'st-grace', 'categoryId': 'cat-power-tools'},
+    <String, Object?>{'uid': 'st-lydia', 'categoryId': 'cat-electrical'},
+    <String, Object?>{'uid': 'st-peter', 'categoryId': 'cat-hand-tools'},
+  ],
+  'updatedBy': ownerUid,
+};
+
+/// `docs/design/stock-counts/`'s shop, which is not the seeded business.
+///
+/// **Its own reader rather than the seed's**, because the design's people and
+/// categories are the point of the capture - an invited member on the rota, a
+/// deactivated one still down for a category, a category nobody counts - and
+/// the seeded corner shop has none of them. The IDs sort in the design's own
+/// order, which is the order a page of them is read in.
+FakeTenantReader _stockCountsReader({Map<String, Object?>? schedule}) {
+  const root = 'tenants/$seedTenantId';
+  Map<String, Object?> member(
+    String uid,
+    String name, {
+    String role = 'cashier',
+    String status = 'active',
+  }) => <String, Object?>{
+    'uid': uid,
+    'email': '$uid@mwangi.test',
+    'name': name,
+    'role': role,
+    'status': status,
+    'invitationStatus': status == 'pending' ? 'sent' : 'accepted',
+  };
+  final staff = <String, Map<String, Object?>>{
+    ownerUid: member(ownerUid, 'Asha Mwangi', role: 'owner'),
+    'st-boniface': member('st-boniface', 'Boniface Otieno', role: 'admin'),
+    'st-david': member('st-david', 'David Mutiso', status: 'inactive'),
+    'st-grace': member('st-grace', 'Grace Wanjiru', role: 'manager'),
+    'st-lydia': member('st-lydia', 'Lydia Achieng', status: 'pending'),
+    'st-njeri': member('st-njeri', 'Njeri Kariuki', status: 'pending'),
+    'st-peter': member('st-peter', 'Peter Kamau'),
+    'st-samuel': member('st-samuel', 'Samuel Ochieng', status: 'pending'),
+  };
+  return FakeTenantReader(
+    documents: <String, Map<String, Object?>>{
+      root: <String, Object?>{
+        'tenantId': seedTenantId,
+        'name': 'Mwangi Hardware',
+        'slug': seedTenantSlug,
+        'status': 'active',
+        'ownerUid': ownerUid,
+      },
+      for (final entry in staff.entries)
+        '$root/staff/${entry.key}': entry.value,
+      if (schedule != null) '$root/configuration/stock_take': schedule,
+    },
+    collections: <String, Map<String, Map<String, Object?>>>{
+      '$root/staff': staff,
+      '$root/categories': const <String, Map<String, Object?>>{
+        'cat-electrical': <String, Object?>{'name': 'Electrical'},
+        'cat-fasteners': <String, Object?>{'name': 'Fasteners'},
+        'cat-hand-tools': <String, Object?>{'name': 'Hand tools'},
+        'cat-paint': <String, Object?>{'name': 'Paint'},
+        'cat-plumbing': <String, Object?>{'name': 'Plumbing'},
+        'cat-power-tools': <String, Object?>{'name': 'Power tools'},
+      },
+    },
+  );
+}
+
+/// The Stock counts page as the settings index opens it.
+Widget _stockCountsPage(
+  FakeTenantReader reader, {
+  TenantConfigurationDocumentWriter? writer,
+}) => TenantSettingPage(
+  destination: TenantSettingsDestination(
+    settingKey: 'stock-take',
+    kind: TenantSettingKind.stockCounts,
+    icon: Icons.fact_check_outlined,
+    allowedRoles: TenantStockTakeSchedulePublisher.allowedRoles,
+    builder: (_) =>
+        TenantStockTakeSettingsPanel(reader: reader, writer: writer),
+  ),
+);
+
+/// Shift history over the seeded business, with its cards opening the Sales
+/// report the way `lib/main.dart` wires them: on the shift's day, narrowed to
+/// whoever ran it, against the same reader.
+Widget _shiftHistory() {
+  final reader = FakeTenantReader.business();
+  return TenantShiftHistoryScreen(
+    reader: reader,
+    returnActions: fakeReturnActions(),
+    salesReportRoute: ({required businessDate, required staffId}) =>
+        TenantSalesReportScreen(
+          reader: reader,
+          reportReader: reader,
+          totalsCallable: FakeCallable(seedSalesTotalsResponse()),
+          returnActions: fakeReturnActions(),
+          initialBusinessDate: businessDate,
+          initialStaffId: staffId,
+        ),
+  );
+}
+
+/// The four settings the composition root offers, for the index captures.
+///
+/// Each destination hosts the same panel `lib/main.dart` hosts, so a picture of
+/// the index is a picture of the real list rather than four invented rows.
+List<TenantSettingsDestination> _settingsDestinations(
+  TenantDataReader reader,
+) => <TenantSettingsDestination>[
+  TenantSettingsDestination(
+    settingKey: 'business-details',
+    kind: TenantSettingKind.businessDetails,
+    icon: Icons.storefront_outlined,
+    allowedRoles: TenantBrandingPublisher.allowedRoles,
+    builder: (_) => TenantBrandingPanel(reader: reader),
+  ),
+  TenantSettingsDestination(
+    settingKey: 'currency',
+    kind: TenantSettingKind.currency,
+    icon: Icons.payments_outlined,
+    allowedRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
+    builder: (_) => TenantCheckoutConfigurationPanel(reader: reader),
+  ),
+  TenantSettingsDestination(
+    settingKey: 'printer',
+    kind: TenantSettingKind.printer,
+    icon: Icons.print_outlined,
+    allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
+    builder: (_) => TenantPrinterConfigurationPanel(reader: reader),
+  ),
+  TenantSettingsDestination(
+    settingKey: 'stock-take',
+    kind: TenantSettingKind.stockCounts,
+    icon: Icons.fact_check_outlined,
+    allowedRoles: TenantStockTakeSchedulePublisher.allowedRoles,
+    builder: (_) => TenantStockTakeSettingsPanel(reader: reader),
+  ),
+];

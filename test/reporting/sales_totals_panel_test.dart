@@ -1,12 +1,13 @@
 import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/fields.dart';
-import 'package:flutter_application_1/ui/stats.dart';
+import 'package:flutter_application_1/ui/card.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,20 +22,6 @@ String _figure(WidgetTester tester, String key) =>
 /// is read off the notice rather than off a paragraph.
 String _notice(WidgetTester tester, String key) =>
     tester.widget<Callout>(find.byKey(ValueKey(key))).message;
-
-/// Opens a [Disclosure] by its summary. Its child is out of the tree until then.
-///
-/// **`ensureVisible` and not `scrollUntilVisible`**, which is the trap
-/// `PLAN.md` records from 2026-08-14: the latter stops when a widget has been
-/// *built*, and a tap on something below the fold lands on nothing without
-/// failing. The tender folds sit under a card, a chooser and five figures, so on
-/// an 800 x 600 test surface they are past the bottom of the page.
-Future<void> _open(WidgetTester tester, String summary) async {
-  await tester.ensureVisible(find.text(summary));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text(summary));
-  await tester.pumpAndSettle();
-}
 
 /// Chooses one option from an [AppSelect], opening it first.
 ///
@@ -91,9 +78,12 @@ void main() {
       expect(find.text('Sales totals'), findsNothing);
     });
 
-    testWidgets('every fold on the page fits one line on a phone', (
-      tester,
-    ) async {
+    testWidgets('the card carries no folds at all', (tester) async {
+      // **All three went on 2026-09-21**, on the product owner's call: the
+      // basis fold above the figures and the two tender explanations. What
+      // each guarded is now either a badge on the figure it qualifies or the
+      // row's own label, so this asserts the absence rather than measuring a
+      // summary that no longer exists.
       await _pump(
         tester,
         _controller(TenantRole.owner),
@@ -101,20 +91,7 @@ void main() {
         width: 411,
       );
 
-      final summaries = tester
-          .widgetList<Disclosure>(find.byType(Disclosure))
-          .map((disclosure) => disclosure.summary)
-          .toList();
-      // The page's own basis, and the two explanations the tender breakdown
-      // carries when it has an unrecorded and an unrecognised bucket.
-      expect(summaries, hasLength(3));
-      for (final summary in summaries) {
-        expect(
-          summary.length,
-          lessThanOrEqualTo(Disclosure.summaryCharacterBudget),
-          reason: summary,
-        );
-      }
+      expect(find.byType(Disclosure), findsNothing);
     });
 
     testWidgets('the unpublished-currency notice is a §2.1 status', (
@@ -160,13 +137,19 @@ void main() {
             )
             .first,
       );
-      final tile = tester.renderObject<RenderBox>(
-        find.ancestor(
-          of: find.byKey(const ValueKey('sales-totals-amount')),
-          matching: find.byType(StatTile),
-        ),
+      // **Measured against the card, not a tile.** The headline stopped being
+      // a `StatTile` when this screen became a card per question; the property
+      // the assertion protects is unchanged, so it is the container that
+      // changed rather than the rule.
+      final card = tester.renderObject<RenderBox>(
+        find
+            .ancestor(
+              of: find.byKey(const ValueKey('sales-totals-amount')),
+              matching: find.byType(AppCard),
+            )
+            .first,
       );
-      expect(figure.size.width, lessThanOrEqualTo(tile.size.width));
+      expect(figure.size.width, lessThanOrEqualTo(card.size.width));
       expect(_figure(tester, 'sales-totals-amount'), 'KES 4820.75');
     });
 
@@ -237,10 +220,10 @@ void main() {
     ]);
 
     await _pump(tester, _controller(TenantRole.owner), callable);
-    await _choose(
+    await _stepPeriod(
       tester,
-      'sales-totals-period',
-      'sales-totals-period-last30Days',
+      TenantSalesPeriod.today,
+      TenantSalesPeriod.last30Days,
     );
     await tester.pump();
     await tester.pump();
@@ -273,6 +256,96 @@ void main() {
           .data,
       '2026-07-31 • your sales only',
     );
+  });
+
+  testWidgets('one day compares its cashiers, a longer period does not', (
+    tester,
+  ) async {
+    // **The card is absent rather than wrong for a longer period.** A shift
+    // belongs to one business date and its summary is a per-shift total, so
+    // summing them over a stretch would put one cashier in several columns.
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      _Callable(<Object?>[_response(), _response()]),
+      reader: _Reader(
+        currency: 'KES',
+        staff: <String, Map<String, String?>>{
+          'tenant-a': <String, String?>{'cashier-a': 'Amina Njoki'},
+        },
+        shifts: <Map<String, Object?>>[
+          _shiftDocument(
+            id: 'shift-100',
+            staffId: 'owner-a',
+            salesMinor: 90000,
+          ),
+          _shiftDocument(
+            id: 'shift-200',
+            staffId: 'cashier-a',
+            salesMinor: 210000,
+            hour: 14,
+          ),
+        ],
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('sales-totals-shifts')), findsOne);
+    // The given name under each bar, and the figure above it.
+    expect(find.text('Amina'), findsOne);
+    expect(find.text('2.1k'), findsOne);
+
+    // Choosing a longer period takes the comparison away with it.
+    await _stepPeriod(
+      tester,
+      TenantSalesPeriod.today,
+      TenantSalesPeriod.last30Days,
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('sales-totals-shifts')), findsNothing);
+  });
+
+  testWidgets('a running shift is drawn without inventing its takings', (
+    tester,
+  ) async {
+    // Its totals are written by the close, so there is no figure to give the
+    // column a height.
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      _Callable(<Object?>[_response(), _response()]),
+      reader: _Reader(
+        currency: 'KES',
+        shifts: <Map<String, Object?>>[
+          _shiftDocument(
+            id: 'shift-100',
+            staffId: 'owner-a',
+            salesMinor: 90000,
+          ),
+          _shiftDocument(id: 'shift-200', staffId: 'owner-a', hour: 18),
+        ],
+      ),
+    );
+
+    expect(find.text('Open'), findsOne);
+    expect(
+      _calloutOrText(tester, 'sales-totals-shifts-open'),
+      contains('still running'),
+    );
+  });
+
+  testWidgets('a shift read that fails costs the page nothing', (tester) async {
+    // The figure a manager came for is the takings; a comparison that could
+    // not be read is one card absent, never a lost page.
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      _Callable(<Object?>[_response(), _response()]),
+      reader: _Reader(currency: 'KES'),
+    );
+
+    expect(find.byKey(const ValueKey('sales-totals-shifts')), findsNothing);
+    expect(_figure(tester, 'sales-totals-amount'), 'KES 4820.75');
   });
 
   testWidgets('one colleague can be totalled separately', (tester) async {
@@ -469,10 +542,10 @@ void main() {
       callable,
       reader: reader,
     );
-    await _choose(
+    await _stepPeriod(
       tester,
-      'sales-totals-period',
-      'sales-totals-period-last7Days',
+      TenantSalesPeriod.today,
+      TenantSalesPeriod.last7Days,
     );
     await tester.pump();
     await tester.pump();
@@ -491,12 +564,23 @@ void main() {
     // second period because it genuinely depends on the period, and a bare
     // count would have hidden a cached read leaking out as easily as it hid
     // this one.
+    //
+    // **The shift read is the third and is not cached, deliberately.** The
+    // per-cashier comparison is one day's shifts, so it belongs to the period
+    // rather than to the session - and unlike the categories and the roster it
+    // has to be asked again when the day changes. It is listed here rather
+    // than filtered out so that a *second* shift read on one period would
+    // still fail this case.
     expect(
       reader.queries
           .map((query) => query.collectionPath)
           .where((path) => !path.endsWith('/expenses'))
           .toList(),
-      <String>['tenants/tenant-a/categories', 'tenants/tenant-a/staff'],
+      <String>[
+        'tenants/tenant-a/categories',
+        'tenants/tenant-a/staff',
+        'tenants/tenant-a/shifts',
+      ],
     );
     // **Asserted against the takings tile rather than counted across the
     // page.** The point here is that the currency was read and applied, and
@@ -504,7 +588,9 @@ void main() {
     // to share the number - the profit is drawn now, and it is the same 4820.75
     // because nothing was subtracted from it.
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sales-totals-amount'))).data,
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-totals-amount')))
+          .data,
       contains('KES 4820.75'),
     );
   });
@@ -539,7 +625,11 @@ void main() {
     );
     // The whole point of that sentence is that a shorter period can be picked,
     // so the chooser must survive the refusal.
-    await _choose(tester, 'sales-totals-period', 'sales-totals-period-today');
+    await _stepPeriod(
+      tester,
+      TenantSalesPeriod.last90Days,
+      TenantSalesPeriod.today,
+    );
     await tester.pump();
     await tester.pump();
 
@@ -821,29 +911,13 @@ void main() {
 
     await _pump(tester, _controller(TenantRole.owner), callable);
 
-    // The explanation is a `Disclosure` now, so it is out of the tree until it
-    // is opened - which is also the assertion that it is not permanently in the
-    // way of the figures it explains.
-    expect(
-      find.byKey(const ValueKey('sales-totals-tender-unrecorded-note')),
-      findsNothing,
-    );
-    await _open(tester, 'Why a sale names no method');
-    expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('sales-totals-tender-unrecorded-note')),
-          )
-          .data,
-      // **Two sales reach this sentence now, and it names both.** It used to
-      // say only that a sale predated the tender field, which stopped being
-      // the whole truth when the register stopped preselecting a method: a
-      // current sale lands here whenever nobody said how the customer paid.
-      'Some sales name no payment method: they were recorded before payment '
-      'methods were captured, or nobody said how the customer paid. They are '
-      'listed separately rather than as unpaid.',
-    );
-    expect(find.textContaining('unpaid sale'), findsNothing);
+    // **The fold is gone, and the fact it guarded is not.** The product owner
+    // removed the two explanatory tips from this card on 2026-09-21; what had
+    // to survive is that a sale naming no method is never called unpaid, which
+    // is the row's own label and the reason it is listed at all.
+    expect(_figure(tester, 'sales-totals-tender-unrecorded'), '4800.75');
+    expect(find.text('Not recorded'), findsOne);
+    expect(find.textContaining('unpaid'), findsNothing);
     // Nothing modelled was recorded, so the verification disclaimer would be
     // about nothing that is on screen.
     expect(
@@ -857,16 +931,10 @@ void main() {
 
     await _pump(tester, _controller(TenantRole.owner), callable);
 
-    await _open(tester, 'An unrecognised method');
-    expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('sales-totals-tender-other-note')),
-          )
-          .data,
-      'Some sales name a payment method this app does not recognise. Their '
-      'takings are still inside the total above.',
-    );
+    // Its own row, its own figure, and its takings still inside the total -
+    // which is the whole of what the removed fold explained.
+    expect(find.text('Unrecognised'), findsOne);
+    expect(_figure(tester, 'sales-totals-tender-other'), '20.00');
   });
 
   testWidgets('a server that reports no split still reports the total', (
@@ -1048,10 +1116,10 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    await _choose(
+    await _stepPeriod(
       tester,
-      'sales-totals-period',
-      'sales-totals-period-last7Days',
+      TenantSalesPeriod.today,
+      TenantSalesPeriod.last7Days,
     );
     await tester.pump();
     await tester.pump();
@@ -1265,15 +1333,21 @@ void main() {
     await tester.pump();
 
     expect(_figure(tester, 'sales-totals-amount'), 'KES 9.00');
-    await _open(tester, 'What these totals include');
-    expect(find.textContaining('On this device'), findsOneWidget);
+    // **The badge carries what the removed fold carried.** Whose count this is
+    // is not a footnote on a device answer - it is the difference between the
+    // whole business and this till - so it sits on the figure now.
+    expect(find.byKey(const ValueKey('sales-totals-device-basis')), findsOne);
     expect(callable.pending, hasLength(1));
 
     callable.completeFirst();
     await tester.pump();
     await tester.pump();
     expect(_figure(tester, 'sales-totals-amount'), 'KES 4820.75');
-    expect(find.textContaining('On this device'), findsNothing);
+    // The server answered, so it is no longer this device's figure.
+    expect(
+      find.byKey(const ValueKey('sales-totals-device-basis')),
+      findsNothing,
+    );
   });
 }
 
@@ -1287,12 +1361,16 @@ Future<void> _pump(
   int staffPageSize = 25,
   double? width,
 }) async {
-  if (width != null) {
-    tester.view.physicalSize = Size(width, 891);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-  }
+  // **Tall enough to build the whole page, since it became a card per
+  // question.** The default 800x600 test surface stopped short of the profit
+  // note and the cards under it, and a `ListView` does not build what it
+  // cannot show - so `find.byKey` reported them missing when they were only
+  // unbuilt. A case that is specifically about a narrow screen still says so
+  // with `width`.
+  tester.view.physicalSize = Size(width ?? 800, 2400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(
@@ -1322,11 +1400,13 @@ class _Reader implements TenantDataReader {
     Map<String, Map<String, String?>> staff =
         const <String, Map<String, String?>>{},
     this.currency,
+    List<Map<String, Object?>> shifts = const <Map<String, Object?>>[],
     this.throws = false,
     this.staffUnreadable = false,
     this.answersOutsideTenant = false,
   }) : categories = Map<String, List<String>>.of(categories),
-       staff = Map<String, Map<String, String?>>.of(staff);
+       staff = Map<String, Map<String, String?>>.of(staff),
+       shifts = List<Map<String, Object?>>.of(shifts);
 
   /// The code published in `configuration/checkout`, or none at all.
   final String? currency;
@@ -1338,6 +1418,9 @@ class _Reader implements TenantDataReader {
   /// canonical record records none. Every business always has its owner,
   /// because the directory reads that record before anything else.
   final Map<String, Map<String, String?>> staff;
+
+  /// The shift documents one day holds, for the per-cashier comparison.
+  final List<Map<String, Object?>> shifts;
 
   final bool throws;
 
@@ -1417,6 +1500,17 @@ class _Reader implements TenantDataReader {
       );
     }
     final tenantId = query.collectionPath.split('/')[1];
+    if (query.collectionPath.endsWith('/shifts')) {
+      return Future<List<TenantQueryDocumentSnapshot>>.value(
+        <TenantQueryDocumentSnapshot>[
+          for (final shift in shifts)
+            TenantQueryDocumentSnapshot(
+              path: '${query.collectionPath}/${shift['shiftId']}',
+              data: shift,
+            ),
+        ],
+      );
+    }
     // Firestore pages a collection in ascending document-ID order and the
     // repository proves it, so the fake has to answer in that order too.
     if (isStaff) {
@@ -1632,4 +1726,54 @@ Map<Key?, String> _optionLabels(WidgetTester tester, String select) {
     find.byKey(ValueKey(select)),
   );
   return <Key?, String>{for (final item in control.items) item.key: item.label};
+}
+
+/// One shift document as the close writes it, or as an open shift stands.
+Map<String, Object?> _shiftDocument({
+  required String id,
+  required String staffId,
+  int? salesMinor,
+  int hour = 9,
+}) => <String, Object?>{
+  'shiftId': id,
+  'tenantId': 'tenant-a',
+  'staffId': staffId,
+  'deviceId': 'dev-0123456789abcdef01234567deadbeef',
+  // **The pinned clock's business date, not the real one.** The query answers
+  // with the day it read, and `loadDayShifts` refuses a document belonging to
+  // another day - so a fixture dated "now" is rejected by the guard rather
+  // than drawn.
+  'businessDate': checkoutBusinessDate(DateTime.utc(2026, 7, 31, 9)),
+  'status': salesMinor == null ? 'open' : 'closed',
+  'startTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, hour)),
+  if (salesMinor != null) ...<String, Object?>{
+    'closingCashMinor': salesMinor,
+    'totalSalesMinor': salesMinor,
+    'totalSales': salesMinor / 100,
+    'transactionCount': 4,
+  },
+};
+
+/// The sentence a keyed plain `Text` carries.
+String _calloutOrText(WidgetTester tester, String key) =>
+    tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+/// Walks the period stepper, which replaced the period menu, until [to] is
+/// showing.
+///
+/// Named by the period rather than by a number of taps, so a case says which
+/// reading it wants and not how many chevrons that happens to be.
+Future<void> _stepPeriod(
+  WidgetTester tester,
+  TenantSalesPeriod from,
+  TenantSalesPeriod to,
+) async {
+  final steps =
+      TenantSalesPeriod.values.indexOf(to) -
+      TenantSalesPeriod.values.indexOf(from);
+  final label = steps > 0 ? 'Earlier period' : 'Shorter period';
+  for (var step = 0; step < steps.abs(); step++) {
+    await tester.tap(find.bySemanticsLabel(label));
+    await tester.pumpAndSettle();
+  }
 }

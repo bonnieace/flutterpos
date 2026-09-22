@@ -180,7 +180,10 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
       };
       return TenantNamedPage<TenantSalePage>(
         page: page,
-        names: await _resolverFor(session, reader).resolve(page.items.map((sale) => sale.soldById)),
+        names: await _resolverFor(
+          session,
+          reader,
+        ).resolve(page.items.map((sale) => sale.soldById)),
       );
     };
     _loader = readWith(widget.reader);
@@ -295,9 +298,17 @@ final class _SaleHistoryContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      key: const ValueKey('sale-history'),
+    return PagedListView(
+      listKey: const ValueKey('sale-history'),
       padding: EdgeInsets.all(tokens.spacing.s20),
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('sale-history-previous'),
+        nextKey: const ValueKey('sale-history-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: (page?.hasMore ?? false) ? onNextPage : null,
+        endOfList: page?.hasMore == false,
+      ),
       children: [
         // **§7's "Title appears once".** Both branches drew this route's name a
         // second time under the `PageHeader` that carries it — `Recent sales`
@@ -370,14 +381,6 @@ final class _SaleHistoryContents extends StatelessWidget {
             'payment is stated as not recorded.',
           ),
         ],
-        SizedBox(height: tokens.spacing.s16),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('sale-history-previous'),
-          nextKey: const ValueKey('sale-history-next'),
-          onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: (page?.hasMore ?? false) ? onNextPage : null,
-        ),
       ],
     );
   }

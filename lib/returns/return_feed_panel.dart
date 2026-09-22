@@ -26,15 +26,6 @@ import 'return_offsets.dart';
 import 'return_verification.dart';
 
 /// Business-wide return history reached from the home screen.
-/// The day a returns list opens on, and the standing it opens showing.
-///
-/// **Today and every standing, on the product owner's call of 2026-09-06.** A
-/// returns screen is opened to answer "what came back today" far more often
-/// than "what has ever come back", and the standing starts open because the
-/// one thing a manager is looking for - a pending return waiting on them - must
-/// not be behind a filter they have to know to change.
-const String tenantReturnFeedAllDates = '';
-
 final class TenantReturnFeedScreen extends StatelessWidget {
   const TenantReturnFeedScreen({
     super.key,
@@ -142,7 +133,19 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
   int _generation = 0;
   bool _busy = false;
 
-  /// The day the reversal was taken, or [tenantReturnFeedAllDates].
+  /// The day the reversal was taken. Exactly one day, always.
+  ///
+  /// **Today, on the product owner's call of 2026-09-06.** A returns screen is
+  /// opened to answer "what came back today" far more often than "what has ever
+  /// come back".
+  ///
+  /// **And no "every day" reading, as of 2026-09-21.** The control was three
+  /// fixed options - today, yesterday, all dates - and is a date picker now, so
+  /// every day is reachable and exactly one is ever applied. The sentinel that
+  /// stood for "all dates" went with it, and so did the reason it was kept: that
+  /// returns predating `recordedOn` had no day and would otherwise be
+  /// unreachable. That expired when the field became required (#110), on the
+  /// finding that SIT holds no such return.
   late String _recordedOn;
 
   /// The standing shown, or null for every standing.
@@ -156,12 +159,6 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
 
   String get _today =>
       checkoutBusinessDate((widget.clock?.call() ?? DateTime.now()).toUtc());
-
-  String get _yesterday => checkoutBusinessDate(
-    (widget.clock?.call() ?? DateTime.now()).toUtc().subtract(
-      const Duration(days: 1),
-    ),
-  );
 
   void _setRecordedOn(String value) {
     if (value == _recordedOn) return;
@@ -250,9 +247,7 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
               ).loadReturns(
                 pageSize: widget.pageSize,
                 cursor: cursor,
-                recordedOn: recordedOn == tenantReturnFeedAllDates
-                    ? null
-                    : recordedOn,
+                recordedOn: recordedOn,
                 status: standing,
               );
           final names = await _resolverFor(session, reader).resolve(
@@ -403,7 +398,6 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
         busy: _busy,
         recordedOn: _recordedOn,
         today: _today,
-        yesterday: _yesterday,
         standing: _standing,
         onRecordedOnChanged: _setRecordedOn,
         onStandingChanged: _setStanding,
@@ -426,7 +420,6 @@ final class _ReturnFeedContents extends StatelessWidget {
     required this.busy,
     required this.recordedOn,
     required this.today,
-    required this.yesterday,
     required this.standing,
     required this.onRecordedOnChanged,
     required this.onStandingChanged,
@@ -441,10 +434,9 @@ final class _ReturnFeedContents extends StatelessWidget {
   final int pageIndex;
   final bool busy;
 
-  /// The day filter's value, and the two days it can name.
+  /// The day filter's value, and the latest day it may name.
   final String recordedOn;
   final String today;
-  final String yesterday;
 
   /// The standing filter's value. Null is every standing.
   final TenantReturnStatus? standing;
@@ -461,9 +453,17 @@ final class _ReturnFeedContents extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final page = view.page;
-    return ListView(
-      key: const ValueKey('return-feed'),
+    return PagedListView(
+      listKey: const ValueKey('return-feed'),
       padding: EdgeInsets.all(tokens.spacing.s20),
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('return-feed-previous'),
+        nextKey: const ValueKey('return-feed-next'),
+        onPrevious: pageIndex > 0 ? onPrevious : null,
+        onNext: page.hasMore ? onNext : null,
+        endOfList: !page.hasMore,
+      ),
       children: <Widget>[
         // **Two filters, and they are the screen's own furniture.** Like the
         // Sales Report's date and staff pair they are drawn before anything is
@@ -472,7 +472,6 @@ final class _ReturnFeedContents extends StatelessWidget {
         _Filters(
           recordedOn: recordedOn,
           today: today,
-          yesterday: yesterday,
           standing: standing,
           onRecordedOnChanged: onRecordedOnChanged,
           onStandingChanged: onStandingChanged,
@@ -503,23 +502,19 @@ final class _ReturnFeedContents extends StatelessWidget {
           // returns**, and telling a manager "no returns yet" about a shop
           // that has taken hundreds would be the screen lying about its own
           // controls.
+          // **One empty state, because there is only one thing it can mean.**
+          // A day is always applied now, so an empty page is never "this
+          // business has never taken a return" - it is "none on this day", and
+          // saying the first about a shop that has taken hundreds would be the
+          // screen lying about its own controls. The `return-feed-empty` key
+          // went with the reading it named.
           EmptyState(
-            key: ValueKey(
-              recordedOn == tenantReturnFeedAllDates && standing == null
-                  ? 'return-feed-empty'
-                  : 'return-feed-no-matches',
-            ),
-            title: recordedOn == tenantReturnFeedAllDates && standing == null
-                ? 'No returns yet'
-                : 'No returns match',
-            hint: recordedOn == tenantReturnFeedAllDates && standing == null
-                ? 'A return appears here once somebody records one against a '
-                      'sale.'
+            key: const ValueKey('return-feed-no-matches'),
+            title: 'No returns on $recordedOn',
+            hint: standing == null
+                ? 'Pick another day to look at.'
                 : 'Try another day, or every standing.',
-            illustration:
-                recordedOn == tenantReturnFeedAllDates && standing == null
-                ? 'empty-cart.svg'
-                : 'file-search.svg',
+            illustration: 'file-search.svg',
           )
         else
           for (final day in _byDay(page.items)) ...<Widget>[
@@ -561,14 +556,6 @@ final class _ReturnFeedContents extends StatelessWidget {
               SizedBox(height: tokens.spacing.s12),
             ],
           ],
-        SizedBox(height: tokens.spacing.s16),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('return-feed-previous'),
-          nextKey: const ValueKey('return-feed-next'),
-          onPrevious: pageIndex > 0 ? onPrevious : null,
-          onNext: page.hasMore ? onNext : null,
-        ),
         // **A footnote rather than a `Callout`.** Whose job it is to verify a
         // return is policy, not a notice: it does not change, nothing is wrong
         // when it applies, and the control it explains is simply not drawn. It
@@ -701,7 +688,6 @@ final class _Filters extends StatelessWidget {
   const _Filters({
     required this.recordedOn,
     required this.today,
-    required this.yesterday,
     required this.standing,
     required this.onRecordedOnChanged,
     required this.onStandingChanged,
@@ -709,13 +695,35 @@ final class _Filters extends StatelessWidget {
 
   final String recordedOn;
   final String today;
-  final String yesterday;
   final TenantReturnStatus? standing;
   final ValueChanged<String> onRecordedOnChanged;
   final ValueChanged<TenantReturnStatus?> onStandingChanged;
 
   /// The standing filter's value for "every standing".
   static const String _allStandings = '';
+
+  /// Opens the day picker and reports the day chosen.
+  ///
+  /// **Bounded above by [today] and not by the clock.** The feed's own business
+  /// date is what every record on this screen is filed under, and a day after
+  /// it is a day no return can have been recorded on - so offering it would be
+  /// offering a reading that is empty by construction. `_pickBusinessDate` on
+  /// the sales report bounds itself the same way.
+  ///
+  /// The floor is 2020: returns carry a business date rather than a timestamp,
+  /// and no business this app has ever served predates it.
+  Future<void> _pickDay(BuildContext context) async {
+    final last = DateTime.parse(today);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.parse(recordedOn),
+      firstDate: DateTime(2020),
+      lastDate: last,
+      helpText: 'Returns recorded on',
+    );
+    if (picked == null) return;
+    onRecordedOnChanged(picked.toIso8601String().substring(0, 10));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -724,37 +732,33 @@ final class _Filters extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Expanded(
-          child: AppSelect<String>(
+          // **A date picker since 2026-09-21, where this was a list of three.**
+          // *Today*, *Yesterday* and *All dates* were the only days a person
+          // could reach from this screen, so a return taken the Friday before
+          // last could be found only by reading back through every page. The
+          // read boundary always accepted any business date - `loadReturns`
+          // takes one exact value and validates it - so the three options were
+          // the control's limit and never the query's.
+          //
+          // **The caption above it went with them.** A button showing a date
+          // behind a calendar glyph does not need the word *Recorded* over it,
+          // which is the same redundancy the other filters on this screen shed
+          // on the same day. It keeps the word as its announcement, because
+          // `AppButton` has no `semanticLabel` and a button reading only
+          // `2026-09-21` says nothing about what pressing it does.
+          child: Semantics(
             key: const ValueKey('return-feed-day-filter'),
-            value: recordedOn,
-            label: 'Recorded',
-            // **No leading glyph on either of these.** At half the row each,
-            // the well's icon costs exactly the space "All dates" and "All
-            // types" need, and both came out on a device as "All dat…". The
-            // label above the control already says which is which.
-            items: <AppSelectItem<String>>[
-              AppSelectItem<String>(
-                key: const ValueKey('return-feed-day-today'),
-                value: today,
-                label: 'Today',
-              ),
-              AppSelectItem<String>(
-                key: const ValueKey('return-feed-day-yesterday'),
-                value: yesterday,
-                label: 'Yesterday',
-              ),
-              // **Kept reachable on purpose.** A return recorded before this
-              // field existed carries no day at all, so without this option
-              // the whole history before 2026-09-06 would be unreachable from
-              // its own screen.
-              const AppSelectItem<String>(
-                key: ValueKey('return-feed-day-all'),
-                value: tenantReturnFeedAllDates,
-                label: 'All dates',
-              ),
-            ],
-            onChanged: (value) =>
-                onRecordedOnChanged(value ?? tenantReturnFeedAllDates),
+            label: 'Returns recorded on $recordedOn. Change the day.',
+            button: true,
+            excludeSemantics: true,
+            child: AppButton(
+              key: const ValueKey('return-feed-day-picker'),
+              label: recordedOn,
+              icon: Icons.calendar_today_outlined,
+              tier: AppButtonTier.secondary,
+              expand: true,
+              onPressed: () => _pickDay(context),
+            ),
           ),
         ),
         SizedBox(width: tokens.spacing.s12),
@@ -763,6 +767,11 @@ final class _Filters extends StatelessWidget {
             key: const ValueKey('return-feed-standing-filter'),
             value: standing?.wireValue ?? _allStandings,
             label: 'Standing',
+            // The day control is a button now rather than a second well with a
+            // glyph in it, so this one can afford the glyph that lets its own
+            // caption go - the pair that `AppSelect.dense` asks for.
+            dense: true,
+            leading: Icons.filter_alt_outlined,
             items: <AppSelectItem<String>>[
               const AppSelectItem<String>(
                 key: ValueKey('return-feed-standing-all'),

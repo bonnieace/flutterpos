@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff — row menu and confirmation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Staff artboards</a></nav>
+<div class="page-stage">
+<div style="width: 520px; height: 880px; box-sizing: border-box; padding: 32px; background: #071610; display: flex; flex-direction: column; gap: 32px;">
+
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <h2 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600; color: #D4E7DD;">What a row can do</h2>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #BCCBB9;">Everything destructive names the person before it is done.</p>
+  </div>
+
+  <section style="display: flex; flex-direction: column; gap: 6px;">
+    <h3 style="margin: 0; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.8px; color: #869585;">ROW MENU, OPEN</h3>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 14px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px;">
+      <span style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: #132A1F; border: 2px solid #42A5F5; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: #D4E7DD;">PK</span>
+      <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 16px; font-weight: 600; color: #D4E7DD;">Peter Kamau</span>
+        <span style="font-size: 13px; color: #869585;">Cashier · Active</span>
+      </div>
+      <button type="button" aria-label="Actions for Peter Kamau" aria-expanded="true" style="width: 44px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #283831; border: 1px solid #3D4A3D; color: #D4E7DD; cursor: pointer;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="12" cy="19" r="1.6"></circle></svg>
+      </button>
+    </div>
+    <div style="align-self: flex-end; width: 280px; margin-top: 4px; padding: 8px; background: #132A1F; border: 1px solid #3D4A3D; border-radius: 12px; box-shadow: 0 18px 40px rgba(3, 17, 11, 0.55); display: flex; flex-direction: column;">
+      <button type="button" style="display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #D4E7DD; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BCCBB9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L20 8l-4-4L4 16z"></path></svg>
+        Edit role and details
+      </button>
+      <button type="button" style="display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #D4E7DD; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BCCBB9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18v12H3z"></path><path d="M3 7l9 6 9-6"></path></svg>
+        Resend invitation
+      </button>
+      <button type="button" style="display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #D4E7DD; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BCCBB9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-4 8"></path></svg>
+        Replace email
+      </button>
+      <span style="display: block; height: 1px; margin: 6px 12px; background: #3D4A3D;"></span>
+      <button type="button" style="display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #EF4444; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20a6 6 0 0112 0"></path><path d="M17 12h5"></path></svg>
+        Cancel invitation
+      </button>
+      <button type="button" style="display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 12px; border: 0; border-radius: 8px; background: rgba(147, 0, 10, 0.20); color: #EF4444; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20a6 6 0 0112 0"></path><path d="M17 10l5 5"></path><path d="M22 10l-5 5"></path></svg>
+        Deactivate
+      </button>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 6px;">
+    <h3 style="margin: 0; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.8px; color: #869585;">CONFIRMATION</h3>
+    <div style="padding: 20px; background: #0D1F16; border: 1px solid #3D4A3D; border-radius: 16px; display: flex; flex-direction: column; gap: 16px;">
+      <h4 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; color: #D4E7DD;">Deactivate Peter Kamau?</h4>
+      <p style="margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9;">He is signed out of every device and cannot sign in again until somebody activates him. The sales, shifts and stock adjustments already recorded under his name stay exactly as they are.</p>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: rgba(176, 205, 189, 0.10); border: 1px solid rgba(176, 205, 189, 0.30);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B0CDBD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5"></path><path d="M12 8h.01"></path></svg>
+        <span style="font-size: 13px; line-height: 18px; color: #BCCBB9;">Peter has an open shift on the counter till. It stays open.</span>
+      </div>
+      <div style="display: flex; gap: 12px;">
+        <button type="button" style="flex-grow: 1; height: 48px; border-radius: 12px; background: transparent; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 15px; font-weight: 600; cursor: pointer;">Keep his access</button>
+        <button type="button" style="flex-grow: 1; height: 48px; border-radius: 12px; background: rgba(147, 0, 10, 0.20); border: 1px solid rgba(239, 68, 68, 0.45); color: #EF4444; font-size: 15px; font-weight: 600; cursor: pointer;">Deactivate</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+</div>
+</body>
+</html>

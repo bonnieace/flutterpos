@@ -341,7 +341,7 @@ void main() {
 
       expect(searchReader.queries.last.searchPrefix, 'br');
       expect(searchReader.queries.last.startAfter, isNull);
-      expect(_text(tester, 'catalog-management-page'), 'Page 1');
+      expect(_text(tester, 'catalog-management-page'), '1');
     },
   );
 
@@ -1186,14 +1186,14 @@ void main() {
 
     await _pump(tester, _controller(), reader, writer: writer, pageSize: 2);
 
-    expect(_text(tester, 'catalog-management-page'), 'Page 1');
+    expect(_text(tester, 'catalog-management-page'), '1');
     expect(find.byKey(const ValueKey('inventory-actions-pd-3')), findsNothing);
     await tester.tap(
       find.byKey(const ValueKey('catalog-management-next-page')),
     );
     await tester.pumpAndSettle();
 
-    expect(_text(tester, 'catalog-management-page'), 'Page 2');
+    expect(_text(tester, 'catalog-management-page'), '2');
     expect(reader.cursors.last, 'pd-2');
     expect(find.byKey(const ValueKey('inventory-actions-pd-3')), findsOne);
     await tester.tap(
@@ -1201,7 +1201,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(_text(tester, 'catalog-management-page'), 'Page 1');
+    expect(_text(tester, 'catalog-management-page'), '1');
   });
 
   testWidgets('a tenant switch mid-write discards the outcome', (tester) async {

@@ -121,32 +121,32 @@ final class _TenantAuditLogPanelState extends State<TenantAuditLogPanel> {
     final cursor = _cursors[_pageIndex];
     TenantGuardedLoader<_AuditView> readWith(TenantDataReader reader) =>
         (session) async {
-      final repository = TenantAuditLogRepository(
-        session: session,
-        reader: reader,
-      );
-      final page = eventType == null
-          ? await repository.loadEvents(
-              pageSize: widget.pageSize,
-              cursor: cursor,
-            )
-          : await repository.loadEventsOfType(
-              eventType: eventType,
-              pageSize: widget.pageSize,
-              cursor: cursor,
-            );
-      // Actors and targets are both staff of this business, so one bounded
-      // resolver answers for both rather than a second lookup being added.
-      return _AuditView(
-        page: page,
-        names: await _resolverFor(session, reader).resolve(<String>[
-          for (final record in page.items) ...<String>[
-            if (record.actorUid case final actorUid?) actorUid,
-            if (record.targetUid case final targetUid?) targetUid,
-          ],
-        ]),
-      );
-    };
+          final repository = TenantAuditLogRepository(
+            session: session,
+            reader: reader,
+          );
+          final page = eventType == null
+              ? await repository.loadEvents(
+                  pageSize: widget.pageSize,
+                  cursor: cursor,
+                )
+              : await repository.loadEventsOfType(
+                  eventType: eventType,
+                  pageSize: widget.pageSize,
+                  cursor: cursor,
+                );
+          // Actors and targets are both staff of this business, so one bounded
+          // resolver answers for both rather than a second lookup being added.
+          return _AuditView(
+            page: page,
+            names: await _resolverFor(session, reader).resolve(<String>[
+              for (final record in page.items) ...<String>[
+                if (record.actorUid case final actorUid?) actorUid,
+                if (record.targetUid case final targetUid?) targetUid,
+              ],
+            ]),
+          );
+        };
     _loader = readWith(widget.reader);
     final cache = widget.reader.cached;
     _loaderCached = cache == null ? null : readWith(cache);
@@ -203,9 +203,17 @@ final class _AuditLogContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      key: const ValueKey('audit-log'),
+    return PagedListView(
+      listKey: const ValueKey('audit-log'),
       padding: EdgeInsets.all(tokens.spacing.s20),
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('audit-log-previous'),
+        nextKey: const ValueKey('audit-log-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
+        endOfList: !page.hasMore,
+      ),
       children: [
         // **The two paragraphs are gone, 2026-09-04.** They said the log holds
         // every event, that sales are not events, that it cannot be edited and
@@ -218,6 +226,7 @@ final class _AuditLogContents extends StatelessWidget {
           key: const ValueKey('audit-log-filter'),
           value: page.eventType,
           label: 'Show',
+          dense: true,
           leading: Icons.filter_list,
           items: <AppSelectItem<TenantAuditEventType?>>[
             const AppSelectItem<TenantAuditEventType?>(
@@ -239,7 +248,8 @@ final class _AuditLogContents extends StatelessWidget {
             title: page.isEventScoped
                 ? 'No "${page.eventType!.label}" event yet'
                 : 'Nothing has been recorded yet',
-            hint: 'An event appears here when somebody changes the business, '
+            hint:
+                'An event appears here when somebody changes the business, '
                 'its staff, or its stock.',
             illustration: 'file-search.svg',
           )
@@ -263,14 +273,6 @@ final class _AuditLogContents extends StatelessWidget {
                     ),
               last: identical(record, page.items.last),
             ),
-        SizedBox(height: tokens.spacing.s24),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('audit-log-previous'),
-          nextKey: const ValueKey('audit-log-next'),
-          onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: page.hasMore ? onNextPage : null,
-        ),
         SizedBox(height: tokens.spacing.s16),
         // The one sentence of the two paragraphs worth keeping, at the foot
         // where a footnote goes: a page ordered by record ID is not a page
@@ -364,7 +366,8 @@ final class _Event extends StatelessWidget {
     TenantAuditEventType.staffUpdated ||
     TenantAuditEventType.staffStatusSet => Icons.people_outline,
     TenantAuditEventType.stockAdjusted ||
-    TenantAuditEventType.returnVerifiedStockRestored => Icons.inventory_2_outlined,
+    TenantAuditEventType.returnVerifiedStockRestored =>
+      Icons.inventory_2_outlined,
     TenantAuditEventType.tenantReconciliationRequested =>
       Icons.fact_check_outlined,
     null => Icons.circle_outlined,

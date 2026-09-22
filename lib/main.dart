@@ -29,7 +29,6 @@ import 'reporting/reporting.dart';
 import 'returns/returns.dart';
 import 'sales/sales.dart';
 import 'shift/shift.dart';
-import 'ui/tokens.dart';
 
 Future<void> main() async {
   await SentryFlutter.init(
@@ -817,6 +816,33 @@ class SpiritPOSApp extends StatelessWidget {
           reader: tenantDataReader,
         );
 
+    // **One Sales report, reached two ways.** The home's *Sales* opens it on
+    // today and everyone; a shift history card opens it on that shift's day
+    // and member. Both carry the same totals, reprinting, tender and catalog,
+    // or the report a card opened would be a thinner screen under the same
+    // name - so it is built here, once.
+    Widget salesReport(
+      TenantDataReader reader, {
+      String? businessDate,
+      String? staffId,
+    }) => TenantSalesReportScreen(
+      reader: reader,
+      reportReader: tenantDataReader,
+      totalsCallable: salesTotalsCallable,
+      checkoutOutbox: checkoutOutbox,
+      returnActions: returnActions,
+      reprinter: receiptReprinter,
+      // Where a sale that names no payment method is given one, by the
+      // cashier who rang it up. The same card the old app offered this
+      // on, beside Return and Reprint.
+      tenderCallable: saleTenderCallable,
+      // The same offline catalog the till prices against, so an item row
+      // can draw the product's photograph without a read of its own.
+      catalog: checkoutCatalogCache,
+      initialBusinessDate: businessDate,
+      initialStaffId: staffId,
+    );
+
     // **Above `MaterialApp`, so every route is inside it.** A staged photograph
     // has to be drawable wherever a product is - the catalog, the till's
     // picture band, a cart line - and each of those is a separate root
@@ -1113,21 +1139,7 @@ class SpiritPOSApp extends StatelessWidget {
             expensesRoute: (reader) =>
                 TenantExpensesScreen(reader: reader, writer: expenseWriter),
             expensesRoles: TenantExpenseRepository.allowedRoles,
-            receiptLookupRoute: (reader) => TenantSalesReportScreen(
-              reader: reader,
-              reportReader: tenantDataReader,
-              totalsCallable: salesTotalsCallable,
-              checkoutOutbox: checkoutOutbox,
-              returnActions: returnActions,
-              reprinter: receiptReprinter,
-              // Where a sale that names no payment method is given one, by the
-              // cashier who rang it up. The same card the old app offered this
-              // on, beside Return and Reprint.
-              tenderCallable: saleTenderCallable,
-              // The same offline catalog the till prices against, so an item row
-              // can draw the product's photograph without a read of its own.
-              catalog: checkoutCatalogCache,
-            ),
+            receiptLookupRoute: (reader) => salesReport(reader),
             receiptLookupRoles: TenantSaleHistoryRepository.reportRoles,
             returnFeedRoute: (reader) =>
                 TenantReturnFeedScreen(reader: reader, actions: returnActions),
@@ -1176,6 +1188,14 @@ class SpiritPOSApp extends StatelessWidget {
             shiftHistoryRoute: (reader) => TenantShiftHistoryScreen(
               reader: reader,
               returnActions: returnActions,
+              // A card opens the report above on its shift's day, narrowed to
+              // whoever ran it.
+              salesReportRoute: ({required businessDate, required staffId}) =>
+                  salesReport(
+                    reader,
+                    businessDate: businessDate,
+                    staffId: staffId,
+                  ),
             ),
             auditLogRoles: TenantAuditLogRepository.allowedRoles,
             // The till, reachable for the first time. Everything below it already
@@ -1270,80 +1290,92 @@ class SpiritPOSApp extends StatelessWidget {
             // no currency is published, and `docs/printer_transport.md` §6
             // forbids guessing a printer address, so until each has been used
             // once the till cannot sell and no paper comes out.
-            settingsRoute: (reader, initialTabKey) => TenantSettingsScreen(
-              initialTabKey: initialTabKey,
-              tabs: <TenantSettingsTab>[
-                // **What the business is, in one tab: its name, its mark, and
-                // the money it trades in.** The currency had a tab to itself
-                // called *Checkout*, which named a screen rather than a
-                // subject and held one field - and a person setting a business
-                // up sets all of this in one sitting. The two panels are
-                // stacked unchanged, each keeping its own guard and its own
-                // role list; both lists are owner and administrator already, so
-                // nothing is offered to anybody new.
+            settingsRoute: (reader, initialSettingKey) => TenantSettingsScreen(
+              initialSettingKey: initialSettingKey,
+              // **One bounded collection page answers every row's standing.**
+              // All four settings are documents in one collection, so the index
+              // states what is set and what is not for one query rather than
+              // four - and rather than the nothing it could state while each
+              // panel read its own document only once its tab had been opened.
+              //
+              // It is a read the screen did not make before. See
+              // `tenant_settings_standings.dart`: this is a deliberate
+              // behaviour change, and passing null here is supported and costs
+              // nothing.
+              standings: (session) => TenantSettingsStandingsRepository(
+                session: session,
+                reader: reader,
+              ).read(collectionReader: reader),
+              destinations: <TenantSettingsDestination>[
+                // **The name, the mark and the slogan.** The currency was
+                // merged in here on 2026-09-13 and has its own row again: the
+                // objection then was to a tab called *Checkout*, which named a
+                // screen rather than a subject, and the pressure that made
+                // merging attractive was a tab strip's horizontal room. A row
+                // costs none, and *Currency* names the subject.
                 //
-                // **It costs this tab two reads instead of one**, which is the
-                // honest price of merging two settings that each read a
-                // document. Opening both used to cost the same two; it is now
-                // paid at once rather than a tab apart.
-                TenantSettingsTab(
-                  tabKey: 'business-details',
-                  label: 'Business details',
+                // Both panels keep their own guard and their own role list, and
+                // both lists were owner and administrator already, so nothing
+                // is offered to anybody new. Splitting them also undoes the
+                // two-reads-per-tab this merge cost: each is read when it is
+                // opened, which is once, and only if it is opened at all.
+                TenantSettingsDestination(
+                  settingKey: 'business-details',
+                  kind: TenantSettingKind.businessDetails,
+                  icon: Icons.storefront_outlined,
                   allowedRoles: TenantBrandingPublisher.allowedRoles,
-                  builder: (context) => Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      TenantBrandingPanel(
-                        reader: reader,
-                        writer: QueuedTenantConfigurationWriter(
-                          store: tenantMutationStore,
-                          cacheReader: reader.cached ?? reader,
-                          currentUid: () =>
-                              FirebaseAuth.instance.currentUser?.uid,
-                          remote: FirebaseTenantConfigurationDocumentWriter(
-                            isOnline: isOnline,
-                          ),
-                        ),
-                        // The logo's own prefix in Storage, gated in
-                        // `storage.rules` to the two roles that may publish the
-                        // document it goes in.
-                        logoStore: FirebaseTenantBrandingLogoStore(),
-                        // The catalog form's own cut-out, offered against a logo
-                        // for the same reason it is offered against a product
-                        // photograph: it is a picture off a phone either way.
-                        backgroundRemover:
-                            CallableTenantProductBackgroundRemover(
-                              callable:
-                                  FirebaseRemoveProductBackgroundCallable(),
-                            ),
-                        // What the receipt will now say, on the roll, the moment it
-                        // is saved. Composed here because this is the only place
-                        // holding the ESC/POS profile and the platform transport at
-                        // once.
-                        printProof: printBrandingProof,
+                  builder: (context) => TenantBrandingPanel(
+                    reader: reader,
+                    writer: QueuedTenantConfigurationWriter(
+                      store: tenantMutationStore,
+                      cacheReader: reader.cached ?? reader,
+                      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                      remote: FirebaseTenantConfigurationDocumentWriter(
+                        isOnline: isOnline,
                       ),
-                      SizedBox(
-                        height: AppTokens.componentOf(context).spacing.s24,
-                      ),
-                      // A commit asks for a full sync pass, because the catalog
-                      // refresh is the only thing that re-reads the document:
-                      // without it this device would keep pricing new sales
-                      // with the code that was just replaced.
-                      TenantCheckoutConfigurationPanel(
-                        reader: reader,
-                        writer: FirebaseTenantCheckoutConfigurationWriter(
-                          firestore: FirebaseFirestore.instance,
-                          isOnline: isOnline,
-                        ),
-                        onPublished: checkoutSyncSignals
-                            .requestSyncAfterConfigurationChange,
-                      ),
-                    ],
+                    ),
+                    // The logo's own prefix in Storage, gated in
+                    // `storage.rules` to the two roles that may publish the
+                    // document it goes in.
+                    logoStore: FirebaseTenantBrandingLogoStore(),
+                    // The catalog form's own cut-out, offered against a logo
+                    // for the same reason it is offered against a product
+                    // photograph: it is a picture off a phone either way.
+                    backgroundRemover: CallableTenantProductBackgroundRemover(
+                      callable: FirebaseRemoveProductBackgroundCallable(),
+                    ),
+                    // What the receipt will now say, on the roll, the moment it
+                    // is saved. Composed here because this is the only place
+                    // holding the ESC/POS profile and the platform transport at
+                    // once.
+                    printProof: printBrandingProof,
                   ),
                 ),
-                TenantSettingsTab(
-                  tabKey: 'printer',
-                  label: 'Printer',
+                // **The setting that stops every sale on every device, on a row
+                // that says so.** A commit asks for a full sync pass, because
+                // the catalog refresh is the only thing that re-reads the
+                // document: without it this device would keep pricing new sales
+                // with the code that was just replaced.
+                TenantSettingsDestination(
+                  settingKey: 'currency',
+                  kind: TenantSettingKind.currency,
+                  icon: Icons.payments_outlined,
+                  allowedRoles:
+                      TenantCheckoutConfigurationPublisher.allowedRoles,
+                  builder: (_) => TenantCheckoutConfigurationPanel(
+                    reader: reader,
+                    writer: FirebaseTenantCheckoutConfigurationWriter(
+                      firestore: FirebaseFirestore.instance,
+                      isOnline: isOnline,
+                    ),
+                    onPublished:
+                        checkoutSyncSignals.requestSyncAfterConfigurationChange,
+                  ),
+                ),
+                TenantSettingsDestination(
+                  settingKey: 'printer',
+                  kind: TenantSettingKind.printer,
+                  icon: Icons.print_outlined,
                   allowedRoles:
                       TenantPrinterConfigurationPublisher.allowedRoles,
                   builder: (_) => TenantPrinterConfigurationPanel(
@@ -1371,9 +1403,10 @@ class SpiritPOSApp extends StatelessWidget {
                     ),
                   ),
                 ),
-                TenantSettingsTab(
-                  tabKey: 'stock-take',
-                  label: 'Stock counts',
+                TenantSettingsDestination(
+                  settingKey: 'stock-take',
+                  kind: TenantSettingKind.stockCounts,
+                  icon: Icons.fact_check_outlined,
                   allowedRoles: TenantStockTakeSchedulePublisher.allowedRoles,
                   // **Not queued, and that is deliberate.** The queued writer
                   // carries `branding` and `printer` and passes everything else

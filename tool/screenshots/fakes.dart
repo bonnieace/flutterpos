@@ -325,6 +325,10 @@ Map<String, Map<String, Object?>> seedSales() {
     required List<Map<String, Object?>> items,
     int discountMinor = 0,
     String shiftId = 'shift-morning',
+    // **Every seeded sale was cash**, so the payment-split card could only
+    // ever photograph one bar - which is the one shape that cannot show
+    // whether the split is legible. A real day is mixed.
+    String tender = 'cash',
   }) {
     var subtotalMinor = 0;
     for (final line in items) {
@@ -348,7 +352,7 @@ Map<String, Map<String, Object?>> seedSales() {
         sequence: sequence,
       ),
       'receiptSequence': sequence,
-      'tender': 'cash',
+      'tender': tender,
       'items': items,
       'subtotalMinor': subtotalMinor,
       'subtotal': subtotalMinor / 100,
@@ -409,6 +413,7 @@ Map<String, Map<String, Object?>> seedSales() {
     'co-2': sale(
       sequence: 2,
       soldById: cashierUid,
+      tender: 'mpesa',
       discountMinor: 500,
       items: <Map<String, Object?>>[
         line(
@@ -426,6 +431,7 @@ Map<String, Map<String, Object?>> seedSales() {
     'co-3': sale(
       sequence: 3,
       soldById: managerUid,
+      tender: 'card',
       shiftId: 'shift-evening',
       items: <Map<String, Object?>>[
         line(
@@ -814,6 +820,8 @@ Map<String, Object?> seedDailyMetrics({
   int transactions = 3,
   int shiftCount = 2,
   int incompleteCostLineCount = 0,
+  double returnedSales = 0,
+  int returnCount = 0,
 }) => <String, Object?>{
   'tenantId': seedTenantId,
   'businessDate': businessDate,
@@ -826,6 +834,21 @@ Map<String, Object?> seedDailyMetrics({
   'metricGeneration': 'gen-000418',
   'sourceDirtyRevision': 3,
   'regeneratedAt': seedTimestamp(hour: 2, minute: 30),
+  // **The net block, which this fixture had never carried.** #104 made it
+  // required: reconciliation writes it on every run with `merge: false`, so a
+  // day without one is a document the decoder refuses outright. Every seeded
+  // day was therefore undecodable, and any surface reading one day by name
+  // read it as unpublished. Nothing caught it because the only reader was the
+  // seven-day window, which swallows a day it cannot read.
+  //
+  // A day nothing came back on nets to its own gross figures.
+  'netSales': sales - returnedSales,
+  'netProfit': profit - returnedSales,
+  'netTransactions': transactions,
+  'netIncompleteCostLineCount': incompleteCostLineCount,
+  'returnedSales': returnedSales,
+  'returnCount': returnCount,
+  'netMetricsVersion': 1,
 };
 
 /// One business day as the reconciliation intake records it.
@@ -966,7 +989,6 @@ final class FakeTenantReader
         const <String, Map<String, Object?>>{},
   }) {
     const root = 'tenants/$seedTenantId';
-    final today = seedBusinessDate();
     return FakeTenantReader(
       documents: <String, Map<String, Object?>>{
         root: <String, Object?>{
@@ -991,9 +1013,14 @@ final class FakeTenantReader
             transactions: offset == 0 ? 3 : 9 + offset,
             incompleteCostLineCount: offset > 3 ? 4 + offset : 0,
           ),
-        '$root/reconciliation_dirty_days/$today': seedReconciliationIntake(
-          businessDate: today,
-        ),
+        // **Every seeded day, not only today.** A published day with no intake
+        // record reads as `unconfirmed` rather than settled - deliberately, so
+        // that a read which did not answer is never mistaken for a
+        // confirmation. Seeding only today therefore made every *other* day
+        // picture the doubt rather than the happy path.
+        for (var offset = 0; offset < 7; offset++)
+          '$root/reconciliation_dirty_days/${seedBusinessDate(offset)}':
+              seedReconciliationIntake(businessDate: seedBusinessDate(offset)),
         // Also by exact path: one run is read as a document by the route that
         // explains a single run, and as a page by the route that lists them.
         for (final entry in seedReconciliationJobs().entries)
@@ -1005,6 +1032,21 @@ final class FakeTenantReader
         ...extraDocuments,
       },
       collections: <String, Map<String, Map<String, Object?>>>{
+        // **The settings index reads this collection as a page**, where every
+        // panel behind it reads one document by path. Both are seeded from the
+        // same two entries, so the index cannot photograph a business the
+        // panels would disagree with.
+        //
+        // `printer` and `stock_take` are deliberately absent: that is a real
+        // business that has not set a printer up, and it is what puts a
+        // standing badge in the capture at all.
+        '$root/configuration': <String, Map<String, Object?>>{
+          'checkout': <String, Object?>{'currency': seedCurrency},
+          'branding': <String, Object?>{
+            'companyName': seedTenantName,
+            'slogan': 'Everything the corner needs',
+          },
+        },
         '$root/categories': seedCategories,
         '$root/products': seedProducts,
         '$root/staff': seedStaff(),
@@ -1473,6 +1515,28 @@ Map<String, Object?> seedSalesTotalsResponse() => <String, Object?>{
     'unrecorded': <String, Object?>{'sales': 90.0, 'transactions': 1},
     'other': <String, Object?>{'sales': 0.0, 'transactions': 0},
   },
+  // **The net block, which this fixture had never carried.**
+  // `TenantSalesNetTotals.decode` refuses an answer without one outright -
+  // *"getSalesComparison sent no net block"* - so every capture of this screen
+  // has been photographing its own failure notice. Nothing caught it because
+  // the harness renders whatever the screen draws, and a screen drawing an
+  // error is still a screen that drew.
+  //
+  // A period nothing came back on nets to its own gross figures.
+  'net': <String, Object?>{
+    'sales': 6420.5,
+    'profit': 1937.25,
+    'transactions': 48,
+    'incompleteCostLineCount': 0,
+  },
+  'netByTender': <String, Object?>{
+    'cash': <String, Object?>{'sales': 3810.25, 'transactions': 29},
+    'mpesa': <String, Object?>{'sales': 1980.0, 'transactions': 13},
+    'card': <String, Object?>{'sales': 540.25, 'transactions': 5},
+    'unrecorded': <String, Object?>{'sales': 90.0, 'transactions': 1},
+    'other': <String, Object?>{'sales': 0.0, 'transactions': 0},
+  },
+  'returnsScanned': 0,
 };
 
 /// The offline catalog the till prices from.

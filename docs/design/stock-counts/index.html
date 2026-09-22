@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock counts screen &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) {
+  .board { flex-direction: column; gap: 6px; }
+  .board h2 { width: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Stock counts screen</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Five artboards for <code class="mono">TenantStockTakeSettingsPanel</code>, the page behind the <em>Stock counts</em> row in <a href="../settings/index.html">Settings</a>. <strong>Built on 2026-09-21</strong>, token-true, and these boards corrected to draw what the build draws &#8212; measured against the harness captures <code class="mono">16e</code> to <code class="mono">16h</code>. Read <a href="README.md">README.md</a> for what was built, where the boards moved to meet it, and what is still open.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="stock-counts-desktop.html">
+      <h2>Stock counts &#8212; desktop</h2>
+      <p>The three choices side by side with their consequences, the week, and one row per person with what they count at the end of it &#8212; under a line that says which categories nobody is counting.</p>
+      <span class="size">1440</span>
+    </a>
+
+    <a class="board" href="stock-counts-phone.html">
+      <h2>Stock counts &#8212; phone</h2>
+      <p>The top of the screen, the rota scrolled, and one person&#8217;s choice open. The two chip strips that scrolled sideways at this width are gone, and each select sits under its name.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="stock-counts-rota-rows.html">
+      <h2>Rota rows</h2>
+      <p>Every state one person&#8217;s row can be in &#8212; invited, deactivated, a category this screen cannot list, somebody down twice, read-only &#8212; with the field that produces each.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="stock-counts-coverage.html">
+      <h2>Coverage and choices</h2>
+      <p>The coverage line in all eight of its states, and the choice cards&#8217; and day toggles&#8217; own states: hover, pressed, selected, focus, read-only.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="stock-counts-screen-states.html">
+      <h2>Screen states</h2>
+      <p>Loading, not read, not allowed, a damaged document, a build that cannot write, saving, and every sentence a save can come back with &#8212; all quoted, none rewritten.</p>
+      <span class="size">1280</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

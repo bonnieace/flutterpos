@@ -146,10 +146,7 @@ void main() {
       // Monday the 17th to Wednesday the 19th: the same three weekdays the
       // current week has had. Before this it asked to the 23rd, so a Wednesday
       // was held against a full Monday-to-Sunday and read as a collapse.
-      expect(
-        callable.rangeFor('2026-08-17'),
-        '2026-08-19',
-      );
+      expect(callable.rangeFor('2026-08-17'), '2026-08-19');
     });
 
     test('a finished week is still compared whole against whole', () async {
@@ -175,15 +172,41 @@ Future<TenantWeeklyReport> _load({
   );
   final reader = _Reader(<Map<String, Object?>>[
     // Two drinks lines across two sales, one food-only sale between them.
-    _sale(saleId: 'co-001', sequence: 1, businessDate: '2026-08-25', lines: <Map<String, Object?>>[_line(productId: 'beer', categoryId: 'drinks')]),
-    _sale(saleId: 'co-002', sequence: 2, businessDate: '2026-08-25', lines: <Map<String, Object?>>[_line(productId: 'bread', categoryId: 'food', quantity: 2)]),
-    _sale(saleId: 'co-003', sequence: 3, businessDate: '2026-08-26', lines: <Map<String, Object?>>[_line(productId: 'beer', categoryId: 'drinks')]),
+    _sale(
+      saleId: 'co-001',
+      sequence: 1,
+      businessDate: '2026-08-25',
+      lines: <Map<String, Object?>>[
+        _line(productId: 'beer', categoryId: 'drinks'),
+      ],
+    ),
+    _sale(
+      saleId: 'co-002',
+      sequence: 2,
+      businessDate: '2026-08-25',
+      lines: <Map<String, Object?>>[
+        _line(productId: 'bread', categoryId: 'food', quantity: 2),
+      ],
+    ),
+    _sale(
+      saleId: 'co-003',
+      sequence: 3,
+      businessDate: '2026-08-26',
+      lines: <Map<String, Object?>>[
+        _line(productId: 'beer', categoryId: 'drinks'),
+      ],
+    ),
     // **One receipt holding both categories.** This is the case the first pass
     // at this page never built, and the one the row rendering got wrong.
-    _sale(saleId: 'co-004', sequence: 4, businessDate: '2026-08-26', lines: <Map<String, Object?>>[
-      _line(productId: 'bread', categoryId: 'food'),
-      _line(productId: 'beer', categoryId: 'drinks'),
-    ]),
+    _sale(
+      saleId: 'co-004',
+      sequence: 4,
+      businessDate: '2026-08-26',
+      lines: <Map<String, Object?>>[
+        _line(productId: 'bread', categoryId: 'food'),
+        _line(productId: 'beer', categoryId: 'drinks'),
+      ],
+    ),
   ]);
   final loader = TenantWeeklyReportLoader(
     session: session,

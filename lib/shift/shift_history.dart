@@ -63,6 +63,52 @@ final class ShiftSummaryAmendment {
   final DateTime? amendedAt;
 }
 
+/// One shift of a single trading day, **open or closed**.
+///
+/// **Why this exists beside [TenantShiftHistoryEntry].** That model refuses a
+/// shift that is not closed - deliberately, because it is the record a cash
+/// settlement is read from and an open shift has no settlement. The sales
+/// totals screen asks a different question when its period is one day: *who
+/// took what today*, and today normally has a shift still running. Waiting for
+/// the close would leave the current cashier out of the comparison.
+///
+/// So this is the permissive read: identity, staff, device and times are proved
+/// the same way, and everything the close writes is optional. A shift still
+/// open simply has no [summary] yet.
+final class TenantShiftDaySlice {
+  const TenantShiftDaySlice._({required this.shift, required this.summary});
+
+  factory TenantShiftDaySlice.fromDocument({
+    required String path,
+    required Map<String, Object?> data,
+  }) {
+    final shift = TenantShift.fromDocument(path: path, data: data);
+    return TenantShiftDaySlice._(
+      shift: shift,
+      // The three closing fields are written together or not at all, and
+      // `_closingSummary` already refuses a partial set. An open shift has
+      // none of them, which is not a defect.
+      summary: TenantShiftHistoryEntry._closingSummary(data),
+    );
+  }
+
+  final TenantShift shift;
+
+  /// The sale-derived totals the close wrote, or null while the shift runs.
+  final ShiftClosingSummary? summary;
+
+  bool get isOpen => shift.status == TenantShiftStatus.open;
+
+  /// What this shift took, or null while it is still running.
+  double? get totalSales => summary?.totalSales;
+
+  String get id => shift.id;
+  String get staffId => shift.staffId;
+  String get businessDate => shift.businessDate;
+  DateTime? get startedAt => shift.startedAt;
+  DateTime? get endedAt => shift.endedAt;
+}
+
 /// Strict read model for one closed `tenants/{tenantId}/shifts/{shiftId}`.
 ///
 /// Identity, path, device, business date, and status are proved by
@@ -356,6 +402,136 @@ final class TenantShiftHistoryRepository extends TenantReadRepository {
   /// Whether this session may page every cashier's closed shifts.
   static bool canReadEveryCashier(TenantSession session) =>
       session.canAccess(allowedRoles: managementRoles);
+
+  /// Every shift one trading day held, **open ones included**, oldest first.
+  ///
+  /// **The status filter is dropped rather than widened**, which is what makes
+  /// this a different query from [loadPage] rather than a flag on it. A
+  /// per-cashier comparison wants the shape of the day, and the shift still
+  /// running is part of that shape; a history page wants settled records, and
+  /// an open shift is not one. Two questions, two queries, two indexes.
+  ///
+  /// Needs (`businessDate`, `__name__`) and, for a cashier, (`staffId`,
+  /// `businessDate`, `__name__`). Both are in `firestore.indexes.json`.
+  Future<List<TenantShiftDaySlice>> loadDayShifts({
+    required String businessDate,
+    TenantShiftHistoryScope scope = TenantShiftHistoryScope.ownShifts,
+    int pageSize = 20,
+  }) async {
+    final ownOnly = scope == TenantShiftHistoryScope.ownShifts;
+    if (!ownOnly && !canReadEveryCashier(session)) {
+      throw const TenantShiftException('shift_history_forbidden');
+    }
+    final page = await readCollectionPage(
+      TenantCollection.shifts,
+      collectionReader: _collectionReader,
+      pageSize: pageSize,
+      // Oldest first: a day reads left to right, and the generated shift ID
+      // embeds a fixed-width millisecond timestamp so ascending document order
+      // is opening order. The recorded instants are still what is rendered.
+      descending: false,
+      equalityFilters: <String, Object?>{
+        'businessDate': businessDate,
+        if (ownOnly) 'staffId': session.uid,
+      },
+    );
+    final slices = <TenantShiftDaySlice>[];
+    for (final snapshot in page.items) {
+      final slice = TenantShiftDaySlice.fromDocument(
+        path: snapshot.path,
+        data: snapshot.data,
+      );
+      if (slice.shift.tenantId != session.tenantId) {
+        throw const TenantShiftException('cross_tenant_shift');
+      }
+      // The query filters on both, and a transport that ignored either must
+      // not put another cashier's or another day's takings under this heading.
+      if (ownOnly && slice.staffId != session.uid) {
+        throw const TenantShiftException('foreign_shift');
+      }
+      if (slice.businessDate != businessDate) {
+        throw const TenantShiftException('foreign_business_date');
+      }
+      slices.add(slice);
+    }
+    return List<TenantShiftDaySlice>.unmodifiable(slices);
+  }
+
+  /// One trading day's **closed** shifts, oldest first, for everyone or for one
+  /// member.
+  ///
+  /// **The history screen's read since 2026-09-22**, when its filters became a
+  /// day and a person - the pair the sales report and the returns feed carry.
+  /// It asks [loadDayShifts]'s question, so it rides the same two indexes:
+  /// (`businessDate`, `__name__`) and, for one member, (`staffId`,
+  /// `businessDate`, `__name__`). And it keeps what [loadPage] keeps: a shift
+  /// still running is **left out rather than refused**, because this query has
+  /// no status filter to exclude it with and it is not history yet.
+  ///
+  /// A null [staffId] is every member, and naming anyone but the session's own
+  /// UID is the same reach; both are management's. A cashier reads their own
+  /// shifts and nothing else, which is also what the rules allow.
+  Future<TenantShiftHistoryPage> loadDayPage({
+    required String businessDate,
+    String? staffId,
+    int pageSize = 20,
+    String? cursor,
+  }) async {
+    final ownOnly = staffId == session.uid;
+    if (!ownOnly && !canReadEveryCashier(session)) {
+      throw const TenantShiftException('shift_history_forbidden');
+    }
+    final page = await readCollectionPage(
+      TenantCollection.shifts,
+      collectionReader: _collectionReader,
+      pageSize: pageSize,
+      cursor: cursor,
+      // Oldest first, as [loadDayShifts] reads a day: the generated shift ID
+      // embeds a fixed-width millisecond, so ascending is opening order.
+      descending: false,
+      equalityFilters: <String, Object?>{
+        'businessDate': businessDate,
+        if (staffId != null) 'staffId': staffId,
+      },
+    );
+
+    final items = <TenantShiftHistoryEntry>[];
+    for (final snapshot in page.items) {
+      final shift = TenantShift.fromDocument(
+        path: snapshot.path,
+        data: snapshot.data,
+      );
+      if (shift.tenantId != session.tenantId) {
+        throw const TenantShiftException('cross_tenant_shift');
+      }
+      // Proved before the status is read: a transport that ignored either
+      // filter is a broken boundary whether or not the shift has closed.
+      if (staffId != null && shift.staffId != staffId) {
+        throw const TenantShiftException('foreign_shift');
+      }
+      if (shift.businessDate != businessDate) {
+        throw const TenantShiftException('foreign_business_date');
+      }
+      if (shift.status != TenantShiftStatus.closed) continue;
+      items.add(
+        TenantShiftHistoryEntry.fromDocument(
+          path: snapshot.path,
+          data: snapshot.data,
+        ),
+      );
+    }
+    return TenantShiftHistoryPage(
+      items: items,
+      nextCursor: page.nextCursor,
+      hasMore: page.hasMore,
+      // The reach the read needed: anyone's but the session's own is the
+      // every-cashier permission, whether the filter names one colleague or
+      // none.
+      scope: ownOnly
+          ? TenantShiftHistoryScope.ownShifts
+          : TenantShiftHistoryScope.everyCashier,
+    );
+  }
 
   Future<TenantShiftHistoryPage> loadPage({
     TenantShiftHistoryScope scope = TenantShiftHistoryScope.ownShifts,

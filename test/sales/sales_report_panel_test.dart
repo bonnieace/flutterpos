@@ -7,6 +7,7 @@ import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/fields.dart';
+import 'package:flutter_application_1/ui/press.dart';
 import 'package:flutter_application_1/ui/skeleton.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,9 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/notices.dart';
 
 const _businessDate = '2026-08-24';
+
+/// A day before [_businessDate], for a report opened on a past shift.
+const _before = '2026-08-21';
 const _deviceId = 'dev-0123456789abcdef0123456789abcdef';
 const _hash =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -160,7 +164,10 @@ void main() {
           lessThan(tester.getTopLeft(receipt).dx),
         );
         expect(tester.widget<Text>(time).data, isNot(contains('UTC')));
-        expect(tester.widget<Text>(time).style?.fontWeight, FontWeight.w800);
+        // The figures' face at its own weight. It asked for 800 until
+        // 2026-09-22, which JetBrains Mono is not bundled at, so the engine
+        // synthesised a bold the design never drew.
+        expect(tester.widget<Text>(time).style?.fontWeight, FontWeight.w500);
         // **Still the bare sequence, and still ambiguous.** Every register
         // starts a business date at 0001, so this named two different receipts
         // on 2026-09-17 - one from each of two tills - and the row cannot tell
@@ -388,6 +395,80 @@ void main() {
       expect(reset.endBusinessDate, '2026-08-23');
     });
 
+    testWidgets('a page turn says which way it went until the page lands', (
+      tester,
+    ) async {
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale('co-2', sequence: 2),
+        _sale('co-1', sequence: 1),
+      ]);
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.cashier,
+        pageSize: 1,
+      );
+      const next = ValueKey('sales-report-next-page');
+      const previous = ValueKey('sales-report-previous-page');
+      expect(_text(tester, 'sales-report-page'), '1');
+      expect(find.bySemanticsLabel('Showing 1'), findsOne);
+
+      final gate = reader.gate = Completer<void>();
+      await tester.tap(find.byKey(next));
+      await tester.pump();
+      await tester.pump();
+
+      // **Still the page being left**, with the spinner where the press was
+      // and the other way waiting. The figure moves when the sales do.
+      expect(_text(tester, 'sales-report-page'), '1');
+      expect(
+        find.descendant(
+          of: find.byKey(next),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOne,
+      );
+      expect(find.bySemanticsLabel('Next page, working'), findsOne);
+      expect(tester.widget<PressSurface>(find.byKey(next)).onPressed, isNull);
+      expect(
+        tester.widget<PressSurface>(find.byKey(previous)).onPressed,
+        isNull,
+      );
+
+      reader.gate = null;
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(_text(tester, 'sales-report-page'), '2');
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byKey(const ValueKey('sales-record-co-1')), findsOneWidget);
+      // The second of two sales is the end of the day, and the bar says so.
+      expect(find.bySemanticsLabel('Showing 2'), findsOne);
+      expect(find.text('· last'), findsOne);
+      expect(tester.widget<PressSurface>(find.byKey(next)).onPressed, isNull);
+      expect(
+        tester.widget<PressSurface>(find.byKey(previous)).onPressed,
+        isNotNull,
+      );
+    });
+
+    testWidgets('a day that fits one page ends with its last card', (
+      tester,
+    ) async {
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale('co-1', sequence: 1),
+      ]);
+      await _pump(tester, reader, width: 411, role: TenantRole.cashier);
+
+      expect(find.byKey(const ValueKey('sales-record-co-1')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('sales-report-next-page')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('sales-report-page')), findsNothing);
+    });
+
     testWidgets('an active ending search reruns for the newly selected date', (
       tester,
     ) async {
@@ -488,6 +569,47 @@ void main() {
         'receiptSequence': 2,
         'soldById': 'user-b',
       });
+    });
+
+    testWidgets('opens on the day and member it is handed', (tester) async {
+      // What a shift history card does: the report opened on that shift's
+      // business date and narrowed to whoever ran it - exactly as if the two
+      // filters had been set by hand.
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale('co-3', sequence: 3, soldById: 'user-b'),
+        _sale('co-2', sequence: 2, soldById: 'user-b', businessDate: _before),
+        _sale('co-1', sequence: 1, businessDate: _before),
+      ]);
+      await _pump(
+        tester,
+        reader,
+        width: 1024,
+        role: TenantRole.manager,
+        initialBusinessDate: _before,
+        initialStaffId: 'user-b',
+      );
+
+      final query = reader.salesQueries.first;
+      expect(query.startBusinessDate, _before);
+      expect(query.endBusinessDate, _before);
+      expect(query.soldById, 'user-b');
+      expect(find.byKey(const ValueKey('sales-record-co-2')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sales-record-co-1')), findsNothing);
+      expect(find.byKey(const ValueKey('sales-record-co-3')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('sales-date-filter')),
+          matching: find.text(_before),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('sales-staff-filter')),
+          matching: find.text('Baraka Cashier (user-b)'),
+        ),
+        findsWidgets,
+      );
     });
 
     testWidgets('a tenant switch discards an outstanding report page', (
@@ -1097,6 +1219,8 @@ Future<void> _pump(
   SalesTotalsCallable? totalsCallable,
   TenantReceiptReprinter? reprinter,
   SetSaleTenderCallable? tenderCallable,
+  String? initialBusinessDate,
+  String? initialStaffId,
 }) async {
   tester.view.physicalSize = Size(width, 2400);
   tester.view.devicePixelRatio = 1;
@@ -1117,6 +1241,8 @@ Future<void> _pump(
             tenderCallable: tenderCallable,
             clock: () => DateTime.utc(2026, 8, 24, 12),
             pageSize: pageSize,
+            initialBusinessDate: initialBusinessDate,
+            initialStaffId: initialStaffId,
           ),
         ),
       ),
@@ -1392,6 +1518,10 @@ final class _SalesReader
 
   final List<TenantQueryDocumentSnapshot> sales;
 
+  /// Holds every sales read until it completes, so a page turn can be watched
+  /// while its page is still being read. Null answers at once.
+  Completer<void>? gate;
+
   /// The returns filed against those sales, which the day's list and the
   /// takings band both net themselves against.
   final List<TenantQueryDocumentSnapshot> returns;
@@ -1487,6 +1617,7 @@ final class _SalesReader
     TenantSalesHistoryQuery query,
   ) async {
     salesQueries.add(query);
+    if (gate case final held?) await held.future;
     return sales
         .where((snapshot) {
           final date = snapshot.data['businessDate'] as String;

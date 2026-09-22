@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download flow &#8212; states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 24px 64px; }
+h1 { margin: 0 0 8px; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.56px; }
+p.lead { margin: 0 0 6px; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 720px; }
+p.why { margin: 0 0 24px; font-size: 13px; line-height: 20px; color: #869585; max-width: 720px; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+.grid { display: flex; gap: 24px; flex-wrap: wrap; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+figcaption { font-size: 13px; line-height: 19px; color: #869585; max-width: 264px; }
+figcaption b { color: #BCCBB9; font-weight: 600; display: block; margin-bottom: 2px; }
+.sheet { width: 264px; box-sizing: border-box; background: #0D1F16; border: 1px solid #283831; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 48px rgba(3, 17, 11, 0.6); }
+.grab { width: 34px; height: 4px; border-radius: 2px; background: #283831; align-self: center; }
+.sheet h3 { margin: 0; font-size: 17px; font-weight: 700; color: #D4E7DD; }
+.sheet p { margin: 0; font-size: 13px; line-height: 19px; color: #BCCBB9; }
+.opt { display: flex; align-items: center; gap: 10px; box-sizing: border-box; width: 100%; min-height: 48px; padding: 8px 12px; border-radius: 12px; border: 1px solid #283831; background: #132A1F; color: #D4E7DD; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left; }
+.opt.on { border-color: #4BE277; background: rgba(75, 226, 119, 0.10); }
+.radio { width: 18px; height: 18px; border-radius: 10px; border: 2px solid #869585; flex-shrink: 0; }
+.opt.on .radio { border-color: #4BE277; background: radial-gradient(circle, #4BE277 0 4px, transparent 5px); }
+.cta { width: 100%; height: 48px; border: 0; border-radius: 12px; background: #4BE277; color: #003915; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.cta[disabled] { background: #1C2A22; color: #3D4A3D; cursor: not-allowed; }
+.ghost { width: 100%; height: 48px; border: 1px solid #283831; border-radius: 12px; background: transparent; color: #D4E7DD; font-size: 15px; font-weight: 600; cursor: pointer; }
+.callout { display: flex; gap: 10px; padding: 12px; border-radius: 12px; font-size: 13px; line-height: 19px; }
+.c-warn { background: rgba(242, 193, 78, 0.10); border: 1px solid rgba(242, 193, 78, 0.30); color: #F2C14E; }
+.c-bad { background: rgba(147, 0, 10, 0.20); border: 1px solid rgba(239, 68, 68, 0.30); color: #EF4444; }
+.track { width: 100%; height: 6px; border-radius: 3px; background: #132A1F; overflow: hidden; }
+.fill { display: block; height: 100%; background: #4BE277; border-radius: 3px; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Reports artboards</a></nav>
+<div class="wrap">
+
+<h1>Download</h1>
+<p class="lead">One icon in the header action slot, on every report. It exports <strong>the report that is showing, for the period that is showing</strong> &#8212; so the sheet never asks again for something the screen already knows.</p>
+<p class="why">Nothing here exists in the app today. <span class="mono">pdf: ^3.10.0</span>, <span class="mono">printing: ^5.11.1</span> and <span class="mono">share_plus</span> are in <span class="mono">pubspec.yaml</span> already, but all three PDF files are on the unreachable list in <span class="mono">test/dev/reachable_lib_test.dart</span> and none of them is a starting point.</p>
+
+<div class="grid">
+
+<figure>
+  <div class="sheet">
+    <span class="grab"></span>
+    <h3>Download this report</h3>
+    <p>Day &#183; Today, Sat 21 Sep</p>
+    <button class="opt on"><span class="radio"></span>PDF</button>
+    <button class="opt"><span class="radio"></span>Spreadsheet (CSV)</button>
+    <div class="callout c-warn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>
+      <span>Today is not reconciled. The file will say so on its first page.</span>
+    </div>
+    <button class="cta">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="M7 11l5 5 5-5"></path><path d="M4 20h16"></path></svg>
+      Download
+    </button>
+  </div>
+  <figcaption><b>Asking</b>The period is stated, not chosen &#8212; it came from the screen. The warning is the same fact the takings card carries, repeated because the file outlives the screen.</figcaption>
+</figure>
+
+<figure>
+  <div class="sheet">
+    <span class="grab"></span>
+    <h3>Building the file</h3>
+    <p>Day &#183; Today, Sat 21 Sep</p>
+    <div class="track"><span class="fill" style="width: 46%;"></span></div>
+    <p style="color: #869585;">Nothing is sent anywhere. The file is made on this phone.</p>
+    <button class="ghost">Cancel</button>
+  </div>
+  <figcaption><b>Working</b>A determinate bar, because the page count is known before the first page is drawn. Cancellable: a month of shifts is not instant on a cheap handset.</figcaption>
+</figure>
+
+<figure>
+  <div class="sheet">
+    <span class="grab"></span>
+    <h3>Ready</h3>
+    <p style="display: flex; align-items: center; gap: 8px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+      <span class="mono" style="color: #BCCBB9;">day-2026-09-21.pdf</span>
+    </p>
+    <button class="cta">Share</button>
+    <button class="ghost">Open</button>
+  </div>
+  <figcaption><b>Done</b>Share and Open, not &#8220;Saved to Downloads&#8221; &#8212; on Android the file goes to app storage and a person who is told it is in Downloads will not find it there.</figcaption>
+</figure>
+
+<figure>
+  <div class="sheet">
+    <span class="grab"></span>
+    <h3>Could not build the file</h3>
+    <div class="callout c-bad">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;" aria-hidden="true"><path d="M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z"></path><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>
+      <span>There is not enough room on this phone.</span>
+    </div>
+    <p>Nothing was written. The report on screen is unaffected.</p>
+    <button class="cta">Try again</button>
+  </div>
+  <figcaption><b>Failed</b>Names the cause and states what was <em>not</em> done. A half-written PDF is worse than none, so the write is to a temporary file and renamed only on success.</figcaption>
+</figure>
+
+<figure>
+  <div class="sheet">
+    <span class="grab"></span>
+    <h3>Download this report</h3>
+    <p>Profit &#183; Today, Sat 21 Sep</p>
+    <button class="opt on"><span class="radio"></span>PDF</button>
+    <button class="opt"><span class="radio"></span>Spreadsheet (CSV)</button>
+    <div class="callout c-warn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>
+      <span>4 of 78 lines carry no cost. The profit in this file is a floor, and the file says so beside the figure.</span>
+    </div>
+    <button class="cta">Download</button>
+  </div>
+  <figcaption><b>The one that is not optional</b><span class="mono">profit_statement.dart</span> forbids a profit figure rendering without its basis in the same block. A PDF bypasses the widget, so the rule has to be re-enforced in the exporter &#8212; on exactly the documents that leave the building.</figcaption>
+</figure>
+
+<figure>
+  <div class="sheet">
+    <span class="grab"></span>
+    <h3>Download this report</h3>
+    <p>Week &#183; 15&#8211;21 Sep</p>
+    <button class="opt on"><span class="radio"></span>PDF</button>
+    <button class="opt"><span class="radio"></span>Spreadsheet (CSV)</button>
+    <div class="callout c-warn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>
+      <span>Thursday and Friday did not answer. The file will cover five days of the seven and name the two it is missing.</span>
+    </div>
+    <button class="cta">Download five days</button>
+  </div>
+  <figcaption><b>A partial period</b>The weekly loader swallows a failed day into a gap rather than losing the page. The export inherits the gap, so the button counts what it will actually contain.</figcaption>
+</figure>
+
+</div>
+</div>
+</body>
+</html>

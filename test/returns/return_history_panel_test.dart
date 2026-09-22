@@ -866,7 +866,7 @@ void main() {
     expect(find.byKey(const ValueKey('return-feed-entry-ret-2')), findsNothing);
   });
 
-  testWidgets('All dates drops the day filter rather than guessing one', (
+  testWidgets('the day filter always narrows to exactly one day', (
     tester,
   ) async {
     final reader = _Reader()
@@ -875,19 +875,40 @@ void main() {
       ]);
 
     await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
-    await tester.tap(find.byKey(const ValueKey('return-feed-day-filter')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('All dates').last);
-    await tester.pumpAndSettle();
 
-    // **The escape a return recorded before this field existed depends on.**
-    // Such a record carries no day, so a query that always named one would put
-    // the whole history before 2026-09-06 out of reach of its own screen.
+    // **There is no "every day" reading any more.** The control was three fixed
+    // options - today, yesterday, all dates - and is a date picker, so every
+    // query from this screen names a day. The escape the removed option existed
+    // for expired when `recordedOn` became required (#110).
+    expect(reader.queries.last.equalityFilters['recordedOn'], '2026-07-31');
     expect(
-      reader.queries.last.equalityFilters.containsKey('recordedOn'),
-      isFalse,
+      find.byKey(const ValueKey('return-feed-day-picker')),
+      findsOneWidget,
     );
     expect(find.byKey(const ValueKey('return-feed-entry-ret-1')), findsOne);
+  });
+
+  testWidgets('picking a day re-reads against that day', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-1'),
+      ]);
+
+    await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
+    await tester.tap(find.byKey(const ValueKey('return-feed-day-picker')));
+    await tester.pumpAndSettle();
+
+    // The picker names what it is choosing, rather than leaving the caption
+    // that used to sit above the control to say it.
+    expect(find.text('Returns recorded on'), findsOneWidget);
+
+    await tester.tap(find.text('29'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    // A day the old three options could not reach at all.
+    expect(reader.queries.last.equalityFilters['recordedOn'], '2026-07-29');
   });
 
   testWidgets('a day with no returns says the filter matched nothing', (
@@ -902,9 +923,11 @@ void main() {
     await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
 
     // Not "no returns yet": the business may have hundreds on another day, and
-    // a screen that says otherwise is lying about its own controls.
+    // a screen that says otherwise is lying about its own controls. With a day
+    // always applied there is no longer any state in which it could say it, so
+    // the empty state names the day instead.
     expect(find.byKey(const ValueKey('return-feed-no-matches')), findsOne);
-    expect(find.byKey(const ValueKey('return-feed-empty')), findsNothing);
+    expect(find.text('No returns on 2026-07-31'), findsOneWidget);
   });
 
   testWidgets('a narrow card never cuts the receipt off', (tester) async {

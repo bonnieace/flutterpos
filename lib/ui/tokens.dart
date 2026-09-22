@@ -1251,6 +1251,7 @@ final class AppTypeRoles {
     required this.numericBody,
     required this.mono,
     required this.numericCompact,
+    required this.monoCaption,
   });
 
   /// `headline-lg` 32 / 1.2, 700, -0.64 tracking. Screen title, expanded only.
@@ -1360,6 +1361,17 @@ final class AppTypeRoles {
   /// below `medium`, where [numericHero] at 30 is wide enough to force a grid
   /// of figures into one column on a phone.
   final TextStyle numericCompact;
+
+  /// [mono] at [caption]'s size: an identifier printed under the name it
+  /// belongs to, where it is read second.
+  ///
+  /// **New on 2026-09-22, for the stock count's rows**, where a product's SKU
+  /// sits under its name. [mono] is 14, which is right for an ID that *is* the
+  /// row's subject; under a 16 name it read as a second name. The stock count
+  /// design draws it at 12, which is [caption]'s size and leading - so this is
+  /// that pair in [mono]'s face and weight, and no size the scale did not
+  /// already have.
+  final TextStyle monoCaption;
 
   /// Hanken Grotesk, the interface face every role but [mono] is set in.
   ///
@@ -1545,6 +1557,14 @@ final class AppTypeRoles {
       fontWeight: FontWeight.w500,
       fontFeatures: _tabular,
     ),
+    // `caption`'s 12 / 16 in `data-mono`'s family and weight, untracked: at 12
+    // the -0.01em `mono` carries is a tenth of a pixel a glyph.
+    monoCaption: TextStyle(
+      fontFamily: monoFamily,
+      fontSize: 12,
+      height: 16 / 12,
+      fontWeight: FontWeight.w500,
+    ),
   );
 
   /// Every role by its `design.md` name, so a test can measure the set rather
@@ -1567,6 +1587,7 @@ final class AppTypeRoles {
     'numeric.compact': numericCompact,
     'numeric.body': numericBody,
     'mono': mono,
+    'mono.caption': monoCaption,
   };
 
   static AppTypeRoles lerp(AppTypeRoles a, AppTypeRoles b, double t) =>
@@ -1585,6 +1606,7 @@ final class AppTypeRoles {
         numericCompact: TextStyle.lerp(a.numericCompact, b.numericCompact, t)!,
         numericBody: TextStyle.lerp(a.numericBody, b.numericBody, t)!,
         mono: TextStyle.lerp(a.mono, b.mono, t)!,
+        monoCaption: TextStyle.lerp(a.monoCaption, b.monoCaption, t)!,
       );
 }
 

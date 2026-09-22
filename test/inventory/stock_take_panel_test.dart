@@ -3,6 +3,7 @@ import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:flutter_application_1/ui/meter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
@@ -14,6 +15,8 @@ import '../support/notices.dart';
 /// not a cosmetic assertion - it is the control, and it is asserted as an
 /// absence because that is the only way to assert it.
 void main() {
+  _layoutTests();
+
   testWidgets('the screen never shows what the books hold', (tester) async {
     // Every product below holds a distinctive quantity. None of those numbers
     // may be on screen: seeing the target tells a counter what to write, which
@@ -150,7 +153,11 @@ void main() {
       findsOneWidget,
       reason: 'the sentence that stops an empty box becoming a claim',
     );
-    expect(writer.pages, isEmpty, reason: 'nothing is sent until it is answered');
+    expect(
+      writer.pages,
+      isEmpty,
+      reason: 'nothing is sent until it is answered',
+    );
   });
 
   testWidgets('a count resumes where it was left, on the same day', (
@@ -215,17 +222,18 @@ void main() {
     );
   });
 
-  testWidgets('a device that has never synced says so rather than showing none', (
-    tester,
-  ) async {
-    await _pump(tester, catalog: const _Catalog.empty());
+  testWidgets(
+    'a device that has never synced says so rather than showing none',
+    (tester) async {
+      await _pump(tester, catalog: const _Catalog.empty());
 
-    expect(
-      find.byKey(const ValueKey('stock-take-no-catalog')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('stock-take-submit')), findsNothing);
-  });
+      expect(
+        find.byKey(const ValueKey('stock-take-no-catalog')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('stock-take-submit')), findsNothing);
+    },
+  );
 
   testWidgets('counting one category leaves the rest of the shelf alone', (
     tester,
@@ -240,6 +248,124 @@ void main() {
     expect(find.byKey(const ValueKey('stock-take-line-pd-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('stock-take-line-pd-2')), findsNothing);
     expect(find.byKey(const ValueKey('stock-take-line-pd-3')), findsNothing);
+  });
+}
+
+void _layoutTests() {
+  testWidgets('each row says where it stands: empty, none there, or its SKU', (
+    tester,
+  ) async {
+    await _pump(tester);
+
+    expect(
+      find.byKey(const ValueKey('stock-take-not-counted-pd-1')),
+      findsOneWidget,
+    );
+
+    await _count(tester, 'pd-1', '0');
+    // The one distinction the screen exists to keep, said in words: a zero is
+    // a look at a bare shelf, not an empty box.
+    expect(
+      find.byKey(const ValueKey('stock-take-none-there-pd-1')),
+      findsOneWidget,
+    );
+    expect(find.text('You looked, none there'), findsOneWidget);
+
+    await _count(tester, 'pd-1', '38');
+    expect(find.text('6161100000019'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('stock-take-not-counted-pd-1')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a number that is not a count marks the whole row', (
+    tester,
+  ) async {
+    final drafts = _Drafts();
+    await _pump(tester, drafts: drafts);
+
+    // Digits only reach the box, so what is left to refuse is a count past
+    // `maximumStockTakeCount`.
+    await _count(tester, 'pd-1', '${maximumStockTakeCount + 1}');
+
+    expect(
+      find.byKey(const ValueKey('stock-take-invalid-pd-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Write a whole number of units, or leave it empty.'),
+      findsOneWidget,
+      reason: 'printed once, across the row - not again under the box',
+    );
+    expect(drafts.saved, isEmpty, reason: 'nothing invalid is recorded');
+
+    await _count(tester, 'pd-1', '12');
+    expect(find.byKey(const ValueKey('stock-take-invalid-pd-1')), findsNothing);
+  });
+
+  testWidgets('a long count widens its box rather than scrolling out of it', (
+    tester,
+  ) async {
+    await _pump(tester);
+    final box = find.byKey(const ValueKey('stock-take-line-pd-1'));
+    double width() => tester.getSize(box).width;
+    // How far the value has scrolled inside the box: anything but zero hides
+    // its leading figures, and `1000000` would read as `00000`.
+    double scrolled() => tester
+        .state<EditableTextState>(
+          find.descendant(of: box, matching: find.byType(EditableText)),
+        )
+        .renderEditable
+        .offset
+        .pixels;
+
+    // How many figures fit before it grows is a property of the real face,
+    // which a widget test does not load; the screenshot harness does.
+    final resting = width();
+    await _count(tester, 'pd-1', '12');
+    expect(width(), resting, reason: 'a short count leaves the box as drawn');
+    expect(scrolled(), 0);
+
+    await _count(tester, 'pd-1', '$maximumStockTakeCount');
+    expect(width(), greaterThan(resting));
+    expect(scrolled(), 0, reason: 'every figure of the count is in view');
+
+    await _count(tester, 'pd-1', '');
+    expect(width(), resting, reason: 'and it goes back when emptied');
+  });
+
+  testWidgets('the progress card counts the lines and leaves the rest', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await _count(tester, 'pd-2', '5');
+
+    expect(find.text('1 of 3 counted'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('stock-take-remaining')))
+          .data,
+      '2 left',
+    );
+    final meter = tester.widget<AppMeter>(find.byType(AppMeter));
+    expect((meter.filled, meter.of), (1, 3));
+  });
+
+  testWidgets('hand in stays on screen however long the list is', (
+    tester,
+  ) async {
+    await _pump(tester);
+
+    expect(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.byKey(const ValueKey('stock-take-submit')),
+      ),
+      findsNothing,
+      reason: 'the button is pinned under the list, not the last row of it',
+    );
+    expect(find.byKey(const ValueKey('stock-take-submit')), findsOneWidget);
   });
 }
 
@@ -290,10 +416,8 @@ Future<void> _pump(
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(
-        controller: TenantSessionController()..open(
-          uid: 'user-cashier',
-          membership: _membership(),
-        ),
+        controller: TenantSessionController()
+          ..open(uid: 'user-cashier', membership: _membership()),
         child: Scaffold(
           body: TenantStockTakePanel(
             catalog: catalog,

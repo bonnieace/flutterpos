@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report pills &#8212; states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 24px 24px 64px; }
+h1 { margin: 0 0 8px; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.56px; }
+h2 { margin: 36px 0 6px; font-size: 17px; font-weight: 600; color: #D4E7DD; }
+p.lead { margin: 0 0 8px; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 660px; }
+p.why { margin: 0 0 14px; font-size: 13px; line-height: 20px; color: #869585; max-width: 660px; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+.stage { padding: 20px 16px; background: #071610; border: 1px solid #283831; border-radius: 12px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pill { height: 48px; box-sizing: border-box; padding: 0 20px; border-radius: 24px; border: 1px solid #283831; background: #0D1F16; color: #BCCBB9; font-size: 15px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.sel { background: #4BE277; border-color: #4BE277; color: #003915; }
+.hov { background: #132A1F; border-color: #3D4A3D; color: #D4E7DD; }
+.selhov { background: #6BFF8F; border-color: #6BFF8F; color: #003915; }
+.foc { outline: 2px solid #4BE277; outline-offset: 2px; }
+.pre { background: #0A1A12; border-color: #283831; color: #869585; transform: scale(0.97); }
+.selpre { background: #2FA85A; border-color: #2FA85A; color: #003915; transform: scale(0.97); }
+.dis { background: #0A1A12; border-color: #1C2A22; color: #3D4A3D; cursor: not-allowed; }
+.dot { width: 7px; height: 7px; border-radius: 4px; background: #F2C14E; flex-shrink: 0; }
+.label { font-size: 13px; color: #869585; width: 148px; flex-shrink: 0; }
+.spec { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid #1C2A22; }
+.spec:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 14px; }
+th { text-align: left; padding: 8px 10px 8px 0; color: #869585; font-weight: 600; border-bottom: 1px solid #283831; font-size: 13px; }
+td { padding: 9px 10px 9px 0; border-bottom: 1px solid #1C2A22; color: #BCCBB9; line-height: 20px; vertical-align: top; }
+td.mono { color: #45F28D; white-space: nowrap; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Reports artboards</a></nav>
+<div class="wrap">
+
+<h1>Report pills</h1>
+<p class="lead">A new component. <span class="mono">AppTabs</span> is a Material <span class="mono">TabBar</span> with a travelling underline &#8212; a different control for a different job, and it stays where it is on the platform console. This is a filled segmented control, and hard rule 5 means it ships with every state it can be in.</p>
+<p class="why">Each pill opens <strong>its own report</strong>. It is not a filter over a shared dashboard: Day, Week and Month have different cards, different reads and different downloads. That is why they are pills and not a period selector.</p>
+
+<h2>Resting strip, at 390</h2>
+<p class="why">Scrolls horizontally. The selected pill is scrolled into view on open, so a report five along is never off-screen when it is the one showing.</p>
+<div class="stage">
+  <div class="row" style="flex-wrap: nowrap; overflow-x: auto;">
+    <button class="pill sel">Day</button>
+    <button class="pill">Week</button>
+    <button class="pill">Month</button>
+    <button class="pill">Profit</button>
+    <button class="pill">Stock</button>
+  </div>
+</div>
+
+<h2>Every state</h2>
+<div class="stage">
+  <div class="spec"><span class="label">Enabled</span><button class="pill">Week</button><span class="label" style="width: auto;">surfaceCard on outline</span></div>
+  <div class="spec"><span class="label">Hover</span><button class="pill hov">Week</button><span class="label" style="width: auto;">lifts to surfaceElevated</span></div>
+  <div class="spec"><span class="label">Focus-visible</span><button class="pill foc">Week</button><span class="label" style="width: auto;">2px ring, 2px offset &#8212; the one stroke width in the system</span></div>
+  <div class="spec"><span class="label">Pressed</span><button class="pill pre">Week</button><span class="label" style="width: auto;">sinks and dims; spring back, never a linear fade</span></div>
+  <div class="spec"><span class="label">Selected</span><button class="pill sel">Day</button><span class="label" style="width: auto;">primary fill, onPrimary text &#8212; 12.8:1</span></div>
+  <div class="spec"><span class="label">Selected + hover</span><button class="pill selhov">Day</button><span class="label" style="width: auto;">primary brightens</span></div>
+  <div class="spec"><span class="label">Selected + pressed</span><button class="pill selpre">Day</button><span class="label" style="width: auto;">primary deepens</span></div>
+  <div class="spec"><span class="label">Disabled</span><button class="pill dis" disabled>Month</button><span class="label" style="width: auto;">a report this role may not open is not drawn at all; this is for one that cannot answer yet</span></div>
+  <div class="spec"><span class="label">Carrying a standing</span><button class="pill"><span class="dot"></span>Stock</button><span class="label" style="width: auto;">a dot only ever <em>accompanies</em> a word on the report itself &#8212; it never carries the fact alone</span></div>
+</div>
+
+<h2>Why 48 and not 40</h2>
+<p class="why">Hard rule 4 is pass/fail on a 48&#215;48 target. The reference these are drawn from uses roughly 40, which fails it. <span class="mono">AppTabs</span> already carries this fix in a comment: a Material text tab is 46 logical pixels and had been two short since it was written. These start at 48 rather than being corrected to it later.</p>
+
+<h2>What the component owns, and what it must not</h2>
+<table>
+  <tr><th style="width: 200px;">Owns</th><th>Note</th></tr>
+  <tr><td class="mono">selectedIndex</td><td>Read from the parent. The strip does not hold which report is showing &#8212; a component that owned that would be a behaviour change wearing a visual component&#8217;s clothes, which is the argument <span class="mono">ui/tabs.dart</span> already makes for not creating its own controller.</td></tr>
+  <tr><td class="mono">onSelected</td><td>The parent decides what a selection costs. Which matters here: Day is free, Week is nine callables.</td></tr>
+  <tr><td>Scroll-into-view</td><td>On mount and on selection change.</td></tr>
+  <tr><td>Keyboard</td><td>Arrow keys move between pills, Home and End to the ends, Enter or Space selects &#8212; the <span class="mono">tablist</span> contract.</td></tr>
+  <tr><td style="color: #F2C14E;">Must not: load</td><td>The strip never triggers a read. The report body behind it is built lazily on first selection and kept alive after, or switching back to Week pays the nine callables twice.</td></tr>
+</table>
+
+<h2>One thing worth knowing</h2>
+<p class="why">There is a retired decision in this repo against pills &#8212; <span class="mono">OPEN_QUESTIONS.md</span> decision 19, quoted in <span class="mono">test/dev/reachable_lib_test.dart</span>, alongside three unreachable pill widgets in <span class="mono">lib/widgets/</span>. Per <span class="mono">CLAUDE.md</span> that document is reference and not authority, and this is your call. It is named here only so nobody re-opens it as though it were settled the other way. The unreachable <span class="mono">pill_button.dart</span> is <em>not</em> a starting point: it predates the token layer and carries its own colours.</p>
+
+</div>
+</body>
+</html>

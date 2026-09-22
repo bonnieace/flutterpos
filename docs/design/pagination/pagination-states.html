@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pagination &#8212; states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+/* Every app value on this board is the token the build would read, named beside it. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+
+/* ---- Pagination: the pager group ------------------------------------------
+   One container: AppButtonSize.lg 48, radius.md 8, action.secondary's container
+   #132A1F and border #3D4A3D. PressSurface's 4px focus-ring gutter goes round the
+   group, as it goes round every pressable surface. */
+.pager { display: inline-flex; align-items: stretch; margin: 4px; min-height: 48px; box-sizing: border-box; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; vertical-align: top; }
+.pager.fill { display: flex; }                        /* compact band: the group takes the row */
+.pager.fill .nav { flex: 1 1 0; min-width: 48px; }
+.seg { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; box-sizing: border-box; margin: 0; border: 0; background: transparent; color: #D4E7DD; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; }   /* label.lg; space.16 with an icon, space.8 to it */
+.seg + .seg { border-left: 1px solid #3D4A3D; }        /* divider: surface.borderStrong */
+.seg:first-child { border-radius: 7px 0 0 7px; }
+.seg:last-child { border-radius: 0 7px 7px 0; }
+.nav { min-width: 48px; cursor: pointer; }
+.nav svg { width: 18px; height: 18px; flex-shrink: 0; fill: currentColor; }   /* AppButton.iconSize */
+.nav:hover, .nav.is-hover { background: rgba(212, 231, 221, 0.08); }         /* label @ 8% = #22392E */
+.nav:active, .nav.is-pressed { background: rgba(212, 231, 221, 0.12); }      /* label @ 12% = #2A4136 */
+.nav:focus-visible, .nav.is-focus { outline: 2px solid #4BE277; outline-offset: 2px; z-index: 1; }   /* action.focusRing */
+.nav:disabled, .nav.is-disabled { color: #5D7468; background: transparent; cursor: default; }        /* action.disabledLabel; the container stays the group's */
+.nav[aria-busy="true"] { cursor: progress; }
+.nav.glyph { padding: 0; }
+.pager:not(.fill) .nav.glyph { width: 48px; }
+.pos { gap: 4px; min-width: 94px; color: #BCCBB9; font-weight: 600; letter-spacing: 0; cursor: default; }   /* label.md, text.secondary; min width measured from 'Page 000' */
+.pos b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-variant-numeric: tabular-nums; color: #D4E7DD; }   /* numeric.body, text.primary */
+.pos i { font-style: normal; color: #BCCBB9; }
+svg.spin { width: 16px; height: 16px; fill: none; animation: spin 0.9s linear infinite; }   /* action.loadingIndicatorSize, label colour */
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { svg.spin { animation-duration: 2.4s; } }
+/* 200% text: TextScaler 2.0 on the words; glyphs keep their size, as Icon does. */
+.pager.x2 .seg { font-size: 28px; line-height: 40px; }
+.pager.x2 .pos { min-width: 156px; }
+/* The width read from the screen, in a dialog narrower than the screen: labels ellipsize. */
+.pager.squeeze .nav { min-width: 0; }
+.pager.squeeze .nav .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* P2: the range statement. label.md text.secondary, figures numeric.body text.primary. */
+.range { font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; white-space: nowrap; }
+.range b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-variant-numeric: tabular-nums; color: #D4E7DD; }
+
+.board { width: 1280px; box-sizing: border-box; padding: 40px; background: #071610; display: flex; flex-direction: column; gap: 48px; }
+h1 { margin: 0; font-size: 32px; line-height: 38.4px; font-weight: 700; letter-spacing: -0.64px; }
+h2 { margin: 0 0 4px; font-size: 22px; line-height: 30.8px; font-weight: 600; }
+.lede { margin: 8px 0 0; max-width: 840px; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.sub { margin: 0 0 20px; max-width: 840px; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.eyebrow { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #869585; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #D4E7DD; }
+.tag { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; white-space: nowrap; }
+.tag.ship { background: rgba(75, 226, 119, 0.10); border: 1px solid rgba(75, 226, 119, 0.30); color: #4BE277; }
+.tag.later { background: rgba(176, 205, 189, 0.10); border: 1px solid rgba(176, 205, 189, 0.30); color: #B0CDBD; }
+
+.matrix { width: 100%; border-collapse: collapse; }
+.matrix th { text-align: left; padding: 0 16px 12px 0; }
+.matrix td { padding: 16px 16px 16px 0; border-top: 1px solid #132A1F; vertical-align: middle; }
+.matrix td.what { width: 250px; }
+.matrix td.what b { display: block; font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; }
+.matrix td.what span { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; color: #869585; }
+.matrix td.note { font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.w363 { width: 371px; }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.card { padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; display: flex; flex-direction: column; gap: 12px; }
+.card h3 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.card p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.card .stage { padding: 16px 12px; background: #071610; border-radius: 8px; display: flex; justify-content: center; }
+.widths { display: flex; flex-direction: column; gap: 20px; }
+.wrow { display: grid; grid-template-columns: 250px 1fr; gap: 16px; align-items: center; padding-top: 16px; border-top: 1px solid #132A1F; }
+.wrow .what b { display: block; font-size: 16px; line-height: 24px; font-weight: 600; }
+.wrow .what span { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; color: #869585; }
+.slot { box-sizing: border-box; padding: 8px 0; border-left: 1px dashed #3D4A3D; border-right: 1px dashed #3D4A3D; background: #071610; }
+.slot.end { display: flex; justify-content: flex-end; }
+.slot-cap { margin-top: 6px; font-size: 12px; line-height: 16px; color: #869585; }
+.film { display: flex; gap: 20px; align-items: flex-end; }
+.cell { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.cell .t { font-size: 12px; line-height: 16px; color: #869585; }
+.roll { zoom: 2; position: relative; display: inline-flex; align-items: center; gap: 4px; height: 48px; padding: 0 16px; box-sizing: border-box; min-width: 94px; justify-content: center; background: #132A1F; border: 1px solid #3D4A3D; border-radius: 8px; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 600; }
+.digit { position: relative; display: inline-block; width: 8.4px; height: 20px; overflow: hidden; font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; color: #D4E7DD; }
+.digit span { position: absolute; left: 0; top: 0; line-height: 20px; }
+.props { display: flex; flex-direction: column; gap: 16px; }
+.prop { padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; display: grid; grid-template-columns: 500px 1fr; gap: 24px; align-items: start; }
+.prop .words { display: flex; flex-direction: column; gap: 10px; }
+.prop .draw { display: flex; flex-direction: column; gap: 12px; }
+.prop h3 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.prop p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.prop .stage { padding: 16px 0; background: #071610; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+.prop .stage.row { flex-direction: row; align-items: center; justify-content: space-between; padding: 12px 12px 12px 16px; }
+.prop .input { font-size: 12px; line-height: 16px; color: #869585; }
+.endline { padding: 12px 16px; font-size: 14px; line-height: 20px; color: #869585; }
+
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Pagination artboards</a></nav>
+<div class="page-stage">
+<div class="board">
+  <header>
+    <h1>Pagination &#8212; states</h1>
+    <p class="lede">Every state the pager can be in, at the widths it lives at. Green tags ship as a restyle with the inputs the bar has today; sage tags need one more input from the call site each, and are drawn so the decision can be made by looking.</p>
+  </header>
+
+  <section>
+    <h2>Where the list is</h2>
+    <p class="sub">The group&#8217;s own states. Monitor and phone side by side.</p>
+    <table class="matrix">
+      <thead><tr><th class="eyebrow">State</th><th class="eyebrow">Medium and expanded</th><th class="eyebrow">Compact</th><th class="eyebrow">Why it draws this</th></tr></thead>
+      <tbody><tr><td class="what"><b>First page</b><span>pageNumber 1, onPrevious null</span></td><td><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>1</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></td><td class="w363"><nav class="pager fill" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>1</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></td><td class="note">Previous is present and disabled, so nothing moves under a thumb when the second page arrives.</td></tr><tr><td class="what"><b>A middle page</b><span>both callbacks set</span></td><td><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></td><td class="w363"><nav class="pager fill" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></td><td class="note">The ordinary case. Two live segments a thumb apart.</td></tr><tr><td class="what"><b>The last page</b><span>onNext null, the read said no more</span></td><td><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>9</b></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></td><td class="w363"><nav class="pager fill" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>9</b></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></td><td class="note">Next is disabled in place. P3 below lets the position say <em>last</em> in words.</td></tr><tr><td class="what"><b>Paused</b><span>onNext null while a write is in flight (the catalog&#8217;s <code>busy</code>)</span></td><td><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>2</b></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></td><td class="w363"><nav class="pager fill" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>2</b></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></td><td class="note">Both disabled for the length of the write. Nothing is hidden, so nothing jumps when it ends.</td></tr><tr><td class="what"><b>The only page</b><span>pageNumber 1, onNext null</span></td><td><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>1</b></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></td><td class="w363"><nav class="pager fill" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>1</b></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></td><td class="note">Draws exactly as a paused first page, because that is all a restyle is told. The quiet disabled ink is what keeps it from shouting. P3 removes it.</td></tr></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>One segment&#8217;s states</h2>
+    <p class="sub">Shown on <em>Next</em>; <em>Previous</em> is its mirror. The position has no interactive states &#8212; it is text, and a live region.</p>
+    <div class="cards"><div class="card"><h3>Enabled</h3><div class="stage"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><p><code>action.secondary</code>: label <code>#D4E7DD</code> on the group&#8217;s <code>#132A1F</code>. 11.80:1.</p></div><div class="card"><h3>Hover</h3><div class="stage"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav is-hover" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><p>The label at 8% washes the segment alone, <code>#22392E</code>. The group&#8217;s edge and the other segment do not move. 9.61:1.</p></div><div class="card"><h3>Pressed</h3><div class="stage"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav is-pressed" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><p>12%, <code>#2A4136</code>, and <code>PressSurface</code>&#8217;s own press. The callback fires on release, as today. 8.53:1.</p></div><div class="card"><h3>Focus-visible</h3><div class="stage"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav is-focus" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><p>2px <code>#4BE277</code> at 2px offset, round the one segment and over its neighbour&#8217;s edge. 11.00:1 on the page.</p></div><div class="card"><h3>Disabled</h3><div class="stage"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><p>Ink to <code>#5D7468</code>; no overlay, no cursor. The container is the group&#8217;s and stays. Announced as disabled.</p></div><div class="card"><h3>Loading &#183; P1</h3><div class="stage"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav" type="button" aria-label="Next page, working" aria-busy="true"><span class="lbl">Next</span><svg class="spin" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="2" stroke-dasharray="33 44"/></svg></button></nav></div><p>The chevron becomes a 16px spinner in the label colour; the word stays. The other segment disables. Announced &#8220;Next page, working&#8221;.</p></div></div>
+  </section>
+
+  <section>
+    <h2>Widths and text size</h2>
+    <p class="sub">Dashed lines are the space the bar is given.</p>
+    <div class="widths"><div class="wrow"><div class="what"><b>Expanded &#183; page 12</b><span>the catalog column, 1136</span></div><div><div class="slot end" style="width: 760px;"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>12</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><div class="slot-cap">Intrinsic width, at the end. Drawn in a slot shortened to fit this board.</div></div></div><div class="wrow"><div class="what"><b>Expanded &#183; page 128</b><span>three digits</span></div><div><div class="slot end" style="width: 760px;"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>128</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><div class="slot-cap">The position reserved <em>Page 000</em>, so reaching page 100 does not move Previous. Page 1,000 grows it by one digit.</div></div></div><div class="wrow"><div class="what"><b>Compact &#183; 411 phone</b><span>20 inset each side, 4 gutter</span></div><div><div class="slot" style="width: 371px;"><nav class="pager fill" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><div class="slot-cap">Nav segments split what the position leaves: 132 each here.</div></div></div><div class="wrow"><div class="what"><b>A dialog on a phone</b><span>283 inside AlertDialog; the screen says 411</span></div><div style="display: flex; gap: 32px;"><div><div class="slot" style="width: 283px;"><nav class="pager fill squeeze" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><div class="slot-cap">Width read from the screen, as the bar reads it today: words chosen, then ellipsized.</div></div><div><div class="slot" style="width: 283px;"><nav class="pager fill" aria-label="Pages"><button class="seg nav glyph" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav glyph" type="button" aria-label="Next page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><div class="slot-cap">Width read from the bar itself: glyphs. Needs the build note in the README.</div></div></div></div><div class="wrow"><div class="what"><b>200% text on a phone</b><span>TextScaler 2.0</span></div><div><div class="slot" style="width: 371px;"><nav class="pager fill x2" aria-label="Pages"><button class="seg nav glyph" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav glyph" type="button" aria-label="Next page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div><div class="slot-cap">The words do not fit at twice the size. Glyphs keep their 48 targets, and the position takes the size it was asked for.</div></div></div></div>
+  </section>
+
+  <section>
+    <h2>Motion</h2>
+    <p class="sub">One thing moves: the page figure, through <code>RollingNumber</code> at <code>spring.snappy</code> (mass 1, stiffness 380, damping 32). It rolls the way the figure moved, only changed digits move, a retrigger picks up from the current position and velocity, and with animations off it swaps. The press is <code>PressSurface</code>&#8217;s own. Nothing waits for the roll: the callback has already fired.</p>
+    <div style="display: flex; flex-direction: column; gap: 32px;">
+      <div style="display: flex; flex-direction: column; gap: 12px;"><span class="eyebrow">Next &#183; 4 to 5 rolls up</span><div class="film"><div class="cell"><span class="roll">Page <span class="digit"><span style="top: 0.0px;">4</span><span style="top: 20.0px;">5</span></span></span><span class="t">pressed</span></div><div class="cell"><span class="roll">Page <span class="digit"><span style="top: -7.0px;">4</span><span style="top: 13.0px;">5</span></span></span><span class="t">40 ms</span></div><div class="cell"><span class="roll">Page <span class="digit"><span style="top: -14.4px;">4</span><span style="top: 5.6px;">5</span></span></span><span class="t">80 ms</span></div><div class="cell"><span class="roll">Page <span class="digit"><span style="top: -20.0px;">4</span><span style="top: 0.0px;">5</span></span></span><span class="t">settled</span></div></div></div>
+      <div style="display: flex; flex-direction: column; gap: 12px;"><span class="eyebrow">Previous &#183; 5 to 4 rolls down</span><div class="film"><div class="cell"><span class="roll">Page <span class="digit"><span style="top: 0.0px;">5</span><span style="top: -20.0px;">4</span></span></span><span class="t">pressed</span></div><div class="cell"><span class="roll">Page <span class="digit"><span style="top: 7.0px;">5</span><span style="top: -13.0px;">4</span></span></span><span class="t">40 ms</span></div><div class="cell"><span class="roll">Page <span class="digit"><span style="top: 14.4px;">5</span><span style="top: -5.6px;">4</span></span></span><span class="t">80 ms</span></div><div class="cell"><span class="roll">Page <span class="digit"><span style="top: 20.0px;">5</span><span style="top: 0.0px;">4</span></span></span><span class="t">settled</span></div></div></div>
+    </div>
+    <p class="sub" style="margin-top: 16px;">Frame times are illustrative &#8212; a spring has no fixed duration, and neither the harness nor this board can show motion. It needs a device.</p>
+  </section>
+
+  <section>
+    <h2>Proposed &#8212; one more input each</h2>
+    <p class="sub">Not a restyle: each needs the call site to pass something it already holds. None needs a new read, write or route.</p>
+    <div class="props">
+      <div class="prop">
+        <div class="draw"><div class="stage" style="align-items: flex-end; padding-right: 12px;"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav" type="button" aria-label="Next page, working" aria-busy="true"><span class="lbl">Next</span><svg class="spin" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="2" stroke-dasharray="33 44"/></svg></button></nav></div></div>
+        <div class="words">
+          <span class="tag later" style="align-self: flex-start;">P1 &#183; needs which way is loading</span>
+          <h3>The segment you pressed says it is working</h3>
+          <p>Today the bar sits unchanged until the page lands &#8212; or, in shift history, leaves the screen for the read. The spinner goes where the press was, the other way waits, and the figure is whatever the call site passes.</p>
+          <span class="input">New input: <code>loading: PaginationDirection?</code>. The call sites already know: they start the read.</span>
+        </div>
+      </div>
+      <div class="prop">
+        <div class="draw"><div class="stage row"><span class="range">Showing <b>61&#8211;80</b></span><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div></div>
+        <div class="words">
+          <span class="tag later" style="align-self: flex-start;">P2 &#183; needs the range</span>
+          <h3>Which records these are</h3>
+          <p>&#8220;Page 4&#8221; says where; &#8220;61&#8211;80&#8221; says how far in. At the start of the row on a monitor, above the pager and start-aligned on a phone. There is no <em>of N</em>, and never will be from these reads: they page by cursor and do not learn a total.</p>
+          <span class="input">New inputs: the first and last record numbers. The call site holds <code>pageSize</code> and <code>items.length</code>.</span>
+        </div>
+      </div>
+      <div class="prop">
+        <div class="draw">
+          <div class="stage" style="align-items: flex-end; padding-right: 12px;"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>9</b> <i>&#183; last</i></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div>
+          <div class="stage"><div class="endline">The only page: no pager. The list ends with its last row.</div></div>
+        </div>
+        <div class="words">
+          <span class="tag later" style="align-self: flex-start;">P3 &#183; needs end-of-list apart from paused</span>
+          <h3>The end is said in words, and a single page has no bar</h3>
+          <p>On the last page the position says <em>last</em>, so a disabled Next is explained in words rather than by its colour. A list that fits on one page draws nothing to page with. The bar cannot move under a thumb when nothing on it can be pressed.</p>
+          <span class="input">New input: <code>endOfList</code>, from <code>hasMore</code>. Today it is folded into a null <code>onNext</code> together with &#8220;paused&#8221;.</span>
+        </div>
+      </div></div>
+  </section>
+</div>
+</div>
+</body>
+</html>

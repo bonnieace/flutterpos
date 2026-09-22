@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reports screen &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Reports &#8212; the Day report</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Four artboards, drawn on <code class="mono">AppTokens.profoundVerdant</code>. A visual proposal for a Day dashboard, the pill strip that selects between reports, and the download flow &#8212; nothing here is wired to anything. Read <a href="README.md">README.md</a> for what it assumes, what the data actually supports, and the two things it cannot ship as.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="reports-day-phone.html">
+      <h2>Day &#8212; phone</h2>
+      <p>The whole report at 390: takings, how it was paid, the day across its shifts, profit with its basis, and returns.</p>
+      <span class="size">390</span>
+    </a>
+
+    <a class="board" href="reports-day-states.html">
+      <h2>Day &#8212; states</h2>
+      <p>Eight states the takings card can be in, each one a value the data model actually produces &#8212; and the three things deliberately left off the screen.</p>
+      <span class="size">catalogue</span>
+    </a>
+
+    <a class="board" href="reports-pills.html">
+      <h2>Report pills</h2>
+      <p>The new component: every state hard rule 5 requires, why 48 and not 40, what it owns, and the one thing it must never do.</p>
+      <span class="size">catalogue</span>
+    </a>
+
+    <a class="board" href="reports-download.html">
+      <h2>Download</h2>
+      <p>Six sheets: asking, working, done, failed, a profit figure that must carry its caveat out of the building, and a period with holes in it.</p>
+      <span class="size">catalogue</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

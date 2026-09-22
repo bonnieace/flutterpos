@@ -420,6 +420,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Settings'), findsOne);
+      // **Settings opens on its index since the strip became a list**, so the
+      // currency is one row down rather than the first tab. What this asserts
+      // is unchanged: the panel behind that row reads under the landing
+      // route's own session scope, which is what produces the sentence below.
+      await tester.tap(find.byKey(const ValueKey('setting-row-currency')));
+      await tester.pumpAndSettle();
+
       _expectText(
         tester,
         'checkout-configuration-current',
@@ -454,12 +461,19 @@ Future<void> _pumpLanding(
           // what this group pins is that the *route* is offered to the same two
           // roles and that opening it lands on the currency.
           settingsRoute: supplyRoute
-              ? (reader, initialTabKey) => TenantSettingsScreen(
-                  initialTabKey: initialTabKey,
-                  tabs: <TenantSettingsTab>[
-                    TenantSettingsTab(
-                      tabKey: 'business-details',
-                      label: 'Business details',
+              ? (reader, initialSettingKey) => TenantSettingsScreen(
+                  initialSettingKey: initialSettingKey,
+                  // **No standings reader, which is a supported way to build
+                  // this screen and costs no query.** What this group pins is
+                  // the route's role gating and the session scope it opens
+                  // under; the index's own read is `tenant_settings_test.dart`'s
+                  // subject, and a fake transport here would be answering a
+                  // question this group is not asking.
+                  destinations: <TenantSettingsDestination>[
+                    TenantSettingsDestination(
+                      settingKey: 'currency',
+                      kind: TenantSettingKind.currency,
+                      icon: Icons.payments_outlined,
                       allowedRoles:
                           TenantCheckoutConfigurationPublisher.allowedRoles,
                       builder: (_) =>

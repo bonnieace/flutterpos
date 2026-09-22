@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pagination &#8212; phone</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+/* Every app value on this board is the token the build would read, named beside it. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+
+/* ---- Pagination: the pager group ------------------------------------------
+   One container: AppButtonSize.lg 48, radius.md 8, action.secondary's container
+   #132A1F and border #3D4A3D. PressSurface's 4px focus-ring gutter goes round the
+   group, as it goes round every pressable surface. */
+.pager { display: inline-flex; align-items: stretch; margin: 4px; min-height: 48px; box-sizing: border-box; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; vertical-align: top; }
+.pager.fill { display: flex; }                        /* compact band: the group takes the row */
+.pager.fill .nav { flex: 1 1 0; min-width: 48px; }
+.seg { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; box-sizing: border-box; margin: 0; border: 0; background: transparent; color: #D4E7DD; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; }   /* label.lg; space.16 with an icon, space.8 to it */
+.seg + .seg { border-left: 1px solid #3D4A3D; }        /* divider: surface.borderStrong */
+.seg:first-child { border-radius: 7px 0 0 7px; }
+.seg:last-child { border-radius: 0 7px 7px 0; }
+.nav { min-width: 48px; cursor: pointer; }
+.nav svg { width: 18px; height: 18px; flex-shrink: 0; fill: currentColor; }   /* AppButton.iconSize */
+.nav:hover, .nav.is-hover { background: rgba(212, 231, 221, 0.08); }         /* label @ 8% = #22392E */
+.nav:active, .nav.is-pressed { background: rgba(212, 231, 221, 0.12); }      /* label @ 12% = #2A4136 */
+.nav:focus-visible, .nav.is-focus { outline: 2px solid #4BE277; outline-offset: 2px; z-index: 1; }   /* action.focusRing */
+.nav:disabled, .nav.is-disabled { color: #5D7468; background: transparent; cursor: default; }        /* action.disabledLabel; the container stays the group's */
+.nav[aria-busy="true"] { cursor: progress; }
+.nav.glyph { padding: 0; }
+.pager:not(.fill) .nav.glyph { width: 48px; }
+.pos { gap: 4px; min-width: 94px; color: #BCCBB9; font-weight: 600; letter-spacing: 0; cursor: default; }   /* label.md, text.secondary; min width measured from 'Page 000' */
+.pos b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-variant-numeric: tabular-nums; color: #D4E7DD; }   /* numeric.body, text.primary */
+.pos i { font-style: normal; color: #BCCBB9; }
+svg.spin { width: 16px; height: 16px; fill: none; animation: spin 0.9s linear infinite; }   /* action.loadingIndicatorSize, label colour */
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { svg.spin { animation-duration: 2.4s; } }
+/* 200% text: TextScaler 2.0 on the words; glyphs keep their size, as Icon does. */
+.pager.x2 .seg { font-size: 28px; line-height: 40px; }
+.pager.x2 .pos { min-width: 156px; }
+/* The width read from the screen, in a dialog narrower than the screen: labels ellipsize. */
+.pager.squeeze .nav { min-width: 0; }
+.pager.squeeze .nav .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* P2: the range statement. label.md text.secondary, figures numeric.body text.primary. */
+.range { font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; white-space: nowrap; }
+.range b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-variant-numeric: tabular-nums; color: #D4E7DD; }
+
+.board { width: 1280px; box-sizing: border-box; padding: 40px; background: #071610; display: flex; flex-direction: column; gap: 48px; }
+h1 { margin: 0; font-size: 32px; line-height: 38.4px; font-weight: 700; letter-spacing: -0.64px; }
+h2 { margin: 0 0 4px; font-size: 22px; line-height: 30.8px; font-weight: 600; }
+.lede { margin: 8px 0 0; max-width: 840px; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.sub { margin: 0 0 20px; max-width: 840px; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.eyebrow { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #869585; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #D4E7DD; }
+.tag { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; white-space: nowrap; }
+.tag.ship { background: rgba(75, 226, 119, 0.10); border: 1px solid rgba(75, 226, 119, 0.30); color: #4BE277; }
+.tag.later { background: rgba(176, 205, 189, 0.10); border: 1px solid rgba(176, 205, 189, 0.30); color: #B0CDBD; }
+
+.pboard { width: 1370px; box-sizing: border-box; padding: 40px; background: #03110B; display: flex; flex-direction: column; gap: 32px; }
+.phones { display: grid; grid-template-columns: repeat(3, 411px); gap: 28px; }
+.pf { display: flex; flex-direction: column; gap: 12px; }
+.pf-cap { display: flex; flex-direction: column; gap: 6px; }
+.pf-cap h2 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.pf-cap p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.phone { position: relative; width: 411px; height: 640px; overflow: hidden; background: #071610; border: 1px solid #283831; border-radius: 16px; display: flex; flex-direction: column; }
+.ptbar { display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 4px; }
+.ptbar .back { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
+.ptbar .t { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.pbody { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 16px 20px; gap: 12px; overflow: hidden; }
+.pbody > * { flex-shrink: 0; }
+.pbody.top { justify-content: flex-start; padding-top: 16px; }
+.pbody.top::before { display: none; }
+.toggle { display: flex; height: 48px; margin: 0 4px 8px; box-sizing: border-box; border: 1px solid #4BE277; border-radius: 8px; overflow: hidden; }
+.toggle span { flex: 1 1 0; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; color: #D4E7DD; }
+.toggle span + span { border-left: 1px solid #4BE277; }
+.toggle .on { background: rgba(75, 226, 119, 0.10); color: #4BE277; }
+.pbody::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 72px; background: linear-gradient(#071610, rgba(7, 22, 16, 0)); z-index: 1; }
+.sale { background: #0D1F16; border: 1px solid #283831; border-radius: 12px; overflow: hidden; }
+.shead { display: flex; align-items: center; gap: 8px; padding: 4px 0 4px 12px; border-bottom: 1px solid #132A1F; }   /* space.4 round the menu's 48 target: the same 56 */
+.shead > svg:last-child { box-sizing: content-box; padding: 14px; margin-left: -8px; }   /* the menu: a 20 glyph in §9's 48 square, flush to the total and the edge */
+.stime { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 18px; line-height: 24px; font-weight: 500; color: #D4E7DD; }
+.srec { font-size: 12px; line-height: 16px; color: #869585; }
+.stotal { margin-left: auto; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 16px; line-height: 20px; font-weight: 500; color: #45F28D; }
+.slines { padding: 0 16px; }
+.line { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.line + .line { border-top: 1px solid #132A1F; }
+.lthumb { width: 40px; height: 40px; flex-shrink: 0; border-radius: 8px; background: #132A1F; display: flex; align-items: center; justify-content: center; }
+.lid { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
+.lname { font-size: 14px; line-height: 20px; font-weight: 600; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lqty { font-size: 12px; line-height: 16px; color: #869585; }
+.lamt { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; font-weight: 500; color: #D4E7DD; white-space: nowrap; }
+.smeta { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 12px; background: #132A1F; font-size: 12px; line-height: 16px; color: #BCCBB9; }   /* space.8: the scale has no 10 */
+.shift { background: #0D1F16; border: 1px solid #283831; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.shift .d { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; }
+.kv { display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #869585; }
+.kv b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 16px; font-weight: 500; letter-spacing: 0; color: #45F28D; }
+.kv b.plain { color: #D4E7DD; }
+.shift .c { font-size: 12px; line-height: 16px; color: #869585; }
+.endline { padding: 4px 4px 0; font-size: 14px; line-height: 20px; color: #869585; text-align: center; }
+.foot { display: flex; flex-direction: column; gap: 8px; }
+.foot .range { margin-left: 4px; }
+
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Pagination artboards</a></nav>
+<div class="page-stage">
+<div class="pboard">
+  <header>
+    <h1>Pagination &#8212; phone</h1>
+    <p class="lede">The foot of two lists at 411, the harness&#8217;s <code>mobile</code> width: the Sales Report, and Shift history&#8217;s single page. Cards follow <code>mobile-full/32b-shift-history-to-sales</code>; only the bar is new. Mwangi Hardware, the shop on every other board.</p>
+  </header>
+  <div class="phones"><div class="pf"><div class="pf-cap"><span class="tag ship" style="align-self: flex-start;">Ships as a restyle</span><h2>Sales Report, page 2</h2><p>Across the row. Each nav segment is 136 wide under a thumb, and the figure sits in the middle of the screen.</p></div><div class="phone"><div class="ptbar"><span class="back"><svg width="24" height="24" viewBox="0 0 24 24" fill="#D4E7DD" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></span><span class="t">Sales Report</span></div>
+      <div class="pbody"><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:58</span><span class="srec">#0119</span><span class="stotal">KES 2400.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Wall paint 4L, white</span><span class="lqty">1 &#215; KES 2400.00</span></span><span class="lamt">KES 2400.00</span></div></div>
+      <div class="smeta"><span>Samuel Ochieng</span><span>Card</span><span>CT-4A2-0119</span><span>Synced 15:59</span></div>
+    </div><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:42</span><span class="srec">#0118</span><span class="stotal">KES 1850.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Wood screws 4x40, box of 200</span><span class="lqty">2 &#215; KES 450.00</span></span><span class="lamt">KES 900.00</span></div><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Claw hammer 16oz</span><span class="lqty">1 &#215; KES 950.00</span></span><span class="lamt">KES 950.00</span></div></div>
+      <div class="smeta"><span>Lydia Achieng</span><span>M-Pesa</span><span>CT-4A2-0118</span><span>Synced 15:43</span></div>
+    </div><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:30</span><span class="srec">#0117</span><span class="stotal">KES 360.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Masonry drill bit 8mm</span><span class="lqty">2 &#215; KES 180.00</span></span><span class="lamt">KES 360.00</span></div></div>
+      <div class="smeta"><span>Njeri Kariuki</span><span>Cash</span><span>CT-4A2-0117</span><span>Synced 15:31</span></div>
+    </div><div class="foot"><nav class="pager fill" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>2</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div></div></div></div><div class="pf"><div class="pf-cap"><span class="tag later" style="align-self: flex-start;">P1 + P2</span><h2>Next pressed</h2><p>The range sits above, start-aligned. The spinner is where the thumb was; Previous waits.</p></div><div class="phone"><div class="ptbar"><span class="back"><svg width="24" height="24" viewBox="0 0 24 24" fill="#D4E7DD" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></span><span class="t">Sales Report</span></div>
+      <div class="pbody"><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:58</span><span class="srec">#0119</span><span class="stotal">KES 2400.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Wall paint 4L, white</span><span class="lqty">1 &#215; KES 2400.00</span></span><span class="lamt">KES 2400.00</span></div></div>
+      <div class="smeta"><span>Samuel Ochieng</span><span>Card</span><span>CT-4A2-0119</span><span>Synced 15:59</span></div>
+    </div><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:42</span><span class="srec">#0118</span><span class="stotal">KES 1850.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Wood screws 4x40, box of 200</span><span class="lqty">2 &#215; KES 450.00</span></span><span class="lamt">KES 900.00</span></div><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Claw hammer 16oz</span><span class="lqty">1 &#215; KES 950.00</span></span><span class="lamt">KES 950.00</span></div></div>
+      <div class="smeta"><span>Lydia Achieng</span><span>M-Pesa</span><span>CT-4A2-0118</span><span>Synced 15:43</span></div>
+    </div><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:30</span><span class="srec">#0117</span><span class="stotal">KES 360.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Masonry drill bit 8mm</span><span class="lqty">2 &#215; KES 180.00</span></span><span class="lamt">KES 360.00</span></div></div>
+      <div class="smeta"><span>Njeri Kariuki</span><span>Cash</span><span>CT-4A2-0117</span><span>Synced 15:31</span></div>
+    </div><div class="foot"><span class="range">Showing <b>21&#8211;40</b></span><nav class="pager fill" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>2</b></span><button class="seg nav" type="button" aria-label="Next page, working" aria-busy="true"><span class="lbl">Next</span><svg class="spin" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="2" stroke-dasharray="33 44"/></svg></button></nav></div></div></div></div><div class="pf"><div class="pf-cap"><span class="tag ship" style="align-self: flex-start;">Ships as a restyle</span><h2>200% text</h2><p>The words do not fit at twice the size. Glyphs keep their 48 targets; the position takes the size it was asked for.</p></div><div class="phone"><div class="ptbar"><span class="back"><svg width="24" height="24" viewBox="0 0 24 24" fill="#D4E7DD" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></span><span class="t">Sales Report</span></div>
+      <div class="pbody"><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:58</span><span class="srec">#0119</span><span class="stotal">KES 2400.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Wall paint 4L, white</span><span class="lqty">1 &#215; KES 2400.00</span></span><span class="lamt">KES 2400.00</span></div></div>
+      <div class="smeta"><span>Samuel Ochieng</span><span>Card</span><span>CT-4A2-0119</span><span>Synced 15:59</span></div>
+    </div><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:42</span><span class="srec">#0118</span><span class="stotal">KES 1850.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Wood screws 4x40, box of 200</span><span class="lqty">2 &#215; KES 450.00</span></span><span class="lamt">KES 900.00</span></div><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Claw hammer 16oz</span><span class="lqty">1 &#215; KES 950.00</span></span><span class="lamt">KES 950.00</span></div></div>
+      <div class="smeta"><span>Lydia Achieng</span><span>M-Pesa</span><span>CT-4A2-0118</span><span>Synced 15:43</span></div>
+    </div><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:30</span><span class="srec">#0117</span><span class="stotal">KES 360.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Masonry drill bit 8mm</span><span class="lqty">2 &#215; KES 180.00</span></span><span class="lamt">KES 360.00</span></div></div>
+      <div class="smeta"><span>Njeri Kariuki</span><span>Cash</span><span>CT-4A2-0117</span><span>Synced 15:31</span></div>
+    </div><div class="foot"><nav class="pager fill x2" aria-label="Pages"><button class="seg nav glyph" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button><span class="seg pos" aria-live="polite">Page <b>2</b></span><button class="seg nav glyph" type="button" aria-label="Next page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div></div></div></div><div class="pf"><div class="pf-cap"><span class="tag ship" style="align-self: flex-start;">Ships as a restyle</span><h2>Shift history, the only page</h2><p>The case every phone capture shows today. Still two disabled controls, but quiet ones, under the card rather than out-painting it.</p></div><div class="phone"><div class="ptbar"><span class="back"><svg width="24" height="24" viewBox="0 0 24 24" fill="#D4E7DD" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></span><span class="t">Shift history</span></div>
+      <div class="pbody top"><div class="toggle"><span class="on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>My shifts</span><span>Every cashier</span></div>
+      <div class="shift"><span class="d">2026-09-21 - You (Asha Mwangi)</span>
+      <div class="kv">Counted cash <b>18450.00</b></div>
+      <div class="kv">Recorded sales <b>18450.00</b></div>
+      <div class="kv">Transactions <b class="plain">37</b></div>
+      <span class="c">Closed 2026-09-21 18:05 UTC</span></div><div class="foot"><nav class="pager fill" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>1</b></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div></div></div></div><div class="pf"><div class="pf-cap"><span class="tag later" style="align-self: flex-start;">P3</span><h2>The same, with P3</h2><p>Told the list ended, the bar is not drawn at all. The last card is the end of the page.</p></div><div class="phone"><div class="ptbar"><span class="back"><svg width="24" height="24" viewBox="0 0 24 24" fill="#D4E7DD" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></span><span class="t">Shift history</span></div>
+      <div class="pbody top"><div class="toggle"><span class="on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>My shifts</span><span>Every cashier</span></div>
+      <div class="shift"><span class="d">2026-09-21 - You (Asha Mwangi)</span>
+      <div class="kv">Counted cash <b>18450.00</b></div>
+      <div class="kv">Recorded sales <b>18450.00</b></div>
+      <div class="kv">Transactions <b class="plain">37</b></div>
+      <span class="c">Closed 2026-09-21 18:05 UTC</span></div></div></div></div><div class="pf"><div class="pf-cap"><span class="tag later" style="align-self: flex-start;">P3</span><h2>The last page, with P3</h2><p>Told the list ended, the position says so in words, beside the disabled Next.</p></div><div class="phone"><div class="ptbar"><span class="back"><svg width="24" height="24" viewBox="0 0 24 24" fill="#D4E7DD" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></span><span class="t">Sales Report</span></div>
+      <div class="pbody"><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:58</span><span class="srec">#0119</span><span class="stotal">KES 2400.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Wall paint 4L, white</span><span class="lqty">1 &#215; KES 2400.00</span></span><span class="lamt">KES 2400.00</span></div></div>
+      <div class="smeta"><span>Samuel Ochieng</span><span>Card</span><span>CT-4A2-0119</span><span>Synced 15:59</span></div>
+    </div><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:42</span><span class="srec">#0118</span><span class="stotal">KES 1850.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Wood screws 4x40, box of 200</span><span class="lqty">2 &#215; KES 450.00</span></span><span class="lamt">KES 900.00</span></div><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Claw hammer 16oz</span><span class="lqty">1 &#215; KES 950.00</span></span><span class="lamt">KES 950.00</span></div></div>
+      <div class="smeta"><span>Lydia Achieng</span><span>M-Pesa</span><span>CT-4A2-0118</span><span>Synced 15:43</span></div>
+    </div><div class="sale">
+      <div class="shead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="stime">15:30</span><span class="srec">#0117</span><span class="stotal">KES 360.00</span><svg width="20" height="20" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+      <div class="slines"><div class="line"><span class="lthumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5.5 9v10h13V9"/><path d="M10 13h4"/></svg></span><span class="lid"><span class="lname">Masonry drill bit 8mm</span><span class="lqty">2 &#215; KES 180.00</span></span><span class="lamt">KES 360.00</span></div></div>
+      <div class="smeta"><span>Njeri Kariuki</span><span>Cash</span><span>CT-4A2-0117</span><span>Synced 15:31</span></div>
+    </div><div class="foot"><nav class="pager fill" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>3</b> <i>&#183; last</i></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div></div></div></div></div>
+</div>
+</div>
+</body>
+</html>

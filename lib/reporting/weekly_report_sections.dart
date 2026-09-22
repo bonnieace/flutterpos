@@ -18,6 +18,7 @@ import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
 import '../ui/fields.dart';
+import '../ui/scaffold.dart';
 import '../ui/press.dart';
 import '../ui/status.dart';
 import '../ui/rolling_number.dart';
@@ -234,7 +235,16 @@ final class WeeklyReportContents extends StatelessWidget {
     );
     return ListView(
       key: const ValueKey('weekly-report-body'),
-      padding: EdgeInsets.symmetric(vertical: tokens.spacing.s8),
+      // **The horizontal inset was missing, and only here.** `AppScaffold` pads
+      // no body - `horizontalInset`'s note names the 20 the list screens use on
+      // all four sides, and every other route in this app supplies it - so this
+      // one drew its cards, its chart and its rows hard against the edge of the
+      // phone while the rest of the app kept a margin. The vertical 8 is
+      // unchanged; it is the gap under the toolbar, not the page inset.
+      padding: EdgeInsets.symmetric(
+        horizontal: AppScaffold.horizontalInset(tokens.spacing),
+        vertical: tokens.spacing.s8,
+      ),
       children: <Widget>[
         if (report?.totals?.basis == TenantSalesTotalsBasis.device &&
             serverCouldNotBeReached(context)) ...<Widget>[

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pagination &#8212; desktop</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+/* Every app value on this board is the token the build would read, named beside it. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+
+/* ---- Pagination: the pager group ------------------------------------------
+   One container: AppButtonSize.lg 48, radius.md 8, action.secondary's container
+   #132A1F and border #3D4A3D. PressSurface's 4px focus-ring gutter goes round the
+   group, as it goes round every pressable surface. */
+.pager { display: inline-flex; align-items: stretch; margin: 4px; min-height: 48px; box-sizing: border-box; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; vertical-align: top; }
+.pager.fill { display: flex; }                        /* compact band: the group takes the row */
+.pager.fill .nav { flex: 1 1 0; min-width: 48px; }
+.seg { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; box-sizing: border-box; margin: 0; border: 0; background: transparent; color: #D4E7DD; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; }   /* label.lg; space.16 with an icon, space.8 to it */
+.seg + .seg { border-left: 1px solid #3D4A3D; }        /* divider: surface.borderStrong */
+.seg:first-child { border-radius: 7px 0 0 7px; }
+.seg:last-child { border-radius: 0 7px 7px 0; }
+.nav { min-width: 48px; cursor: pointer; }
+.nav svg { width: 18px; height: 18px; flex-shrink: 0; fill: currentColor; }   /* AppButton.iconSize */
+.nav:hover, .nav.is-hover { background: rgba(212, 231, 221, 0.08); }         /* label @ 8% = #22392E */
+.nav:active, .nav.is-pressed { background: rgba(212, 231, 221, 0.12); }      /* label @ 12% = #2A4136 */
+.nav:focus-visible, .nav.is-focus { outline: 2px solid #4BE277; outline-offset: 2px; z-index: 1; }   /* action.focusRing */
+.nav:disabled, .nav.is-disabled { color: #5D7468; background: transparent; cursor: default; }        /* action.disabledLabel; the container stays the group's */
+.nav[aria-busy="true"] { cursor: progress; }
+.nav.glyph { padding: 0; }
+.pager:not(.fill) .nav.glyph { width: 48px; }
+.pos { gap: 4px; min-width: 94px; color: #BCCBB9; font-weight: 600; letter-spacing: 0; cursor: default; }   /* label.md, text.secondary; min width measured from 'Page 000' */
+.pos b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-variant-numeric: tabular-nums; color: #D4E7DD; }   /* numeric.body, text.primary */
+.pos i { font-style: normal; color: #BCCBB9; }
+svg.spin { width: 16px; height: 16px; fill: none; animation: spin 0.9s linear infinite; }   /* action.loadingIndicatorSize, label colour */
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { svg.spin { animation-duration: 2.4s; } }
+/* 200% text: TextScaler 2.0 on the words; glyphs keep their size, as Icon does. */
+.pager.x2 .seg { font-size: 28px; line-height: 40px; }
+.pager.x2 .pos { min-width: 156px; }
+/* The width read from the screen, in a dialog narrower than the screen: labels ellipsize. */
+.pager.squeeze .nav { min-width: 0; }
+.pager.squeeze .nav .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* P2: the range statement. label.md text.secondary, figures numeric.body text.primary. */
+.range { font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; white-space: nowrap; }
+.range b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-variant-numeric: tabular-nums; color: #D4E7DD; }
+
+.board { width: 1280px; box-sizing: border-box; padding: 40px; background: #071610; display: flex; flex-direction: column; gap: 48px; }
+h1 { margin: 0; font-size: 32px; line-height: 38.4px; font-weight: 700; letter-spacing: -0.64px; }
+h2 { margin: 0 0 4px; font-size: 22px; line-height: 30.8px; font-weight: 600; }
+.lede { margin: 8px 0 0; max-width: 840px; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.sub { margin: 0 0 20px; max-width: 840px; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.eyebrow { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #869585; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #D4E7DD; }
+.tag { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; white-space: nowrap; }
+.tag.ship { background: rgba(75, 226, 119, 0.10); border: 1px solid rgba(75, 226, 119, 0.30); color: #4BE277; }
+.tag.later { background: rgba(176, 205, 189, 0.10); border: 1px solid rgba(176, 205, 189, 0.30); color: #B0CDBD; }
+
+.dboard { width: 1440px; box-sizing: border-box; padding: 40px 0 48px; background: #03110B; display: flex; flex-direction: column; gap: 40px; }
+.dhead { padding: 0 40px; }
+.flabel { padding: 0 40px 12px; display: flex; align-items: center; gap: 12px; }
+.flabel h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; }
+.flabel p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.frame { position: relative; width: 1440px; background: #071610; border-top: 1px solid #132A1F; border-bottom: 1px solid #132A1F; overflow: hidden; }
+/* AppScaffold toolbar, as captured in web-full/18-manage-catalog */
+.tbar { padding: 12px 16px 8px; }
+.tbar .t { display: block; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }   /* titleLarge */
+.tbar .s { display: block; font-size: 14px; line-height: 21px; color: #BCCBB9; }                      /* bodyMedium, text.secondary */
+.col { width: 1136px; margin: 0 auto; padding: 0 0 20px; }
+/* RecordList table: surface.raised, borderSubtle edge and rules, radius.lg */
+.table { position: relative; background: #0D1F16; border: 1px solid #132A1F; border-top: 0; border-radius: 0 0 12px 12px; }
+.table::before { content: ''; position: absolute; left: -1px; right: -1px; top: 0; height: 56px; background: linear-gradient(#071610, rgba(7, 22, 16, 0)); z-index: 1; pointer-events: none; }
+.scrolled { position: absolute; left: 0; right: 0; top: 6px; z-index: 2; text-align: center; font-size: 12px; line-height: 16px; color: #869585; }
+.prow { display: grid; grid-template-columns: 301px 158px 88px 158px 158px 158px 1fr; align-items: center; height: 81px; padding: 0 24px 0 25px; box-sizing: border-box; }
+.prow + .prow { border-top: 1px solid #132A1F; }
+.pcell { font-size: 14px; line-height: 21px; color: #BCCBB9; min-width: 0; }
+.pcell.num { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-variant-numeric: tabular-nums; }
+.pcell.money { color: #45F28D; }
+.pcell.act { display: flex; justify-content: flex-end; padding-right: 14px; }
+.prod { display: flex; align-items: center; gap: 12px; }
+.thumb { width: 48px; height: 48px; flex-shrink: 0; border-radius: 8px; background: #132A1F; display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 24px; font-weight: 500; color: #BCCBB9; }
+.pid { min-width: 0; display: flex; flex-direction: column; }
+.pline { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pname { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.psku { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; font-weight: 500; color: #BCCBB9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pbadge { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 6px; box-sizing: border-box; border-radius: 8px; background: rgba(147, 0, 10, 0.20); border: 1px solid rgba(239, 68, 68, 0.30); color: #EF4444; font-size: 12px; font-weight: 600; white-space: nowrap; }
+/* The bar: space.12 under the list, as the catalog puts it */
+.foot { margin-top: 12px; display: flex; align-items: center; justify-content: flex-end; gap: 16px; }
+.foot .range { margin-left: 4px; margin-right: auto; }
+
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Pagination artboards</a></nav>
+<div class="page-stage">
+<div class="dboard">
+  <header class="dhead">
+    <h1>Pagination &#8212; desktop</h1>
+    <p class="lede">The foot of Inventory Manager at 1440, where the bar lives under the widest list in the app. Mwangi Hardware&#8217;s catalog, sixty-five products at twenty a page. The column, table and rows are the ones in <code>web-full/18-manage-catalog</code>; only the bar is new.</p>
+  </header>
+
+  <section>
+    <div class="flabel"><span class="tag ship">Ships as a restyle</span><h2>Page 3 of the catalog</h2></div>
+    <div class="frame">
+    <div class="tbar"><span class="t">Inventory Manager</span><span class="s">Manage products, categories, and stock.</span></div>
+    <div class="col">
+      <div class="table"><span class="scrolled">scrolled to the foot of the page</span><div class="prow">
+      <div class="pcell prod"><span class="thumb">MD</span><span class="pid"><span class="pline"><span class="pname">Masonry drill bit 8mm</span></span><span class="psku">SKU: 6161102000418</span></span></div>
+      <div class="pcell">Power tools</div>
+      <div class="pcell num">34</div>
+      <div class="pcell num money">180.00</div>
+      <div class="pcell num">120.00</div>
+      <div class="pcell num money">6120.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div><div class="prow">
+      <div class="pcell prod"><span class="thumb">PE</span><span class="pid"><span class="pline"><span class="pname">PVC elbow 1/2 in</span></span><span class="psku">SKU: 6161103000127</span></span></div>
+      <div class="pcell">Plumbing</div>
+      <div class="pcell num">210</div>
+      <div class="pcell num money">35.00</div>
+      <div class="pcell num">21.00</div>
+      <div class="pcell num money">7350.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div><div class="prow">
+      <div class="pcell prod"><span class="thumb">WS</span><span class="pid"><span class="pline"><span class="pname">Wood screws 4x40, box of 200</span></span><span class="psku">SKU: 6161101000233</span></span></div>
+      <div class="pcell">Fasteners</div>
+      <div class="pcell num">18</div>
+      <div class="pcell num money">450.00</div>
+      <div class="pcell num">310.00</div>
+      <div class="pcell num money">8100.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div><div class="prow">
+      <div class="pcell prod"><span class="thumb">CH</span><span class="pid"><span class="pline"><span class="pname">Claw hammer 16oz</span><span class="pbadge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg>-2 in stock</span></span><span class="psku">SKU: 6161104000092</span></span></div>
+      <div class="pcell">Hand tools</div>
+      <div class="pcell num">-2</div>
+      <div class="pcell num money">950.00</div>
+      <div class="pcell num">640.00</div>
+      <div class="pcell num money">-1900.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div></div>
+      <div class="foot"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>3</b></span><button class="seg nav" type="button" aria-label="Next page"><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div>
+    </div>
+  </div>
+  </section>
+
+  <section>
+    <div class="flabel"><span class="tag ship">Ships as a restyle</span><h2>The last page</h2><p>Next disabled in place. Nothing else on the row moves.</p></div>
+    <div class="frame">
+    <div class="tbar"><span class="t">Inventory Manager</span><span class="s">Manage products, categories, and stock.</span></div>
+    <div class="col">
+      <div class="table"><span class="scrolled">scrolled to the foot of the page</span><div class="prow">
+      <div class="pcell prod"><span class="thumb">WP</span><span class="pid"><span class="pline"><span class="pname">Wall paint 4L, white</span></span><span class="psku">SKU: 6161106000015</span></span></div>
+      <div class="pcell">Paint</div>
+      <div class="pcell num">12</div>
+      <div class="pcell num money">2400.00</div>
+      <div class="pcell num">1850.00</div>
+      <div class="pcell num money">28800.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div><div class="prow">
+      <div class="pcell prod"><span class="thumb">EC</span><span class="pid"><span class="pline"><span class="pname">Extension cable 5m</span><span class="pbadge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg>0 in stock</span></span><span class="psku">SKU: 6161105000064</span></span></div>
+      <div class="pcell">Electrical</div>
+      <div class="pcell num">0</div>
+      <div class="pcell num money">1200.00</div>
+      <div class="pcell num">820.00</div>
+      <div class="pcell num money">0.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div><div class="prow">
+      <div class="pcell prod"><span class="thumb">TT</span><span class="pid"><span class="pline"><span class="pname">Teflon tape</span></span><span class="psku">SKU: 6161103000301</span></span></div>
+      <div class="pcell">Plumbing</div>
+      <div class="pcell num">140</div>
+      <div class="pcell num money">50.00</div>
+      <div class="pcell num">28.00</div>
+      <div class="pcell num money">7000.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div></div>
+      <div class="foot"><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>4</b></span><button class="seg nav" type="button" aria-label="Next page" disabled><span class="lbl">Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button></nav></div>
+    </div>
+  </div>
+  </section>
+
+  <section>
+    <div class="flabel"><span class="tag later">P1 + P2 + P3</span><h2>With one more input each</h2><p>Next pressed on page 3: the range at the start, the spinner where the press was.</p></div>
+    <div class="frame">
+    <div class="tbar"><span class="t">Inventory Manager</span><span class="s">Manage products, categories, and stock.</span></div>
+    <div class="col">
+      <div class="table"><span class="scrolled">scrolled to the foot of the page</span><div class="prow">
+      <div class="pcell prod"><span class="thumb">MD</span><span class="pid"><span class="pline"><span class="pname">Masonry drill bit 8mm</span></span><span class="psku">SKU: 6161102000418</span></span></div>
+      <div class="pcell">Power tools</div>
+      <div class="pcell num">34</div>
+      <div class="pcell num money">180.00</div>
+      <div class="pcell num">120.00</div>
+      <div class="pcell num money">6120.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div><div class="prow">
+      <div class="pcell prod"><span class="thumb">PE</span><span class="pid"><span class="pline"><span class="pname">PVC elbow 1/2 in</span></span><span class="psku">SKU: 6161103000127</span></span></div>
+      <div class="pcell">Plumbing</div>
+      <div class="pcell num">210</div>
+      <div class="pcell num money">35.00</div>
+      <div class="pcell num">21.00</div>
+      <div class="pcell num money">7350.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div><div class="prow">
+      <div class="pcell prod"><span class="thumb">WS</span><span class="pid"><span class="pline"><span class="pname">Wood screws 4x40, box of 200</span></span><span class="psku">SKU: 6161101000233</span></span></div>
+      <div class="pcell">Fasteners</div>
+      <div class="pcell num">18</div>
+      <div class="pcell num money">450.00</div>
+      <div class="pcell num">310.00</div>
+      <div class="pcell num money">8100.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div><div class="prow">
+      <div class="pcell prod"><span class="thumb">CH</span><span class="pid"><span class="pline"><span class="pname">Claw hammer 16oz</span><span class="pbadge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg>-2 in stock</span></span><span class="psku">SKU: 6161104000092</span></span></div>
+      <div class="pcell">Hand tools</div>
+      <div class="pcell num">-2</div>
+      <div class="pcell num money">950.00</div>
+      <div class="pcell num">640.00</div>
+      <div class="pcell num money">-1900.00</div>
+      <div class="pcell act"><svg width="20" height="20" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+    </div></div>
+      <div class="foot"><span class="range">Showing <b>41&#8211;60</b></span><nav class="pager" aria-label="Pages"><button class="seg nav" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg><span class="lbl">Previous</span></button><span class="seg pos" aria-live="polite">Page <b>3</b></span><button class="seg nav" type="button" aria-label="Next page, working" aria-busy="true"><span class="lbl">Next</span><svg class="spin" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="2" stroke-dasharray="33 44"/></svg></button></nav></div>
+    </div>
+  </div>
+  </section>
+</div>
+</div>
+</body>
+</html>

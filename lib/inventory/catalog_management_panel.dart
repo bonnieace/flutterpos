@@ -1745,6 +1745,9 @@ final class _UnifiedInventoryContents extends StatelessWidget {
       key: const ValueKey('inventory-search'),
       controller: search,
       label: 'Search products',
+      // The wide row now reads like the compact one below it, which has never
+      // captioned these three and is the treatment this screen is liked for.
+      dense: true,
       leading: Icons.qr_code_scanner_outlined,
       helper: searchHelper,
       onChanged: onSearchChanged,
@@ -1752,6 +1755,7 @@ final class _UnifiedInventoryContents extends StatelessWidget {
     final categoryControl = AppSelect<String>(
       key: const ValueKey('inventory-category-filter'),
       label: 'Category',
+      dense: true,
       leading: Icons.category_outlined,
       value: category,
       items: <AppSelectItem<String>>[
@@ -1768,6 +1772,7 @@ final class _UnifiedInventoryContents extends StatelessWidget {
     final stockControl = AppSelect<TenantProductStockFilter>(
       key: const ValueKey('inventory-stock-filter'),
       label: 'Stock',
+      dense: true,
       leading: Icons.filter_alt_outlined,
       value: stockFilter,
       items: const <AppSelectItem<TenantProductStockFilter>>[
@@ -1832,13 +1837,24 @@ final class _UnifiedInventoryContents extends StatelessWidget {
         color: tokens.colors.text.secondary,
       ),
     );
-    return ListView(
+    return PagedListView(
       padding: EdgeInsets.fromLTRB(
         horizontalPadding,
         tokens.spacing.s8,
         horizontalPadding,
         tokens.spacing.s20,
       ),
+      pagination: data == null
+          ? null
+          : Pagination(
+              pageNumber: pageIndex + 1,
+              previousKey: const ValueKey('catalog-management-previous-page'),
+              pageKey: const ValueKey('catalog-management-page'),
+              nextKey: const ValueKey('catalog-management-next-page'),
+              onPrevious: pageIndex == 0 || busy ? null : onPreviousPage,
+              onNext: data.products.hasMore && !busy ? onNextPage : null,
+              endOfList: !data.products.hasMore,
+            ),
       children: <Widget>[
         if (canWrite) _actionHeader(context, compact: !wide),
         SizedBox(height: tokens.spacing.s20),
@@ -1856,15 +1872,6 @@ final class _UnifiedInventoryContents extends StatelessWidget {
             empty: empty,
             actionsOf: _actions,
             visualOf: _visual,
-          ),
-          SizedBox(height: tokens.spacing.s12),
-          Pagination(
-            pageNumber: pageIndex + 1,
-            previousKey: const ValueKey('catalog-management-previous-page'),
-            pageKey: const ValueKey('catalog-management-page'),
-            nextKey: const ValueKey('catalog-management-next-page'),
-            onPrevious: pageIndex == 0 || busy ? null : onPreviousPage,
-            onNext: data.products.hasMore && !busy ? onNextPage : null,
           ),
         ],
       ],
@@ -3575,9 +3582,8 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
                       ? null
                       : (category) => _run(() => widget.onRename(category)),
                 ),
-              if (page != null && !reading) ...<Widget>[
-                SizedBox(height: tokens.spacing.s16),
-                Pagination(
+              if (page != null && !reading)
+                ...Pagination(
                   pageNumber: _page + 1,
                   onPrevious: _page == 0 || _working
                       ? null
@@ -3591,8 +3597,8 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
                           _page++;
                         })
                       : null,
-                ),
-              ],
+                  endOfList: !page.hasMore,
+                ).withGapAbove(tokens.spacing.s16),
               if (widget.writer != null) ...<Widget>[
                 SizedBox(height: tokens.spacing.s24),
                 _CategoryComposer(

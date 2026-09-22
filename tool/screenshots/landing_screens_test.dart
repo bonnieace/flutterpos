@@ -112,8 +112,9 @@ void main() {
           source: const FakeEvidenceSource(
             CheckoutEvidenceSummary(savedOffline: 2, confirmed: 11),
           ),
-          alsoWaiting: () => printJobs.pending().jobs.length,
+          alsoWaiting: (_) => printJobs.pending().jobs.length,
           notificationsRoute: (_) => TenantNotificationsScreen(
+            tenantId: 'tenant-a',
             evidenceSource: const FakeEvidenceSource(
               CheckoutEvidenceSummary(savedOffline: 2, confirmed: 11),
             ),
@@ -129,19 +130,29 @@ void main() {
             drafts: FakeDraftSink(),
           ),
         ),
-        // One tabbed Settings route since 2026-09-13, where this harness used
-        // to supply two of the three separate ones.
-        settingsRoute: (reader) => TenantSettingsScreen(
-          tabs: <TenantSettingsTab>[
-            TenantSettingsTab(
-              tabKey: 'checkout',
-              label: 'Checkout',
+        // **One Settings route that opens on an index**, where this harness
+        // used to supply two of the three separate ones and then one tab strip.
+        // The standings are read the same way the composition root reads
+        // them - one bounded page of `configuration` - so the captures show
+        // what a real index shows rather than a row with nothing on it.
+        settingsRoute: (reader, initialSettingKey) => TenantSettingsScreen(
+          initialSettingKey: initialSettingKey,
+          standings: (session) => TenantSettingsStandingsRepository(
+            session: session,
+            reader: reader,
+          ).read(collectionReader: reader),
+          destinations: <TenantSettingsDestination>[
+            TenantSettingsDestination(
+              settingKey: 'currency',
+              kind: TenantSettingKind.currency,
+              icon: Icons.payments_outlined,
               allowedRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
               builder: (_) => TenantCheckoutConfigurationPanel(reader: reader),
             ),
-            TenantSettingsTab(
-              tabKey: 'printer',
-              label: 'Printer',
+            TenantSettingsDestination(
+              settingKey: 'printer',
+              kind: TenantSettingKind.printer,
+              icon: Icons.print_outlined,
               allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
               builder: (_) => TenantPrinterConfigurationPanel(reader: reader),
             ),

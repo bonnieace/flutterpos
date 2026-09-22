@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home &#8212; the figures band</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #869585; }
+.panel { padding: 8px; background: #0D1F16; border: 1px solid #283831; border-radius: 16px; }
+.stat { padding: 16px; background: #132A1F; border: 1px solid #283831; border-radius: 12px; display: flex; flex-direction: column; gap: 10px; }
+.stat-head { display: flex; align-items: center; gap: 8px; }
+.stat-chip { width: 28px; height: 28px; flex-shrink: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.stat-label { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #BCCBB9; }
+.stat-value { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: #D4E7DD; }
+.stat-value.money { color: #45F28D; }
+.stat-detail { font-size: 12px; line-height: 17px; color: #869585; }
+.badge-await { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 8px; background: rgba(242, 193, 78, 0.10); border: 1px solid rgba(242, 193, 78, 0.30); color: #F2C14E; font-size: 11px; font-weight: 700; }
+.cond { display: flex; flex-direction: column; gap: 4px; }
+.cond code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; line-height: 18px; color: #45F28D; }
+.cond span { font-size: 13px; line-height: 19px; color: #869585; }
+.vdiv { width: 1px; align-self: stretch; background: linear-gradient(to bottom, transparent, #3D4A3D, transparent); }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Home artboards</a></nav>
+<div class="page-stage">
+<div style="width: 1280px; height: 1180px; box-sizing: border-box; padding: 40px 60px; background: #071610; display: flex; flex-direction: column; gap: 32px;">
+
+  <header style="display: flex; flex-direction: column; gap: 6px;">
+    <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.5px; color: #D4E7DD;">The figures band</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; max-width: 760px;">Four tiles in one bordered panel, which is the shape the inspiration&#8217;s <code style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #45F28D;">_StatsBar</code> has: 2&#215;2 on a phone, one row with hairline dividers above 768. The rebuild carries five, so a phone draws two, two, and a single tile with a hole beside it.</p>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 12px;">
+    <h2>On a phone &#8212; 2&#215;2, 358 wide</h2>
+    <div style="display: flex; gap: 40px; align-items: flex-start;">
+      <div class="panel" style="width: 358px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <div class="stat">
+          <div class="stat-head"><span class="stat-chip" style="background: rgba(69, 242, 141, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#45F28D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle></svg></span><span class="stat-label">Today&#8217;s sales</span></div>
+          <span class="stat-value money">KES 910.00</span>
+          <span class="stat-detail">Reconciled 2026-09-19</span>
+        </div>
+        <div class="stat">
+          <div class="stat-head"><span class="stat-chip" style="background: rgba(66, 165, 245, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#42A5F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg></span><span class="stat-label">Transactions</span></div>
+          <span class="stat-value">23</span>
+          <span class="stat-detail">Counted today</span>
+        </div>
+        <div class="stat">
+          <div class="stat-head"><span class="stat-chip" style="background: rgba(176, 205, 189, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BCCBB9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span><span class="stat-label">Shifts</span></div>
+          <span class="stat-value">2</span>
+          <span class="stat-detail">Closed today</span>
+        </div>
+        <div class="stat">
+          <div class="stat-head"><span class="stat-chip" style="background: rgba(102, 187, 106, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66BB6A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-6 4 3 6-8"></path><path d="M19 6h-4"></path><path d="M19 6v4"></path></svg></span><span class="stat-label">Net profit</span></div>
+          <span class="stat-value money">KES 241.50</span>
+          <span class="stat-detail">After cost of goods and expenses</span>
+        </div>
+      </div>
+      <div class="cond" style="width: 380px; padding-top: 8px;">
+        <code>tiles.length == 4</code>
+        <span>The panel keeps its <code style="color: #45F28D;">space.8</code> inset rather than <code style="color: #45F28D;">space.16</code>, because a <code style="color: #45F28D;">StatTile</code> already carries its own horizontal inset and doubling it truncated the labels to &#8220;TODAY&#8217;S S&#8230;&#8221; on a 360 handset. That is existing and unchanged.</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px;">
+    <h2>Above 768 &#8212; one row, hairline dividers</h2>
+    <div class="panel" style="padding: 20px 8px; display: flex; align-items: stretch; gap: 16px;">
+      <div class="stat" style="flex: 1; background: transparent; border: 0;">
+        <div class="stat-head"><span class="stat-chip" style="background: rgba(69, 242, 141, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#45F28D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle></svg></span><span class="stat-label">Today&#8217;s sales</span></div>
+        <span class="stat-value money">KES 910.00</span>
+        <span class="stat-detail">Reconciled 2026-09-19</span>
+      </div>
+      <div class="vdiv" aria-hidden="true"></div>
+      <div class="stat" style="flex: 1; background: transparent; border: 0;">
+        <div class="stat-head"><span class="stat-chip" style="background: rgba(66, 165, 245, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#42A5F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg></span><span class="stat-label">Transactions</span></div>
+        <span class="stat-value">23</span>
+        <span class="stat-detail">Counted today</span>
+      </div>
+      <div class="vdiv" aria-hidden="true"></div>
+      <div class="stat" style="flex: 1; background: transparent; border: 0;">
+        <div class="stat-head"><span class="stat-chip" style="background: rgba(176, 205, 189, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BCCBB9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span><span class="stat-label">Shifts</span></div>
+        <span class="stat-value">2</span>
+        <span class="stat-detail">Closed today</span>
+      </div>
+      <div class="vdiv" aria-hidden="true"></div>
+      <div class="stat" style="flex: 1; background: transparent; border: 0;">
+        <div class="stat-head"><span class="stat-chip" style="background: rgba(102, 187, 106, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66BB6A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-6 4 3 6-8"></path><path d="M19 6h-4"></path><path d="M19 6v4"></path></svg></span><span class="stat-label">Net profit</span></div>
+        <span class="stat-value money">KES 241.50</span>
+        <span class="stat-detail">After cost of goods and expenses</span>
+      </div>
+    </div>
+    <p style="margin: 0; font-size: 13px; line-height: 19px; color: #869585;">The divider is the inspiration&#8217;s own: a 1-pixel column fading to transparent at both ends. It replaces the tile border rather than adding to it, so the band reads as one row of the day&#8217;s numbers.</p>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px;">
+    <h2>One profit tile, not two</h2>
+    <div style="display: flex; gap: 20px; align-items: flex-start;">
+      <div style="width: 340px; display: flex; flex-direction: column; gap: 10px;">
+        <div class="stat">
+          <div class="stat-head"><span class="stat-chip" style="background: rgba(102, 187, 106, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66BB6A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-6 4 3 6-8"></path><path d="M19 6h-4"></path><path d="M19 6v4"></path></svg></span><span class="stat-label">Net profit</span></div>
+          <span class="stat-value money">KES 241.50</span>
+          <span class="stat-detail">After cost of goods and expenses</span>
+        </div>
+        <div class="cond"><code>expenses != null</code><span>Expenses were read, so the figure is the whole answer and the label says so.</span></div>
+      </div>
+      <div style="width: 340px; display: flex; flex-direction: column; gap: 10px;">
+        <div class="stat">
+          <div class="stat-head"><span class="stat-chip" style="background: rgba(102, 187, 106, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66BB6A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-6 4 3 6-8"></path><path d="M19 6h-4"></path><path d="M19 6v4"></path></svg></span><span class="stat-label">Gross profit</span></div>
+          <span class="stat-value money">KES 274.00</span>
+          <span class="stat-detail">After cost of goods</span>
+        </div>
+        <div class="cond"><code>expenses == null</code><span>Expenses could not be read, so the tile states the figure it can stand behind and names its basis. The label changes with it.</span></div>
+      </div>
+      <div style="width: 340px; display: flex; flex-direction: column; gap: 10px;">
+        <div class="stat" style="opacity: 0.5;">
+          <div class="stat-head"><span class="stat-chip" style="background: rgba(102, 187, 106, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66BB6A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-6 4 3 6-8"></path><path d="M19 6h-4"></path><path d="M19 6v4"></path></svg></span><span class="stat-label">Gross profit</span></div>
+          <span class="stat-value money">KES 274.00</span>
+          <span class="stat-detail">After cost of goods</span>
+        </div>
+        <div class="cond"><code>&#8212; withdrawn &#8212;</code><span>The fifth tile. On a day with no expenses it prints the same number as the one above it, which is where <code style="color: #45F28D;">KES 274.00</code> appeared twice on one phone screen.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px;">
+    <h2>What a tile says when it cannot say a figure</h2>
+    <div style="display: flex; gap: 20px; align-items: flex-start;">
+      <div style="width: 340px; display: flex; flex-direction: column; gap: 10px;">
+        <div class="stat">
+          <div class="stat-head"><span class="stat-chip" style="background: rgba(69, 242, 141, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#45F28D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle></svg></span><span class="stat-label">Today&#8217;s sales</span></div>
+          <span class="stat-value">&#8212;</span>
+          <span class="stat-detail">Not reconciled yet</span>
+        </div>
+        <div class="cond"><code>metrics == null</code><span>An em dash, never a zero: a morning&#8217;s trade printed as <code style="color: #45F28D;">KES 0.00</code> is the worst kind of wrong figure, a plausible one.</span></div>
+      </div>
+      <div style="width: 340px; display: flex; flex-direction: column; gap: 10px;">
+        <div class="stat">
+          <div class="stat-head" style="justify-content: space-between;">
+            <span style="display: flex; align-items: center; gap: 8px;"><span class="stat-chip" style="background: rgba(69, 242, 141, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#45F28D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle></svg></span><span class="stat-label">Today&#8217;s sales</span></span>
+            <span class="badge-await">Not reconciled</span>
+          </div>
+          <span class="stat-value money">KES 640.00</span>
+          <span class="stat-detail">On this device</span>
+        </div>
+        <div class="cond"><code>deviceKnowsMore</code><span>This device holds sales the published figure cannot, so it states its own total and marks what it is. Reconciliation certifies the value rather than releasing it.</span></div>
+      </div>
+      <div style="width: 340px; display: flex; flex-direction: column; gap: 10px;">
+        <div class="stat">
+          <div class="stat-head" style="justify-content: space-between;">
+            <span style="display: flex; align-items: center; gap: 8px;"><span class="stat-chip" style="background: rgba(69, 242, 141, 0.15);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#45F28D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle></svg></span><span class="stat-label">Today&#8217;s sales</span></span>
+            <span class="badge-await">2 not sent</span>
+          </div>
+          <span class="stat-value money">KES 910.00</span>
+          <span class="stat-detail">Reconciled 2026-09-19</span>
+        </div>
+        <div class="cond"><code>unsentTransactions &gt; 0</code><span>The published figure is ahead and still short by the sales in the outbox. The number is the best available; the badge is what is said about the rest.</span></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+</div>
+</body>
+</html>

@@ -195,9 +195,7 @@ void main() {
       expect(
         tester
             .widget<StatusBadge>(
-              find.byKey(
-                const ValueKey('daily-summary-reconciled-2026-07-30'),
-              ),
+              find.byKey(const ValueKey('daily-summary-reconciled-2026-07-30')),
             )
             .status,
         AppStatus.ok,
@@ -247,9 +245,7 @@ void main() {
       // §2.1 and rule 4: the word carries the state, never the colour alone.
       expect(badge.label, 'Waiting to be regenerated');
       expect(
-        find.byKey(
-          const ValueKey('daily-summary-superseded-note-2026-07-30'),
-        ),
+        find.byKey(const ValueKey('daily-summary-superseded-note-2026-07-30')),
         findsOne,
       );
       // The figures themselves are still drawn - they are what a reader came
@@ -356,9 +352,7 @@ void main() {
     expect(
       tester
           .widget<Text>(
-            find.byKey(
-              const ValueKey('daily-summary-transactions-2026-07-30'),
-            ),
+            find.byKey(const ValueKey('daily-summary-transactions-2026-07-30')),
           )
           .data,
       '12',
@@ -527,9 +521,7 @@ void main() {
     expect(
       tester
           .widget<Text>(
-            find.byKey(
-              const ValueKey('daily-summary-transactions-2026-07-31'),
-            ),
+            find.byKey(const ValueKey('daily-summary-transactions-2026-07-31')),
           )
           .data,
       '1',
@@ -698,9 +690,7 @@ void main() {
       ],
     );
 
-    await tester.tap(
-      find.byKey(const ValueKey('daily-summary-sales-totals')),
-    );
+    await tester.tap(find.byKey(const ValueKey('daily-summary-sales-totals')));
     await tester.pumpAndSettle();
 
     // The route runs under the same session scope, so a tenant switch
@@ -736,8 +726,12 @@ void main() {
         tenantId: 'tenant-b',
         // The profit moves with the takings: the net cross-check derives cost
         // from the two, and 430.25 profit on 7.50 of sales is a negative cost.
-        overrides: <String, Object?>{'sales': 7.5, 'profit': 2.5,
-          'transactions': 1, 'transactionCount': 1},
+        overrides: <String, Object?>{
+          'sales': 7.5,
+          'profit': 2.5,
+          'transactions': 1,
+          'transactionCount': 1,
+        },
       ),
     }, deferred: true);
 
@@ -764,11 +758,7 @@ void main() {
 }
 
 /// Completes every read a sequential day-by-day load issues under [prefix].
-Future<void> _drain(
-  WidgetTester tester,
-  _Reader reader,
-  String prefix,
-) async {
+Future<void> _drain(WidgetTester tester, _Reader reader, String prefix) async {
   for (var pass = 0; pass < 4; pass++) {
     reader.completeAllFor(prefix);
     await tester.pump();

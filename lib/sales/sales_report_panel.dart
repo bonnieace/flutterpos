@@ -52,12 +52,20 @@ final class TenantSalesReportScreen extends StatelessWidget {
     this.checkoutOutbox,
     this.catalog,
     this.clock,
+    this.initialBusinessDate,
+    this.initialStaffId,
   });
 
   final TenantDataReader reader;
   final TenantSalesHistoryQueryReader? reportReader;
   final SalesTotalsCallable? totalsCallable;
   final TenantReturnActions? returnActions;
+
+  /// See [TenantSalesReportPanel.initialBusinessDate].
+  final String? initialBusinessDate;
+
+  /// See [TenantSalesReportPanel.initialStaffId].
+  final String? initialStaffId;
 
   /// A second copy of a receipt, audited. Absent, the sale menu offers none -
   /// see [TenantReceiptReprinter].
@@ -90,6 +98,8 @@ final class TenantSalesReportScreen extends StatelessWidget {
       checkoutOutbox: checkoutOutbox,
       catalog: catalog,
       clock: clock,
+      initialBusinessDate: initialBusinessDate,
+      initialStaffId: initialStaffId,
     ),
   );
 }
@@ -109,7 +119,24 @@ final class TenantSalesReportPanel extends StatefulWidget {
     this.clock,
     this.pageSize = 20,
     this.staffPageSize = 50,
+    this.initialBusinessDate,
+    this.initialStaffId,
   });
+
+  /// The business date the report opens on. Null is today, which is how the
+  /// home opens it.
+  ///
+  /// **Where the filters start, not a lock on them**: the date button moves it
+  /// as it always does. Set by a screen that opens the report *about*
+  /// something - a shift history card opens the day its shift belonged to.
+  final String? initialBusinessDate;
+
+  /// The member the report opens narrowed to. Null is everyone.
+  ///
+  /// Taken exactly as a choice in the staff select is: management only, and
+  /// only for a member the roster lists. A cashier's report is their own
+  /// whatever this says.
+  final String? initialStaffId;
 
   final TenantDataReader reader;
   final TenantSalesHistoryQueryReader? reportReader;
@@ -141,6 +168,11 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   String? _staffId;
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
+
+  /// Which way the last page turn went, so the pager can say which of its
+  /// segments is working while that page is read. Null after anything that
+  /// starts the day again from its first page.
+  PaginationDirection? _paging;
   int _generation = 0;
   String? _submittedEnding;
   String? _receiptRejection;
@@ -178,7 +210,8 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   @override
   void initState() {
     super.initState();
-    _businessDate = _todayBusinessDate;
+    _businessDate = widget.initialBusinessDate ?? _todayBusinessDate;
+    _staffId = widget.initialStaffId;
   }
 
   String get _todayBusinessDate => checkoutBusinessDate(
@@ -197,6 +230,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   void _resetPages() {
     _cursors = <String?>[null];
     _pageIndex = 0;
+    _paging = null;
     _generation++;
   }
 
@@ -234,12 +268,16 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
     setState(() {
       _cursors = <String?>[..._cursors.take(_pageIndex + 1), cursor];
       _pageIndex++;
+      _paging = PaginationDirection.next;
     });
   }
 
   void _previous() {
     if (_pageIndex == 0) return;
-    setState(() => _pageIndex--);
+    setState(() {
+      _pageIndex--;
+      _paging = PaginationDirection.previous;
+    });
   }
 
   void _onReceiptChanged(String value) {
@@ -768,6 +806,8 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           receiptRejection: _receiptRejection,
           receiptResult: null,
           pageIndex: _pageIndex,
+          paging: _paging,
+          pageSize: widget.pageSize,
           onReceiptChanged: _onReceiptChanged,
           onSubmitReceipt: _submitReceipt,
           onPickDate: _pickBusinessDate,
@@ -802,6 +842,8 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           receiptRejection: _receiptRejection,
           receiptResult: null,
           pageIndex: _pageIndex,
+          paging: _paging,
+          pageSize: widget.pageSize,
           failureMessage: 'The sales for this day could not be read.',
           onReceiptChanged: _onReceiptChanged,
           onSubmitReceipt: _submitReceipt,
@@ -868,6 +910,8 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           receiptRejection: _receiptRejection,
           receiptResult: receiptResult,
           pageIndex: _pageIndex,
+          paging: _paging,
+          pageSize: widget.pageSize,
           onReceiptChanged: _onReceiptChanged,
           onSubmitReceipt: _submitReceipt,
           onPickDate: _pickBusinessDate,
@@ -964,6 +1008,8 @@ final class _SalesReportContents extends StatelessWidget {
     required this.receiptRejection,
     required this.receiptResult,
     required this.pageIndex,
+    required this.paging,
+    required this.pageSize,
     this.failureMessage,
     required this.onReceiptChanged,
     required this.onSubmitReceipt,
@@ -1004,6 +1050,14 @@ final class _SalesReportContents extends StatelessWidget {
   final String? receiptRejection;
   final Widget? receiptResult;
   final int pageIndex;
+
+  /// Which way the last page turn went. While the guard is re-reading it is
+  /// the read the pager says it is waiting on; once the page lands it says
+  /// nothing.
+  final PaginationDirection? paging;
+
+  /// How many sales a page reads, which is what numbers the records shown.
+  final int pageSize;
   final ValueChanged<String> onReceiptChanged;
   final VoidCallback onSubmitReceipt;
   final VoidCallback onPickDate;
@@ -1027,9 +1081,12 @@ final class _SalesReportContents extends StatelessWidget {
         : width < AppLayout.contract.expandedFloor
         ? tokens.spacing.s20
         : tokens.spacing.s24;
-    return ListView(
-      key: const ValueKey('sales-report'),
+    final showingReceipt = submittedEnding != null && receiptResult != null;
+    return PagedListView(
+      listKey: const ValueKey('sales-report'),
       padding: EdgeInsets.all(inset),
+      // A receipt looked up by its number is one sale, and does not page.
+      pagination: showingReceipt ? null : _pager(context),
       children: <Widget>[
         if (failureMessage case final message?) ...<Widget>[
           Callout(
@@ -1052,7 +1109,7 @@ final class _SalesReportContents extends StatelessWidget {
         SizedBox(height: tokens.spacing.s12),
         _scopeControls(context),
         SizedBox(height: tokens.spacing.s16),
-        if (submittedEnding != null && receiptResult != null)
+        if (showingReceipt)
           receiptResult!
         else ...<Widget>[
           // **The one region on this page that genuinely needs a server**, and
@@ -1082,17 +1139,47 @@ final class _SalesReportContents extends StatelessWidget {
             )
           else
             const _SaleCardsSkeleton(key: ValueKey('sales-report-skeleton')),
-          SizedBox(height: tokens.spacing.s16),
-          Pagination(
-            pageNumber: pageIndex + 1,
-            previousKey: const ValueKey('sales-report-previous-page'),
-            nextKey: const ValueKey('sales-report-next-page'),
-            pageKey: const ValueKey('sales-report-page'),
-            onPrevious: onPrevious,
-            onNext: onNext,
-          ),
         ],
       ],
+    );
+  }
+
+  /// The pager for the day's cards, held at the bottom of the screen by
+  /// [PagedListView].
+  ///
+  /// **While a turned page is read, the page being left stays on screen** -
+  /// the guard holds it, see [TenantReadFreshness.rereading] - so the pager
+  /// says so too: the figure is that page's, the segment that was pressed
+  /// shows a spinner, and neither answers a second press. The figure rolls
+  /// when the new page's sales land, so the roll is the arrival rather than
+  /// the press. A re-read that is not a page turn - a new date, a new
+  /// colleague, a return settled - draws no spinner.
+  Pagination _pager(BuildContext context) {
+    final loaded = view;
+    final rereading = TenantReadFreshness.maybeOf(context)?.rereading ?? false;
+    final reading = rereading ? paging : null;
+    final pageNumber = switch (reading) {
+      PaginationDirection.next => pageIndex,
+      PaginationDirection.previous => pageIndex + 2,
+      null => pageIndex + 1,
+    };
+    final first = (pageNumber - 1) * pageSize + 1;
+    return Pagination(
+      pageNumber: pageNumber,
+      previousKey: const ValueKey('sales-report-previous-page'),
+      nextKey: const ValueKey('sales-report-next-page'),
+      pageKey: const ValueKey('sales-report-page'),
+      onPrevious: onPrevious,
+      onNext: onNext,
+      loading: reading,
+      // Only a page that has answered can say whether it was the last one.
+      endOfList: loaded != null && !loaded.page.hasMore,
+      // **The records this page read**, as the design numbers them - a sale
+      // returned in full is still one of them, though its card has left the
+      // list.
+      range: loaded == null || loaded.page.items.isEmpty
+          ? null
+          : (first: first, last: first + loaded.page.items.length - 1),
     );
   }
 
@@ -1134,27 +1221,28 @@ final class _SalesReportContents extends StatelessWidget {
   Widget _scopeControls(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final loaded = view;
-    final date = Column(
+    // **No caption over either control.** *Date* sat above a button already
+    // showing a date behind a calendar glyph, and *Sold by* above a control
+    // reading *All staff* - both of them the same word twice, and between them
+    // two lines of type over the figures this page exists to show.
+    //
+    // **The date button keeps the word as its announcement**, because
+    // `AppButton` has no `semanticLabel` of its own and a button reading only
+    // `2026-09-21` tells a screen reader nothing about what pressing it does.
+    // Hidden, never removed - the contract `AppTextField.dense` states.
+    final date = Semantics(
       key: const ValueKey('sales-date-filter'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Text(
-          'Date',
-          style: tokens.typography.labelMedium.copyWith(
-            color: tokens.colors.text.secondary,
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s8),
-        AppButton(
-          key: const ValueKey('sales-date-picker'),
-          label: businessDate,
-          icon: Icons.calendar_today_outlined,
-          tier: AppButtonTier.secondary,
-          expand: true,
-          onPressed: onPickDate,
-        ),
-      ],
+      label: 'Date, $businessDate',
+      button: true,
+      excludeSemantics: true,
+      child: AppButton(
+        key: const ValueKey('sales-date-picker'),
+        label: businessDate,
+        icon: Icons.calendar_today_outlined,
+        tier: AppButtonTier.secondary,
+        expand: true,
+        onPressed: onPickDate,
+      ),
     );
     // A member who cannot narrow the day never gets this control in either
     // state. While the read is outstanding the directory has not answered yet,
@@ -1166,6 +1254,7 @@ final class _SalesReportContents extends StatelessWidget {
       key: const ValueKey('sales-staff-filter'),
       value: loaded?.appliedStaffId ?? '',
       label: 'Sold by',
+      dense: true,
       leading: Icons.person_outline,
       // **Disabled rather than absent while the colleagues are being read.**
       // Absent would move the date button from half the row to all of it and
@@ -1209,6 +1298,65 @@ final class _SalesReportContents extends StatelessWidget {
 /// rows are folded, which is the shape it opens in.
 const double _totalsBandHeight = 96;
 
+/// The hairline this page's cards are ruled with: one logical pixel, which is
+/// `Divider`'s own default. Named rather than inlined because this app has no
+/// stroke-width token to read it from - recorded here rather than invented as
+/// one.
+const double _hairline = 1;
+
+/// A sale card's frame: `surface.raised` inside a `cardEdge` hairline at
+/// `radius.lg`, with everything in it clipped inside the edge.
+///
+/// **Not `AppCard`, and the foot is why.** `AppCard` lays its child over its
+/// own border, which is right for a card whose content is inset and wrong for
+/// this one: the foot is a filled strip running edge to edge, and it painted
+/// its square corners over the card's rounded ones and its fill over the
+/// card's bottom edge, so the card had no edge along the bottom at all. The
+/// design draws the strip *inside* the edge, as a border-box does, and that is
+/// what the inset and the clip reproduce.
+///
+/// **`radius.lg` rather than `AppCard`'s `radius.md`**, because the design
+/// draws these cards at 12.
+final class _SaleCardFrame extends StatelessWidget {
+  const _SaleCardFrame({super.key, required this.child});
+
+  final Widget child;
+
+  /// The space between two cards in the day's list.
+  static double gap(AppTokens tokens) => tokens.spacing.s12;
+
+  /// The foot's padding. The design draws 10 above and below the line, which
+  /// falls between two steps of the scale; `space.8` is the slimmer of the
+  /// pair.
+  static EdgeInsets footPadding(AppTokens tokens) => EdgeInsets.symmetric(
+    horizontal: tokens.spacing.s12,
+    vertical: tokens.spacing.s8,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final radius = tokens.radius.lg;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: tokens.colors.surface.raised,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: tokens.colors.surface.cardEdge,
+          width: _hairline,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(_hairline),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius - _hairline),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 /// Placeholder sale cards, for the day that has not been read yet.
 ///
 /// **Its own widget rather than `RecordListSkeleton`**, because
@@ -1231,7 +1379,9 @@ final class _SaleCardsSkeleton extends StatelessWidget {
         children: <Widget>[
           for (var card = 0; card < _cards; card++)
             Padding(
-              padding: EdgeInsets.only(bottom: tokens.spacing.s8),
+              padding: EdgeInsets.only(
+                top: card == 0 ? 0 : _SaleCardFrame.gap(tokens),
+              ),
               child: const _SaleCardSkeleton(),
             ),
         ],
@@ -1251,9 +1401,10 @@ final class _SaleCardsSkeleton extends StatelessWidget {
 /// whole argument for a skeleton over a spinner.
 ///
 /// **The chrome is real, and only the values are blocks.** Decision 35 again:
-/// the card frame, both rules and the meta band's fill do not change when the
-/// read returns, so they are drawn rather than approximated. What shimmers is
-/// exactly the set of things the server is still deciding.
+/// the card frame, both rules and the foot's fill do not change when the read
+/// returns, so they are drawn rather than approximated. What shimmers is
+/// exactly the set of things the server is still deciding, each block where
+/// [_SaleCard] puts the value it stands for.
 final class _SaleCardSkeleton extends StatelessWidget {
   const _SaleCardSkeleton();
 
@@ -1261,30 +1412,27 @@ final class _SaleCardSkeleton extends StatelessWidget {
   /// is enough to read as *a list of things* rather than as one more line.
   static const int _items = 2;
 
-  /// The hairline [_SaleCard] rules its regions with: one logical pixel, which
-  /// is the figure the real card passes and `Divider`'s own default. Named
-  /// rather than inlined because this app has no stroke-width token to read it
-  /// from - recorded here rather than invented as one.
-  static const double _hairline = 1;
-
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     // Everything sits inside a card, so every block steps up from `raised`
     // rather than matching it.
     const tone = SkeletonTone.onRaised;
-    return AppCard(
-      padding: EdgeInsets.zero,
+    return _SaleCardFrame(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Padding(
-            padding: EdgeInsets.all(tokens.spacing.s12),
+            padding: EdgeInsetsDirectional.only(
+              start: tokens.spacing.s12,
+              top: tokens.spacing.s4,
+              bottom: tokens.spacing.s4,
+            ),
             child: Row(
               children: <Widget>[
                 SkeletonBlock(
-                  width: tokens.spacing.s20,
-                  height: tokens.spacing.s20,
+                  width: AppButton.iconSize,
+                  height: AppButton.iconSize,
                   radius: tokens.radius.sm,
                   tone: tone,
                 ),
@@ -1296,20 +1444,13 @@ final class _SaleCardSkeleton extends StatelessWidget {
                       Expanded(
                         child: SkeletonLine(
                           widthFactor: 0.72,
-                          style: tokens.typography.mono.copyWith(
-                            fontSize: tokens.typography.bodyLarge.fontSize,
+                          style: tokens.typography.numericBody.copyWith(
+                            fontSize: tokens.typography.titleMedium.fontSize,
                           ),
                           tone: tone,
                         ),
                       ),
                       SizedBox(width: tokens.spacing.s8),
-                      SkeletonBlock(
-                        width: tokens.spacing.s16,
-                        height: tokens.spacing.s16,
-                        radius: tokens.radius.sm,
-                        tone: tone,
-                      ),
-                      SizedBox(width: tokens.spacing.s4),
                       Expanded(
                         child: SkeletonLine(
                           widthFactor: 0.62,
@@ -1324,16 +1465,23 @@ final class _SaleCardSkeleton extends StatelessWidget {
                 SizedBox(
                   width: tokens.spacing.s64,
                   child: SkeletonLine(
-                    style: tokens.typography.numericBody,
+                    style: tokens.typography.numericBody.copyWith(
+                      fontSize: tokens.typography.bodyLarge.fontSize,
+                    ),
                     tone: tone,
                   ),
                 ),
-                SizedBox(width: tokens.spacing.s8),
-                SkeletonBlock(
-                  width: tokens.spacing.s24,
-                  height: tokens.spacing.s24,
-                  radius: tokens.radius.sm,
-                  tone: tone,
+                // The menu's glyph, in the menu's square.
+                SizedBox.square(
+                  dimension: tokens.density.minimumTapTarget.height,
+                  child: Center(
+                    child: SkeletonBlock(
+                      width: tokens.spacing.s20,
+                      height: tokens.spacing.s20,
+                      radius: tokens.radius.sm,
+                      tone: tone,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1350,17 +1498,29 @@ final class _SaleCardSkeleton extends StatelessWidget {
             const _SaleItemRowSkeleton(tone: tone),
           ],
           Container(
-            padding: EdgeInsets.all(tokens.spacing.s12),
+            padding: _SaleCardFrame.footPadding(tokens),
             color: tokens.colors.surface.overlay,
             child: Wrap(
-              spacing: tokens.spacing.s16,
-              runSpacing: tokens.spacing.s8,
+              spacing: tokens.spacing.s12,
+              runSpacing: tokens.spacing.s4,
               children: <Widget>[
                 // Two ragged widths rather than two equal ones: a staff name
                 // and a tender are not the same length, and a placeholder that
                 // pretends they are reads as a table.
-                _SaleMetaSkeleton(tone: tone, width: tokens.spacing.s64),
-                _SaleMetaSkeleton(tone: tone, width: tokens.spacing.s48),
+                SizedBox(
+                  width: tokens.spacing.s64 + tokens.spacing.s32,
+                  child: SkeletonLine(
+                    style: tokens.typography.caption,
+                    tone: tone,
+                  ),
+                ),
+                SizedBox(
+                  width: tokens.spacing.s40,
+                  child: SkeletonLine(
+                    style: tokens.typography.caption,
+                    tone: tone,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1404,7 +1564,6 @@ final class _SaleItemRowSkeleton extends StatelessWidget {
                   style: tokens.typography.labelMedium,
                   tone: tone,
                 ),
-                SizedBox(height: tokens.spacing.s4),
                 SkeletonLine(
                   widthFactor: 0.34,
                   style: tokens.typography.caption,
@@ -1423,37 +1582,6 @@ final class _SaleItemRowSkeleton extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// One placeholder meta pair in the card's foot, shaped like [_SaleMeta].
-final class _SaleMetaSkeleton extends StatelessWidget {
-  const _SaleMetaSkeleton({required this.tone, required this.width});
-
-  final SkeletonTone tone;
-
-  /// How wide the label reads. The caller varies it so the two do not line up.
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        SkeletonBlock(
-          width: tokens.spacing.s16,
-          height: tokens.spacing.s16,
-          radius: tokens.radius.sm,
-          tone: tone,
-        ),
-        SizedBox(width: tokens.spacing.s4),
-        SizedBox(
-          width: width,
-          child: SkeletonLine(style: tokens.typography.caption, tone: tone),
-        ),
-      ],
     );
   }
 }
@@ -1589,8 +1717,10 @@ final class _ManagementSalesSummary extends StatelessWidget {
         serverNet?.sales ?? _nonNegative(totals.sales - returnedMinor / 100);
     final netTransactions =
         serverNet?.transactions ??
-        (totals.transactions - returns.fullyReturnedSales)
-            .clamp(0, totals.transactions);
+        (totals.transactions - returns.fullyReturnedSales).clamp(
+          0,
+          totals.transactions,
+        );
     // The split has to describe the same money as the total above it, so it
     // comes from whichever side that total did.
     final breakdown = serverNet == null
@@ -2078,9 +2208,11 @@ final class _SalesPresentation extends StatelessWidget {
       key: const ValueKey('sales-report-cards'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        for (final sale in shown)
+        for (final (index, sale) in shown.indexed)
           Padding(
-            padding: EdgeInsets.only(bottom: tokens.spacing.s8),
+            padding: EdgeInsets.only(
+              top: index == 0 ? 0 : _SaleCardFrame.gap(tokens),
+            ),
             child: _SaleCard(
               sale: sale,
               offset: returns.offsetFor(sale),
@@ -2139,19 +2271,27 @@ final class _SaleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final returned = offset;
-    return AppCard(
+    return _SaleCardFrame(
       key: ValueKey('sales-record-${sale.id}'),
-      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Padding(
-            padding: EdgeInsets.all(tokens.spacing.s12),
+            // **56 high, and the menu's target is what sets it.** The design
+            // draws this row as 16 above and below a 24 line; the menu is §9's
+            // 48 square, so the same 56 is 4 above and below it, and the
+            // square sits against the card's edge where the design has its
+            // 12 of padding.
+            padding: EdgeInsetsDirectional.only(
+              start: tokens.spacing.s12,
+              top: tokens.spacing.s4,
+              bottom: tokens.spacing.s4,
+            ),
             child: Row(
               children: <Widget>[
                 Icon(
                   Icons.schedule_outlined,
-                  size: 18,
+                  size: AppButton.iconSize,
                   color: tokens.colors.action.primary.container,
                 ),
                 SizedBox(width: tokens.spacing.s8),
@@ -2164,20 +2304,15 @@ final class _SaleCard extends StatelessWidget {
                           key: ValueKey('sales-recorded-time-${sale.id}'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: tokens.typography.mono.copyWith(
+                          // The figures' face at the title size: the time is
+                          // what a person scans the day's cards by.
+                          style: tokens.typography.numericBody.copyWith(
                             color: tokens.colors.text.primary,
-                            fontSize: tokens.typography.bodyLarge.fontSize,
-                            fontWeight: FontWeight.w800,
+                            fontSize: tokens.typography.titleMedium.fontSize,
                           ),
                         ),
                       ),
                       SizedBox(width: tokens.spacing.s8),
-                      Icon(
-                        Icons.receipt_long_outlined,
-                        size: 14,
-                        color: tokens.colors.text.tertiary,
-                      ),
-                      SizedBox(width: tokens.spacing.s4),
                       Flexible(
                         child: Text(
                           _receiptEnding(sale),
@@ -2204,7 +2339,7 @@ final class _SaleCard extends StatelessWidget {
                   key: ValueKey('sales-total-${sale.id}'),
                   style: tokens.typography.numericBody.copyWith(
                     color: tokens.colors.text.money,
-                    fontWeight: FontWeight.w800,
+                    fontSize: tokens.typography.bodyLarge.fontSize,
                   ),
                 ),
                 _SaleMenu(
@@ -2216,11 +2351,11 @@ final class _SaleCard extends StatelessWidget {
               ],
             ),
           ),
-          Divider(height: 1, color: tokens.colors.surface.borderSubtle),
+          Divider(height: _hairline, color: tokens.colors.surface.borderSubtle),
           for (final (index, line) in sale.lines.indexed) ...<Widget>[
             if (index > 0)
               Divider(
-                height: 1,
+                height: _hairline,
                 indent: tokens.spacing.s16,
                 endIndent: tokens.spacing.s16,
                 color: tokens.colors.surface.borderSubtle,
@@ -2228,24 +2363,26 @@ final class _SaleCard extends StatelessWidget {
             _SaleItemRow(sale: sale, line: line, index: index),
           ],
           Container(
-            padding: EdgeInsets.all(tokens.spacing.s12),
+            padding: _SaleCardFrame.footPadding(tokens),
             color: tokens.colors.surface.overlay,
             child: Wrap(
-              spacing: tokens.spacing.s16,
-              runSpacing: tokens.spacing.s8,
+              spacing: tokens.spacing.s12,
+              runSpacing: tokens.spacing.s4,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: <Widget>[
-                _SaleMeta(icon: Icons.person_outline, label: staffLabel),
-                _SaleMeta(icon: Icons.payments_outlined, label: _tender(sale)),
+                // **Words, no glyphs.** Each of these reads as what it is - a
+                // name, a way of paying, a till's receipt number, a sync time -
+                // and a glyph in front of each one was four more marks on a
+                // strip that exists to be read second.
+                _SaleMeta(label: staffLabel),
+                _SaleMeta(label: _tender(sale)),
                 // **The till, named here because the header has no room.**
                 // The header's `#0001` is the same on every register's first
                 // sale of a day - see `_receiptEnding` for the measurement -
-                // and this foot is a `Wrap` of `MainAxisSize.min` rows, so it
-                // reflows onto another line instead of ellipsizing the way that
-                // slot does.
+                // and this foot is a `Wrap`, so it reflows onto another line
+                // instead of ellipsizing the way that slot does.
                 _SaleMeta(
                   key: ValueKey('sales-receipt-till-${sale.id}'),
-                  icon: Icons.point_of_sale_outlined,
                   label: _receiptLabel(sale),
                 ),
                 // **Only where the two times disagree.** The header now shows
@@ -2255,7 +2392,6 @@ final class _SaleCard extends StatelessWidget {
                 if (_syncedLaterAt(sale) case final synced?)
                   _SaleMeta(
                     key: ValueKey('sales-synced-later-${sale.id}'),
-                    icon: Icons.cloud_done_outlined,
                     label: 'Synced ${_clockTime(synced)}',
                   ),
                 // §9: the standing is a word as well as a colour, and it is
@@ -2343,15 +2479,16 @@ final class _SaleItemRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
+                // One line, as the design draws it: a basket reads as a column
+                // of names, and a name that wraps breaks the column.
                 Text(
                   line.name,
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: tokens.typography.labelMedium.copyWith(
                     color: tokens.colors.text.primary,
                   ),
                 ),
-                SizedBox(height: tokens.spacing.s4),
                 Text(
                   '${line.quantity} × ${sale.currency} '
                   '${_money(line.unitPriceMinor)}',
@@ -2375,32 +2512,26 @@ final class _SaleItemRow extends StatelessWidget {
   }
 }
 
+/// One fact in a sale card's foot: `caption` at `text.secondary`.
+///
+/// **Bounded by the foot, not by a figure of its own.** A `Wrap` hands each
+/// child at most its own width, so a name longer than the strip ellipsizes at
+/// the strip's edge and everything after it takes the next run.
 final class _SaleMeta extends StatelessWidget {
-  const _SaleMeta({super.key, required this.icon, required this.label});
+  const _SaleMeta({super.key, required this.label});
 
-  final IconData icon;
   final String label;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Icon(icon, size: 16, color: tokens.colors.text.tertiary),
-        SizedBox(width: tokens.spacing.s4),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 220),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: tokens.typography.caption.copyWith(
-              color: tokens.colors.text.secondary,
-            ),
-          ),
-        ),
-      ],
+    return Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: tokens.typography.caption.copyWith(
+        color: tokens.colors.text.secondary,
+      ),
     );
   }
 }
@@ -2440,7 +2571,12 @@ final class _SaleMenu extends StatelessWidget {
     return PopupMenuButton<_SaleAction>(
       key: ValueKey('sales-actions-${sale.id}'),
       tooltip: 'Actions for receipt ${sale.receiptNumber}',
-      icon: Icon(Icons.more_vert, color: tokens.colors.text.secondary),
+      icon: Icon(
+        Icons.more_vert,
+        size: tokens.spacing.s20,
+        color: tokens.colors.text.secondary,
+      ),
+      iconSize: tokens.spacing.s20,
       color: tokens.colors.surface.overlay,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(tokens.radius.md),
@@ -2609,7 +2745,12 @@ String _receiptLabel(TenantSale sale) {
 String _receiptEnding(TenantSale sale) =>
     '#${sale.receiptSequence.toString().padLeft(checkoutReceiptSequenceDigits, '0')}';
 
-String _tender(TenantSale sale) => sale.tender?.label ?? 'Not recorded';
+/// The way a sale was paid, as its card's foot says it.
+///
+/// **The blank names what is blank.** The foot's facts stand as words alone
+/// since 2026-09-22, so a bare *Not recorded* no longer had a payments glyph in
+/// front of it to say what was not.
+String _tender(TenantSale sale) => sale.tender?.label ?? 'Payment not recorded';
 
 String _saleMoney(TenantSale sale, int minorUnits) =>
     '${sale.currency} ${_money(minorUnits)}';

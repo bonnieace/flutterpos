@@ -188,9 +188,17 @@ final class _LedgerContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      key: const ValueKey('product-ledger'),
+    return PagedListView(
+      listKey: const ValueKey('product-ledger'),
       padding: EdgeInsets.all(tokens.spacing.s20),
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('product-ledger-previous'),
+        nextKey: const ValueKey('product-ledger-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: ledger.movements.hasMore ? onNextPage : null,
+        endOfList: !ledger.movements.hasMore,
+      ),
       children: [
         // **The one of the fourteen §7 sites that stays, and it is not a
         // duplicate.** The `AppScaffold` title is `Product stock ledger` and this
@@ -258,14 +266,6 @@ final class _LedgerContents extends StatelessWidget {
             key: ValueKey('product-ledger-empty'),
             'No stock movement has been recorded against this product.',
           ),
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('product-ledger-previous'),
-          nextKey: const ValueKey('product-ledger-next'),
-          onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: ledger.movements.hasMore ? onNextPage : null,
         ),
       ],
     );

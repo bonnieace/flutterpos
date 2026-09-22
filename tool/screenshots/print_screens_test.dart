@@ -246,11 +246,16 @@ void main() {
 /// captures are about the receipts, and a second set of moving figures above
 /// them would make the differences between the four harder to see rather than
 /// easier.
+///
+/// **The seeded business, because the queue is now read per business.** Every
+/// job above is enqueued under [seedTenantId], and `pending` drops any other
+/// tenant's jobs - so a different ID here would capture an empty queue.
 Widget _notifications(
   HivePrintJobQueue queue, {
   PrintJobRetry? onRetry,
   CheckoutEvidenceSummary summary = const CheckoutEvidenceSummary(),
 }) => TenantNotificationsScreen(
+  tenantId: seedTenantId,
   evidenceSource: FakeEvidenceSource(summary),
   printQueue: queue,
   onRetryPrint: onRetry,

@@ -256,6 +256,141 @@ final class TenantStaffSummary {
   }
 }
 
+/// What a person's access to this business amounts to right now.
+///
+/// **Membership status and invitation state, resolved to one word.** A row
+/// carried both - a `StatusBadge` for the membership and a right-aligned
+/// caption for the invitation - so *this person cannot sign in and nothing is
+/// going to change that on its own* had to be assembled by a reader out of two
+/// separate marks at two weights. These seven are what those two fields
+/// actually produce between them, and a row states one of them.
+///
+/// **The membership outranks the invitation**, for the reason
+/// [TenantStaffSummary.invitationState] gives about its own two fields: an
+/// active member is active however their invitation was delivered.
+///
+/// **Nothing here reads anything new.** Every value is computed from
+/// `status`, `invitationStatus`, `invitationDelivery` and `invitationExpiresAt`,
+/// which the directory document already carries and the row already held.
+enum StaffStanding {
+  active,
+  invited,
+  notSent,
+  linkExpired,
+  emailRejected,
+  invitationCancelled,
+  deactivated;
+
+  /// The standing [staff] is in at [now].
+  static StaffStanding of(TenantStaffSummary staff, DateTime now) =>
+      resolved(staff.status, staff.invitationState(now));
+
+  /// The standing, from a membership status and an invitation state that has
+  /// already had a clock applied to it.
+  ///
+  /// **Separate from [of] so the row does not need a second clock.** The
+  /// directory resolves every invitation against one `now` before it builds a
+  /// card; asking the card for its own would let two rows in one list disagree
+  /// about the same deadline.
+  static StaffStanding resolved(
+    MembershipStatus status,
+    TenantStaffInvitationState invitation,
+  ) => switch (status) {
+    MembershipStatus.active => StaffStanding.active,
+    MembershipStatus.inactive => StaffStanding.deactivated,
+    MembershipStatus.pending => switch (invitation) {
+      // An accepted invitation against a membership that has not been
+      // activated yet is still somebody waiting to be let in, which is what
+      // *Invited* says.
+      TenantStaffInvitationState.accepted => StaffStanding.invited,
+      TenantStaffInvitationState.sent => StaffStanding.invited,
+      TenantStaffInvitationState.notSent => StaffStanding.notSent,
+      TenantStaffInvitationState.expired => StaffStanding.linkExpired,
+      TenantStaffInvitationState.undeliverable => StaffStanding.emailRejected,
+      TenantStaffInvitationState.cancelled => StaffStanding.invitationCancelled,
+    },
+  };
+
+  /// Whether this is an invitation that will not arrive without somebody acting.
+  ///
+  /// **The same split `TenantStockTakeSchedule` and the shift standings make.**
+  /// A link that has run out and an address that bounced are both dead ends.
+  /// *Not sent yet* is deliberately excluded: delivery has not run, and it
+  /// usually runs.
+  bool get needsAttention =>
+      this == StaffStanding.linkExpired || this == StaffStanding.emailRejected;
+
+  /// The word on the badge. Sentence case, §8 rule 7.
+  String get label => switch (this) {
+    StaffStanding.active => 'Active',
+    StaffStanding.invited => 'Invited',
+    StaffStanding.notSent => 'Not sent yet',
+    StaffStanding.linkExpired => 'Link expired',
+    StaffStanding.emailRejected => 'Email rejected',
+    StaffStanding.invitationCancelled => 'Invitation cancelled',
+    StaffStanding.deactivated => 'Deactivated',
+  };
+
+  /// The tier the badge wears. §2.1's own vocabulary: `attention` is awaiting,
+  /// `problem` is a dead end, `neutral` is a standing nobody has to act on.
+  AppStatus get status => switch (this) {
+    StaffStanding.active => AppStatus.ok,
+    StaffStanding.invited => AppStatus.attention,
+    StaffStanding.notSent => AppStatus.attention,
+    StaffStanding.linkExpired => AppStatus.problem,
+    StaffStanding.emailRejected => AppStatus.problem,
+    StaffStanding.invitationCancelled => AppStatus.neutral,
+    StaffStanding.deactivated => AppStatus.neutral,
+  };
+
+  /// The glyph, so §9's rule holds: container, icon and word, never hue alone.
+  IconData get icon => switch (this) {
+    StaffStanding.active => Icons.check_circle_outline,
+    StaffStanding.invited => Icons.mail_outline,
+    StaffStanding.notSent => Icons.schedule_send_outlined,
+    StaffStanding.linkExpired => Icons.timer_off_outlined,
+    StaffStanding.emailRejected => Icons.report_gmailerrorred_outlined,
+    StaffStanding.invitationCancelled => Icons.block_outlined,
+    StaffStanding.deactivated => Icons.do_not_disturb_on_outlined,
+  };
+
+  /// What a screen reader is told, where the word alone is not a sentence.
+  String get semanticLabel => switch (this) {
+    StaffStanding.active => 'Active, can sign in',
+    StaffStanding.invited => 'Invited, waiting to be accepted',
+    StaffStanding.notSent => 'Invitation not sent yet',
+    StaffStanding.linkExpired => 'Invitation link has expired',
+    StaffStanding.emailRejected => 'Invitation email was rejected',
+    StaffStanding.invitationCancelled => 'Invitation was cancelled',
+    StaffStanding.deactivated => 'Deactivated, cannot sign in',
+  };
+
+  /// The key of the row action this standing promotes out of the kebab, or null
+  /// where it promotes none.
+  ///
+  /// **The two dead ends promote different actions, and that is the point.**
+  /// Resending to an address the mail server already rejected bounces again, so
+  /// *Email rejected* reaches for the replacement and never the resend.
+  ///
+  /// This names an action the row has already built and gated; it does not add
+  /// one. A standing whose action is absent - because this session may not take
+  /// it - simply draws no button.
+  String? promotedActionKeyFor(String uid) => switch (this) {
+    StaffStanding.notSent => 'resend-staff-invitation-$uid',
+    StaffStanding.linkExpired => 'resend-staff-invitation-$uid',
+    StaffStanding.emailRejected => 'replace-staff-email-$uid',
+    _ => null,
+  };
+
+  /// The word on that button, where there is one.
+  String? get promotedActionLabel => switch (this) {
+    StaffStanding.notSent => 'Send now',
+    StaffStanding.linkExpired => 'Resend',
+    StaffStanding.emailRejected => 'Replace email',
+    _ => null,
+  };
+}
+
 /// One bounded page of canonical tenant staff.
 final class TenantStaffPage {
   TenantStaffPage({
@@ -1120,6 +1255,63 @@ final class _StaffManagementContents extends StatelessWidget {
 
   bool get _hasQuery => searchTerm.isNotEmpty || role != null || status != null;
 
+  /// The people on this page whose invitation has reached a dead end.
+  ///
+  /// **Deliberately this page and not the business.** Both conditions are
+  /// computed rather than stored - *expired* is a deadline compared to now,
+  /// *rejected* is a delivery state - so neither is a field a bounded query
+  /// could filter or count on the server. A figure assembled from the rows
+  /// currently on screen is exactly the claim the four counters were removed
+  /// for making, which is why this names people and states no total.
+  List<({TenantStaffSummary staff, StaffStanding standing})>
+  get _invitationsInTrouble =>
+      <({TenantStaffSummary staff, StaffStanding standing})>[
+        for (final member in page.items)
+          if (StaffStanding.resolved(
+            member.status,
+            invitationStateFor(member),
+          ).needsAttention)
+            (
+              staff: member,
+              standing: StaffStanding.resolved(
+                member.status,
+                invitationStateFor(member),
+              ),
+            ),
+      ];
+
+  /// How many people the callout names before it stops naming them.
+  ///
+  /// Named rather than tokenised, for the reason `EmptyState.markSize` gives:
+  /// this is how long a sentence may get before it stops being read, and no
+  /// source this app has states one.
+  static const int namedInCallout = 3;
+
+  /// One sentence per person, and no count.
+  String _troubleMessage(
+    List<({TenantStaffSummary staff, StaffStanding standing})> trouble,
+  ) {
+    final named = trouble.take(namedInCallout);
+    final sentences = <String>[
+      for (final entry in named)
+        switch (entry.standing) {
+          StaffStanding.linkExpired =>
+            "${entry.staff.displayName}'s invitation link has expired.",
+          // The distinction that decides which button the row promotes, said
+          // in the words it will be said in there: resending to an address the
+          // mail server already refused bounces again.
+          StaffStanding.emailRejected =>
+            "${entry.staff.displayName}'s email was rejected by the mail "
+                'server.',
+          _ => '',
+        },
+    ];
+    if (trouble.length > namedInCallout) {
+      sentences.add('The rest are marked in the list below.');
+    }
+    return sentences.join(' ');
+  }
+
   bool get _readOnly =>
       !session.canAccess(
         allowedRoles: TenantStaffInvitationGateway.allowedRoles,
@@ -1136,9 +1328,18 @@ final class _StaffManagementContents extends StatelessWidget {
         : width < AppLayout.contract.expandedFloor
         ? tokens.spacing.s20
         : tokens.spacing.s24;
-    return ListView(
-      key: const ValueKey('staff-management'),
+    return PagedListView(
+      listKey: const ValueKey('staff-management'),
       padding: EdgeInsets.all(inset),
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('staff-directory-previous-page'),
+        nextKey: const ValueKey('staff-directory-next-page'),
+        pageKey: const ValueKey('staff-directory-page'),
+        onPrevious: onPrevious,
+        onNext: onNext,
+        endOfList: !page.hasMore,
+      ),
       children: <Widget>[
         // **The page opens on the search field, at the developer's direction on
         // 2026-08-28.** *Invite staff* used to be the first thing in this list,
@@ -1162,6 +1363,22 @@ final class _StaffManagementContents extends StatelessWidget {
         // on screen rather than from the business - so *Staff 20* on a shop
         // with sixty staff, and four different figures on page two. A block of
         // cards above a list, saying less than the list does.
+        //
+        // **What is here instead names people rather than counting them**, and
+        // that is the whole of why it is allowed to exist where the counters
+        // were not. A name read off this page is exact whatever page it is;
+        // *2 need attention* over a paginated query is the same claim that was
+        // removed. See [_invitationsInTrouble].
+        if (_invitationsInTrouble case final trouble
+            when trouble.isNotEmpty) ...<Widget>[
+          Callout(
+            key: const ValueKey('staff-invitations-in-trouble'),
+            status: AppStatus.problem,
+            title: 'These invitations will not arrive on their own',
+            message: _troubleMessage(trouble),
+          ),
+          SizedBox(height: tokens.spacing.s16),
+        ],
         _filters(context, compact: compact),
         SizedBox(height: tokens.spacing.s16),
         _StaffDirectoryList(
@@ -1182,25 +1399,24 @@ final class _StaffManagementContents extends StatelessWidget {
           invitationStateFor: invitationStateFor,
           selfUid: selfUid,
         ),
-        SizedBox(height: tokens.spacing.s16),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('staff-directory-previous-page'),
-          nextKey: const ValueKey('staff-directory-next-page'),
-          pageKey: const ValueKey('staff-directory-page'),
-          onPrevious: onPrevious,
-          onNext: onNext,
-        ),
       ],
     );
   }
 
   Widget _filters(BuildContext context, {required bool compact}) {
     final tokens = AppTokens.componentOf(context);
+    // **The three filters wear their captions inside themselves.** *Search
+    // staff* over a well whose placeholder reads *Name or email*, *Role* over
+    // a control reading *All roles*, *Status* over one reading *All statuses* -
+    // the same word twice, three times over, and on a phone those three lines
+    // cost more height than a staff card. Each keeps its label as its
+    // accessible name and its leading glyph as the mark that names it, which is
+    // the contract `AppTextField.dense` states.
     final searchField = AppTextField(
       key: const ValueKey('staff-search'),
       controller: search,
       label: 'Search staff',
+      dense: true,
       placeholder: 'Name or email',
       leading: Icons.search,
       onChanged: onSearchChanged,
@@ -1212,6 +1428,8 @@ final class _StaffManagementContents extends StatelessWidget {
       key: const ValueKey('staff-role-filter'),
       value: role?.wireValue ?? '',
       label: 'Role',
+      dense: true,
+      leading: Icons.badge_outlined,
       items: <AppSelectItem<String>>[
         const AppSelectItem<String>(value: '', label: 'All roles'),
         for (final item in TenantRole.values)
@@ -1228,6 +1446,8 @@ final class _StaffManagementContents extends StatelessWidget {
       key: const ValueKey('staff-status-filter'),
       value: status?.wireValue ?? '',
       label: 'Status',
+      dense: true,
+      leading: Icons.filter_alt_outlined,
       items: <AppSelectItem<String>>[
         const AppSelectItem<String>(value: '', label: 'All statuses'),
         for (final item in MembershipStatus.values)
@@ -1307,14 +1527,22 @@ final class _StaffDirectoryReading extends StatelessWidget {
         : tokens.spacing.s24;
     // The three controls exactly as they will be: an empty search well, and
     // the two filters holding the everything-selected option they open on.
-    const search = SkeletonField(label: 'Search staff', leading: Icons.search);
+    // **No captions here either, and that is load-bearing rather than tidy.**
+    // This state exists so the filter row is drawn in its real wells at its
+    // real height before the directory lands; a skeleton that still reserved
+    // three label rows would drop the whole page by their height the moment it
+    // did. `SkeletonField` draws no label row for an empty one, exactly as
+    // `AppFieldWell` does.
+    const search = SkeletonField(label: '', leading: Icons.search);
     const role = SkeletonField(
-      label: 'Role',
+      label: '',
+      leading: Icons.badge_outlined,
       value: 'All roles',
       trailing: Icons.arrow_drop_down,
     );
     const status = SkeletonField(
-      label: 'Status',
+      label: '',
+      leading: Icons.filter_alt_outlined,
       value: 'All statuses',
       trailing: Icons.arrow_drop_down,
     );
@@ -1553,6 +1781,25 @@ final class _StaffCard extends StatelessWidget {
   final TenantStaffInvitationState invitationState;
   final bool isSelf;
 
+  /// This row's one standing, from the two fields it already held.
+  StaffStanding get standing =>
+      StaffStanding.resolved(staff.status, invitationState);
+
+  /// The action this standing promotes, where the row has one to promote.
+  ///
+  /// **Found among the actions already built for the kebab, by key.** It is the
+  /// same action in a second place, not a second action: if this session may
+  /// not take it, `actionsFor` never built it and nothing is drawn. That is
+  /// what keeps a promoted button from becoming a permission of its own.
+  _StaffMenuAction? get _promoted {
+    final key = standing.promotedActionKeyFor(staff.uid);
+    if (key == null) return null;
+    for (final action in actions) {
+      if (action.key == ValueKey<String>(key)) return action;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -1593,6 +1840,10 @@ final class _StaffCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: tokens.spacing.s16),
+          // **One standing, where the membership badge and the invitation
+          // caption used to be two marks.** `StaffStanding` resolves the two
+          // fields into the one word this screen is opened to find out, and
+          // `_promoted` lifts the action that word implies out of the kebab.
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
@@ -1601,22 +1852,15 @@ final class _StaffCard extends StatelessWidget {
                 staff: staff,
               ),
               SizedBox(width: tokens.spacing.s12),
-              Flexible(child: _membershipBadge(staff)),
-              if (staff.status == MembershipStatus.pending) ...<Widget>[
+              Flexible(child: _standingBadge(staff, standing)),
+              if (_promoted case final promoted?) ...<Widget>[
                 const Spacer(),
-                Flexible(
-                  child: Text(
-                    key: ValueKey('staff-invitation-${staff.uid}'),
-                    staffInvitationStatusLabel(invitationState),
-                    textAlign: TextAlign.end,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    // The old card's right-aligned last line, which is where a
-                    // person's eye goes for "and what about it lately".
-                    style: tokens.typography.caption.copyWith(
-                      color: tokens.colors.text.tertiary,
-                    ),
-                  ),
+                AppButton(
+                  key: ValueKey('staff-promoted-${staff.uid}'),
+                  label: standing.promotedActionLabel!,
+                  tier: AppButtonTier.secondary,
+                  size: AppButtonSize.sm,
+                  onPressed: promoted.onPressed,
                 ),
               ],
             ],
@@ -1660,17 +1904,29 @@ final class _StaffRolePill extends StatelessWidget {
         staff.isOwner ||
         staff.role == TenantRole.owner ||
         staff.role == TenantRole.admin;
+    // **A role stops wearing the action green.** Everybody below an
+    // administrator was tinted with `action.primary.container` - the same green
+    // as the *Active* badge and the *Invite staff* button, three jobs for one
+    // colour on one row, so a manager's pill read as a standing. The privileged
+    // violet stays: it is the one identity colour the token layer documents as
+    // carrying meaning, and the old app's readers recognised an administrator
+    // by it before they read the word.
     final ink = privileged
         ? tokens.colors.accent.privileged
-        : tokens.colors.action.primary.container;
+        : tokens.colors.text.secondary;
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: tokens.spacing.s8,
         vertical: tokens.spacing.s4,
       ),
       decoration: BoxDecoration(
-        color: ink.withValues(alpha: fill),
+        color: privileged
+            ? tokens.colors.accent.privileged.withValues(alpha: fill)
+            : tokens.colors.surface.field,
         borderRadius: BorderRadius.circular(tokens.radius.md),
+        border: privileged
+            ? null
+            : Border.all(color: tokens.colors.surface.borderStrong),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1787,7 +2043,10 @@ final class _StaffTable extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            status: _membershipBadge(member),
+            status: _standingBadge(
+              member,
+              StaffStanding.resolved(member.status, invitationStateFor(member)),
+            ),
             invitation: Text(
               member.status == MembershipStatus.pending
                   ? staffInvitationStatusLabel(invitationStateFor(member))
@@ -1972,6 +2231,15 @@ final class _StaffAvatar extends StatelessWidget {
   /// never smaller than a thing a finger could be asked to hit.
   static const double cardSize = 48;
 
+  /// How thick the identity ring is.
+  ///
+  /// Named here rather than tokenised, for the reason `EmptyState.markSize` and
+  /// `_LandingGreeting.funnelStep` both give: no source this app has states an
+  /// avatar ring, and inventing `layout.avatarRing` would be inventing a token,
+  /// which `CLAUDE.md` forbids one rule before it forbids magic numbers. Two is
+  /// what reads as a ring at 48 and still at the 40 the list uses.
+  static const double ringWidth = 2;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -1982,16 +2250,25 @@ final class _StaffAvatar extends StatelessWidget {
         width: size,
         height: size,
         alignment: Alignment.center,
+        // **A ring, not a fill, since the contrast was measured.** The comment
+        // this replaces said the six `accent.identity` tones were chosen so
+        // white passes on all of them. It does not: `text.onAccent` on
+        // `#FFA726` is 1.94:1, against §9's 4.5. Tinting the fill does not
+        // rescue it either - `#AB47BC` on its own 16% tint is 3.12:1.
+        //
+        // So the initials go on `surface.field` in ordinary primary ink -
+        // 11.8:1 - and the identity colour becomes a two-pixel ring. The hue
+        // stays decorative, which is all it was ever asked to be, and it is now
+        // the only thing it is being asked to do.
         decoration: BoxDecoration(
-          color: accent,
+          color: tokens.colors.surface.field,
           borderRadius: BorderRadius.circular(tokens.radius.lg),
+          border: Border.all(color: accent, width: ringWidth),
         ),
         child: Text(
           _initials(staff.displayName),
           style: tokens.typography.labelLarge.copyWith(
-            // The old card put white on every one of these six, and they are
-            // the 400 tones chosen so it passes on all of them.
-            color: tokens.colors.text.onAccent,
+            color: tokens.colors.text.primary,
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -2056,16 +2333,20 @@ final class _StaffActionMenu extends StatelessWidget {
   }
 }
 
-StatusBadge _membershipBadge(TenantStaffSummary staff) => StatusBadge(
-  key: ValueKey('staff-status-${staff.uid}'),
-  label: membershipStatusLabel(staff.status),
-  status: switch (staff.status) {
-    MembershipStatus.active => AppStatus.ok,
-    MembershipStatus.pending => AppStatus.attention,
-    MembershipStatus.inactive => AppStatus.neutral,
-  },
-  semanticLabel: membershipStatusSemanticLabel(staff.status),
-);
+/// One row's standing, as the badge both renderings wear.
+///
+/// **This replaces `_membershipBadge`.** That one labelled the membership
+/// alone - *Pending* - which is the field, not the answer: three of the five
+/// things a pending membership can be are somebody's problem and two are not,
+/// and the word *Pending* separates none of them.
+StatusBadge _standingBadge(TenantStaffSummary staff, StaffStanding standing) =>
+    StatusBadge(
+      key: ValueKey('staff-standing-${staff.uid}'),
+      label: standing.label,
+      status: standing.status,
+      icon: standing.icon,
+      semanticLabel: standing.semanticLabel,
+    );
 
 String _initials(String value) {
   final words = value

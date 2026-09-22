@@ -766,9 +766,25 @@ final class _ProductStockContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      key: const ValueKey('product-stock'),
+    return PagedListView(
+      listKey: const ValueKey('product-stock'),
       padding: EdgeInsets.all(tokens.spacing.s20),
+      // **Pagination is secondary.** §2.1 permits exactly one primary per
+      // screen region, and "Next page" competing for the eye is the tier
+      // system not being applied rather than a taste call. The same repoint
+      // is made on every paginated feed - and as of `Pagination` it is made
+      // once, in the component, rather than on thirteen screens.
+      //
+      // It used to say `Adjust stock` was this region's primary. That control
+      // is a sheet over the catalog now and this route has no primary at all.
+      pagination: Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('product-stock-previous'),
+        nextKey: const ValueKey('product-stock-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
+        endOfList: !page.hasMore,
+      ),
       children: [
         // §7's "Title appears once", and this was the example `design.md` names
         // in its own words: `web/21-product-stock` read *White bread loaf* in
@@ -862,22 +878,6 @@ final class _ProductStockContents extends StatelessWidget {
             key: ValueKey('product-stock-empty'),
             'No stock movements have been recorded for this product.',
           ),
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        // **Pagination is secondary.** §2.1 permits exactly one primary per
-        // screen region, and "Next page" competing for the eye is the tier
-        // system not being applied rather than a taste call. The same repoint
-        // is made on every paginated feed - and as of `Pagination` it is made
-        // once, in the component, rather than on thirteen screens.
-        //
-        // It used to say `Adjust stock` was this region's primary. That control
-        // is a sheet over the catalog now and this route has no primary at all.
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('product-stock-previous'),
-          nextKey: const ValueKey('product-stock-next'),
-          onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: page.hasMore ? onNextPage : null,
         ),
         SizedBox(height: tokens.spacing.s12),
         // **Out of the page bar it was sharing, and that is the migration

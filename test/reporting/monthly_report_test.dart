@@ -70,16 +70,16 @@ void main() {
 
     test('a month that has not begun says so', () {
       expect(TenantReportMonth.at(_now).hasBegun(_now), isTrue);
-      expect(
-        TenantReportMonth.at(_now, offset: 1).hasBegun(_now),
-        isFalse,
-      );
+      expect(TenantReportMonth.at(_now, offset: 1).hasBegun(_now), isFalse);
     });
   });
 
   group('loading a month', () {
     test('asks twice: this month, and the month before', () async {
-      final callable = _Callable(<Object?>[_response(), _response(sales: 4000)]);
+      final callable = _Callable(<Object?>[
+        _response(),
+        _response(sales: 4000),
+      ]);
       final report = await _loader(callable).load(TenantReportMonth.at(_now));
 
       expect(callable.payloads, hasLength(2));
@@ -230,9 +230,8 @@ final class _Callable implements SalesTotalsCallable {
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     payloads.add(payload);
-    final outcome = _outcomes[_index < _outcomes.length
-        ? _index++
-        : _outcomes.length - 1];
+    final outcome =
+        _outcomes[_index < _outcomes.length ? _index++ : _outcomes.length - 1];
     if (outcome is Error) throw outcome;
     if (outcome is Exception) throw outcome;
     return outcome;

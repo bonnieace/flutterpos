@@ -156,10 +156,11 @@ final class ShiftHistoryCard extends StatelessWidget {
   /// figures bare rather than guessing a code - see [TenantReportingCurrency].
   final TenantReportingCurrency currency;
 
-  /// Opens the shift's own sales. **The whole card body is this control**: it
-  /// is the one thing there is to do with a row here, and a card carrying a
-  /// `View sales` button on every one of twenty rows spends a 48-high band of
-  /// the screen saying the same word twenty times.
+  /// Opens the Sales report on the shift's day, narrowed to the member who ran
+  /// it. **The whole card body is this control**: it is the one thing there is
+  /// to do with a row here, and a card carrying a `View sales` button on every
+  /// one of twenty rows spends a 48-high band of the screen saying the same
+  /// word twenty times.
   final VoidCallback onViewSales;
 
   /// Opens the corrections trail narrowed to this shift. Null where the shift
@@ -192,7 +193,9 @@ final class ShiftHistoryCard extends StatelessWidget {
                   children: <Widget>[
                     Text(
                       title,
-                      key: ValueKey<String>('shift-history-subject-${entry.id}'),
+                      key: ValueKey<String>(
+                        'shift-history-subject-${entry.id}',
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: tokens.typography.bodyLarge.copyWith(
@@ -248,13 +251,12 @@ final class ShiftHistoryCard extends StatelessWidget {
             // would round away from an edge that is still there.
             borderRadius: corrections == null
                 ? BorderRadius.circular(tokens.radius.md)
-                : BorderRadius.vertical(
-                    top: Radius.circular(tokens.radius.md),
-                  ),
+                : BorderRadius.vertical(top: Radius.circular(tokens.radius.md)),
             onPressed: onViewSales,
             fillWidth: true,
-            semanticLabel: '$title. ${standing.label}. Open this shift'
-                "'s sales.",
+            semanticLabel:
+                '$title. ${standing.label}. Open the sales report for this '
+                "shift's day and cashier.",
             excludeSemantics: true,
             hoverOverlay: tokens.colors.action.secondary.hoverWash(),
             pressedOverlay: tokens.colors.action.secondary.pressedWash(),
@@ -461,10 +463,9 @@ final class _DifferenceLine extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: tokens.density.body(tokens.typography).copyWith(
-              color: problem.fg,
-              fontWeight: FontWeight.w600,
-            ),
+            style: tokens.density
+                .body(tokens.typography)
+                .copyWith(color: problem.fg, fontWeight: FontWeight.w600),
           ),
         ),
         SizedBox(width: tokens.spacing.s8),

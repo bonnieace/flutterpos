@@ -4,6 +4,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_staff_directory.dart';
 import 'reporting_currency.dart';
 import '../expenses/expense.dart';
+import '../shift/shift_history.dart';
 import 'net_profit.dart';
 import 'sales_totals.dart';
 
@@ -111,6 +112,7 @@ final class SalesTotalsView {
     required this.totals,
     required this.context,
     this.expenses,
+    this.shifts = const <TenantShiftDaySlice>[],
   });
 
   final TenantSalesTotals totals;
@@ -127,6 +129,15 @@ final class SalesTotalsView {
   /// So the loader reads spending only for the unfiltered, whole-business
   /// view, and every filtered view shows gross alone.
   final TenantExpensePeriod? expenses;
+
+  /// The shifts of the day, where the period **is** a single day.
+  ///
+  /// **Empty for every longer period, and not because the read failed.** A
+  /// shift belongs to one business date and `ShiftClosingSummary` is a
+  /// per-shift total rather than a per-cashier one, so summing shifts across a
+  /// stretch would put one cashier in several columns. The loader therefore
+  /// asks only when the period is *Today*; see `ShiftComparisonChart`.
+  final List<TenantShiftDaySlice> shifts;
 
   /// This period after everything the business spent, or null where either
   /// half is missing.
