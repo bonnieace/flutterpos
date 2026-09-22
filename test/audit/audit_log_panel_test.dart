@@ -351,7 +351,7 @@ Future<void> _pumpLanding(
           reader: reader,
           onSignOut: () async {},
           auditLogRoute: supplyRoute
-              ? (reader) => TenantAuditLogScreen(reader: reader)
+              ? (reader) => TenantAuditLogScreen(reader: reader, clock: _clock)
               : null,
           auditLogRoles: TenantAuditLogRepository.allowedRoles,
           // The control the role-boundary test measures against: a destination
@@ -387,6 +387,7 @@ Future<void> _pump(
             reader: reader,
             eventType: eventType,
             pageSize: pageSize,
+            clock: _clock,
           ),
         ),
       ),
@@ -396,6 +397,13 @@ Future<void> _pump(
   await tester.pump();
   await tester.pump();
 }
+
+/// The day every fixture below is recorded on.
+///
+/// **Pinned, because the day filter opens on today.** The trail now draws only
+/// the rows of one UTC day unless the reader widens it, so a suite whose events
+/// are dated would otherwise start passing and failing with the calendar.
+DateTime _clock() => DateTime.utc(2026, 8, 1, 12);
 
 /// The exact envelope `functions/src/staff/shared.ts` `auditData` creates.
 TenantQueryDocumentSnapshot _staffEvent({

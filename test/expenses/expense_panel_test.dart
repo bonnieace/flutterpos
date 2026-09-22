@@ -14,10 +14,13 @@ import 'package:flutter_application_1/expenses/expense.dart';
 import 'package:flutter_application_1/expenses/expense_charts.dart';
 import 'package:flutter_application_1/expenses/expense_panel.dart';
 import 'package:flutter_application_1/expenses/expense_request.dart';
+import 'package:flutter_application_1/ui/buttons.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  _rangeCases();
+
   testWidgets('the period chooser draws before the figures do', (tester) async {
     // The control that would take a person to a different stretch of days must
     // not sit behind the read of this one.
@@ -115,7 +118,7 @@ void main() {
       reason: 'Money that did not leave the business counts towards nothing.',
     );
 
-    // It is still listed - under the heading it was spent on, which is the
+    // It is still listed - under the type it was spent on, which is the
     // only place this app lists records now.
     await tester.tap(find.byKey(const ValueKey('expense-open-rent')));
     await tester.pumpAndSettle();
@@ -164,6 +167,66 @@ void main() {
     await _pump(tester, reader: _Reader(currency: null));
 
     expect(find.byKey(const ValueKey('expenses-currency-unknown')), findsOne);
+  });
+
+  testWidgets('the record sheet takes every character typed into it', (
+    tester,
+  ) async {
+    // **`enterText` would not catch this.** It replaces the whole value in one
+    // call, so a field that has lost its platform input connection still ends
+    // up holding the right string. This types the way a keyboard does - one
+    // `updateEditingValue` per character, through whatever connection the field
+    // is holding at that moment - and then reads the field back. A sheet that
+    // re-parents its `TextField` when the first character lands, or when the
+    // keyboard takes its share of the screen, fails here and nowhere else.
+    final writer = _Writer();
+    await _pump(tester, reader: _Reader(), writer: writer);
+
+    await tester.tap(find.byKey(const ValueKey('expenses-record')));
+    await tester.pumpAndSettle();
+
+    await _typeCharacterByCharacter(
+      tester,
+      const ValueKey('expense-description'),
+      'August rent',
+    );
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(
+              of: find.byKey(const ValueKey('expense-description')),
+              matching: find.byType(EditableText),
+            ),
+          )
+          .controller
+          .text,
+      'August rent',
+    );
+
+    // The keyboard arriving is what re-pads the sheet. A field re-parented by
+    // that pass would go dead mid-word, which is the shape of the defect
+    // `_AboveTheKeyboard` exists for - so the amount is typed after it.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 800);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+
+    await _typeCharacterByCharacter(
+      tester,
+      const ValueKey('expense-amount'),
+      '1250',
+    );
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(
+              of: find.byKey(const ValueKey('expense-amount')),
+              matching: find.byType(EditableText),
+            ),
+          )
+          .controller
+          .text,
+      '1250',
+    );
   });
 
   testWidgets('recording an expense writes it and re-reads the period', (
@@ -388,7 +451,7 @@ void main() {
     expect(writer.voided.single.expenseId, '2026-08-27-aaa');
     expect(writer.voided.single.reason, 'Recorded twice');
     expect(reader.reads, greaterThan(readsBefore));
-    // **And the heading's own screen is gone.** It holds the period it was
+    // **And the type's own screen is gone.** It holds the period it was
     // handed, so every figure on it went stale the moment the write landed;
     // the list behind it has re-read by the time a person lands back on it.
     expect(find.byKey(const ValueKey('expense-category')), findsNothing);
@@ -430,7 +493,7 @@ void main() {
     );
 
     // Nothing was taken, so there is no composition to draw - but the record
-    // exists, and a heading is the only way into it now that this route lists
+    // exists, and a type is the only way into it now that this route lists
     // none itself.
     expect(find.byKey(const ValueKey('expenses-total')), findsOne);
     await tester.tap(find.byKey(const ValueKey('expense-open-rent')));
@@ -461,6 +524,28 @@ void main() {
       reason: 'A build that cannot write offers no control that writes.',
     );
   });
+}
+
+/// Types [value] one character at a time, against whatever input connection the
+/// field holds at that moment. See the case that calls it for why.
+Future<void> _typeCharacterByCharacter(
+  WidgetTester tester,
+  Key field,
+  String value,
+) async {
+  await tester.tap(find.byKey(field));
+  await tester.pumpAndSettle();
+  var soFar = '';
+  for (final character in value.split('')) {
+    soFar += character;
+    tester.testTextInput.updateEditingValue(
+      TextEditingValue(
+        text: soFar,
+        selection: TextSelection.collapsed(offset: soFar.length),
+      ),
+    );
+    await tester.pump();
+  }
 }
 
 Future<void> _pump(
@@ -538,6 +623,72 @@ final class _Writer implements TenantExpenseWriter {
   }
 }
 
+/// The range filter, which replaced three fixed offsets on 2026-09-22.
+void _rangeCases() {
+  testWidgets('the page opens on the month so far, not a fixed 30 days', (
+    tester,
+  ) async {
+    // The clock is 27 August, so the range is the 1st to the 27th. A record on
+    // 20 July is inside the old *Last 30 days* and outside this month, which is
+    // what makes it the case that tells the two apart.
+    final reader = _Reader(
+      records: <Map<String, Object?>>[
+        _record(token: 'aaa', amountMinor: 30000, date: '2026-07-20'),
+        _record(token: 'bbb', amountMinor: 10000, date: '2026-08-05'),
+      ],
+    );
+    await _pump(tester, reader: reader);
+
+    expect(
+      reader.cursors.first,
+      '2026-08-01',
+      reason: 'The read opens at the first of the month the clock is in.',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('expenses-ring-total')))
+          .data,
+      'KES 100.00',
+      reason: 'July is before this month and is not in the total.',
+    );
+  });
+
+  testWidgets('the filter names the stretch it is holding', (tester) async {
+    await _pump(tester, reader: _Reader());
+
+    expect(
+      tester
+          .widget<AppButton>(find.byKey(const ValueKey('expenses-range')))
+          .label,
+      'This month',
+      reason: 'A range a person has a word for is said in that word.',
+    );
+  });
+
+  testWidgets('the filter opens a calendar over two dates', (tester) async {
+    await _pump(tester, reader: _Reader());
+
+    await tester.tap(find.byKey(const ValueKey('expenses-range')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byType(DateRangePickerDialog),
+      findsOne,
+      reason:
+          'A range is picked on the platform calendar, not from a list of '
+          'offsets somebody guessed at.',
+    );
+  });
+
+  testWidgets('the count and the empty state say what the range is called', (
+    tester,
+  ) async {
+    await _pump(tester, reader: _Reader());
+
+    expect(find.text('Nothing recorded this month'), findsOne);
+  });
+}
+
 Map<String, Object?> _record({
   required String token,
   required int amountMinor,
@@ -576,6 +727,11 @@ final class _Reader implements TenantDataReader {
 
   int reads = 0;
 
+  /// Every cursor the repository has opened a page at. The first of these is
+  /// the range's own start date - see `TenantExpenseRepository.readRange`,
+  /// which uses the start date itself as the opening cursor.
+  final List<String?> cursors = <String?>[];
+
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
     if (path.endsWith('/configuration/checkout') && currency != null) {
@@ -592,6 +748,7 @@ final class _Reader implements TenantDataReader {
     TenantCollectionQuery query,
   ) async {
     reads++;
+    cursors.add(query.startAfterDocumentId);
     if (gate != null) await gate!.future;
     final byId = <String, Map<String, Object?>>{
       for (final record in records) record['expenseId']! as String: record,

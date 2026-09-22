@@ -14,18 +14,31 @@ import 'audit_log.dart';
 
 /// Read-only route listing the events recorded for one business.
 final class TenantAuditLogScreen extends StatelessWidget {
-  const TenantAuditLogScreen({super.key, required this.reader, this.eventType});
+  const TenantAuditLogScreen({
+    super.key,
+    required this.reader,
+    this.eventType,
+    this.clock,
+  });
 
   final TenantDataReader reader;
 
   /// When present, the trail opens narrowed to exactly this event.
   final TenantAuditEventType? eventType;
 
+  /// Reads the instant the day filter opens on. Injected so a test can pin the
+  /// day this page calls *today*.
+  final DateTime Function()? clock;
+
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Logs',
     contentWidth: AppContentWidth.records,
-    body: TenantAuditLogPanel(reader: reader, eventType: eventType),
+    body: TenantAuditLogPanel(
+      reader: reader,
+      eventType: eventType,
+      clock: clock,
+    ),
   );
 }
 
@@ -47,11 +60,16 @@ final class TenantAuditLogPanel extends StatefulWidget {
     super.key,
     required this.reader,
     this.eventType,
+    this.clock,
     this.pageSize = 20,
   });
 
   final TenantDataReader reader;
   final TenantAuditEventType? eventType;
+
+  /// See [TenantAuditLogScreen.clock].
+  final DateTime Function()? clock;
+
   final int pageSize;
 
   @override
@@ -62,6 +80,23 @@ final class _TenantAuditLogPanelState extends State<TenantAuditLogPanel> {
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
   TenantAuditEventType? _eventType;
+
+  /// The UTC day the page is narrowed to, or null for every day on it.
+  ///
+  /// **UTC, because every row on this page states its instant in UTC.** A
+  /// filter that cut the day on the phone's own clock would hide a row whose
+  /// visible timestamp reads as the day that was asked for.
+  ///
+  /// **Not in the guard key, and this is the one thing to know about it.** The
+  /// audit collection is paged by document ID - a digest, not a date - and the
+  /// repository takes equality filters only, so there is no read that asks the
+  /// server for one day. This narrows the page in hand. It is why the count of
+  /// rows can fall to nothing on a day the business was plainly busy: the
+  /// events of that day are on some other page. Filtering the trail itself
+  /// needs a `createdAt` ordering on the query and the composite index that
+  /// comes with it.
+  DateTime? _day;
+
   final TenantStaffNameResolvers _staffNames = TenantStaffNameResolvers();
   String? _loaderKey;
   TenantGuardedLoader<_AuditView>? _loader;
@@ -71,6 +106,39 @@ final class _TenantAuditLogPanelState extends State<TenantAuditLogPanel> {
   void initState() {
     super.initState();
     _eventType = widget.eventType;
+    // Opened on today, at the developer's direction on 2026-09-22.
+    _day = _today;
+  }
+
+  /// Today, as a UTC date.
+  DateTime get _today {
+    final now = (widget.clock ?? DateTime.now)().toUtc();
+    return DateTime.utc(now.year, now.month, now.day);
+  }
+
+  /// Narrowing to a day is a repaint, not a re-read: see [_day]. The cursor and
+  /// the page number are deliberately left alone, so a person who has paged
+  /// three pages in and then picks a day keeps the page they were reading.
+  void _selectDay(DateTime? day) {
+    if (day == _day) return;
+    setState(() => _day = day);
+  }
+
+  /// Opens the calendar, and narrows to whatever day comes back.
+  ///
+  /// The range is the year behind today and today itself: an audit trail has no
+  /// future, and a bound stops the picker offering a decade of days that cannot
+  /// hold an event.
+  Future<void> _pickDay() async {
+    final today = _today;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _day ?? today,
+      firstDate: DateTime.utc(today.year - 1, today.month, today.day),
+      lastDate: today,
+    );
+    if (picked == null || !mounted) return;
+    _selectDay(DateTime.utc(picked.year, picked.month, picked.day));
   }
 
   @override
@@ -173,7 +241,11 @@ final class _TenantAuditLogPanelState extends State<TenantAuditLogPanel> {
         view: view,
         selfUid: session.uid,
         pageIndex: _pageIndex,
+        day: _day,
+        today: _today,
         onSelectEvent: _selectEvent,
+        onSelectDay: _selectDay,
+        onPickDay: _pickDay,
         onNextPage: () => _nextPage(view.page.nextCursor),
         onPreviousPage: _previousPage,
       ),
@@ -186,7 +258,11 @@ final class _AuditLogContents extends StatelessWidget {
     required this.view,
     required this.selfUid,
     required this.pageIndex,
+    required this.day,
+    required this.today,
     required this.onSelectEvent,
+    required this.onSelectDay,
+    required this.onPickDay,
     required this.onNextPage,
     required this.onPreviousPage,
   });
@@ -194,11 +270,47 @@ final class _AuditLogContents extends StatelessWidget {
   final _AuditView view;
   final String selfUid;
   final int pageIndex;
+
+  /// The UTC day this page is narrowed to, or null for every day on it.
+  final DateTime? day;
+
+  /// Today as a UTC date, so the two named choices can be labelled.
+  final DateTime today;
+
   final ValueChanged<TenantAuditEventType?> onSelectEvent;
+  final ValueChanged<DateTime?> onSelectDay;
+  final VoidCallback onPickDay;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
 
   TenantAuditRecordPage get page => view.page;
+
+  DateTime get _yesterday => today.subtract(const Duration(days: 1));
+
+  /// The rows of [page] that fall on [day].
+  ///
+  /// **A record with no recorded instant is not on any day**, so it is held
+  /// back whenever one is chosen rather than filed under an arbitrary one.
+  /// *Any day* is where it can always be read.
+  List<TenantAuditRecord> get _shown {
+    final chosen = day;
+    if (chosen == null) return page.items;
+    final end = chosen.add(const Duration(days: 1));
+    return <TenantAuditRecord>[
+      for (final record in page.items)
+        if (record.recordedAt case final at?)
+          if (!at.toUtc().isBefore(chosen) && at.toUtc().isBefore(end)) record,
+    ];
+  }
+
+  /// What the day filter is holding, as the value its items are keyed by.
+  String get _dayValue {
+    final chosen = day;
+    if (chosen == null) return _anyDay;
+    if (chosen == today) return _todayValue;
+    if (chosen == _yesterday) return _yesterdayValue;
+    return _exactDay;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -222,24 +334,80 @@ final class _AuditLogContents extends StatelessWidget {
         // between the title and the thing they came to read. What survives of
         // them is the one fact that changes what a row means: which events are
         // on the page, and that is the control below rather than prose.
-        AppSelect<TenantAuditEventType?>(
-          key: const ValueKey('audit-log-filter'),
-          value: page.eventType,
-          label: 'Show',
-          dense: true,
-          leading: Icons.filter_list,
-          items: <AppSelectItem<TenantAuditEventType?>>[
-            const AppSelectItem<TenantAuditEventType?>(
-              value: null,
-              label: 'All events',
-            ),
-            for (final type in TenantAuditEventType.values)
-              AppSelectItem<TenantAuditEventType?>(
-                value: type,
-                label: type.label,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: AppSelect<TenantAuditEventType?>(
+                key: const ValueKey('audit-log-filter'),
+                value: page.eventType,
+                label: 'Show',
+                dense: true,
+                leading: Icons.filter_list,
+                items: <AppSelectItem<TenantAuditEventType?>>[
+                  const AppSelectItem<TenantAuditEventType?>(
+                    value: null,
+                    label: 'All events',
+                  ),
+                  for (final type in TenantAuditEventType.values)
+                    AppSelectItem<TenantAuditEventType?>(
+                      value: type,
+                      label: type.label,
+                    ),
+                ],
+                onChanged: onSelectEvent,
               ),
+            ),
+            SizedBox(width: tokens.spacing.s12),
+            Expanded(
+              child: AppSelect<String>(
+                key: const ValueKey('audit-log-day-filter'),
+                value: _dayValue,
+                label: 'Day',
+                dense: true,
+                leading: Icons.calendar_today_outlined,
+                items: <AppSelectItem<String>>[
+                  const AppSelectItem<String>(
+                    key: ValueKey('audit-log-day-any'),
+                    value: _anyDay,
+                    label: 'Any day',
+                  ),
+                  const AppSelectItem<String>(
+                    key: ValueKey('audit-log-day-today'),
+                    value: _todayValue,
+                    label: 'Today',
+                  ),
+                  const AppSelectItem<String>(
+                    key: ValueKey('audit-log-day-yesterday'),
+                    value: _yesterdayValue,
+                    label: 'Yesterday',
+                  ),
+                  // The day already chosen from the calendar, so the control
+                  // holds what it is showing - a select cannot sit on a value
+                  // its own list does not carry.
+                  if (_dayValue == _exactDay)
+                    AppSelectItem<String>(
+                      key: const ValueKey('audit-log-day-exact'),
+                      value: _exactDay,
+                      label: _dayLabel(day!),
+                    ),
+                  const AppSelectItem<String>(
+                    key: ValueKey('audit-log-day-pick'),
+                    value: _pickDay,
+                    label: 'Another day...',
+                  ),
+                ],
+                onChanged: (value) => switch (value) {
+                  _anyDay => onSelectDay(null),
+                  _todayValue => onSelectDay(today),
+                  _yesterdayValue => onSelectDay(_yesterday),
+                  _pickDay => onPickDay(),
+                  // The day already chosen, chosen again.
+                  _ => null,
+                },
+              ),
+            ),
           ],
-          onChanged: onSelectEvent,
         ),
         SizedBox(height: tokens.spacing.s24),
         if (page.items.isEmpty)
@@ -253,6 +421,19 @@ final class _AuditLogContents extends StatelessWidget {
                 'its staff, or its stock.',
             illustration: 'file-search.svg',
           )
+        else if (_shown.isEmpty)
+          // **Said as a fact about this page, not about the day.** The trail
+          // is paged by record ID rather than by time, so the events of the
+          // chosen day may be sitting on any page; claiming the business did
+          // nothing that day would be a claim this screen cannot make.
+          EmptyState(
+            key: const ValueKey('audit-log-day-empty'),
+            title: 'Nothing from ${_dayLabel(day!)} on this page',
+            hint:
+                'The trail is ordered by record, not by time, so that day may '
+                'be further on. Turn the page, or choose any day.',
+            illustration: 'file-search.svg',
+          )
         else
           // **One rail, no day headings.** Grouping by day was the obvious
           // thing to reach for and it was wrong here: the query pages by
@@ -260,7 +441,7 @@ final class _AuditLogContents extends StatelessWidget {
           // and a screen that drew a heading per run would show four headings
           // for four events and imply an order the data does not carry. Each
           // row states its own instant instead, which is the honest unit.
-          for (final record in page.items)
+          for (final record in _shown)
             _Event(
               record: record,
               actor: _actorLabel(record),
@@ -271,7 +452,7 @@ final class _AuditLogContents extends StatelessWidget {
                       names: view.names,
                       selfUid: selfUid,
                     ),
-              last: identical(record, page.items.last),
+              last: identical(record, _shown.last),
             ),
         SizedBox(height: tokens.spacing.s16),
         // The one sentence of the two paragraphs worth keeping, at the foot
@@ -300,6 +481,21 @@ final class _AuditLogContents extends StatelessWidget {
 /// An unmodelled event is shown as itself: a server deploy recording a new one
 /// is not evidence of anything wrong, and hiding the row would hide a real
 /// event from the business's own trail.
+/// The day filter's item values. Strings rather than an enum because one of
+/// them is a door to the calendar rather than a day, and the chosen day itself
+/// needs a value that does not change as the day does.
+const String _anyDay = 'any';
+const String _todayValue = 'today';
+const String _yesterdayValue = 'yesterday';
+const String _exactDay = 'exact';
+const String _pickDay = 'pick';
+
+/// One UTC date, in the order every instant on this page is written in.
+String _dayLabel(DateTime day) {
+  String pad(int part) => part.toString().padLeft(2, '0');
+  return '${day.year}-${pad(day.month)}-${pad(day.day)}';
+}
+
 String _eventLabel(TenantAuditRecord record) =>
     record.type?.label ?? record.eventType;
 

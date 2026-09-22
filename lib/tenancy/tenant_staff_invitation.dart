@@ -227,6 +227,7 @@ final class TenantStaffInvitationForm extends StatefulWidget {
     required this.session,
     required this.callable,
     required this.onSuccess,
+    this.onCancel,
     this.requestIdFactory,
     this.tickets,
   });
@@ -234,6 +235,13 @@ final class TenantStaffInvitationForm extends StatefulWidget {
   final TenantSession session;
   final InviteStaffCallable callable;
   final VoidCallback onSuccess;
+
+  /// Closes the form without inviting anybody.
+  ///
+  /// **The form draws it rather than the sheet around it**, so this ends in the
+  /// same stacked pair every other form on this surface ends in. A caller that
+  /// has nowhere to go back to passes null and gets the commit alone.
+  final VoidCallback? onCancel;
   final TenantStaffRequestIdFactory? requestIdFactory;
 
   /// Where this device remembers the request id of an unfinished invitation.
@@ -531,8 +539,18 @@ final class _TenantStaffInvitationFormState
             icon: Icons.person_add_alt_1_outlined,
             tier: AppButtonTier.primary,
             loading: _submitting,
+            expand: true,
             onPressed: _submit,
           ),
+          if (widget.onCancel case final cancel?) ...<Widget>[
+            SizedBox(height: tokens.spacing.s12),
+            AppButton(
+              key: const ValueKey('invite-staff-cancel'),
+              label: 'Cancel',
+              expand: true,
+              onPressed: _submitting ? null : cancel,
+            ),
+          ],
         ],
       ),
     );

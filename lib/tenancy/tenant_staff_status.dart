@@ -401,17 +401,17 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
           ),
         ],
         SizedBox(height: tokens.spacing.s16),
-        // Keep the safe and committing actions in one horizontal decision.
-        // The controls may contract on a narrow record, but never reorder by
-        // wrapping one underneath the other.
-        AppActionRow(
-          actions: <Widget>[
-            AppButton(
-              key: const ValueKey('set-staff-status-cancel'),
-              label: 'Cancel',
-              tier: AppButtonTier.tertiary,
-              onPressed: _submitting ? null : widget.onCancel,
-            ),
+        // **Two buttons, stacked, each the width of the sheet**, at the
+        // developer's direction on 2026-09-22. Every form on this surface now
+        // ends the same way the record-expense sheet always has: the committing
+        // action on top, the way out under it. `AppActionRow`'s horizontal pair
+        // is for a record inside a page; a sheet is one errand with one answer,
+        // and a thumb reaching the bottom of a phone should not have to pick a
+        // half of the row.
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
             AppButton(
               key: const ValueKey('set-staff-status-confirm'),
               label: 'Confirm $action',
@@ -425,7 +425,15 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
                   ? AppButtonTier.primary
                   : AppButtonTier.destructive,
               loading: _submitting,
+              expand: true,
               onPressed: _submit,
+            ),
+            SizedBox(height: tokens.spacing.s12),
+            AppButton(
+              key: const ValueKey('set-staff-status-cancel'),
+              label: 'Cancel',
+              expand: true,
+              onPressed: _submitting ? null : widget.onCancel,
             ),
           ],
         ),

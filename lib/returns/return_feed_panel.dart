@@ -477,20 +477,12 @@ final class _ReturnFeedContents extends StatelessWidget {
           onStandingChanged: onStandingChanged,
         ),
         SizedBox(height: tokens.spacing.s16),
-        // **The paragraph and the counts sentence are gone, 2026-09-04.**
-        // *Review every recorded return here* is what the screen's own title
-        // says; *pending returns have not changed stock* is what the word
-        // PENDING on every card says; and *On this page: 1 verified, 1
-        // pending* is a sentence where two figures belong. What is left is the
-        // pair of figures, which is also the only thing on the page that
-        // answers "is there anything for me to do".
-        if (page.items.isNotEmpty) ...<Widget>[
-          _Standings(
-            pending: page.pending.length,
-            verified: page.verified.length,
-          ),
-          SizedBox(height: tokens.spacing.s24),
-        ],
+        // **The pending and verified tiles are gone too, 2026-09-22.** The
+        // paragraph and the counts sentence went on 2026-09-04 and left a pair
+        // of figures behind; those are now gone at the developer's direction.
+        // Neither was a total for the business - both counted the page in hand
+        // - and every card below already wears its own standing, so the pair
+        // restated in two tiles what the list says row by row.
         // **Day headings and cards, not a record table, since 2026-08-26.**
         // The old till grouped its returns under *Today*, *Yesterday* and then
         // a date, and drew each one as a card with a tinted glyph for its
@@ -799,95 +791,6 @@ final class _Filters extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// How many returns on this page are waiting, and how many are done.
-///
-/// **Two figures where there was a sentence.** *On this page: 1 verified, 1
-/// pending* is read left to right and answers nothing at a glance; a pending
-/// count in the attention colour beside a verified count in the ok one is the
-/// same fact, and a person can see it without reading it.
-final class _Standings extends StatelessWidget {
-  const _Standings({required this.pending, required this.verified});
-
-  final int pending;
-  final int verified;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    return Row(
-      key: const ValueKey('return-feed-counts'),
-      children: <Widget>[
-        Expanded(
-          child: _Standing(
-            count: pending,
-            label: 'Pending',
-            // Zero pending is not a state that needs a colour: nothing is
-            // owed. §5.1's rule, applied to a figure rather than to a badge.
-            status: pending > 0 ? AppStatus.attention : null,
-          ),
-        ),
-        SizedBox(width: tokens.spacing.s12),
-        Expanded(
-          child: _Standing(
-            count: verified,
-            label: 'Verified',
-            status: verified > 0 ? AppStatus.ok : null,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-final class _Standing extends StatelessWidget {
-  const _Standing({
-    required this.count,
-    required this.label,
-    required this.status,
-  });
-
-  final int count;
-  final String label;
-  final AppStatus? status;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    final role = status?.role(tokens);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: role?.bg ?? tokens.colors.surface.sunken,
-        border: Border.all(
-          color: role?.border ?? tokens.colors.surface.borderSubtle,
-        ),
-        borderRadius: BorderRadius.circular(tokens.radius.md),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(tokens.spacing.s16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(
-              '$count',
-              style: tokens.typography.numericCompact.copyWith(
-                color: role?.fg ?? tokens.colors.text.primary,
-              ),
-            ),
-            SizedBox(height: tokens.spacing.s4),
-            Text(
-              label,
-              style: tokens.typography.caption.copyWith(
-                color: role?.fg ?? tokens.colors.text.secondary,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

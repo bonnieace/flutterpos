@@ -61,28 +61,48 @@ final class TenantExpenseCategoryScreen extends StatelessWidget {
     final scoped = period.forCategory(category);
     return AppScaffold(
       title: category.label,
-      subtitle: 'Spending under one heading, $periodLabel.',
+      subtitle: 'Spending under one type, $periodLabel.',
       contentWidth: AppContentWidth.records,
-      body: _CategoryContents(
-        category: category,
-        period: scoped,
-        whole: period,
-        currency: currency,
-        periodLabel: periodLabel,
-        onVoid: onVoid,
+      body: ListView(
+        key: const ValueKey('expense-category'),
+        padding: EdgeInsets.all(AppTokens.componentOf(context).spacing.s20),
+        children: <Widget>[
+          TenantExpenseCategoryDetail(
+            category: category,
+            period: scoped,
+            whole: period,
+            currency: currency,
+            periodLabel: periodLabel,
+            onVoid: onVoid,
+            // A pushed route, so a withdrawal that lands leaves it: the period
+            // it is holding is stale the moment the write does, and the list
+            // behind re-reads.
+            leaveOnVoid: true,
+          ),
+        ],
       ),
     );
   }
 }
 
-final class _CategoryContents extends StatelessWidget {
-  const _CategoryContents({
+/// One type's total, its shape over the period, and its records.
+///
+/// **A block rather than a screen, since 2026-09-22.** It is the body of
+/// [TenantExpenseCategoryScreen] and it is also what the Expenses route draws
+/// in place of the composition once its own type filter names a type -
+/// so filtering to *Transport* reads exactly like tapping *Transport*, and the
+/// filters above stay put to move between types. It owns no scroll of its
+/// own for that reason: whichever surface draws it already has one.
+final class TenantExpenseCategoryDetail extends StatelessWidget {
+  const TenantExpenseCategoryDetail({
+    super.key,
     required this.category,
     required this.period,
     required this.whole,
     required this.currency,
     required this.periodLabel,
     this.onVoid,
+    this.leaveOnVoid = false,
   });
 
   final TenantExpenseCategory category;
@@ -97,17 +117,25 @@ final class _CategoryContents extends StatelessWidget {
   final String periodLabel;
   final TenantExpenseVoidRequest? onVoid;
 
+  /// Whether a settled withdrawal pops the route this is drawn on.
+  ///
+  /// True on the pushed screen, whose whole reason to exist was the record that
+  /// has just gone. False where this is drawn inside the Expenses route, which
+  /// has no route of its own to leave - that page re-reads instead, and the
+  /// type stays on screen with one fewer record on it.
+  final bool leaveOnVoid;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final dates = period.businessDates;
     final share = whole.shareOf(category);
     final counted = period.records.where((record) => !record.isVoided).length;
-    return ListView(
-      key: const ValueKey('expense-category'),
-      padding: EdgeInsets.all(tokens.spacing.s20),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        // **The heading is the figure, not a tile holding one.** Three stat
+        // **The type is the figure, not a tile holding one.** Three stat
         // cards over a chart is the arrangement the developer asked to be rid
         // of on 2026-08-27: what this screen is for is one number and its
         // shape over time, and the number goes at the top at the size that
@@ -155,7 +183,7 @@ final class _CategoryContents extends StatelessWidget {
           EmptyState(
             key: const ValueKey('expense-category-empty'),
             title: 'Nothing under ${category.label.toLowerCase()}',
-            hint: 'This heading had no spending in the days shown.',
+            hint: 'This type had no spending in the days shown.',
             illustration: 'empty-wallet.svg',
           )
         else ...<Widget>[
@@ -184,7 +212,7 @@ final class _CategoryContents extends StatelessWidget {
               record: record,
               currency: currency,
               first: index == 0,
-              // Every row here is under the heading this screen is named for.
+              // Every row here is under the type this screen is named for.
               showCategory: false,
               onVoid: onVoid == null || record.isVoided
                   ? null
@@ -195,11 +223,12 @@ final class _CategoryContents extends StatelessWidget {
     );
   }
 
-  /// Asks for the void, and leaves if it happened.
+  /// Asks for the void, and leaves if it happened and this is a route.
   Future<void> _withdraw(BuildContext context, TenantExpense record) async {
-    // Read before the await: this screen is about to be popped, and a
+    // Read before the await: this screen may be about to be popped, and a
     // `Navigator.of` after the gap would be looking at a dead element.
-    final navigator = Navigator.of(context);
-    if (await onVoid!(record)) navigator.pop();
+    final navigator = leaveOnVoid ? Navigator.of(context) : null;
+    final gone = await onVoid!(record);
+    if (gone) navigator?.pop();
   }
 }

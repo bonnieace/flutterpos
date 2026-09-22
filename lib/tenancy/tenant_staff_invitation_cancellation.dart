@@ -488,15 +488,17 @@ final class _TenantStaffInvitationCancellationFormState
           ),
         ],
         SizedBox(height: tokens.spacing.s12),
-        // The destructive choice stays beside its safe alternative.
-        AppActionRow(
-          actions: <Widget>[
-            AppButton(
-              key: const ValueKey('cancel-staff-invitation-dismiss'),
-              label: 'Keep invitation',
-              tier: AppButtonTier.tertiary,
-              onPressed: _submitting ? null : widget.onCancel,
-            ),
+        // **Two buttons, stacked, each the width of the sheet**, at the
+        // developer's direction on 2026-09-22. Every form on this surface now
+        // ends the same way the record-expense sheet always has: the committing
+        // action on top, the way out under it. `AppActionRow`'s horizontal pair
+        // is for a record inside a page; a sheet is one errand with one answer,
+        // and a thumb reaching the bottom of a phone should not have to pick a
+        // half of the row.
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
             // This is the clearest case in the sweep for the destructive tier
             // existing at all: the old call site reached past the theme for
             // `colorScheme.error` and `onError` to build a red slab by hand,
@@ -508,7 +510,15 @@ final class _TenantStaffInvitationCancellationFormState
               icon: Icons.person_remove_outlined,
               tier: AppButtonTier.destructive,
               loading: _submitting,
+              expand: true,
               onPressed: _submit,
+            ),
+            SizedBox(height: tokens.spacing.s12),
+            AppButton(
+              key: const ValueKey('cancel-staff-invitation-dismiss'),
+              label: 'Keep invitation',
+              expand: true,
+              onPressed: _submitting ? null : widget.onCancel,
             ),
           ],
         ),

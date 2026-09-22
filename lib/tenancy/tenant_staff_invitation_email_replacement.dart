@@ -549,22 +549,32 @@ final class _TenantStaffInvitationEmailReplacementFormState
             ),
           ],
           SizedBox(height: tokens.spacing.s16),
-          // The pair remains horizontal on every record width.
-          AppActionRow(
-            actions: <Widget>[
-              AppButton(
-                key: const ValueKey('replace-staff-email-cancel'),
-                label: 'Cancel',
-                tier: AppButtonTier.tertiary,
-                onPressed: _submitting ? null : widget.onCancel,
-              ),
+          // **Two buttons, stacked, each the width of the sheet**, at the
+          // developer's direction on 2026-09-22. Every form on this surface now
+          // ends the same way the record-expense sheet always has: the committing
+          // action on top, the way out under it. `AppActionRow`'s horizontal pair
+          // is for a record inside a page; a sheet is one errand with one answer,
+          // and a thumb reaching the bottom of a phone should not have to pick a
+          // half of the row.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
               AppButton(
                 key: const ValueKey('replace-staff-email-confirm'),
                 label: 'Replace email',
                 icon: Icons.alternate_email_outlined,
                 tier: AppButtonTier.primary,
                 loading: _submitting,
+                expand: true,
                 onPressed: _submit,
+              ),
+              SizedBox(height: tokens.spacing.s12),
+              AppButton(
+                key: const ValueKey('replace-staff-email-cancel'),
+                label: 'Cancel',
+                expand: true,
+                onPressed: _submitting ? null : widget.onCancel,
               ),
             ],
           ),

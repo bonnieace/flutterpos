@@ -328,11 +328,11 @@ final class TenantExpensePeriod {
     return List<TenantExpenseCategory>.unmodifiable(categories);
   }
 
-  /// Every heading these records fall under, whether or not any of them still
+  /// Every type these records fall under, whether or not any of them still
   /// counts, largest first.
   ///
   /// **This is not [spentCategories] with a different name.** That one answers
-  /// *where did the money go*, and a heading holding nothing but voided records
+  /// *where did the money go*, and a type holding nothing but voided records
   /// did not take any - so it is correctly absent from the composition. This
   /// one answers *where are these records*, which is a different question and
   /// the only one that can be asked of a period whose every record has been

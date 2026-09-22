@@ -49,8 +49,31 @@ final class ExpenseChartMetrics {
   static const double dailyHeight = 160;
 
   /// How far past the first and last day the plot extends, so their labels
-  /// have somewhere to sit. Half a day either side.
+  /// have somewhere to sit. Half a day either side, at most.
   static const double axisMargin = 0.5;
+
+  /// The share of the plot that margin may take at each end.
+  ///
+  /// **Half a day is the wrong unit on a short period**, at the developer's
+  /// direction on 2026-09-22, and the trim of the empty ends is what made it
+  /// obvious: a month spends 1.6% of its width on each margin, while three days
+  /// spend 17% each - so the line a person is actually reading was drawn across
+  /// two thirds of the box with a sixth of it blank at either end. What the
+  /// margin is for is a fixed thing - somewhere for the first and last date to
+  /// sit - so it is bounded as a share of the plot rather than as a fraction of
+  /// a slot whose width changes with the period.
+  static const double axisMarginShare = 0.08;
+
+  /// How far past the first and last of [points] days the plot extends.
+  ///
+  /// One day keeps the whole half-slot: there is no span to take a share of,
+  /// and a lone dot belongs in the middle of its own box rather than against
+  /// an edge. Past ten days the share exceeds half a slot and this is [axisMargin]
+  /// again, so nothing about a month or a fortnight moves.
+  static double axisMarginFor(int points) {
+    if (points <= 1) return axisMargin;
+    return ((points - 1) * axisMarginShare).clamp(0.0, axisMargin);
+  }
 
   /// How much of the hole's diameter the total may use.
   ///
@@ -132,8 +155,10 @@ class _ExpenseCompositionRingState extends State<ExpenseCompositionRing>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final tokens = AppTokens.componentOf(context);
-    final drive =
-        _sweep ??= SpringDrive(vsync: this, spring: tokens.motion.gentle);
+    final drive = _sweep ??= SpringDrive(
+      vsync: this,
+      spring: tokens.motion.gentle,
+    );
     // **`animateTo`, never `forward()`.** The reference's ring sweeps in from
     // nothing, and this reproduces that - but a period changed while it is
     // still sweeping retargets from where the arc is, which is the whole reason
@@ -276,11 +301,46 @@ final class ExpenseDailyChart extends StatelessWidget {
 
   final TenantReportingCurrency currency;
 
+  /// The first and last day of [dates] that anything was spent on, or null
+  /// where nothing was.
+  ///
+  /// **The empty run at each end is not data and is not drawn**, at the
+  /// developer's direction on 2026-09-22. The period is the stretch of days a
+  /// person asked for, not the stretch their spending fell in: one expense
+  /// inside *Last 30 days* used to draw twenty-nine points of nothing and one
+  /// spike, which reads as a month of activity that did not happen. Trimmed, one
+  /// expense is one point - a dot, which is what the app this feature came from
+  /// drew - and two expenses three days apart are the four days between them.
+  ///
+  /// **Only the ends are trimmed.** A day with no spending *between* two days
+  /// with some is a real zero and stays: dropping it would put the two spends
+  /// side by side and lose the gap, which is the distortion the empty days were
+  /// kept for in the first place.
+  ({int first, int last})? get _spent {
+    var first = -1;
+    var last = -1;
+    for (var index = 0; index < totalsMinor.length; index++) {
+      if (totalsMinor[index] <= 0) continue;
+      if (first < 0) first = index;
+      last = index;
+    }
+    return first < 0 ? null : (first: first, last: last);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final chart = tokens.colors.chart;
-    final peak = totalsMinor.fold<int>(0, (a, b) => a > b ? a : b);
+    // A period nothing was spent in has no run to trim, so it keeps the whole
+    // window and draws the flat line it always did - which is the honest
+    // picture of a type that took no money.
+    final spent = _spent;
+    final from = spent?.first ?? 0;
+    final to = spent?.last ?? totalsMinor.length - 1;
+    final charted = <int>[
+      for (var index = from; index <= to; index++) totalsMinor[index],
+    ];
+    final peak = charted.fold<int>(0, (a, b) => a > b ? a : b);
     final ceiling = peak <= 0
         ? ExpenseChartMetrics.emptyCeiling
         : peak / 100 * ExpenseChartMetrics.ceilingHeadroom;
@@ -295,8 +355,14 @@ final class ExpenseDailyChart extends StatelessWidget {
         // `maximumDottedDays` the line carries the shape on its own.
         child: Builder(
           builder: (context) {
+            // **A single day is always dotted.** `fl_chart` draws a line
+            // between points and there is no line through one, so a lone day
+            // with its dots suppressed would render an empty box - which is the
+            // one reading this chart must never give a type that has taken
+            // money.
             final dotted =
-                totalsMinor.length <= ExpenseChartMetrics.maximumDottedDays;
+                charted.length <= ExpenseChartMetrics.maximumDottedDays;
+            final margin = ExpenseChartMetrics.axisMarginFor(charted.length);
             return LineChart(
               LineChartData(
                 // **Half a slot of margin at each end**, which is what
@@ -305,10 +371,8 @@ final class ExpenseDailyChart extends StatelessWidget {
                 // the plot's edges and their date labels - centred under them -
                 // hang off the screen, which is what the first capture of this
                 // line showed on the right.
-                minX: -ExpenseChartMetrics.axisMargin,
-                maxX:
-                    (totalsMinor.length - 1).toDouble().clamp(0, 3650) +
-                    ExpenseChartMetrics.axisMargin,
+                minX: -margin,
+                maxX: (charted.length - 1).toDouble().clamp(0, 3650) + margin,
                 minY: 0,
                 maxY: ceiling,
                 lineTouchData: LineTouchData(
@@ -329,8 +393,8 @@ final class ExpenseDailyChart extends StatelessWidget {
                 lineBarsData: <LineChartBarData>[
                   LineChartBarData(
                     spots: <FlSpot>[
-                      for (var index = 0; index < totalsMinor.length; index++)
-                        FlSpot(index.toDouble(), totalsMinor[index] / 100),
+                      for (var index = 0; index < charted.length; index++)
+                        FlSpot(index.toDouble(), charted[index] / 100),
                     ],
                     isCurved: true,
                     // A curve through daily spending can dip below a floor of
@@ -417,18 +481,28 @@ final class ExpenseDailyChart extends StatelessWidget {
     );
   }
 
-  String _dayLabel(int index) =>
-      index >= 0 && index < dates.length ? dates[index] : '';
+  /// The dates actually plotted, which is [dates] without its empty ends.
+  List<String> get _charted {
+    final spent = _spent;
+    if (spent == null) return dates;
+    return dates.sublist(spent.first, spent.last + 1);
+  }
+
+  String _dayLabel(int index) {
+    final charted = _charted;
+    return index >= 0 && index < charted.length ? charted[index] : '';
+  }
 
   String _axisLabel(num position) {
     // A tick that is not on a day names no day. Cheap insurance against the
     // interval above ever being relaxed again.
     if ((position - position.round()).abs() > 0.001) return '';
     final index = position.round();
-    final middle = dates.length ~/ 2;
-    if (dates.length > 1 &&
+    final charted = _charted;
+    final middle = charted.length ~/ 2;
+    if (charted.length > 1 &&
         index != 0 &&
-        index != dates.length - 1 &&
+        index != charted.length - 1 &&
         index != middle) {
       return '';
     }
@@ -446,8 +520,11 @@ final class ExpenseDailyChart extends StatelessWidget {
   String _summary() {
     final total = totalsMinor.fold<int>(0, (sum, value) => sum + value);
     if (total <= 0) return 'Nothing was spent on any day of this period.';
+    // The days the chart draws, not the days the period covers: a reader who
+    // cannot see it is told what is there rather than what was asked for.
+    final days = _charted.length;
     return 'Spending by day, ${currency.format(total)} across '
-        '${dates.length} ${dates.length == 1 ? 'day' : 'days'}. Each day and '
+        '$days ${days == 1 ? 'day' : 'days'}. Each day and '
         'its amount is listed below.';
   }
 }

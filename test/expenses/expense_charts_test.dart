@@ -144,6 +144,104 @@ void main() {
       expect(find.text('20 Aug'), findsOne);
     });
   });
+
+  group('the plot uses the width it has', () {
+    /// What share of the plot the days themselves take, at [points] days.
+    double dataShare(int points) {
+      final margin = ExpenseChartMetrics.axisMarginFor(points);
+      return (points - 1) / ((points - 1) + 2 * margin);
+    }
+
+    test('a short period is not two thirds line and one third margin', () {
+      // The state this closes: three days drew the line across 67% of the box
+      // with a sixth of it blank at either end, because the margin was half a
+      // slot and a slot is a third of a three-day plot.
+      expect(dataShare(3), greaterThan(0.85));
+      expect(dataShare(2), greaterThan(0.85));
+    });
+
+    test('a month is left exactly as it was', () {
+      // Past ten days the share exceeds half a slot, so the bound is the old
+      // constant and nothing about a fortnight or a month moves.
+      expect(
+        ExpenseChartMetrics.axisMarginFor(31),
+        ExpenseChartMetrics.axisMargin,
+      );
+      expect(
+        ExpenseChartMetrics.axisMarginFor(14),
+        ExpenseChartMetrics.axisMargin,
+      );
+    });
+
+    test('one day keeps its whole slot, so the dot is centred', () {
+      // There is no span to take a share of, and a lone dot against an edge
+      // reads as a line that has been cut off.
+      expect(
+        ExpenseChartMetrics.axisMarginFor(1),
+        ExpenseChartMetrics.axisMargin,
+      );
+    });
+
+    test('the margin never grows past half a slot', () {
+      for (var points = 1; points <= 40; points++) {
+        expect(
+          ExpenseChartMetrics.axisMarginFor(points),
+          lessThanOrEqualTo(ExpenseChartMetrics.axisMargin),
+          reason:
+              'A margin wider than half a slot at $points days would put '
+              'the first day further from the edge than from its neighbour.',
+        );
+      }
+    });
+  });
+
+  group('the empty days at each end', () {
+    testWidgets('one expense in a month is drawn as that one day', (
+      tester,
+    ) async {
+      // **The defect this closes.** *Last 30 days* with one expense in it drew
+      // twenty-nine points of nothing and one spike, which reads as a month of
+      // activity. The window a chart draws is the spending, not the question
+      // that was asked - so one expense is one day, and the axis says which.
+      await _pumpDaily(tester, _dates('2026-07-29', 30), spentOn: <int>{12});
+
+      expect(find.text('10 Aug'), findsOne);
+      expect(
+        find.text('29 Jul'),
+        findsNothing,
+        reason:
+            'The empty days before the first expense are not the period '
+            'this type spent in.',
+      );
+      expect(find.text('27 Aug'), findsNothing);
+    });
+
+    testWidgets('a day with nothing on it between two spends is kept', (
+      tester,
+    ) async {
+      // Only the ends are trimmed. Dropping an interior zero would put the two
+      // spends side by side and lose the gap between them, which is the whole
+      // reason the empty days are carried at all.
+      await _pumpDaily(tester, _dates('2026-08-01', 10), spentOn: <int>{2, 6});
+
+      // Five days are charted - the 3rd to the 7th - so the middle label is
+      // the 5th rather than any day of the window that was asked for.
+      expect(find.text('3 Aug'), findsOne);
+      expect(find.text('5 Aug'), findsOne);
+      expect(find.text('7 Aug'), findsOne);
+    });
+
+    testWidgets('a type that spent nothing keeps its whole window', (
+      tester,
+    ) async {
+      // There is no run to trim, and a flat line across the days asked for is
+      // the honest picture of a type that took no money.
+      await _pumpDaily(tester, _dates('2026-08-01', 7), spentOn: <int>{});
+
+      expect(find.text('1 Aug'), findsOne);
+      expect(find.text('7 Aug'), findsOne);
+    });
+  });
 }
 
 Future<void> _pumpRing(WidgetTester tester, TenantExpensePeriod period) async {
@@ -163,7 +261,19 @@ Future<void> _pumpRing(WidgetTester tester, TenantExpensePeriod period) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _pumpDaily(WidgetTester tester, List<String> dates) async {
+/// Draws [dates] with something spent on [spentOn], or on the first and last
+/// day when that is left out.
+///
+/// **Both ends by default, and that is not incidental.** The chart trims the
+/// empty run at each end of the series, so a fixture that spent on one day
+/// alone charts one day however many it was handed - which is the right
+/// behaviour and the wrong fixture for a case about the axis.
+Future<void> _pumpDaily(
+  WidgetTester tester,
+  List<String> dates, {
+  Set<int>? spentOn,
+}) async {
+  final spent = spentOn ?? <int>{0, dates.length - 1};
   await tester.pumpWidget(
     MaterialApp(
       theme: spiritTheme,
@@ -175,7 +285,7 @@ Future<void> _pumpDaily(WidgetTester tester, List<String> dates) async {
               dates: dates,
               totalsMinor: <int>[
                 for (var index = 0; index < dates.length; index++)
-                  index == dates.length - 1 ? 1450 : 0,
+                  spent.contains(index) ? 1450 : 0,
               ],
               currency: _currency,
             ),

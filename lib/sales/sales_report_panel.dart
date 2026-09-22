@@ -1771,16 +1771,13 @@ final class _ManagementSalesSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          if (totals.basis == TenantSalesTotalsBasis.device) ...<Widget>[
-            Text(
-              'On this device',
-              key: const ValueKey('sales-report-device-basis'),
-              style: tokens.typography.labelMedium.copyWith(
-                color: tokens.colors.text.secondary,
-              ),
-            ),
-            SizedBox(height: tokens.spacing.s12),
-          ],
+          // **No basis caption over the figure**, at the developer's direction
+          // on 2026-09-22. A caption reading *On this device* sat above the
+          // takings whenever the totals came off the cache rather than the
+          // callable, and it appeared and disappeared under the same day's
+          // figure as the network came and went. The other report surfaces -
+          // the monthly report, the totals page, the weekly sections - still
+          // carry their own; this one does not.
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[

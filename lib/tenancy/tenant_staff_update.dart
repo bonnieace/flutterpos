@@ -434,7 +434,7 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
           // the form does. A person correcting a phone number is also
           // submitting the role on screen, and `Correct` is precisely the word
           // that stops them noticing.
-          SectionHeading('Edit role and details: ${widget.target.displayName}'),
+          SectionHeading('Edit ${widget.target.displayName}'),
           SizedBox(height: tokens.spacing.s8),
           AppTextField(
             key: const ValueKey('update-staff-name'),
@@ -510,22 +510,32 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
             ),
           ],
           SizedBox(height: tokens.spacing.s16),
-          // The shared action row keeps this pair horizontal on every record.
-          AppActionRow(
-            actions: <Widget>[
-              AppButton(
-                key: const ValueKey('update-staff-cancel'),
-                label: 'Cancel',
-                tier: AppButtonTier.tertiary,
-                onPressed: _submitting ? null : widget.onCancel,
-              ),
+          // **Two buttons, stacked, each the width of the sheet**, at the
+          // developer's direction on 2026-09-22. Every form on this surface now
+          // ends the same way the record-expense sheet always has: the committing
+          // action on top, the way out under it. `AppActionRow`'s horizontal pair
+          // is for a record inside a page; a sheet is one errand with one answer,
+          // and a thumb reaching the bottom of a phone should not have to pick a
+          // half of the row.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
               AppButton(
                 key: const ValueKey('update-staff-submit'),
                 label: 'Save changes',
                 icon: Icons.save_outlined,
                 tier: AppButtonTier.primary,
                 loading: _submitting,
+                expand: true,
                 onPressed: _submit,
+              ),
+              SizedBox(height: tokens.spacing.s12),
+              AppButton(
+                key: const ValueKey('update-staff-cancel'),
+                label: 'Cancel',
+                expand: true,
+                onPressed: _submitting ? null : widget.onCancel,
               ),
             ],
           ),

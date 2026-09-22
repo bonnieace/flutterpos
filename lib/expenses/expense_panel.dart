@@ -18,7 +18,6 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
-import '../ui/chips.dart';
 import '../ui/fields.dart';
 import '../ui/press.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -38,20 +37,79 @@ import 'expense_request.dart';
 
 /// The stretch of trading days this route totals.
 ///
-/// **A chip strip rather than a dropdown**, which is this app's own rule: a
-/// surface carrying one filter shows its options without a tap, and only a
-/// surface carrying several folds them into `AppSelect`.
-enum TenantExpenseRange {
-  today(1, 'Today'),
-  last7Days(7, 'Last 7 days'),
-  last30Days(30, 'Last 30 days');
+/// **Two business dates rather than three fixed offsets**, at the developer's
+/// direction on 2026-09-22. *Today*, *Last 7 days* and *Last 30 days* answered
+/// three questions and refused every other one: a shopkeeper closing off
+/// August could not ask for August, and one checking a quarter could not ask
+/// for it either. A range is the same read - `readRange` has always taken two
+/// dates - with the choice handed to the person instead of enumerated for
+/// them.
+@immutable
+final class TenantExpenseRange {
+  const TenantExpenseRange({required this.startDate, required this.endDate});
 
-  const TenantExpenseRange(this.days, this.label);
+  /// The month [now] falls in, up to [now] itself.
+  ///
+  /// **Month to date, not the whole month**, which is what this route opens on.
+  /// A range running to the end of the month would spend its read on days that
+  /// have not happened, and label a total *September* when September is three
+  /// weeks from over.
+  factory TenantExpenseRange.monthOf(DateTime now) {
+    final today = checkoutBusinessDate(now);
+    final first = DateTime.utc(now.year, now.month);
+    return TenantExpenseRange(
+      startDate: checkoutBusinessDate(first),
+      endDate: today,
+    );
+  }
 
-  /// How many business dates the range covers, including today.
-  final int days;
+  /// `yyyy-MM-dd`, inclusive.
+  final String startDate;
+  final String endDate;
 
-  final String label;
+  DateTime get start => DateTime.parse('${startDate}T00:00:00Z');
+  DateTime get end => DateTime.parse('${endDate}T00:00:00Z');
+
+  /// How many business dates the range covers, including both ends.
+  int get days => end.difference(start).inDays + 1;
+
+  /// What the filter and the captions call this stretch.
+  ///
+  /// **The shapes a person recognises are named**, because `1 Sep - 22 Sep` is
+  /// a worse answer than *this month* to somebody who asked for this month.
+  /// Anything else is stated as its two ends, which is the only honest reading
+  /// of a range nobody has a word for.
+  String label(DateTime now) {
+    final today = checkoutBusinessDate(now);
+    final yesterday = checkoutBusinessDate(
+      now.subtract(const Duration(days: 1)),
+    );
+    if (startDate == endDate) {
+      if (endDate == today) return 'Today';
+      if (endDate == yesterday) return 'Yesterday';
+      return _dayFormat.format(start);
+    }
+    final month = TenantExpenseRange.monthOf(now);
+    if (startDate == month.startDate && endDate == month.endDate) {
+      return 'This month';
+    }
+    // Both ends inside one month: the month is said once rather than twice.
+    if (start.year == end.year && start.month == end.month) {
+      return '${start.day} - ${_dayFormat.format(end)}';
+    }
+    return '${_dayFormat.format(start)} - ${_dayFormat.format(end)}';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is TenantExpenseRange &&
+      other.startDate == startDate &&
+      other.endDate == endDate;
+
+  @override
+  int get hashCode => Object.hash(startDate, endDate);
+
+  static final DateFormat _dayFormat = DateFormat('d MMM');
 }
 
 /// Withdraws one expense, answering whether it was withdrawn.
@@ -100,7 +158,18 @@ final class TenantExpensesPanel extends StatefulWidget {
 }
 
 class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
-  TenantExpenseRange _range = TenantExpenseRange.last30Days;
+  /// Set in [initState] rather than here, because it is read off the clock.
+  late TenantExpenseRange _range;
+
+  /// The type the page is narrowed to, or null for every type.
+  ///
+  /// **Not part of the guard key, and that is the difference between the two
+  /// filters.** The period decides which documents are read, so changing it
+  /// re-reads; the type only decides which of the records already in hand
+  /// are counted, so changing it is a repaint. Putting it in the key would
+  /// spend a read to throw records away.
+  TenantExpenseCategory? _category;
+
   int _generation = 0;
 
   String? _loaderKey;
@@ -108,6 +177,39 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
   TenantGuardedLoader<_ExpensesView>? _cachedLoader;
 
   DateTime get _now => (widget.clock ?? _utcNow)().toUtc();
+
+  @override
+  void initState() {
+    super.initState();
+    _range = TenantExpenseRange.monthOf(_now);
+  }
+
+  /// Opens the calendar on the range in hand and reads back whatever comes out.
+  ///
+  /// **`firstDate` is not the beginning of time.** A range read is bounded at
+  /// [TenantExpenseRepository.maximumRangeRecords], so a person who picks five
+  /// years gets a total that is quietly short - the truncation callout says so,
+  /// but a picker that offers the year 2000 is inviting it. One year back is
+  /// the longest stretch this page can draw a chart for anyway.
+  Future<void> _pickRange() async {
+    final now = _now;
+    final today = DateTime.utc(now.year, now.month, now.day);
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: DateTimeRange(start: _range.start, end: _range.end),
+      firstDate: DateTime.utc(today.year - 1, today.month, today.day),
+      lastDate: today,
+      helpText: 'Select the days to total',
+      saveText: 'Done',
+    );
+    if (picked == null || !mounted) return;
+    final next = TenantExpenseRange(
+      startDate: checkoutBusinessDate(picked.start),
+      endDate: checkoutBusinessDate(picked.end),
+    );
+    if (next == _range) return;
+    setState(() => _range = next);
+  }
 
   /// Re-reads the period, after a record or a void changed what is in it.
   void _reload() => setState(() => _generation++);
@@ -117,10 +219,8 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
   void _composeLoaders(String key) {
     if (key == _loaderKey && _loader != null) return;
     _loaderKey = key;
-    final endDate = checkoutBusinessDate(_now);
-    final startDate = checkoutBusinessDate(
-      _now.subtract(Duration(days: _range.days - 1)),
-    );
+    final startDate = _range.startDate;
+    final endDate = _range.endDate;
     _loader = _readWith(widget.reader, startDate, endDate);
     final cache = widget.reader.cached;
     _cachedLoader = cache == null ? null : _readWith(cache, startDate, endDate);
@@ -207,7 +307,7 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
             category: category,
             period: period,
             currency: currency,
-            periodLabel: _range.label.toLowerCase(),
+            periodLabel: _range.label(_now).toLowerCase(),
             onVoid: widget.writer == null
                 ? null
                 : (record) => _void(session, record, currency),
@@ -242,28 +342,61 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final guardKey = '${_range.name}:$_generation';
-    final chips = Padding(
+    final guardKey = '${_range.startDate}:${_range.endDate}:$_generation';
+    // **Two selects in a row, under a button the width of the page**, at the
+    // developer's direction on 2026-09-22 - the shape the sales report, the
+    // shift history and the catalog already open in. The page's own rule about
+    // chips is answered rather than broken: a chip strip is for a surface
+    // carrying *one* filter, and this one now carries two.
+    final filters = Padding(
       padding: EdgeInsets.only(bottom: tokens.spacing.s20),
-      child: FilterChipBar<TenantExpenseRange>(
-        key: const ValueKey('expenses-range'),
-        semanticLabel: 'The stretch of days these expenses cover.',
-        options: <FilterChipOption<TenantExpenseRange>>[
-          for (final range in TenantExpenseRange.values)
-            FilterChipOption<TenantExpenseRange>(
-              key: ValueKey('expenses-range-${range.name}'),
-              value: range,
-              label: range.label,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          // **A button onto the calendar, not a list of three offsets.** The
+          // sales report and the shift history both put their day behind
+          // exactly this control, so a date on this page is opened the way a
+          // date is opened everywhere else in the app.
+          Expanded(
+            child: AppButton(
+              key: const ValueKey('expenses-range'),
+              label: _range.label(_now),
+              icon: Icons.calendar_today_outlined,
+              tier: AppButtonTier.secondary,
+              expand: true,
+              onPressed: _pickRange,
             ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(
+            child: AppSelect<TenantExpenseCategory?>(
+              key: const ValueKey('expenses-category-filter'),
+              label: 'Type',
+              dense: true,
+              leading: Icons.folder_outlined,
+              value: _category,
+              items: <AppSelectItem<TenantExpenseCategory?>>[
+                const AppSelectItem<TenantExpenseCategory?>(
+                  key: ValueKey('expenses-category-filter-all'),
+                  value: null,
+                  label: 'All types',
+                ),
+                // Every type, not only the ones this period spent under: a
+                // list that changes length with the read would move the option
+                // under a person's finger between one period and the next.
+                for (final category in TenantExpenseCategory.values)
+                  AppSelectItem<TenantExpenseCategory?>(
+                    key: ValueKey(
+                      'expenses-category-filter-${category.wireValue}',
+                    ),
+                    value: category,
+                    label: category.label,
+                  ),
+              ],
+              onChanged: (category) => setState(() => _category = category),
+            ),
+          ),
         ],
-        selected: _range,
-        // There is no "no period" reading of this page, so a deselection is
-        // refused rather than silently mapped onto a default - the same call
-        // the sales totals period chooser makes.
-        onSelected: (range) {
-          if (range == null || range == _range) return;
-          setState(() => _range = range);
-        },
       ),
     );
     _composeLoaders(guardKey);
@@ -274,9 +407,13 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
       // **The chooser stays on screen through every phase**, the way the sales
       // totals page keeps its own: the control that would take a person to a
       // different period must not be behind the read of this one.
-      loading: _ExpensesFrame(chips: chips, child: const _ExpensesReading()),
+      loading: _ExpensesFrame(
+        record: _recordButton(null),
+        filters: filters,
+        child: const _ExpensesReading(),
+      ),
       denied: _ExpensesFrame(
-        chips: chips,
+        filters: filters,
         child: const EmptyState(
           key: ValueKey('expenses-denied'),
           title: 'Expenses are not shown for this role',
@@ -285,7 +422,8 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
         ),
       ),
       failure: (context, error) => _ExpensesFrame(
-        chips: chips,
+        record: _recordButton(null),
+        filters: filters,
         child: const ErrorState(
           key: ValueKey('expenses-failure'),
           badgeLabel: 'Not read',
@@ -294,34 +432,56 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
         ),
       ),
       builder: (context, session, view) => _ExpensesFrame(
-        chips: chips,
-        action: widget.writer == null
-            ? null
-            : AppIconButton(
-                key: const ValueKey('expenses-record'),
-                // A filled circle at the prominent size, at the developer's
-                // direction on 2026-08-28: a bare `+` glyph at 18 on the dark
-                // toolbar was there but not findable.
-                icon: Icons.add_circle,
-                iconSize: AppButton.prominentIconSize,
-                semanticLabel: 'Record expense',
-                // **Tertiary, not primary.** The primary tier's label is the
-                // near-black ink that sits on a mint container, and an
-                // unbordered icon button paints no container - so a primary `+`
-                // is black on the bar's own dark surface, which is the contrast
-                // failure hard rule 4 is pass/fail about. Tertiary is the mint
-                // glyph on nothing, which is what this control is.
-                tier: AppButtonTier.tertiary,
-                bordered: false,
-                onPressed: () => _record(session),
-              ),
+        record: _recordButton(() => _record(session)),
+        filters: filters,
         child: _ExpensesContents(
           period: view.period,
           currency: view.currency,
-          range: _range,
+          rangeLabel: _range.label(_now),
+          category: _category,
           canRecord: widget.writer != null,
           onOpenCategory: (category) =>
               _openCategory(session, category, view.period, view.currency),
+          onVoid: widget.writer == null
+              ? null
+              : (record) => _void(session, record, view.currency),
+        ),
+      ),
+    );
+  }
+
+  /// The page's own control, the width of the page.
+  ///
+  /// **A labelled button above the list rather than a `+` on the top bar**, at
+  /// the developer's direction on 2026-09-22. It carries the word *expense*,
+  /// which the glyph never did.
+  ///
+  /// [onPressed] is null in the phases that have no session to record against,
+  /// and the button is drawn disabled rather than left out: a control that
+  /// appears once the read lands moves the filters under it, which is the jump
+  /// the filter row is kept out of every phase to avoid. A build with no writer
+  /// has no such control at all, in any phase.
+  Widget? _recordButton(VoidCallback? onPressed) {
+    if (widget.writer == null) return null;
+    return Builder(
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: AppTokens.componentOf(context).spacing.s12,
+        ),
+        // **Secondary, not primary**, at the developer's direction on
+        // 2026-09-22: the mint container is the loudest thing this app paints,
+        // and a full-width slab of it above the figures made the page read as
+        // being about adding an expense rather than about what has been spent.
+        // §2.1's outlined tier is the same control, said at the volume a page
+        // of reading can carry. The sheet this opens keeps its primary - one
+        // action, one screen region, which is the rule the mint is rationed by.
+        child: AppButton(
+          key: const ValueKey('expenses-record'),
+          label: 'Add expense',
+          icon: Icons.add,
+          tier: AppButtonTier.secondary,
+          expand: true,
+          onPressed: onPressed,
         ),
       ),
     );
@@ -338,22 +498,28 @@ typedef _ExpensesView = ({
 ///
 /// **The scaffold is built here rather than by the route, and that is the
 /// point of the class.** The one control this page exists for - recording an
-/// expense - belongs at the trailing edge of the top bar, and it may only be
-/// offered to somebody the guard has already admitted. A route drawing that
-/// button outside the guard would hold it out to the manager the guard is
-/// about to refuse.
+/// expense - may only be offered to somebody the guard has already admitted. A
+/// route drawing that button outside the guard would hold it out to the manager
+/// the guard is about to refuse.
 ///
 /// **A `ListView` rather than a `Column`, and that is not cosmetic.** A month
 /// of a real business is hundreds of records, and the page owning the scroll is
 /// what stops the list running off the bottom.
 final class _ExpensesFrame extends StatelessWidget {
-  const _ExpensesFrame({required this.chips, required this.child, this.action});
+  const _ExpensesFrame({
+    required this.filters,
+    required this.child,
+    this.record,
+  });
 
-  final Widget chips;
+  /// The period and the type, side by side.
+  final Widget filters;
+
   final Widget child;
 
-  /// The top bar's own control, or null in a phase that has nothing to offer.
-  final Widget? action;
+  /// The full-width record button, or null where this build cannot write and
+  /// on the refusal, which offers nothing.
+  final Widget? record;
 
   @override
   Widget build(BuildContext context) {
@@ -362,11 +528,10 @@ final class _ExpensesFrame extends StatelessWidget {
       title: 'Expenses',
       subtitle: 'What the business spent, beyond the cost of its stock.',
       contentWidth: AppContentWidth.records,
-      primaryAction: action,
       body: ListView(
         key: const ValueKey('expenses'),
         padding: EdgeInsets.all(tokens.spacing.s20),
-        children: <Widget>[chips, child],
+        children: <Widget>[if (record != null) record!, filters, child],
       ),
     );
   }
@@ -377,21 +542,56 @@ final class _ExpensesContents extends StatelessWidget {
   const _ExpensesContents({
     required this.period,
     required this.currency,
-    required this.range,
+    required this.rangeLabel,
+    required this.category,
     required this.canRecord,
     this.onOpenCategory,
+    this.onVoid,
   });
 
+  /// The whole period, every type. Sliced here rather than by the caller, so
+  /// a type drawn on its own can still state its share of all the spending.
   final TenantExpensePeriod period;
+
   final TenantReportingCurrency currency;
-  final TenantExpenseRange range;
+
+  /// What the filter above calls the stretch of days - *This month*, *Today*,
+  /// *3 - 17 Sep*. Resolved by the panel, which is what holds the clock.
+  final String rangeLabel;
+
+  /// The type the filter above is holding, or null for all of them.
+  final TenantExpenseCategory? category;
+
   final bool canRecord;
 
   /// Opens one category's own records and its day-by-day chart.
   final ValueChanged<TenantExpenseCategory>? onOpenCategory;
 
+  /// Withdraws one record, for the type drawn in place of the composition.
+  final TenantExpenseVoidRequest? onVoid;
+
   @override
   Widget build(BuildContext context) {
+    // **A type chosen above draws that type's own screen here**, at the
+    // developer's direction on 2026-09-22. The composition is the answer to
+    // *where did the money go*, and narrowed to one type it degenerated into
+    // a single bar at 100% - a picture of the question rather than of the
+    // answer. What a person wants having named a type is what tapping that
+    // type already gave them: the total, the days it fell on, and the
+    // records. The filters stay above it, so the next type is one tap away
+    // rather than a trip back.
+    final chosen = category;
+    if (chosen != null) {
+      return TenantExpenseCategoryDetail(
+        key: ValueKey('expenses-type-${chosen.wireValue}'),
+        category: chosen,
+        period: period.forCategory(chosen),
+        whole: period,
+        currency: currency,
+        periodLabel: rangeLabel.toLowerCase(),
+        onVoid: onVoid,
+      );
+    }
     final tokens = AppTokens.componentOf(context);
     final live = period.records.where((record) => !record.isVoided).length;
     final spent = period.spentCategories.isNotEmpty;
@@ -415,7 +615,7 @@ final class _ExpensesContents extends StatelessWidget {
         // picture below the fold on a phone. The composition is this page's
         // headline, and the total belongs in the hole it already has.
         // A period that took no money draws no ring, so the figure it would
-        // have held goes above the headings instead of inside them.
+        // have held goes above the types instead of inside them.
         if (!spent) ...<Widget>[
           Text(
             currency.format(period.total),
@@ -436,7 +636,7 @@ final class _ExpensesContents extends StatelessWidget {
         SizedBox(height: tokens.spacing.s12),
         Text(
           '$live ${live == 1 ? 'record' : 'records'}, '
-          '${range.label.toLowerCase()}',
+          '${rangeLabel.toLowerCase()}',
           key: const ValueKey('expenses-count'),
           textAlign: TextAlign.center,
           style: tokens.typography.caption.copyWith(
@@ -455,17 +655,17 @@ final class _ExpensesContents extends StatelessWidget {
                 'stretch of days to see a complete total.',
           ),
         ],
-        // **The page ends at the headings, at the developer's direction on
+        // **The page ends at the types, at the developer's direction on
         // 2026-08-28.** The reference this feature is measured against lists no
         // records here at all: the question this screen answers is *where did
         // the money go*, and a flat list of every record underneath answers a
         // different one twice as loudly. Records - and withdrawing one - are
-        // inside the heading they belong to, one tap away.
+        // inside the type they belong to, one tap away.
         if (period.records.isEmpty) ...<Widget>[
           SizedBox(height: tokens.spacing.s32),
           EmptyState(
             key: const ValueKey('expenses-empty'),
-            title: 'Nothing recorded ${range.label.toLowerCase()}',
+            title: 'Nothing recorded ${rangeLabel.toLowerCase()}',
             hint: canRecord
                 ? 'Record rent, wages, fuel or a repair and it counts against '
                       'profit from then on.'
@@ -514,8 +714,8 @@ final class ExpenseRow extends StatelessWidget {
   /// Whether this is the first row, which draws no hairline above itself.
   final bool first;
 
-  /// Whether the heading is named beside the date. False on a category's own
-  /// screen, where every row is under the heading the screen is called.
+  /// Whether the type is named beside the date. False on a category's own
+  /// screen, where every row is under the type the screen is called.
   final bool showCategory;
 
   /// Whether to hold the trailing control's width on a row that has none.
@@ -694,7 +894,7 @@ final class _CategoryShares extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     // **The fallback is the reachability rule, not a cosmetic one.** A period
     // whose every record has been voided took no money and so has no
-    // composition to draw - but its records still exist, and a heading is the
+    // composition to draw - but its records still exist, and a type is the
     // only way into them now that the route lists none itself.
     final spent = period.spentCategories;
     final categories = spent.isEmpty ? period.categories : spent;
@@ -896,7 +1096,10 @@ Future<AppNotice?> showExpenseRecordSheet(
   required String businessDate,
 }) => showAppSheet<AppNotice>(
   context,
-  initialDetent: AppSheetDetent.full,
+  // **The sheet's own opening detent, not the full screen**, at the developer's
+  // direction on 2026-09-22. Two fields, a chooser and a pair of buttons do not
+  // need 95% of a phone, and taking it hid the period the record is being added
+  // to. It is still draggable to full.
   builder: (sheetContext, scrollController) => _RecordExpenseForm(
     writer: writer,
     session: session,

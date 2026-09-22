@@ -671,14 +671,14 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
 
 /// The staff page's chrome, drawn in every phase of the read.
 ///
-/// The toolbar and its action are the same whether the directory has arrived
-/// or not, so they are drawn for real and only the body changes - the rule the
-/// skeleton work settled on for every other route here.
+/// The toolbar is the same whether the directory has arrived or not, so it is
+/// drawn for real and only the body changes - the rule the skeleton work
+/// settled on for every other route here. It carries no action of its own:
+/// *Invite staff* is a button at the head of the body now.
 final class _StaffFrame extends StatelessWidget {
-  const _StaffFrame({required this.child, this.action});
+  const _StaffFrame({required this.child});
 
   final Widget child;
-  final Widget? action;
 
   @override
   Widget build(BuildContext context) => AppScaffold(
@@ -696,7 +696,6 @@ final class _StaffFrame extends StatelessWidget {
     // line that fits.
     subtitle: 'Manage your team, their roles and access.',
     contentWidth: AppContentWidth.records,
-    primaryAction: action,
     body: child,
   );
 }
@@ -793,9 +792,6 @@ final class _TenantStaffManagementPanel extends StatefulWidget {
 
 final class _TenantStaffManagementPanelState
     extends State<_TenantStaffManagementPanel> {
-  final TextEditingController _search = TextEditingController();
-  Timer? _searchDebounce;
-  String _searchTerm = '';
   TenantRole? _role;
   MembershipStatus? _status;
   List<String?> _cursors = <String?>[null];
@@ -807,13 +803,6 @@ final class _TenantStaffManagementPanelState
 
   DateTime _now() => (widget.clock ?? DateTime.now)();
 
-  @override
-  void dispose() {
-    _searchDebounce?.cancel();
-    _search.dispose();
-    super.dispose();
-  }
-
   void _resetPage() {
     _cursors = <String?>[null];
     _pageIndex = 0;
@@ -823,23 +812,6 @@ final class _TenantStaffManagementPanelState
   void _reload() {
     if (!mounted) return;
     setState(_resetPage);
-  }
-
-  void _onSearchChanged(String value) {
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(AppMotion.standard.long.duration, () {
-      if (!mounted) return;
-      final trimmed = value.trim();
-      final next = trimmed.length < 2 ? '' : tenantStaffSearchTerm(trimmed);
-      if (next == _searchTerm) {
-        setState(() {});
-        return;
-      }
-      setState(() {
-        _searchTerm = next;
-        _resetPage();
-      });
-    });
   }
 
   void _setRole(TenantRole? role) {
@@ -875,7 +847,6 @@ final class _TenantStaffManagementPanelState
     if (_loaderKey == key && _loader != null) return;
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
-    final search = _searchTerm;
     final role = _role;
     final status = _status;
     // Both readers per pass. Nothing supplies a `queryReader` today, so the
@@ -895,7 +866,6 @@ final class _TenantStaffManagementPanelState
             ).queryPage(
               pageSize: widget.pageSize,
               cursor: cursor,
-              search: search.isEmpty ? null : search,
               role: role,
               status: status,
             );
@@ -936,19 +906,15 @@ final class _TenantStaffManagementPanelState
           children: <Widget>[
             const SectionHeading('Invite staff'),
             SizedBox(height: AppTokens.componentOf(context).spacing.s12),
+            // The way out is the form's own now, so this form ends in the same
+            // stacked pair as every other one on this surface.
             TenantStaffInvitationForm(
               session: session,
               callable: widget.inviteCallable ?? FirebaseInviteStaffCallable(),
               requestIdFactory: widget.requestIdFactory,
               tickets: widget.tickets,
               onSuccess: success,
-            ),
-            SizedBox(height: AppTokens.componentOf(context).spacing.s8),
-            AppButton(
-              key: const ValueKey('invite-staff-cancel'),
-              label: 'Cancel',
-              tier: AppButtonTier.tertiary,
-              onPressed: close,
+              onCancel: close,
             ),
           ],
         ),
@@ -1010,7 +976,12 @@ final class _TenantStaffManagementPanelState
     if (compact) {
       await showAppSheet<void>(
         context,
-        initialDetent: AppSheetDetent.full,
+        // **The sheet's own opening detent, not the full screen**, at the
+        // developer's direction on 2026-09-22. These forms are three or four
+        // fields and a pair of buttons; opening at 0.95 made every one of them
+        // read as a route that had replaced the directory rather than a sheet
+        // over it, and left the page behind invisible. It is still draggable to
+        // full for a form that needs the room.
         dismissible: false,
         builder: (sheetContext, sheetController) => TenantSessionScope(
           controller: sessionController,
@@ -1055,7 +1026,7 @@ final class _TenantStaffManagementPanelState
         // what makes a stale edit able to reinstate a role somebody else has
         // just removed. Naming the role in the verb is what lets a person see
         // that before they press Save rather than afterwards.
-        label: 'Edit role and details',
+        label: 'Edit',
         icon: Icons.edit_outlined,
         key: ValueKey('edit-staff-${staff.uid}'),
         onPressed: () => _openForm(session, _StaffActionKind.correct, staff),
@@ -1105,7 +1076,7 @@ final class _TenantStaffManagementPanelState
   @override
   Widget build(BuildContext context) {
     final key =
-        'staff:$_generation:$_pageIndex:$_searchTerm:'
+        'staff:$_generation:$_pageIndex:'
         '${_role?.wireValue ?? '-'}:${_status?.wireValue ?? '-'}';
     _composeLoaders(key);
     return TenantRouteGuard<TenantStaffPage>(
@@ -1131,30 +1102,15 @@ final class _TenantStaffManagementPanelState
         ),
       ),
       builder: (context, session, page) => _StaffFrame(
-        action: _canInvite(session)
-            ? AppIconButton(
-                key: const ValueKey('invite-staff-open'),
-                icon: Icons.person_add_alt_1_outlined,
-                iconSize: AppButton.prominentIconSize,
-                semanticLabel: 'Invite staff',
-                // Tertiary and unbordered: the primary tier's label is the
-                // near-black ink meant for a mint container, and an unbordered
-                // icon button paints no container - so a primary glyph here
-                // would be black on the bar's own dark surface.
-                tier: AppButtonTier.tertiary,
-                bordered: false,
-                onPressed: () => _openForm(session, _StaffActionKind.invite),
-              )
-            : null,
         child: _StaffManagementContents(
           session: session,
           page: page,
-          search: _search,
-          searchTerm: _searchTerm,
           role: _role,
           status: _status,
           pageIndex: _pageIndex,
-          onSearchChanged: _onSearchChanged,
+          onInvite: _canInvite(session)
+              ? () => _openForm(session, _StaffActionKind.invite)
+              : null,
           onRoleChanged: _setRole,
           onStatusChanged: _setStatus,
           canInvite: _canInvite(session),
@@ -1168,8 +1124,8 @@ final class _TenantStaffManagementPanelState
     );
   }
 
-  /// Whether this session may invite at all, which is what puts the control in
-  /// the toolbar or leaves it out.
+  /// Whether this session may invite at all, which is what puts the button at
+  /// the head of the page or leaves it out.
   static bool _canInvite(TenantSession session) => session.canAccess(
     allowedRoles: TenantStaffInvitationGateway.allowedRoles,
   );
@@ -1205,12 +1161,10 @@ final class _StaffManagementContents extends StatelessWidget {
   const _StaffManagementContents({
     required this.session,
     required this.page,
-    required this.search,
-    required this.searchTerm,
     required this.role,
     required this.status,
     required this.pageIndex,
-    required this.onSearchChanged,
+    required this.onInvite,
     required this.onRoleChanged,
     required this.onStatusChanged,
     required this.canInvite,
@@ -1223,17 +1177,20 @@ final class _StaffManagementContents extends StatelessWidget {
 
   final TenantSession session;
   final TenantStaffPage page;
-  final TextEditingController search;
-  final String searchTerm;
   final TenantRole? role;
   final MembershipStatus? status;
   final int pageIndex;
-  final ValueChanged<String> onSearchChanged;
+
+  /// Opens the invitation form, or null for a session that may not invite - in
+  /// which case the button is not drawn at all rather than drawn disabled. A
+  /// control a role can never use is not a state of that control.
+  final VoidCallback? onInvite;
+
   final ValueChanged<TenantRole?> onRoleChanged;
   final ValueChanged<MembershipStatus?> onStatusChanged;
 
-  /// Whether this session may invite. It decides only whether the read-only
-  /// notice is drawn - the control itself is in the toolbar now.
+  /// Whether this session may invite. It decides whether the read-only notice
+  /// is drawn; [onInvite] decides the button.
   final bool canInvite;
   final List<_StaffMenuAction> Function(TenantStaffSummary) actionsFor;
   final TenantStaffInvitationState Function(TenantStaffSummary)
@@ -1244,8 +1201,7 @@ final class _StaffManagementContents extends StatelessWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
-  /// How wide the two filters are once there is room to put them beside the
-  /// search field.
+  /// How wide each of the two filters is once the page is wider than a phone.
   ///
   /// **Named so the placeholder can read it**, and not on §2.3's scale because
   /// it is not a spacing: it is how much room *All statuses* needs beside a
@@ -1253,7 +1209,7 @@ final class _StaffManagementContents extends StatelessWidget {
   /// and then shuffle it sideways the moment the directory landed.
   static const double filterWidth = 190;
 
-  bool get _hasQuery => searchTerm.isNotEmpty || role != null || status != null;
+  bool get _hasQuery => role != null || status != null;
 
   /// The people on this page whose invitation has reached a dead end.
   ///
@@ -1391,7 +1347,7 @@ final class _StaffManagementContents extends StatelessWidget {
             ),
             title: _hasQuery ? 'No matching staff' : 'No staff yet',
             hint: _hasQuery
-                ? 'Try a different name, email, role, or status.'
+                ? 'Try a different role or status.'
                 : 'Invite somebody to give them access to this business.',
             illustration: _hasQuery ? 'file-search.svg' : 'team.svg',
           ),
@@ -1405,25 +1361,28 @@ final class _StaffManagementContents extends StatelessWidget {
 
   Widget _filters(BuildContext context, {required bool compact}) {
     final tokens = AppTokens.componentOf(context);
-    // **The three filters wear their captions inside themselves.** *Search
-    // staff* over a well whose placeholder reads *Name or email*, *Role* over
-    // a control reading *All roles*, *Status* over one reading *All statuses* -
-    // the same word twice, three times over, and on a phone those three lines
-    // cost more height than a staff card. Each keeps its label as its
-    // accessible name and its leading glyph as the mark that names it, which is
-    // the contract `AppTextField.dense` states.
-    final searchField = AppTextField(
-      key: const ValueKey('staff-search'),
-      controller: search,
-      label: 'Search staff',
-      dense: true,
-      placeholder: 'Name or email',
-      leading: Icons.search,
-      onChanged: onSearchChanged,
-      helper: search.text.trim().length == 1
-          ? 'Type at least 2 characters to search.'
-          : null,
-    );
+    // **The head of the page is the invitation, not a search well**, at the
+    // developer's direction on 2026-09-22: the same shape expenses and stock
+    // counts now open in - one button the width of the page, with the filters
+    // under it. The search field that stood here is gone, and with it the only
+    // way to find a colleague by name; the two filters and the pager are what
+    // narrow the directory now.
+    final invite = onInvite == null
+        ? null
+        : AppButton(
+            key: const ValueKey('invite-staff-open'),
+            label: 'Invite staff',
+            icon: Icons.person_add_alt_1_outlined,
+            tier: AppButtonTier.primary,
+            expand: true,
+            onPressed: onInvite,
+          );
+    // **The two filters wear their captions inside themselves.** *Role* over a
+    // control reading *All roles* and *Status* over one reading *All statuses*
+    // is the same word twice, and on a phone those label rows cost more height
+    // than a staff card. Each keeps its label as its accessible name and its
+    // leading glyph as the mark that names it, which is the contract
+    // `AppSelect.dense` states.
     final roleFilter = AppSelect<String>(
       key: const ValueKey('staff-role-filter'),
       value: role?.wireValue ?? '',
@@ -1462,12 +1421,19 @@ final class _StaffManagementContents extends StatelessWidget {
             : MembershipStatus.fromWire(value),
       ),
     );
-    if (compact) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          searchField,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (invite != null) ...<Widget>[
+          invite,
           SizedBox(height: tokens.spacing.s12),
+        ],
+        // **The filters stay at their own width past a phone rather than
+        // stretching to the page.** Two selects spread across a desktop column
+        // put *All roles* and *All statuses* a hand's width apart for no
+        // reason; the pair reads as a pair at the width the row already had
+        // them at.
+        if (compact)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -1475,18 +1441,16 @@ final class _StaffManagementContents extends StatelessWidget {
               SizedBox(width: tokens.spacing.s8),
               Expanded(child: statusFilter),
             ],
+          )
+        else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              SizedBox(width: filterWidth, child: roleFilter),
+              SizedBox(width: tokens.spacing.s12),
+              SizedBox(width: filterWidth, child: statusFilter),
+            ],
           ),
-        ],
-      );
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Expanded(child: searchField),
-        SizedBox(width: tokens.spacing.s12),
-        SizedBox(width: filterWidth, child: roleFilter),
-        SizedBox(width: tokens.spacing.s12),
-        SizedBox(width: filterWidth, child: statusFilter),
       ],
     );
   }
@@ -1496,10 +1460,15 @@ final class _StaffManagementContents extends StatelessWidget {
 ///
 /// **Shaped like the page that replaces it**: the filter row is drawn in its
 /// real wells with its real labels, and only the records shimmer. Decision 35's
-/// argument, and on this route it is the one that matters - a person who opens
-/// staff is almost always going there to find one person, and *Search staff*
-/// under a real well tells them they have arrived at the right screen a beat
+/// argument, and on this route it is the one that matters - the two filters
+/// under real wells tell a person they have arrived at the right screen a beat
 /// before the list can.
+///
+/// **The invite button is a block, not a real button.** Whether this session
+/// may invite is read off the session the guard has not produced yet, so a real
+/// button here would either lie to a manager who cannot invite or be drawn
+/// disabled for an owner who can. A block holds its height and claims nothing,
+/// and the row below it does not move when the answer lands.
 ///
 /// **It claims nothing about what is coming.** No count, no "no staff yet" -
 /// both are answers this state does not have, and the second is the one a
@@ -1525,15 +1494,15 @@ final class _StaffDirectoryReading extends StatelessWidget {
         : width < AppLayout.contract.expandedFloor
         ? tokens.spacing.s20
         : tokens.spacing.s24;
-    // The three controls exactly as they will be: an empty search well, and
-    // the two filters holding the everything-selected option they open on.
+    // The controls exactly as they will be: the invitation's block, and the
+    // two filters holding the everything-selected option they open on.
     // **No captions here either, and that is load-bearing rather than tidy.**
     // This state exists so the filter row is drawn in its real wells at its
     // real height before the directory lands; a skeleton that still reserved
-    // three label rows would drop the whole page by their height the moment it
-    // did. `SkeletonField` draws no label row for an empty one, exactly as
+    // label rows would drop the whole page by their height the moment it did.
+    // `SkeletonField` draws no label row for an empty one, exactly as
     // `AppFieldWell` does.
-    const search = SkeletonField(label: '', leading: Icons.search);
+    final invite = SkeletonBlock(height: AppButtonSize.lg.height);
     const role = SkeletonField(
       label: '',
       leading: Icons.badge_outlined,
@@ -1552,9 +1521,9 @@ final class _StaffDirectoryReading extends StatelessWidget {
         key: const ValueKey('staff-directory-reading'),
         padding: EdgeInsets.all(inset),
         children: <Widget>[
-          if (compact) ...<Widget>[
-            search,
-            SizedBox(height: tokens.spacing.s12),
+          invite,
+          SizedBox(height: tokens.spacing.s12),
+          if (compact)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
@@ -1562,13 +1531,11 @@ final class _StaffDirectoryReading extends StatelessWidget {
                 SizedBox(width: tokens.spacing.s8),
                 const Expanded(child: status),
               ],
-            ),
-          ] else
+            )
+          else
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Expanded(child: search),
-                SizedBox(width: tokens.spacing.s12),
                 const SizedBox(
                   width: _StaffManagementContents.filterWidth,
                   child: role,
@@ -2210,17 +2177,16 @@ final class _StaffIdentity extends StatelessWidget {
   }
 }
 
-/// A member's initials in a block of their own colour.
+/// A member's initials in a block.
 ///
-/// **The colour is the person's, not the row's.** The old card gave every
-/// member a filled block from a fixed set, and that is what makes a scrolling
-/// list scannable - a face you recognise before you have read anything. It is
-/// keyed off the member's uid rather than their position, so deactivating
-/// somebody above them does not repaint everybody below.
-///
-/// **Decoration only, and it is never alone**: the name is beside it, the
-/// initials are inside it, and the semantic label names the member. Hard rule 4
-/// is about facts, and which of six hues a person drew is not one.
+/// **No identity hue since 2026-09-22**, at the developer's direction. The
+/// block used to carry a two-pixel ring in one of six colours keyed off the
+/// member's uid, on the argument that a recognisable face makes a scrolling
+/// list scannable. Six hues cycling down a directory of twenty is not a face,
+/// and the row already carries the name, the role and the standing - so the
+/// ring was colour that meant nothing, on the one element of the row that had
+/// nothing else to say. What is left is the well the initials always sat on,
+/// with the page's own subtle edge.
 final class _StaffAvatar extends StatelessWidget {
   const _StaffAvatar({required this.staff, required this.size});
 
@@ -2231,39 +2197,26 @@ final class _StaffAvatar extends StatelessWidget {
   /// never smaller than a thing a finger could be asked to hit.
   static const double cardSize = 48;
 
-  /// How thick the identity ring is.
-  ///
-  /// Named here rather than tokenised, for the reason `EmptyState.markSize` and
-  /// `_LandingGreeting.funnelStep` both give: no source this app has states an
-  /// avatar ring, and inventing `layout.avatarRing` would be inventing a token,
-  /// which `CLAUDE.md` forbids one rule before it forbids magic numbers. Two is
-  /// what reads as a ring at 48 and still at the 40 the list uses.
-  static const double ringWidth = 2;
-
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final accent = tokens.colors.accent.identityFor(staff.uid);
     return Semantics(
       label: '${staff.displayName} initials',
       child: Container(
         width: size,
         height: size,
         alignment: Alignment.center,
-        // **A ring, not a fill, since the contrast was measured.** The comment
-        // this replaces said the six `accent.identity` tones were chosen so
-        // white passes on all of them. It does not: `text.onAccent` on
-        // `#FFA726` is 1.94:1, against §9's 4.5. Tinting the fill does not
-        // rescue it either - `#AB47BC` on its own 16% tint is 3.12:1.
-        //
-        // So the initials go on `surface.field` in ordinary primary ink -
-        // 11.8:1 - and the identity colour becomes a two-pixel ring. The hue
-        // stays decorative, which is all it was ever asked to be, and it is now
-        // the only thing it is being asked to do.
+        // **The initials go on `surface.field` in ordinary primary ink**, which
+        // measures 11.8:1. That much is unchanged and is why the block was
+        // never a filled colour: `text.onAccent` on `#FFA726` is 1.94:1 against
+        // §9's 4.5, and tinting the fill does not rescue it either - `#AB47BC`
+        // on its own 16% tint is 3.12:1. What has gone is the identity ring
+        // that used to edge it; the block keeps the page's own hairline so it
+        // still reads as a block.
         decoration: BoxDecoration(
           color: tokens.colors.surface.field,
           borderRadius: BorderRadius.circular(tokens.radius.lg),
-          border: Border.all(color: accent, width: ringWidth),
+          border: Border.all(color: tokens.colors.surface.borderSubtle),
         ),
         child: Text(
           _initials(staff.displayName),

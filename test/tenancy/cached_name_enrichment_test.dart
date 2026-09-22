@@ -169,7 +169,14 @@ Future<void> _pumpAuditLog(WidgetTester tester, TenantDataReader reader) async {
       home: TenantSessionScope(
         controller: TenantSessionController()
           ..open(uid: 'admin-a', membership: _membership()),
-        child: Scaffold(body: TenantAuditLogPanel(reader: reader)),
+        child: Scaffold(
+          body: TenantAuditLogPanel(
+            reader: reader,
+            // The trail opens on today, and every fixture here is dated: the
+            // clock is pinned to the day they carry so the page draws them.
+            clock: () => DateTime.utc(2026, 8, 1, 12),
+          ),
+        ),
       ),
     ),
   );

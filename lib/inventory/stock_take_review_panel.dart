@@ -20,6 +20,7 @@ import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
+import '../ui/fields.dart';
 import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -61,30 +62,14 @@ final class TenantStockTakeReviewScreen extends StatelessWidget {
     title: 'Stock counts',
     subtitle: 'What was counted, and how it differed from the books.',
     contentWidth: AppContentWidth.records,
-    primaryAction: countRoute == null
-        ? null
-        : Builder(
-            builder: (context) => AppButton(
-              key: const ValueKey('stock-take-review-count'),
-              label: 'Count stock',
-              tier: AppButtonTier.primary,
-              onPressed: () {
-                final controller = TenantSessionScope.of(context);
-                Navigator.of(context).push(
-                  AppPageRoute<void>(
-                    builder: (routeContext) => TenantSessionScope(
-                      controller: controller,
-                      child: countRoute!(routeContext),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
+    // **No toolbar action**, at the developer's direction on 2026-09-22.
+    // *Count stock* is a button the width of the page at the head of the body,
+    // with the two filters under it - the shape expenses and staff now open in.
     body: TenantStockTakeReviewPanel(
       reader: reader,
       applyCallable: applyCallable,
       onApplied: onApplied,
+      countRoute: countRoute,
     ),
   );
 }
@@ -95,12 +80,18 @@ final class TenantStockTakeReviewPanel extends StatefulWidget {
     required this.reader,
     this.applyCallable,
     this.onApplied,
+    this.countRoute,
     this.pageSize = TenantStockTakeReviewRepository.defaultPageSize,
   });
 
   final TenantDataReader reader;
   final ApplyStockTakeCallable? applyCallable;
   final VoidCallback? onApplied;
+
+  /// The counting screen, started from the button at the head of this panel.
+  /// Absent leaves the button off - see [TenantStockTakeReviewScreen.countRoute].
+  final WidgetBuilder? countRoute;
+
   final int pageSize;
 
   @override
@@ -121,6 +112,18 @@ class _TenantStockTakeReviewPanelState
   void rereadAfterReturn() => setState(() => _generation++);
 
   int _generation = 0;
+
+  /// The standing the list is narrowed to, or null for every standing.
+  TenantStockTakeStatus? _status;
+
+  /// The counter the list is narrowed to, or null for everybody.
+  ///
+  /// **Neither filter is in the loader key.** `loadTakes` reads one bounded
+  /// page and both of these narrow what is already in hand, so a change here is
+  /// a repaint rather than a read - and a filter that spent a read to throw
+  /// rows away would also renumber the page it filtered.
+  String? _counterUid;
+
   final TenantStaffNameResolvers _staffNames = TenantStaffNameResolvers();
 
   /// One resolver per session **and per pass**, so the cached pass resolves a
@@ -139,17 +142,65 @@ class _TenantStockTakeReviewPanelState
     // while keeping what it is drawing. `_composeLoaders` in the catalog panel
     // is the same pattern and the reason it exists.
     _composeLoaders('$_generation');
-    return TenantRouteGuard<TenantNamedPage<List<TenantStockTakeRecord>>>(
-      allowedRoles: TenantStockTakeReviewRepository.allowedRoles,
-      load: _loader!,
-      loadCached: _loaderCached,
-      denied: const ErrorState(
-        status: AppStatus.problem,
-        badgeLabel: 'Not allowed',
-        statement:
-            'Only an owner, administrator or manager may read stock counts.',
-      ),
-      builder: _buildList,
+    final tokens = AppTokens.componentOf(context);
+    final count = _countButton(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        // **Above the guard, exactly where the toolbar button was.** Taking a
+        // count is not a thing this page read, so it does not wait on the read
+        // and it does not disappear when the read refuses: the same standing
+        // the control had in the top bar, moved down into the page.
+        if (count != null)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              tokens.spacing.s16,
+              tokens.spacing.s16,
+              tokens.spacing.s16,
+              0,
+            ),
+            child: count,
+          ),
+        Expanded(
+          child: TenantRouteGuard<TenantNamedPage<List<TenantStockTakeRecord>>>(
+            allowedRoles: TenantStockTakeReviewRepository.allowedRoles,
+            load: _loader!,
+            loadCached: _loaderCached,
+            denied: const ErrorState(
+              status: AppStatus.problem,
+              badgeLabel: 'Not allowed',
+              statement:
+                  'Only an owner, administrator or manager may read stock '
+                  'counts.',
+            ),
+            builder: _buildList,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// *Count stock*, the width of the page.
+  Widget? _countButton(BuildContext context) {
+    final route = widget.countRoute;
+    if (route == null) return null;
+    return AppButton(
+      key: const ValueKey('stock-take-review-count'),
+      label: 'Count stock',
+      icon: Icons.checklist_outlined,
+      tier: AppButtonTier.primary,
+      expand: true,
+      onPressed: () {
+        final controller = TenantSessionScope.of(context);
+        Navigator.of(context).push(
+          AppPageRoute<void>(
+            builder: (routeContext) => TenantSessionScope(
+              controller: controller,
+              child: route(routeContext),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -201,32 +252,150 @@ class _TenantStockTakeReviewPanelState
             'who counts what in Settings.',
       );
     }
-    // **A `ListView`, and the scroll is still the caller's.** It was a
-    // `RecordList` inside one, because that component is a bare `Column`; it is
-    // now a list of `TenantStockTakeCard`, which is a bare card for the same
-    // reason. Without the scroll a third count overflows the viewport instead
-    // of scrolling, which is what the device run found.
-    return ListView.separated(
-      key: const ValueKey('stock-take-review-list'),
-      padding: EdgeInsets.all(tokens.spacing.s16),
-      itemCount: takes.length,
-      separatorBuilder: (context, index) =>
-          SizedBox(height: tokens.spacing.s12),
-      itemBuilder: (context, index) {
-        final take = takes[index];
-        return TenantStockTakeCard(
-          // The key the record card carried, kept so a test written against
-          // this list keeps addressing the same count.
-          key: ValueKey<String>('stock-take-${take.id}'),
-          take: take,
-          counterLabel: tenantStaffLabel(
-            take.counterUid,
-            names: named.names,
-            selfUid: session.uid,
+    final shown = takes
+        .where(
+          (take) =>
+              (_status == null || take.status == _status) &&
+              (_counterUid == null || take.counterUid == _counterUid),
+        )
+        .toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            tokens.spacing.s16,
+            tokens.spacing.s16,
+            tokens.spacing.s16,
+            0,
           ),
-          onOpen: () => _open(session, take),
-        );
-      },
+          child: _filters(context, session, named),
+        ),
+        // **A `ListView`, and the scroll is still the caller's.** It was a
+        // `RecordList` inside one, because that component is a bare `Column`;
+        // it is now a list of `TenantStockTakeCard`, which is a bare card for
+        // the same reason. Without the scroll a third count overflows the
+        // viewport instead of scrolling, which is what the device run found.
+        Expanded(
+          child: shown.isEmpty
+              // **Not "No counts yet".** This page holds counts; these two
+              // filters are why none is on screen, and the way out is to widen
+              // them rather than to hand another one in.
+              ? const EmptyState(
+                  key: ValueKey('stock-take-review-no-matches'),
+                  title: 'No counts match',
+                  hint: 'Try another standing, or another person.',
+                )
+              : ListView.separated(
+                  key: const ValueKey('stock-take-review-list'),
+                  padding: EdgeInsets.all(tokens.spacing.s16),
+                  itemCount: shown.length,
+                  separatorBuilder: (context, index) =>
+                      SizedBox(height: tokens.spacing.s12),
+                  itemBuilder: (context, index) {
+                    final take = shown[index];
+                    return TenantStockTakeCard(
+                      // The key the record card carried, kept so a test written
+                      // against this list keeps addressing the same count.
+                      key: ValueKey<String>('stock-take-${take.id}'),
+                      take: take,
+                      counterLabel: tenantStaffLabel(
+                        take.counterUid,
+                        names: named.names,
+                        selfUid: session.uid,
+                      ),
+                      onOpen: () => _open(session, take),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// The standing and the counter, side by side.
+  ///
+  /// **The counters are the ones on this page, not the business's staff.** The
+  /// page is one bounded read and the names arrived with it, so offering
+  /// somebody who took no count on it would be a choice that empties the list
+  /// and explains nothing. A counter the filter is holding stays on offer even
+  /// after a re-read drops them, because a select has to hold what it shows.
+  Widget _filters(
+    BuildContext context,
+    TenantSession session,
+    TenantNamedPage<List<TenantStockTakeRecord>> named,
+  ) {
+    final tokens = AppTokens.componentOf(context);
+    final counters =
+        <String>{
+          for (final take in named.page) take.counterUid,
+          if (_counterUid != null) _counterUid!,
+        }.toList(growable: false)
+          ..sort();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(
+          child: AppSelect<TenantStockTakeStatus?>(
+            key: const ValueKey('stock-take-review-status-filter'),
+            label: 'Standing',
+            dense: true,
+            leading: Icons.filter_alt_outlined,
+            value: _status,
+            items: const <AppSelectItem<TenantStockTakeStatus?>>[
+              AppSelectItem<TenantStockTakeStatus?>(
+                key: ValueKey('stock-take-review-status-all'),
+                value: null,
+                label: 'All standings',
+              ),
+              AppSelectItem<TenantStockTakeStatus?>(
+                key: ValueKey('stock-take-review-status-submitting'),
+                value: TenantStockTakeStatus.submitting,
+                label: 'Still arriving',
+              ),
+              AppSelectItem<TenantStockTakeStatus?>(
+                key: ValueKey('stock-take-review-status-submitted'),
+                value: TenantStockTakeStatus.submitted,
+                label: 'Handed in',
+              ),
+              AppSelectItem<TenantStockTakeStatus?>(
+                key: ValueKey('stock-take-review-status-applied'),
+                value: TenantStockTakeStatus.applied,
+                label: 'Applied',
+              ),
+            ],
+            onChanged: (status) => setState(() => _status = status),
+          ),
+        ),
+        SizedBox(width: tokens.spacing.s12),
+        Expanded(
+          child: AppSelect<String?>(
+            key: const ValueKey('stock-take-review-counter-filter'),
+            label: 'Counted by',
+            dense: true,
+            leading: Icons.person_outline,
+            value: _counterUid,
+            items: <AppSelectItem<String?>>[
+              const AppSelectItem<String?>(
+                key: ValueKey('stock-take-review-counter-all'),
+                value: null,
+                label: 'Everybody',
+              ),
+              for (final uid in counters)
+                AppSelectItem<String?>(
+                  key: ValueKey<String>('stock-take-review-counter-$uid'),
+                  value: uid,
+                  label: tenantStaffLabel(
+                    uid,
+                    names: named.names,
+                    selfUid: session.uid,
+                  ),
+                ),
+            ],
+            onChanged: (uid) => setState(() => _counterUid = uid),
+          ),
+        ),
+      ],
     );
   }
 
