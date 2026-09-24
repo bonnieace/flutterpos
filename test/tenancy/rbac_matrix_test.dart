@@ -62,6 +62,7 @@ import 'package:flutter_application_1/sales/receipt_lookup.dart';
 import 'package:flutter_application_1/sales/sale_history.dart';
 import 'package:flutter_application_1/shift/abandoned_shift.dart';
 import 'package:flutter_application_1/shift/shift_history.dart';
+import 'package:flutter_application_1/suppliers/supplier.dart';
 import 'package:flutter_application_1/tenancy/tenant_staff_directory.dart';
 import 'package:flutter_application_1/tenancy/tenant_staff_invitation.dart';
 import 'package:flutter_application_1/tenancy/tenant_branding_writer.dart';
@@ -300,6 +301,19 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
     expected: TenantExpenseRepository.allowedRoles,
     row: 'Expenses: owner/administrator only, like the other money settings.',
   ),
+  // | Suppliers, deliveries and production | Full | Full | Full | No |
+  //
+  // **Added 2026-09-24 with the feature, at the developer's direction.** The
+  // roles that receive and produce stock; a manager may set a product's cost
+  // through a delivery or a batch because each is a permanent record of how
+  // the figure was reached, while editing the cost directly stays owner and
+  // administrator (`TenantCatalogManagementRepository.costRoles`).
+  'TenantSupplierRepository.allowedRoles': (
+    expected: TenantSupplierRepository.allowedRoles,
+    row:
+        'Suppliers, deliveries and production: the management three, as '
+        'the roles that receive stock.',
+  ),
   // | Business details and logo | Full | Full | No | No |
   'TenantBrandingPublisher.allowedRoles': (
     expected: TenantBrandingPublisher.allowedRoles,
@@ -402,6 +416,8 @@ const Map<String, List<TenantRole>> _fromTheMatrix = <String, List<TenantRole>>{
   'TenantSaleHistoryRepository.reportRoles': <TenantRole>[_o, _a, _m, _c],
   'TenantSaleHistoryRepository.managementReportRoles': _management,
   'TenantReturnHistoryRepository.allowedRoles': <TenantRole>[_o, _a, _m, _c],
+  // Registered 2026-09-24 with suppliers and production.
+  'TenantSupplierRepository.allowedRoles': _management,
 };
 
 /// Why this file does not assert which routes a role is offered.

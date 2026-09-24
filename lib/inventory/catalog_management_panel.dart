@@ -348,6 +348,10 @@ final class _TenantCatalogManagementPanelState
   final TextEditingController _search = TextEditingController();
 
   String? _selectedCategoryId;
+
+  /// Bought in unless somebody says otherwise, which is what every product
+  /// added before the choice existed was.
+  TenantProductCostType _productCostType = TenantProductCostType.purchased;
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
   int _generation = 0;
@@ -688,6 +692,8 @@ final class _TenantCatalogManagementPanelState
         onCategorySelected: (categoryId) {
           _selectedCategoryId = categoryId;
         },
+        costType: _productCostType,
+        onCostTypeSelected: (costType) => _productCostType = costType,
         onChooseImage: widget.imageStore == null ? null : _chooseProductImage,
         onImageChanged: (image) => _productImage = image,
         session: session,
@@ -757,6 +763,7 @@ final class _TenantCatalogManagementPanelState
         categoryId: _selectedCategoryId ?? '',
         categories: view.categories.items,
         requestId: _productRequestId ??= _newRequestId(),
+        costType: _productCostType,
       );
     } on TenantCatalogManagementException catch (error) {
       _productRequestId = null;
@@ -811,6 +818,7 @@ final class _TenantCatalogManagementPanelState
           categories: view.categories.items,
           requestId: _productRequestId!,
           imageUrl: upload.url,
+          costType: _productCostType,
         );
       }
       final result = await writer.createProduct(intent);
@@ -1073,6 +1081,7 @@ final class _TenantCatalogManagementPanelState
         requestId: _editRequestIdFor(draft.fingerprint(product.id)),
         imageUrl: stagedImage?.url,
         clearImage: draft.removeImage,
+        costType: draft.costType,
       );
     } on TenantCatalogManagementException catch (error) {
       // **A new photograph on its own is not an unchanged correction.** With
@@ -1222,6 +1231,7 @@ final class _TenantCatalogManagementPanelState
     _productCost.clear();
     _productQuantity.clear();
     _selectedCategoryId = null;
+    _productCostType = TenantProductCostType.purchased;
     _productImage = null;
   }
 
@@ -3312,6 +3322,8 @@ final class _AddProductScreen extends StatefulWidget {
     required this.image,
     required this.busy,
     required this.onCategorySelected,
+    required this.costType,
+    required this.onCostTypeSelected,
     required this.onChooseImage,
     required this.onImageChanged,
     required this.session,
@@ -3336,6 +3348,8 @@ final class _AddProductScreen extends StatefulWidget {
   final TenantProductImageCandidate? image;
   final bool busy;
   final ValueChanged<String> onCategorySelected;
+  final TenantProductCostType costType;
+  final ValueChanged<TenantProductCostType> onCostTypeSelected;
   final Future<TenantProductImageCandidate?> Function()? onChooseImage;
   final ValueChanged<TenantProductImageCandidate?> onImageChanged;
 
@@ -3356,6 +3370,7 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
       ? widget.selectedCategoryId!
       : '';
   late TenantProductImageCandidate? _image = widget.image;
+  late TenantProductCostType _costType = widget.costType;
 
   bool get _canSubmit =>
       !widget.busy &&
@@ -3437,7 +3452,17 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
               leading: Icons.payments_outlined,
             ),
           ],
-          SizedBox(height: tokens.spacing.s8),
+          SizedBox(height: tokens.spacing.s12),
+          _ProductCostTypeChoice(
+            choiceKey: const ValueKey('catalog-management-product-cost-type'),
+            value: _costType,
+            enabled: !widget.busy,
+            onChanged: (costType) {
+              setState(() => _costType = costType);
+              widget.onCostTypeSelected(costType);
+            },
+          ),
+          SizedBox(height: tokens.spacing.s12),
           // **Optional, and blank is the ordinary case.** A product being added
           // for the first time usually holds nothing yet; one being brought
           // across from a shelf that already exists usually does. Deliberately
@@ -3890,11 +3915,15 @@ final class _ProductEditDraft {
     required this.clearCost,
     required this.image,
     required this.removeImage,
+    required this.costType,
   });
 
   final String name;
   final String sku;
   final String categoryId;
+
+  /// Bought in or made here, as the form leaves it.
+  final TenantProductCostType costType;
   final String? price;
   final String? cost;
 
@@ -3917,6 +3946,7 @@ final class _ProductEditDraft {
     image?.fileName ?? '',
     '${image?.bytes.length ?? 0}',
     '$removeImage',
+    costType.wireValue,
     // NUL-separated, matching every other identity digest in this codebase.
     // Written as an escape rather than typed: it reached this file as a
     // literal NUL byte, which made `grep` report the whole module as binary
@@ -3976,6 +4006,7 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
     text: widget.product.cost == null ? '' : moneyText(widget.product.cost!),
   );
   late String _categoryId = widget.product.categoryId;
+  late TenantProductCostType _costType = widget.product.costType;
   bool _clearCost = false;
   TenantProductImageCandidate? _image;
   bool _removeImage = false;
@@ -4091,6 +4122,13 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
           helper:
               'What the register matches a scan against. No spaces. The old '
               'code stops finding this product.',
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        _ProductCostTypeChoice(
+          choiceKey: const ValueKey('catalog-management-edit-cost-type'),
+          value: _costType,
+          enabled: true,
+          onChanged: (costType) => setState(() => _costType = costType),
         ),
         if (widget.canChangeMoney) ...[
           SizedBox(height: tokens.spacing.s8),
@@ -4218,7 +4256,70 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
               clearCost: widget.canChangeMoney && _clearCost,
               image: _image,
               removeImage: _removeImage,
+              costType: _costType,
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Bought in or made here, as one two-way choice beside the product's other
+/// descriptive fields.
+///
+/// **Not money, so it is offered to everybody who may edit the product.** The
+/// sentence under it states what each answer changes - which actions the app
+/// offers for the product - because a choice whose consequence is not written
+/// down is a choice answered by reflex.
+final class _ProductCostTypeChoice extends StatelessWidget {
+  const _ProductCostTypeChoice({
+    required this.choiceKey,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final ValueKey<String> choiceKey;
+  final TenantProductCostType value;
+  final bool enabled;
+  final ValueChanged<TenantProductCostType> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const SectionHeading('Where it comes from'),
+        SizedBox(height: tokens.spacing.s8),
+        SegmentedButton<TenantProductCostType>(
+          key: choiceKey,
+          segments: <ButtonSegment<TenantProductCostType>>[
+            for (final costType in TenantProductCostType.values)
+              ButtonSegment<TenantProductCostType>(
+                value: costType,
+                label: Text(
+                  key: ValueKey('${choiceKey.value}-${costType.wireValue}'),
+                  costType.label,
+                ),
+              ),
+          ],
+          selected: <TenantProductCostType>{value},
+          onSelectionChanged: enabled
+              ? (selection) => onChanged(selection.single)
+              : null,
+        ),
+        SizedBox(height: tokens.spacing.s8),
+        Text(
+          key: ValueKey('${choiceKey.value}-consequence'),
+          value == TenantProductCostType.produced
+              ? 'Production batches are recorded against it, and each '
+                    'completed batch sets its unit cost.'
+              : 'It is restocked from suppliers, and a delivery that names a '
+                    'unit cost sets its unit cost.',
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.secondary,
           ),
         ),
       ],

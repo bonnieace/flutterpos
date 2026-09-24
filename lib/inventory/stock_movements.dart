@@ -33,6 +33,14 @@ enum TenantStockMovementSource {
   /// A manual `adjustStock` correction.
   manualAdjustment('manual_adjustment', 'Manual adjustment'),
 
+  /// One product line of a supplier delivery, recorded by
+  /// `receiveSupplierDelivery`. Always positive.
+  supplierDelivery('supplier_delivery', 'Supplier delivery'),
+
+  /// A completed production batch, recorded by `completeProduction`. Always
+  /// positive.
+  production('production', 'Production'),
+
   /// Any source this client does not model. It carries no wire value, so it can
   /// never be filtered for; a surface shows the recorded value verbatim.
   other('', 'Other source');

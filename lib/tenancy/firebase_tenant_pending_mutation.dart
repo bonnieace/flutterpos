@@ -43,6 +43,20 @@ Map<String, Object?> tenantCategoryCallablePayload(
   'document': record.payload,
 };
 
+/// The `createSupplier` or `updateSupplier` request one queued write describes.
+///
+/// Derived from the record for the reason [tenantCategoryCallablePayload] is:
+/// the queued payload is the document a device composed, which is what the
+/// overlay draws, and the business and the supplier come from the path. For a
+/// create the supplier ID is also the idempotency key.
+Map<String, Object?> tenantSupplierCallablePayload(
+  TenantPendingMutationRecord record,
+) => <String, Object?>{
+  'tenantId': record.tenantId,
+  'supplierId': record.targetPath.split('/').last,
+  'document': record.payload,
+};
+
 /// Carries one queued mutation to the server, by whichever route its kind uses.
 ///
 /// **Two transports, one queue.** Most kinds are document writes the rules
@@ -185,6 +199,20 @@ final class FirebaseTenantMutationGateway
         // number, both already in it, so re-sending a page is free.
         case TenantPendingMutationKind.stockTakePage:
           await _call('submitStockTake', record.payload);
+        // **Callables for the category reason**: a supplier's name is unique
+        // across the business, which only the server can check.
+        case TenantPendingMutationKind.supplierCreate:
+          await _call('createSupplier', tenantSupplierCallablePayload(record));
+        case TenantPendingMutationKind.supplierUpdate:
+          await _call('updateSupplier', tenantSupplierCallablePayload(record));
+        // **Callables because each moves stock and sets a cost** in one
+        // transaction with the ledger entries that account for it. The payload
+        // is the whole request; the server keys a delivery page's idempotency
+        // record on the delivery and the page, and a batch's on the batch.
+        case TenantPendingMutationKind.supplierDeliveryPage:
+          await _call('receiveSupplierDelivery', record.payload);
+        case TenantPendingMutationKind.productionComplete:
+          await _call('completeProduction', record.payload);
       }
       return const TenantMutationSubmissionResult(
         TenantMutationSubmissionOutcome.committed,

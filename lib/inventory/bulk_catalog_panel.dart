@@ -422,11 +422,12 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
       _clearCost
           ? const TenantBulkCatalogEdit.clearCost()
           : TenantBulkCatalogEdit.cost(_value.text),
-    // Unreachable: neither is offered, because a name and a code belong to one
-    // product each.
+    // Unreachable: none is offered. A name and a code belong to one product
+    // each, and where a cost comes from is set one product at a time.
     TenantProductField.name ||
     TenantProductField.sku ||
-    TenantProductField.image => TenantBulkCatalogEdit.cost(_value.text),
+    TenantProductField.image ||
+    TenantProductField.costType => TenantBulkCatalogEdit.cost(_value.text),
   };
 
   /// Builds the plan, then asks the server what it would do, writing nothing.
@@ -1836,6 +1837,7 @@ String _batchConfirmation(
     case TenantProductField.name:
     case TenantProductField.sku:
     case TenantProductField.image:
+    case TenantProductField.costType:
       break;
   }
   if (plan.pages.length > 1) {

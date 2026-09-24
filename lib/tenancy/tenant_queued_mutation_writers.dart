@@ -26,6 +26,7 @@ import '../expenses/expense_request.dart';
 import '../inventory/catalog_management.dart';
 import '../inventory/stock_take.dart';
 import '../returns/return_request.dart';
+import '../suppliers/supplier.dart';
 import 'tenant_pending_mutation.dart';
 import 'tenant_repository.dart';
 
@@ -208,6 +209,71 @@ final class QueuedTenantCatalogWriter implements TenantCatalogWriter {
     );
     _onQueued?.call();
     return TenantCatalogWriteResult.queued(operationId);
+  }
+}
+
+/// Durable-first supplier writing.
+///
+/// Both are callables, queued the way categories are and for the same reason:
+/// a supplier's name is unique across the business, which only the server can
+/// check. The uid comes from [currentUid], as the catalog writer's does, so a
+/// queued supplier is drawn for the session that added it.
+final class QueuedTenantSupplierWriter implements TenantSupplierWriter {
+  const QueuedTenantSupplierWriter({
+    required TenantPendingMutationStore store,
+    required TenantPendingMutationUidProvider currentUid,
+    TenantQueuedMutationSignal? onQueued,
+  }) : _store = store,
+       _currentUid = currentUid,
+       _onQueued = onQueued;
+
+  final TenantPendingMutationStore _store;
+  final TenantPendingMutationUidProvider _currentUid;
+  final TenantQueuedMutationSignal? _onQueued;
+
+  @override
+  Future<TenantSupplierWriteResult> createSupplier(
+    TenantSupplierCreateIntent intent,
+  ) => _queue(
+    tenantId: intent.tenantId,
+    operationId: 'supplier-create-${intent.supplierId}',
+    kind: TenantPendingMutationKind.supplierCreate,
+    targetPath: intent.path,
+    payload: intent.documentData(),
+  );
+
+  @override
+  Future<TenantSupplierWriteResult> updateSupplier(
+    TenantSupplierUpdateIntent intent,
+  ) => _queue(
+    tenantId: intent.tenantId,
+    operationId: intent.operationId,
+    kind: TenantPendingMutationKind.supplierUpdate,
+    targetPath: intent.path,
+    payload: intent.documentData(),
+  );
+
+  Future<TenantSupplierWriteResult> _queue({
+    required String tenantId,
+    required String operationId,
+    required TenantPendingMutationKind kind,
+    required String targetPath,
+    required Map<String, Object?> payload,
+  }) async {
+    final uid = _currentUid();
+    if (uid == null) {
+      throw const TenantSupplierException('supplier_no_session');
+    }
+    await _store.enqueue(
+      uid: uid,
+      tenantId: tenantId,
+      operationId: operationId,
+      kind: kind,
+      targetPath: targetPath,
+      payload: payload,
+    );
+    _onQueued?.call();
+    return TenantSupplierWriteResult.queued(operationId);
   }
 }
 

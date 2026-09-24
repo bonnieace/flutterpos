@@ -88,6 +88,37 @@ const int maximumCatalogCategoryScan = 500;
 /// the bound rather than twenty-five.
 const int _categoryScanPageSize = 50;
 
+/// Where a product's cost comes from, as the catalog labels it.
+///
+/// **Display only, and not money.** A *Made here* product is the one a
+/// production batch can be recorded against; a *Bought in* one is the one a
+/// supplier delivery restocks. Neither changes how a sale is priced or costed -
+/// every route that states a cost writes the one [TenantProduct.cost] - so a
+/// manager may set it, and it sits beside the descriptive fields rather than
+/// beside the money.
+enum TenantProductCostType {
+  purchased('purchased', 'Bought in'),
+  produced('produced', 'Made here');
+
+  const TenantProductCostType(this.wireValue, this.label);
+
+  /// The value stored in Firestore. Frozen: renaming a constant here must never
+  /// silently re-label every product already written.
+  final String wireValue;
+
+  /// What a person reads on screen.
+  final String label;
+
+  /// The cost type a stored value means.
+  ///
+  /// **Permissive on purpose**, like `retired`: only the exact `produced` marks
+  /// a product as made here. Absent, null, or a value this build does not model
+  /// reads as bought in, because one product the strict model refuses empties
+  /// the whole cached catalog - and a display flag is not worth that.
+  static TenantProductCostType fromStored(Object? value) =>
+      value == produced.wireValue ? produced : purchased;
+}
+
 /// Strict read model for `tenants/{tenantId}/products/{productId}`.
 ///
 /// New documents use `categoryId`. The legacy `category` alias is accepted
@@ -117,7 +148,8 @@ final class TenantProduct {
        // became a flag carries no such field, and this model is strict enough
        // that one product it refuses makes the whole cached catalog a miss.
        // Absent therefore means "in the catalog", which is what it always was.
-       retired = data['retired'] == true;
+       retired = data['retired'] == true,
+       costType = TenantProductCostType.fromStored(data['costType']);
 
   final String id;
 
@@ -153,6 +185,9 @@ final class TenantProduct {
   /// it and the catalog marks it - the document stays, so every past sale line
   /// and every ledger entry below it still names something that answers.
   final bool retired;
+
+  /// Bought in or made here. See [TenantProductCostType].
+  final TenantProductCostType costType;
 }
 
 /// A product's standing, as one of §2.1's five - or nothing at all.

@@ -186,6 +186,7 @@ final class TenantProductCreateIntent {
     required this.createdBy,
     required this.quantity,
     this.imageUrl,
+    this.costType = TenantProductCostType.purchased,
   });
 
   final String path;
@@ -193,6 +194,10 @@ final class TenantProductCreateIntent {
   final String productId;
   final String name;
   final String sku;
+
+  /// Bought in or made here. Not money, so every role that may create a
+  /// product may set it.
+  final TenantProductCostType costType;
 
   /// The units the business already holds, and zero for the ordinary case.
   ///
@@ -246,6 +251,7 @@ final class TenantProductCreateIntent {
     'searchName': tenantProductSearchName(name),
     'searchPrefixes': tenantProductSearchPrefixes(name: name, sku: sku),
     if (imageUrl != null) 'image': imageUrl.toString(),
+    'costType': costType.wireValue,
     'createdBy': createdBy,
   };
 }
@@ -315,7 +321,11 @@ enum TenantProductField {
   price('price', 'Unit price'),
   cost('cost', 'Unit cost'),
   categoryId('categoryId', 'Category'),
-  image('image', 'Image');
+  image('image', 'Image'),
+
+  /// Bought in or made here. Descriptive, not money: see
+  /// [TenantProductCostType].
+  costType('costType', 'Bought in or made here');
 
   const TenantProductField(this.wireKey, this.label);
 
@@ -380,10 +390,14 @@ final class TenantProductUpdateIntent {
     required this.categoryName,
     required this.imageUrl,
     required this.clearsImage,
+    this.costType,
   });
 
   final String tenantId;
   final String productId;
+
+  /// The new cost type, or null when it is not being changed.
+  final TenantProductCostType? costType;
 
   /// The idempotency key. One correction keeps one request ID across a retry,
   /// so a genuine retry answers off the server's own record instead of reaching
@@ -443,6 +457,7 @@ final class TenantProductUpdateIntent {
     if (categoryId != null) 'categoryId': categoryId,
     if (imageUrl != null) 'image': imageUrl.toString(),
     if (clearsImage) 'image': null,
+    if (costType != null) 'costType': costType!.wireValue,
   };
 }
 
@@ -582,6 +597,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     String cost = '',
     String openingQuantity = '',
     Uri? imageUrl,
+    TenantProductCostType costType = TenantProductCostType.purchased,
   }) {
     _requireCreateRole();
     _requireRequestId(requestId);
@@ -635,6 +651,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       createdBy: session.uid,
       quantity: quantity,
       imageUrl: _validatedProductImage(imageUrl),
+      costType: costType,
     );
   }
 
@@ -697,6 +714,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     bool clearCost = false,
     Uri? imageUrl,
     bool clearImage = false,
+    TenantProductCostType? costType,
   }) {
     // The server's PRODUCT_UPDATE_ROLES are the same operational three that may
     // create, which is why the route guard's own list is reused here.
@@ -857,6 +875,18 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       }
     }
 
+    TenantProductCostType? nextCostType;
+    if (costType != null && costType != product.costType) {
+      nextCostType = costType;
+      changes.add(
+        TenantProductFieldChange._(
+          field: TenantProductField.costType,
+          previous: product.costType.label,
+          next: costType.label,
+        ),
+      );
+    }
+
     if (changes.isEmpty) {
       throw const TenantCatalogManagementException('product_unchanged');
     }
@@ -874,6 +904,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       categoryName: nextCategoryName,
       imageUrl: nextImageUrl,
       clearsImage: clearsImage,
+      costType: nextCostType,
     );
   }
 
@@ -1285,6 +1316,12 @@ final class TenantProductUpdateResult {
     }
     if (intent.clearsImage && imageUrl != null) {
       throw const FormatException('updateProduct did not clear the image.');
+    }
+    if (intent.costType != null &&
+        data['costType'] != intent.costType!.wireValue) {
+      throw const FormatException(
+        'updateProduct did not apply where the cost comes from.',
+      );
     }
     return TenantProductUpdateResult._(
       updateId: _requiredString(data, 'updateId'),

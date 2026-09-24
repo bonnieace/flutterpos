@@ -1333,6 +1333,9 @@ final class TenantBulkCatalogRepository {
       case TenantProductField.name:
       case TenantProductField.sku:
       case TenantProductField.image:
+      // Set one product at a time: `updateProducts` refuses it in a row, so a
+      // bulk page naming it could only ever fail.
+      case TenantProductField.costType:
         // Unreachable through [TenantBulkCatalogEdit], whose four constructors
         // are the only way to name a field. Refused rather than asserted,
         // because a name or a code shared across many products is a state the
@@ -1607,6 +1610,7 @@ String _describePrevious(
     case TenantProductField.sku:
       return product.sku;
     case TenantProductField.image:
+    case TenantProductField.costType:
       throw const TenantBulkCatalogException('field_not_bulk_editable');
   }
 }
@@ -2232,7 +2236,8 @@ void _requireBatchValueApplied(
                 checkoutMinorUnitsFromMajor(page.wireValue as num),
     TenantProductField.name ||
     TenantProductField.sku ||
-    TenantProductField.image => false,
+    TenantProductField.image ||
+    TenantProductField.costType => false,
   };
   if (!applied) {
     throw const FormatException(

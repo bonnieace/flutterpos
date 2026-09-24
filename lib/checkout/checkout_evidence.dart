@@ -774,6 +774,15 @@ String _mutationRejectionReason(TenantPendingMutationRecord record) {
         'categories with one name cannot be told apart when a spreadsheet '
         'names that category.';
   }
+  final duplicateSupplier =
+      code == 'already-exists' &&
+      (record.kind == TenantPendingMutationKind.supplierCreate ||
+          record.kind == TenantPendingMutationKind.supplierUpdate);
+  if (duplicateSupplier) {
+    return 'This business already has a supplier with that name. Two '
+        "suppliers with one name would split one supplier's deliveries in "
+        'two.';
+  }
   return code.replaceAll('_', ' ');
 }
 
@@ -793,4 +802,10 @@ String _mutationKindLabel(TenantPendingMutationKind kind) => switch (kind) {
   // reading this list is being told what is still on its way - not how the
   // count was split up to send it.
   TenantPendingMutationKind.stockTakePage => 'Stock count',
+  TenantPendingMutationKind.supplierCreate => 'New supplier',
+  TenantPendingMutationKind.supplierUpdate => 'Supplier correction',
+  // Singular for the reason a stock count is: one delivery, however many
+  // pages it took to send.
+  TenantPendingMutationKind.supplierDeliveryPage => 'Supplier delivery',
+  TenantPendingMutationKind.productionComplete => 'Production batch',
 };

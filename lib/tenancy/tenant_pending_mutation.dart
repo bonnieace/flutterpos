@@ -6,6 +6,7 @@ import 'package:hive/hive.dart';
 
 import '../checkout/checkout_outbox.dart';
 import 'tenant_id.dart';
+import 'tenant_paths.dart';
 import 'tenant_repository.dart';
 import 'tenant_session.dart';
 import 'tenant_switch.dart';
@@ -59,6 +60,35 @@ enum TenantPendingMutationKind {
   /// already here, so a page may be re-sent at any time and land on the same
   /// documents with the same values.
   stockTakePage,
+
+  /// Adding a supplier. **A callable for the reason categories are**: two
+  /// suppliers folding to one name would split one supplier's deliveries in
+  /// two, and only the server can read every other name inside the transaction
+  /// that writes. The payload is the document a device composed.
+  supplierCreate,
+
+  /// Correcting one supplier - its name, its contact details, or whether it is
+  /// still offered. Replay-safe by construction: setting a field to the value
+  /// it holds leaves the same document.
+  supplierUpdate,
+
+  /// One page of one supplier delivery: up to sixteen product lines, each
+  /// restocked and, where it names a unit cost, re-costed.
+  ///
+  /// **Every page of one delivery carries the same `targetPath`**, which is the
+  /// delivery rather than any product - so the pages drain in order, and a
+  /// refusal strands that one delivery rather than every later stock change to
+  /// the products in it. It is the first kind that **touches more than the
+  /// document it names**: see [tenantMutationTouchedPaths].
+  supplierDeliveryPage,
+
+  /// One completed production batch: the product's stock goes up by what was
+  /// made and its cost becomes what one unit cost to make.
+  ///
+  /// **Addressed to the batch, not the product**, for the reason a delivery
+  /// page is: a batch that is refused must not hold every later adjustment to
+  /// the product behind it.
+  productionComplete,
 }
 
 /// Whether the queue reaches this kind through the Admin SDK rather than
@@ -79,6 +109,13 @@ bool tenantMutationIsCallable(TenantPendingMutationKind kind) => switch (kind) {
   TenantPendingMutationKind.productCorrect ||
   TenantPendingMutationKind.stockAdjust ||
   TenantPendingMutationKind.stockTakePage ||
+  // A supplier's name must be unique, and a delivery and a batch each move
+  // stock and set a cost in one transaction with the ledger entry that
+  // accounts for it.
+  TenantPendingMutationKind.supplierCreate ||
+  TenantPendingMutationKind.supplierUpdate ||
+  TenantPendingMutationKind.supplierDeliveryPage ||
+  TenantPendingMutationKind.productionComplete ||
   // **Neither of these writes a quantity.** They are here for the other half of
   // the rule - a document only the Admin SDK may write - and the reason is
   // uniqueness: two categories folding to one name make every spreadsheet that
@@ -604,50 +641,49 @@ final class TenantPendingMutationWorker {
     // hold one another behind an unreachable request.
     //
     // **With one exception, and it is the reason this set exists.** Groups
-    // drain concurrently, so a product filed under a category this same device
-    // queued a moment ago can reach the server first - and `createProduct` now
-    // refuses a category the business does not hold. The product waits for its
-    // category rather than racing it.
-    final queuedCategories = _queuedCategoryIds(records);
+    // drain concurrently, so a record naming a document this same device queued
+    // the create of a moment ago can reach the server first - and the server
+    // refuses a category, a product or a supplier the business does not hold.
+    // The record waits for what it depends on rather than racing it.
+    final queuedCreates = _queuedCreatePaths(records);
     await Future.wait<void>(
-      byTarget.values.map((group) => _runTarget(group, queuedCategories)),
+      byTarget.values.map((group) => _runTarget(group, queuedCreates)),
     );
     await _store.purgeConfirmed();
   }
 
-  /// The categories this device has queued and not yet seen settle.
+  /// The documents this device has queued the creation of and not yet seen
+  /// settle.
   ///
-  /// **Unresolved, so a rejected category stops holding anything.** A category
-  /// refused for its name is never coming, and a product waiting on one would
+  /// **Unresolved, so a rejected create stops holding anything.** A category
+  /// refused for its name is never coming, and a record waiting on one would
   /// wait for ever; letting it through means the server refuses it too, in the
   /// same words and where somebody can see them.
-  static Set<String> _queuedCategoryIds(
+  static Set<String> _queuedCreatePaths(
     List<TenantPendingMutationRecord> records,
   ) => <String>{
     for (final record in records)
-      if (record.kind == TenantPendingMutationKind.categoryCreate &&
+      if ((record.kind == TenantPendingMutationKind.categoryCreate ||
+              record.kind == TenantPendingMutationKind.productCreate ||
+              record.kind == TenantPendingMutationKind.supplierCreate) &&
           record.isUnresolved)
-        record.targetPath.split('/').last,
+        record.targetPath,
   };
 
-  /// Whether this record is a product filed under a category still in flight.
+  /// Whether this record names a document whose own create is still in flight.
   ///
   /// The deferral `TenantProductImageUploadWorker` performs for a photograph
-  /// whose product is still queued, applied to the pair one step up. It reads
-  /// the category out of the document a device composed, which is the only
-  /// place a queued create records it.
-  static bool _awaitsQueuedCategory(
+  /// whose product is still queued, generalised: a product waits for its
+  /// category, a delivery page for its supplier and every product it restocks,
+  /// and a production batch for the product it makes.
+  static bool _awaitsQueuedCreate(
     TenantPendingMutationRecord record,
-    Set<String> queuedCategories,
-  ) {
-    if (record.kind != TenantPendingMutationKind.productCreate) return false;
-    final categoryId = record.payload['categoryId'];
-    return categoryId is String && queuedCategories.contains(categoryId);
-  }
+    Set<String> queuedCreates,
+  ) => tenantMutationDependencies(record).any(queuedCreates.contains);
 
   Future<void> _runTarget(
     List<TenantPendingMutationRecord> records,
-    Set<String> queuedCategories,
+    Set<String> queuedCreates,
   ) async {
     for (var record in records) {
       if (record.state == TenantPendingMutationState.rejected ||
@@ -660,7 +696,7 @@ final class TenantPendingMutationWorker {
       // started, because there is nothing wrong with this record - the one it
       // depends on has simply not landed yet. The whole group returns, since a
       // correction to a product that does not exist yet cannot go either.
-      if (_awaitsQueuedCategory(record, queuedCategories)) return;
+      if (_awaitsQueuedCreate(record, queuedCreates)) return;
       try {
         if (_store.hasActiveLease(record)) continue;
         if (record.state == TenantPendingMutationState.awaitingConfirmation ||
@@ -799,8 +835,8 @@ final class TenantPendingMutationOverlayReader
     Map<String, Object?>? data = canonical?.data;
     var touched = false;
     for (final record in records) {
-      if (record.targetPath != path) continue;
-      data = _projected(record, data);
+      if (!tenantMutationTouchedPaths(record).contains(path)) continue;
+      data = _projected(record, path, data);
       touched = true;
     }
     if (!touched) return canonical;
@@ -820,13 +856,14 @@ final class TenantPendingMutationOverlayReader
       for (final item in canonical) item.path: <String, Object?>{...item.data},
     };
     for (final record in records) {
-      if (!record.targetPath.startsWith('${query.collectionPath}/')) continue;
-      // A retire of a product this page never held is not an entry to add and
-      // then hide; `containsKey` keeps a tombstone from inventing one.
-      final present = byPath.containsKey(record.targetPath);
-      final projected = _projected(record, byPath[record.targetPath]);
-      if (projected == null && !present) continue;
-      byPath[record.targetPath] = projected;
+      for (final path in _pathsUnder(record, query.collectionPath)) {
+        // A retire of a product this page never held is not an entry to add
+        // and then hide; `containsKey` keeps a tombstone from inventing one.
+        final present = byPath.containsKey(path);
+        final projected = _projected(record, path, byPath[path]);
+        if (projected == null && !present) continue;
+        byPath[path] = projected;
+      }
     }
     final items = <TenantQueryDocumentSnapshot>[];
     for (final entry in byPath.entries) {
@@ -985,7 +1022,7 @@ final class TenantPendingMutationOverlayReader
     if (identity == null || uid == null) return canonical;
     final records = <TenantPendingMutationRecord>[
       for (final record in await _active(uid, identity))
-        if (record.targetPath.startsWith('${query.collectionPath}/')) record,
+        if (_pathsUnder(record, query.collectionPath).isNotEmpty) record,
     ];
     if (records.isEmpty) return canonical;
 
@@ -993,10 +1030,12 @@ final class TenantPendingMutationOverlayReader
       for (final item in canonical) item.path: <String, Object?>{...item.data},
     };
     for (final record in records) {
-      final present = byPath.containsKey(record.targetPath);
-      final projected = _projected(record, byPath[record.targetPath]);
-      if (projected == null && !present) continue;
-      byPath[record.targetPath] = projected;
+      for (final path in _pathsUnder(record, query.collectionPath)) {
+        final present = byPath.containsKey(path);
+        final projected = _projected(record, path, byPath[path]);
+        if (projected == null && !present) continue;
+        byPath[path] = projected;
+      }
     }
 
     final items = <TenantQueryDocumentSnapshot>[];
@@ -1063,6 +1102,7 @@ final class TenantPendingMutationOverlayReader
   /// else writes the document directly and can be merged as it stands.
   Map<String, Object?>? _projected(
     TenantPendingMutationRecord record,
+    String path,
     Map<String, Object?>? canonical,
   ) {
     switch (record.kind) {
@@ -1128,19 +1168,43 @@ final class TenantPendingMutationOverlayReader
         };
       case TenantPendingMutationKind.productCreate:
       case TenantPendingMutationKind.categoryCreate:
+      case TenantPendingMutationKind.supplierCreate:
         return <String, Object?>{
           if (canonical != null) ...canonical,
           ...record.payload,
           'createdAt': canonical?['createdAt'] ?? record.createdAt,
         };
       case TenantPendingMutationKind.categoryRename:
+      case TenantPendingMutationKind.supplierUpdate:
       case TenantPendingMutationKind.brandingMerge:
       case TenantPendingMutationKind.printerConfigurationMerge:
         return <String, Object?>{
           if (canonical != null) ...canonical,
           ...record.payload,
         };
+      case TenantPendingMutationKind.supplierDeliveryPage:
+        return path == record.targetPath
+            ? _deliveryHeader(record, canonical)
+            : _deliveredProduct(record, path, canonical);
+      case TenantPendingMutationKind.productionComplete:
+        return path == record.targetPath
+            ? _producedBatch(record, canonical)
+            : _producedProduct(record, canonical);
     }
+  }
+
+  /// The touched paths of [record] that sit directly under [collectionPath].
+  static List<String> _pathsUnder(
+    TenantPendingMutationRecord record,
+    String collectionPath,
+  ) {
+    final depth = collectionPath.split('/').length + 1;
+    return <String>[
+      for (final path in tenantMutationTouchedPaths(record))
+        if (path.startsWith('$collectionPath/') &&
+            path.split('/').length == depth)
+          path,
+    ];
   }
 
   @override
@@ -1213,6 +1277,210 @@ Map<String, Object?> _correctedProduct(
   return result;
 }
 
+/// The product lines one queued delivery page carries, as its payload states
+/// them. A malformed line is skipped rather than thrown on: this draws a local
+/// projection, and the server is what refuses a malformed page.
+List<Map<String, Object?>> _deliveryLines(TenantPendingMutationRecord record) {
+  final lines = record.payload['lines'];
+  if (lines is! List) return const <Map<String, Object?>>[];
+  return <Map<String, Object?>>[
+    for (final line in lines)
+      if (line is Map && line['productId'] is String)
+        <String, Object?>{
+          for (final entry in line.entries) entry.key as String: entry.value,
+        },
+  ];
+}
+
+int? _minorOf(Object? major) =>
+    major is num ? (major * 100).round() : null;
+
+/// A queued delivery drawn as the server will hold it, page by page.
+///
+/// Lines a page already landed are replaced rather than repeated, so a page
+/// that reached the server but has not been confirmed here yet is not counted
+/// twice on the supplier's history.
+Map<String, Object?> _deliveryHeader(
+  TenantPendingMutationRecord record,
+  Map<String, Object?>? canonical,
+) {
+  final page = record.payload['page'];
+  final stored = canonical?['lines'];
+  final lines = <Map<String, Object?>>[
+    if (stored is List)
+      for (final line in stored)
+        if (line is Map && line['page'] != page)
+          <String, Object?>{
+            for (final entry in line.entries) entry.key as String: entry.value,
+          },
+    for (final line in _deliveryLines(record))
+      <String, Object?>{
+        'productId': line['productId'],
+        'productName': line['productName'],
+        'quantity': line['quantity'],
+        'unitCostMinor': _minorOf(line['unitCost']),
+        'page': page,
+      },
+  ];
+  var units = 0;
+  var valueMinor = 0;
+  var costless = 0;
+  for (final line in lines) {
+    final quantity = line['quantity'];
+    final unitCostMinor = line['unitCostMinor'];
+    if (quantity is int) units += quantity;
+    if (quantity is int && unitCostMinor is int) {
+      valueMinor += quantity * unitCostMinor;
+    } else {
+      costless += 1;
+    }
+  }
+  return <String, Object?>{
+    if (canonical != null) ...canonical,
+    'tenantId': record.tenantId,
+    'deliveryId': record.payload['deliveryId'],
+    'supplierId': record.payload['supplierId'],
+    'reference': record.payload['reference'],
+    'actorUid': canonical?['actorUid'] ?? record.uid,
+    'lines': lines,
+    'lineCount': lines.length,
+    'unitCount': units,
+    'valueMinor': valueMinor,
+    'costlessLineCount': costless,
+    'complete': canonical?['complete'] ?? false,
+    'createdAt': canonical?['createdAt'] ?? record.createdAt,
+  };
+}
+
+/// One product a queued delivery page restocks, drawn as it will stand.
+///
+/// **Never invents a product**: a product this device holds no copy of stays
+/// absent, exactly as a queued adjustment leaves it.
+Map<String, Object?>? _deliveredProduct(
+  TenantPendingMutationRecord record,
+  String path,
+  Map<String, Object?>? canonical,
+) {
+  if (canonical == null) return null;
+  final productId = path.split('/').last;
+  final result = <String, Object?>{...canonical};
+  for (final line in _deliveryLines(record)) {
+    if (line['productId'] != productId) continue;
+    final held = result['quantity'];
+    final quantity = line['quantity'];
+    if (held is num && quantity is num) result['quantity'] = held + quantity;
+    final unitCost = line['unitCost'];
+    if (unitCost is num) result['cost'] = unitCost;
+  }
+  return result;
+}
+
+/// A queued production batch drawn as the server will hold it.
+Map<String, Object?> _producedBatch(
+  TenantPendingMutationRecord record,
+  Map<String, Object?>? canonical,
+) {
+  final expenses = record.payload['expenses'];
+  return <String, Object?>{
+    if (canonical != null) ...canonical,
+    'tenantId': record.tenantId,
+    'batchId': record.payload['batchId'],
+    'batchNumber': record.payload['batchNumber'],
+    'productId': record.payload['productId'],
+    'productName': record.payload['productName'],
+    'quantity': record.payload['quantity'],
+    'expenses': <Map<String, Object?>>[
+      if (expenses is List)
+        for (final row in expenses)
+          if (row is Map)
+            <String, Object?>{
+              'description': row['description'],
+              'amountMinor': _minorOf(row['amount']),
+            },
+    ],
+    'totalCostMinor': record.payload['totalCostMinor'],
+    'unitCostMinor': record.payload['unitCostMinor'],
+    'actorUid': canonical?['actorUid'] ?? record.uid,
+    'createdAt': canonical?['createdAt'] ?? record.createdAt,
+  };
+}
+
+/// The product a queued batch makes, drawn as it will stand: more stock, and
+/// the cost one unit took to make.
+Map<String, Object?>? _producedProduct(
+  TenantPendingMutationRecord record,
+  Map<String, Object?>? canonical,
+) {
+  if (canonical == null) return null;
+  final result = <String, Object?>{...canonical};
+  final held = result['quantity'];
+  final quantity = record.payload['quantity'];
+  if (held is num && quantity is num) result['quantity'] = held + quantity;
+  final unitCostMinor = record.payload['unitCostMinor'];
+  if (unitCostMinor is int) result['cost'] = unitCostMinor / 100;
+  return result;
+}
+
+/// Every document [record] changes when it lands, its own path first.
+///
+/// **One for every kind but two**, and those two are why this exists. A
+/// delivery page restocks each product it names and a production batch
+/// restocks the product it makes, while both are addressed to their own record
+/// so a refusal strands only that record. The overlay draws a queued record
+/// over every path here, so the stock a delivery brought in shows on the
+/// catalog the moment it is queued.
+List<String> tenantMutationTouchedPaths(TenantPendingMutationRecord record) {
+  final paths = TenantPaths(record.tenantId);
+  return switch (record.kind) {
+    TenantPendingMutationKind.supplierDeliveryPage => <String>[
+      record.targetPath,
+      for (final line in _deliveryLines(record))
+        if (_documentIdOrNull(line['productId']) case final productId?)
+          paths.product(productId),
+    ],
+    TenantPendingMutationKind.productionComplete => <String>[
+      record.targetPath,
+      if (_documentIdOrNull(record.payload['productId']) case final productId?)
+        paths.product(productId),
+    ],
+    _ => <String>[record.targetPath],
+  };
+}
+
+/// The documents [record] names that must exist on the server before it is
+/// sent, other than its own.
+///
+/// A product names its category; a delivery page its supplier and every
+/// product it restocks; a production batch the product it makes. The worker
+/// holds a record back while one of these is still an unsent create on this
+/// device, rather than letting the server refuse it for a race.
+List<String> tenantMutationDependencies(TenantPendingMutationRecord record) {
+  final paths = TenantPaths(record.tenantId);
+  return switch (record.kind) {
+    TenantPendingMutationKind.productCreate => <String>[
+      if (_documentIdOrNull(record.payload['categoryId']) case final id?)
+        paths.category(id),
+    ],
+    TenantPendingMutationKind.supplierDeliveryPage => <String>[
+      if (_documentIdOrNull(record.payload['supplierId']) case final id?)
+        paths.supplier(id),
+      ...tenantMutationTouchedPaths(record).skip(1),
+    ],
+    TenantPendingMutationKind.productionComplete =>
+      tenantMutationTouchedPaths(record).skip(1).toList(),
+    _ => const <String>[],
+  };
+}
+
+String? _documentIdOrNull(Object? value) {
+  if (value is! String) return null;
+  try {
+    return validateTenantDocumentId(value);
+  } on ArgumentError {
+    return null;
+  }
+}
+
 /// Orders two stored values the way the transport's `orderBy` would.
 ///
 /// Only the two types the product ordering actually uses are compared; anything
@@ -1275,6 +1543,12 @@ void _requireTarget(
     // path per count is what keeps a count's pages ordered without serialising
     // one person's count behind another's.
     TenantPendingMutationKind.stockTakePage => 'stock_takes',
+    TenantPendingMutationKind.supplierCreate ||
+    TenantPendingMutationKind.supplierUpdate => 'suppliers',
+    // The delivery and the batch, not the products they restock - see the
+    // kinds' own notes and [tenantMutationTouchedPaths].
+    TenantPendingMutationKind.supplierDeliveryPage => 'supplier_deliveries',
+    TenantPendingMutationKind.productionComplete => 'production_batches',
   };
   if (collection != expected) {
     throw const TenantPendingMutationException('invalid_target');

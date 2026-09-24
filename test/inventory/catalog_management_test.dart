@@ -80,8 +80,33 @@ void main() {
           name: 'White bread loaf',
           sku: '6161100000019',
         ),
+        'costType': 'purchased',
         'createdBy': 'user-a',
       });
+    });
+
+    test('a product made here says so, and reads back as made here', () {
+      final intent = _productIntent(
+        price: '50',
+        costType: TenantProductCostType.produced,
+      );
+
+      expect(intent.documentData()['costType'], 'produced');
+      final decoded = TenantProduct.fromDocument(
+        path: intent.path,
+        data: <String, Object?>{...intent.documentData(), 'createdAt': 1},
+      );
+      expect(decoded.costType, TenantProductCostType.produced);
+    });
+
+    test('a manager may add a product made here, because it is not money', () {
+      final intent = _productIntent(
+        price: '50',
+        role: TenantRole.manager,
+        costType: TenantProductCostType.produced,
+      );
+
+      expect(intent.costType, TenantProductCostType.produced);
     });
 
     test('the document it writes decodes back through TenantProduct', () {
@@ -518,6 +543,42 @@ void main() {
   });
 
   group('update intent', () {
+    test('marking a product made here is a descriptive change', () {
+      final intent = _updateIntent(
+        role: TenantRole.manager,
+        price: null,
+        costType: TenantProductCostType.produced,
+      );
+
+      expect(intent.payload(), <String, Object?>{
+        'tenantId': 'tenant-a',
+        'productId': 'prod-bread',
+        'requestId': _requestId,
+        'costType': 'produced',
+      });
+      expect(intent.fields, <TenantProductField>[TenantProductField.costType]);
+      // Not money, so a manager's correction carrying it is not refused.
+      expect(intent.changesMoney, isFalse);
+      expect(intent.changes.single.previous, 'Bought in');
+      expect(intent.changes.single.next, 'Made here');
+    });
+
+    test('a cost type the product already holds is not a correction', () {
+      expect(
+        () => _updateIntent(
+          price: null,
+          costType: TenantProductCostType.purchased,
+        ),
+        throwsA(
+          isA<TenantCatalogManagementException>().having(
+            (error) => error.code,
+            'code',
+            'product_unchanged',
+          ),
+        ),
+      );
+    });
+
     test('carries only the fields that move, and its own identity', () {
       // The callable reads its permission tier from the fields a payload names
       // rather than from the resulting diff, so resending an unchanged price
@@ -1074,6 +1135,7 @@ TenantProductCreateIntent _productIntent({
   String tenantId = 'tenant-a',
   String uid = 'user-a',
   String requestId = _requestId,
+  TenantProductCostType costType = TenantProductCostType.purchased,
 }) => _repository(role: role, tenantId: tenantId, uid: uid).buildProductIntent(
   name: name,
   sku: sku,
@@ -1083,6 +1145,7 @@ TenantProductCreateIntent _productIntent({
   categoryId: categoryId,
   categories: _categories(tenantId),
   requestId: requestId,
+  costType: costType,
 );
 
 /// A rename of the Bakery category, which is the one document write this
@@ -1150,6 +1213,7 @@ TenantProductUpdateIntent _updateIntent({
   TenantRole role = TenantRole.owner,
   String productTenantId = 'tenant-a',
   String requestId = _requestId,
+  TenantProductCostType? costType,
 }) => _repository(role: role).buildUpdateIntent(
   product: _storedProduct(
     tenantId: productTenantId,
@@ -1164,6 +1228,7 @@ TenantProductUpdateIntent _updateIntent({
   categoryId: categoryId,
   categories: _categories('tenant-a'),
   requestId: requestId,
+  costType: costType,
 );
 
 /// A well-formed `updateProduct` answer, with any field replaced.

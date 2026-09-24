@@ -63,7 +63,22 @@ enum TenantCollection {
   /// is not decoration. [TenantReadRepository] orders a page by document ID and
   /// takes only equality filters, so a date *range* is reachable only if the
   /// ordering key already carries the date. See `tenantExpenseId`.
-  expenses('expenses');
+  expenses('expenses'),
+
+  /// Who stock is bought from. Server-written by `createSupplier` and
+  /// `updateSupplier`, which keep names unique across the business; a supplier
+  /// is never deleted, only marked inactive, because deliveries name it.
+  suppliers('suppliers'),
+
+  /// What each supplier delivery brought in: one supplier, one reference, many
+  /// product lines. Written only by `receiveSupplierDelivery`, in the same
+  /// transaction that moves the stock and sets each product's cost.
+  supplierDeliveries('supplier_deliveries'),
+
+  /// What each production batch made and cost to make. Written only by
+  /// `completeProduction`, in the same transaction that adds the stock and sets
+  /// the product's cost. A completed batch is never edited.
+  productionBatches('production_batches');
 
   const TenantCollection(this.segment);
 
@@ -121,6 +136,9 @@ final class TenantPaths {
     TenantCollection.reconciliationSummary,
     TenantCollection.shiftAmendments,
     TenantCollection.expenses,
+    TenantCollection.suppliers,
+    TenantCollection.supplierDeliveries,
+    TenantCollection.productionBatches,
   ];
 
   final String tenantId;
@@ -154,6 +172,11 @@ final class TenantPaths {
   String get shiftAmendments =>
       collectionPath(TenantCollection.shiftAmendments);
   String get expenses => collectionPath(TenantCollection.expenses);
+  String get suppliers => collectionPath(TenantCollection.suppliers);
+  String get supplierDeliveries =>
+      collectionPath(TenantCollection.supplierDeliveries);
+  String get productionBatches =>
+      collectionPath(TenantCollection.productionBatches);
 
   String product(String productId) =>
       documentPath(TenantCollection.products, productId);
@@ -166,6 +189,12 @@ final class TenantPaths {
       documentPath(TenantCollection.returns, returnId);
   String expenseRecord(String expenseId) =>
       documentPath(TenantCollection.expenses, expenseId);
+  String supplier(String supplierId) =>
+      documentPath(TenantCollection.suppliers, supplierId);
+  String supplierDelivery(String deliveryId) =>
+      documentPath(TenantCollection.supplierDeliveries, deliveryId);
+  String productionBatch(String batchId) =>
+      documentPath(TenantCollection.productionBatches, batchId);
   String staffMember(String uid) => documentPath(TenantCollection.staff, uid);
   String configurationDocument(String documentId) =>
       documentPath(TenantCollection.configuration, documentId);

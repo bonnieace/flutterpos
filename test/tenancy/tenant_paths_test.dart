@@ -97,6 +97,15 @@ void main() {
         // every other key. Owner and administrator only, read as well as
         // write, matching the roles a profit figure is shown to.
         TenantCollection.expenses: 'tenants/tenant-a/expenses',
+        // Who stock is bought from, what each delivery brought in, and what
+        // each production batch cost. Added deliberately: all three are
+        // server-written, readable by owners, admins and managers, and a
+        // supplier is never deleted because deliveries name it.
+        TenantCollection.suppliers: 'tenants/tenant-a/suppliers',
+        TenantCollection.supplierDeliveries:
+            'tenants/tenant-a/supplier_deliveries',
+        TenantCollection.productionBatches:
+            'tenants/tenant-a/production_batches',
       };
 
       expect(TenantPaths.businessCollections.toSet(), expected.keys.toSet());

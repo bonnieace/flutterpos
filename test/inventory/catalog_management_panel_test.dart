@@ -818,6 +818,33 @@ void main() {
     expect(snackNotice(tester).status, AppStatus.ok);
   });
 
+  testWidgets('a product can be added as made here, and says what that means', (
+    tester,
+  ) async {
+    final writer = _Writer();
+    await _pump(tester, _controller(), _Reader.seeded(), writer: writer);
+
+    await _fillProduct(tester, name: 'Bread', sku: 'BR-1', price: '50');
+    final madeHere = find.byKey(
+      const ValueKey('catalog-management-product-cost-type-produced'),
+    );
+    await tester.ensureVisible(madeHere);
+    await tester.tap(madeHere);
+    await tester.pumpAndSettle();
+    // The consequence is written beside the choice, not left to be guessed.
+    expect(
+      find.text(
+        'Production batches are recorded against it, and each completed '
+        'batch sets its unit cost.',
+      ),
+      findsOneWidget,
+    );
+    await _confirmProduct(tester);
+
+    expect(writer.products.single.costType, TenantProductCostType.produced);
+    expect(writer.products.single.documentData()['costType'], 'produced');
+  });
+
   testWidgets('leaving the opening stock blank still adds the product', (
     tester,
   ) async {
