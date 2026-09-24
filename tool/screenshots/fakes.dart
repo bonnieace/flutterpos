@@ -506,6 +506,47 @@ seedShifts() => <String, Map<String, Object?>>{
   },
 };
 
+/// Who the seeded business buys from.
+///
+/// One is inactive, so the directory can picture the standing it is filtered
+/// by, and one has never had a delivery recorded against it.
+Map<String, Map<String, Object?>> seedSuppliers() => <String, Map<String, Object?>>{
+  'sp_abc': <String, Object?>{
+    'name': 'ABC Distributors',
+    'phone': '0712 345 678',
+    'email': 'orders@abc.example',
+    'address': 'Industrial Area, Enterprise Road',
+    'notes': 'Delivers Tuesdays and Fridays.\nAsk for Peter at the depot.',
+    'active': true,
+    'createdBy': ownerUid,
+    'createdAt': seedTimestamp(daysAgo: 20),
+    'lastDeliveryAt': seedTimestamp(daysAgo: 2, hour: 7),
+  },
+  'sp_mama': <String, Object?>{
+    'name': 'Mama Njeri Flour',
+    'phone': '0722 100 200',
+    'active': true,
+    'createdBy': ownerUid,
+    'createdAt': seedTimestamp(daysAgo: 12),
+    'lastDeliveryAt': seedTimestamp(daysAgo: 6, hour: 8),
+  },
+  'sp_fresh': <String, Object?>{
+    'name': 'Fresh Farms Dairy',
+    'email': 'sales@freshfarms.example',
+    'active': true,
+    'createdBy': ownerUid,
+    'createdAt': seedTimestamp(daysAgo: 3),
+  },
+  'sp_xyz': <String, Object?>{
+    'name': 'XYZ Wholesale',
+    'phone': '0733 999 000',
+    'active': false,
+    'createdBy': ownerUid,
+    'createdAt': seedTimestamp(daysAgo: 40),
+    'lastDeliveryAt': seedTimestamp(daysAgo: 30, hour: 9),
+  },
+};
+
 /// What the seeded business spent, over the last week of trading.
 ///
 /// **The document ID leads with the business date**, which is not decoration:
@@ -1054,6 +1095,7 @@ final class FakeTenantReader
         '$root/shifts': seedShifts(),
         '$root/returns': seedReturns(),
         '$root/expenses': seedExpenses(),
+        '$root/suppliers': seedSuppliers(),
         '$root/stock_adjustments': seedStockAdjustments(),
         '$root/audit_logs': seedAuditLogs(),
         '$root/shift_amendments': seedShiftAmendments(),

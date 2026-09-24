@@ -209,6 +209,20 @@ const Map<String, String> captions = <String, String>{
   '35-activity-log':
       'The business’s own event trail, including the changes the platform '
       'made to it.',
+  'suppliers-active':
+      'Who stock is bought from, as a manager reads it: active suppliers '
+      'alphabetically, each with when a delivery was last recorded.',
+  'suppliers-every-standing':
+      'The same directory showing every standing. Only the inactive supplier '
+      'wears a badge; the ordinary case says nothing.',
+  'supplier-record':
+      'One supplier: how to reach them, and when they last delivered.',
+  'supplier-record-inactive':
+      'An inactive supplier keeps its record and history, and can be offered '
+      'again from here.',
+  'supplier-add':
+      'Adding a supplier. Only the name is required; the name is checked '
+      'against every other supplier before it is queued.',
 };
 
 /// The viewport directories, in the order a screen's figures are laid out:

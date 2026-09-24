@@ -126,7 +126,6 @@ final class TenantRoutingShell extends StatefulWidget {
     this.checkoutRoute,
     this.settingsRoute,
     this.settingsRoles = const <TenantRole>[],
-    this.printerSettingsRoles = const <TenantRole>[],
     this.printQueueCount,
     this.unresolvedDifferencesCount,
     this.catalogManagementRoute,
@@ -144,6 +143,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.dailySummaryRoles = const <TenantRole>[],
     this.expensesRoute,
     this.expensesRoles = const <TenantRole>[],
+    this.suppliersRoute,
+    this.suppliersRoles = const <TenantRole>[],
     this.receiptLookupRoute,
     this.receiptLookupRoles = const <TenantRole>[],
     this.returnFeedRoute,
@@ -356,14 +357,6 @@ final class TenantRoutingShell extends StatefulWidget {
   /// tab inside it enforces for itself.
   final List<TenantRole> settingsRoles;
 
-  /// Who is offered the *Printer* shortcut beside *Settings*.
-  ///
-  /// **A second door onto one room, not a second room.** It opens the same
-  /// `settingsRoute` at its printer tab, so the panel, its guard and its role
-  /// list are the tab's and this decides only who is shown the shortcut.
-  /// Setting a printer is the one setting an administrator does standing at
-  /// the counter with a roll of paper, which is why it keeps a tile of its own.
-  final List<TenantRole> printerSettingsRoles;
 
   /// How many receipts this device has not printed.
   ///
@@ -425,6 +418,13 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles the expenses route is offered to.
   final List<TenantRole> expensesRoles;
+
+  /// Optional suppliers route: who stock is bought from, and receiving a
+  /// delivery from them.
+  final Widget Function(TenantDataReader reader)? suppliersRoute;
+
+  /// The roles the suppliers route is offered to.
+  final List<TenantRole> suppliersRoles;
 
   /// Optional guarded receipt-lookup route, injected for the same reason.
   final Widget Function(TenantDataReader reader)? receiptLookupRoute;
@@ -1334,7 +1334,6 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       checkoutRoute: widget.checkoutRoute,
       settingsRoute: widget.settingsRoute,
       settingsRoles: widget.settingsRoles,
-      printerSettingsRoles: widget.printerSettingsRoles,
       printQueueCount: widget.printQueueCount,
       unresolvedDifferencesCount: widget.unresolvedDifferencesCount,
       catalogManagementRoute: widget.catalogManagementRoute,
@@ -1349,6 +1348,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       dailySummaryRoles: widget.dailySummaryRoles,
       expensesRoute: widget.expensesRoute,
       expensesRoles: widget.expensesRoles,
+      suppliersRoute: widget.suppliersRoute,
+      suppliersRoles: widget.suppliersRoles,
       receiptLookupRoute: widget.receiptLookupRoute,
       receiptLookupRoles: widget.receiptLookupRoles,
       returnFeedRoute: widget.returnFeedRoute,
@@ -2662,7 +2663,6 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.checkoutRoute,
     this.settingsRoute,
     this.settingsRoles = const <TenantRole>[],
-    this.printerSettingsRoles = const <TenantRole>[],
     this.printQueueCount,
     this.unresolvedDifferencesCount,
     this.catalogManagementRoute,
@@ -2679,6 +2679,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.dailySummaryRoles = const <TenantRole>[],
     this.expensesRoute,
     this.expensesRoles = const <TenantRole>[],
+    this.suppliersRoute,
+    this.suppliersRoles = const <TenantRole>[],
     this.receiptLookupRoute,
     this.receiptLookupRoles = const <TenantRole>[],
     this.returnFeedRoute,
@@ -2744,14 +2746,6 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// `configuration/{documentId}` admits for writing.
   final List<TenantRole> settingsRoles;
 
-  /// Who is offered the *Printer* shortcut beside *Settings*.
-  ///
-  /// **A second door onto one room, not a second room.** It opens the same
-  /// `settingsRoute` at its printer tab, so the panel, its guard and its role
-  /// list are the tab's and this decides only who is shown the shortcut.
-  /// Setting a printer is the one setting an administrator does standing at
-  /// the counter with a roll of paper, which is why it keeps a tile of its own.
-  final List<TenantRole> printerSettingsRoles;
 
   /// See `TenantRoutingShell.printQueueCount`.
   final int? Function()? printQueueCount;
@@ -2801,6 +2795,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to, decided by the expenses domain.
   final List<TenantRole> expensesRoles;
+
+  /// Builds the suppliers route; unreachable while it is absent.
+  final Widget Function(TenantDataReader reader)? suppliersRoute;
+
+  /// The roles that route is offered to, decided by the suppliers domain.
+  final List<TenantRole> suppliersRoles;
 
   /// Optional guarded receipt-lookup route, injected for the same reason.
   final Widget Function(TenantDataReader reader)? receiptLookupRoute;
@@ -3641,6 +3641,31 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           );
         },
       ),
+    // **Who stock is bought from, beside the stock it restocks.** Added on
+    // 2026-09-24 at the developer's direction, as its own tile rather than a
+    // fourth button on Inventory's head, which is built for three: a supplier
+    // has contact details, a history and a report, which makes it a directory
+    // like Staff rather than a setting of a product like Categories.
+    if (suppliersRoute != null && membership.role.canAccess(suppliersRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('suppliers'),
+        label: 'Suppliers',
+        description:
+            'Who you buy stock from, and what each delivery brought in.',
+        group: 'Inventory',
+        icon: Icons.local_shipping_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: suppliersRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
     // Beside Reports, because it is the other half of the same question. A
     // report says what came in and what the stock cost; this says what else
     // went out, and the two together are the only way the profit on those
@@ -3732,33 +3757,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           );
         },
       ),
-    // **Printer, back beside Settings and not instead of it.** Folding the five
-    // settings into tabs put this one three taps away - open Settings, find the
-    // strip, scroll it - and it is the setting somebody reaches for while
-    // standing at the counter with a roll of paper that will not come out. It
-    // opens the same screen at its own tab, so there is still exactly one
-    // printer panel, one guard and one role list.
-    if (settingsRoute != null &&
-        membership.role.canAccess(printerSettingsRoles))
-      HomeDestination(
-        destinationKey: const ValueKey('printer-settings'),
-        label: 'Printer',
-        description:
-            'Set the register printer and put a test page on the roll.',
-        group: 'Settings',
-        icon: Icons.print_outlined,
-        onPressed: () {
-          final controller = TenantSessionScope.of(context);
-          Navigator.of(context).push(
-            AppPageRoute<void>(
-              builder: (_) => TenantSessionScope(
-                controller: controller,
-                child: settingsRoute!(reader, 'printer'),
-              ),
-            ),
-          );
-        },
-      ),
+    // **No Printer tile since 2026-09-24, at the developer's direction.** It
+    // opened this same Settings screen at its printer tab, to exactly the roles
+    // Settings is offered to, so removing it strands nobody; the room went to
+    // Suppliers and Production. The printer is one tab inside Settings.
     if (membership.role.canAccess(TenantStaffDirectoryScreen.allowedRoles))
       HomeDestination(
         destinationKey: const ValueKey('staff'),

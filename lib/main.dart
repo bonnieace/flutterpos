@@ -30,6 +30,7 @@ import 'reports/report_saver.dart';
 import 'returns/returns.dart';
 import 'sales/sales.dart';
 import 'shift/shift.dart';
+import 'suppliers/suppliers.dart';
 import 'ui/scaffold.dart';
 import 'ui/tokens.dart';
 
@@ -677,6 +678,15 @@ class SpiritPOSApp extends StatelessWidget {
       store: tenantMutationStore,
       onQueued: checkoutSyncSignals.requestSyncAfterSave,
     );
+    // Who stock is bought from. Queued like categories and for their reason:
+    // a supplier's name is unique across the business, which only the server
+    // can check, so a name a colleague took first is refused at drain and
+    // reported rather than silently doubled.
+    final supplierWriter = QueuedTenantSupplierWriter(
+      store: tenantMutationStore,
+      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+      onQueued: checkoutSyncSignals.requestSyncAfterSave,
+    );
     // **One counting screen, two doors onto it.** A cashier opens it from the
     // home menu; anybody who can read *Stock counts* opens it from the button on
     // that screen. Built once rather than at each call site, so the draft box,
@@ -1150,6 +1160,9 @@ class SpiritPOSApp extends StatelessWidget {
               imageCache: tenantImageCache,
             ),
             expensesRoles: TenantExpenseRepository.allowedRoles,
+            suppliersRoute: (reader) =>
+                TenantSuppliersScreen(reader: reader, writer: supplierWriter),
+            suppliersRoles: TenantSupplierRepository.allowedRoles,
             receiptLookupRoute: (reader) => salesReport(reader),
             receiptLookupRoles: TenantSaleHistoryRepository.reportRoles,
             returnFeedRoute: (reader) => TenantReturnFeedScreen(
@@ -1476,10 +1489,6 @@ class SpiritPOSApp extends StatelessWidget {
               ],
             ),
             settingsRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
-            // The printer tab's own list, so the shortcut and the tab behind it
-            // are offered to exactly the same people.
-            printerSettingsRoles:
-                TenantPrinterConfigurationPublisher.allowedRoles,
             printQueueCount: () => _printQueueCount(checkoutPrintJobs),
             // Nightly reconciliation has been recording differences that nobody
             // sees unless they go looking for them. This is the count of the ones
