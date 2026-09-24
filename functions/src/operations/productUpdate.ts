@@ -78,6 +78,7 @@ export const EDITABLE_PRODUCT_FIELDS = [
   "cost",
   "categoryId",
   "image",
+  "costType",
 ] as const;
 
 export type EditableProductField = (typeof EDITABLE_PRODUCT_FIELDS)[number];
@@ -146,6 +147,49 @@ export const MONETARY_PRODUCT_FIELDS: readonly EditableProductField[] = [
   "cost",
 ];
 
+/**
+ * Where a product's cost comes from, as the catalog labels it: *Bought in* or
+ * *Made here*.
+ *
+ * **Display only, and not money.** It decides which actions the app offers for
+ * a product - a *Made here* product is the one a production batch can be
+ * recorded against - and nothing about how a sale is priced or costed. Every
+ * route that states a cost writes the one `cost` field whatever this says, so it
+ * sits outside [MONETARY_PRODUCT_FIELDS] and a manager may set it.
+ *
+ * Absent means `purchased`: every product created before the field existed was
+ * bought in, as far as the app ever knew.
+ */
+export const PRODUCT_COST_TYPES = ["purchased", "produced"] as const;
+
+export type ProductCostType = (typeof PRODUCT_COST_TYPES)[number];
+
+/**
+ * The cost type a stored value means, read the way the client reads it.
+ *
+ * Permissive on purpose, like `retired`: only the exact `produced` marks a
+ * product as made here, and anything else - absent, null, or a value some later
+ * build writes - reads as bought in. The strict client model refusing one product
+ * would empty the whole cached catalog, and a display flag is not worth that.
+ */
+export function storedProductCostType(value: unknown): ProductCostType {
+  return value === "produced" ? "produced" : "purchased";
+}
+
+/** Refuses a cost type the catalog does not model. */
+export function requireProductCostType(value: unknown): ProductCostType {
+  if (
+    typeof value !== "string" ||
+    !(PRODUCT_COST_TYPES as readonly string[]).includes(value)
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "costType must be purchased or produced."
+    );
+  }
+  return value as ProductCostType;
+}
+
 /** The fields this module reads from `tenants/{tenantId}/products/{productId}`. */
 export interface StoredProductFields {
   name?: unknown;
@@ -165,6 +209,7 @@ export interface StoredProductFields {
   quantity?: unknown;
   categoryId?: unknown;
   image?: unknown;
+  costType?: unknown;
   searchName?: unknown;
   searchPrefixes?: unknown;
 }
@@ -183,6 +228,9 @@ export interface SellableProduct {
   quantity: number;
   categoryId: string;
   image: string | null;
+
+  /** Bought in or made here. See [PRODUCT_COST_TYPES]. */
+  costType: ProductCostType;
 }
 
 /** One field's correction, as the audit entry records it. */
@@ -243,6 +291,7 @@ export interface ProductUpdateInput {
 
   categoryId?: string;
   image?: string | null;
+  costType?: ProductCostType;
 
   /**
    * The editable keys the payload named, before anything is compared with what
@@ -460,6 +509,10 @@ export function readProductUpdateInput(
     input.image = data.image === null ? null : normalizeProductImage(data.image);
     requestedFields.push("image");
   }
+  if (data.costType !== undefined && data.costType !== null) {
+    input.costType = requireProductCostType(data.costType);
+    requestedFields.push("costType");
+  }
   if (requestedFields.length === 0) {
     throw new HttpsError(
       "invalid-argument",
@@ -621,6 +674,7 @@ export function readSellableProduct(fields: StoredProductFields): SellableProduc
     quantity: fields.quantity as number,
     categoryId,
     image,
+    costType: storedProductCostType(fields.costType),
   };
 }
 
@@ -677,6 +731,7 @@ export function planProductUpdate(input: {
     resulting.categoryId = requested.categoryId;
   }
   if (requested.image !== undefined) resulting.image = requested.image;
+  if (requested.costType !== undefined) resulting.costType = requested.costType;
   const product = readSellableProduct(resulting);
 
   const changes: ProductFieldChange[] = [];
@@ -746,6 +801,17 @@ export function planProductUpdate(input: {
       });
       documentUpdate.image = product.image;
     }
+  }
+  if (
+    requested.costType !== undefined &&
+    storedProductCostType(stored.costType) !== product.costType
+  ) {
+    changes.push({
+      field: "costType",
+      previous: storedProductCostType(stored.costType),
+      next: product.costType,
+    });
+    documentUpdate.costType = product.costType;
   }
   if (changes.some((change) => change.field === "name" || change.field === "sku")) {
     const search = productSearchFields(product.name, product.sku);

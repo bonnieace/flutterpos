@@ -331,3 +331,43 @@ test("a product filed under a category that does not exist is refused", async ()
       error instanceof HttpsError && error.code === "failed-precondition"
   );
 });
+
+test("a product is bought in unless the document says it is made here", () => {
+  const plain = planFor();
+  const made = planFor({costType: "produced"});
+
+  // Written on every product, so "made here" is an equality read against a
+  // stored value rather than an inference from a field's absence.
+  assert.equal(plain.documentData.costType, "purchased");
+  assert.equal(made.documentData.costType, "produced");
+  assert.equal(
+    (made.auditData.created as Record<string, unknown>).costType,
+    "produced"
+  );
+});
+
+test("a cost type the catalog does not model is refused at the door", () => {
+  const error = refusal(() => readProductCreateInput(document({costType: "made"})));
+
+  assert.equal(error.code, "invalid-argument");
+  assert.match(error.message, /costType/);
+});
+
+test("the cost type is part of what a retry is recognised by", () => {
+  // Two creates under one product ID that differ only in where the cost comes
+  // from must not hash the same: the second would be answered off the first's
+  // record and the product left bought in.
+  assert.notDeepEqual(
+    productCreateFingerprintInput(planFor({costType: "produced"})),
+    productCreateFingerprintInput(planFor())
+  );
+});
+
+test("a manager may create a product made here, because the flag is not money", () => {
+  assert.doesNotThrow(() =>
+    assertProductCreateAuthorized(
+      "manager" as TenantRole,
+      readProductCreateInput(document({costType: "produced"}))
+    )
+  );
+});

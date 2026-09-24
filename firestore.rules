@@ -792,6 +792,34 @@ service cloud.firestore {
         }
       }
 
+      // Who stock is bought from, what each delivery brought in, and what each
+      // production batch cost to make.
+      //
+      // **Read by the roles that receive and produce stock, and written only by
+      // `createSupplier`, `updateSupplier`, `receiveSupplierDelivery` and
+      // `completeProduction`.** A supplier's name is unique across the business,
+      // which no rule can check; a delivery and a batch each move stock and set a
+      // product's cost in the same transaction, and whoever writes a quantity
+      // writes the movement that accounts for it.
+      //
+      // The role check touches no document field on purpose. A queued delivery
+      // or batch is confirmed by reading its own path before it is re-sent, and
+      // that read has to answer for a document the server has not written yet.
+      match /suppliers/{supplierId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
+      match /supplier_deliveries/{deliveryId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
+      match /production_batches/{batchId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
       // The server's own record of every reconciliation run queued for this
       // business, and of whether each business day's totals are current.
       //

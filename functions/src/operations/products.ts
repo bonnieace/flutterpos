@@ -49,6 +49,7 @@ import {
   planProductUpdate,
   readProductUpdateInput,
 } from "./productUpdate";
+import type {ProductCostType} from "./productUpdate";
 
 interface UpdateProductRequest {
   tenantId?: unknown;
@@ -69,6 +70,7 @@ interface UpdateProductRequest {
 
   categoryId?: unknown;
   image?: unknown;
+  costType?: unknown;
   requestId?: unknown;
 }
 
@@ -107,6 +109,9 @@ export interface UpdateProductResponse {
 
   categoryId: string;
   image: string | null;
+
+  /** Bought in or made here, as the product now holds it. */
+  costType: ProductCostType;
 }
 
 /**
@@ -198,6 +203,7 @@ export async function applyProductUpdate(
     costMinor: plan.product.costMinor,
     categoryId: plan.product.categoryId,
     image: plan.product.image,
+    costType: plan.product.costType,
   };
 }
 
@@ -231,6 +237,7 @@ export function productUpdateFingerprintInput(
     costMinor: requested.costMinor,
     categoryId: requested.categoryId,
     image: requested.image,
+    costType: requested.costType,
   };
 }
 

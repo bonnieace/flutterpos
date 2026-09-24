@@ -354,6 +354,39 @@ const COLLECTIONS = [
     },
   },
   {
+    name: "suppliers",
+    segment: "suppliers",
+    docId: (principal) => slug(principal),
+    seed: { name: "Grid supplier", active: true },
+    ops: {
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
+      ...SERVER_WRITTEN,
+    },
+  },
+  {
+    name: "supplier_deliveries",
+    segment: "supplier_deliveries",
+    docId: (principal) => slug(principal),
+    seed: { supplierId: "grid", lineCount: 1, valueMinor: 5000 },
+    ops: {
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
+      ...SERVER_WRITTEN,
+    },
+  },
+  {
+    name: "production_batches",
+    segment: "production_batches",
+    docId: (principal) => slug(principal),
+    seed: { productId: "grid", quantity: 100, unitCostMinor: 3000 },
+    ops: {
+      get: { allow: memberRoles(["owner", "admin", "manager"]) },
+      list: { allow: memberRoles(["owner", "admin", "manager"]) },
+      ...SERVER_WRITTEN,
+    },
+  },
+  {
     name: "reconciliation_jobs",
     segment: "reconciliation_jobs",
     docId: (principal) => slug(principal),

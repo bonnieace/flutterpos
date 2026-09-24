@@ -65,6 +65,7 @@ export {
   adjustStock,
   applyStockTake,
   createCategory,
+  createSupplier,
   drainStrandedSales,
   createProduct,
   getSalesComparison,
@@ -77,6 +78,7 @@ export {
   submitStockTake,
   updateProduct,
   updateProducts,
+  updateSupplier,
   verifyReturnAndRestoreStock,
 } from "./operations";
 

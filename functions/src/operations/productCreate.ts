@@ -16,6 +16,7 @@ import {
   assertProductUpdateAuthorized,
   productSearchFields,
   readSellableProduct,
+  requireProductCostType,
 } from "./productUpdate";
 
 /**
@@ -86,6 +87,7 @@ const ACCEPTED_PRODUCT_DOCUMENT_KEYS = new Set<string>([
   "quantity",
   "categoryId",
   "image",
+  "costType",
   "searchName",
   "searchPrefixes",
   "createdBy",
@@ -167,6 +169,13 @@ export function readProductCreateInput(value: unknown): ProductCreateInput {
       ...(document.image === undefined || document.image === null ?
         {} :
         {image: document.image}),
+      // Validated here rather than read permissively as a stored value is: a
+      // request naming a cost type the catalog does not model is a caller defect,
+      // and writing it would make the stored value mean something only because
+      // the reader forgives it.
+      ...(document.costType === undefined || document.costType === null ?
+        {} :
+        {costType: requireProductCostType(document.costType)}),
     },
     quantity,
     requestedCost,
@@ -242,6 +251,10 @@ export function planProductCreate(options: {
       searchName: search.searchName,
       searchPrefixes: search.searchPrefixes,
       ...(sellable.image === null ? {} : {image: sellable.image}),
+      // Written on every product rather than only on one made here, so "which
+      // products are made here" is one equality read against a stored value and
+      // never an inference from a field's absence.
+      costType: sellable.costType,
       // From the actor, never from the payload. A device composes this document
       // and could name anybody; who created a product is the server's to say.
       createdBy: options.actorUid,
@@ -261,6 +274,7 @@ export function planProductCreate(options: {
         cost: sellable.cost,
         categoryId: sellable.categoryId,
         quantity: sellable.quantity,
+        costType: sellable.costType,
       },
       openingQuantity: sellable.quantity,
       // The ledger entry those units came in through, and null when the product
@@ -312,6 +326,7 @@ export function productCreateFingerprintInput(
     categoryId: document.categoryId,
     quantity: plan.quantity,
     image: document.image ?? null,
+    costType: document.costType,
   };
 }
 

@@ -3,6 +3,7 @@ import test from "node:test";
 import {HttpsError} from "firebase-functions/v2/https";
 import {TenantRole} from "../core/model";
 import {
+  ACCEPTED_PRODUCT_ROW_KEYS,
   MAXIMUM_PRODUCT_NAME_LENGTH,
   MAXIMUM_PRODUCT_SKU_LENGTH,
   ProductUpdateInput,
@@ -13,6 +14,7 @@ import {
   productSearchFields,
   readProductUpdateInput,
   readSellableProduct,
+  storedProductCostType,
 } from "./productUpdate";
 
 /**
@@ -534,4 +536,50 @@ test("quantity is still the refusal that outranks everything", () => {
     refusalCode(() => input({cost: 12.5, quantity: 40})),
     "invalid-argument"
   );
+});
+
+test("marking a product made here is written and audited as a change", () => {
+  const result = plan(storedProduct(), {costType: "produced"});
+
+  assert.deepEqual(result.changedFields, ["costType"]);
+  assert.deepEqual(result.documentUpdate, {costType: "produced"});
+  // An absent stored value reads as bought in, so the audit states the
+  // transition in the words the catalog uses rather than "null to produced".
+  assert.deepEqual(result.changes, [
+    {field: "costType", previous: "purchased", next: "produced"},
+  ]);
+});
+
+test("a cost type the product already holds changes nothing", () => {
+  // Absent means bought in, so asking for bought in on a product that never
+  // recorded one is the request that changes nothing.
+  assert.equal(
+    refusalCode(() => plan(storedProduct(), {costType: "purchased"})),
+    "failed-precondition"
+  );
+  assert.equal(
+    refusalCode(() => plan(storedProduct({costType: "produced"}), {costType: "produced"})),
+    "failed-precondition"
+  );
+});
+
+test("a manager may change where a cost comes from, because it is not money", () => {
+  assert.doesNotThrow(() =>
+    assertProductUpdateAuthorized("manager" as TenantRole, input({costType: "produced"}))
+  );
+});
+
+test("an unmodelled cost type is refused in a request and forgiven in storage", () => {
+  assert.equal(refusalCode(() => input({costType: "made"})), "invalid-argument");
+  // A stored value this build does not model reads as bought in rather than
+  // refusing the product, for the reason `retired` is read permissively.
+  assert.equal(storedProductCostType("made"), "purchased");
+  assert.equal(storedProductCostType(undefined), "purchased");
+  assert.equal(readSellableProduct(storedProduct({costType: "produced"})).costType, "produced");
+});
+
+test("a bulk row cannot carry a cost type", () => {
+  // Bulk correction and import are deliberately left as they were: this MVP
+  // sets the flag one product at a time.
+  assert.equal(ACCEPTED_PRODUCT_ROW_KEYS.has("costType"), false);
 });
