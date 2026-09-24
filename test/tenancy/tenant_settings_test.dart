@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
@@ -9,13 +11,6 @@ void main() {
     // a row says about it, so a setting that grows a state cannot be added
     // without one of these failing.
     test('an absent document is awaiting, except the counting rota', () {
-      expect(
-        TenantSettingsStandingsRepository.standingFor(
-          TenantSettingKind.businessDetails,
-          null,
-        ).state,
-        TenantSettingState.awaiting,
-      );
       expect(
         TenantSettingsStandingsRepository.standingFor(
           TenantSettingKind.printer,
@@ -58,13 +53,6 @@ void main() {
         ).blocksTrading,
         isFalse,
       );
-      expect(
-        TenantSettingsStandingsRepository.standingFor(
-          TenantSettingKind.businessDetails,
-          null,
-        ).blocksTrading,
-        isFalse,
-      );
     });
 
     test('a document that cannot be parsed is unreadable, not a failure', () {
@@ -97,24 +85,27 @@ void main() {
       expect(currency.badgeLabel, isNull);
     });
 
-    test('a setting that stops the till wears the problem tier, not awaiting', () {
-      // Both are "a step nobody has taken". Only one of them is also the
-      // reason nothing can be sold, and that is what the colour has to say.
-      expect(
-        TenantSettingsStandingsRepository.standingFor(
-          TenantSettingKind.currency,
-          null,
-        ).status,
-        AppStatus.problem,
-      );
-      expect(
-        TenantSettingsStandingsRepository.standingFor(
-          TenantSettingKind.printer,
-          null,
-        ).status,
-        AppStatus.attention,
-      );
-    });
+    test(
+      'a setting that stops the till wears the problem tier, not awaiting',
+      () {
+        // Both are "a step nobody has taken". Only one of them is also the
+        // reason nothing can be sold, and that is what the colour has to say.
+        expect(
+          TenantSettingsStandingsRepository.standingFor(
+            TenantSettingKind.currency,
+            null,
+          ).status,
+          AppStatus.problem,
+        );
+        expect(
+          TenantSettingsStandingsRepository.standingFor(
+            TenantSettingKind.printer,
+            null,
+          ).status,
+          AppStatus.attention,
+        );
+      },
+    );
 
     test('the callout says the cause, where the row said the consequence', () {
       final currency = TenantSettingsStandingsRepository.standingFor(
@@ -169,11 +160,12 @@ void main() {
 
       // **One query, not four.** The whole point of the index.
       expect(reader.queries, hasLength(1));
+      // **No *Business details* row since 2026-09-23**: the receipt branding
+      // is on the *Printer* page.
       expect(
         find.byKey(const ValueKey('setting-row-business-details')),
-        findsOneWidget,
+        findsNothing,
       );
-      expect(find.textContaining('Mwangi Hardware'), findsOneWidget);
       expect(find.textContaining('KES'), findsOneWidget);
       // The printer was never published, so its row says what that costs.
       expect(
@@ -271,13 +263,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(reader.queries, isEmpty);
-      expect(
-        find.byKey(const ValueKey('setting-row-printer')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('setting-row-printer')), findsOneWidget);
       // No standing was read, so none is claimed.
-      expect(find.byKey(const ValueKey('setting-standing-printer')),
-          findsNothing);
+      expect(
+        find.byKey(const ValueKey('setting-standing-printer')),
+        findsNothing,
+      );
       expect(find.byKey(const ValueKey('settings-blocking')), findsNothing);
     });
 
@@ -294,6 +285,44 @@ void main() {
       expect(reader.queries, isEmpty);
     });
 
+    testWidgets('returning from a setting keeps the list while it re-reads', (
+      tester,
+    ) async {
+      // #141: the re-read on return blanked the index to a full-screen
+      // spinner and lost its scroll position, on every return from anything.
+      final reader = _ConfigurationReader(documents: const {});
+      var reads = 0;
+      final stalled =
+          Completer<Map<TenantSettingKind, TenantSettingStanding>>();
+      await tester.pumpWidget(
+        _settingsApp(
+          reader: reader,
+          standingsReader: (session) {
+            reads++;
+            if (reads > 1) return stalled.future;
+            return TenantSettingsStandingsRepository(
+              session: session,
+              reader: reader,
+            ).read(collectionReader: reader);
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final row = find.byKey(const ValueKey('setting-row-printer'));
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(reads, 2, reason: 'a return still re-reads');
+      expect(find.byKey(const ValueKey('settings-reading')), findsNothing);
+      expect(find.byKey(const ValueKey('setting-row-printer')), findsOneWidget);
+    });
+
     testWidgets('a failed standings read still opens every setting', (
       tester,
     ) async {
@@ -307,10 +336,7 @@ void main() {
       );
       // **The rows are still there.** A summary that could not be read must not
       // stand between a person and the setting they came to change.
-      expect(
-        find.byKey(const ValueKey('setting-row-printer')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('setting-row-printer')), findsOneWidget);
     });
   });
 }
@@ -320,6 +346,10 @@ Widget _settingsApp({
   List<String>? built,
   String? initialSettingKey,
   bool standings = true,
+  Future<Map<TenantSettingKind, TenantSettingStanding>> Function(
+    TenantSession session,
+  )?
+  standingsReader,
   TenantRole role = TenantRole.owner,
 }) {
   final controller = TenantSessionController()
@@ -346,15 +376,16 @@ Widget _settingsApp({
       controller: controller,
       child: TenantSettingsScreen(
         initialSettingKey: initialSettingKey,
-        standings: standings
-            ? (session) => TenantSettingsStandingsRepository(
-                session: session,
-                reader: reader,
-              ).read(collectionReader: reader)
-            : null,
+        standings:
+            standingsReader ??
+            (standings
+                ? (session) => TenantSettingsStandingsRepository(
+                    session: session,
+                    reader: reader,
+                  ).read(collectionReader: reader)
+                : null),
         destinations: <TenantSettingsDestination>[
           for (final (key, kind) in const <(String, TenantSettingKind)>[
-            ('business-details', TenantSettingKind.businessDetails),
             ('currency', TenantSettingKind.currency),
             ('printer', TenantSettingKind.printer),
             ('stock-take', TenantSettingKind.stockCounts),

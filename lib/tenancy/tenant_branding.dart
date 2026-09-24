@@ -28,6 +28,27 @@ final class TenantBrandingRepository extends TenantReadRepository {
     final data = await readDocument(TenantCollection.configuration, documentId);
     return data == null ? null : TenantBranding.fromMap(data);
   }
+
+  /// [load], or the name this business registered under where nothing has
+  /// been published.
+  ///
+  /// **The registered name is fixed at signup and is what Business details
+  /// shows, read-only**, so a business that never saved that screen is not
+  /// unnamed - it simply has no slogan or logo yet. Null only where neither
+  /// document can be read, which a cache-only reader on a device that has
+  /// never opened the home can still be.
+  Future<TenantBranding?> loadOrRegistered() async {
+    final published = await load();
+    if (published != null) return published;
+    final name = registeredTenantName(await readTenantRoot());
+    return name == null ? null : TenantBranding(companyName: name);
+  }
+}
+
+/// The name on the tenant document, written once at signup.
+String? registeredTenantName(Map<String, Object?>? tenant) {
+  final name = tenant?['name'];
+  return name is String && name.trim().isNotEmpty ? name.trim() : null;
 }
 
 String _requiredString(Map<String, Object?> map, String field) {

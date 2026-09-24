@@ -253,7 +253,12 @@ class _TenantSettingsIndexState extends State<_TenantSettingsIndex> {
           : FutureBuilder<Map<TenantSettingKind, TenantSettingStanding>>(
               future: _standings,
               builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
+                // **Only the first read has nothing to draw.** A re-read on
+                // returning from a setting keeps the previous standings on
+                // screen - `FutureBuilder` carries them while the new future
+                // is pending - rather than blanking the list to a spinner and
+                // losing its scroll position (#141).
+                if (!snapshot.hasData && !snapshot.hasError) {
                   return const LoadingState(
                     key: ValueKey('settings-reading'),
                     message: 'Reading this business’s settings.',
@@ -422,7 +427,9 @@ final class _SettingRow extends StatelessWidget {
           color: colors.surface.raised,
           borderRadius: radius,
           border: Border.all(
-            color: fault ? accent.withValues(alpha: _edge) : colors.surface.cardEdge,
+            color: fault
+                ? accent.withValues(alpha: _edge)
+                : colors.surface.cardEdge,
           ),
         ),
         child: Row(

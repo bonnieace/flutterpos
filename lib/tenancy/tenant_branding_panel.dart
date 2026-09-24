@@ -1,9 +1,11 @@
-/// The screen a business names itself on.
+/// What a receipt is headed with: the brand name, a slogan and a logo.
 ///
-/// **What it decides.** The title on the home, and the header printed at the
-/// top of every receipt. Both have read `configuration/branding` since the
-/// beginning and neither had anything to read, because nothing in this product
-/// could write it.
+/// **Part of the *Printer* page since 2026-09-23**, where it was its own
+/// *Business details* setting. The business's own name is the one it
+/// registered under and is not edited anywhere; the brand name here is a
+/// separate value, seeded from that registered name, that the business may
+/// change for its receipts. It is still `configuration/branding`, so nothing
+/// that reads the document moved.
 ///
 /// **The logo is an upload since 2026-09-05, and the address field is gone.**
 /// It was an address because `storage.rules` permitted exactly one path -
@@ -22,11 +24,9 @@
 /// an image on a phone exactly as a product photograph is, and two pipelines
 /// would be two places to fix the same fault.
 ///
-/// **The name is seeded from what the business registered as.** A shop that has
-/// published nothing had a blank field over the sentence *this business has
-/// published no details*, which asked a shopkeeper to type a name the app was
-/// already showing them on the home. It is a suggestion in a text field and not
-/// a saved value - nothing is published until they press the button.
+/// **The brand name starts as the registered name.** It is a suggestion in a
+/// text field and not a saved value - nothing is published until they press
+/// the button.
 library;
 
 import 'dart:async';
@@ -46,7 +46,6 @@ import '../inventory/product_image_provider.dart';
 import '../inventory/product_image_store.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
-import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
@@ -71,49 +70,6 @@ typedef TenantBrandingProofPrint =
       String? slogan,
       Uint8List? logo,
     });
-
-/// The guarded route.
-final class TenantBrandingScreen extends StatelessWidget {
-  const TenantBrandingScreen({
-    super.key,
-    required this.reader,
-    this.writer,
-    this.logoStore,
-    this.backgroundRemover,
-    this.printProof,
-  });
-
-  final TenantDataReader reader;
-
-  /// Absent, the screen reads and refuses to publish - which is what a build
-  /// with no Firestore behind it, and a test, both want.
-  final TenantConfigurationDocumentWriter? writer;
-
-  /// Absent, the logo well is not drawn at all: choosing a picture that has
-  /// nowhere to go is worse than not offering one.
-  final TenantBrandingLogoStore? logoStore;
-
-  /// Null where no background-removal service is configured, which draws no
-  /// such action. See `product_background_removal.dart`.
-  final TenantProductBackgroundRemover? backgroundRemover;
-
-  /// Null where nothing can print. A save then saves and says so, and no
-  /// sentence about paper appears.
-  final TenantBrandingProofPrint? printProof;
-
-  @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: 'Business details',
-    contentWidth: AppContentWidth.reading,
-    body: TenantBrandingPanel(
-      reader: reader,
-      writer: writer,
-      logoStore: logoStore,
-      backgroundRemover: backgroundRemover,
-      printProof: printProof,
-    ),
-  );
-}
 
 final class TenantBrandingPanel extends StatefulWidget {
   const TenantBrandingPanel({
@@ -291,8 +247,7 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
         'Saved on this device; waiting to sync.',
       ),
       TenantConfigurationWriteKind.committed => const AppNotice.confirmed(
-        'Saved. The home and every receipt printed from now on carry these '
-        'details.',
+        'Saved. Every receipt printed from now on carries this branding.',
       ),
       TenantConfigurationWriteKind.rejected => const AppNotice.refused(
         'The server refused the change, so nothing was saved.',
@@ -300,11 +255,11 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
       // §2.1's `attention` is "awaiting", which an unknown write is. The page
       // re-reads rather than guessing which way it went.
       TenantConfigurationWriteKind.ambiguous => const AppNotice.unknown(
-        'It is not certain whether that saved. The details below have been '
+        'It is not certain whether that saved. The branding below has been '
         'read again.',
       ),
       TenantConfigurationWriteKind.unavailable => const AppNotice.offline(
-        'This device is offline, so nothing was sent. The details are '
+        'This device is offline, so nothing was sent. The branding is '
         'unchanged.',
       ),
     });
@@ -440,19 +395,19 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
       denied: const Center(
         child: EmptyState(
           key: ValueKey('branding-denied'),
-          title: 'Business details are not shown for this role',
+          title: 'Receipt branding is not shown for this role',
           hint: 'An owner or an administrator can change them.',
           illustration: 'access-denied.svg',
         ),
       ),
       loading: const Center(
-        child: LoadingState(message: 'Reading the business details'),
+        child: LoadingState(message: 'Reading the receipt branding'),
       ),
       failure: (context, error) => Center(
         child: ErrorState(
           key: const ValueKey('branding-failure'),
           badgeLabel: 'Not read',
-          statement: 'The business details could not be read.',
+          statement: 'The receipt branding could not be read.',
           stillTrue: 'Nothing has been changed.',
           actions: <Widget>[
             AppButton(
@@ -474,81 +429,83 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
         final canPublish =
             TenantBrandingPublisher.canPublishInSession(session) &&
             widget.writer != null;
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              // **The picture first, as the catalog form draws it.** A logo is
-              // the one detail on this screen a shopkeeper recognises without
-              // reading, and the inventory forms put the well at the top of the
-              // column for that reason.
-              if (widget.logoStore != null) ...<Widget>[
-                _BrandingLogoWell(
-                  logo: _logo,
-                  publishedLogo: _standingLogo(published),
-                  logoRemoved: _logoRemoved,
-                  remover: widget.backgroundRemover,
-                  session: session,
-                  enabled: canPublish && !_saving,
-                  onLogoChanged: (logo) => setState(() {
-                    _logo = logo;
-                    _logoRemoved = false;
-                  }),
-                  onRemoveLogo:
-                      _logo == null && _standingLogo(published) == null
-                      ? null
-                      : () => setState(() {
-                          _logo = null;
-                          _logoRemoved = true;
-                        }),
-                ),
-                SizedBox(height: tokens.spacing.s24),
-              ],
-              if (!published.isUsable)
-                Padding(
-                  padding: EdgeInsets.only(bottom: tokens.spacing.s16),
-                  child: const Callout(
-                    key: ValueKey('branding-absent'),
-                    status: AppStatus.attention,
-                    message:
-                        'This business has published no details, so the home '
-                        'and its receipts carry no name yet.',
-                  ),
-                ),
-              AppTextField(
-                key: const ValueKey('branding-company-name'),
-                label: 'Business name',
-                controller: _companyName,
-                placeholder: 'What customers know this shop as',
-                helper: 'Printed at the top of every receipt.',
-                maxLength: TenantBrandingPublisher.maximumCompanyNameLength,
-                textCapitalization: TextCapitalization.words,
+        // **A bare column**: the page that hosts this - the *Printer*
+        // setting - owns the scroll, and a second scrollable here would nest
+        // one inside the other.
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            // **The picture first, as the catalog form draws it.** A logo is
+            // the one detail on this screen a shopkeeper recognises without
+            // reading, and the inventory forms put the well at the top of the
+            // column for that reason.
+            if (widget.logoStore != null) ...<Widget>[
+              _BrandingLogoWell(
+                logo: _logo,
+                publishedLogo: _standingLogo(published),
+                logoRemoved: _logoRemoved,
+                remover: widget.backgroundRemover,
+                session: session,
                 enabled: canPublish && !_saving,
-              ),
-              SizedBox(height: tokens.spacing.s16),
-              AppTextField(
-                key: const ValueKey('branding-slogan'),
-                label: 'Slogan',
-                controller: _slogan,
-                placeholder: 'Optional',
-                helper: 'One line under the name on a receipt.',
-                maxLength: TenantBrandingPublisher.maximumSloganLength,
-                enabled: canPublish && !_saving,
+                onLogoChanged: (logo) => setState(() {
+                  _logo = logo;
+                  _logoRemoved = false;
+                }),
+                onRemoveLogo: _logo == null && _standingLogo(published) == null
+                    ? null
+                    : () => setState(() {
+                        _logo = null;
+                        _logoRemoved = true;
+                      }),
               ),
               SizedBox(height: tokens.spacing.s24),
-              AppButton(
-                key: const ValueKey('branding-save'),
-                label: 'Save details',
-                // The full measure of the form, because it is the one thing
-                // this screen is for and there is nothing beside it.
-                expand: true,
-                loading: _saving,
-                onPressed: canPublish
-                    ? () => _publish(session, published)
-                    : null,
-              ),
             ],
-          ),
+            // **Nothing published is not a problem.** The name below is the
+            // one this business registered under, which the home, receipts
+            // and reports already carry; only a document that is there and
+            // cannot be read is worth saying anything about.
+            if (published.isMalformed)
+              Padding(
+                padding: EdgeInsets.only(bottom: tokens.spacing.s16),
+                child: const Callout(
+                  key: ValueKey('branding-malformed'),
+                  status: AppStatus.attention,
+                  message:
+                      'The saved details cannot be read, so receipts carry '
+                      'the registered name only. Saving here replaces them.',
+                ),
+              ),
+            // **The brand, not the business.** Seeded from the registered
+            // name and editable, because what a receipt is headed with is the
+            // shop's choice; the name it registered under is not changed.
+            AppTextField(
+              key: const ValueKey('branding-company-name'),
+              label: 'Brand name',
+              controller: _companyName,
+              maxLength: TenantBrandingPublisher.maximumCompanyNameLength,
+              textCapitalization: TextCapitalization.words,
+              enabled: canPublish && !_saving,
+            ),
+            SizedBox(height: tokens.spacing.s16),
+            AppTextField(
+              key: const ValueKey('branding-slogan'),
+              label: 'Slogan',
+              controller: _slogan,
+              placeholder: 'Optional',
+              maxLength: TenantBrandingPublisher.maximumSloganLength,
+              enabled: canPublish && !_saving,
+            ),
+            SizedBox(height: tokens.spacing.s24),
+            AppButton(
+              key: const ValueKey('branding-save'),
+              label: 'Save branding',
+              // The full measure of the form, because it is the one thing
+              // this screen is for and there is nothing beside it.
+              expand: true,
+              loading: _saving,
+              onPressed: canPublish ? () => _publish(session, published) : null,
+            ),
+          ],
         );
       },
     );

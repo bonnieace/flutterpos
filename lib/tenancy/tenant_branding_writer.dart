@@ -40,6 +40,9 @@ sealed class TenantPublishedBranding {
 
   /// Whether the home and a receipt have a name to carry.
   bool get isUsable => branding != null;
+
+  /// Whether a document is there and cannot be read.
+  bool get isMalformed => this is _BrandingMalformed;
 }
 
 final class _BrandingAbsent extends TenantPublishedBranding {

@@ -8,9 +8,9 @@
 /// which stops every sale on every device when it is missing, was not a tab at
 /// all but the second panel down inside *Business details*.
 ///
-/// **One query, not four.** All four settings are documents in one collection -
-/// `tenants/{tenantId}/configuration/{branding,checkout,printer,stock_take}` -
-/// so a single bounded collection page answers every standing. The per-setting
+/// **One query, not three.** Every setting is a document in one collection -
+/// `tenants/{tenantId}/configuration/{checkout,printer,stock_take}` - so a
+/// single bounded collection page answers every standing. The per-setting
 /// reads are untouched: opening a setting still mounts its panel and reads its
 /// document, exactly as opening a tab did.
 ///
@@ -29,20 +29,22 @@ import '../checkout/checkout_configuration.dart';
 import '../checkout/checkout_print_configuration.dart';
 import '../inventory/stock_take_schedule.dart';
 import '../ui/status.dart';
-import 'tenant_branding.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
 
 /// One setting a business has.
+///
+/// **No *Business details* since 2026-09-23.** The business's own name is the
+/// one it registered under and is not edited here; the receipt's brand name,
+/// slogan and logo moved onto the *Printer* page, the only thing they were ever
+/// for.
 enum TenantSettingKind {
-  businessDetails,
   currency,
   printer,
   stockCounts;
 
   /// The document in `configuration` this setting is published as.
   String get documentId => switch (this) {
-    TenantSettingKind.businessDetails => TenantBrandingRepository.documentId,
     TenantSettingKind.currency =>
       TenantCheckoutConfigurationRepository.documentId,
     TenantSettingKind.printer =>
@@ -53,7 +55,6 @@ enum TenantSettingKind {
 
   /// The word on the row. Sentence case, §8 rule 7.
   String get label => switch (this) {
-    TenantSettingKind.businessDetails => 'Business details',
     TenantSettingKind.currency => 'Currency',
     TenantSettingKind.printer => 'Printer',
     TenantSettingKind.stockCounts => 'Stock counts',
@@ -195,36 +196,6 @@ final class TenantSettingsStandingsRepository extends TenantReadRepository {
     Map<String, Object?>? data,
   ) {
     switch (kind) {
-      case TenantSettingKind.businessDetails:
-        if (data == null) {
-          return const TenantSettingStanding(
-            kind: TenantSettingKind.businessDetails,
-            state: TenantSettingState.awaiting,
-            detail: 'The home and its receipts carry no name yet.',
-          );
-        }
-        try {
-          final branding = TenantBranding.fromMap(data);
-          final slogan = branding.slogan;
-          return TenantSettingStanding(
-            kind: TenantSettingKind.businessDetails,
-            state: TenantSettingState.set,
-            detail: <String>[
-              branding.companyName,
-              if (slogan != null) slogan,
-              if (branding.logoUrl != null) 'logo set',
-            ].join(' · '),
-          );
-        } on FormatException {
-          return const TenantSettingStanding(
-            kind: TenantSettingKind.businessDetails,
-            state: TenantSettingState.unreadable,
-            detail:
-                'The published details cannot be read, so the home and its '
-                'receipts carry no name. Saving here replaces them.',
-          );
-        }
-
       case TenantSettingKind.currency:
         if (data == null) {
           return const TenantSettingStanding(
