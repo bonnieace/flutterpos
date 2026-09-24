@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landing page &#8212; states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+
+body { margin: 0; background: #03110B; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.sheet { max-width: 1160px; margin: 0 auto; padding: 20px 24px 64px; }
+h1.t { margin: 0 0 8px; font-size: 30px; font-weight: 700; letter-spacing: -0.6px; color: #FFFFFF; }
+p.i { margin: 0 0 40px; font-size: 15px; line-height: 23px; color: #BCCBB9; max-width: 760px; }
+h2.s { margin: 46px 0 6px; font-size: 19px; font-weight: 700; color: #FFFFFF; padding-bottom: 12px; border-bottom: 1px solid #283831; }
+p.n { margin: 12px 0 22px; font-size: 14px; line-height: 22px; color: #849E8F; max-width: 800px; }
+p.n em { color: #BCCBB9; font-style: normal; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #45F28D; }
+
+/* every stage is the page's own ground, so a control is shown where it lives */
+.stage { background: #FFFFFF; border: 1px solid #283831; border-radius: 12px; padding: 26px; color: #141A16; }
+.stage.wash { background: #F4F7F5; }
+.stage.dark { background: #101C15; color: #FFFFFF; }
+.stage.flush { padding: 0; overflow: hidden; }
+.lbl { font-size: 11.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #8A938D; margin-bottom: 10px; display: block; }
+.stage.dark .lbl { color: #7E8F85; }
+.row { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
+.cell { display: flex; flex-direction: column; }
+
+/* ---- buttons ---- */
+.btn { height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 22px; border-radius: 8px; border: 1px solid transparent; font-size: 14.5px; font-weight: 700; letter-spacing: 0.2px; white-space: nowrap; text-decoration: none; cursor: pointer; }
+.btn-primary { background: #15251B; border-color: #15251B; color: #FFFFFF; }
+.btn-primary.hover { background: #22392B; border-color: #22392B; }
+.btn-primary.pressed { background: #0B140F; border-color: #0B140F; transform: scale(0.98); }
+.btn-primary.focus { outline: 2px solid #1A7A33; outline-offset: 2px; }
+.btn-primary.disabled { background: #E3E8E5; border-color: #E3E8E5; color: #9AA39D; cursor: not-allowed; }
+.btn-primary.loading { background: #22392B; border-color: #22392B; }
+.spin { width: 15px; height: 15px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.32); border-top-color: #FFFFFF; display: inline-block; }
+.btn-secondary { background: #FFFFFF; border-color: #D4DCD7; color: #141A16; }
+.btn-secondary.hover { background: #F4F7F5; border-color: #B9C4BD; }
+.btn-secondary.pressed { background: #E9EEEB; transform: scale(0.98); }
+.btn-onDark { background: #4BE277; border-color: #4BE277; color: #003915; }
+.btn-onDark.hover { background: #6BFF8F; border-color: #6BFF8F; }
+.btn-onDark-2 { background: transparent; border-color: #3D4A3D; color: #FFFFFF; }
+
+/* ---- top bar ---- */
+.topbar { height: 74px; background: #FFFFFF; border-bottom: 1px solid #E3E8E5; display: flex; align-items: center; padding: 0 28px; gap: 2px; }
+.logo { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 800; letter-spacing: -0.4px; color: #141A16; margin-right: 30px; }
+.logo .mark { width: 30px; height: 30px; border-radius: 8px; background: #15251B; color: #45F28D; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; }
+.logo i { font-style: normal; font-weight: 500; color: #7A857E; }
+.nl { height: 38px; padding: 0 13px; display: inline-flex; align-items: center; border-radius: 7px; font-size: 15px; font-weight: 500; color: #4A554E; text-decoration: none; }
+.nl.hover { background: #F4F7F5; color: #141A16; }
+.nl.current { color: #141A16; font-weight: 600; box-shadow: inset 0 -2px 0 #15251B; border-radius: 7px 7px 0 0; }
+.nl.focus { outline: 2px solid #1A7A33; outline-offset: 2px; }
+.stuck { background: rgba(255,255,255,0.92); box-shadow: 0 6px 20px rgba(20,26,22,0.10); }
+
+/* ---- field ---- */
+.field { width: 330px; }
+.field label { display: block; font-size: 13px; font-weight: 600; color: #141A16; margin-bottom: 7px; }
+.inp { height: 52px; width: 100%; border-radius: 8px; background: #FFFFFF; border: 1px solid #D4DCD7; color: #141A16; font-size: 15px; padding: 0 14px; display: flex; align-items: center; }
+.inp.ph { color: #9AA39D; }
+.inp.focus { border-color: #15251B; outline: 2px solid #1A7A33; outline-offset: 2px; }
+.inp.err { border-color: #C0392B; background: #FDF6F5; }
+.inp.ok { border-color: #1A7A33; }
+.msg { margin-top: 8px; font-size: 13px; line-height: 19px; }
+.msg.e { color: #C0392B; } .msg.o { color: #1A7A33; } .msg.h { color: #6B756F; }
+.msg a { color: #C0392B; }
+
+/* ---- faq ---- */
+.faq { width: 540px; }
+.q { padding: 20px 0; border-top: 1px solid #D4DCD7; }
+.q h4 { margin: 0; font-size: 17px; line-height: 25px; font-weight: 700; color: #141A16; display: flex; justify-content: space-between; gap: 16px; align-items: center; letter-spacing: -0.2px; }
+.q h4 i { color: #8A938D; font-style: normal; font-weight: 400; font-size: 13px; flex-shrink: 0; }
+.q p { margin: 10px 0 0; font-size: 15px; line-height: 24px; color: #4A554E; }
+.q.hover h4 { color: #1A7A33; }
+.q.focus { outline: 2px solid #1A7A33; outline-offset: 4px; border-radius: 4px; }
+
+/* ---- day chips ---- */
+.days { display: inline-flex; gap: 10px; }
+.day { border: 1px solid #E3E8E5; border-radius: 10px; padding: 13px 12px; width: 134px; background: #FFFFFF; }
+.day .d { font-size: 11px; color: #8A938D; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.3px; }
+.day .v { margin-top: 8px; font-size: 16.5px; font-weight: 700; color: #141A16; font-feature-settings: 'tnum'; }
+.day .s { margin-top: 9px; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+.s-ok { color: #1A7A33; } .s-wait { color: #8A6A0F; } .s-stop { color: #C0392B; }
+.day.wait { border-color: #E8DCB8; background: #FDFBF3; }
+.day.stop { border-color: #E8C4BE; background: #FDF6F5; }
+
+/* ---- contrast table ---- */
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid #E3E8E5; }
+th { font-size: 11.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #8A938D; }
+td.sw { width: 1%; white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; gap: 8px; }
+.sq { width: 18px; height: 18px; border-radius: 5px; border: 1px solid rgba(20,26,22,0.14); }
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #4A554E; }
+.pass { color: #1A7A33; font-weight: 700; }
+.note { margin: 18px 0 0; font-size: 13.5px; line-height: 21px; color: #4A554E; }
+.note code { color: #1A7A33; }
+</style>
+</head>
+<body>
+
+<p class="page-nav"><a href="index.html">&#8592; Landing page</a></p>
+
+<div class="sheet">
+
+<h1 class="t">States</h1>
+<p class="i">Every control on the page, in each state it can be in, drawn on the ground it actually sits on. A marketing page still has to satisfy rule 4 &#8212; contrast, 48dp targets, focus rings, and status never carried by colour alone &#8212; and this board is where that is shown rather than asserted. <em style="color:#D4E7DD;font-style:normal;">All of it moved to paper</em> when the page did, which changed every value below.</p>
+
+<!-- ============ buttons ============ -->
+<h2 class="s">Calls to action</h2>
+<p class="n">The primary is <em>ink</em>, not green &#8212; <code>#15251B</code> on white. A saturated green button on a white page reads consumer; a near&#8209;black one reads like software somebody pays for, which is the register the brief asks for. Green stays for kickers, ticks and the checked&#8209;day status, so it still signals the brand without carrying the click. On the closing dark band the accent comes back, because there the contrast runs the other way.</p>
+<div class="stage">
+  <div class="row">
+    <span class="cell"><span class="lbl">Enabled</span><a class="btn btn-primary" href="#">Start free</a></span>
+    <span class="cell"><span class="lbl">Hover</span><a class="btn btn-primary hover" href="#">Start free</a></span>
+    <span class="cell"><span class="lbl">Pressed</span><a class="btn btn-primary pressed" href="#">Start free</a></span>
+    <span class="cell"><span class="lbl">Focus&#8209;visible</span><a class="btn btn-primary focus" href="#">Start free</a></span>
+    <span class="cell"><span class="lbl">Loading</span><span class="btn btn-primary loading"><span class="spin"></span> Creating&#8230;</span></span>
+    <span class="cell"><span class="lbl">Disabled</span><span class="btn btn-primary disabled">Start free</span></span>
+  </div>
+  <div class="row" style="margin-top:26px;">
+    <span class="cell"><span class="lbl">Secondary</span><a class="btn btn-secondary" href="#">Watch a 2&#8209;minute tour</a></span>
+    <span class="cell"><span class="lbl">Hover</span><a class="btn btn-secondary hover" href="#">Watch a 2&#8209;minute tour</a></span>
+    <span class="cell"><span class="lbl">Pressed</span><a class="btn btn-secondary pressed" href="#">Watch a 2&#8209;minute tour</a></span>
+  </div>
+</div>
+<div class="stage dark" style="margin-top:14px;">
+  <div class="row">
+    <span class="cell"><span class="lbl">On the closing band</span><a class="btn btn-onDark" href="#">Start free</a></span>
+    <span class="cell"><span class="lbl">Hover</span><a class="btn btn-onDark hover" href="#">Start free</a></span>
+    <span class="cell"><span class="lbl">Secondary</span><a class="btn btn-onDark-2" href="#">Watch a 2&#8209;minute tour</a></span>
+  </div>
+</div>
+
+<!-- ============ nav ============ -->
+<h2 class="s">Top bar</h2>
+<p class="n">White with a hairline under it at rest. Once the hero scrolls past it sticks, goes translucent and takes a soft shadow &#8212; the only motion on the page that is not a spring, because a sticky bar that springs is a sticky bar people complain about. The current section is marked by weight <em>and</em> an underline, never colour alone.</p>
+<div class="stage flush">
+  <div class="topbar">
+    <span class="logo"><span class="mark">U</span> Uzapay <i>POS</i></span>
+    <a class="nl current" href="#">What it does</a>
+    <a class="nl hover" href="#">How it works</a>
+    <a class="nl focus" href="#">Who it&#8217;s for</a>
+    <a class="nl" href="#">Pricing</a>
+    <a class="nl" href="#">FAQ</a>
+    <span style="margin-left:auto;display:flex;gap:8px;"><a class="btn btn-secondary" href="#" style="height:40px;padding:0 16px;">Log in</a><a class="btn btn-primary" href="#" style="height:40px;padding:0 16px;">Start free</a></span>
+  </div>
+  <div class="topbar stuck">
+    <span class="logo"><span class="mark">U</span> Uzapay <i>POS</i></span>
+    <a class="nl" href="#">What it does</a>
+    <a class="nl current" href="#">How it works</a>
+    <a class="nl" href="#">Who it&#8217;s for</a>
+    <a class="nl" href="#">Pricing</a>
+    <a class="nl" href="#">FAQ</a>
+    <span style="margin-left:auto;display:flex;gap:8px;"><a class="btn btn-secondary" href="#" style="height:40px;padding:0 16px;">Log in</a><a class="btn btn-primary" href="#" style="height:40px;padding:0 16px;">Start free</a></span>
+  </div>
+  <p style="margin:0;padding:14px 28px 18px;font-size:13px;color:#6B756F;background:#F4F7F5;">Above: at rest. Below: stuck, after the hero leaves.</p>
+</div>
+
+<!-- ============ field ============ -->
+<h2 class="s">The one field on the page</h2>
+<p class="n">Both CTAs lead to the same thing: an email, then a password. It matters here because the page&#8217;s whole promise is that it tells you the truth early, and the first refusal a visitor meets decides whether they believe the rest of it. Every message says what to do next rather than what went wrong.</p>
+<div class="stage wash">
+  <div class="row">
+    <span class="cell field"><span class="lbl">Empty</span><label>Your email</label><span class="inp ph">you@yourshop.co.ke</span><span class="msg h">One confirmation email. Nothing else, ever.</span></span>
+    <span class="cell field"><span class="lbl">Focus</span><label>Your email</label><span class="inp focus">amina@</span><span class="msg h">One confirmation email. Nothing else, ever.</span></span>
+    <span class="cell field"><span class="lbl">Error</span><label>Your email</label><span class="inp err">amina@mamanjeri</span><span class="msg e">That address is missing its ending &#8212; .com or .co.ke.</span></span>
+  </div>
+  <div class="row" style="margin-top:26px;">
+    <span class="cell field"><span class="lbl">Already taken</span><label>Your email</label><span class="inp err">amina@mamanjeri.co.ke</span><span class="msg e">You already have an account. <a href="#">Log in instead</a>.</span></span>
+    <span class="cell field"><span class="lbl">Accepted</span><label>Your email</label><span class="inp ok">amina@mamanjeri.co.ke</span><span class="msg o">&#10003; Sent. Open it on this phone to finish.</span></span>
+    <span class="cell field"><span class="lbl">Offline</span><label>Your email</label><span class="inp">amina@mamanjeri.co.ke</span><span class="msg h">No connection right now. The app works offline &#8212; signing up needs one minute of signal.</span></span>
+  </div>
+</div>
+
+<!-- ============ faq ============ -->
+<h2 class="s">FAQ, open and closed</h2>
+<p class="n">The first answer is open on arrival and the rest are closed. The caret rotates on a spring, interruptible from wherever it is &#8212; somebody tapping three questions quickly must not watch three animations queue up behind each other.</p>
+<div class="stage">
+  <div class="faq">
+    <div class="q"><h4>Does it really work without internet? <i>&#9650;</i></h4><p>Yes &#8212; even from cold. Open the app on a phone with no connection at all and the register is ready. Your sales sit safely on the device and go up the moment you&#8217;re back.</p></div>
+    <div class="q hover"><h4>Does it take M&#8209;Pesa or card payments? <i>&#9660;</i></h4></div>
+    <div class="q focus"><h4>What printer do I need? <i>&#9660;</i></h4></div>
+    <div class="q"><h4>Can my cashier see the takings? <i>&#9660;</i></h4></div>
+  </div>
+</div>
+
+<!-- ============ day status ============ -->
+<h2 class="s">A day&#8217;s status, three ways</h2>
+<p class="n">The checked&#8209;week strip is the one place a colour carries meaning, so each state also carries a glyph and a plain phrase &#8212; <em>Checks out</em>, <em>Re&#8209;checking</em>, <em>Needs you</em> &#8212; and the two that are not clean change their border and ground as well. Read in greyscale, all three are still distinguishable.</p>
+<div class="stage">
+  <div class="days">
+    <div class="day"><span class="d">WED 23</span><span class="v">39,880</span><span class="s s-ok">&#10003; Checks out</span></div>
+    <div class="day wait"><span class="d">THU 24</span><span class="v">72,410</span><span class="s s-wait">&#9203; Re&#8209;checking</span></div>
+    <div class="day stop"><span class="d">SAT 26</span><span class="v">&#8212;</span><span class="s s-stop">&#10007; Needs you</span></div>
+  </div>
+  <div class="days" style="margin-left:22px;filter:grayscale(1);">
+    <div class="day"><span class="d">WED 23</span><span class="v">39,880</span><span class="s s-ok">&#10003; Checks out</span></div>
+    <div class="day wait"><span class="d">THU 24</span><span class="v">72,410</span><span class="s s-wait">&#9203; Re&#8209;checking</span></div>
+    <div class="day stop"><span class="d">SAT 26</span><span class="v">&#8212;</span><span class="s s-stop">&#10007; Needs you</span></div>
+  </div>
+</div>
+
+<!-- ============ contrast ============ -->
+<h2 class="s">Contrast, measured</h2>
+<p class="n">Rule 4 is pass/fail, so here is the pass. Every value is checked against the ground it is actually drawn on &#8212; <code>paperWhite</code> and <code>paperWash</code> for the page, and the closing band&#8217;s ink for the two colours that appear there.</p>
+<div class="stage">
+  <table>
+    <tr><th>Foreground</th><th>On</th><th>Ratio</th><th>Used for</th><th></th></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#141A16"></span><span class="mono">#141A16</span></span></td><td class="mono">#FFFFFF</td><td class="mono">16.4:1</td><td>Headlines, card titles, figures</td><td class="pass">AAA</td></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#141A16"></span><span class="mono">#141A16</span></span></td><td class="mono">#F4F7F5</td><td class="mono">15.2:1</td><td>The same, on a wash band</td><td class="pass">AAA</td></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#4A554E"></span><span class="mono">#4A554E</span></span></td><td class="mono">#FFFFFF</td><td class="mono">8.0:1</td><td>Body copy, card text, bullets</td><td class="pass">AAA</td></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#6B756F"></span><span class="mono">#6B756F</span></span></td><td class="mono">#FFFFFF</td><td class="mono">5.0:1</td><td>Fine print, captions</td><td class="pass">AA</td></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#8A938D"></span><span class="mono">#8A938D</span></span></td><td class="mono">#FFFFFF</td><td class="mono">3.2:1</td><td>Chart axis labels, FAQ caret &#8212; <em style="color:#4A554E;font-style:normal;">non&#8209;text only</em></td><td class="pass">AA&nbsp;&#8202;NT</td></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#1A7A33"></span><span class="mono">#1A7A33</span></span></td><td class="mono">#FFFFFF</td><td class="mono">4.8:1</td><td>Kickers, ticks, <em style="color:#4A554E;font-style:normal;">Checks out</em></td><td class="pass">AA</td></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#FFFFFF"></span><span class="mono">#FFFFFF</span></span></td><td class="mono">#15251B</td><td class="mono">14.8:1</td><td>Label on the primary button</td><td class="pass">AAA</td></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#8A6A0F"></span><span class="mono">#8A6A0F</span></span></td><td class="mono">#FDFBF3</td><td class="mono">5.2:1</td><td><em style="color:#4A554E;font-style:normal;">Re&#8209;checking</em></td><td class="pass">AA</td></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#C0392B"></span><span class="mono">#C0392B</span></span></td><td class="mono">#FDF6F5</td><td class="mono">5.1:1</td><td><em style="color:#4A554E;font-style:normal;">Needs you</em>, field errors</td><td class="pass">AA</td></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#B5C6BC"></span><span class="mono">#B5C6BC</span></span></td><td class="mono">#101C15</td><td class="mono">9.6:1</td><td>Closing band and footer copy</td><td class="pass">AAA</td></tr>
+    <tr><td class="sw"><span class="chip"><span class="sq" style="background:#4BE277"></span><span class="mono">#4BE277</span></span></td><td class="mono">#101C15</td><td class="mono">10.1:1</td><td>Closing band kicker and CTA</td><td class="pass">AAA</td></tr>
+  </table>
+  <p class="note"><strong>Three of these are derived, and the move to paper is why.</strong> <code>status.ok</code>, <code>status.attention</code> and <code>status.error</code> are drawn for the dark chrome and none survives white &#8212; <code>#F2C14E</code> manages 1.9:1. Each is darkened until it passes, keeping its hue. <code>#4A554E</code> and <code>#6B756F</code> are <code>paperMutedInk</code> and one step lighter for captions. If this page is built, all five want to join the token layer beside <code>AppReportRoles</code> rather than live in a stylesheet.</p>
+  <p class="note"><strong>One row is deliberately below 4.5.</strong> <code>#8A938D</code> at 3.2:1 is used for chart axis ticks and the collapsed FAQ caret and for nothing that has to be read &#8212; it clears the 3:1 bar for non&#8209;text and graphical objects. Every word on the page is at 4.8:1 or better.</p>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landing page &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Landing page</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Four artboards for the marketing site, drawn on <code class="mono">AppTokens.profoundVerdant</code> with the two figure&#8209;bearing sections on <code class="mono">AppReportRoles</code> paper. The brief is <a href="../../marketing/landing-page-prompt.md">landing-page-prompt.md</a> and the reference is <a href="https://mobilesasa.com/">mobilesasa.com</a>. Read <a href="README.md">README.md</a> for what was taken from it, what was refused, and the three colours that are not tokens yet.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="landing-desktop.html">
+      <h2>The page &#8212; desktop</h2>
+      <p>All eleven sections at full height: hero, fact band, the problem, six cards, reconciliation on paper, four verticals, setup, pricing, FAQ, closing CTA, footer.</p>
+      <span class="size">1440</span>
+    </a>
+
+    <a class="board" href="landing-phone.html">
+      <h2>The page &#8212; phone</h2>
+      <p>The same eleven at <code class="mono">compact</code>. Four things change shape rather than shrink: the nav, the fact band, the reconciliation strip and the FAQ.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="landing-states.html">
+      <h2>States</h2>
+      <p>Both CTAs in six states, the top bar at rest and stuck, the signup field including its refusals, the FAQ open and closed, a day&#8217;s status in greyscale, and the contrast table.</p>
+      <span class="size">1160</span>
+    </a>
+
+    <a class="board" href="landing-inspiration.html">
+      <h2>What the inspiration gave</h2>
+      <p>Eleven of Mobile Sasa&#8217;s devices, each marked took / bent / left, and the fact band drawn both ways &#8212; the four figures a copied band would have claimed, beside the four that are true.</p>
+      <span class="size">1100</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

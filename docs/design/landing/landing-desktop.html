@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landing page &#8212; desktop</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+
+body { margin: 0; background: #03110B; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+figcaption { font-size: 13px; color: #869585; max-width: 900px; text-align: center; line-height: 19px; }
+figcaption em { color: #BCCBB9; font-style: normal; }
+
+/* ================= the artboard: 1440 wide, natural height ================= */
+.site { width: 1440px; box-sizing: border-box; background: #FFFFFF; color: #141A16; overflow: hidden; border-radius: 4px; box-shadow: 0 24px 60px rgba(3,17,11,0.6); font-size: 16px; }
+.site * { box-sizing: border-box; }
+.site a { text-decoration: none; }
+.wrap { max-width: 1160px; margin: 0 auto; padding: 0 48px; }
+.wash { background: #F4F7F5; }
+.rule-t { border-top: 1px solid #E3E8E5; }
+
+/* ---- buttons: dark ink primary, the serious-SaaS default ---- */
+.btn { height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 22px; border-radius: 8px; border: 1px solid transparent; font-size: 14.5px; font-weight: 700; letter-spacing: 0.2px; white-space: nowrap; }
+.btn-primary { background: #15251B; border-color: #15251B; color: #FFFFFF; }
+.btn-secondary { background: #FFFFFF; border-color: #D4DCD7; color: #141A16; }
+.btn-ghost { background: transparent; color: #4A554E; }
+.btn-lg { height: 54px; padding: 0 28px; font-size: 15.5px; }
+
+/* ---- top bar ---- */
+.top { height: 74px; border-bottom: 1px solid #E3E8E5; display: flex; align-items: center; background: #FFFFFF; }
+.top .wrap { display: flex; align-items: center; width: 100%; }
+.logo { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 800; letter-spacing: -0.4px; color: #141A16; }
+.logo .mark { width: 30px; height: 30px; border-radius: 8px; background: #15251B; color: #45F28D; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; }
+.logo i { font-style: normal; font-weight: 500; color: #7A857E; }
+.top nav { display: flex; align-items: center; gap: 2px; margin-left: 40px; }
+.top nav a { height: 38px; padding: 0 13px; display: inline-flex; align-items: center; border-radius: 7px; font-size: 15px; font-weight: 500; color: #4A554E; }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* ---- hero ---- */
+.hero { padding: 84px 0 96px; }
+.hero .wrap { display: grid; grid-template-columns: 556px 1fr; gap: 48px; align-items: center; }
+.eyebrow { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 15px; background: #EAF4EC; border: 1px solid #CDE6D4; color: #1A7A33; font-size: 13px; font-weight: 600; }
+h1 { margin: 22px 0 0; font-size: 60px; line-height: 63px; font-weight: 800; letter-spacing: -2.2px; color: #141A16; }
+h1 em { font-style: normal; color: #1A7A33; }
+.lede { margin: 24px 0 0; font-size: 18.5px; line-height: 30px; color: #4A554E; max-width: 510px; }
+.cta-row { margin-top: 32px; display: flex; align-items: center; gap: 11px; }
+.fineprint { margin: 16px 0 0; font-size: 14px; color: #6B756F; }
+
+/* hero shot: dark phone against white, a report card floated off it */
+.shot { position: relative; height: 496px; }
+.shot .phone { position: absolute; left: 34px; top: 0; width: 276px; background: #071610; border: 9px solid #15251B; border-radius: 32px; padding: 17px 15px 22px; box-shadow: 0 32px 64px rgba(20,26,22,0.30); }
+.shot .paper { position: absolute; right: 0; bottom: 18px; width: 384px; background: #FFFFFF; border: 1px solid #E3E8E5; border-radius: 14px; padding: 20px 22px; box-shadow: 0 22px 48px rgba(20,26,22,0.14); }
+
+.ph-shop { font-size: 13.5px; font-weight: 600; color: #D4E7DD; display: flex; justify-content: space-between; }
+.ph-greet { margin-top: 15px; font-size: 19px; font-weight: 700; color: #FFFFFF; letter-spacing: -0.3px; }
+.ph-flag { margin-top: 13px; border-radius: 10px; background: rgba(242,193,78,0.10); border: 1px solid rgba(242,193,78,0.34); padding: 10px 12px; }
+.ph-flag b { display: block; font-size: 12.5px; font-weight: 700; color: #F2C14E; }
+.ph-flag span { display: block; font-size: 11.5px; line-height: 16px; color: #BCCBB9; margin-top: 1px; }
+.ph-grid { margin-top: 15px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px 8px; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.well { width: 44px; height: 44px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.tile span { font-size: 10px; color: #BCCBB9; text-align: center; line-height: 12px; }
+
+.p-head { display: flex; align-items: baseline; justify-content: space-between; }
+.p-title { font-size: 14.5px; font-weight: 700; color: #141A16; }
+.p-sub { font-size: 12px; color: #6B756F; }
+.p-fig { margin-top: 12px; font-size: 31px; font-weight: 800; color: #141A16; letter-spacing: -1.1px; font-feature-settings: 'tnum'; }
+.p-cap { font-size: 12px; color: #6B756F; margin-top: 2px; }
+.bars { margin-top: 18px; display: flex; align-items: flex-end; gap: 8px; height: 84px; }
+.bars i { flex: 1; border-radius: 3px 3px 0 0; background: #25AB2E; display: block; }
+.bars i.t { background: #1DA39E; }
+.axis { margin-top: 7px; display: flex; justify-content: space-between; font-size: 10.5px; color: #8A938D; font-family: 'JetBrains Mono', monospace; }
+.p-note { margin-top: 15px; padding-top: 13px; border-top: 1px solid #E3E8E5; font-size: 12px; color: #1A7A33; font-weight: 600; }
+
+/* ---- fact band ---- */
+.facts { border-top: 1px solid #E3E8E5; border-bottom: 1px solid #E3E8E5; background: #F4F7F5; }
+.facts .wrap { display: grid; grid-template-columns: repeat(4, 1fr); }
+.fact { padding: 34px 0 36px; }
+.facts .fact + .fact { border-left: 1px solid #E3E8E5; padding-left: 34px; }
+.fact b { display: block; font-size: 29px; font-weight: 800; color: #141A16; letter-spacing: -0.9px; }
+.fact span { display: block; margin-top: 7px; font-size: 14.5px; line-height: 21px; color: #4A554E; max-width: 215px; }
+
+/* ---- section furniture ---- */
+section.band { padding: 104px 0; }
+.kicker { font-size: 12.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #1A7A33; }
+h2 { margin: 14px 0 0; font-size: 42px; line-height: 49px; font-weight: 800; letter-spacing: -1.4px; color: #141A16; max-width: 780px; }
+.sub { margin: 18px 0 0; font-size: 18px; line-height: 29px; color: #4A554E; max-width: 660px; }
+
+/* ---- problem ---- */
+.probs { margin-top: 52px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+.prob { border-top: 2px solid #141A16; padding: 20px 0 0; }
+.prob p { margin: 0; font-size: 19.5px; line-height: 30px; color: #141A16; font-weight: 600; letter-spacing: -0.2px; }
+
+/* ---- feature cards ---- */
+.cards { margin-top: 56px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.card { background: #FFFFFF; border: 1px solid #E3E8E5; border-radius: 14px; padding: 28px 26px 26px; }
+.card .ico { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 19px; background: #F4F7F5; border: 1px solid #E3E8E5; }
+.card h3 { margin: 18px 0 0; font-size: 20px; line-height: 27px; font-weight: 700; color: #141A16; letter-spacing: -0.4px; }
+.card p { margin: 10px 0 0; font-size: 15px; line-height: 24px; color: #4A554E; }
+.card ul { margin: 18px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.card li { font-size: 14px; line-height: 21px; color: #4A554E; padding-left: 24px; position: relative; }
+.card li::before { content: '\2713'; position: absolute; left: 0; top: -1px; color: #1A7A33; font-weight: 700; font-size: 13px; }
+
+/* ---- reconciliation ---- */
+.beats { margin-top: 56px; display: grid; grid-template-columns: repeat(4, 1fr); background: #FFFFFF; border: 1px solid #E3E8E5; border-radius: 14px; overflow: hidden; }
+.beat { padding: 30px 26px 32px; }
+.beat + .beat { border-left: 1px solid #E3E8E5; }
+.beat .n { width: 28px; height: 28px; border-radius: 50%; background: #15251B; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.beat h4 { margin: 16px 0 0; font-size: 17px; line-height: 24px; font-weight: 700; color: #141A16; letter-spacing: -0.2px; }
+.beat p { margin: 9px 0 0; font-size: 14px; line-height: 22px; color: #4A554E; }
+.days { margin-top: 20px; background: #FFFFFF; border: 1px solid #E3E8E5; border-radius: 14px; padding: 24px 26px 26px; }
+.days .hd { display: flex; justify-content: space-between; align-items: baseline; }
+.days .hd b { font-size: 14.5px; color: #141A16; }
+.days .hd span { font-size: 12.5px; color: #6B756F; }
+.strip { margin-top: 18px; display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+.day { border: 1px solid #E3E8E5; border-radius: 10px; padding: 13px 12px; }
+.day .d { font-size: 11px; color: #8A938D; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.3px; }
+.day .v { margin-top: 8px; font-size: 16.5px; font-weight: 700; color: #141A16; font-feature-settings: 'tnum'; }
+.day .s { margin-top: 9px; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+.s-ok { color: #1A7A33; } .s-wait { color: #8A6A0F; } .s-stop { color: #C0392B; }
+.day.wait { border-color: #E8DCB8; background: #FDFBF3; }
+.day.stop { border-color: #E8C4BE; background: #FDF6F5; }
+
+/* ---- verticals ---- */
+.fors { margin-top: 56px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; }
+.for h4 { margin: 0; font-size: 17.5px; font-weight: 700; color: #141A16; padding-bottom: 16px; border-bottom: 1px solid #D4DCD7; letter-spacing: -0.2px; }
+.for ul { margin: 18px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.for li { font-size: 14.5px; line-height: 22px; color: #4A554E; }
+
+/* ---- steps ---- */
+.steps { margin-top: 56px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.step { background: #FFFFFF; border: 1px solid #E3E8E5; border-radius: 14px; padding: 26px 24px; }
+.step .n { font-size: 12.5px; font-weight: 700; color: #1A7A33; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; }
+.step h4 { margin: 14px 0 0; font-size: 17.5px; font-weight: 700; color: #141A16; letter-spacing: -0.2px; }
+.step p { margin: 9px 0 0; font-size: 14.5px; line-height: 22px; color: #4A554E; }
+
+/* ---- pricing ---- */
+.price { margin-top: 52px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.price .box { background: #FFFFFF; border: 1px solid #E3E8E5; border-radius: 16px; padding: 36px; }
+.price .box.lead { border: 2px solid #15251B; }
+.price .tag { font-size: 12.5px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase; color: #1A7A33; }
+.price .amt { margin-top: 16px; font-size: 48px; font-weight: 800; color: #141A16; letter-spacing: -1.8px; }
+.price .amt small { font-size: 18px; font-weight: 600; color: #6B756F; letter-spacing: 0; }
+.price p { margin: 14px 0 0; font-size: 15px; line-height: 23px; color: #4A554E; }
+.price ul { margin: 22px 0 26px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 11px; }
+.price li { font-size: 14.5px; line-height: 22px; color: #141A16; padding-left: 26px; position: relative; }
+.price li::before { content: '\2713'; position: absolute; left: 0; color: #1A7A33; font-weight: 700; }
+
+/* ---- faq ---- */
+.faqs { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 0 56px; }
+.faq { padding: 26px 0; border-top: 1px solid #D4DCD7; }
+.faq h4 { margin: 0; font-size: 17px; line-height: 25px; font-weight: 700; color: #141A16; letter-spacing: -0.2px; }
+.faq p { margin: 10px 0 0; font-size: 15px; line-height: 24px; color: #4A554E; }
+
+/* ---- closing: the one dark band, so the last thing you see is the product ---- */
+.close { background: #101C15; padding: 100px 0; text-align: center; }
+.close h2 { color: #FFFFFF; margin: 0 auto; max-width: 740px; }
+.close .kicker { color: #45F28D; }
+.close .sub { color: #B5C6BC; margin-left: auto; margin-right: auto; }
+.close .cta-row { justify-content: center; }
+.close .fineprint { color: #8CA095; }
+.btn-onDark { background: #4BE277; border-color: #4BE277; color: #003915; }
+.btn-onDark-2 { background: transparent; border-color: #3D4A3D; color: #FFFFFF; }
+
+/* ---- footer ---- */
+footer { background: #101C15; border-top: 1px solid rgba(255,255,255,0.08); padding: 56px 0 40px; color: #B5C6BC; }
+.fcols { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; }
+.fcols h5 { margin: 0 0 16px; font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #7E8F85; }
+.fcols a, .fcols p { display: block; margin: 0 0 11px; font-size: 14.5px; line-height: 21px; color: #B5C6BC; }
+footer .logo { color: #FFFFFF; }
+footer .logo .mark { background: #4BE277; color: #003915; }
+footer .logo i { color: #7E8F85; }
+.legal { margin-top: 48px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; font-size: 13px; color: #7E8F85; }
+.legal a { color: #7E8F85; }
+</style>
+</head>
+<body>
+
+<p class="page-nav"><a href="index.html">&#8592; Landing page</a></p>
+
+<div class="page-stage">
+<figure>
+<div class="site">
+
+  <!-- ================= top bar ================= -->
+  <div class="top">
+    <div class="wrap">
+      <span class="logo"><span class="mark">U</span> Uzapay <i>POS</i></span>
+      <nav>
+        <a href="#">What it does</a>
+        <a href="#">How it works</a>
+        <a href="#">Who it&#8217;s for</a>
+        <a href="#">Pricing</a>
+        <a href="#">FAQ</a>
+      </nav>
+      <span class="right">
+        <a class="btn btn-ghost" href="#">Log in</a>
+        <a class="btn btn-primary" href="#">Start free</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- ================= hero ================= -->
+  <div class="hero">
+    <div class="wrap">
+      <div>
+        <span class="eyebrow">&#9679; Now in beta with shops across Kenya</span>
+        <h1>Tonight the drawer adds up.<br>Or you&#8217;ll know <em>why</em>.</h1>
+        <p class="lede">Uzapay keeps selling when the network drops, counts every shift as it closes, and re&#8209;checks your whole day overnight. You wake up to answers instead of a hunt.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary btn-lg" href="#">Start free</a>
+          <a class="btn btn-secondary btn-lg" href="#">Watch a 2&#8209;minute tour</a>
+        </div>
+        <p class="fineprint">No card. No contract. Selling the same afternoon.</p>
+      </div>
+
+      <div class="shot">
+        <div class="phone">
+          <span class="ph-shop">Mama Njeri Stores <span style="color:#849E8F;">&#9776;</span></span>
+          <div class="ph-greet">Good evening, Amina</div>
+          <div class="ph-flag">
+            <b>3 days don&#8217;t add up</b>
+            <span>Thu, Fri and Sat &#8212; tap to see why</span>
+          </div>
+          <div class="ph-grid">
+            <span class="tile"><span class="well" style="background:rgba(57,140,242,0.14);border:1px solid rgba(57,140,242,0.38);color:#6FB7F2;">&#128179;</span><span>Register</span></span>
+            <span class="tile"><span class="well" style="background:rgba(69,242,141,0.14);border:1px solid rgba(69,242,141,0.38);color:#45F28D;">&#128202;</span><span>Sales</span></span>
+            <span class="tile"><span class="well" style="background:rgba(242,193,78,0.14);border:1px solid rgba(242,193,78,0.38);color:#F2C14E;">&#8617;</span><span>Returns</span></span>
+            <span class="tile"><span class="well" style="background:rgba(118,63,242,0.16);border:1px solid rgba(118,63,242,0.40);color:#A98BF5;">&#128230;</span><span>Stock</span></span>
+            <span class="tile"><span class="well" style="background:rgba(242,140,78,0.14);border:1px solid rgba(242,140,78,0.38);color:#F0A868;">&#128181;</span><span>Expenses</span></span>
+            <span class="tile"><span class="well" style="background:rgba(69,242,141,0.14);border:1px solid rgba(69,242,141,0.38);color:#45F28D;">&#128200;</span><span>Reports</span></span>
+            <span class="tile"><span class="well" style="background:rgba(222,103,203,0.14);border:1px solid rgba(222,103,203,0.38);color:#E38FD6;">&#128100;</span><span>Staff</span></span>
+            <span class="tile"><span class="well" style="background:rgba(57,140,242,0.14);border:1px solid rgba(57,140,242,0.38);color:#6FB7F2;">&#9881;</span><span>Settings</span></span>
+          </div>
+        </div>
+
+        <div class="paper">
+          <div class="p-head"><span class="p-title">This week</span><span class="p-sub">Mon 21 &#8211; Sun 27 Sep</span></div>
+          <div class="p-fig">KES 412,900</div>
+          <div class="p-cap">1,204 sales across 6 trading days</div>
+          <div class="bars">
+            <i style="height:58%"></i><i style="height:71%"></i><i style="height:49%"></i>
+            <i style="height:83%"></i><i style="height:96%"></i><i class="t" style="height:64%"></i>
+            <i style="height:22%;background:#E3E8E5"></i>
+          </div>
+          <div class="axis"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+          <div class="p-note">&#10003;&nbsp; Checked against all 1,204 sales at 06:14 today</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= fact band ================= -->
+  <div class="facts">
+    <div class="wrap">
+      <div class="fact"><b>No signal?</b><span>Keep selling. Everything catches up when the network does.</span></div>
+      <div class="fact"><b>4 roles</b><span>Your cashier sees a till. You see the whole business.</span></div>
+      <div class="fact"><b>One story</b><span>Sales, stock, shifts and costs, all in the same record.</span></div>
+      <div class="fact"><b>KES</b><span>Or whatever you trade in. Your prices, your call.</span></div>
+    </div>
+  </div>
+
+  <!-- ================= problem ================= -->
+  <section class="band">
+    <div class="wrap">
+      <span class="kicker">Sound familiar</span>
+      <h2>The till was never the problem.</h2>
+      <p class="sub">Ringing up a sale is the easy part, and every app on the market does it. Nobody hands you the evening.</p>
+      <div class="probs">
+        <div class="prob"><p>The drawer is short again, and nobody can tell you which shift it happened on.</p></div>
+        <div class="prob"><p>The shelf and the system stopped agreeing weeks ago, and neither will admit it first.</p></div>
+        <div class="prob"><p>The only person who understands the numbers is the person you&#8217;d have to ask about them.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= features ================= -->
+  <section class="band wash rule-t">
+    <div class="wrap">
+      <span class="kicker">What it does</span>
+      <h2>Six jobs, all the way done.</h2>
+      <p class="sub">Not a feature list. These are the six things a shop actually hands its till, and each one is finished end to end.</p>
+
+      <div class="cards">
+        <div class="card">
+          <span class="ico">&#128246;</span>
+          <h3>The network dies. You don&#8217;t.</h3>
+          <p>Router down, bundles finished, power out on the whole street &#8212; the register does not care. It takes the sale, prints the receipt, and remembers everything.</p>
+          <ul>
+            <li>Sales locked safely onto the phone</li>
+            <li>Sent up the second you&#8217;re back</li>
+            <li>You always see what&#8217;s still waiting</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="ico">&#9201;</span>
+          <h3>Every drawer has a name on it.</h3>
+          <p>Staff open a shift with what&#8217;s in the till and close it with what&#8217;s left. No more anonymous shortfalls at the end of a long week.</p>
+          <ul>
+            <li>Who opened, who closed, what they counted</li>
+            <li>Measured against what that shift sold</li>
+            <li>Short? You&#8217;ll know whose, and when</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="ico">&#128230;</span>
+          <h3>Know what&#8217;s on the shelf. Actually know.</h3>
+          <p>Counting day stops being a guess and an argument. Staff count, managers approve, and the correction is applied once &#8212; by the right person.</p>
+          <ul>
+            <li>Nobody signs off their own numbers</li>
+            <li>Every movement kept, in order</li>
+            <li>Find where it went, not just that it&#8217;s gone</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="ico">&#128200;</span>
+          <h3>Reports you&#8217;ll actually open.</h3>
+          <p>Each one answers a question you already have, instead of handing you a dashboard and wishing you luck.</p>
+          <ul>
+            <li>Today, this week, this month</li>
+            <li>What&#8217;s left after rent, wages and stock</li>
+            <li>Export it and send it to your accountant</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="ico">&#128100;</span>
+          <h3>Your cashier sees a till. You see the business.</h3>
+          <p>Four roles, and a screen someone shouldn&#8217;t have isn&#8217;t greyed out &#8212; it simply isn&#8217;t there. Nothing to explain, nothing to talk anyone out of.</p>
+          <ul>
+            <li>Invite the team by email in a minute</li>
+            <li>Change a role, the screens follow</li>
+            <li>Access ends the day they do</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="ico">&#128220;</span>
+          <h3>If it happened, it&#8217;s written down.</h3>
+          <p>Every refund, correction and approval leaves a line behind it. Not to catch anyone out &#8212; so that honest mistakes stop looking like something worse.</p>
+          <ul>
+            <li>Who did it, when, and to what</li>
+            <li>Returns checked before money moves</li>
+            <li>Plain sentences, not a database dump</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= reconciliation ================= -->
+  <section class="band rule-t">
+    <div class="wrap">
+      <span class="kicker">The part other tills skip</span>
+      <h2>Most systems tell you what they were told. Uzapay checks.</h2>
+      <p class="sub">A running total is only ever as honest as the device keeping it. So every night we throw yesterday&#8217;s total away and work it out again from every sale on record. If the two don&#8217;t match, that&#8217;s not something you should have to notice.</p>
+
+      <div class="beats">
+        <div class="beat">
+          <span class="n">1</span>
+          <h4>You make the sale</h4>
+          <p>Saved on the phone first, sent up second. Always that order, signal or no signal.</p>
+        </div>
+        <div class="beat">
+          <span class="n">2</span>
+          <h4>The day gets flagged</h4>
+          <p>New sales mean yesterday&#8217;s figure is out of date. We mark it rather than quietly leave it.</p>
+        </div>
+        <div class="beat">
+          <span class="n">3</span>
+          <h4>We do the sums again</h4>
+          <p>Not topped up or adjusted. Built again from scratch, from every sale we actually hold.</p>
+        </div>
+        <div class="beat">
+          <span class="n">4</span>
+          <h4>It clears, or it speaks up</h4>
+          <p>A day that matches goes green. Anything else arrives on your home screen with a reason.</p>
+        </div>
+      </div>
+
+      <div class="days">
+        <div class="hd">
+          <b>Your week, checked</b>
+          <span>Exactly what Amina sees when she opens the app</span>
+        </div>
+        <div class="strip">
+          <div class="day"><span class="d">MON 21</span><span class="v">48,120</span><span class="s s-ok">&#10003; Checks out</span></div>
+          <div class="day"><span class="d">TUE 22</span><span class="v">61,340</span><span class="s s-ok">&#10003; Checks out</span></div>
+          <div class="day"><span class="d">WED 23</span><span class="v">39,880</span><span class="s s-ok">&#10003; Checks out</span></div>
+          <div class="day wait"><span class="d">THU 24</span><span class="v">72,410</span><span class="s s-wait">&#9203; Re&#8209;checking</span></div>
+          <div class="day wait"><span class="d">FRI 25</span><span class="v">88,905</span><span class="s s-wait">&#9203; Re&#8209;checking</span></div>
+          <div class="day stop"><span class="d">SAT 26</span><span class="v">&#8212;</span><span class="s s-stop">&#10007; Needs you</span></div>
+          <div class="day"><span class="d">SUN 27</span><span class="v">20,145</span><span class="s s-ok">&#10003; Checks out</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= verticals ================= -->
+  <section class="band wash rule-t">
+    <div class="wrap">
+      <span class="kicker">Who it&#8217;s for</span>
+      <h2>Shops where cash moves fast and hands change often.</h2>
+      <div class="fors">
+        <div class="for">
+          <h4>Corner shops &amp; minimarts</h4>
+          <ul>
+            <li>Three cashiers, one drawer</li>
+            <li>Shelves nobody has time to count</li>
+            <li>Queues that don&#8217;t wait for software</li>
+            <li>An owner who can&#8217;t be there all day</li>
+          </ul>
+        </div>
+        <div class="for">
+          <h4>Bars &amp; restaurants</h4>
+          <ul>
+            <li>Handovers at midnight, not at nine</li>
+            <li>Stock that walks if nobody counts it</li>
+            <li>Crates in, empties out, every week</li>
+            <li>Takings declared shift by shift</li>
+          </ul>
+        </div>
+        <div class="for">
+          <h4>Kiosks &amp; dukas</h4>
+          <ul>
+            <li>One phone and nowhere to put it</li>
+            <li>A signal that comes and goes</li>
+            <li>Receipts only when someone asks</li>
+            <li>You&#8217;re the owner and the cashier</li>
+          </ul>
+        </div>
+        <div class="for">
+          <h4>Hardware &amp; agrovet</h4>
+          <ul>
+            <li>Slow stock that&#8217;s worth real money</li>
+            <li>Returns that need a second look</li>
+            <li>Costs that eat the margin quietly</li>
+            <li>Regulars who expect a proper receipt</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= setup ================= -->
+  <section class="band rule-t">
+    <div class="wrap">
+      <span class="kicker">Getting started</span>
+      <h2>Sign up before lunch. Sell by dinner.</h2>
+      <p class="sub">Two things stand between a brand new shop and its first sale, and the app keeps both on your home screen until they&#8217;re done. No consultant, no install, no weekend of setup.</p>
+      <div class="steps">
+        <div class="step"><span class="n">01</span><h4>Open an account</h4><p>Your email, a password, and the name above your door.</p></div>
+        <div class="step"><span class="n">02</span><h4>Pick your currency</h4><p>The till won&#8217;t price a thing until it knows what money you take.</p></div>
+        <div class="step"><span class="n">03</span><h4>Add one product</h4><p>Just one to get going. Bring the rest in from a spreadsheet later.</p></div>
+        <div class="step"><span class="n">04</span><h4>Bring in the team</h4><p>Invite by email, hand out roles, point it at your printer.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= pricing ================= -->
+  <section class="band wash rule-t">
+    <div class="wrap">
+      <span class="kicker">Pricing</span>
+      <h2>Free while we&#8217;re still building it.</h2>
+      <p class="sub">Real shops are trading on Uzapay today and we haven&#8217;t set prices yet. We&#8217;d rather tell you that than print a number you&#8217;ll watch change in three months.</p>
+
+      <div class="price">
+        <div class="box lead">
+          <span class="tag">Beta &#8212; open now</span>
+          <div class="amt">KES 0<small> / month</small></div>
+          <p>Everything on this page, for every member of staff you have. Nothing locked, nothing saved for a paid tier later.</p>
+          <ul>
+            <li>Unlimited sales, products and staff</li>
+            <li>Offline register on every phone</li>
+            <li>Nightly checks and every report</li>
+            <li>Your numbers stay yours &#8212; take them whenever</li>
+          </ul>
+          <a class="btn btn-primary btn-lg" href="#" style="width:100%">Start free</a>
+        </div>
+        <div class="box">
+          <span class="tag" style="color:#6B756F;">More than one shop?</span>
+          <div class="amt" style="font-size:28px;letter-spacing:-0.6px;line-height:36px;">Run them all from<br>one login.</div>
+          <p>Each shop keeps its own products, staff, currency and figures, and you move between them without signing out. If you&#8217;re opening a second branch, talk to us first &#8212; we&#8217;d rather set you up properly than sell you something.</p>
+          <a class="btn btn-secondary btn-lg" href="#" style="width:100%;margin-top:10px;">Talk to us</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= faq ================= -->
+  <section class="band rule-t">
+    <div class="wrap">
+      <span class="kicker">FAQ</span>
+      <h2>Straight answers.</h2>
+      <div class="faqs">
+        <div class="faq">
+          <h4>Does it really work without internet?</h4>
+          <p>Yes &#8212; even from cold. Open the app on a phone with no connection at all and the register is ready. Your sales sit safely on the device and go up the moment you&#8217;re back.</p>
+        </div>
+        <div class="faq">
+          <h4>Does it take M&#8209;Pesa or card payments?</h4>
+          <p>No, and we&#8217;d rather say so here than let you find out later. Uzapay records how each sale was paid so your figures are right, but the money moves the way it always has.</p>
+        </div>
+        <div class="faq">
+          <h4>What if the phone dies or gets restarted?</h4>
+          <p>Nothing is lost. Anything waiting to be sent is written to the device, not held in memory, and it picks up exactly where it stopped.</p>
+        </div>
+        <div class="faq">
+          <h4>What printer do I need?</h4>
+          <p>The ordinary network thermal kind, the same one most shops already have. Add its address once and send a test page to the roll before your first sale.</p>
+        </div>
+        <div class="faq">
+          <h4>Can my cashier see the takings?</h4>
+          <p>Only if you want them to. A cashier gets the register and their own shift &#8212; reports, staff and history simply aren&#8217;t on their screen.</p>
+        </div>
+        <div class="faq">
+          <h4>Can I run more than one shop?</h4>
+          <p>Yes, from the same login, switching without signing out. Each keeps its own products, staff and figures &#8212; there&#8217;s no single combined report across shops yet.</p>
+        </div>
+        <div class="faq">
+          <h4>Does it work on a computer?</h4>
+          <p>The same app opens in any desktop browser, laid out for the bigger screen. Most owners ring up on a phone and read the reports on a laptop.</p>
+        </div>
+        <div class="faq">
+          <h4>What happens to my numbers if I leave?</h4>
+          <p>You take them with you. Your sales, stock and reports export in a format anyone can open &#8212; we don&#8217;t hold your books to keep your business.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= closing ================= -->
+  <div class="close">
+    <div class="wrap">
+      <span class="kicker">Ready when you are</span>
+      <h2>Stop guessing what today was worth.</h2>
+      <p class="sub">Set it up this afternoon, sell on it tonight, and read the whole day back over breakfast.</p>
+      <div class="cta-row">
+        <a class="btn btn-onDark btn-lg" href="#">Start free</a>
+        <a class="btn btn-onDark-2 btn-lg" href="#">Watch a 2&#8209;minute tour</a>
+      </div>
+      <p class="fineprint">No card. No contract. Selling the same afternoon.</p>
+    </div>
+  </div>
+
+  <!-- ================= footer ================= -->
+  <footer>
+    <div class="wrap">
+      <div class="fcols">
+        <div>
+          <span class="logo"><span class="mark">U</span> Uzapay <i>POS</i></span>
+          <p style="margin-top:16px;max-width:290px;color:#7E8F85;">For shopkeepers who need the evening to add up, not just the sale to go through.</p>
+        </div>
+        <div>
+          <h5>Product</h5>
+          <a href="#">What it does</a><a href="#">How it works</a><a href="#">Pricing</a><a href="#">FAQ</a>
+        </div>
+        <div>
+          <h5>Company</h5>
+          <a href="#">About</a><a href="#">Contact</a><a href="#">Status</a>
+        </div>
+        <div>
+          <h5>Talk to us</h5>
+          <p>Nairobi, Kenya</p>
+          <a href="#">hello@uzapay.com</a>
+        </div>
+      </div>
+      <div class="legal">
+        <span>&#169; 2026 Uzapay POS</span>
+        <span style="display:flex;gap:24px;"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Delete your account</a></span>
+      </div>
+    </div>
+  </footer>
+
+</div>
+<figcaption>The page at <em>1440</em>, full height, on <code style="color:#45F28D;font-family:monospace;font-size:12px;">AppReportRoles</code> paper throughout. White and <code style="color:#45F28D;font-family:monospace;font-size:12px;">paperWash</code> alternate to break the scroll; the only dark left is the product itself &#8212; the phone in the hero &#8212; and the closing band, so the last thing on screen is the app rather than a form.</figcaption>
+</figure>
+</div>
+
+</body>
+</html>
