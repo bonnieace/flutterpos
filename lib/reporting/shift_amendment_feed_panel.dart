@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/money_text.dart';
 import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/routes.dart';
@@ -414,4 +415,4 @@ final class _AmendmentContents extends StatelessWidget {
       '${record.expectationId} at generation ${record.expectationGeneration}.';
 }
 
-String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+String _money(int minorUnits) => moneyTextOfMinor(minorUnits);

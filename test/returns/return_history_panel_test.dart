@@ -11,7 +11,6 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_application_1/ui/status.dart';
-import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
@@ -297,24 +296,11 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const ValueKey('sale-returns-next')), findsNothing);
-    // **The three pieces of standing prose are one fold since 2026-08-26.** The
-    // sheet used to open with a paragraph, a `SectionHeading` repeating the
-    // header, and a second paragraph inside the form. All three sentences are
-    // kept, behind one summary.
+    // The sheet opens on the form: no heading repeating the header, and no
+    // explanation above the first control.
     expect(find.text('Record a return'), findsNothing);
+    expect(find.text('What a return does'), findsNothing);
     expect(find.byKey(const ValueKey('sale-returns-scope')), findsNothing);
-    await tester.tap(find.text('What a return does'));
-    await tester.pumpAndSettle();
-    final scope = tester
-        .widget<Text>(find.byKey(const ValueKey('sale-returns-scope')))
-        .data!;
-    for (final sentence in <String>[
-      'Choose what the customer returned and record the reason.',
-      'Only what this sale still has available may be returned',
-      'Stock changes only after a manager verifies the return.',
-    ]) {
-      expect(scope, contains(sentence), reason: sentence);
-    }
   });
 
   testWidgets('without a writer the route stays read-only', (tester) async {

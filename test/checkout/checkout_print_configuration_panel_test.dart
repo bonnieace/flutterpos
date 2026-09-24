@@ -55,21 +55,17 @@ void main() {
     expect(_buttonLabel(tester, 'printer-configuration-submit'), 'Save printer');
   });
 
-  testWidgets('a configured printer is stated with its address and roll', (
+  testWidgets('a configured printer draws no status card, only its fields', (
     tester,
   ) async {
     final reader = _Reader(stored: _stored(paperWidth: 'columns_48'));
 
     await _pump(tester, _controller(), reader, writer: _Writer());
 
+    // The filled fields already say where receipts go.
     expect(
-      noticeMessage(tester, 'printer-configuration-current'),
-      'Receipts go to 192.168.1.50:9100 on 48-column paper.',
-    );
-    // Nothing is wrong and nothing is pending: §2.1's "informational".
-    expect(
-      noticeStatus(tester, 'printer-configuration-current'),
-      AppStatus.info,
+      find.byKey(const ValueKey('printer-configuration-current')),
+      findsNothing,
     );
     expect(
       _buttonLabel(tester, 'printer-configuration-submit'),
@@ -128,6 +124,7 @@ void main() {
       final reader = _Reader();
 
       await _pump(tester, _controller(), reader, writer: writer);
+      // A new printer defaults to an 80mm roll, the one most shops buy.
       await _save(tester, host: '192.168.1.50');
 
       expect(writer.merges.single.path, _printerPath);
@@ -135,7 +132,7 @@ void main() {
         'transport': 'direct_tcp',
         'host': '192.168.1.50',
         'port': 9100,
-        'paperWidth': 'columns_32',
+        'paperWidth': 'columns_48',
         'hasCutter': true,
         'updatedBy': 'owner-a',
       });

@@ -347,8 +347,9 @@ TenantReturnVerificationFailure _classify(FirebaseFunctionsException error) {
     'internal' ||
     'aborted' ||
     'unknown' => TenantReturnVerificationFailure.ambiguous,
-    'failed-precondition' when message.contains('already been verified') ||
-        message.contains('Only a pending return') =>
+    'failed-precondition'
+        when message.contains('already been verified') ||
+            message.contains('Only a pending return') =>
       TenantReturnVerificationFailure.alreadyVerified,
     'failed-precondition' when message.contains('exceeds the immutable sale') =>
       TenantReturnVerificationFailure.exceedsSale,

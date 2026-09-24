@@ -37,6 +37,7 @@
 library;
 
 import '../checkout/checkout_tender.dart';
+import '../ui/money_text.dart';
 import '../ui/status.dart';
 import 'reconciliation_anomalies.dart';
 import 'reconciliation_status.dart';
@@ -501,7 +502,7 @@ _DifferenceReading _tenderVariance(TenantReconciliationAnomaly anomaly) {
 
 /// Minor units as money, unlabelled for the reason `_shiftVariance` records:
 /// this screen has no access to the business's currency code.
-String _money(int minorUnits) => _major(minorUnits).toStringAsFixed(2);
+String _money(int minorUnits) => moneyTextOfMinor(minorUnits);
 
 num _major(int minorUnits) => minorUnits / 100;
 

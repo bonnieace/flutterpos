@@ -240,10 +240,10 @@ final class CheckoutTenantReceiptReprinter implements TenantReceiptReprinter {
       });
     } on FirebaseFunctionsException catch (error) {
       throw _ReprintRefused(switch (error.code) {
-        'permission-denied' || 'unauthenticated' => TenantReceiptReprintCode
-            .forbidden,
-        'not-found' || 'unimplemented' => TenantReceiptReprintCode
-            .serviceMissing,
+        'permission-denied' ||
+        'unauthenticated' => TenantReceiptReprintCode.forbidden,
+        'not-found' ||
+        'unimplemented' => TenantReceiptReprintCode.serviceMissing,
         'failed-precondition' => TenantReceiptReprintCode.notFound,
         // **Not the missing-sale sentence.** `invalid-argument` means this
         // client sent the server something it will not accept, which is a
@@ -251,8 +251,8 @@ final class CheckoutTenantReceiptReprinter implements TenantReceiptReprinter {
         // "that sale is not in this business" about a sale on screen is exactly
         // how the 2026-09-06 receipt-pattern bug presented.
         'invalid-argument' => TenantReceiptReprintCode.refused,
-        'unavailable' || 'deadline-exceeded' => TenantReceiptReprintCode
-            .unavailable,
+        'unavailable' ||
+        'deadline-exceeded' => TenantReceiptReprintCode.unavailable,
         _ => TenantReceiptReprintCode.refused,
       });
     } catch (_) {

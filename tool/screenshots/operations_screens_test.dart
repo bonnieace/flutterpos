@@ -20,7 +20,9 @@ import 'package:flutter_application_1/returns/returns.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/shift/shift.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_application_1/ui/snackbar.dart';
+import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -318,6 +320,23 @@ void main() {
             session: session,
             reader: reader,
           ).read(collectionReader: reader),
+          destinations: _settingsDestinations(reader),
+        ),
+      );
+    },
+    viewports: responsiveViewports,
+  );
+
+  // **The printer page with the receipt branding under it**, which is where the
+  // brand name, slogan and logo moved when *Business details* went, on
+  // 2026-09-23.
+  screenshotCase(
+    '16c2-settings-printer-and-branding',
+    build: () {
+      final reader = FakeTenantReader.business();
+      return inSession(
+        TenantSettingsScreen(
+          initialSettingKey: 'printer',
           destinations: _settingsDestinations(reader),
         ),
       );
@@ -1281,28 +1300,6 @@ void main() {
     viewports: responsiveViewports,
   );
 
-  // The same sheet with its one fold open, because a `Disclosure` closed is a
-  // capture of a summary line and says nothing about the prose behind it.
-  screenshotCase(
-    '34c-returns-explained',
-    build: () => inSession(
-      _SheetHost(
-        open: (context) => openTenantSaleReturnSheet(
-          context,
-          reader: FakeTenantReader.business(),
-          request: TenantSaleReturnsRequest(sale: _sale('co-1')),
-          actions: fakeReturnActions(),
-        ),
-      ),
-      controller: seedSession(role: TenantRole.manager, uid: managerUid),
-    ),
-    afterPump: (tester) async {
-      await tester.tap(find.text('What a return does'));
-      await tester.pumpAndSettle();
-    },
-    viewports: responsiveViewports,
-  );
-
   // **The same route as a cashier, which is the session the role standing is
   // for.** `34` runs as a manager, who may verify, so the notice saying a
   // recorded return waits for management renders in none of its images - the
@@ -1390,6 +1387,137 @@ void main() {
     },
     viewports: responsiveViewports,
   );
+
+  // -------------------------------------------------------------------------
+  // Stock counts
+  // -------------------------------------------------------------------------
+
+  // One count in each standing the filter offers.
+  screenshotCase(
+    '38-stock-counts',
+    build: () => inSession(
+      TenantStockTakeReviewScreen(
+        reader: _stockTakeReader(),
+        countRoute: (context) => const SizedBox.shrink(),
+      ),
+      controller: seedSession(),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  // The count that needs review, opened: what differs, biggest first, and the
+  // accept pinned under it.
+  screenshotCase(
+    '38b-the-count',
+    build: () => inSession(
+      TenantStockTakeReviewScreen(
+        reader: _stockTakeReader(),
+        applyCallable: _NeverStockTakeApply(),
+      ),
+      controller: seedSession(),
+    ),
+    fullPage: false,
+    afterPump: (tester) async {
+      await tester.tap(find.byKey(const ValueKey('stock-take-$_reviewTakeId')));
+      await tester.pumpAndSettle();
+    },
+    viewports: responsiveViewports,
+  );
+
+  // -------------------------------------------------------------------------
+  // Sales
+  // -------------------------------------------------------------------------
+
+  screenshotCase(
+    '39-set-payment-method',
+    build: () => inSession(
+      _SheetHost(
+        open: (context) => showSaleTenderDialog(context, sale: _sale('co-1')),
+      ),
+      controller: seedSession(),
+    ),
+    viewports: responsiveViewports,
+  );
+}
+
+const String _reviewTakeId =
+    'st_2026-09-19_0123456789abcdef0123456789abcdef01234567';
+
+/// The seeded business with three counts: one needing review, one accepted and
+/// one where everything agreed.
+FakeTenantReader _stockTakeReader() {
+  const root = 'tenants/$seedTenantId';
+  Map<String, Object?> take({
+    required String date,
+    required String counter,
+    required String status,
+    required int variance,
+    required int units,
+    int unmatched = 0,
+  }) => <String, Object?>{
+    'tenantId': seedTenantId,
+    'counterUid': counter,
+    'businessDate': date,
+    'status': status,
+    'scope': <String, Object?>{'kind': 'everything'},
+    'productsInScope': 240,
+    'countedLineCount': 240,
+    'varianceLineCount': variance,
+    'absoluteVarianceUnits': units,
+    'unmatchedLineCount': unmatched,
+  };
+  Map<String, Object?> line({
+    required int counted,
+    required int? expected,
+    int? seen,
+  }) => <String, Object?>{
+    'counted': counted,
+    'expected': expected,
+    'variance': expected == null ? null : counted - expected,
+    'seenQuantity': seen,
+    'matched': expected != null,
+    'needsApply': expected != null && counted != expected,
+    'countedAt': '2026-09-19T08:30:00Z',
+  };
+  final reader = FakeTenantReader.business();
+  reader.collections['$root/stock_takes'] = <String, Map<String, Object?>>{
+    _reviewTakeId: take(
+      date: '2026-09-19',
+      counter: ownerUid,
+      status: 'submitted',
+      variance: 2,
+      units: 10,
+      unmatched: 1,
+    ),
+    'st_2026-09-12_0123456789abcdef0123456789abcdef01234567': take(
+      date: '2026-09-12',
+      counter: managerUid,
+      status: 'applied',
+      variance: 3,
+      units: 5,
+    ),
+    'st_2026-09-05_0123456789abcdef0123456789abcdef01234567': take(
+      date: '2026-09-05',
+      counter: cashierUid,
+      status: 'submitted',
+      variance: 0,
+      units: 0,
+    ),
+  };
+  reader.collections['$root/stock_takes/$_reviewTakeId/lines'] =
+      <String, Map<String, Object?>>{
+        'pd-soda-300': line(counted: 41, expected: 48, seen: 48),
+        'pd-bread-white': line(counted: 19, expected: 16),
+        'p_9fK2xQ7n': line(counted: 12, expected: null),
+      };
+  return reader;
+}
+
+/// Present so the accept button is drawn enabled; never pressed.
+final class _NeverStockTakeApply implements ApplyStockTakeCallable {
+  @override
+  Future<Object?> call(Map<String, Object?> payload) =>
+      throw UnimplementedError('The capture never accepts a count.');
 }
 
 /// A writer that answers but is never actually pressed: the captures are of
@@ -1683,20 +1811,13 @@ Widget _shiftHistory() {
   );
 }
 
-/// The four settings the composition root offers, for the index captures.
+/// The three settings the composition root offers, for the index captures.
 ///
 /// Each destination hosts the same panel `lib/main.dart` hosts, so a picture of
-/// the index is a picture of the real list rather than four invented rows.
+/// the index is a picture of the real list rather than three invented rows.
 List<TenantSettingsDestination> _settingsDestinations(
   TenantDataReader reader,
 ) => <TenantSettingsDestination>[
-  TenantSettingsDestination(
-    settingKey: 'business-details',
-    kind: TenantSettingKind.businessDetails,
-    icon: Icons.storefront_outlined,
-    allowedRoles: TenantBrandingPublisher.allowedRoles,
-    builder: (_) => TenantBrandingPanel(reader: reader),
-  ),
   TenantSettingsDestination(
     settingKey: 'currency',
     kind: TenantSettingKind.currency,
@@ -1709,7 +1830,17 @@ List<TenantSettingsDestination> _settingsDestinations(
     kind: TenantSettingKind.printer,
     icon: Icons.print_outlined,
     allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
-    builder: (_) => TenantPrinterConfigurationPanel(reader: reader),
+    // The printer, then the receipt branding under it, as `lib/main.dart`.
+    builder: (context) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        TenantPrinterConfigurationPanel(reader: reader),
+        SizedBox(height: AppTokens.componentOf(context).spacing.s32),
+        const SectionHeading('Receipt branding'),
+        SizedBox(height: AppTokens.componentOf(context).spacing.s12),
+        TenantBrandingPanel(reader: reader),
+      ],
+    ),
   ),
   TenantSettingsDestination(
     settingKey: 'stock-take',

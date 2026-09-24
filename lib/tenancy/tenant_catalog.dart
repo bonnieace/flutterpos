@@ -1,3 +1,4 @@
+import '../ui/money_text.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -266,7 +267,7 @@ List<RecordAttribute> tenantProductAttributes(
   ),
   RecordAttribute(
     label: 'Unit price',
-    value: product.price.toStringAsFixed(2),
+    value: moneyText(product.price),
     kind: RecordValueKind.money,
     valueKey: ValueKey('$keyPrefix-price-${product.id}'),
   ),

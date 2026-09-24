@@ -9,6 +9,7 @@ import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
+import '../ui/press.dart';
 import '../ui/tokens.dart';
 import 'sale_history.dart';
 
@@ -265,15 +266,27 @@ final class _SaleTenderDialog extends StatelessWidget {
             ),
           ),
           SizedBox(height: tokens.spacing.s16),
-          for (final tender in CheckoutTender.values) ...<Widget>[
-            AppButton(
-              key: ValueKey('sale-tender-choice-${tender.wireValue}'),
-              label: tender.label,
-              tier: AppButtonTier.secondary,
-              onPressed: () => Navigator.of(context).pop(tender),
+          // One tap answers, as the stacked buttons did: a card is the answer,
+          // not a selection waiting for a second confirming tap.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                for (final (index, tender)
+                    in CheckoutTender.values.indexed) ...<Widget>[
+                  if (index > 0) SizedBox(width: tokens.spacing.s8),
+                  Expanded(
+                    child: _TenderCard(
+                      key: ValueKey('sale-tender-choice-${tender.wireValue}'),
+                      tender: tender,
+                      current: tender == sale.tender,
+                      onPressed: () => Navigator.of(context).pop(tender),
+                    ),
+                  ),
+                ],
+              ],
             ),
-            SizedBox(height: tokens.spacing.s8),
-          ],
+          ),
         ],
       ),
       actions: <Widget>[
@@ -284,6 +297,122 @@ final class _SaleTenderDialog extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ],
+    );
+  }
+}
+
+/// The glyph each payment method is drawn with, the same ones the sales list
+/// uses for its tender filter.
+IconData _tenderIcon(CheckoutTender tender) => switch (tender) {
+  CheckoutTender.cash => Icons.payments_outlined,
+  CheckoutTender.mpesa => Icons.phone_android_outlined,
+  CheckoutTender.card => Icons.credit_card_outlined,
+};
+
+/// One payment method in [_SaleTenderDialog]: a glyph in a well over its name.
+///
+/// **States:** enabled, hover, pressed and focus-visible from [PressSurface].
+/// The method a sale already names is marked *Current* in words and a check,
+/// not by colour alone; it stays tappable, because the server is what says a
+/// sale already names it.
+final class _TenderCard extends StatelessWidget {
+  const _TenderCard({
+    super.key,
+    required this.tender,
+    required this.current,
+    required this.onPressed,
+  });
+
+  final CheckoutTender tender;
+  final bool current;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    final radius = BorderRadius.circular(tokens.radius.lg);
+    return Semantics(
+      container: true,
+      button: true,
+      label: tender.label,
+      value: current ? 'Current' : null,
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: PressSurface(
+        borderRadius: radius,
+        onPressed: onPressed,
+        fillWidth: true,
+        fillHeight: true,
+        excludeSemantics: true,
+        hoverOverlay: colors.action.secondary.hoverWash(),
+        pressedOverlay: colors.action.secondary.pressedWash(),
+        // Filled here: `fillWidth` widens the tap area, not the card, and three
+        // cards sized to their own words would be three widths.
+        child: SizedBox.expand(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.surface.raised,
+              borderRadius: radius,
+              border: Border.all(color: colors.surface.cardEdge),
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: tokens.spacing.s8,
+                vertical: tokens.spacing.s16,
+              ),
+              child: Column(
+                children: <Widget>[
+                  Container(
+                    width: tokens.spacing.s48,
+                    height: tokens.spacing.s48,
+                    decoration: BoxDecoration(
+                      color: colors.surface.sunken,
+                      borderRadius: BorderRadius.circular(tokens.radius.md),
+                    ),
+                    child: Icon(
+                      _tenderIcon(tender),
+                      size: tokens.spacing.s24,
+                      color: colors.action.primary.container,
+                    ),
+                  ),
+                  SizedBox(height: tokens.spacing.s8),
+                  Text(
+                    tender.label,
+                    textAlign: TextAlign.center,
+                    style: tokens.typography.bodyLarge.copyWith(
+                      color: colors.text.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (current) ...<Widget>[
+                    SizedBox(height: tokens.spacing.s4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(
+                          Icons.check,
+                          size: tokens.spacing.s16,
+                          color: colors.text.tertiary,
+                        ),
+                        SizedBox(width: tokens.spacing.s4),
+                        Flexible(
+                          child: Text(
+                            'Current',
+                            style: tokens.typography.caption.copyWith(
+                              color: colors.text.tertiary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

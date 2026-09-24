@@ -7,6 +7,7 @@ import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/money_text.dart';
 import '../ui/pagination.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -424,7 +425,7 @@ AppNotice _refusalNotice(TenantShiftAmendmentFailure failure) =>
       ),
     };
 
-String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+String _money(int minorUnits) => moneyTextOfMinor(minorUnits);
 
 final class _AnomalyContents extends StatelessWidget {
   const _AnomalyContents({

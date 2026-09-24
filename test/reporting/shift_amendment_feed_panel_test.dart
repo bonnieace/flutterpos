@@ -34,7 +34,7 @@ void main() {
     // of them moved, which is a heading that changes per record.
     expect(
       _text(tester, 'shift-amendment-sales-amend_abc'),
-      '115.00 to 345.00',
+      '115 to 345',
     );
     expect(_text(tester, 'shift-amendment-transactions-amend_abc'), '1 to 3');
     // The direction is the server's own: observed minus expected, so a negative
@@ -42,7 +42,7 @@ void main() {
     // difference rides in the same column because it is the same disagreement.
     expect(
       _text(tester, 'shift-amendment-difference-amend_abc'),
-      'The shift had recorded 230.00 less than its sales prove, and counted 2 '
+      'The shift had recorded 230 less than its sales prove, and counted 2 '
       'transactions fewer. This removed difference sv_shift-1_gen-9 from the '
       'unresolved list.',
     );

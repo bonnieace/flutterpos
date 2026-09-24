@@ -240,7 +240,7 @@ void main() {
         edit: const TenantBulkCatalogEdit.cost('9.99'),
       ).pages.single;
       expect(byCost.rows.map((row) => row.previous), <String>[
-        '40.00',
+        '40',
         'not recorded',
       ]);
     });
@@ -952,7 +952,7 @@ void main() {
 
       expect(rows.map((row) => row.position), <int>[51, 52]);
       expect(rows.first.subject, 'Product pd-51');
-      expect(rows.first.detail, 'from 65.00 to 19.99');
+      expect(rows.first.detail, 'from 65 to 19.99');
       expect(rows[1].detail, 'Already 19.99. Nothing was written for this row.');
     });
 
@@ -972,7 +972,7 @@ void main() {
       expect(rows.single.position, 2);
       expect(rows.single.subject, 'White bread loaf');
       expect(rows.single.detail, contains('opens holding 12'));
-      expect(rows.single.detail, contains('costs 40.00'));
+      expect(rows.single.detail, contains('costs 40'));
     });
 
     test('an import preview names the category, never the ID it wrote', () {

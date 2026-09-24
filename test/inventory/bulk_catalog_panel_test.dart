@@ -193,7 +193,7 @@ void main() {
 
     expect(
       _text(tester, 'bulk-catalog-row-detail-1'),
-      'Product 1 • from 65.00 to 19.99',
+      'Product 1 • from 65 to 19.99',
     );
     await _tap(tester, 'bulk-catalog-commit');
     expect(find.textContaining('no figure already reported moves'), findsOne);

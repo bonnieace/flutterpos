@@ -577,6 +577,66 @@ void main() {
     );
   });
 
+  group('spending has figures of its own only on a day that has some', () {
+    // With nothing spent, net profit is gross profit under a second name, and
+    // an expenses tile reading zero beside it is three tiles saying one thing.
+    Future<void> pump(
+      WidgetTester tester,
+      List<TenantQueryDocumentSnapshot> expenses,
+    ) => _pumpLanding(
+      tester,
+      panelHeight: 120,
+      role: TenantRole.owner,
+      reader: _CachedSalesReader(<TenantQueryDocumentSnapshot>[
+        _cachedSale(checkoutId: 'checkout-a', sequence: 1, totalMinor: 3000),
+      ], expenses: expenses),
+    );
+
+    testWidgets('a day with an expense shows it, and a net figure', (
+      tester,
+    ) async {
+      await pump(tester, <TenantQueryDocumentSnapshot>[
+        _todayExpense(token: 'tok-a', amountMinor: 1200),
+      ]);
+
+      final spent = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-expenses')),
+      );
+      expect(spent.value, contains('12'));
+      expect(spent.detail, 'Recorded today');
+      expect(find.byKey(const ValueKey('home-today-net-profit')), findsOne);
+      expect(
+        tester
+            .widget<StatTile>(find.byKey(const ValueKey('home-today-profit')))
+            .label,
+        'Gross profit',
+      );
+    });
+
+    testWidgets('a day with none shows neither', (tester) async {
+      await pump(tester, const <TenantQueryDocumentSnapshot>[]);
+
+      expect(find.byKey(const ValueKey('home-today-expenses')), findsNothing);
+      expect(find.byKey(const ValueKey('home-today-net-profit')), findsNothing);
+      expect(
+        tester
+            .widget<StatTile>(find.byKey(const ValueKey('home-today-profit')))
+            .label,
+        'Profit',
+        reason: 'Gross only means something beside a net figure.',
+      );
+    });
+
+    testWidgets('a voided expense is not spending', (tester) async {
+      await pump(tester, <TenantQueryDocumentSnapshot>[
+        _todayExpense(token: 'tok-a', amountMinor: 1200, voided: true),
+      ]);
+
+      expect(find.byKey(const ValueKey('home-today-expenses')), findsNothing);
+      expect(find.byKey(const ValueKey('home-today-net-profit')), findsNothing);
+    });
+  });
+
   group('an unreconciled day says what this device can already add up', () {
     // Reconciliation qualifies the figure; it does not unlock it. Before
     // 2026-09-19 every tile here read an em dash over *Not reconciled yet*
@@ -699,43 +759,44 @@ void main() {
       expect(sales.detail, 'On this device');
     });
 
-    testWidgets('a busier till keeps its figure, and the tile says what is not in it', (
-      tester,
-    ) async {
-      // **Both halves matter, and the first is the one easy to get wrong.**
-      // The cache holds a subset of what the server has, so this device can
-      // only ever say `cached + unsent` - and against a register that has sold
-      // nine, that is the smaller and further-off number. Preferring it because
-      // this device happens to hold unsent work would replace 9 with 2 on a day
-      // that truly took 10.
-      //
-      // So the published figure stays, and what was wrong before is only that
-      // it said nothing about the sale this device is still carrying.
-      final outbox = await _offlineOutbox('landing-outbox-b', count: 1);
-      addTearDown(outbox.close);
+    testWidgets(
+      'a busier till keeps its figure, and the tile says what is not in it',
+      (tester) async {
+        // **Both halves matter, and the first is the one easy to get wrong.**
+        // The cache holds a subset of what the server has, so this device can
+        // only ever say `cached + unsent` - and against a register that has sold
+        // nine, that is the smaller and further-off number. Preferring it because
+        // this device happens to hold unsent work would replace 9 with 2 on a day
+        // that truly took 10.
+        //
+        // So the published figure stays, and what was wrong before is only that
+        // it said nothing about the sale this device is still carrying.
+        final outbox = await _offlineOutbox('landing-outbox-b', count: 1);
+        addTearDown(outbox.close);
 
-      await _pumpLanding(
-        tester,
-        panelHeight: 120,
-        role: TenantRole.owner,
-        checkoutOutbox: outbox,
-        reader: _BehindReader(
-          publishedTransactions: 9,
-          sales: <TenantQueryDocumentSnapshot>[
-            _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
-          ],
-        ),
-      );
+        await _pumpLanding(
+          tester,
+          panelHeight: 120,
+          role: TenantRole.owner,
+          checkoutOutbox: outbox,
+          reader: _BehindReader(
+            publishedTransactions: 9,
+            sales: <TenantQueryDocumentSnapshot>[
+              _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
+            ],
+          ),
+        );
 
-      final transactions = tester.widget<StatTile>(
-        find.byKey(const ValueKey('home-today-transactions')),
-      );
-      expect(transactions.value, '9');
-      expect(transactions.detail, 'Counted today');
-      // Never colour alone: the badge carries the words.
-      expect(transactions.status, AppStatus.attention);
-      expect(transactions.statusLabel, '1 not sent');
-    });
+        final transactions = tester.widget<StatTile>(
+          find.byKey(const ValueKey('home-today-transactions')),
+        );
+        expect(transactions.value, '9');
+        expect(transactions.detail, 'Counted today');
+        // Never colour alone: the badge carries the words.
+        expect(transactions.status, AppStatus.attention);
+        expect(transactions.statusLabel, '1 not sent');
+      },
+    );
 
     testWidgets('a published day this device owes nothing on says so plainly', (
       tester,
@@ -766,39 +827,40 @@ void main() {
       expect(transactions.statusLabel, isNull);
     });
 
-    testWidgets('a sale the server has not counted wins over the published day', (
-      tester,
-    ) async {
-      // The server has counted two; this device holds three, because one was
-      // rung offline and has not synced. Reconciliation cannot know about it,
-      // so the published figure is simply behind - and the till that rang the
-      // sale is the one surface that can say so.
-      await _pumpLanding(
-        tester,
-        panelHeight: 120,
-        role: TenantRole.owner,
-        reader: _BehindReader(
-          publishedTransactions: 2,
-          sales: <TenantQueryDocumentSnapshot>[
-            _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
-            _cachedSale(checkoutId: 'b', sequence: 2, totalMinor: 3000),
-            _cachedSale(checkoutId: 'c', sequence: 3, totalMinor: 3000),
-          ],
-        ),
-      );
+    testWidgets(
+      'a sale the server has not counted wins over the published day',
+      (tester) async {
+        // The server has counted two; this device holds three, because one was
+        // rung offline and has not synced. Reconciliation cannot know about it,
+        // so the published figure is simply behind - and the till that rang the
+        // sale is the one surface that can say so.
+        await _pumpLanding(
+          tester,
+          panelHeight: 120,
+          role: TenantRole.owner,
+          reader: _BehindReader(
+            publishedTransactions: 2,
+            sales: <TenantQueryDocumentSnapshot>[
+              _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
+              _cachedSale(checkoutId: 'b', sequence: 2, totalMinor: 3000),
+              _cachedSale(checkoutId: 'c', sequence: 3, totalMinor: 3000),
+            ],
+          ),
+        );
 
-      final transactions = tester.widget<StatTile>(
-        find.byKey(const ValueKey('home-today-transactions')),
-      );
-      expect(transactions.value, '3');
-      expect(transactions.detail, 'On this device');
-      expect(transactions.statusLabel, 'Not reconciled');
+        final transactions = tester.widget<StatTile>(
+          find.byKey(const ValueKey('home-today-transactions')),
+        );
+        expect(transactions.value, '3');
+        expect(transactions.detail, 'On this device');
+        expect(transactions.statusLabel, 'Not reconciled');
 
-      final sales = tester.widget<StatTile>(
-        find.byKey(const ValueKey('home-today-sales')),
-      );
-      expect(sales.value, contains('90'));
-    });
+        final sales = tester.widget<StatTile>(
+          find.byKey(const ValueKey('home-today-sales')),
+        );
+        expect(sales.value, contains('90'));
+      },
+    );
 
     testWidgets('a second till that sold more keeps the published figure', (
       tester,
@@ -1077,9 +1139,15 @@ final class _CachedSalesReader
         TenantDataReader,
         TenantSalesHistoryQueryReader,
         TenantCacheReadable {
-  _CachedSalesReader(this.sales);
+  _CachedSalesReader(
+    this.sales, {
+    this.expenses = const <TenantQueryDocumentSnapshot>[],
+  });
 
   final List<TenantQueryDocumentSnapshot> sales;
+
+  /// Today's spending, answered to the expenses walk and to nothing else.
+  final List<TenantQueryDocumentSnapshot> expenses;
 
   @override
   TenantDataReader get cacheOnly => this;
@@ -1090,11 +1158,26 @@ final class _CachedSalesReader
   Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
 
   /// No returns in the cache, so the day is reported gross - the same
-  /// fallback `TenantSalesTotals.net` makes everywhere else.
+  /// fallback `TenantSalesTotals.net` makes everywhere else. The expenses walk
+  /// is answered in ID order after its cursor, which is how it pages.
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
-  ) async => const <TenantQueryDocumentSnapshot>[];
+  ) async {
+    if (!query.collectionPath.endsWith('/expenses')) {
+      return const <TenantQueryDocumentSnapshot>[];
+    }
+    final after = query.startAfterDocumentId;
+    final ordered = expenses.toList()..sort((a, b) => a.path.compareTo(b.path));
+    return ordered
+        .where(
+          (document) =>
+              after == null ||
+              document.path.split('/').last.compareTo(after) > 0,
+        )
+        .take(query.limit)
+        .toList(growable: false);
+  }
 
   /// **Ordered and paged, because the repository checks.** Answering the same
   /// unsorted list to every page reads as an unstable query and
@@ -1248,6 +1331,34 @@ TenantQueryDocumentSnapshot _cachedSale({
       'totalMinor': totalMinor,
       'total': totalMinor / 100,
       'createdAt': _nineInTheMorning().toUtc(),
+    },
+  );
+}
+
+/// One expense recorded today, voided where [voided] says so.
+TenantQueryDocumentSnapshot _todayExpense({
+  required String token,
+  required int amountMinor,
+  bool voided = false,
+}) {
+  final date = checkoutBusinessDate(_nineInTheMorning().toUtc());
+  return TenantQueryDocumentSnapshot(
+    path: 'tenants/tenant-a/expenses/$date-$token',
+    data: <String, Object?>{
+      'expenseId': '$date-$token',
+      'tenantId': 'tenant-a',
+      'businessDate': date,
+      'category': 'rent',
+      'description': 'Something the business paid for',
+      'amountMinor': amountMinor,
+      'amount': amountMinor / 100,
+      'recordedBy': 'user-a',
+      'createdAt': _nineInTheMorning().toUtc(),
+      if (voided) ...<String, Object?>{
+        'voidedAt': _nineInTheMorning().toUtc(),
+        'voidedBy': 'user-a',
+        'voidReason': 'Recorded twice.',
+      },
     },
   );
 }

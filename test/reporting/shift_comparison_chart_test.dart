@@ -122,7 +122,7 @@ void main() {
       ]);
 
       expect(find.text('18.4k'), findsNothing, reason: 'no bar to label');
-      expect(find.text('18400.00'), findsOne);
+      expect(find.text('18400'), findsOne);
       expect(find.text('Open'), findsOne);
       // The whole name, not the given one: a row is not five columns wide.
       expect(find.text('Grace Wanjiru'), findsExactly(2));

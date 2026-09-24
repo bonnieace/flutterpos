@@ -616,30 +616,6 @@ final class _SaleReturnsContents extends StatelessWidget {
             title: 'Return',
             subtitle: request.receiptNumber,
           ),
-          SizedBox(height: tokens.spacing.s12),
-          // **Three pieces of standing prose folded into one, on 2026-08-26.**
-          // This sheet opened with a two-sentence paragraph, then a
-          // `SectionHeading` reading *Record a return* under a header already
-          // reading *Return*, then a second two-sentence paragraph inside the
-          // form — roughly a third of a phone screen of explanation above the
-          // first control, all of it permanent and all of it true of every
-          // return this sheet will ever record. §5.1's own row for that is a
-          // `Disclosure`, which is what the rest of this app already uses.
-          //
-          // **Every sentence is kept verbatim and reordered, not rewritten.**
-          // The order is what a person asks in: what may I return, what does
-          // recording it do, and when does stock actually move.
-          const Disclosure(
-            key: ValueKey('sale-returns-scope-disclosure'),
-            summary: 'What a return does',
-            child: Text(
-              key: ValueKey('sale-returns-scope'),
-              'Choose what the customer returned and record the reason. Only '
-              'what this sale still has available may be returned, and pending '
-              'returns already count against it. Stock changes only after a '
-              'manager verifies the return.',
-            ),
-          ),
         ],
         // **Phase 06's second criterion, which this page left to inference.**
         // Requesting a return is open to every active role and verifying it is
@@ -932,11 +908,6 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // **The heading and the availability paragraph left on 2026-08-26.**
-        // The heading read `Record a return` directly under a sheet header
-        // reading `Return`, which is §7's "title appears once"; the paragraph
-        // is now the middle sentence of this sheet's one `Disclosure`. Neither
-        // sentence was lost — see `sale-returns-scope`.
         for (final line in widget.returnable.lines)
           Padding(
             padding: EdgeInsets.symmetric(vertical: tokens.spacing.s4),

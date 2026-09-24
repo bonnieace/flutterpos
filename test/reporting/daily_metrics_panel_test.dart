@@ -36,7 +36,7 @@ void main() {
         // No currency document in this device copy, so the figure is stated
         // without a code - exactly as an unpublished currency is everywhere
         // else on this screen.
-        '425.00',
+        '425',
       );
       expect(
         tester

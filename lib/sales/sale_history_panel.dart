@@ -1,3 +1,4 @@
+import '../ui/money_text.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -481,7 +482,7 @@ String _recordedAtLabel(TenantSale sale, String soldByLabel) {
       : 'Recorded ${_instant(recordedAt)} by $soldByLabel';
 }
 
-String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+String _money(int minorUnits) => moneyTextOfMinor(minorUnits);
 
 String _instant(DateTime value) {
   final utc = value.toUtc();

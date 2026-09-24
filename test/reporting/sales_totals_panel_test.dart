@@ -236,7 +236,7 @@ void main() {
           .data,
       '2026-07-02 to 2026-07-31',
     );
-    expect(find.textContaining('61200.00'), findsOne);
+    expect(find.textContaining('61200'), findsOne);
   });
 
   testWidgets('only mine filters by the signed-in member', (tester) async {
@@ -792,7 +792,7 @@ void main() {
     // The server sums the matching lines and counts only their costs, so the
     // figure is that category's margin and the basis sentence beside it says
     // what the takings themselves are.
-    expect(_figure(tester, 'sales-totals-profit'), 'KES 100.00');
+    expect(_figure(tester, 'sales-totals-profit'), 'KES 100');
     expect(_figure(tester, 'sales-totals-margin'), '25.0%');
     expect(find.byKey(const ValueKey('sales-totals-category-basis')), findsOne);
   });
@@ -816,9 +816,9 @@ void main() {
 
     expect(rowFor('cash'), 'KES 2000.25');
     expect(rowFor('mpesa'), 'KES 1800.50');
-    expect(rowFor('card'), 'KES 900.00');
-    expect(rowFor('unrecorded'), 'KES 100.00');
-    expect(rowFor('other'), 'KES 20.00');
+    expect(rowFor('card'), 'KES 900');
+    expect(rowFor('unrecorded'), 'KES 100');
+    expect(rowFor('other'), 'KES 20');
     for (final method in const <String>[
       'Cash',
       'M-Pesa',
@@ -934,7 +934,7 @@ void main() {
     // Its own row, its own figure, and its takings still inside the total -
     // which is the whole of what the removed fold explained.
     expect(find.text('Unrecognised'), findsOne);
-    expect(_figure(tester, 'sales-totals-tender-other'), '20.00');
+    expect(_figure(tester, 'sales-totals-tender-other'), '20');
   });
 
   testWidgets('a server that reports no split still reports the total', (
@@ -1332,7 +1332,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(_figure(tester, 'sales-totals-amount'), 'KES 9.00');
+    expect(_figure(tester, 'sales-totals-amount'), 'KES 9');
     // **The badge carries what the removed fold carried.** Whose count this is
     // is not a footnote on a device answer - it is the difference between the
     // whole business and this till - so it sits on the figure now.

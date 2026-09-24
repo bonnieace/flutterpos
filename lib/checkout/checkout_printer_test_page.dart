@@ -17,9 +17,12 @@
 ///
 /// **The three things it proves, in the order it prints them:**
 ///
-/// 1. **Graphics.** The mark at the top is a raster image, which is the one
-///    capability a receipt never exercises and the first that a printer with
-///    the wrong density setting gets wrong.
+/// 1. **Graphics.** The mark at the top is a raster image, and the first thing
+///    a printer with the wrong density setting gets wrong. **Since 2026-09-23
+///    it is the business's own logo where one is published**, headed exactly
+///    as a receipt is - logo, brand name, slogan - so the test page shows what
+///    a receipt will look like as well as whether the printer works. With no
+///    logo it is the built-in test mark.
 /// 2. **The width.** The ruler line is exactly one row of the roll. If its last
 ///    digit is missing, or it has wrapped onto a second line, the paper setting
 ///    is wrong - a fault that otherwise shows up as receipts with their amounts
@@ -30,6 +33,7 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
 import 'package:image/image.dart' as img;
@@ -86,24 +90,49 @@ final class CheckoutPrinterTestPage {
 
   /// The finished payload, ready for `PrinterTransport.send`.
   ///
-  /// [businessName] is resolved by the caller from branding, exactly as the
-  /// receipt's is - this class reads no documents. [at] is passed rather than
+  /// [businessName], [slogan] and [logo] are the receipt branding, resolved by
+  /// the caller exactly as the receipt's are - this class reads no documents.
+  /// [logo] is the published image file; bytes that do not decode fall back to
+  /// the test mark rather than refusing the page. [at] is passed rather than
   /// taken from the wall clock, so the bytes are a function of their inputs.
-  List<int> build({required DateTime at, String? businessName}) {
+  List<int> build({
+    required DateTime at,
+    String? businessName,
+    String? slogan,
+    Uint8List? logo,
+  }) {
     final generator = Generator(
       paperSizeFor(configuration.paperWidth),
       profile,
     );
     final name = businessName?.trim();
+    final line = slogan?.trim();
+    // The receipt's own reduction of the logo, so the test page cannot print a
+    // mark a receipt would not.
+    final mark = receiptLogoMark(logo);
     final bytes = <int>[
       ...generator.reset(),
       ...generator.setGlobalCodeTable(codePage),
-      ...generator.imageRaster(_mark(_markSize)),
+      ...generator.imageRaster(mark ?? _mark(_markSize)),
+      if (name != null && name.isNotEmpty) ...<int>[
+        // **The receipt's heading, at the receipt's scale**: double width,
+        // centred by padding over the paper - see `CheckoutReceiptBody`.
+        ...generator.emptyLines(1),
+        ...generator.text(
+          _centred(name, scale: 2),
+          styles: const PosStyles(
+            bold: true,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+          ),
+        ),
+        if (line != null && line.isNotEmpty) ...generator.text(_centred(line)),
+        ...generator.hr(),
+      ],
       ...generator.text(
         _centred(PrinterTestPageWords.title),
         styles: const PosStyles(bold: true, height: PosTextSize.size2),
       ),
-      if (name != null && name.isNotEmpty) ...generator.text(_centred(name)),
       ...generator.hr(),
       ...generator.text(
         _pair(
@@ -177,10 +206,14 @@ final class CheckoutPrinterTestPage {
   /// The reason is `CheckoutReceiptBody._centred`'s: `Generator.text` emits an
   /// absolute dot position *and* a justification for the same line, and each
   /// printer resolves that contradiction however it likes.
-  String _centred(String text) {
+  ///
+  /// [scale] is the character width the line prints at, so a double-width
+  /// heading is centred over the paper rather than over its left half.
+  String _centred(String text, {int scale = 1}) {
+    final columns = _columns ~/ scale;
     final printable = ReceiptText.forPrinter(text);
-    if (printable.length >= _columns) return printable.substring(0, _columns);
-    return ' ' * ((_columns - printable.length) ~/ 2) + printable;
+    if (printable.length >= columns) return printable.substring(0, columns);
+    return ' ' * ((columns - printable.length) ~/ 2) + printable;
   }
 
   /// One full row, marked every five characters and ending in the column count.

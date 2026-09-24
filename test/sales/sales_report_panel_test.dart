@@ -705,7 +705,7 @@ void main() {
       expect(find.byKey(const ValueKey('sales-record-co-2')), findsOneWidget);
       // 100.00 taken, 9.00 of it handed back - the sale's *total*, not its
       // line subtotal, so the discount comes off the refund too.
-      expect(_text(tester, 'sales-report-revenue'), 'KES 91.00');
+      expect(_text(tester, 'sales-report-revenue'), 'KES 91');
       // Only a sale that came back in full stops being a transaction.
       expect(_text(tester, 'sales-report-transactions'), '3');
       // **The figure is netted and nothing explains it, by decision.** What
@@ -793,7 +793,7 @@ void main() {
             .label,
         'Returned',
       );
-      expect(_text(tester, 'sales-total-co-1'), 'KES 0.00');
+      expect(_text(tester, 'sales-total-co-1'), 'KES 0');
     });
   });
 

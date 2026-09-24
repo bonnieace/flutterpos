@@ -321,9 +321,7 @@ class _TenantStockTakePanelState extends State<TenantStockTakePanel> {
       message: remaining == 0
           ? 'Every product here has a number against it. Hand the count in when '
                 'you are ready.'
-          : 'Leave a box empty for anything you did not get to. An empty box '
-                'and a zero are not the same thing: zero means you looked and '
-                'the shelf was bare.',
+          : 'Enter 0 if no stock exists.',
     );
   }
 
@@ -550,7 +548,7 @@ final class _CountProgress extends StatelessWidget {
               Expanded(
                 child: Text(
                   '$counted of $total counted',
-                  style: tokens.typography.bodyLarge.copyWith(
+                  style: tokens.typography.titleMedium.copyWith(
                     color: colors.text.primary,
                     fontWeight: FontWeight.w600,
                   ),
@@ -560,7 +558,11 @@ final class _CountProgress extends StatelessWidget {
               Text(
                 '$remaining left',
                 key: const ValueKey('stock-take-remaining'),
+                // `numeric.body`'s face at `body.lg`'s size, a step under the
+                // heading it sits beside.
                 style: tokens.typography.numericBody.copyWith(
+                  fontSize: tokens.typography.bodyLarge.fontSize,
+                  height: tokens.typography.bodyLarge.height,
                   color: colors.text.tertiary,
                 ),
               ),
@@ -576,11 +578,9 @@ final class _CountProgress extends StatelessWidget {
             semanticLabel: '$counted of $total counted',
           ),
           SizedBox(height: tokens.spacing.s8),
-          // A caption rather than body: it is the one paragraph on the screen
-          // a person reads once, and the rows under it are what they came for.
           Text(
             message,
-            style: tokens.typography.caption.copyWith(
+            style: tokens.typography.bodyMedium.copyWith(
               color: colors.text.secondary,
             ),
           ),
@@ -671,7 +671,7 @@ final class _CountLine extends StatelessWidget {
             null => Text(
               'Not counted yet',
               key: ValueKey('stock-take-not-counted-${product.id}'),
-              style: tokens.typography.caption.copyWith(
+              style: tokens.typography.bodyMedium.copyWith(
                 color: colors.text.tertiary,
               ),
             ),
@@ -718,7 +718,7 @@ final class _CountLine extends StatelessWidget {
                       children: <Widget>[
                         Text(
                           product.name,
-                          style: tokens.typography.bodyLarge.copyWith(
+                          style: tokens.typography.titleMedium.copyWith(
                             color: colors.text.primary,
                             fontWeight: FontWeight.w600,
                           ),

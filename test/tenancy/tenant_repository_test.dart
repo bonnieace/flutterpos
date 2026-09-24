@@ -46,6 +46,45 @@ void main() {
     await expectLater(repository.load(), throwsA(isA<TenantScopeViolation>()));
   });
 
+  group('branding falls back to the registered name', () {
+    TenantBrandingRepository repository(Map<String, Map<String, Object?>> docs) =>
+        TenantBrandingRepository(
+          session: TenantSession.active(
+            uid: 'user-a',
+            tenantId: 'tenant-a',
+            role: TenantRole.cashier,
+          ),
+          reader: _MapReader(docs),
+        );
+
+    test('published branding wins over the registered name', () async {
+      final branding = await repository({
+        'tenants/tenant-a': {'name': 'Registered'},
+        'tenants/tenant-a/configuration/branding': {'companyName': 'Trading'},
+      }).loadOrRegistered();
+      expect(branding?.companyName, 'Trading');
+    });
+
+    test('nothing published carries the registered name', () async {
+      final branding = await repository({
+        'tenants/tenant-a': {'name': ' Chill Tent '},
+      }).loadOrRegistered();
+      expect(branding?.companyName, 'Chill Tent');
+      expect(branding?.slogan, isNull);
+      expect(branding?.logoUrl, isNull);
+    });
+
+    test('neither document read is null, not a blank name', () async {
+      expect(await repository({}).loadOrRegistered(), isNull);
+      expect(
+        await repository({
+          'tenants/tenant-a': {'name': '  '},
+        }).loadOrRegistered(),
+        isNull,
+      );
+    });
+  });
+
   /// **The panel stopped drawing the business's name in §11 step 5b**, and this
   /// asserts the absence rather than only the presence. The name is the home's
   /// *title* now, resolved once above the header, and §7's "title appears once"
@@ -534,3 +573,15 @@ final class _FakeReader implements TenantDocumentReader {
   }
 }
 
+
+final class _MapReader implements TenantDocumentReader {
+  _MapReader(this.documents);
+
+  final Map<String, Map<String, Object?>> documents;
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    final data = documents[path];
+    return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
+  }
+}

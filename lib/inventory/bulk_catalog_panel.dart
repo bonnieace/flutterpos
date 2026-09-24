@@ -9,6 +9,7 @@ import '../ui/buttons.dart';
 import '../ui/chips.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/money_text.dart';
 import '../ui/pagination.dart';
 import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
@@ -1374,8 +1375,8 @@ final class _BulkCatalogContents extends StatelessWidget {
             title: Text(product.name),
             subtitle: Text(
               '${tenantCategoryLabel(product.categoryId, names: categoryNames)} '
-              '• ${product.sku} • ${product.price.toStringAsFixed(2)}'
-              '${product.cost == null ? '' : ' • costs ${product.cost!.toStringAsFixed(2)}'}',
+              '• ${product.sku} • ${moneyText(product.price)}'
+              '${product.cost == null ? '' : ' • costs ${moneyText(product.cost!)}'}',
             ),
           ),
       ...Pagination(

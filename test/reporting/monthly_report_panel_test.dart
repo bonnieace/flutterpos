@@ -27,7 +27,7 @@ void main() {
     // No published currency in this harness, so the figure carries no code
     // and no separator - `TenantReportingCurrency` states that rather than
     // guessing one.
-    expect(_profitValue(tester), '1200.00');
+    expect(_profitValue(tester), '1200');
     expect(
       _noteText(tester),
       'Every sale line behind it carries a cost.',
@@ -115,7 +115,7 @@ void main() {
         ),
       );
 
-      expect(_profitValue(tester), '1200.00', reason: 'this month is complete');
+      expect(_profitValue(tester), '1200', reason: 'this month is complete');
       // Sales and transactions keep their arrows; only profit loses one.
       expect(find.textContaining('July 2026'), findsNWidgets(3));
     },

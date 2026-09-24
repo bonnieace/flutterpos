@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 
 /// `ESC t` — the code-page selector. Present here for the same reason it is on
 /// a receipt: a shop's own name is on this page too.
@@ -143,6 +145,50 @@ void main() {
     });
   });
 
+  // **Headed as a receipt is, since 2026-09-23**: the published logo in place
+  // of the test mark, then the brand name and the slogan.
+  group('with the receipt branding', () {
+    test('prints the published logo instead of the test mark', () {
+      final logo = _png(width: 400, height: 400);
+      final mark = receiptLogoMark(logo)!;
+      final bytes = page().build(
+        at: at,
+        businessName: 'Chill Tent',
+        logo: logo,
+      );
+      expect(_rasterWidthBytes(bytes), (mark.width + 7) ~/ 8);
+    });
+
+    test('falls back to the test mark when the logo does not decode', () {
+      final plain = page().build(at: at);
+      final broken = page().build(
+        at: at,
+        logo: Uint8List.fromList(<int>[1, 2, 3, 4]),
+      );
+      expect(_rasterWidthBytes(broken), _rasterWidthBytes(plain));
+    });
+
+    test('prints the slogan under the brand name', () {
+      final printed = lines(
+        page().build(
+          at: at,
+          businessName: 'Chill Tent',
+          slogan: 'Cold drinks, warm welcome',
+        ),
+      );
+      final name = printed.indexWhere((line) => line.contains('Chill Tent'));
+      final slogan = printed.indexWhere(
+        (line) => line.contains('Cold drinks, warm welcome'),
+      );
+      expect(name, isNonNegative);
+      expect(slogan, greaterThan(name));
+      expect(
+        printed.indexWhere((line) => line.contains('PRINTER TEST')),
+        greaterThan(slogan),
+      );
+    });
+  });
+
   group('the end of the page', () {
     test('cuts where there is a cutter', () {
       expect(_contains(page().build(at: at), _gsV), isTrue);
@@ -194,3 +240,16 @@ int _indexOf(List<int> haystack, List<int> needle) {
 
 bool _contains(List<int> haystack, List<int> needle) =>
     _indexOf(haystack, needle) >= 0;
+
+/// The width, in bytes, of the first raster image in [bytes].
+int _rasterWidthBytes(List<int> bytes) {
+  final start = _indexOf(bytes, _gsV0);
+  final header = start + _gsV0.length + 1;
+  return bytes[header] + (bytes[header + 1] << 8);
+}
+
+Uint8List _png({required int width, required int height}) {
+  final image = img.Image(width: width, height: height, numChannels: 4);
+  img.fill(image, color: img.ColorRgba8(0, 0, 0, 255));
+  return Uint8List.fromList(img.encodePng(image));
+}

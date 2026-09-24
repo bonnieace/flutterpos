@@ -32,6 +32,7 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_types.dart';
+import '../ui/money_text.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
 import 'profit_report.dart';
@@ -415,7 +416,7 @@ String weeklyReportMoney(TenantReportingCurrency? currency, double amount) =>
 /// separator is noise, and `TenantReportingCurrency.format` stays as it is so
 /// nothing else on the page changes shape.
 String weeklyReportHeroMoney(TenantReportingCurrency? currency, double amount) {
-  final grouped = NumberFormat('#,##0.00').format(amount);
+  final grouped = moneyTextGrouped(amount);
   final code = currency?.code;
   return code == null ? grouped : '$code $grouped';
 }
@@ -427,7 +428,7 @@ String weeklyReportHeroMoney(TenantReportingCurrency? currency, double amount) {
 /// - at two across on a phone a coded amount in the 22-point mono face does
 /// not fit its cell - and says nothing the card above it has not. A surface
 /// that does not carry [weeklyReportMoney] somewhere must not use this.
-String weeklyReportAmount(double amount) => amount.toStringAsFixed(2);
+String weeklyReportAmount(double amount) => moneyText(amount);
 
 /// The old screen's `MMM d` week ends, and its `MMM dd, yyyy - hh:mm a` rows.
 final DateFormat weeklyReportDayFormat = DateFormat('MMM d');

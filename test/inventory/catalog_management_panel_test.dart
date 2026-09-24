@@ -1270,7 +1270,7 @@ void main() {
     // the callable validates the resulting document, so a refusal can name a
     // field this correction never touched.
     expect(_field(tester, 'catalog-management-edit-name'), 'White bread loaf');
-    expect(_field(tester, 'catalog-management-edit-price'), '65.00');
+    expect(_field(tester, 'catalog-management-edit-price'), '65');
     await tester.enterText(
       find.byKey(const ValueKey('catalog-management-edit-price')),
       '70',
@@ -1431,7 +1431,7 @@ void main() {
     );
     await _openCorrection(tester, 'pd-1');
 
-    expect(_field(tester, 'catalog-management-edit-cost'), '40.00');
+    expect(_field(tester, 'catalog-management-edit-cost'), '40');
     await tester.tap(
       find.byKey(const ValueKey('catalog-management-edit-clear-cost')),
     );

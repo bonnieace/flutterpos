@@ -40,6 +40,7 @@
 /// read by nothing until this file.
 library;
 
+import '../ui/money_text.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -406,9 +407,10 @@ final class _CheckoutSkeleton extends StatelessWidget {
           AppTextField(
             key: const ValueKey('checkout-search'),
             label: 'Search by name or code',
+            dense: true,
+            placeholder: 'Search by name or code',
             leading: Icons.search,
             enabled: false,
-            helper: 'Tap a product to add it to the sale.',
           ),
           SizedBox(height: tokens.spacing.s8),
           // Every category label is `_snapshot.categories`, so the bar is data
@@ -748,20 +750,6 @@ final class _CartEditorState extends State<_CartEditor> {
     setState(() {
       _categoryId = uncachedOnly ? null : categoryId;
       _uncachedCategoriesOnly = uncachedOnly;
-    });
-  }
-
-  /// Empties the cart without saving anything.
-  ///
-  /// Nothing is persisted until [_save], so this destroys no record - only the
-  /// lines a cashier rang up for a customer who left. The saved receipt is
-  /// deliberately untouched: it describes a different, finished sale.
-  void _clearSale() {
-    setState(() {
-      _quantities.clear();
-      _unusableQuantities.clear();
-      _tender = null;
-      _clearRefusal();
     });
   }
 
@@ -1142,47 +1130,7 @@ final class _CartEditorState extends State<_CartEditor> {
                   horizontal: inset,
                   vertical: tokens.spacing.s12,
                 ),
-                children: <Widget>[
-                  // The sheet's own clear, in the position the fixed head used
-                  // to hold. §2.1's worked example still applies - it is the
-                  // destructive tier, and the save is at the far end of the
-                  // pane in `_cartFoot`.
-                  if (!stepped && _quantities.isNotEmpty) ...<Widget>[
-                    Align(
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: AppButton(
-                        key: const ValueKey('checkout-clear-sale'),
-                        label: 'Clear this sale',
-                        icon: Icons.delete_outline,
-                        tier: AppButtonTier.destructive,
-                        size: AppButtonSize.sm,
-                        onPressed: _saving
-                            ? null
-                            : () => _confirmClearSale(context),
-                      ),
-                    ),
-                    SizedBox(height: tokens.spacing.s8),
-                  ],
-                  ..._saleLines(context, tokens, currency),
-                  SizedBox(height: tokens.spacing.s16),
-                  // **§7's "Long copy" pattern, and this is policy rather than
-                  // state.** "Anything over two lines that explains *policy*
-                  // rather than *the current state* goes in a `Disclosure`" -
-                  // and what a saved sale does afterwards is the policy this
-                  // panel's own class comment spends four paragraphs on. It was
-                  // permanent body text at the foot of every cart.
-                  const Disclosure(
-                    key: ValueKey('checkout-submission-disclosure'),
-                    // 30 characters, inside
-                    // `Disclosure.summaryCharacterBudget`.
-                    summary: 'What happens to a saved sale',
-                    child: Text(
-                      key: ValueKey('checkout-submission-policy'),
-                      'A saved sale is submitted and confirmed automatically. '
-                      'It cannot be edited, retried, or deleted here.',
-                    ),
-                  ),
-                ],
+                children: <Widget>[..._saleLines(context, tokens, currency)],
               ),
             ),
           ),
@@ -1216,29 +1164,7 @@ final class _CartEditorState extends State<_CartEditor> {
         vertical: tokens.spacing.s8,
       ),
       child: Row(
-        children: <Widget>[
-          Expanded(child: SectionHeading('This sale')),
-          // Offered only when there is something to abandon, and never for a
-          // saved sale: nothing here is persisted, so this destroys no
-          // record.
-          //
-          // **§2.1's own worked example, closed.** "Clear this sale is
-          // `destructive`, Save sale is `primary`. Today the destructive
-          // action is the more prominent of the two." It was an
-          // `OutlinedButton` wearing the theme's mint outline directly above
-          // a `FilledButton`; it is §2.1's destructive tier now - red label,
-          // red border, transparent container - and the primary one is the
-          // save, at the other end of the pane.
-          if (_quantities.isNotEmpty)
-            AppButton(
-              key: const ValueKey('checkout-clear-sale'),
-              label: 'Clear this sale',
-              icon: Icons.delete_outline,
-              tier: AppButtonTier.destructive,
-              size: AppButtonSize.sm,
-              onPressed: _saving ? null : () => _confirmClearSale(context),
-            ),
-        ],
+        children: <Widget>[Expanded(child: SectionHeading('This sale'))],
       ),
     ),
   );
@@ -1526,6 +1452,12 @@ final class _CartEditorState extends State<_CartEditor> {
         AppTextField(
           key: const ValueKey('checkout-search'),
           label: 'Search by name or code',
+          // **The words inside the well, and nothing above or under it**, at
+          // the developer's direction on 2026-09-23: a caption and a helper
+          // cost two lines of a till screen to say what the magnifier and the
+          // placeholder already do.
+          dense: true,
+          placeholder: 'Search by name or code',
           leading: Icons.search,
           controller: _search,
           textInputAction: TextInputAction.search,
@@ -1533,7 +1465,6 @@ final class _CartEditorState extends State<_CartEditor> {
           // own tap, which is the only way a product enters the sale. Barcode
           // scanning is not wired to this field yet.
           onChanged: (_) => setState(() {}),
-          helper: 'Tap a product to add it to the sale.',
         ),
         if (_snapshot.categories.isNotEmpty ||
             _hasUncachedCategories) ...<Widget>[
@@ -1695,30 +1626,6 @@ final class _CartEditorState extends State<_CartEditor> {
   ///
   /// `ConfirmDialog` is §5.1's own row for this and does not exist yet.
   ///
-  /// **The confirm is §2.1's outlined destructive tier, and that is now the
-  /// specification rather than a workaround.** §7 used to ask for a *filled*
-  /// destructive confirm while §2.1 defined no filled destructive container at
-  /// all; the tier below was chosen because inventing the missing colour is what
-  /// `claude.md` forbids, and `design.md` **v0.6** withdrew the word on
-  /// 2026-08-16 at the product owner's direction. Nothing here changed when it
-  /// did, which is the outcome an amendment should have.
-  Future<void> _confirmClearSale(BuildContext context) async {
-    // **§7's own worked example, in §5.1's own component.** The consequence and
-    // the reassurance were one paragraph; they are the two rows §7 asks for -
-    // what happens, then what is still true, which is §8 rule 6.
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Clear this sale?',
-      consequence: 'Every item is removed and the payment method is cleared.',
-      stillTrue: 'Nothing has been saved yet, so no record is lost.',
-      confirmLabel: 'Clear it',
-      cancelLabel: 'Keep it',
-      confirmKey: const ValueKey('checkout-clear-confirm'),
-      cancelKey: const ValueKey('checkout-clear-cancel'),
-    );
-    if (confirmed && mounted) _clearSale();
-  }
-
   List<Widget> _tenderSection(BuildContext context, AppTokens tokens) =>
       <Widget>[
         // **Nothing is preselected, and saving without a choice is allowed.**
@@ -2469,7 +2376,7 @@ final class _CartLine extends StatelessWidget {
   }
 }
 
-String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+String _money(int minorUnits) => moneyTextOfMinor(minorUnits);
 
 /// Thousands separators, so a bound quoted to a cashier stays readable and
 /// stays derived from the constant it describes.

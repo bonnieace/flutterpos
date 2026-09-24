@@ -235,10 +235,7 @@ final class CheckoutPrintDispatcher {
         bytes: bytes,
       );
     } else {
-      await _queue.reprint(
-        sale.receiptNumber,
-        onReprint: (_) => onReprint(),
-      );
+      await _queue.reprint(sale.receiptNumber, onReprint: (_) => onReprint());
     }
     final ran = await _queue.run(sale.receiptNumber, transport: _transport);
     return ran.state == PrintJobState.printed

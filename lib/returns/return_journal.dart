@@ -75,9 +75,7 @@ final class TenantReturnJournalScreen extends StatelessWidget {
     title: 'View return',
     // The receipt a person can match against the paper in their hand, and the
     // document ID only when there is nothing better.
-    subtitle: receipt == null
-        ? 'Sale ${record.saleId}'
-        : 'Receipt $receipt',
+    subtitle: receipt == null ? 'Sale ${record.saleId}' : 'Receipt $receipt',
     body: _ReturnJournal(
       record: record,
       staffNames: staffNames,
@@ -304,7 +302,9 @@ final class _Masthead extends StatelessWidget {
               ),
             ),
             Text(
-              recordedAt == null ? 'Awaiting server time' : _instant(recordedAt),
+              recordedAt == null
+                  ? 'Awaiting server time'
+                  : _instant(recordedAt),
               key: const ValueKey('return-journal-recorded'),
               style: tokens.typography.caption.copyWith(
                 color: tokens.colors.text.tertiary,

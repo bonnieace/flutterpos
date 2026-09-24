@@ -90,7 +90,7 @@ void main() {
     // that took no card must not need a typed nought to close.
     await tester.enterText(
       find.byKey(const ValueKey('declared-cash')),
-      '1250.00',
+      '1250',
     );
     await tester.enterText(
       find.byKey(const ValueKey('declared-mpesa')),
@@ -107,9 +107,9 @@ void main() {
     // Only what was typed is read back. The figure it was measured against is
     // deliberately absent here too: a declaration that prints the expected
     // total on submission is blind exactly once.
-    expect(find.text('Cash: 1250.00.'), findsOneWidget);
+    expect(find.text('Cash: 1250.'), findsOneWidget);
     expect(find.text('M-Pesa: 340.50.'), findsOneWidget);
-    expect(find.text('Card: 0.00.'), findsOneWidget);
+    expect(find.text('Card: 0.'), findsOneWidget);
     expect(find.byKey(const ValueKey('shift-close-sales')), findsNothing);
     await _tapInSheet(tester, 'shift-close-done');
 
@@ -157,7 +157,7 @@ void main() {
     await _openShiftSheet(tester);
     await tester.enterText(
       find.byKey(const ValueKey('declared-cash')),
-      '900.00',
+      '900',
     );
     await _tapInSheet(tester, 'close-shift-confirm');
 
@@ -288,7 +288,7 @@ void main() {
 
     await tester.enterText(
       find.byKey(const ValueKey('declared-cash')),
-      '250.00',
+      '250',
     );
     await _tapInSheet(tester, 'close-shift-confirm');
 
@@ -353,7 +353,7 @@ void main() {
     // Corrected, with the other two boxes left empty.
     await tester.enterText(
       find.byKey(const ValueKey('declared-cash')),
-      '80.00',
+      '80',
     );
     await _tapInSheet(tester, 'close-shift-confirm');
 

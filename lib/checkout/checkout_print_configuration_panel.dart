@@ -428,7 +428,7 @@ class _PrinterContentsState extends State<_PrinterContents> {
   );
   late PrinterPaperWidth _paperWidth =
       widget.configured.configuration?.paperWidth ??
-      PrinterPaperWidth.columns32;
+      PrinterPaperWidth.columns48;
   late bool _hasCutter = widget.configured.configuration?.hasCutter ?? true;
 
   @override
@@ -481,11 +481,9 @@ class _PrinterContentsState extends State<_PrinterContents> {
             'A sale is recorded before its receipt is sent, so a printer that '
             'is off or jammed never stops a sale. Each receipt waits its turn '
             'and is sent once; if it fails it is kept, with the reason, until '
-            'somebody sends it again. Nothing here proves paper came out - the '
-            'app can only say the receipt reached the printer.',
+            'somebody sends it again.',
           ),
         ),
-        SizedBox(height: tokens.spacing.s12),
         // **The paragraph that was the subtitle, as the status it always
         // was.** Whether receipts are going anywhere at all is not prose about
         // the screen, it is the screen's standing - and §2.1 wants a container,
@@ -495,26 +493,23 @@ class _PrinterContentsState extends State<_PrinterContents> {
         // `problem` for settings that cannot be read is §2.1's own
         // *"unreadable"*; `attention` for none set up is its *"awaiting"*,
         // because that is a setup step nobody has taken yet.
-        Callout(
-          key: const ValueKey('printer-configuration-current'),
-          status: switch (configured.state) {
-            TenantPrinterConfigurationState.configured => AppStatus.info,
-            TenantPrinterConfigurationState.absent => AppStatus.attention,
-            TenantPrinterConfigurationState.malformed => AppStatus.problem,
-          },
-          message: switch (configured.state) {
-            TenantPrinterConfigurationState.configured =>
-              'Receipts go to ${configured.configuration!.endpoint} on '
-                  '${configured.configuration!.paperWidth.columns}-column '
-                  'paper.',
-            TenantPrinterConfigurationState.absent =>
-              'No printer is set up, so receipts are not sent anywhere. Sales '
-                  'are recorded as normal.',
-            TenantPrinterConfigurationState.malformed =>
-              'The saved printer settings cannot be read, so receipts are not '
-                  'sent anywhere. Saving a printer here replaces them.',
-          },
-        ),
+        //
+        // **Only when receipts are going nowhere**, since 2026-09-23: a working
+        // printer is already stated by the filled fields under it.
+        if (!configured.canPrint) ...<Widget>[
+          SizedBox(height: tokens.spacing.s12),
+          Callout(
+            key: const ValueKey('printer-configuration-current'),
+            status: configured.state == TenantPrinterConfigurationState.absent
+                ? AppStatus.attention
+                : AppStatus.problem,
+            message: configured.state == TenantPrinterConfigurationState.absent
+                ? 'No printer is set up, so receipts are not sent anywhere. '
+                      'Sales are recorded as normal.'
+                : 'The saved printer settings cannot be read, so receipts are '
+                      'not sent anywhere. Saving a printer here replaces them.',
+          ),
+        ],
         if (!widget.canPublish) ...<Widget>[
           SizedBox(height: tokens.spacing.s12),
           const Callout(
@@ -531,9 +526,6 @@ class _PrinterContentsState extends State<_PrinterContents> {
             onChanged: (_) => setState(() {}),
             label: 'Printer address',
             leading: Icons.print_outlined,
-            helper:
-                'The name or IP the printer shows on its own test page, '
-                'such as 192.168.1.50.',
           ),
           SizedBox(height: tokens.spacing.s8),
           AppTextField(
@@ -543,7 +535,6 @@ class _PrinterContentsState extends State<_PrinterContents> {
             keyboardType: TextInputType.number,
             onChanged: (_) => setState(() {}),
             label: 'Port',
-            helper: 'Almost always ${PrinterEndpoint.rawEscPosPort}.',
           ),
           SizedBox(height: tokens.spacing.s12),
           AppSelect<PrinterPaperWidth>(
@@ -551,9 +542,6 @@ class _PrinterContentsState extends State<_PrinterContents> {
             value: _paperWidth,
             enabled: !widget.busy,
             label: 'Paper width',
-            helper:
-                'The roll this printer takes. It decides how the receipt '
-                'is laid out.',
             items: <AppSelectItem<PrinterPaperWidth>>[
               for (final width in PrinterPaperWidth.values)
                 AppSelectItem<PrinterPaperWidth>(
@@ -570,10 +558,6 @@ class _PrinterContentsState extends State<_PrinterContents> {
             value: _hasCutter,
             contentPadding: EdgeInsets.zero,
             title: const Text('This printer cuts the paper'),
-            subtitle: const Text(
-              'Without a cutter the receipt ends with blank paper to tear '
-              'against instead.',
-            ),
             onChanged: widget.busy
                 ? null
                 : (value) => setState(() => _hasCutter = value ?? false),

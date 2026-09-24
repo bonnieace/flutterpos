@@ -48,9 +48,9 @@ void main() {
     expect(find.byKey(const ValueKey('checkout-line-product-a')), findsOne);
     expect(
       _text(tester, 'checkout-line-amount-product-a'),
-      '2 x KES 120.50 = KES 241.00',
+      '2 x KES 120.50 = KES 241',
     );
-    expect(_text(tester, 'checkout-total'), 'KES 248.00');
+    expect(_text(tester, 'checkout-total'), 'KES 248');
   });
 
   testWidgets('preselects no tender and records the silence', (tester) async {
@@ -264,7 +264,7 @@ void main() {
     await _tap(tester, 'checkout-line-remove-product-a');
 
     expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
-    expect(_text(tester, 'checkout-total'), 'KES 0.00');
+    expect(_text(tester, 'checkout-total'), 'KES 0');
   });
 
   testWidgets('a device with no catalog for this business cannot sell', (
@@ -644,67 +644,6 @@ void main() {
     });
   });
 
-  group('clearing a sale', () {
-    testWidgets('is offered only once there is something to abandon', (
-      tester,
-    ) async {
-      await _pump(tester, sessions, catalog, drafts);
-
-      expect(find.byKey(const ValueKey('checkout-clear-sale')), findsNothing);
-
-      await _tap(tester, 'checkout-product-product-a');
-
-      expect(find.byKey(const ValueKey('checkout-clear-sale')), findsOne);
-    });
-
-    testWidgets('a confirmed clear empties the cart and the tender', (
-      tester,
-    ) async {
-      await _pump(tester, sessions, catalog, drafts);
-
-      await _tap(tester, 'checkout-product-product-a');
-      await _tap(tester, 'checkout-tender-cash');
-      await _tap(tester, 'checkout-clear-sale');
-      await _tap(tester, 'checkout-clear-confirm');
-
-      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
-      // The tender goes with the cart so it is never carried into the next
-      // customer unobserved.
-      expect(
-        _text(tester, 'checkout-save-blocked'),
-        'Add at least one item to save this sale.',
-      );
-      // Nothing was ever persisted, so nothing was destroyed.
-      expect(drafts.requests, isEmpty);
-    });
-
-    testWidgets('a cancelled clear keeps every line', (tester) async {
-      await _pump(tester, sessions, catalog, drafts);
-
-      await _tap(tester, 'checkout-product-product-a');
-      await _tap(tester, 'checkout-clear-sale');
-      await _tap(tester, 'checkout-clear-cancel');
-
-      expect(find.byKey(const ValueKey('checkout-line-product-a')), findsOne);
-    });
-
-    testWidgets('clearing a sale leaves the last receipt on screen', (
-      tester,
-    ) async {
-      await _pump(tester, sessions, catalog, drafts);
-
-      await _tap(tester, 'checkout-product-product-a');
-      await _tap(tester, 'checkout-tender-cash');
-      await _tap(tester, 'checkout-save');
-      await _tap(tester, 'checkout-product-product-b');
-      await _tap(tester, 'checkout-clear-sale');
-      await _tap(tester, 'checkout-clear-confirm');
-
-      // The receipt describes a different, finished sale.
-      expect(snackNotice(tester).message, contains('CT-A7F-20260731-0001'));
-    });
-  });
-
   group('typing a quantity', () {
     testWidgets('sells twelve of something in one entry', (tester) async {
       await _pump(tester, sessions, catalog, drafts);
@@ -714,7 +653,7 @@ void main() {
 
       expect(
         _text(tester, 'checkout-line-amount-product-b'),
-        '12 x KES 7.00 = KES 84.00',
+        '12 x KES 7 = KES 84',
       );
 
       await _tap(tester, 'checkout-tender-cash');
@@ -734,7 +673,7 @@ void main() {
 
       expect(
         _text(tester, 'checkout-line-amount-product-b'),
-        '10 x KES 7.00 = KES 70.00',
+        '10 x KES 7 = KES 70',
       );
       expect(
         _field(tester, 'checkout-line-quantity-product-b').controller!.text,
@@ -755,7 +694,7 @@ void main() {
       // become the sale.
       expect(
         _text(tester, 'checkout-line-amount-product-b'),
-        '1 x KES 7.00 = KES 7.00',
+        '1 x KES 7 = KES 7',
       );
       expect(
         _text(tester, 'checkout-save-blocked'),
@@ -977,7 +916,7 @@ void main() {
       // `Total` as a label and the amount as money, and one `Text` cannot carry
       // two roles - so the bar is a label over a figure, and this key is on the
       // figure.
-      expect(_text(tester, 'checkout-cart-bar-total'), 'KES 14.00');
+      expect(_text(tester, 'checkout-cart-bar-total'), 'KES 14');
       expect(
         tester
             .widget<Badge>(find.byKey(const ValueKey('checkout-cart-badge')))
@@ -1009,20 +948,19 @@ void main() {
 
       await _tap(tester, 'checkout-product-product-b');
       await _tap(tester, 'checkout-open-cart');
-      expect(_text(tester, 'checkout-total'), 'KES 7.00');
+      expect(_text(tester, 'checkout-total'), 'KES 7');
 
       // The sheet is its own route, so it does not rebuild when the panel
       // behind it does. Removing the only line has to empty it anyway.
       await _tap(tester, 'checkout-line-remove-product-b');
 
       expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
-      expect(_text(tester, 'checkout-total'), 'KES 0.00');
+      expect(_text(tester, 'checkout-total'), 'KES 0');
     });
   });
 
   group('the till draws the design system rather than Material', () {
-    testWidgets('gives the save the primary tier and the clear the destructive '
-        'one', (tester) async {
+    testWidgets('gives the save the primary tier', (tester) async {
       // **`design.md` §2.1's own worked example, and it was still on screen.**
       // "Clear this sale is `destructive`, Save sale is `primary`. Today the
       // destructive action is the more prominent of the two." It was an
@@ -1032,10 +970,8 @@ void main() {
       await _tap(tester, 'checkout-product-product-a');
 
       expect(_save(tester).tier, AppButtonTier.primary);
-      expect(
-        _button(tester, 'checkout-clear-sale').tier,
-        AppButtonTier.destructive,
-      );
+      // No clear at all since 2026-09-23: a line comes out on its own delete.
+      expect(find.byKey(const ValueKey('checkout-clear-sale')), findsNothing);
     });
 
     testWidgets('replaces the save label with a spinner rather than a word', (
@@ -1186,29 +1122,6 @@ void main() {
 
       expect(_status(tester, 'checkout-unavailable'), AppStatus.info);
     });
-
-    testWidgets('folds the submission policy rather than printing it', (
-      tester,
-    ) async {
-      // §7's "Long copy": policy folds, current state does not. What happens to
-      // a saved sale afterwards was permanent body text at the foot of every
-      // cart.
-      await _pump(tester, sessions, catalog, drafts);
-
-      final disclosure = tester.widget<Disclosure>(
-        find.byKey(const ValueKey('checkout-submission-disclosure')),
-      );
-      expect(
-        disclosure.summary.length,
-        lessThanOrEqualTo(Disclosure.summaryCharacterBudget),
-      );
-      // Closed means gone from the tree, so a screen reader is not read prose
-      // nobody can see.
-      expect(
-        find.byKey(const ValueKey('checkout-submission-policy')),
-        findsNothing,
-      );
-    });
   });
 
   group('a product this device believes is gone', () {
@@ -1257,7 +1170,7 @@ void main() {
       // draws two texts where it drew one. `checkout-product-price-oversold` is
       // the other half and is asserted below.
       expect(_text(tester, 'checkout-product-stock-oversold'), '-3 in stock');
-      expect(_text(tester, 'checkout-product-price-oversold'), 'KES 5.00');
+      expect(_text(tester, 'checkout-product-price-oversold'), 'KES 5');
     });
 
     testWidgets('a stocked product carries no such mark', (tester) async {
@@ -1277,7 +1190,7 @@ void main() {
       await _pump(tester, sessions, catalog, drafts);
 
       expect(_text(tester, 'checkout-product-stock-product-b'), '12 in stock');
-      expect(_text(tester, 'checkout-product-price-product-b'), 'KES 7.00');
+      expect(_text(tester, 'checkout-product-price-product-b'), 'KES 7');
       // The freshness sentence that used to sit above the grid was removed on
       // 2026-08-23 to give the products the screen. The figure itself is what
       // a cashier reads, and it is still on the card.
@@ -1542,7 +1455,7 @@ void main() {
       expect(find.byType(AppSnackBar), findsNothing);
       expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
       expect(_field(tester, 'checkout-search').controller!.text, isEmpty);
-      expect(_text(tester, 'checkout-total'), 'KES 0.00');
+      expect(_text(tester, 'checkout-total'), 'KES 0');
     },
   );
 

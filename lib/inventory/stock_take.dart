@@ -139,11 +139,15 @@ final class TenantStockTakeCount {
     final seen = raw['seenQuantity'];
     final at = raw['countedAt'];
     if (counted is! int || at is! String) {
-      throw const TenantStockTakeException(TenantStockTakeFailure.draftUnreadable);
+      throw const TenantStockTakeException(
+        TenantStockTakeFailure.draftUnreadable,
+      );
     }
     final countedAt = DateTime.tryParse(at);
     if (countedAt == null) {
-      throw const TenantStockTakeException(TenantStockTakeFailure.draftUnreadable);
+      throw const TenantStockTakeException(
+        TenantStockTakeFailure.draftUnreadable,
+      );
     }
     return TenantStockTakeCount(
       counted: counted,
@@ -239,11 +243,15 @@ final class TenantStockTakeDraft {
         startedAt is! String ||
         scope is! Map ||
         counts is! Map) {
-      throw const TenantStockTakeException(TenantStockTakeFailure.draftUnreadable);
+      throw const TenantStockTakeException(
+        TenantStockTakeFailure.draftUnreadable,
+      );
     }
     final started = DateTime.tryParse(startedAt);
     if (started == null) {
-      throw const TenantStockTakeException(TenantStockTakeFailure.draftUnreadable);
+      throw const TenantStockTakeException(
+        TenantStockTakeFailure.draftUnreadable,
+      );
     }
     return TenantStockTakeDraft(
       takeId: takeId,
@@ -331,7 +339,9 @@ List<TenantStockTakePageIntent> tenantStockTakePages(
   int pageSize = maximumStockTakeLinesPerPage,
 }) {
   if (pageSize < 1 || pageSize > maximumStockTakeLinesPerPage) {
-    throw const TenantStockTakeException(TenantStockTakeFailure.invalidPageSize);
+    throw const TenantStockTakeException(
+      TenantStockTakeFailure.invalidPageSize,
+    );
   }
   if (draft.counts.isEmpty) {
     throw const TenantStockTakeException(TenantStockTakeFailure.nothingCounted);
@@ -401,7 +411,9 @@ String tenantStockTakeId({
   required String businessDate,
 }) {
   final digest = sha256.convert(
-    utf8.encode(<String>['stockTake', tenantId, counterUid, requestId].join(' ')),
+    utf8.encode(
+      <String>['stockTake', tenantId, counterUid, requestId].join(' '),
+    ),
   );
   return 'st_${businessDate}_${digest.toString().substring(0, 40)}';
 }
@@ -449,7 +461,9 @@ final class TenantStockTakeWriteResult {
 
 /// Where a page of a count goes.
 abstract interface class TenantStockTakeWriter {
-  Future<TenantStockTakeWriteResult> submitPage(TenantStockTakePageIntent intent);
+  Future<TenantStockTakeWriteResult> submitPage(
+    TenantStockTakePageIntent intent,
+  );
 }
 
 /// The guarded boundary a count is handed in through.

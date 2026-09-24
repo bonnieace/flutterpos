@@ -595,7 +595,7 @@ void main() {
       // idempotency record and a round trip behind a request that does nothing.
       expect(() => _updateIntent(), _code('product_unchanged'));
       expect(
-        () => _updateIntent(name: '  White   bread loaf  ', price: '65.00'),
+        () => _updateIntent(name: '  White   bread loaf  ', price: '65'),
         _code('product_unchanged'),
       );
     });
@@ -681,7 +681,7 @@ void main() {
       expect(intent.clearsCost, isTrue);
       expect(
         intent.changes.single.toString(),
-        'Unit cost: was 40.00, now not recorded',
+        'Unit cost: was 40, now not recorded',
       );
     });
 

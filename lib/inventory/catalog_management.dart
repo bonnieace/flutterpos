@@ -1,3 +1,4 @@
+import '../ui/money_text.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -1649,8 +1650,7 @@ int tenantCatalogPriceMinorUnits(
 }
 
 /// Formats exact minor units the way every amount in this app is written.
-String tenantCatalogMajorUnits(int minorUnits) =>
-    (minorUnits / 100).toStringAsFixed(2);
+String tenantCatalogMajorUnits(int minorUnits) => moneyTextOfMinor(minorUnits);
 
 final RegExp _whitespaceRun = RegExp(r'\s+');
 final RegExp _pricePattern = RegExp(r'^\d{1,12}(\.\d{1,2})?$');

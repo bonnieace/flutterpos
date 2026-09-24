@@ -207,7 +207,11 @@ final class HiveTenantStockTakeDrafts extends ChangeNotifier
     // and a record of yesterday cannot satisfy today because today's key is a
     // different one.
     final satisfied = <String>{
-      ...satisfiedScopes(uid: uid, tenantId: tenantId, businessDate: businessDate),
+      ...satisfiedScopes(
+        uid: uid,
+        tenantId: tenantId,
+        businessDate: businessDate,
+      ),
       scopeKey,
     };
     await _box.put(key, satisfied.toList());

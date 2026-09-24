@@ -59,7 +59,9 @@ final class TenantStockTakeAssignment {
       throw const FormatException('an assignment must name a member.');
     }
     if (categoryId != null && (categoryId is! String || categoryId.isEmpty)) {
-      throw const FormatException('categoryId must be a category when present.');
+      throw const FormatException(
+        'categoryId must be a category when present.',
+      );
     }
     return TenantStockTakeAssignment(
       uid: uid,
@@ -240,14 +242,18 @@ final class TenantPublishedStockTakeSchedule {
   /// allowed to hold a shop out of its own register, so the failure mode is
   /// "no count is due" and the one person who can fix it sees `malformed` on
   /// the settings screen.
-  TenantStockTakeSchedule get schedule => _schedule ?? TenantStockTakeSchedule.none;
+  TenantStockTakeSchedule get schedule =>
+      _schedule ?? TenantStockTakeSchedule.none;
 
   TenantStockTakeSchedule? get published => _schedule;
 }
 
 /// Guarded read-only repository for one business's counting schedule.
 final class TenantStockTakeScheduleRepository extends TenantReadRepository {
-  TenantStockTakeScheduleRepository({required super.session, required super.reader});
+  TenantStockTakeScheduleRepository({
+    required super.session,
+    required super.reader,
+  });
 
   static const documentId = 'stock_take';
 
@@ -302,13 +308,19 @@ final class TenantStockTakeScheduleIntent {
 }
 
 final class TenantStockTakeSchedulePublisher extends TenantReadRepository {
-  TenantStockTakeSchedulePublisher({required super.session, required super.reader});
+  TenantStockTakeSchedulePublisher({
+    required super.session,
+    required super.reader,
+  });
 
   static const List<TenantRole> allowedRoles =
       TenantStockTakeScheduleRepository.writeRoles;
 
   Future<TenantPublishedStockTakeSchedule> loadPublished() =>
-      TenantStockTakeScheduleRepository(session: session, reader: reader).load();
+      TenantStockTakeScheduleRepository(
+        session: session,
+        reader: reader,
+      ).load();
 
   /// Builds the one instruction these values describe.
   ///

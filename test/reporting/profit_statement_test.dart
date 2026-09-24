@@ -44,7 +44,7 @@ void main() {
       currency: 'KES',
     );
 
-    expect(_text(tester, 'day-profit'), 'KES -25.00');
+    expect(_text(tester, 'day-profit'), 'KES -25');
     expect(_text(tester, 'day-margin'), '-25.0%');
   });
 
@@ -57,7 +57,7 @@ void main() {
 
     // The figure survives and the margin line is absent entirely, rather than
     // being a percentage of nothing.
-    expect(_text(tester, 'day-profit'), 'KES 0.00');
+    expect(_text(tester, 'day-profit'), 'KES 0');
     expect(find.byKey(const ValueKey('day-margin')), findsNothing);
     expect(find.text('Margin'), findsNothing);
   });

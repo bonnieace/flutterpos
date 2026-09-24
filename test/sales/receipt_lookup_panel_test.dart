@@ -54,7 +54,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('receipt-lookup-total-co-1')))
           .data,
-      'Total: KES 10.00',
+      'Total: KES 10',
     );
 
     await tester.tap(find.byKey(const ValueKey('receipt-lookup-returns-co-1')));

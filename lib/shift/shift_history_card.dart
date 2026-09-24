@@ -39,6 +39,7 @@ import 'package:intl/intl.dart';
 import '../reporting/reporting_currency.dart';
 import '../ui/buttons.dart';
 import '../ui/card.dart';
+import '../ui/money_text.dart';
 import '../ui/press.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -618,17 +619,16 @@ String _correctedSemantics(ShiftSummaryAmendment amendment) {
 /// currency; see [TenantReportingCurrency], and the notice the panel prints once
 /// when this returns bare figures.
 String shiftMoney(TenantReportingCurrency currency, int minorUnits) {
-  final grouped = _amountFormat.format(minorUnits / 100);
+  final grouped = moneyTextGroupedOfMinor(minorUnits);
   final code = currency.code;
   return code == null ? grouped : '$code $grouped';
 }
 
 /// An amount with no currency code, for a sentence a screen reader hears.
-String _plainAmount(int minorUnits) => _amountFormat.format(minorUnits / 100);
+String _plainAmount(int minorUnits) => moneyTextGroupedOfMinor(minorUnits);
 
 String _clock(DateTime instant) => _clockFormat.format(instant.toLocal());
 
 final DateFormat _dayFormat = DateFormat('EEE d MMM');
 final DateFormat _clockFormat = DateFormat('HH:mm');
 final DateFormat _stampFormat = DateFormat('d MMM yyyy, HH:mm');
-final NumberFormat _amountFormat = NumberFormat('#,##0.00');

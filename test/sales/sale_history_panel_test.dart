@@ -33,7 +33,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('sale-history-recorded')))
           .data,
-      'Recorded: 18.00 over 2 transactions. Counted cash was 20.00.',
+      'Recorded: 18 over 2 transactions. Counted cash was 20.',
     );
     expect(find.byKey(const ValueKey('sale-history-entry-co-2')), findsOne);
     expect(
@@ -49,7 +49,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('sale-history-total-co-1')))
           .data,
-      'KES 9.00',
+      'KES 9',
     );
     expect(
       tester
@@ -57,7 +57,7 @@ void main() {
             find.byKey(const ValueKey('sale-history-discount-co-1')),
           )
           .data,
-      '1.00',
+      '1',
     );
     expect(
       tester
@@ -267,7 +267,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('sale-history-recorded')))
           .data,
-      'This shift closed without a recorded summary. Counted cash was 20.00.',
+      'This shift closed without a recorded summary. Counted cash was 20.',
     );
     expect(find.byKey(const ValueKey('sale-history-empty')), findsOne);
   });
