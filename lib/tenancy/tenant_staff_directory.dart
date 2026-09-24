@@ -3,6 +3,17 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../inventory/product_image_cache.dart';
+import '../reports/analysis/sales_report.dart';
+import '../reports/analysis/staff_analysis.dart';
+import '../reports/analysis/staff_report.dart';
+import '../reports/report_document.dart';
+import '../reports/report_file.dart';
+import '../reports/report_identity_source.dart';
+import '../reports/report_period.dart';
+import '../reports/report_run.dart';
+import '../reports/ui/report_action.dart';
+import '../sales/sale_history.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
@@ -619,7 +630,15 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
     this.queryReader,
     this.clock,
     this.tickets,
+    this.reportSaver,
+    this.imageCache,
   });
+
+  /// Where a generated report goes. Null renders no report control at all.
+  final TenantReportSaver? reportSaver;
+
+  /// Lets a report's branding lockup reuse the logo this device already holds.
+  final TenantImageCache? imageCache;
 
   static const allowedRoles = <TenantRole>[
     TenantRole.admin,
@@ -666,6 +685,8 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
     queryReader: queryReader,
     clock: clock,
     tickets: tickets,
+    reportSaver: reportSaver,
+    imageCache: imageCache,
   );
 }
 
@@ -676,9 +697,18 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
 /// settled on for every other route here. It carries no action of its own:
 /// *Invite staff* is a button at the head of the body now.
 final class _StaffFrame extends StatelessWidget {
-  const _StaffFrame({required this.child});
+  const _StaffFrame({required this.child, this.reportAction});
 
   final Widget child;
+
+  /// The toolbar control that takes a comparison of the roster away.
+  ///
+  /// **`actions` rather than `primaryAction`.** This page exists to manage who
+  /// is on the roster; how they compare over a period is a second question, and
+  /// it is asked of a document rather than of this screen. Absent in every
+  /// phase but the read one, because there is no session to report against
+  /// until the guard has produced one.
+  final Widget? reportAction;
 
   @override
   Widget build(BuildContext context) => AppScaffold(
@@ -696,6 +726,7 @@ final class _StaffFrame extends StatelessWidget {
     // line that fits.
     subtitle: 'Manage your team, their roles and access.',
     contentWidth: AppContentWidth.records,
+    actions: <Widget>[if (reportAction != null) reportAction!],
     body: child,
   );
 }
@@ -716,8 +747,12 @@ final class TenantStaffDirectoryPanel extends StatefulWidget {
     this.clock,
     this.tickets,
     this.pageSize = 20,
+    this.reportSaver,
+    this.imageCache,
   });
 
+  final TenantReportSaver? reportSaver;
+  final TenantImageCache? imageCache;
   final TenantDataReader reader;
   final CancelTenantInvitationCallable? cancelInvitationCallable;
   final InviteStaffCallable? inviteCallable;
@@ -752,6 +787,8 @@ final class _TenantStaffDirectoryPanelState
     clock: widget.clock,
     tickets: widget.tickets,
     pageSize: widget.pageSize,
+    reportSaver: widget.reportSaver,
+    imageCache: widget.imageCache,
   );
 }
 
@@ -770,8 +807,12 @@ final class _TenantStaffManagementPanel extends StatefulWidget {
     required this.clock,
     required this.tickets,
     required this.pageSize,
+    required this.reportSaver,
+    required this.imageCache,
   });
 
+  final TenantReportSaver? reportSaver;
+  final TenantImageCache? imageCache;
   final TenantDataReader reader;
   final CancelTenantInvitationCallable? cancelInvitationCallable;
   final InviteStaffCallable? inviteCallable;
@@ -1102,6 +1143,7 @@ final class _TenantStaffManagementPanelState
         ),
       ),
       builder: (context, session, page) => _StaffFrame(
+        reportAction: _reportAction(session),
         child: _StaffManagementContents(
           session: session,
           page: page,
@@ -1120,6 +1162,79 @@ final class _TenantStaffManagementPanelState
           onPrevious: _pageIndex == 0 ? null : _previous,
           onNext: page.hasMore ? () => _next(page.nextCursor) : null,
         ),
+      ),
+    );
+  }
+
+  /// The toolbar control that takes a staff comparison away.
+  ///
+  /// **Reads the whole roster and a whole period, or quotes no share.** The
+  /// four counters this screen used to carry were removed because a figure
+  /// assembled from the page on screen was judged a lie. A report is not
+  /// allowed to reintroduce that: the source walks every page of the
+  /// directory, and `TenantStaffAnalysis.isComplete` decides whether any share
+  /// of the whole may be printed at all.
+  ///
+  /// Null where no saver is wired, or where the session may not read the sales
+  /// the comparison is built from - a staff report without trading in it would
+  /// be the directory with a letterhead.
+  Widget? _reportAction(TenantSession session) {
+    final saver = widget.reportSaver;
+    if (saver == null ||
+        !session.canAccess(
+          allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
+        )) {
+      return null;
+    }
+
+    return TenantReportAction(
+      clock: _now,
+      run: TenantReportRun(
+        kind: TenantReportKind.staff,
+        support: TenantReportPeriodSupport.range,
+        saver: saver,
+        build: (period) async {
+          final sales = TenantSalesReportSource(
+            repository: TenantSaleHistoryRepository(
+              session: session,
+              reader: widget.reader,
+            ),
+          );
+          final source = TenantStaffReportSource(
+            directory: TenantStaffDirectoryRepository(
+              session: session,
+              reader: widget.reader,
+            ),
+            sales: sales,
+          );
+          final roster = await source.gatherRoster();
+          final read = await sales.gather(period);
+          final previous = await sales.gatherPrevious(period);
+          final identity = await readTenantReportIdentity(
+            session: session,
+            reader: widget.reader,
+            generatedAt: _now(),
+            imageCache: widget.imageCache,
+          );
+          return describeStaffReport(
+            identity: identity,
+            analysis: TenantStaffAnalysis.from(
+              period: period,
+              roster: roster.roster,
+              sales: read.sales,
+              // The staff comparison only ranks people, so an unread earlier
+              // window and an empty one leave it in the same place: nobody
+              // has a previous rank. It takes the empty list for either.
+              previous: previous ?? const <TenantSale>[],
+              isComplete: roster.complete,
+              truncated: read.truncated,
+              documentsRead:
+                  roster.roster.length +
+                  read.sales.length +
+                  (previous?.length ?? 0),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1373,7 +1488,11 @@ final class _StaffManagementContents extends StatelessWidget {
             key: const ValueKey('invite-staff-open'),
             label: 'Invite staff',
             icon: Icons.person_add_alt_1_outlined,
-            tier: AppButtonTier.primary,
+            // **Secondary, not primary**, at the developer's direction on
+            // 2026-09-23 - the call expenses made for its own head button the
+            // day before. A full-width mint slab over the roster made the page
+            // read as being about inviting rather than about who is on it.
+            tier: AppButtonTier.secondary,
             expand: true,
             onPressed: onInvite,
           );

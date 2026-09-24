@@ -5,7 +5,16 @@ import '../reporting/reporting_currency.dart';
 import '../reporting/shift_amendment_feed.dart';
 import '../reporting/shift_amendment_feed_panel.dart';
 import '../returns/return_actions.dart';
-import '../sales/sale_history_panel.dart';
+import '../inventory/product_image_cache.dart';
+import '../reports/analysis/shifts_analysis.dart';
+import '../reports/analysis/shifts_report.dart';
+import '../reports/report_document.dart';
+import '../reports/report_file.dart';
+import '../reports/report_identity_source.dart';
+import '../reports/report_people.dart';
+import '../reports/report_period.dart';
+import '../reports/report_run.dart';
+import '../reports/ui/report_action.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -17,7 +26,6 @@ import '../ui/fields.dart';
 import '../ui/pagination.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
-import '../ui/sheet.dart';
 import '../ui/skeleton.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
@@ -44,9 +52,6 @@ import 'shift_history_card.dart';
 ///   it: five things between the title and the first shift, every one of them
 ///   about *which twenty happened to be read*. A day is a question the read
 ///   answers exactly, and each card still says whether it settled.
-/// - **The prose itself moved into a sheet**, opened from the toolbar. It is
-///   the same four claims; it is just no longer between the title and the data.
-///   See [showShiftReconciliationSheet].
 /// - **Days are groups**, so `2026-07-31 - Brian` stops being a record title.
 /// - **The difference is the figure with the weight**, and only where there is
 ///   one. See `shift_history_card.dart`.
@@ -58,9 +63,17 @@ final class TenantShiftHistoryScreen extends StatelessWidget {
     this.returnActions,
     this.pageSize = 20,
     this.clock,
+    this.reportSaver,
+    this.imageCache,
   });
 
   final TenantDataReader reader;
+
+  /// Where a generated report goes. Null renders no toolbar control at all.
+  final TenantReportSaver? reportSaver;
+
+  /// Fetches the logo the report's branding band draws.
+  final TenantImageCache? imageCache;
 
   /// Forwarded to the panel. See [TenantShiftHistoryPanel.salesReportRoute].
   final ShiftSalesReportRoute salesReportRoute;
@@ -69,10 +82,8 @@ final class TenantShiftHistoryScreen extends StatelessWidget {
   /// unavailable while it is absent.
   final TenantReturnActions? returnActions;
 
-  /// Forwarded to the panel. **Here so a test can drive the route rather than
-  /// the panel inside it**, which matters now that two of this screen's controls
-  /// live in the toolbar: a test that pumped the panel alone would be a test of
-  /// a page that no longer exists on its own.
+  /// Forwarded to the panel, so a test can drive the route rather than the
+  /// panel inside it.
   final int pageSize;
 
   /// Forwarded to the panel. See [TenantShiftHistoryPanel.clock].
@@ -82,36 +93,15 @@ final class TenantShiftHistoryScreen extends StatelessWidget {
   Widget build(BuildContext context) => AppScaffold(
     title: 'Shift history',
     contentWidth: AppContentWidth.records,
-    // **Both of these are chrome rather than the page's subject**, which is the
-    // split `AppScaffold.actions` documents. *My recent sales* cuts across every
-    // shift on the page and is not what any one row is about; *how this is
-    // counted* is about the screen. Neither is what the page exists for, so
-    // neither takes `primaryAction`.
+    // **One toolbar control since 2026-09-24.** *My recent sales* and the
+    // reconciliation explainer were taken off this bar on 2026-09-23 because
+    // the day and the person above the list are the whole of what the page
+    // asks. This is not a third question about the page - it is a copy of a
+    // period taken away, which is chrome by the same reading.
     actions: <Widget>[
-      Builder(
-        builder: (context) => AppIconButton(
-          key: const ValueKey('shift-history-own-sales'),
-          icon: Icons.receipt_long_outlined,
-          semanticLabel: 'My recent sales',
-          bordered: false,
-          tier: AppButtonTier.tertiary,
-          onPressed: () => _openSales(
-            context,
-            const TenantOwnSaleHistoryRequest(),
-            reader: reader,
-            returnActions: returnActions,
-          ),
-        ),
-      ),
-      Builder(
-        builder: (context) => AppIconButton(
-          key: const ValueKey('shift-history-explainer'),
-          icon: Icons.info_outline,
-          semanticLabel: 'How a shift is reconciled',
-          bordered: false,
-          tier: AppButtonTier.tertiary,
-          onPressed: () => showShiftReconciliationSheet(context),
-        ),
+      TenantSessionReportAction(
+        clock: clock ?? DateTime.now,
+        runFor: (session) => _reportRun(session),
       ),
     ],
     body: TenantShiftHistoryPanel(
@@ -122,6 +112,58 @@ final class TenantShiftHistoryScreen extends StatelessWidget {
       clock: clock,
     ),
   );
+
+  /// Shifts over a period, which the day filter cannot ask for.
+  ///
+  /// **Management only, and there is no own-shifts version.** A period report
+  /// over the whole business is the every-cashier permission whichever way it
+  /// is sliced, so a cashier gets no control rather than one covering only
+  /// themselves - which would read as the shop's and be one person's.
+  TenantReportRun? _reportRun(TenantSession session) {
+    final saver = reportSaver;
+    if (saver == null) return null;
+    if (!TenantShiftHistoryRepository.canReadEveryCashier(session)) return null;
+
+    final now = clock ?? DateTime.now;
+    return TenantReportRun(
+      kind: TenantReportKind.shifts,
+      support: TenantReportPeriodSupport.range,
+      saver: saver,
+      build: (period) async {
+        final source = TenantShiftsReportSource(
+          repository: TenantShiftHistoryRepository(
+            session: session,
+            reader: reader,
+          ),
+        );
+        final read = await source.gather(period);
+        final previous = await source.gatherPrevious(period);
+        final identity = await readTenantReportIdentity(
+          session: session,
+          reader: reader,
+          generatedAt: now(),
+          imageCache: imageCache,
+        );
+        final analysis = TenantShiftsAnalysis.from(
+          period: period,
+          shifts: read.shifts,
+          previous: previous,
+          truncated: read.truncated,
+        );
+        return describeShiftsReport(
+          identity: identity,
+          analysis: analysis,
+          people: await readTenantReportPeople(
+            session: session,
+            reader: reader,
+            uids: analysis.people
+                .take(TenantShiftsAnalysis.listed)
+                .map((person) => person.staffId),
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Builds the Sales report opened on [businessDate], narrowed to [staffId].
@@ -524,32 +566,6 @@ final class _TenantShiftHistoryPanelState
   }
 }
 
-/// Opens the read-only sales route under the same session scope, so its own
-/// guard sees the exact controller this page was authorized against.
-///
-/// The toolbar's *My recent sales* is its one caller since a shift's card opens
-/// the Sales report instead - see [TenantShiftHistoryPanel.salesReportRoute].
-void _openSales(
-  BuildContext context,
-  TenantSaleHistoryRequest request, {
-  required TenantDataReader reader,
-  required TenantReturnActions? returnActions,
-}) {
-  final sessions = TenantSessionScope.read(context);
-  Navigator.of(context).push(
-    AppPageRoute<void>(
-      builder: (_) => TenantSessionScope(
-        controller: sessions,
-        child: TenantSaleHistoryScreen(
-          reader: reader,
-          request: request,
-          returnActions: returnActions,
-        ),
-      ),
-    ),
-  );
-}
-
 final class _ShiftHistoryContents extends StatelessWidget {
   const _ShiftHistoryContents({
     required this.session,
@@ -816,85 +832,3 @@ final class _ShiftHistoryContents extends StatelessWidget {
     );
   }
 }
-
-/// The four claims that used to sit between the title and the first shift.
-///
-/// **Same words, different place.** They were a five-line paragraph every
-/// person read past once and then past forever, above the data they were about;
-/// here they are one tap from the toolbar, laid out as the four terms a person
-/// would actually come looking for the meaning of.
-Future<void> showShiftReconciliationSheet(BuildContext context) =>
-    showAppSheet<void>(
-      context,
-      builder: (context, controller) {
-        final tokens = AppTokens.componentOf(context);
-        final body = tokens.density.body(tokens.typography);
-        Widget term(String name, String meaning, Color colour) => Padding(
-          padding: EdgeInsets.only(bottom: tokens.spacing.s16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                name,
-                style: tokens.typography.labelMedium.copyWith(color: colour),
-              ),
-              SizedBox(height: tokens.spacing.s4),
-              Text(
-                meaning,
-                style: body.copyWith(color: tokens.colors.text.secondary),
-              ),
-            ],
-          ),
-        );
-        return ListView(
-          key: const ValueKey('shift-history-explainer-sheet'),
-          controller: controller,
-          padding: EdgeInsets.fromLTRB(
-            tokens.spacing.s20,
-            tokens.spacing.s8,
-            tokens.spacing.s20,
-            tokens.spacing.s24,
-          ),
-          children: <Widget>[
-            const SectionHeading('How a shift is reconciled'),
-            SizedBox(height: tokens.spacing.s16),
-            term(
-              'Counted cash',
-              'What was declared at the close, exactly as the server holds it. '
-                  'It is never recomputed here.',
-              tokens.colors.text.money,
-            ),
-            term(
-              'Recorded sales',
-              "What that shift's own sales came to, exactly as the server "
-                  'holds them.',
-              tokens.colors.text.money,
-            ),
-            term(
-              'The difference',
-              'The whole declaration against the whole of the sales, less any '
-                  'opening float - takings, not cash alone, so a shop taking '
-                  'M-Pesa does not read as short by its M-Pesa. Reconciliation '
-                  'resolves it.',
-              tokens.colors.status.problem.fg,
-            ),
-            term(
-              'Corrections',
-              "A correction rewrites a shift's recorded sales to the total its "
-                  'own sales prove. It never changes the counted cash. The '
-                  'record of who asked for one, and why, is kept for managers, '
-                  'administrators and owners.',
-              tokens.colors.status.attention.fg,
-            ),
-            AppButton(
-              key: const ValueKey('shift-history-explainer-done'),
-              label: 'Got it',
-              tier: AppButtonTier.primary,
-              expand: true,
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        );
-      },
-    );

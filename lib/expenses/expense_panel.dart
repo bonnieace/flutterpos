@@ -13,7 +13,16 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../checkout/checkout_draft.dart';
+import '../inventory/product_image_cache.dart';
 import '../reporting/reporting_currency.dart';
+import '../reports/analysis/expense_analysis.dart';
+import '../reports/analysis/expense_report.dart';
+import '../reports/report_document.dart';
+import '../reports/report_file.dart';
+import '../reports/report_identity_source.dart';
+import '../reports/report_period.dart';
+import '../reports/report_run.dart';
+import '../reports/ui/report_action.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -125,6 +134,8 @@ final class TenantExpensesScreen extends StatelessWidget {
     required this.reader,
     this.writer,
     this.clock,
+    this.reportSaver,
+    this.imageCache,
   });
 
   final TenantDataReader reader;
@@ -135,9 +146,22 @@ final class TenantExpensesScreen extends StatelessWidget {
 
   final DateTime Function()? clock;
 
+  /// Where a generated report goes. Null renders no report control at all,
+  /// which is what a build with no saver wired should show rather than a
+  /// button that does nothing.
+  final TenantReportSaver? reportSaver;
+
+  /// Lets a report's branding lockup reuse the logo this device already holds.
+  final TenantImageCache? imageCache;
+
   @override
-  Widget build(BuildContext context) =>
-      TenantExpensesPanel(reader: reader, writer: writer, clock: clock);
+  Widget build(BuildContext context) => TenantExpensesPanel(
+    reader: reader,
+    writer: writer,
+    clock: clock,
+    reportSaver: reportSaver,
+    imageCache: imageCache,
+  );
 }
 
 /// Reads and records expenses behind [TenantRouteGuard].
@@ -147,11 +171,15 @@ final class TenantExpensesPanel extends StatefulWidget {
     required this.reader,
     this.writer,
     this.clock,
+    this.reportSaver,
+    this.imageCache,
   });
 
   final TenantDataReader reader;
   final TenantExpenseWriter? writer;
   final DateTime Function()? clock;
+  final TenantReportSaver? reportSaver;
+  final TenantImageCache? imageCache;
 
   @override
   State<TenantExpensesPanel> createState() => _TenantExpensesPanelState();
@@ -433,6 +461,7 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
       ),
       builder: (context, session, view) => _ExpensesFrame(
         record: _recordButton(() => _record(session)),
+        reportAction: _reportAction(session),
         filters: filters,
         child: _ExpensesContents(
           period: view.period,
@@ -446,6 +475,53 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
               ? null
               : (record) => _void(session, record, view.currency),
         ),
+      ),
+    );
+  }
+
+  /// The toolbar control that takes a report of a period away.
+  ///
+  /// **Built here because this is where the session is.** A report reads the
+  /// period the person picks at the moment they ask for it, against the
+  /// guarded session - not against whatever this page happens to have on
+  /// screen, and not against the range in the filter row. The two are
+  /// deliberately independent: somebody looking at this month may well want
+  /// last quarter on paper.
+  ///
+  /// Null where no saver is wired, which renders no control at all.
+  Widget? _reportAction(TenantSession session) {
+    final saver = widget.reportSaver;
+    if (saver == null) return null;
+
+    return TenantReportAction(
+      clock: () => _now,
+      run: TenantReportRun(
+        kind: TenantReportKind.expenses,
+        support: TenantReportPeriodSupport.range,
+        saver: saver,
+        build: (period) async {
+          final source = TenantExpenseReportSource(
+            repository: TenantExpenseRepository(
+              session: session,
+              reader: widget.reader,
+            ),
+          );
+          final read = await source.gather(period);
+          final identity = await readTenantReportIdentity(
+            session: session,
+            reader: widget.reader,
+            generatedAt: _now,
+            imageCache: widget.imageCache,
+          );
+          return describeExpenseReport(
+            identity: identity,
+            analysis: TenantExpenseAnalysis.from(
+              period: period,
+              spending: read.now,
+              previous: read.before,
+            ),
+          );
+        },
       ),
     );
   }
@@ -510,6 +586,7 @@ final class _ExpensesFrame extends StatelessWidget {
     required this.filters,
     required this.child,
     this.record,
+    this.reportAction,
   });
 
   /// The period and the type, side by side.
@@ -521,6 +598,15 @@ final class _ExpensesFrame extends StatelessWidget {
   /// on the refusal, which offers nothing.
   final Widget? record;
 
+  /// The toolbar control that takes a copy of a period away.
+  ///
+  /// **`actions` rather than `primaryAction`.** This page exists to show what
+  /// the business spent; taking a report of it is a second thing you may want
+  /// to do, not the reason the page is here. It is also absent in every phase
+  /// but the read one - there is no session to report against until the guard
+  /// has one, and a control that cannot work should not be drawn.
+  final Widget? reportAction;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -528,6 +614,7 @@ final class _ExpensesFrame extends StatelessWidget {
       title: 'Expenses',
       subtitle: 'What the business spent, beyond the cost of its stock.',
       contentWidth: AppContentWidth.records,
+      actions: <Widget>[if (reportAction != null) reportAction!],
       body: ListView(
         key: const ValueKey('expenses'),
         padding: EdgeInsets.all(tokens.spacing.s20),

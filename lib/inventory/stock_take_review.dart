@@ -178,7 +178,10 @@ final class TenantStockTakeLineRecord {
 
 /// Guarded reads of this business's counts.
 final class TenantStockTakeReviewRepository extends TenantReadRepository {
-  TenantStockTakeReviewRepository({required super.session, required super.reader});
+  TenantStockTakeReviewRepository({
+    required super.session,
+    required super.reader,
+  });
 
   /// Who may look at a count and the lines under it.
   ///
@@ -228,6 +231,92 @@ final class TenantStockTakeReviewRepository extends TenantReadRepository {
       cursor: cursor,
     );
     return page.items.map(TenantStockTakeRecord.fromSnapshot).toList();
+  }
+
+  /// Every count taken over a span of trading days, oldest first.
+  ///
+  /// **A range over the document key, which needs no index at all.** A take's
+  /// ID is `st_<businessDate>_<digest>` - see `tenantStockTakeId` - so the
+  /// bounds are the first and last key a day could produce, and Firestore
+  /// serves a `__name__` range without one being declared. Ranging a
+  /// `businessDate` field instead would have asked the server to index a fact
+  /// the key already carries.
+  ///
+  /// **The upper bound reaches past the digest deliberately.** `￿` sorts
+  /// after every character a digest can hold, so the last day of the period is
+  /// included whole rather than cut at whichever take happens to sort first.
+  Future<
+    ({List<TenantStockTakeRecord> items, String? nextDocumentId})
+  >
+  loadDateRange({
+    required TenantCollectionReader collectionReader,
+    required String startBusinessDate,
+    required String endBusinessDate,
+    int pageSize = defaultPageSize,
+    String? startAfterDocumentId,
+  }) async {
+    if (pageSize < 1 || pageSize > 50) {
+      throw RangeError.range(pageSize, 1, 50, 'pageSize');
+    }
+    if (startBusinessDate.compareTo(endBusinessDate) > 0) {
+      throw ArgumentError.value(
+        startBusinessDate,
+        'startBusinessDate',
+        'is after endBusinessDate',
+      );
+    }
+    final reader = collectionReader is TenantReportRangeReader
+        ? collectionReader as TenantReportRangeReader
+        : null;
+    if (reader == null) {
+      throw StateError('This reader cannot read a stock count period.');
+    }
+
+    final requested = pageSize + 1;
+    final snapshots = await reader.queryTenantDocumentIdRange(
+      TenantDocumentIdRangeQuery.scoped(
+        collectionPath: paths.collectionPath(TenantCollection.stockTakes),
+        limit: requested,
+        startAtDocumentId: 'st_${startBusinessDate}_',
+        endAtDocumentId: 'st_${endBusinessDate}_￿',
+        startAfterDocumentId: startAfterDocumentId,
+      ),
+    );
+    if (snapshots.length > requested) {
+      throw const TenantScopeViolation(
+        'The stock count period returned more documents than requested.',
+      );
+    }
+
+    final records = <TenantStockTakeRecord>[];
+    final seen = <String>{};
+    for (final snapshot in snapshots) {
+      final record = TenantStockTakeRecord.fromSnapshot(snapshot);
+      if (!seen.add(record.id)) {
+        throw const TenantScopeViolation(
+          'The stock count period returned a duplicate document.',
+        );
+      }
+      // The key range bounds the span, and the take states its own day. A
+      // transport that ignored the bounds must not file a count under a
+      // period it was not taken in.
+      if (record.businessDate.compareTo(startBusinessDate) < 0 ||
+          record.businessDate.compareTo(endBusinessDate) > 0) {
+        throw const TenantScopeViolation(
+          'The stock count period returned a count from another period.',
+        );
+      }
+      records.add(record);
+    }
+
+    final hasMore = records.length > pageSize;
+    final visible = hasMore
+        ? records.take(pageSize).toList(growable: false)
+        : records;
+    return (
+      items: visible,
+      nextDocumentId: hasMore ? visible.last.id : null,
+    );
   }
 
   /// The lines of one count that differ from the books.
@@ -288,7 +377,9 @@ final class TenantStockTakeProductNames extends TenantReadRepository {
     final requested = <String>{};
     for (final productId in productIds) {
       try {
-        requested.add(validateTenantDocumentId(productId, fieldName: 'productId'));
+        requested.add(
+          validateTenantDocumentId(productId, fieldName: 'productId'),
+        );
       } on ArgumentError {
         continue;
       }
@@ -442,18 +533,21 @@ TenantStockTakeApplyFailure _failureOf(
 ) {
   final message = error.message ?? '';
   return switch (error.code) {
-    'permission-denied' || 'unauthenticated' =>
-      TenantStockTakeApplyFailure.forbidden,
+    'permission-denied' ||
+    'unauthenticated' => TenantStockTakeApplyFailure.forbidden,
     'not-found' => TenantStockTakeApplyFailure.missing,
     'failed-precondition' when message.contains('not finished arriving') =>
       TenantStockTakeApplyFailure.stillArriving,
     'failed-precondition' => TenantStockTakeApplyFailure.invalidStoredQuantity,
-    'deadline-exceeded' || 'unavailable' || 'aborted' || 'internal' =>
-      TenantStockTakeApplyFailure.ambiguous,
+    'deadline-exceeded' ||
+    'unavailable' ||
+    'aborted' ||
+    'internal' => TenantStockTakeApplyFailure.ambiguous,
     // A refusal partway through a loop has already corrected part of the count,
     // so it is never simply "nothing happened".
-    _ => appliedSoFar > 0
-        ? TenantStockTakeApplyFailure.ambiguous
-        : TenantStockTakeApplyFailure.refused,
+    _ =>
+      appliedSoFar > 0
+          ? TenantStockTakeApplyFailure.ambiguous
+          : TenantStockTakeApplyFailure.refused,
   };
 }

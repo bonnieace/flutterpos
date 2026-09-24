@@ -423,6 +423,116 @@ final class TenantReturnHistoryRepository extends TenantReadRepository {
       hasMore: page.hasMore,
     );
   }
+
+  /// Every return taken over a span of trading days, oldest first.
+  ///
+  /// **The read a report needs, and the one the screen's filters could not
+  /// express.** [loadReturns] narrows to a single `recordedOn`; a report covers
+  /// a period, and reading one by looping a day at a time would be one round
+  /// trip per day for a month of days - most of them answering nothing.
+  ///
+  /// **Keyed to `recordedOn`**, the day the reversal was taken, rather than to
+  /// the day of the sale being reversed. See
+  /// [TenantBusinessDateRangeField.recordedOn] for why those are different
+  /// questions.
+  ///
+  /// **The position is typed rather than an opaque string**, unlike every
+  /// paginated screen here. A cursor is a string because it crosses into a
+  /// widget and back; this paging is internal to one report's gather loop and
+  /// never leaves it, so encoding the pair would be ceremony around a value
+  /// nobody else can see.
+  Future<
+    ({List<TenantReturn> items, TenantBusinessDateRangePosition? next})
+  >
+  loadRecordedRange({
+    required String startRecordedOn,
+    required String endRecordedOn,
+    int pageSize = 50,
+    TenantBusinessDateRangePosition? startAfter,
+  }) async {
+    if (!session.canAccess(allowedRoles: allowedRoles)) {
+      throw const TenantReturnException('returns_forbidden');
+    }
+    if (pageSize < 1 || pageSize > 50) {
+      throw RangeError.range(pageSize, 1, 50, 'pageSize');
+    }
+    final String start;
+    final String end;
+    try {
+      start = validateCheckoutBusinessDate(startRecordedOn);
+      end = validateCheckoutBusinessDate(endRecordedOn);
+    } on ArgumentError {
+      throw const TenantReturnException('invalid_recorded_on');
+    }
+    if (start.compareTo(end) > 0) {
+      throw const TenantReturnException('invalid_return_range');
+    }
+    // The same shape `TenantSaleHistoryRepository.loadReport` uses: the range
+    // transport is a separate interface from the collection reader, so it is
+    // reached by a checked cast rather than by promotion.
+    final reader = _collectionReader is TenantReportRangeReader
+        ? _collectionReader as TenantReportRangeReader
+        : null;
+    if (reader == null) {
+      throw StateError('This reader cannot read a returns period.');
+    }
+
+    final requested = pageSize + 1;
+    final snapshots = await reader.queryTenantBusinessDateRange(
+      TenantBusinessDateRangeQuery.scoped(
+        collectionPath: paths.collectionPath(TenantCollection.returns),
+        orderBy: TenantBusinessDateRangeField.recordedOn,
+        limit: requested,
+        startBusinessDate: start,
+        endBusinessDate: end,
+        startAfter: startAfter,
+      ),
+    );
+    if (snapshots.length > requested) {
+      throw const TenantScopeViolation(
+        'The returns period returned more documents than requested.',
+      );
+    }
+
+    final items = <TenantReturn>[];
+    final seen = <String>{};
+    for (final snapshot in snapshots) {
+      final record = TenantReturn.fromDocument(
+        path: snapshot.path,
+        data: snapshot.data,
+      );
+      if (!seen.add(record.id)) {
+        throw const TenantScopeViolation(
+          'The returns period returned a duplicate document.',
+        );
+      }
+      if (record.tenantId != session.tenantId) {
+        throw const TenantReturnException('cross_tenant_return');
+      }
+      // The query bounds the span, but a transport that ignored either bound
+      // must not put a return inside a period it was not taken in - the
+      // document states that period on its own first page.
+      if (record.recordedOn.compareTo(start) < 0 ||
+          record.recordedOn.compareTo(end) > 0) {
+        throw const TenantReturnException('return_recorded_on_mismatch');
+      }
+      items.add(record);
+    }
+
+    final hasMore = items.length > pageSize;
+    final visible = hasMore
+        ? items.take(pageSize).toList(growable: false)
+        : items;
+    return (
+      items: visible,
+      next: hasMore
+          ? TenantBusinessDateRangePosition(
+              businessDate: visible.last.recordedOn,
+              documentId: visible.last.id,
+            )
+          : null,
+    );
+  }
 }
 
 /// The sale's trading day, where the return records one.

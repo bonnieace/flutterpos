@@ -1,7 +1,16 @@
+import '../ui/money_text.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../reports/analysis/inventory_analysis.dart';
+import '../reports/analysis/inventory_report.dart';
+import '../reports/report_document.dart';
+import '../reports/report_file.dart';
+import '../reports/report_identity_source.dart';
+import '../reports/report_period.dart';
+import '../reports/report_run.dart';
+import '../reports/ui/report_action.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -27,6 +36,7 @@ import 'catalog_management.dart';
 import 'product_background_removal.dart';
 import 'product_image_framing.dart';
 import 'product_image_framing_panel.dart';
+import 'product_image_cache.dart';
 import 'product_image_picker.dart';
 import 'stock_adjustment.dart';
 import 'product_image_drafts.dart';
@@ -71,9 +81,22 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
     this.movementFeedRoute,
     this.movementFeedRoles = const <TenantRole>[],
     this.productVisualBuilder,
+    this.reportSaver,
+    this.imageCache,
+    this.clock,
   });
 
   final TenantDataReader reader;
+
+  /// Where a generated report goes. Null renders no toolbar control at all.
+  final TenantReportSaver? reportSaver;
+
+  /// Fetches the logo the report's branding band draws.
+  final TenantImageCache? imageCache;
+
+  /// Reads the instant the snapshot is stamped with. Injected so a test can
+  /// pin it.
+  final DateTime Function()? clock;
 
   /// Supplied by the composition root. While it is absent this route is exactly
   /// a read-only statement of the catalog, as every other injected capability
@@ -147,6 +170,12 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
     title: 'Inventory Manager',
     subtitle: 'Manage products, categories, and stock.',
     contentWidth: AppContentWidth.records,
+    actions: <Widget>[
+      TenantSessionReportAction(
+        clock: clock ?? DateTime.now,
+        runFor: (session) => _reportRun(session),
+      ),
+    ],
     body: TenantCatalogManagementPanel(
       reader: reader,
       writer: writer,
@@ -170,6 +199,53 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
       productVisualBuilder: productVisualBuilder,
     ),
   );
+
+  /// The catalog as at now, which is the only thing it can honestly be.
+  ///
+  /// **The one report with no date control.** `products` carries no history -
+  /// a document holds the quantity it holds now and nothing about last
+  /// Tuesday - so there is nothing to range over. The picker is told
+  /// [TenantReportPeriodSupport.snapshot] and offers no period at all, rather
+  /// than offering one the records could never honour.
+  TenantReportRun? _reportRun(TenantSession session) {
+    final saver = reportSaver;
+    if (saver == null) return null;
+
+    final now = clock ?? DateTime.now;
+    return TenantReportRun(
+      kind: TenantReportKind.inventory,
+      support: TenantReportPeriodSupport.snapshot,
+      saver: saver,
+      // The period the sheet hands back is the day the snapshot was taken.
+      // It is not read from and not ranged over; the document is stamped with
+      // the instant instead.
+      build: (period) async {
+        final source = TenantInventoryReportSource(
+          repository: TenantCatalogRepository(
+            session: session,
+            reader: reader,
+          ),
+        );
+        final read = await source.gather();
+        final names = await source.categoryNames();
+        final identity = await readTenantReportIdentity(
+          session: session,
+          reader: reader,
+          generatedAt: now(),
+          imageCache: imageCache,
+        );
+        return describeInventoryReport(
+          identity: identity,
+          analysis: TenantInventoryAnalysis.from(
+            takenAt: now(),
+            products: read.products,
+            categoryNames: names,
+            truncated: read.truncated,
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Guarded catalog-management content, split out to keep it widget-testable.
@@ -2382,7 +2458,7 @@ final class _InventoryProductCard extends StatelessWidget {
                 width: priceColumnWidth,
                 child: _InventoryProductMetric(
                   label: 'Price',
-                  value: product.price.toStringAsFixed(2),
+                  value: moneyText(product.price),
                   valueKey: ValueKey(
                     'catalog-management-product-price-${product.id}',
                   ),
@@ -2810,7 +2886,7 @@ final class _InventoryProductTableRow extends StatelessWidget {
           ),
         ),
         price: Text(
-          product.price.toStringAsFixed(2),
+          moneyText(product.price),
           key: ValueKey('catalog-management-product-price-${product.id}'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -2819,7 +2895,7 @@ final class _InventoryProductTableRow extends StatelessWidget {
           ),
         ),
         cost: Text(
-          product.cost?.toStringAsFixed(2) ?? '—',
+          product.cost == null ? '—' : moneyText(product.cost!),
           key: ValueKey('catalog-management-product-cost-${product.id}'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -2830,7 +2906,7 @@ final class _InventoryProductTableRow extends StatelessWidget {
           ),
         ),
         value: Text(
-          (product.price * product.quantity).toStringAsFixed(2),
+          moneyText(product.price * product.quantity),
           key: ValueKey('catalog-management-product-value-${product.id}'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -3139,7 +3215,7 @@ String _refusalMessage(String code) => switch (code) {
   _ => 'The catalog could not be changed.',
 };
 
-String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+String _money(int minorUnits) => moneyTextOfMinor(minorUnits);
 
 /// The shared full-screen frame for adding and correcting one product.
 ///
@@ -3894,10 +3970,10 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
     text: widget.product.sku,
   );
   late final TextEditingController _price = TextEditingController(
-    text: widget.product.price.toStringAsFixed(2),
+    text: moneyText(widget.product.price),
   );
   late final TextEditingController _cost = TextEditingController(
-    text: widget.product.cost?.toStringAsFixed(2) ?? '',
+    text: widget.product.cost == null ? '' : moneyText(widget.product.cost!),
   );
   late String _categoryId = widget.product.categoryId;
   bool _clearCost = false;

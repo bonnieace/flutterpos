@@ -1,3 +1,4 @@
+import '../ui/money_text.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,6 +17,15 @@ import '../reporting/sales_totals_session_context.dart';
 import '../returns/return_actions.dart';
 import '../returns/return_history_panel.dart';
 import '../returns/return_offsets.dart';
+import '../inventory/product_image_cache.dart';
+import '../reports/analysis/sales_analysis.dart';
+import '../reports/analysis/sales_report.dart';
+import '../reports/report_document.dart';
+import '../reports/report_file.dart';
+import '../reports/report_identity_source.dart';
+import '../reports/report_period.dart';
+import '../reports/report_run.dart';
+import '../reports/ui/report_action.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -40,6 +50,70 @@ import 'sale_line_products.dart';
 import 'sale_reprint.dart';
 
 /// One tenant-safe Sales destination for daily browsing, lookup, and returns.
+/// The toolbar control that takes a sales report away.
+///
+/// **Management only, and the reason is honesty rather than privilege.**
+/// `loadReport` forces `soldById` to the reader's own uid for anybody outside
+/// `managementReportRoles` - which is right for a cashier looking at their own
+/// day on screen, and wrong for a document headed with the business's name. A
+/// cashier's report would be their own sales presented as the shop's takings,
+/// so there is no control rather than a misleading file.
+///
+/// Absent too where no saver is wired, and while the session is still opening.
+Widget _salesReportAction(
+  BuildContext context, {
+  required TenantDataReader reader,
+  required TenantReportSaver? saver,
+  required TenantImageCache? imageCache,
+  required DateTime Function()? clock,
+}) {
+  final session = TenantSessionScope.of(context).session;
+  if (saver == null ||
+      session == null ||
+      !session.canAccess(
+        allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
+      )) {
+    return const SizedBox.shrink();
+  }
+
+  DateTime now() => (clock ?? () => DateTime.now().toUtc())().toUtc();
+
+  return TenantReportAction(
+    clock: now,
+    run: TenantReportRun(
+      kind: TenantReportKind.sales,
+      support: TenantReportPeriodSupport.range,
+      saver: saver,
+      build: (period) async {
+        final source = TenantSalesReportSource(
+          repository: TenantSaleHistoryRepository(
+            session: session,
+            reader: reader,
+          ),
+        );
+        final read = await source.gather(period);
+        final previous = await source.gatherPrevious(period);
+        final identity = await readTenantReportIdentity(
+          session: session,
+          reader: reader,
+          generatedAt: now(),
+          imageCache: imageCache,
+        );
+        return describeSalesReport(
+          identity: identity,
+          analysis: TenantSalesAnalysis.from(
+            period: period,
+            sales: read.sales,
+            previous: previous,
+            truncated: read.truncated,
+            documentsRead: read.sales.length + (previous?.length ?? 0),
+          ),
+        );
+      },
+    ),
+  );
+}
+
 final class TenantSalesReportScreen extends StatelessWidget {
   const TenantSalesReportScreen({
     super.key,
@@ -54,7 +128,15 @@ final class TenantSalesReportScreen extends StatelessWidget {
     this.clock,
     this.initialBusinessDate,
     this.initialStaffId,
+    this.reportSaver,
+    this.imageCache,
   });
+
+  /// Where a generated report goes. Null renders no report control at all.
+  final TenantReportSaver? reportSaver;
+
+  /// Lets a report's branding lockup reuse the logo this device already holds.
+  final TenantImageCache? imageCache;
 
   final TenantDataReader reader;
   final TenantSalesHistoryQueryReader? reportReader;
@@ -88,6 +170,17 @@ final class TenantSalesReportScreen extends StatelessWidget {
     title: 'Sales Report',
     subtitle: 'Review transactions, receipts, and returns.',
     contentWidth: AppContentWidth.records,
+    actions: <Widget>[
+      Builder(
+        builder: (context) => _salesReportAction(
+          context,
+          reader: reader,
+          saver: reportSaver,
+          imageCache: imageCache,
+          clock: clock,
+        ),
+      ),
+    ],
     body: TenantSalesReportPanel(
       reader: reader,
       reportReader: reportReader,
@@ -2363,6 +2456,9 @@ final class _SaleCard extends StatelessWidget {
             padding: _SaleCardFrame.footPadding(tokens),
             color: tokens.colors.surface.overlay,
             child: Wrap(
+              // The spare width goes between the facts rather than after the
+              // last one, so the strip spans the card.
+              alignment: WrapAlignment.spaceBetween,
               spacing: tokens.spacing.s12,
               runSpacing: tokens.spacing.s4,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -2747,12 +2843,12 @@ String _receiptEnding(TenantSale sale) =>
 /// **The blank names what is blank.** The foot's facts stand as words alone
 /// since 2026-09-22, so a bare *Not recorded* no longer had a payments glyph in
 /// front of it to say what was not.
-String _tender(TenantSale sale) => sale.tender?.label ?? 'Payment not recorded';
+String _tender(TenantSale sale) => sale.tender?.label ?? 'Not recorded';
 
 String _saleMoney(TenantSale sale, int minorUnits) =>
     '${sale.currency} ${_money(minorUnits)}';
 
-String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+String _money(int minorUnits) => moneyTextOfMinor(minorUnits);
 
 /// When the customer paid, which offline is not when the server heard of it.
 ///

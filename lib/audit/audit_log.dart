@@ -314,6 +314,105 @@ final class TenantAuditLogRepository extends TenantReadRepository {
       eventType: eventType,
     );
   }
+
+  /// Every event recorded between two instants, oldest first.
+  ///
+  /// **This is the read the logs report was waiting for.** The trail is keyed
+  /// by the operation, request or delivery ID an event belongs to - a digest
+  /// for most writers - so document order carries no time information at all,
+  /// and the screen's own day filter is honest about being a sieve over one
+  /// page. Ordering by `createdAt` is what makes a period answerable, and it
+  /// is the same move [TenantCollectionOrder.createdAt] already made for the
+  /// stock ledger.
+  ///
+  /// **A record with no `createdAt` cannot appear here, and the report says
+  /// so.** [TenantAuditRecord.recordedAt] is optional because a row without a
+  /// time still proves an event happened; but an ordering cannot include a
+  /// document that has no value to order by. Firestore leaves those out of the
+  /// index entirely, so they are missing rather than misplaced - which is the
+  /// honest outcome, provided the document admits it.
+  Future<
+    ({List<TenantAuditRecord> items, TenantInstantRangePosition? next})
+  >
+  loadRecordedRange({
+    required DateTime startAt,
+    required DateTime endAt,
+    int pageSize = 50,
+    TenantInstantRangePosition? startAfter,
+  }) async {
+    if (!canReadInSession(session)) {
+      throw const TenantAuditLogException('audit_logs_forbidden');
+    }
+    if (pageSize < 1 || pageSize > 50) {
+      throw RangeError.range(pageSize, 1, 50, 'pageSize');
+    }
+    if (startAt.isAfter(endAt)) {
+      throw const TenantAuditLogException('invalid_audit_range');
+    }
+    final reader = _collectionReader is TenantReportRangeReader
+        ? _collectionReader as TenantReportRangeReader
+        : null;
+    if (reader == null) {
+      throw StateError('This reader cannot read an audit period.');
+    }
+
+    final requested = pageSize + 1;
+    final snapshots = await reader.queryTenantInstantRange(
+      TenantInstantRangeQuery.scoped(
+        collectionPath: paths.collectionPath(TenantCollection.auditLogs),
+        limit: requested,
+        startAt: startAt.toUtc(),
+        endAt: endAt.toUtc(),
+        startAfter: startAfter,
+      ),
+    );
+    if (snapshots.length > requested) {
+      throw const TenantScopeViolation(
+        'The audit period returned more documents than requested.',
+      );
+    }
+
+    final items = <TenantAuditRecord>[];
+    final seen = <String>{};
+    for (final snapshot in snapshots) {
+      final record = TenantAuditRecord.fromDocument(
+        path: snapshot.path,
+        data: snapshot.data,
+      );
+      if (!seen.add(record.id)) {
+        throw const TenantScopeViolation(
+          'The audit period returned a duplicate document.',
+        );
+      }
+      if (record.tenantId != session.tenantId) {
+        throw const TenantAuditLogException('cross_tenant_audit_record');
+      }
+      // Ordered by the instant, so every row must carry one. A document the
+      // transport returned without it was never in the index this asked of,
+      // and putting it in a period it cannot claim would be an invention.
+      final at = record.recordedAt;
+      if (at == null ||
+          at.isBefore(startAt.toUtc()) ||
+          at.isAfter(endAt.toUtc())) {
+        throw const TenantAuditLogException('foreign_audit_instant');
+      }
+      items.add(record);
+    }
+
+    final hasMore = items.length > pageSize;
+    final visible = hasMore
+        ? items.take(pageSize).toList(growable: false)
+        : items;
+    return (
+      items: visible,
+      next: hasMore
+          ? TenantInstantRangePosition(
+              at: visible.last.recordedAt!,
+              documentId: visible.last.id,
+            )
+          : null,
+    );
+  }
 }
 
 String _requiredString(Map<String, Object?> data, String field) {

@@ -12,16 +12,27 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
+import '../reports/analysis/stock_counts_analysis.dart';
+import '../reports/analysis/stock_counts_report.dart';
+import '../reports/report_document.dart';
+import '../reports/report_file.dart';
+import '../reports/report_identity_source.dart';
+import '../reports/report_people.dart';
+import '../reports/report_period.dart';
+import '../reports/report_run.dart';
+import '../reports/ui/report_action.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import 'product_image_cache.dart';
 import '../ui/buttons.dart';
+import '../ui/card.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
-import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
@@ -39,9 +50,21 @@ final class TenantStockTakeReviewScreen extends StatelessWidget {
     this.applyCallable,
     this.onApplied,
     this.countRoute,
+    this.reportSaver,
+    this.imageCache,
+    this.clock,
   });
 
   final TenantDataReader reader;
+
+  /// Where a generated report goes. Null renders no toolbar control at all.
+  final TenantReportSaver? reportSaver;
+
+  /// Fetches the logo the report's branding band draws.
+  final TenantImageCache? imageCache;
+
+  /// Reads the instant a report calls *now*. Injected so a test can pin it.
+  final DateTime Function()? clock;
 
   /// Absent in a build with no callable wired, which renders read-only.
   final ApplyStockTakeCallable? applyCallable;
@@ -62,9 +85,18 @@ final class TenantStockTakeReviewScreen extends StatelessWidget {
     title: 'Stock counts',
     subtitle: 'What was counted, and how it differed from the books.',
     contentWidth: AppContentWidth.records,
-    // **No toolbar action**, at the developer's direction on 2026-09-22.
-    // *Count stock* is a button the width of the page at the head of the body,
-    // with the two filters under it - the shape expenses and staff now open in.
+    // **One toolbar action since 2026-09-24**, and only one. *Count stock*
+    // stays a button the width of the page at the head of the body, with the
+    // two filters under it - the shape expenses and staff open in, and the
+    // developer's direction of 2026-09-22 that took the act off the toolbar.
+    // Taking a copy of a period away is not the act this page exists for, so
+    // it is chrome and it goes here.
+    actions: <Widget>[
+      TenantSessionReportAction(
+        clock: clock ?? DateTime.now,
+        runFor: (session) => _reportRun(session),
+      ),
+    ],
     body: TenantStockTakeReviewPanel(
       reader: reader,
       applyCallable: applyCallable,
@@ -72,6 +104,59 @@ final class TenantStockTakeReviewScreen extends StatelessWidget {
       countRoute: countRoute,
     ),
   );
+
+  /// Counts over a period, which the review list cannot ask for.
+  TenantReportRun? _reportRun(TenantSession session) {
+    final saver = reportSaver;
+    if (saver == null) return null;
+    // The same set that may read a count and the lines under it.
+    if (!session.canAccess(
+      allowedRoles: TenantStockTakeReviewRepository.allowedRoles,
+    )) {
+      return null;
+    }
+
+    final now = clock ?? DateTime.now;
+    return TenantReportRun(
+      kind: TenantReportKind.stockCounts,
+      support: TenantReportPeriodSupport.range,
+      saver: saver,
+      build: (period) async {
+        final source = TenantStockCountsReportSource(
+          repository: TenantStockTakeReviewRepository(
+            session: session,
+            reader: reader,
+          ),
+          reader: reader,
+        );
+        final read = await source.gather(period);
+        final previous = await source.gatherPrevious(period);
+        final identity = await readTenantReportIdentity(
+          session: session,
+          reader: reader,
+          generatedAt: now(),
+          imageCache: imageCache,
+        );
+        final analysis = TenantStockCountsAnalysis.from(
+          period: period,
+          takes: read.takes,
+          previous: previous,
+          truncated: read.truncated,
+        );
+        return describeStockCountsReport(
+          identity: identity,
+          analysis: analysis,
+          people: await readTenantReportPeople(
+            session: session,
+            reader: reader,
+            uids: analysis.counters
+                .take(TenantStockCountsAnalysis.listed)
+                .map((person) => person.staffId),
+          ),
+        );
+      },
+    );
+  }
 }
 
 final class TenantStockTakeReviewPanel extends StatefulWidget {
@@ -99,8 +184,7 @@ final class TenantStockTakeReviewPanel extends StatefulWidget {
       _TenantStockTakeReviewPanelState();
 }
 
-class _TenantStockTakeReviewPanelState
-    extends State<TenantStockTakeReviewPanel>
+class _TenantStockTakeReviewPanelState extends State<TenantStockTakeReviewPanel>
     with RereadOnReturn<TenantStockTakeReviewPanel> {
   /// **Handing a count in left this list showing "No counts yet".** *Count
   /// stock* is pushed from the screen above this panel, which cannot reach
@@ -113,8 +197,12 @@ class _TenantStockTakeReviewPanelState
 
   int _generation = 0;
 
-  /// The standing the list is narrowed to, or null for every standing.
-  TenantStockTakeStatus? _status;
+  /// The standing the list is narrowed to, as the label a count's card wears,
+  /// or null for every standing.
+  ///
+  /// **The card's own words**, so a filter and the badge it narrows by cannot
+  /// disagree: both come from [TenantStockTakeStanding.of].
+  String? _standing;
 
   /// The counter the list is narrowed to, or null for everybody.
   ///
@@ -188,7 +276,7 @@ class _TenantStockTakeReviewPanelState
       key: const ValueKey('stock-take-review-count'),
       label: 'Count stock',
       icon: Icons.checklist_outlined,
-      tier: AppButtonTier.primary,
+      tier: AppButtonTier.secondary,
       expand: true,
       onPressed: () {
         final controller = TenantSessionScope.of(context);
@@ -228,7 +316,10 @@ class _TenantStockTakeReviewPanelState
       // rather than the row.
       return TenantNamedPage<List<TenantStockTakeRecord>>(
         page: takes,
-        names: await _resolverFor(session, reader).resolve(takes.map((take) => take.counterUid)),
+        names: await _resolverFor(
+          session,
+          reader,
+        ).resolve(takes.map((take) => take.counterUid)),
       );
     };
     _loader = readWith(widget.reader);
@@ -255,7 +346,8 @@ class _TenantStockTakeReviewPanelState
     final shown = takes
         .where(
           (take) =>
-              (_status == null || take.status == _status) &&
+              (_standing == null ||
+                  TenantStockTakeStanding.of(take).label == _standing) &&
               (_counterUid == null || take.counterUid == _counterUid),
         )
         .toList(growable: false);
@@ -294,17 +386,18 @@ class _TenantStockTakeReviewPanelState
                       SizedBox(height: tokens.spacing.s12),
                   itemBuilder: (context, index) {
                     final take = shown[index];
+                    final counterLabel = tenantStaffLabel(
+                      take.counterUid,
+                      names: named.names,
+                      selfUid: session.uid,
+                    );
                     return TenantStockTakeCard(
                       // The key the record card carried, kept so a test written
                       // against this list keeps addressing the same count.
                       key: ValueKey<String>('stock-take-${take.id}'),
                       take: take,
-                      counterLabel: tenantStaffLabel(
-                        take.counterUid,
-                        names: named.names,
-                        selfUid: session.uid,
-                      ),
-                      onOpen: () => _open(session, take),
+                      counterLabel: counterLabel,
+                      onOpen: () => _open(take, counterLabel),
                     );
                   },
                 ),
@@ -326,45 +419,43 @@ class _TenantStockTakeReviewPanelState
     TenantNamedPage<List<TenantStockTakeRecord>> named,
   ) {
     final tokens = AppTokens.componentOf(context);
-    final counters =
-        <String>{
-          for (final take in named.page) take.counterUid,
-          if (_counterUid != null) _counterUid!,
-        }.toList(growable: false)
-          ..sort();
+    final counters = <String>{
+      for (final take in named.page) take.counterUid,
+      if (_counterUid != null) _counterUid!,
+    }.toList(growable: false)..sort();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Expanded(
-          child: AppSelect<TenantStockTakeStatus?>(
+          child: AppSelect<String?>(
             key: const ValueKey('stock-take-review-status-filter'),
             label: 'Standing',
             dense: true,
             leading: Icons.filter_alt_outlined,
-            value: _status,
-            items: const <AppSelectItem<TenantStockTakeStatus?>>[
-              AppSelectItem<TenantStockTakeStatus?>(
+            value: _standing,
+            items: const <AppSelectItem<String?>>[
+              AppSelectItem<String?>(
                 key: ValueKey('stock-take-review-status-all'),
                 value: null,
-                label: 'All standings',
+                label: 'Standing',
               ),
-              AppSelectItem<TenantStockTakeStatus?>(
-                key: ValueKey('stock-take-review-status-submitting'),
-                value: TenantStockTakeStatus.submitting,
-                label: 'Still arriving',
+              AppSelectItem<String?>(
+                key: ValueKey('stock-take-review-status-needs-review'),
+                value: 'Needs review',
+                label: 'Needs review',
               ),
-              AppSelectItem<TenantStockTakeStatus?>(
-                key: ValueKey('stock-take-review-status-submitted'),
-                value: TenantStockTakeStatus.submitted,
-                label: 'Handed in',
+              AppSelectItem<String?>(
+                key: ValueKey('stock-take-review-status-accepted'),
+                value: 'Accepted',
+                label: 'Accepted',
               ),
-              AppSelectItem<TenantStockTakeStatus?>(
-                key: ValueKey('stock-take-review-status-applied'),
-                value: TenantStockTakeStatus.applied,
-                label: 'Applied',
+              AppSelectItem<String?>(
+                key: ValueKey('stock-take-review-status-all-agreed'),
+                value: 'All agreed',
+                label: 'All agreed',
               ),
             ],
-            onChanged: (status) => setState(() => _status = status),
+            onChanged: (standing) => setState(() => _standing = standing),
           ),
         ),
         SizedBox(width: tokens.spacing.s12),
@@ -379,7 +470,7 @@ class _TenantStockTakeReviewPanelState
               const AppSelectItem<String?>(
                 key: ValueKey('stock-take-review-counter-all'),
                 value: null,
-                label: 'Everybody',
+                label: 'Staff',
               ),
               for (final uid in counters)
                 AppSelectItem<String?>(
@@ -399,7 +490,7 @@ class _TenantStockTakeReviewPanelState
     );
   }
 
-  Future<void> _open(TenantSession session, TenantStockTakeRecord take) async {
+  Future<void> _open(TenantStockTakeRecord take, String counterLabel) async {
     final sessions = TenantSessionScope.of(context);
     await Navigator.of(context).push(
       AppPageRoute<void>(
@@ -407,6 +498,7 @@ class _TenantStockTakeReviewPanelState
           controller: sessions,
           child: _TenantStockTakeDetailScreen(
             take: take,
+            counterLabel: counterLabel,
             reader: widget.reader,
             applyCallable: widget.applyCallable,
             onApplied: () {
@@ -433,12 +525,16 @@ final class _TenantStockTakeLines {
 final class _TenantStockTakeDetailScreen extends StatefulWidget {
   const _TenantStockTakeDetailScreen({
     required this.take,
+    required this.counterLabel,
     required this.reader,
     this.applyCallable,
     this.onApplied,
   });
 
   final TenantStockTakeRecord take;
+
+  /// Who counted it, already resolved by the list this was opened from.
+  final String counterLabel;
   final TenantDataReader reader;
   final ApplyStockTakeCallable? applyCallable;
   final VoidCallback? onApplied;
@@ -461,7 +557,7 @@ class _TenantStockTakeDetailScreenState
     _composeLoaders(widget.take.id);
     return AppScaffold(
       title: 'The count',
-      subtitle: widget.take.businessDate,
+      subtitle: _subtitle(widget.take, widget.counterLabel),
       contentWidth: AppContentWidth.records,
       body: TenantRouteGuard<_TenantStockTakeLines>(
         allowedRoles: TenantStockTakeReviewRepository.allowedRoles,
@@ -471,6 +567,21 @@ class _TenantStockTakeDetailScreenState
       ),
     );
   }
+
+  /// *Fri 19 Sep · Whole catalog · Grace Wanjiku*: when, what and who.
+  ///
+  /// The business date is stored as `yyyy-MM-dd`; one this cannot read is
+  /// shown as it is rather than dropped.
+  static String _subtitle(TenantStockTakeRecord take, String counterLabel) {
+    final date = DateTime.tryParse(take.businessDate);
+    return <String>[
+      date == null ? take.businessDate : _dayFormat.format(date),
+      take.categoryId == null ? 'Whole catalog' : 'One category',
+      counterLabel,
+    ].join(' · ');
+  }
+
+  static final DateFormat _dayFormat = DateFormat('EEE d MMM');
 
   /// The lines, and the names of the products they name.
   ///
@@ -511,32 +622,40 @@ class _TenantStockTakeDetailScreenState
     TenantSession session,
     _TenantStockTakeLines loaded,
   ) {
-    final lines = loaded.lines;
+    final take = widget.take;
     final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    final inset = AppScaffold.horizontalInset(tokens.spacing);
+    final ring = colors.action.focusRing;
+    final gutter = ring.width + ring.offset;
     // Biggest difference first, which is the order somebody investigating wants
     // and the order Firestore cannot give: it sorts by the stored value, and
     // what matters here is the size of it either way.
-    final sorted = lines.toList()
+    final sorted = loaded.lines.toList()
       ..sort(
         (left, right) =>
             (right.variance ?? 0).abs().compareTo((left.variance ?? 0).abs()),
       );
-    return ListView(
-      padding: EdgeInsets.all(tokens.spacing.s16),
-      children: <Widget>[
-        if (widget.take.status == TenantStockTakeStatus.submitting)
-          Callout(
-            key: const ValueKey('stock-take-detail-arriving'),
+    // Counted, less what differed and what matched no product: the lines this
+    // screen leaves out, said so that leaving them out hides nothing.
+    final agreed =
+        take.countedLineCount -
+        take.varianceLineCount -
+        take.unmatchedLineCount;
+    final canAccept = sorted.isNotEmpty && !_applied && take.canApply;
+
+    final Widget? standing = take.status == TenantStockTakeStatus.submitting
+        ? const Callout(
+            key: ValueKey('stock-take-detail-arriving'),
             status: AppStatus.attention,
             title: 'This count is still arriving',
             message:
-                'The device that took it has not finished sending. Accepting it '
-                'now would correct only the part that has arrived, so the '
+                'The device that took it has not finished sending. Accepting '
+                'it now would correct only the part that has arrived, so the '
                 'server will refuse until the rest lands.',
           )
-        else if (_applied ||
-            widget.take.status == TenantStockTakeStatus.applied)
-          const Callout(
+        : _applied || take.status == TenantStockTakeStatus.applied
+        ? const Callout(
             key: ValueKey('stock-take-detail-applied'),
             status: AppStatus.ok,
             title: 'Accepted',
@@ -544,69 +663,111 @@ class _TenantStockTakeDetailScreenState
                 'Every difference below has been written to the stock ledger, '
                 'where it can be read against the product it moved.',
           )
-        else if (sorted.isEmpty)
-          const Callout(
+        : sorted.isEmpty
+        ? const Callout(
             key: ValueKey('stock-take-detail-agreed'),
             status: AppStatus.ok,
             title: 'Everything counted agreed with the books',
             message: 'There is nothing to correct.',
-          ),
-        SizedBox(height: tokens.spacing.s16),
-        if (sorted.isNotEmpty)
-          RecordList(
-            identityLabel: 'Product',
-            items: <RecordItem>[
-              for (final line in sorted) _lineItem(line, loaded.names),
+          )
+        : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.all(inset),
+            children: <Widget>[
+              if (standing != null) ...<Widget>[
+                standing,
+                SizedBox(height: tokens.spacing.s16),
+              ],
+              _TenantStockTakeSummary(take: take),
+              if (sorted.isNotEmpty) ...<Widget>[
+                SizedBox(height: tokens.spacing.s24),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: <Widget>[
+                    Text(
+                      'What differs',
+                      style: tokens.typography.labelMedium.copyWith(
+                        color: colors.text.primary,
+                      ),
+                    ),
+                    SizedBox(width: tokens.spacing.s12),
+                    Expanded(
+                      child: Text(
+                        key: const ValueKey('stock-take-detail-order'),
+                        agreed > 0
+                            ? 'Biggest first · $agreed that agreed are not '
+                                  'listed'
+                            : 'Biggest first',
+                        style: tokens.typography.caption.copyWith(
+                          color: colors.text.tertiary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: tokens.spacing.s12),
+                for (final (index, line) in sorted.indexed) ...<Widget>[
+                  if (index > 0) SizedBox(height: tokens.spacing.s12),
+                  _TenantStockTakeLineCard(
+                    key: ValueKey('stock-take-line-${line.productId}'),
+                    line: line,
+                    name: loaded.names[line.productId],
+                  ),
+                ],
+              ],
             ],
           ),
-        if (sorted.isNotEmpty && !_applied && widget.take.canApply) ...<Widget>[
-          SizedBox(height: tokens.spacing.s8),
-          AppButton(
-            key: const ValueKey('stock-take-accept'),
-            label: 'Accept and correct the stock',
-            tier: AppButtonTier.primary,
-            loading: _applying,
-            onPressed: widget.applyCallable == null || _applying
-                ? null
-                : () => _apply(session, sorted.length),
-          ),
-        ],
-      ],
-    );
-  }
-
-  RecordItem _lineItem(
-    TenantStockTakeLineRecord line,
-    Map<String, String> names,
-  ) {
-    final variance = line.variance;
-    return RecordItem(
-      id: line.productId,
-      recordKey: ValueKey('stock-take-line-${line.productId}'),
-      // **The product's name, falling back to its ID.** The ID is the only
-      // thing certainly true about a line whose product this business no longer
-      // holds, so it is what an unresolved name degrades to rather than a blank.
-      title: names[line.productId] ?? line.productId,
-      subtitle: line.matched
-          ? 'Counted ${line.counted}, books said ${line.expected}'
-          : 'Counted ${line.counted}, no such product on the server',
-      status: variance == null
-          ? const RecordStatus(label: 'Unmatched', status: AppStatus.attention)
-          : RecordStatus(
-              label: variance > 0 ? '+$variance' : '$variance',
-              status: AppStatus.problem,
+        ),
+        // **Pinned, the way the counting screen pins its hand-in**, with the
+        // sentence that stops somebody reading the result as a bug under it.
+        if (canAccept)
+          ColoredBox(
+            color: colors.surface.base,
+            child: SafeArea(
+              top: false,
+              minimum: EdgeInsets.fromLTRB(
+                inset - gutter,
+                tokens.spacing.s12,
+                inset - gutter,
+                tokens.spacing.s20,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  AppButton(
+                    key: const ValueKey('stock-take-accept'),
+                    label: 'Accept and correct the stock',
+                    tier: AppButtonTier.primary,
+                    expand: true,
+                    loading: _applying,
+                    onPressed: widget.applyCallable == null || _applying
+                        ? null
+                        : () => _apply(session, sorted.length),
+                  ),
+                  SizedBox(height: tokens.spacing.s8),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: gutter),
+                    child: Text(
+                      key: const ValueKey('stock-take-accept-note'),
+                      'Each correction is the difference this count found, not '
+                      'the figure it counted. Anything sold since then stays '
+                      'sold.',
+                      style: tokens.typography.caption.copyWith(
+                        color: colors.text.tertiary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-      attributes: <RecordAttribute>[
-        if (line.movedWhileCounting)
-          // The window `seenQuantity` exists for, said plainly: it is the
-          // difference between a shortfall and a count taken while the shop was
-          // still trading.
-          RecordAttribute(
-            label: 'On the device',
-            value: '${line.seenQuantity} when counted',
           ),
-        if (line.isApplied)
-          const RecordAttribute(label: 'Corrected', value: 'Yes'),
       ],
     );
   }
@@ -693,4 +854,327 @@ class _TenantStockTakeDetailScreenState
           'This count was not accepted and nothing was changed.',
         ),
       };
+}
+
+/// The count in three figures: how many were counted, how many differ, and by
+/// how many units in total.
+final class _TenantStockTakeSummary extends StatelessWidget {
+  const _TenantStockTakeSummary({required this.take});
+
+  final TenantStockTakeRecord take;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final divider = VerticalDivider(
+      width: tokens.spacing.s24 + 1,
+      thickness: 1,
+      color: tokens.colors.surface.borderSubtle,
+    );
+    return AppCard(
+      key: const ValueKey('stock-take-detail-summary'),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Expanded(
+              child: _figure(
+                tokens,
+                id: 'counted',
+                value: take.countedLineCount,
+                caption: 'counted',
+              ),
+            ),
+            divider,
+            Expanded(
+              child: _figure(
+                tokens,
+                id: 'differ',
+                value: take.varianceLineCount,
+                caption: take.varianceLineCount == 1 ? 'differs' : 'differ',
+              ),
+            ),
+            divider,
+            Expanded(
+              child: _figure(
+                tokens,
+                id: 'units',
+                value: take.absoluteVarianceUnits,
+                caption: take.absoluteVarianceUnits == 1
+                    ? 'unit apart'
+                    : 'units apart',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _figure(
+    AppTokens tokens, {
+    required String id,
+    required int value,
+    required String caption,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      Text(
+        '$value',
+        key: ValueKey('stock-take-detail-$id'),
+        style: tokens.typography.numericCompact.copyWith(
+          color: tokens.colors.text.primary,
+        ),
+      ),
+      Text(
+        caption,
+        style: tokens.typography.caption.copyWith(
+          color: tokens.colors.text.tertiary,
+        ),
+      ),
+    ],
+  );
+}
+
+/// One product that did not agree with the books.
+///
+/// **The difference is the box at the trailing edge**, because it is what the
+/// line is listed for; the figures that make it are the words on the left.
+/// Short, over and unmatched say themselves in words and a sign as well as in
+/// the box's colour.
+final class _TenantStockTakeLineCard extends StatelessWidget {
+  const _TenantStockTakeLineCard({
+    super.key,
+    required this.line,
+    required this.name,
+  });
+
+  final TenantStockTakeLineRecord line;
+
+  /// Null when the product could not be read, which falls back to its ID: the
+  /// only thing certainly true about a line whose product is not there.
+  final String? name;
+
+  /// The difference box's width: the counting screen's box, so the figure a
+  /// count is about sits in a box of one size on both of its screens.
+  static double boxWidth(AppTokens tokens) =>
+      tokens.spacing.s48 + tokens.spacing.s48;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    return AppCard(
+      padding: EdgeInsets.all(tokens.spacing.s12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  name ?? line.productId,
+                  style: tokens.typography.titleMedium.copyWith(
+                    color: colors.text.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (!line.matched) ...<Widget>[
+                  SizedBox(height: tokens.spacing.s4),
+                  Text(
+                    'No product on the server answers to this yet',
+                    style: tokens.typography.bodyMedium.copyWith(
+                      color: colors.text.tertiary,
+                    ),
+                  ),
+                ],
+                SizedBox(height: tokens.spacing.s8),
+                Wrap(
+                  spacing: tokens.spacing.s16,
+                  runSpacing: tokens.spacing.s4,
+                  children: <Widget>[
+                    _figure(
+                      tokens,
+                      label: 'Counted',
+                      value: Text(
+                        '${line.counted}',
+                        key: ValueKey(
+                          'stock-take-line-counted-${line.productId}',
+                        ),
+                        style: _figureStyle(tokens).copyWith(
+                          color: colors.text.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    _figure(
+                      tokens,
+                      label: 'Books said',
+                      value: Text(
+                        line.matched ? '${line.expected}' : 'nothing',
+                        key: ValueKey(
+                          'stock-take-line-expected-${line.productId}',
+                        ),
+                        style: line.matched
+                            ? _figureStyle(tokens).copyWith(
+                                color: colors.status.info.fg,
+                                fontWeight: FontWeight.w700,
+                              )
+                            : tokens.typography.bodyMedium.copyWith(
+                                color: colors.text.tertiary,
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+                // The window `seenQuantity` exists for, said plainly: it is the
+                // difference between a shortfall and a count taken while the
+                // shop was still trading. **Only when the books did move** - a
+                // note on every line saying nothing happened is noise.
+                if (line.movedWhileCounting) ...<Widget>[
+                  SizedBox(height: tokens.spacing.s8),
+                  _note(
+                    tokens,
+                    key: ValueKey('stock-take-line-seen-${line.productId}'),
+                    message:
+                        'The phone held ${line.seenQuantity} when the number '
+                        'was typed, so the books moved while counting.',
+                  ),
+                ],
+                if (line.isApplied) ...<Widget>[
+                  SizedBox(height: tokens.spacing.s8),
+                  StatusBadge(
+                    key: ValueKey(
+                      'stock-take-line-corrected-${line.productId}',
+                    ),
+                    status: AppStatus.ok,
+                    label: 'Corrected',
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          _difference(tokens),
+        ],
+      ),
+    );
+  }
+
+  /// A figure beside a body-sized label: `numeric.body`'s face at `body.lg`'s
+  /// size, so the number reads a step above the words naming it.
+  static TextStyle _figureStyle(AppTokens tokens) =>
+      tokens.typography.numericBody.copyWith(
+        fontSize: tokens.typography.bodyLarge.fontSize,
+        height: tokens.typography.bodyLarge.height,
+      );
+
+  /// One labelled figure: *Counted 41*.
+  Widget _figure(
+    AppTokens tokens, {
+    required String label,
+    required Widget value,
+  }) => Row(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.baseline,
+    textBaseline: TextBaseline.alphabetic,
+    children: <Widget>[
+      Text(
+        label,
+        style: tokens.typography.bodyMedium.copyWith(
+          color: tokens.colors.text.secondary,
+        ),
+      ),
+      SizedBox(width: tokens.spacing.s4),
+      value,
+    ],
+  );
+
+  /// The difference, signed and named: *-7 short*, *+3 over*, or *unmatched*.
+  Widget _difference(AppTokens tokens) {
+    final variance = line.variance;
+    final role = variance == null
+        ? tokens.colors.status.attention
+        : tokens.colors.status.problem;
+    final Widget mark = variance == null
+        ? Icon(
+            Icons.warning_amber_rounded,
+            size: tokens.spacing.s24,
+            color: role.fg,
+          )
+        : Text(
+            variance > 0 ? '+$variance' : '$variance',
+            key: ValueKey('stock-take-line-variance-${line.productId}'),
+            style: tokens.typography.numericHero.copyWith(color: role.fg),
+          );
+    final word = switch (variance) {
+      null => 'unmatched',
+      > 0 => 'over',
+      _ => 'short',
+    };
+    return Container(
+      width: boxWidth(tokens),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.s8,
+        vertical: tokens.spacing.s12,
+      ),
+      decoration: BoxDecoration(
+        color: role.bg,
+        border: Border.all(color: role.border),
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          mark,
+          SizedBox(height: tokens.spacing.s4),
+          Text(
+            word,
+            key: ValueKey('stock-take-line-word-${line.productId}'),
+            style: tokens.typography.labelMedium.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A tinted aside under the figures, the same shape a count's card uses.
+  Widget _note(AppTokens tokens, {required Key key, required String message}) {
+    final role = tokens.colors.status.info;
+    return DecoratedBox(
+      key: key,
+      decoration: BoxDecoration(
+        color: role.bg,
+        border: Border.all(color: role.border),
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(tokens.spacing.s8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(
+              Icons.info_outline,
+              size: StatusBadge.iconSize,
+              color: role.fg,
+            ),
+            SizedBox(width: tokens.spacing.s8),
+            Expanded(
+              child: Text(
+                message,
+                style: tokens.typography.caption.copyWith(
+                  color: tokens.colors.text.secondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

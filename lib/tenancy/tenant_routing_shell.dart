@@ -13,6 +13,7 @@ import '../reporting/reporting_currency.dart';
 import '../reporting/profit_report.dart';
 import '../reporting/profit_statement.dart';
 import '../reporting/sales_totals.dart';
+import '../reports/report_saver.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/home_navigation.dart';
@@ -2889,8 +2890,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     TenantDataReader reader,
     TenantSession session,
   ) async {
+    // **Through the registered-name fallback, and first.** The home is opened
+    // before the till, so this read is also what leaves the tenant document in
+    // the offline copy the receipt's cache-only read falls back to.
     final branding = _quiet(
-      () => TenantBrandingRepository(session: session, reader: reader).load(),
+      () => TenantBrandingRepository(
+        session: session,
+        reader: reader,
+      ).loadOrRegistered(),
     );
     // The repository enforces this itself and throws `metrics_forbidden`; the
     // gate is here as well so a cashier's home does not spend a read finding
@@ -3211,10 +3218,19 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         ? deviceReport
         : metrics?.profitReport ?? deviceReport;
     final currency = overview.currency ?? TenantReportingCurrency.unknown;
+    // **Only a day with spending in it has an expenses tile or a net one**, at
+    // the developer's direction on 2026-09-23. With nothing spent, net profit
+    // is gross profit under a second name, and a row of figures carrying the
+    // same number twice - beside an expenses tile reading zero - is three
+    // tiles saying one thing. A voided record is money that never left, so it
+    // does not count as spending here either.
+    final spent = overview.expenses;
+    final hasSpending = spent != null && spent.totalMinor > 0;
     // Composed here rather than on the server: `daily_metrics.profit` is
     // revenue minus the cost of the goods sold and stays that way, so nothing
-    // already written changes meaning. Null where either half is missing.
-    final net = report == null || overview.expenses == null
+    // already written changes meaning. Null where either half is missing, or
+    // where there is nothing to take off.
+    final net = report == null || !hasSpending
         ? null
         : TenantNetProfitReport.from(
             gross: report,
@@ -3348,13 +3364,30 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         // that is simply absent: a person who glanced at *Profit* yesterday
         // and *Profit* today would have no way to tell that one of them
         // counted the rent and the other did not.
+        if (hasSpending)
+          StatTile(
+            key: const ValueKey('home-today-expenses'),
+            label: 'Expenses',
+            value: currency.format(spent.total),
+            money: true,
+            // The glyph the *Expenses* destination wears, so the figure and
+            // the place it comes from are recognisably one thing.
+            icon: Icons.account_balance_wallet_outlined,
+            // A read that stopped at its bound is a floor, not a total, and
+            // says so in words rather than in colour.
+            status: spent.truncated ? AppStatus.attention : null,
+            statusLabel: spent.truncated ? 'At least' : null,
+            detail: spent.truncated
+                ? 'Not every record was read'
+                : 'Recorded today',
+          ),
         if (overview.showProfit && net != null)
           StatTile(
             key: const ValueKey('home-today-net-profit'),
             label: 'Net profit',
             value: net.isDrawable ? currency.format(net.netProfit) : '—',
             money: net.isDrawable,
-            icon: Icons.account_balance_wallet_outlined,
+            icon: Icons.savings_outlined,
             // A loss is the one reading this whole feature exists to make
             // possible, so it is marked rather than left to the minus sign.
             status: net.isLoss ? AppStatus.problem : null,
@@ -3648,12 +3681,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             'from the figures themselves.',
         group: 'Reports',
         icon: Icons.insights_outlined,
-        // **The one figure on this page that is asking for something.** Nightly
-        // reconciliation records differences that nobody sees unless they go
-        // looking; this is the count of the ones still open, and the
-        // *Differences* card it now opens onto says the same thing in a
-        // sentence - a number alone is not a status.
-        badgeCount: _openDifferences(context),
+        // **No count on the tile**, at the developer's direction on
+        // 2026-09-23. Open reconciliation differences are still said in a
+        // sentence where the destination has room for one, and in full on the
+        // *Differences* card this opens onto.
         status: switch (_openDifferences(context)) {
           null || 0 => null,
           1 => '1 unresolved difference',
@@ -3685,8 +3716,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         destinationKey: const ValueKey('settings'),
         label: 'Settings',
         description:
-            'What prices mean, what the business is called, what it prints on, '
-            'and when stock is counted.',
+            'What prices mean, what receipts print on and look like, and when '
+            'stock is counted.',
         group: 'Settings',
         icon: Icons.tune_outlined,
         onPressed: () {
@@ -3744,6 +3775,15 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 child: TenantStaffDirectoryScreen(
                   reader: reader,
                   tickets: staffRequestTickets,
+                  // **Injected here rather than from `main.dart`**, because
+                  // this is the one destination the shell builds itself
+                  // rather than taking as a route builder.
+                  //
+                  // No image cache: a staff report is generated occasionally,
+                  // so its branding logo is fetched fresh rather than threaded
+                  // three layers down for a saving nobody would notice. The
+                  // fetch already degrades to no logo on a slow link.
+                  reportSaver: const SharedFileTenantReportSaver(),
                 ),
               ),
             ),

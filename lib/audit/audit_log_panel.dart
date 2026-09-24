@@ -10,6 +10,16 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_staff_names.dart';
+import '../reports/analysis/logs_analysis.dart';
+import '../reports/analysis/logs_report.dart';
+import '../reports/report_document.dart';
+import '../reports/report_file.dart';
+import '../reports/report_identity_source.dart';
+import '../reports/report_people.dart';
+import '../reports/report_period.dart';
+import '../reports/report_run.dart';
+import '../reports/ui/report_action.dart';
+import '../inventory/product_image_cache.dart';
 import 'audit_log.dart';
 
 /// Read-only route listing the events recorded for one business.
@@ -19,9 +29,17 @@ final class TenantAuditLogScreen extends StatelessWidget {
     required this.reader,
     this.eventType,
     this.clock,
+    this.reportSaver,
+    this.imageCache,
   });
 
   final TenantDataReader reader;
+
+  /// Where a generated report goes. Null renders no toolbar control at all.
+  final TenantReportSaver? reportSaver;
+
+  /// Fetches the logo the report's branding band draws.
+  final TenantImageCache? imageCache;
 
   /// When present, the trail opens narrowed to exactly this event.
   final TenantAuditEventType? eventType;
@@ -34,12 +52,77 @@ final class TenantAuditLogScreen extends StatelessWidget {
   Widget build(BuildContext context) => AppScaffold(
     title: 'Logs',
     contentWidth: AppContentWidth.records,
+    actions: <Widget>[
+      TenantSessionReportAction(
+        clock: clock ?? DateTime.now,
+        runFor: (session) => _reportRun(session),
+      ),
+    ],
     body: TenantAuditLogPanel(
       reader: reader,
       eventType: eventType,
       clock: clock,
     ),
   );
+
+  /// The trail over a period, which the screen's day filter cannot ask for.
+  ///
+  /// **The period is picked at the moment somebody asks for the file**, and is
+  /// deliberately independent of the day showing on the page: this screen
+  /// filters one page and a report reads a real span.
+  TenantReportRun? _reportRun(TenantSession session) {
+    final saver = reportSaver;
+    if (saver == null) return null;
+    // Owner and admin, exactly as `firestore.rules` already decided for the
+    // screen. A report is not a way around that.
+    if (!TenantAuditLogRepository.canReadInSession(session)) return null;
+
+    final now = clock ?? DateTime.now;
+    return TenantReportRun(
+      kind: TenantReportKind.logs,
+      support: TenantReportPeriodSupport.range,
+      saver: saver,
+      build: (period) async {
+        final source = TenantLogsReportSource(
+          repository: TenantAuditLogRepository(
+            session: session,
+            reader: reader,
+          ),
+        );
+        final read = await source.gather(period);
+        final previous = await source.gatherPrevious(period);
+        final identity = await readTenantReportIdentity(
+          session: session,
+          reader: reader,
+          generatedAt: now(),
+          imageCache: imageCache,
+        );
+        final analysis = TenantLogsAnalysis.from(
+          period: period,
+          records: read.records,
+          previous: previous,
+          truncated: read.truncated,
+        );
+        return describeLogsReport(
+          identity: identity,
+          analysis: analysis,
+          // **Members only.** A platform actor has no staff record, and asking
+          // the directory for one would spend a read to learn nothing.
+          people: await readTenantReportPeople(
+            session: session,
+            reader: reader,
+            uids: <String>[
+              for (final actor in analysis.actors.take(TenantLogsAnalysis.listed))
+                if (!actor.isPlatform) actor.actor,
+              for (final record in analysis.critical.take(TenantLogsAnalysis.listed))
+                if (record.actorType == null && record.actorUid != null)
+                  record.actorUid!,
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// One guarded page of audit records with the staff names it needs.

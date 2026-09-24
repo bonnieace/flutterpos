@@ -75,6 +75,28 @@ final class ShiftSummaryAmendment {
 /// So this is the permissive read: identity, staff, device and times are proved
 /// the same way, and everything the close writes is optional. A shift still
 /// open simply has no [summary] yet.
+/// Counted cash minus recorded sales, in minor units, or null where nothing is
+/// known.
+///
+/// **One copy, read by a row and by a report.** The rule this encodes is
+/// load-bearing and easy to get subtly wrong - see
+/// [TenantShiftHistoryEntry.cashVarianceMinor] for the whole argument - so a
+/// period report computes it by calling this rather than by restating it. A
+/// second spelling that drifted would have a report disagreeing with the
+/// screen about the same shift.
+///
+/// Null where the shift closed without its sales, where it carries no
+/// declaration, and while it is still running. Zero means counted and level;
+/// null means nobody can say.
+int? _cashVarianceMinor(TenantShift shift, ShiftClosingSummary? summary) {
+  if (shift.closedWithoutEvidence) return null;
+  final declared = shift.declaration;
+  if (summary == null || declared == null) return null;
+  final declaredTotalMinor =
+      declared.cashMinor + declared.mpesaMinor + declared.cardMinor;
+  return declaredTotalMinor - shift.openingFloatMinor - summary.totalSalesMinor;
+}
+
 final class TenantShiftDaySlice {
   const TenantShiftDaySlice._({required this.shift, required this.summary});
 
@@ -101,6 +123,13 @@ final class TenantShiftDaySlice {
 
   /// What this shift took, or null while it is still running.
   double? get totalSales => summary?.totalSales;
+
+  /// Counted against recorded, in minor units. See [_cashVarianceMinor].
+  ///
+  /// **Null for a shift still running**, as well as for every shift that
+  /// closed without its sales: there is nothing to compare a drawer against
+  /// until the drawer has been counted.
+  int? get cashVarianceMinor => _cashVarianceMinor(shift, summary);
 
   String get id => shift.id;
   String get staffId => shift.staffId;
@@ -207,17 +236,7 @@ final class TenantShiftHistoryEntry {
   /// float. Leaving it in would have this row read *Takings over* by the float
   /// every day - and disagree with the verification an owner sees for the same
   /// shift, which is worse than either figure being wrong alone.
-  int? get cashVarianceMinor {
-    if (shift.closedWithoutEvidence) return null;
-    final recorded = summary;
-    final declared = shift.declaration;
-    if (recorded == null || declared == null) return null;
-    final declaredTotalMinor =
-        declared.cashMinor + declared.mpesaMinor + declared.cardMinor;
-    return declaredTotalMinor -
-        shift.openingFloatMinor -
-        recorded.totalSalesMinor;
-  }
+  int? get cashVarianceMinor => _cashVarianceMinor(shift, summary);
 
   /// The change this drawer started with, in minor units.
   ///
@@ -578,6 +597,104 @@ final class TenantShiftHistoryRepository extends TenantReadRepository {
       nextCursor: page.nextCursor,
       hasMore: page.hasMore,
       scope: scope,
+    );
+  }
+
+  /// Every shift over a span of trading days, oldest first, **open ones
+  /// included**.
+  ///
+  /// **Open shifts come back because a report has to count them.** A period
+  /// holding a shift nobody closed is a fact about that period: the drawer was
+  /// never counted, so its takings were never settled, and a report that
+  /// silently dropped it would show a day as reconciled that is not. The
+  /// caller separates them; this read does not decide for it.
+  ///
+  /// **Management only, and no per-cashier narrowing.** A period report over
+  /// the whole business is the every-cashier permission whichever way it is
+  /// sliced, so there is no own-shifts mode here to be tempted by - a cashier
+  /// gets no shifts report at all rather than one covering only themselves,
+  /// which would read as the shop's and be one person's.
+  ///
+  /// Rides the automatic (`businessDate`, `__name__`) index: no equality joins
+  /// the range, so nothing new is deployed for it.
+  Future<
+    ({List<TenantShiftDaySlice> items, TenantBusinessDateRangePosition? next})
+  >
+  loadDateRange({
+    required String startBusinessDate,
+    required String endBusinessDate,
+    int pageSize = 50,
+    TenantBusinessDateRangePosition? startAfter,
+  }) async {
+    if (!canReadEveryCashier(session)) {
+      throw const TenantShiftException('shift_history_forbidden');
+    }
+    if (pageSize < 1 || pageSize > 50) {
+      throw RangeError.range(pageSize, 1, 50, 'pageSize');
+    }
+    if (startBusinessDate.compareTo(endBusinessDate) > 0) {
+      throw const TenantShiftException('invalid_shift_range');
+    }
+    final reader = _collectionReader is TenantReportRangeReader
+        ? _collectionReader as TenantReportRangeReader
+        : null;
+    if (reader == null) {
+      throw StateError('This reader cannot read a shifts period.');
+    }
+
+    final requested = pageSize + 1;
+    final snapshots = await reader.queryTenantBusinessDateRange(
+      TenantBusinessDateRangeQuery.scoped(
+        collectionPath: paths.collectionPath(TenantCollection.shifts),
+        orderBy: TenantBusinessDateRangeField.businessDate,
+        limit: requested,
+        startBusinessDate: startBusinessDate,
+        endBusinessDate: endBusinessDate,
+        startAfter: startAfter,
+      ),
+    );
+    if (snapshots.length > requested) {
+      throw const TenantScopeViolation(
+        'The shifts period returned more documents than requested.',
+      );
+    }
+
+    final slices = <TenantShiftDaySlice>[];
+    final seen = <String>{};
+    for (final snapshot in snapshots) {
+      final slice = TenantShiftDaySlice.fromDocument(
+        path: snapshot.path,
+        data: snapshot.data,
+      );
+      if (!seen.add(slice.shift.id)) {
+        throw const TenantScopeViolation(
+          'The shifts period returned a duplicate document.',
+        );
+      }
+      if (slice.shift.tenantId != session.tenantId) {
+        throw const TenantShiftException('cross_tenant_shift');
+      }
+      // The query bounds the span; a transport that ignored either bound must
+      // not put a shift under a period it did not trade in.
+      if (slice.businessDate.compareTo(startBusinessDate) < 0 ||
+          slice.businessDate.compareTo(endBusinessDate) > 0) {
+        throw const TenantShiftException('foreign_business_date');
+      }
+      slices.add(slice);
+    }
+
+    final hasMore = slices.length > pageSize;
+    final visible = hasMore
+        ? slices.take(pageSize).toList(growable: false)
+        : slices;
+    return (
+      items: visible,
+      next: hasMore
+          ? TenantBusinessDateRangePosition(
+              businessDate: visible.last.businessDate,
+              documentId: visible.last.shift.id,
+            )
+          : null,
     );
   }
 }

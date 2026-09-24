@@ -81,7 +81,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('expenses-ring-total')))
           .data,
-      'KES 400.00',
+      'KES 400',
       reason: 'The period total is the middle of the ring.',
     );
     // Largest first, and each row carries its own figure rather than leaving
@@ -92,7 +92,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('expense-share-amount-rent')))
           .data,
-      'KES 300.00',
+      'KES 300',
     );
     expect(find.text('75%'), findsOne);
   });
@@ -114,7 +114,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('expenses-ring-total')))
           .data,
-      'KES 100.00',
+      'KES 100',
       reason: 'Money that did not leave the business counts towards nothing.',
     );
 
@@ -364,7 +364,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('expenses-ring-total')))
           .data,
-      'KES 400.00',
+      'KES 400',
     );
     // **The legend is the accessible reading of the same data.** Every slice
     // has a labelled row carrying its name and figure, so no fact here is
@@ -406,7 +406,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('expense-category-total')))
           .data,
-      'KES 300.00',
+      'KES 300',
     );
     expect(
       tester
@@ -648,7 +648,7 @@ void _rangeCases() {
       tester
           .widget<Text>(find.byKey(const ValueKey('expenses-ring-total')))
           .data,
-      'KES 100.00',
+      'KES 100',
       reason: 'July is before this month and is not in the total.',
     );
   });

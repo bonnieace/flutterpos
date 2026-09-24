@@ -32,7 +32,7 @@ void main() {
     // **Grouped, and with no currency code.** These fixtures publish no checkout
     // configuration, so `TenantReportingCurrency` answers `unknown` and the
     // figures stay bare rather than being labelled with a guess.
-    _expectText(tester, 'shift-history-counted-shift-b', '1,250.00');
+    _expectText(tester, 'shift-history-counted-shift-b', '1,250');
     _expectText(tester, 'shift-history-sales-shift-b', '987.50');
     // The transaction count rides on the shift's own second line rather than
     // taking a key-value row of its own: it is part of what identifies the
@@ -280,7 +280,7 @@ void main() {
       find.byKey(const ValueKey('shift-history-variance-shift-a')),
       findsNothing,
     );
-    _expectText(tester, 'shift-history-counted-shift-a', '1,250.00');
+    _expectText(tester, 'shift-history-counted-shift-a', '1,250');
   });
 
   testWidgets('a shift ended from another device is not the same silence', (
@@ -575,63 +575,6 @@ void main() {
     // The shift's own day, and the member who ran it - not the session's.
     expect(opened.last, (_businessDate, 'user-b'));
     expect(find.text('Shift sales'), findsNothing);
-  });
-
-  testWidgets('the cashier reaches its own recent sales', (tester) async {
-    final reader = _Reader()
-      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[])
-      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[]);
-
-    await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
-    // It cuts across every shift on the page and is not what any one row is
-    // about, so it sits in the toolbar rather than between the filters and the
-    // first card, where it used to push the list down on every visit.
-    await tester.tap(find.byKey(const ValueKey('shift-history-own-sales')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('My recent sales'), findsOne);
-    expect(reader.queries.last.equalityFilters, <String, Object?>{
-      'soldById': 'user-a',
-    });
-  });
-
-  testWidgets('the four terms are one tap from the toolbar, not a preamble', (
-    tester,
-  ) async {
-    // Five lines of policy used to sit between the title and the first shift,
-    // read past once and then past forever. Same claims, out of the way.
-    final reader = _Reader()
-      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
-        _snapshot('shift-a'),
-      ]);
-
-    await _pumpPanel(
-      tester,
-      _controller(TenantRole.cashier),
-      reader,
-      tall: true,
-    );
-
-    expect(
-      find.byKey(const ValueKey('shift-history-explainer-sheet')),
-      findsNothing,
-    );
-    await tester.tap(find.byKey(const ValueKey('shift-history-explainer')));
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const ValueKey('shift-history-explainer-sheet')),
-      findsOne,
-    );
-    expect(find.text('How a shift is reconciled'), findsOne);
-    expect(find.textContaining('never changes the counted cash'), findsOne);
-    // Who may read the trail is a property of the screen rather than of any
-    // shift, so it is stated here rather than under every corrected row.
-    expect(
-      find.textContaining('kept for managers, administrators and owners'),
-      findsOne,
-    );
-    expect(find.textContaining('short by its M-Pesa'), findsOne);
   });
 
   testWidgets('a corrected shift says so and opens its own corrections', (

@@ -764,7 +764,8 @@ final class TenantPendingMutationOverlayReader
         TenantSalesHistoryQueryReader,
         TenantStaffDirectoryQueryReader,
         TenantProductSearchReader,
-        TenantCollectionGroupReader {
+        TenantCollectionGroupReader,
+        TenantReportRangeReader {
   const TenantPendingMutationOverlayReader({
     required TenantDataReader base,
     required TenantPendingMutationStore store,
@@ -916,6 +917,54 @@ final class TenantPendingMutationOverlayReader
       throw StateError('Staff directory query is unavailable.');
     }
     return base.queryTenantStaff(query);
+  }
+
+  /// The three period reads a report can need, forwarded unchanged.
+  ///
+  /// **Forwarded rather than overlaid, deliberately.** The overlay above exists
+  /// so a record this device has just written is visible on the screen that
+  /// wrote it; a report is a statement about what the *server* holds for a
+  /// named period, and folding an unsent local write into one would produce a
+  /// document that disagrees with the business's own records the moment it is
+  /// mailed to anybody.
+  ///
+  /// **They have to be here at all because this class is what the routes
+  /// hold.** Every route is handed this overlay, not the Firestore reader
+  /// under it, so a reader capability this class does not declare is a
+  /// capability no screen can reach - which is exactly how five reports came
+  /// to refuse on a device while every test passed. See the doc on
+  /// [TenantReportRangeReader].
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantBusinessDateRange(
+    TenantBusinessDateRangeQuery query,
+  ) {
+    final Object base = _base;
+    if (base is! TenantReportRangeReader) {
+      throw StateError('Period reads are unavailable.');
+    }
+    return base.queryTenantBusinessDateRange(query);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantDocumentIdRange(
+    TenantDocumentIdRangeQuery query,
+  ) {
+    final Object base = _base;
+    if (base is! TenantReportRangeReader) {
+      throw StateError('Period reads are unavailable.');
+    }
+    return base.queryTenantDocumentIdRange(query);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantInstantRange(
+    TenantInstantRangeQuery query,
+  ) {
+    final Object base = _base;
+    if (base is! TenantReportRangeReader) {
+      throw StateError('Period reads are unavailable.');
+    }
+    return base.queryTenantInstantRange(query);
   }
 
   /// **The catalog is read through here, not through [getCollectionPage].**

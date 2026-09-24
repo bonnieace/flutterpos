@@ -566,6 +566,254 @@ abstract interface class TenantSalesHistoryQueryReader {
   );
 }
 
+/// The business-date field a period read ranges over.
+///
+/// **An enum rather than a field name**, for the reason no query here takes a
+/// caller-supplied predicate: a range is the one shape that can walk off the
+/// end of an index, and a free string would let a caller ask for a scan no
+/// index serves and no rule anticipated. Two collections, two fields, both
+/// named here.
+enum TenantBusinessDateRangeField {
+  /// `returns.recordedOn` - the day the reversal was taken.
+  ///
+  /// **Not `businessDate`, which is the day of the *sale* being reversed.** A
+  /// returns report answers what came back over a period, so it is keyed to
+  /// when the return happened. Netting a day's takings is the other question
+  /// and `loadDayReturns` already answers it.
+  recordedOn('recordedOn'),
+
+  /// `shifts.businessDate` - the trading day a shift belongs to.
+  businessDate('businessDate');
+
+  const TenantBusinessDateRangeField(this.field);
+
+  final String field;
+}
+
+/// Where a business-date range page resumes.
+///
+/// Two components for the reason [TenantPageCursor] carries two: the page is
+/// ordered by the date and then by document ID, and a cursor holding only the
+/// date would either repeat a record or skip one wherever a day holds more
+/// than one.
+final class TenantBusinessDateRangePosition {
+  const TenantBusinessDateRangePosition({
+    required this.businessDate,
+    required this.documentId,
+  });
+
+  final String businessDate;
+  final String documentId;
+}
+
+/// A period read over a collection keyed by a business-date string.
+///
+/// **No equality filter, deliberately.** A single-field inequality plus
+/// `__name__` is served by Firestore's *automatic* index; joining an equality
+/// to it needs a composite one per combination. A report covers the whole
+/// business over a period and narrows nothing, so it asks for nothing that
+/// needs an index to be deployed before it will run.
+final class TenantBusinessDateRangeQuery {
+  const TenantBusinessDateRangeQuery._({
+    required this.collectionPath,
+    required this.orderBy,
+    required this.limit,
+    required this.startBusinessDate,
+    required this.endBusinessDate,
+    this.startAfter,
+  });
+
+  /// Built by a repository, which owns the path and the field.
+  factory TenantBusinessDateRangeQuery.scoped({
+    required String collectionPath,
+    required TenantBusinessDateRangeField orderBy,
+    required int limit,
+    required String startBusinessDate,
+    required String endBusinessDate,
+    TenantBusinessDateRangePosition? startAfter,
+  }) => TenantBusinessDateRangeQuery._(
+    collectionPath: collectionPath,
+    orderBy: orderBy,
+    limit: limit,
+    startBusinessDate: startBusinessDate,
+    endBusinessDate: endBusinessDate,
+    startAfter: startAfter,
+  );
+
+  /// Lets a test transport describe a query a repository did not build.
+  factory TenantBusinessDateRangeQuery.forTesting({
+    required String collectionPath,
+    required TenantBusinessDateRangeField orderBy,
+    required int limit,
+    required String startBusinessDate,
+    required String endBusinessDate,
+    TenantBusinessDateRangePosition? startAfter,
+  }) => TenantBusinessDateRangeQuery._(
+    collectionPath: collectionPath,
+    orderBy: orderBy,
+    limit: limit,
+    startBusinessDate: startBusinessDate,
+    endBusinessDate: endBusinessDate,
+    startAfter: startAfter,
+  );
+
+  final String collectionPath;
+  final TenantBusinessDateRangeField orderBy;
+  final int limit;
+
+  /// Inclusive, both ends: a period report covers the days it names.
+  final String startBusinessDate;
+  final String endBusinessDate;
+
+  final TenantBusinessDateRangePosition? startAfter;
+}
+
+/// A period read over a collection whose **document IDs** carry the date.
+///
+/// **`stock_takes` and nothing else, and it needs no index at all.** A take's
+/// ID is `st_<businessDate>_<digest>` - see `tenantStockTakeId` - so a range
+/// over the key itself selects a span of trading days, and Firestore serves a
+/// `__name__` range without any index being declared. The alternative was a
+/// `businessDate` field range, which would have been a second copy of a fact
+/// the ID already states.
+final class TenantDocumentIdRangeQuery {
+  const TenantDocumentIdRangeQuery._({
+    required this.collectionPath,
+    required this.limit,
+    required this.startAtDocumentId,
+    required this.endAtDocumentId,
+    this.startAfterDocumentId,
+  });
+
+  factory TenantDocumentIdRangeQuery.scoped({
+    required String collectionPath,
+    required int limit,
+    required String startAtDocumentId,
+    required String endAtDocumentId,
+    String? startAfterDocumentId,
+  }) => TenantDocumentIdRangeQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    startAtDocumentId: startAtDocumentId,
+    endAtDocumentId: endAtDocumentId,
+    startAfterDocumentId: startAfterDocumentId,
+  );
+
+  factory TenantDocumentIdRangeQuery.forTesting({
+    required String collectionPath,
+    required int limit,
+    required String startAtDocumentId,
+    required String endAtDocumentId,
+    String? startAfterDocumentId,
+  }) => TenantDocumentIdRangeQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    startAtDocumentId: startAtDocumentId,
+    endAtDocumentId: endAtDocumentId,
+    startAfterDocumentId: startAfterDocumentId,
+  );
+
+  final String collectionPath;
+  final int limit;
+
+  /// Inclusive bounds on the document key, ascending.
+  final String startAtDocumentId;
+  final String endAtDocumentId;
+
+  final String? startAfterDocumentId;
+}
+
+/// Where an instant-ordered range page resumes.
+final class TenantInstantRangePosition {
+  const TenantInstantRangePosition({
+    required this.at,
+    required this.documentId,
+  });
+
+  final DateTime at;
+  final String documentId;
+}
+
+/// A period read over a collection whose only time is a recorded instant.
+///
+/// **`audit_logs`, where the ID is a digest.** An audit ID is the operation,
+/// request or delivery ID the event belongs to, so the key order carries no
+/// time information whatever and the existing feed says so outright. Ordering
+/// by `createdAt` is what lets a period be asked for at all - it is the same
+/// move `TenantCollectionOrder.createdAt` already made for the stock ledger,
+/// and it is why the logs report could not be built before.
+final class TenantInstantRangeQuery {
+  const TenantInstantRangeQuery._({
+    required this.collectionPath,
+    required this.limit,
+    required this.startAt,
+    required this.endAt,
+    this.startAfter,
+  });
+
+  factory TenantInstantRangeQuery.scoped({
+    required String collectionPath,
+    required int limit,
+    required DateTime startAt,
+    required DateTime endAt,
+    TenantInstantRangePosition? startAfter,
+  }) => TenantInstantRangeQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    startAt: startAt,
+    endAt: endAt,
+    startAfter: startAfter,
+  );
+
+  factory TenantInstantRangeQuery.forTesting({
+    required String collectionPath,
+    required int limit,
+    required DateTime startAt,
+    required DateTime endAt,
+    TenantInstantRangePosition? startAfter,
+  }) => TenantInstantRangeQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    startAt: startAt,
+    endAt: endAt,
+    startAfter: startAfter,
+  );
+
+  final String collectionPath;
+  final int limit;
+
+  /// Inclusive at both ends, in UTC.
+  final DateTime startAt;
+  final DateTime endAt;
+
+  final TenantInstantRangePosition? startAfter;
+}
+
+/// Narrow transport for the three period reads a report can need.
+///
+/// **One interface rather than three**, which is a departure from the one
+/// narrow reader per query this file otherwise keeps. The three exist for a
+/// single purpose - reading a named period so a document can state it - they
+/// are implemented by the same transport, and a fake that supports one
+/// invariably has to support the others. Splitting them would have put three
+/// `is` casts at every call site to buy nothing.
+abstract interface class TenantReportRangeReader {
+  /// A span of trading days over a collection carrying a business-date field.
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantBusinessDateRange(
+    TenantBusinessDateRangeQuery query,
+  );
+
+  /// A span of document keys, for a collection whose IDs carry the date.
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantDocumentIdRange(
+    TenantDocumentIdRangeQuery query,
+  );
+
+  /// A span of recorded instants, for a collection whose IDs carry no time.
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantInstantRange(
+    TenantInstantRangeQuery query,
+  );
+}
+
 /// A collection-group query that can only be constructed by
 /// [TenantReadRepository].
 ///
@@ -649,7 +897,8 @@ final class FirebaseTenantDocumentReader
         TenantCollectionGroupReader,
         TenantProductSearchReader,
         TenantStaffDirectoryQueryReader,
-        TenantSalesHistoryQueryReader {
+        TenantSalesHistoryQueryReader,
+        TenantReportRangeReader {
   FirebaseTenantDocumentReader([FirebaseFirestore? firestore])
     : this._(firestore ?? FirebaseFirestore.instance, Source.serverAndCache);
 
@@ -890,6 +1139,73 @@ final class FirebaseTenantDocumentReader
     if (query.startAfter case final cursor?) {
       request = request.startAfter(<Object>[
         cursor.businessDate,
+        cursor.documentId,
+      ]);
+    }
+    return _pageOf(request);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantBusinessDateRange(
+    TenantBusinessDateRangeQuery query,
+  ) async {
+    final field = query.orderBy.field;
+    // **Ascending, unlike the sales report.** A report reads a period from its
+    // first day forward, and the pages are assembled into one document rather
+    // than shown a screenful at a time, so newest-first would only oblige the
+    // analysis to reverse what it was handed.
+    Query<Map<String, dynamic>> request = _firestore
+        .collection(query.collectionPath)
+        .where(field, isGreaterThanOrEqualTo: query.startBusinessDate)
+        .where(field, isLessThanOrEqualTo: query.endBusinessDate)
+        .orderBy(field)
+        .orderBy(FieldPath.documentId)
+        .limit(query.limit);
+    if (query.startAfter case final cursor?) {
+      request = request.startAfter(<Object>[
+        cursor.businessDate,
+        cursor.documentId,
+      ]);
+    }
+    return _pageOf(request);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantDocumentIdRange(
+    TenantDocumentIdRangeQuery query,
+  ) async {
+    Query<Map<String, dynamic>> request = _firestore
+        .collection(query.collectionPath)
+        .where(
+          FieldPath.documentId,
+          isGreaterThanOrEqualTo: query.startAtDocumentId,
+        )
+        .where(FieldPath.documentId, isLessThanOrEqualTo: query.endAtDocumentId)
+        .orderBy(FieldPath.documentId)
+        .limit(query.limit);
+    if (query.startAfterDocumentId case final cursor?) {
+      request = request.startAfter(<Object>[cursor]);
+    }
+    return _pageOf(request);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantInstantRange(
+    TenantInstantRangeQuery query,
+  ) async {
+    // The ordering the stock ledger already added, reused rather than a second
+    // spelling of the same field name.
+    final field = TenantCollectionOrder.createdAt.field!;
+    Query<Map<String, dynamic>> request = _firestore
+        .collection(query.collectionPath)
+        .where(field, isGreaterThanOrEqualTo: Timestamp.fromDate(query.startAt))
+        .where(field, isLessThanOrEqualTo: Timestamp.fromDate(query.endAt))
+        .orderBy(field)
+        .orderBy(FieldPath.documentId)
+        .limit(query.limit);
+    if (query.startAfter case final cursor?) {
+      request = request.startAfter(<Object>[
+        Timestamp.fromDate(cursor.at),
         cursor.documentId,
       ]);
     }

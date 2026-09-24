@@ -1,6 +1,7 @@
 import '../checkout/checkout_configuration.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
+import '../ui/money_text.dart';
 
 /// The ISO 4217 code a reported figure is labelled with, or nothing at all.
 ///
@@ -49,13 +50,28 @@ final class TenantReportingCurrency {
     }
   }
 
+  /// Lets a test state a currency this business never published.
+  ///
+  /// **The `TenantCollectionQuery.forTesting` bargain, for the same reason.**
+  /// [read] is the only way production code gets a code, and it needs a session
+  /// and a reader to do it - which meant that until this existed, every test
+  /// touching a reported figure had to use [unknown], and the labelled path
+  /// (`KES 1234.50`) was the one a suite could not reach. A report is mostly
+  /// columns of money, so that gap was the wrong one to carry.
+  ///
+  /// This constructs nothing production code can reach by accident: [read] is
+  /// still the only caller that turns a configuration document into a code, and
+  /// it still degrades to [unknown] rather than guessing.
+  factory TenantReportingCurrency.forTesting(String code) =>
+      TenantReportingCurrency._(code);
+
   final String? code;
 
   bool get isKnown => code != null;
 
   /// Formats one major-unit amount, with the code when there is one.
   String format(num amount) {
-    final figure = amount.toStringAsFixed(2);
+    final figure = moneyText(amount);
     final code = this.code;
     return code == null ? figure : '$code $figure';
   }

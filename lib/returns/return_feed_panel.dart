@@ -3,6 +3,16 @@ import 'package:flutter/material.dart';
 import '../checkout/checkout_draft.dart';
 import '../checkout/checkout_receipt.dart';
 import '../sales/sale_history.dart';
+import '../inventory/product_image_cache.dart';
+import '../reports/analysis/returns_analysis.dart';
+import '../reports/analysis/returns_report.dart';
+import '../reports/report_document.dart';
+import '../reports/report_file.dart';
+import '../reports/report_identity_source.dart';
+import '../reports/report_people.dart';
+import '../reports/report_period.dart';
+import '../reports/report_run.dart';
+import '../reports/ui/report_action.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -12,6 +22,7 @@ import '../ui/buttons.dart';
 import '../ui/card.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/money_text.dart';
 import '../ui/pagination.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -32,10 +43,18 @@ final class TenantReturnFeedScreen extends StatelessWidget {
     required this.reader,
     this.actions,
     this.clock,
+    this.reportSaver,
+    this.imageCache,
   });
 
   final TenantDataReader reader;
   final TenantReturnActions? actions;
+
+  /// Where a generated report goes. Null renders no toolbar control at all.
+  final TenantReportSaver? reportSaver;
+
+  /// Fetches the logo the report's branding band draws.
+  final TenantImageCache? imageCache;
 
   /// What "today" means to the day filter. Absent, the wall clock.
   final DateTime Function()? clock;
@@ -45,8 +64,83 @@ final class TenantReturnFeedScreen extends StatelessWidget {
     title: 'Returns',
     subtitle: 'All returns recorded by this business',
     contentWidth: AppContentWidth.records,
+    actions: <Widget>[
+      TenantSessionReportAction(
+        clock: clock ?? DateTime.now,
+        runFor: (session) => _reportRun(session),
+      ),
+    ],
     body: TenantReturnFeedPanel(reader: reader, actions: actions, clock: clock),
   );
+
+  /// Returns over a period, which the day filter cannot ask for.
+  ///
+  /// **Priced by reading the sales behind them.** A return line carries a
+  /// product and a quantity and no money at all, exactly as this page's own
+  /// `_ReturnFacts` has to work around - so the report joins to the sale for
+  /// the same reason and states units alone where it cannot.
+  TenantReportRun? _reportRun(TenantSession session) {
+    final saver = reportSaver;
+    if (saver == null) return null;
+    // Every active member may review returns, which is what the rules allow
+    // and what this page is already open to.
+    if (!session.canAccess(
+      allowedRoles: TenantReturnHistoryRepository.allowedRoles,
+    )) {
+      return null;
+    }
+
+    final now = clock ?? DateTime.now;
+    return TenantReportRun(
+      kind: TenantReportKind.returns,
+      support: TenantReportPeriodSupport.range,
+      saver: saver,
+      build: (period) async {
+        final source = TenantReturnsReportSource(
+          repository: TenantReturnHistoryRepository(
+            session: session,
+            reader: reader,
+          ),
+          sales: TenantSaleHistoryRepository(
+            session: session,
+            reader: reader,
+          ),
+        );
+        final read = await source.gather(period);
+        final valuation = await source.value(read.returns);
+        final previous = await source.gatherPrevious(period);
+        final identity = await readTenantReportIdentity(
+          session: session,
+          reader: reader,
+          generatedAt: now(),
+          imageCache: imageCache,
+        );
+        final analysis = TenantReturnsAnalysis.from(
+          period: period,
+          returns: read.returns,
+          valuation: valuation,
+          previous: previous,
+          truncated: read.truncated,
+        );
+        return describeReturnsReport(
+          identity: identity,
+          analysis: analysis,
+          // **Resolved after the analysis**, because only then is it known
+          // which people the report will actually list. Grouping stays on the
+          // UID; the name is a label put on at the last moment, and a cashier
+          // reading this will see its colleagues by UID exactly as this page
+          // already shows them.
+          people: await readTenantReportPeople(
+            session: session,
+            reader: reader,
+            uids: analysis.recorders
+                .take(TenantReturnsAnalysis.listed)
+                .map((person) => person.staffId),
+          ),
+        );
+      },
+    );
+  }
 }
 
 final class _ReturnFeedView {
@@ -1116,7 +1210,7 @@ final class _Moment extends StatelessWidget {
   }
 }
 
-String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+String _money(int minorUnits) => moneyTextOfMinor(minorUnits);
 
 /// The old card's tinted glyph square.
 final class _StandingTile extends StatelessWidget {

@@ -9,7 +9,7 @@ void main() {
     expect(currency.isKnown, isTrue);
     expect(currency.code, 'KES');
     expect(currency.format(1250.5), 'KES 1250.50');
-    expect(currency.format(0), 'KES 0.00');
+    expect(currency.format(0), 'KES 0');
   });
 
   test('an absent configuration leaves a bare figure', () async {
@@ -54,13 +54,16 @@ void main() {
     expect(TenantReportingCurrency.unknown.isKnown, isFalse);
   });
 
-  test('an amount is always shown to the minor unit', () {
+  test('a whole amount has no decimals, and cents always have two', () {
+    // Since 2026-09-23: `.00` on a whole amount is noise, but `7.5` would read
+    // as a different number from `7.50`.
     const currency = TenantReportingCurrency.unknown;
 
-    expect(currency.format(7), '7.00');
+    expect(currency.format(7), '7');
     expect(currency.format(7.5), '7.50');
-    expect(currency.format(7.004), '7.00');
+    expect(currency.format(7.004), '7');
     expect(currency.format(7.006), '7.01');
+    expect(currency.format(-3.05), '-3.05');
   });
 }
 

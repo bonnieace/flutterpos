@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report sheet &#8212; as built, on a phone</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, input { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-head { padding: 12px 24px 0; max-width: 900px; }
+.page-head h1 { margin: 0 0 8px; font-size: 28px; line-height: 33.6px; font-weight: 700; color: #D4E7DD; }
+.page-head p { margin: 0 0 6px; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.page-stage { display: flex; justify-content: center; flex-wrap: wrap; gap: 32px; padding: 20px 24px 48px; align-items: flex-start; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.page-stage > figure > .phone, .page-stage > figure > .desk { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+figcaption { font-size: 13px; color: #869585; max-width: 411px; text-align: left; line-height: 19px; }
+.desk + figcaption { max-width: 900px; }
+figcaption em { color: #BCCBB9; font-style: normal; }
+figcaption strong { color: #D4E7DD; font-weight: 600; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #45F28D; }
+.m { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-feature-settings: 'tnum'; }
+
+/* The phone: 411 x 891, the frame the other boards in docs/design use. */
+.phone { position: relative; width: 411px; height: 891px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+.desk { position: relative; width: 900px; height: 700px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+
+/* AppScaffold toolbar, drawn only so the sheet has something to sit over. */
+.bar { flex-shrink: 0; height: 64px; display: flex; align-items: center; padding: 0 8px 0 16px; }
+.bar .ttl { flex: 1 1 auto; min-width: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar .glyph { width: 48px; height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #BCCBB9; padding: 0; }
+.bar .glyph-on { color: #4BE277; }
+.page-behind { flex: 1 1 auto; padding: 0 20px; display: flex; flex-direction: column; gap: 12px; opacity: 0.5; }
+.sk { background: #132A1F; border-radius: 8px; }
+
+/* showAppSheet: surface.overlay, radius.lg on top, a 32x4 handle 12 clear
+   above and below. Content padding is the report picker own 20. */
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 3; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; background: #132A1F; border-radius: 12px 12px 0 0; display: flex; flex-direction: column; overflow: hidden; }
+.handle { flex-shrink: 0; height: 28px; display: flex; align-items: center; justify-content: center; }
+.handle span { width: 32px; height: 4px; border-radius: 999px; background: #3D4A3D; }
+.body { flex: 1 1 auto; min-height: 0; padding: 20px; display: flex; flex-direction: column; }
+.body > * { flex-shrink: 0; }
+.gap { flex-shrink: 0; }
+
+/* titleLarge 22 / 30.8 / 600 */
+.title { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+/* labelEyebrow 12 / 12 / 700 / +0.6, upper */
+.eyebrow { margin: 0; font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #BCCBB9; }
+/* caption 12 / 16 / 400 */
+.note { margin: 0; font-size: 12px; line-height: 16px; color: #BCCBB9; }
+/* bodyMedium 14 / 21 / 400 */
+.lead { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+
+/* FilterChipBar: 32 high inside a 48 target, radius.lg, labelMedium 14/20/600.
+   Clipped to the padding edge, not inset - a half chip is the affordance. */
+.chips { display: flex; align-items: center; height: 48px; overflow: hidden; }
+.chips-wrap { display: flex; flex-wrap: wrap; height: auto; overflow: visible; }
+.chip { margin: 0 4px; height: 32px; box-sizing: border-box; padding: 0 12px; display: inline-flex; align-items: center; gap: 4px; border-radius: 12px; border: 1px solid #3D4A3D; background: transparent; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.chips .chip + .chip { margin-left: 12px; }
+.chip-on { background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30); color: #4BE277; }
+.chip-focus { outline: 2px solid #4BE277; outline-offset: 2px; }
+.chip-pressed { background: rgba(212, 231, 221, 0.12); }
+
+/* AppButton: 48 high, radius.md, labelLarge 14/20/700/+0.7. */
+.btn { height: 48px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 20px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; cursor: pointer; }
+.btn-icon { padding: 0 16px; }
+.btn-primary { background: #4BE277; border-color: #4BE277; color: #003915; }
+.btn-secondary { background: #132A1F; border-color: #3D4A3D; color: #D4E7DD; }
+.btn-tertiary { background: transparent; border-color: transparent; color: #D4E7DD; }
+.btn-disabled { background: #283831; border-color: #3D4A3D; color: #869585; cursor: default; }
+.btn-block { display: flex; width: calc(100% - 8px); margin: 4px; }
+.btn-focus { outline: 2px solid #4BE277; outline-offset: 2px; }
+.btn-pressed { transform: scale(0.98); }
+
+/* AppToggleButton: a 48 well in the action roles, a check glyph when on. */
+.pair { display: flex; }
+.pair > .tile { flex: 1 1 0; min-width: 0; }
+.tile { margin: 4px; height: 48px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; }
+.tile-on { background: #4BE277; border-color: #4BE277; color: #003915; }
+.tile-disabled { background: #283831; border-color: #3D4A3D; color: #869585; }
+.tile-focus { outline: 2px solid #4BE277; outline-offset: 2px; }
+.tile-pressed { transform: scale(0.98); }
+.tile svg { flex-shrink: 0; }
+
+/* LoadingState: a 32 indicator over the density body, centred. */
+.loading { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px; }
+.spin { width: 32px; height: 32px; border-radius: 50%; border: 2px solid rgba(75, 226, 119, 0.25); border-top-color: #4BE277; }
+.loading p { margin: 0; font-size: 16px; line-height: 24px; color: #BCCBB9; text-align: center; }
+
+/* AppSnackBar: floating, 16 in from every edge, a status tint over overlay. */
+.snack { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); background: #132A1F; }
+.snack.abs { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 6; }
+.snack p { margin: 0; font-size: 16px; line-height: 24px; color: #D4E7DD; }
+.snack svg { flex-shrink: 0; margin-top: 3px; }
+.snack-ok { background: linear-gradient(rgba(75, 226, 119, 0.10), rgba(75, 226, 119, 0.10)), #132A1F; border-color: rgba(75, 226, 119, 0.30); }
+.snack-info { background: linear-gradient(rgba(176, 205, 189, 0.10), rgba(176, 205, 189, 0.10)), #132A1F; border-color: rgba(176, 205, 189, 0.30); }
+.snack-problem { background: linear-gradient(rgba(147, 0, 10, 0.20), rgba(147, 0, 10, 0.20)), #132A1F; border-color: rgba(239, 68, 68, 0.30); }
+
+/* Measuring marks. Not part of the design - the ruler laid over it. */
+.fold { position: absolute; left: 0; right: 0; z-index: 8; border-top: 1px dashed rgba(242, 193, 78, 0.85); }
+.fold span { position: absolute; right: 4px; top: -18px; font-size: 11px; font-weight: 600; color: #F2C14E; background: rgba(7, 22, 16, 0.85); padding: 0 4px; border-radius: 4px; }
+.clipmark { position: absolute; left: 0; right: 0; bottom: 0; z-index: 8; background: repeating-linear-gradient(135deg, rgba(239, 68, 68, 0.18) 0 8px, transparent 8px 16px); border-top: 1px dashed rgba(239, 68, 68, 0.9); }
+.clipmark span { position: absolute; right: 4px; top: 4px; font-size: 11px; font-weight: 600; color: #EF4444; background: rgba(7, 22, 16, 0.85); padding: 0 4px; border-radius: 4px; }
+.navbar { position: absolute; left: 0; right: 0; bottom: 0; height: 24px; z-index: 7; display: flex; align-items: center; justify-content: center; }
+.navbar i { display: block; width: 108px; height: 4px; border-radius: 999px; background: rgba(212, 231, 221, 0.45); }
+.tag { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 8px; background: #283831; border: 1px solid #3D4A3D; color: #BCCBB9; font-size: 12px; font-weight: 600; }
+.tag-new { background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30); color: #4BE277; }
+.tag-bad { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.30); color: #EF4444; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All report-sheet artboards</a></nav>
+<header class="page-head">
+  <h1>As built, on a phone</h1>
+  <p>Three frames of <code>showTenantReportSheet</code> at <code>TenantReportPeriodSupport.range</code>
+     &#8212; the support all three wired reports use &#8212; drawn on the 411&#215;891 frame the rest of
+     <code>docs/design</code> uses, over a gesture bar.</p>
+  <p>The sheet box is <strong>624</strong>: <code>AppSheetDetent.half</code> is 0.7 and
+     <code>showTenantReportSheet</code> passes no <code>initialDetent</code>. The dashed amber rule is
+     that edge. Anything below it is reachable only by scrolling the list or dragging to
+     <code>full</code>.</p>
+</header>
+
+<div class="page-stage">
+
+<figure>
+<div class="phone">
+  <div class="bar">
+    <div class="ttl">Sales</div>
+    <div class="glyph glyph-on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3v2h18V3zM3 21h18v-2H3v2zM5 7h14v10H5V7zm2 2v6h10V9H7z"/></svg></div>
+  </div>
+  <div class="page-behind">
+    <div class="sk" style="height: 96px;"></div>
+    <div class="sk" style="height: 64px;"></div>
+    <div class="sk" style="height: 64px;"></div>
+    <div class="sk" style="height: 64px;"></div>
+  </div>
+  <div class="scrim"></div>
+  <div class="sheet" style="height: 624px;">
+    <div class="handle"><span></span></div>
+    <div class="body" style="padding-bottom: 44px;">
+      <h2 class="title">Sales report</h2>
+      <div class="gap" style="height: 24px;"></div>
+
+      <p class="eyebrow">Period</p>
+      <div class="gap" style="height: 8px;"></div>
+      <div class="chips">
+        <span class="chip chip-on">This month</span>
+        <span class="chip">Today</span>
+        <span class="chip">Yesterday</span>
+        <span class="chip">Last 7 days</span>
+        <span class="chip">Last 30 days</span>
+        <span class="chip">Choose dates</span>
+      </div>
+      <div class="gap" style="height: 12px;"></div>
+      <div class="gap" style="height: 24px;"></div>
+
+      <p class="eyebrow">Format</p>
+      <div class="gap" style="height: 8px;"></div>
+      <div class="pair">
+        <span class="tile tile-on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>PDF</span>
+        <span class="tile">Excel</span>
+      </div>
+      <div class="gap" style="height: 8px;"></div>
+      <p class="note">A visual report to read or print</p>
+      <div class="gap" style="height: 24px;"></div>
+
+      <p class="eyebrow">When it is ready</p>
+      <div class="gap" style="height: 8px;"></div>
+      <div class="pair">
+        <span class="tile tile-on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>Save a copy</span>
+        <span class="tile">Share</span>
+      </div>
+      <div class="gap" style="height: 8px;"></div>
+      <p class="note">Choose a folder on this phone and keep the file.</p>
+      <div class="gap" style="height: 24px;"></div>
+
+      <span class="btn btn-primary btn-block">Create report</span>
+      <div class="gap" style="height: 8px;"></div>
+      <span class="btn btn-tertiary btn-block">Cancel</span>
+    </div>
+  </div>
+  <div class="fold" style="bottom: 624px;"><span>half detent &#183; 624</span></div>
+  <div class="navbar"><i></i></div>
+</div>
+<figcaption><strong>1. As it opens.</strong> <em>This month</em> is selected and first, which is
+  <code>_initialPreset</code> for a range report and the fix recorded in <code>TenantReportPreset</code>
+  &#8212; a default sitting fifth opened off the right-hand edge. It fits the detent with room to
+  spare. Note what is <em>not</em> on the screen: the month it means. <em>This month</em> on 23 Sep is
+  1&#8211;23 Sep, 23 days, and the sheet never says so.</figcaption>
+</figure>
+
+<figure>
+<div class="phone">
+  <div class="bar">
+    <div class="ttl">Sales</div>
+    <div class="glyph glyph-on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3v2h18V3zM3 21h18v-2H3v2zM5 7h14v10H5V7zm2 2v6h10V9H7z"/></svg></div>
+  </div>
+  <div class="page-behind">
+    <div class="sk" style="height: 96px;"></div>
+    <div class="sk" style="height: 64px;"></div>
+    <div class="sk" style="height: 64px;"></div>
+    <div class="sk" style="height: 64px;"></div>
+  </div>
+  <div class="scrim"></div>
+  <div class="sheet" style="height: 624px;">
+    <div class="handle"><span></span></div>
+    <div class="body" style="padding-bottom: 44px;">
+      <h2 class="title">Sales report</h2>
+      <div class="gap" style="height: 24px;"></div>
+
+      <p class="eyebrow">Period</p>
+      <div class="gap" style="height: 8px;"></div>
+      <div class="chips" style="justify-content: flex-end;">
+        <span class="chip">Last 7 days</span>
+        <span class="chip">Last 30 days</span>
+        <span class="chip chip-on">Choose dates</span>
+      </div>
+      <div class="gap" style="height: 12px;"></div>
+      <span class="btn btn-secondary btn-icon" style="align-self: flex-start; margin: 0 4px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5z"/></svg>Choose dates</span>
+      <div class="gap" style="height: 24px;"></div>
+
+      <p class="eyebrow">Format</p>
+      <div class="gap" style="height: 8px;"></div>
+      <div class="pair">
+        <span class="tile tile-on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>PDF</span>
+        <span class="tile">Excel</span>
+      </div>
+      <div class="gap" style="height: 8px;"></div>
+      <p class="note">A visual report to read or print</p>
+      <div class="gap" style="height: 24px;"></div>
+
+      <p class="eyebrow">When it is ready</p>
+      <div class="gap" style="height: 8px;"></div>
+      <div class="pair">
+        <span class="tile tile-on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>Save a copy</span>
+        <span class="tile">Share</span>
+      </div>
+      <div class="gap" style="height: 8px;"></div>
+      <p class="note">Choose a folder on this phone and keep the file.</p>
+      <div class="gap" style="height: 24px;"></div>
+
+      <span class="btn btn-disabled btn-block">Create report</span>
+      <div class="gap" style="height: 8px;"></div>
+      <span class="btn btn-tertiary btn-block">Cancel</span>
+    </div>
+  </div>
+  <div class="fold" style="bottom: 624px;"><span>half detent &#183; 624</span></div>
+  <div class="navbar"><i></i></div>
+</div>
+<figcaption><strong>2. <em>Choose dates</em> tapped, the calendar backed out of.</strong> The chip bar
+  has scrolled to its end &#8212; the person had to, because the chip is the sixth of six. The picker
+  opened, they changed their mind, and <code>_chosen</code> is still null: <em>Create report</em> is
+  disabled, the reason is nowhere on the screen, and the word <em>Choose dates</em> is now on two
+  controls at once. The extra 48 of button also pushes <em>Cancel</em> into the detent edge.</figcaption>
+</figure>
+
+<figure>
+<div class="phone">
+  <div class="bar">
+    <div class="ttl">Sales</div>
+    <div class="glyph glyph-on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3v2h18V3zM3 21h18v-2H3v2zM5 7h14v10H5V7zm2 2v6h10V9H7z"/></svg></div>
+  </div>
+  <div class="page-behind">
+    <div class="sk" style="height: 96px;"></div>
+    <div class="sk" style="height: 64px;"></div>
+    <div class="sk" style="height: 64px;"></div>
+    <div class="sk" style="height: 64px;"></div>
+  </div>
+  <div class="scrim"></div>
+  <div class="sheet" style="height: 624px;">
+    <div class="handle"><span></span></div>
+    <div class="body" style="padding-bottom: 44px;">
+      <h2 class="title">Sales report</h2>
+      <div class="gap" style="height: 24px;"></div>
+
+      <p class="eyebrow">Period</p>
+      <div class="gap" style="height: 8px;"></div>
+      <div class="chips" style="justify-content: flex-end;">
+        <span class="chip">Last 7 days</span>
+        <span class="chip">Last 30 days</span>
+        <span class="chip chip-on">Choose dates</span>
+      </div>
+      <div class="gap" style="height: 12px;"></div>
+      <span class="btn btn-secondary btn-icon" style="align-self: flex-start; margin: 0 4px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5z"/></svg>1&#8211;14 Sep 2026</span>
+      <div class="gap" style="height: 24px;"></div>
+
+      <p class="eyebrow">Format</p>
+      <div class="gap" style="height: 8px;"></div>
+      <div class="pair">
+        <span class="tile">PDF</span>
+        <span class="tile tile-on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>Excel</span>
+      </div>
+      <div class="gap" style="height: 8px;"></div>
+      <p class="note">The figures, to sort and total yourself</p>
+      <div class="gap" style="height: 24px;"></div>
+
+      <p class="eyebrow">When it is ready</p>
+      <div class="gap" style="height: 8px;"></div>
+      <div class="pair">
+        <span class="tile">Save a copy</span>
+        <span class="tile tile-on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>Share</span>
+      </div>
+      <div class="gap" style="height: 8px;"></div>
+      <p class="note">Send it to WhatsApp, mail, Drive, or a printer.</p>
+      <div class="gap" style="height: 24px;"></div>
+
+      <span class="btn btn-primary btn-block">Create report</span>
+      <div class="gap" style="height: 8px;"></div>
+      <span class="btn btn-tertiary btn-block">Cancel</span>
+    </div>
+  </div>
+  <div class="fold" style="bottom: 624px;"><span>half detent &#183; 624</span></div>
+  <div class="navbar"><i></i></div>
+</div>
+<figcaption><strong>3. A span picked, and the other choice in every pair.</strong> The button carries
+  <code>_chosen.label()</code>, which is the one place in the sheet a real date appears. Excel and
+  Share are drawn here so both halves of both toggles are on one board; the captions under them are
+  <code>TenantReportFormat.description</code> and <code>TenantReportDestination.description</code>
+  verbatim. This is the tallest state the sheet has, and it is the one that runs out of
+  detent.</figcaption>
+</figure>
+
+</div>
+</body>
+</html>
