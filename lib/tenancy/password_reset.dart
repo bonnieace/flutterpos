@@ -40,13 +40,10 @@ final class PasswordResetCallableException implements Exception {
 
 /// Firebase adapter for `requestPasswordReset`.
 ///
-/// **This is the app's only App Check-enforced callable.** The function is
-/// declared `enforceAppCheck: true` because it is the one endpoint an
-/// unauthenticated stranger may call, so it is the one that needs proof the
-/// caller is this app. In a debug build the debug provider supplies that; a
-/// release build needs Play Integrity and a registered app, and until that is
-/// configured this call fails in release with `unauthenticated`. Mapped below
-/// like any other refusal rather than left to surface raw.
+/// **The one endpoint an unauthenticated stranger may call.** It enforced App
+/// Check until 2026-09-24, which refused every release build because none
+/// sends a token; it no longer does, so a release build is answered like a
+/// debug one.
 final class FirebaseRequestPasswordResetCallable
     implements RequestPasswordResetCallable {
   FirebaseRequestPasswordResetCallable({FirebaseFunctions? functions})
@@ -131,9 +128,9 @@ PasswordResetFailure passwordResetFailure(Object error) {
           'Too many requests from this device. Wait a few minutes and try '
           'again.',
     ),
-    // App Check refused the caller. In a release build with no attestation
-    // configured this is the expected answer, and it is not the person's fault
-    // or their address's - so it names neither.
+    // The server would not accept this caller. App Check was the reason until
+    // the function stopped enforcing it; nothing expected produces this now.
+    // It is not the person's fault or their address's - so it names neither.
     'unauthenticated' ||
     'permission-denied' => const PasswordResetFailure(
       kind: PasswordResetFailureKind.refused,

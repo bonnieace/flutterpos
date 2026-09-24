@@ -455,10 +455,11 @@ Known and deliberate, so a deploy is not surprised by them:
   `com.example.flutter_application_1` and signs release with the **debug**
   keystore; the iOS bundle ID is the template default. Changing the ID needs a
   matching `google-services.json` from a newly registered app.
-- **App Check is debug-only** (`lib/main.dart`). Release attestation needs Play
-  Integrity, which needs the release keystore's SHA-256. Until then
-  `requestPasswordReset` — the only `enforceAppCheck: true` callable — fails in
-  a release build. The UI maps that to "this app could not prove itself".
+- **Nothing enforces App Check.** `requestPasswordReset` was the only callable
+  that did, and it stopped on 2026-09-24. It is also the only one a stranger
+  can call, and it has no per-recipient cooldown, so a script can ask for reset
+  mail to a real account over and over. The client still installs a debug-only
+  provider (`lib/main.dart`); nothing checks the token it sends.
 - **No App Links.** Hosting now exists (see [Hosting](#3b-hosting)), but
   `/.well-known/assetlinks.json` is not published and the app declares no intent
   filter, so no emailed link can open the app.

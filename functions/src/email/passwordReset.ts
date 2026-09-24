@@ -9,7 +9,7 @@ import {
 } from "firebase-admin/firestore";
 import {CallableRequest, onCall} from "firebase-functions/v2/https";
 import {onTaskDispatched} from "firebase-functions/v2/tasks";
-import {requireAppCheckedPublic, requireAuthenticatedUser} from "../core/authorization";
+import {requireAuthenticatedUser} from "../core/authorization";
 import {requireObject, requireRequestId} from "../core/validation";
 import {BrevoEmailProvider} from "./brevoProvider";
 import {
@@ -419,13 +419,19 @@ async function defaultEnqueue(task: PasswordResetTask, taskId: string): Promise<
   );
 }
 
+/**
+ * **No App Check, and nothing yet in its place.** This was the one callable
+ * that enforced it, and no release build ever sent a token, so it refused every
+ * request outside a debug build. Windows has no attestation provider at all, so
+ * enforcement cannot come back as-is. What it stood between is a script asking
+ * for mail to a real account's address with a fresh `requestId` each time;
+ * a per-recipient cooldown is the guard that belongs here instead.
+ */
 export const requestPasswordReset = onCall<unknown, Promise<{accepted: true}>>(
   {
-    enforceAppCheck: true,
     secrets: [EMAIL_RECIPIENT_HMAC_KEYRING],
   },
   async (request: CallableRequest<unknown>) => {
-    requireAppCheckedPublic(request);
     const keyring = parseRecipientHmacKeyring(EMAIL_RECIPIENT_HMAC_KEYRING.value());
     const prepared = preparePasswordResetRequest(request.data, keyring);
     if (!prepared.task || !prepared.taskId) return prepared.response;

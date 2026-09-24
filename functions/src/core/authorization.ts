@@ -17,12 +17,6 @@ export interface AuthenticatedUserOptions {
   allowUnverified?: boolean;
 }
 
-export function requireAppCheckedPublic(request: CallableRequest<unknown>): void {
-  if (!request.app) {
-    throw new HttpsError("failed-precondition", "App verification is required.");
-  }
-}
-
 export function requireAuthenticatedUser<T>(
   request: CallableRequest<T>,
   options: AuthenticatedUserOptions = {}
