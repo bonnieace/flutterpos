@@ -2,6 +2,9 @@
 library;
 
 export 'supplier.dart';
+export 'supplier_delivery.dart';
+export 'supplier_delivery_history.dart';
+export 'supplier_delivery_panel.dart';
 export 'supplier_directory_panel.dart';
 export 'supplier_form.dart';
 export 'supplier_record_panel.dart';

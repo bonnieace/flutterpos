@@ -15,28 +15,10 @@ import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'supplier.dart';
+import 'supplier_delivery_history.dart';
+import 'supplier_delivery_panel.dart';
 import 'supplier_directory_panel.dart';
 import 'supplier_form.dart';
-
-/// Builds one extra part of a supplier's record for [supplier].
-typedef TenantSupplierRecordPart =
-    Widget? Function(
-      BuildContext context,
-      TenantSession session,
-      TenantSupplier supplier,
-    );
-
-/// What a surface outside the directory adds to a supplier's record: the act
-/// of receiving a delivery from them, and the deliveries already received.
-final class TenantSupplierRecordExtras {
-  const TenantSupplierRecordExtras({this.primaryAction, this.history});
-
-  /// Drawn at the head of the actions - *Receive delivery*.
-  final TenantSupplierRecordPart? primaryAction;
-
-  /// Drawn beneath the contact details - the delivery history.
-  final TenantSupplierRecordPart? history;
-}
 
 /// What the record route reads: the supplier, and the directory it sits in,
 /// which a correction's duplicate-name check is made against.
@@ -59,13 +41,16 @@ final class TenantSupplierRecordScreen extends StatefulWidget {
     required this.reader,
     required this.supplierId,
     this.writer,
-    this.extras,
+    this.deliveries,
   });
 
   final TenantDataReader reader;
   final String supplierId;
   final TenantSupplierWriter? writer;
-  final TenantSupplierRecordExtras? extras;
+
+  /// What receiving a delivery needs. Null offers no *Receive delivery*; the
+  /// history of deliveries is read either way.
+  final TenantSupplierDeliveryServices? deliveries;
 
   @override
   State<TenantSupplierRecordScreen> createState() =>
@@ -138,6 +123,21 @@ final class _TenantSupplierRecordScreenState
     _reload();
   }
 
+  Future<void> _receive(TenantSupplier supplier) async {
+    final deliveries = widget.deliveries;
+    if (deliveries == null) return;
+    final notice = await openReceiveDeliveryScreen(
+      context,
+      reader: widget.reader,
+      services: deliveries,
+      supplierWriter: widget.writer,
+      supplierId: supplier.id,
+    );
+    if (!mounted || notice == null) return;
+    showAppSnackBar(context, notice);
+    _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     _composeLoaders();
@@ -176,12 +176,24 @@ final class _TenantSupplierRecordScreenState
           title: supplier.name,
           child: _RecordContents(
             supplier: supplier,
-            primaryAction: widget.extras?.primaryAction?.call(
-              context,
-              session,
-              supplier,
+            primaryAction: widget.deliveries == null
+                ? null
+                : AppButton(
+                    key: const ValueKey('supplier-record-receive'),
+                    label: 'Receive delivery',
+                    icon: Icons.local_shipping_outlined,
+                    tier: AppButtonTier.primary,
+                    expand: true,
+                    onPressed: () => _receive(supplier),
+                  ),
+            // Keyed by the generation, so a delivery just received is read
+            // back into the history rather than the section keeping its page.
+            history: TenantSupplierDeliveryHistory(
+              key: ValueKey('supplier-deliveries-$_generation'),
+              reader: widget.reader,
+              session: session,
+              supplier: supplier,
             ),
-            history: widget.extras?.history?.call(context, session, supplier),
             onEdit: widget.writer == null ? null : () => _edit(session, view),
             onSetActive: widget.writer == null
                 ? null

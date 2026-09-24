@@ -28,12 +28,12 @@ import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'supplier.dart';
+import 'supplier_delivery_panel.dart';
 import 'supplier_form.dart';
 import 'supplier_record_panel.dart';
 
 /// Builds the one extra control a surface outside this folder adds to the
-/// directory's head - the delivery form, the report - without this folder
-/// importing either.
+/// directory's toolbar - the report - without this folder importing it.
 typedef TenantSupplierDirectoryAction =
     Widget? Function(
       BuildContext context,
@@ -47,9 +47,8 @@ final class TenantSuppliersScreen extends StatefulWidget {
     super.key,
     required this.reader,
     this.writer,
-    this.primaryAction,
+    this.deliveries,
     this.reportAction,
-    this.recordExtras,
   });
 
   final TenantDataReader reader;
@@ -57,15 +56,11 @@ final class TenantSuppliersScreen extends StatefulWidget {
   /// Where a supplier write is queued. Null renders a read-only directory.
   final TenantSupplierWriter? writer;
 
-  /// The head of the page's main act - *Receive delivery* - when the build
-  /// carries one.
-  final TenantSupplierDirectoryAction? primaryAction;
+  /// What receiving a delivery needs. Null offers no *Receive delivery*.
+  final TenantSupplierDeliveryServices? deliveries;
 
   /// The toolbar's report control, when the build carries one.
   final TenantSupplierDirectoryAction? reportAction;
-
-  /// What a supplier record shows beneath its contact details.
-  final TenantSupplierRecordExtras? recordExtras;
 
   @override
   State<TenantSuppliersScreen> createState() => _TenantSuppliersScreenState();
@@ -163,13 +158,27 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
           child: TenantSupplierRecordScreen(
             reader: widget.reader,
             writer: widget.writer,
+            deliveries: widget.deliveries,
             supplierId: supplier.id,
-            extras: widget.recordExtras,
           ),
         ),
       ),
     );
     if (mounted) _reload();
+  }
+
+  Future<void> _receive() async {
+    final deliveries = widget.deliveries;
+    if (deliveries == null) return;
+    final notice = await openReceiveDeliveryScreen(
+      context,
+      reader: widget.reader,
+      services: deliveries,
+      supplierWriter: widget.writer,
+    );
+    if (!mounted || notice == null) return;
+    showAppSnackBar(context, notice);
+    _reload();
   }
 
   @override
@@ -198,7 +207,16 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
           standing: _standing,
           pageIndex: _pageIndex,
           canWrite: widget.writer != null,
-          primaryAction: widget.primaryAction?.call(context, session, directory),
+          primaryAction: widget.deliveries == null
+              ? null
+              : AppButton(
+                  key: const ValueKey('suppliers-receive'),
+                  label: 'Receive delivery',
+                  icon: Icons.local_shipping_outlined,
+                  tier: AppButtonTier.primary,
+                  expand: true,
+                  onPressed: _receive,
+                ),
           onSearchChanged: () => setState(() => _pageIndex = 0),
           onStandingChanged: _setStanding,
           onAdd: widget.writer == null

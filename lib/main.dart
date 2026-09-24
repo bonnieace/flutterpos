@@ -1160,8 +1160,21 @@ class SpiritPOSApp extends StatelessWidget {
               imageCache: tenantImageCache,
             ),
             expensesRoles: TenantExpenseRepository.allowedRoles,
-            suppliersRoute: (reader) =>
-                TenantSuppliersScreen(reader: reader, writer: supplierWriter),
+            suppliersRoute: (reader) => TenantSuppliersScreen(
+              reader: reader,
+              writer: supplierWriter,
+              // `requestSyncAfterCatalogChange`, because a delivery moves stock
+              // and sets costs: the refresh is what carries both into the
+              // till's offline catalog, so the next sale is costed right.
+              deliveries: TenantSupplierDeliveryServices(
+                writer: QueuedTenantSupplierDeliveryWriter(
+                  store: tenantMutationStore,
+                  currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                  onQueued: checkoutSyncSignals.requestSyncAfterCatalogChange,
+                ),
+                productSearchReader: tenantDataReader,
+              ),
+            ),
             suppliersRoles: TenantSupplierRepository.allowedRoles,
             receiptLookupRoute: (reader) => salesReport(reader),
             receiptLookupRoles: TenantSaleHistoryRepository.reportRoles,

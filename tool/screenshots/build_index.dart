@@ -220,6 +220,16 @@ const Map<String, String> captions = <String, String>{
   'supplier-record-inactive':
       'An inactive supplier keeps its record and history, and can be offered '
       'again from here.',
+  'supplier-delivery-form':
+      'Receiving a delivery from a supplier’s record: the reference, and '
+      'each product that arrived with what it holds now. A unit cost is '
+      'optional; blank keeps the product’s cost.',
+  'supplier-delivery-confirm':
+      'Every stock and cost change the delivery makes, stated as from and to '
+      'before anything is queued.',
+  'supplier-record-deliveries-open':
+      'A supplier’s deliveries, newest first, one opened to its lines. The '
+      'value says how many lines named no cost.',
   'supplier-add':
       'Adding a supplier. Only the name is required; the name is checked '
       'against every other supplier before it is queued.',

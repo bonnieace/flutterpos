@@ -547,6 +547,65 @@ Map<String, Map<String, Object?>> seedSuppliers() => <String, Map<String, Object
   },
 };
 
+/// What two of the seeded suppliers delivered.
+///
+/// **Keyed so the document ID orders the same way the time does**, newest
+/// highest: the fake pages by document ID, and the history reads newest first
+/// by `createdAt`, so the two have to agree or the page's ordering proof
+/// refuses it. One delivery names no cost on one line, so the history shows
+/// what a partial value looks like.
+Map<String, Map<String, Object?>> seedSupplierDeliveries() =>
+    <String, Map<String, Object?>>{
+      'sd_2': <String, Object?>{
+        'tenantId': seedTenantId,
+        'deliveryId': 'sd_2',
+        'supplierId': 'sp_abc',
+        'supplierName': 'ABC Distributors',
+        'reference': 'INV-48392',
+        'actorUid': managerUid,
+        'complete': true,
+        'createdAt': seedTimestamp(daysAgo: 2, hour: 7),
+        'lines': <Map<String, Object?>>[
+          <String, Object?>{
+            'productId': 'pd-bread-white',
+            'productName': 'White bread loaf',
+            'quantity': 24,
+            'unitCostMinor': 4800,
+            'previousCostMinor': 4650,
+            'page': 0,
+          },
+          <String, Object?>{
+            'productId': 'pd-bar-soap-blue',
+            'productName': 'Bar soap - blue',
+            'quantity': 36,
+            'unitCostMinor': null,
+            'previousCostMinor': 11200,
+            'page': 0,
+          },
+        ],
+      },
+      'sd_1': <String, Object?>{
+        'tenantId': seedTenantId,
+        'deliveryId': 'sd_1',
+        'supplierId': 'sp_abc',
+        'supplierName': 'ABC Distributors',
+        'reference': 'INV-47811',
+        'actorUid': ownerUid,
+        'complete': true,
+        'createdAt': seedTimestamp(daysAgo: 9, hour: 8),
+        'lines': <Map<String, Object?>>[
+          <String, Object?>{
+            'productId': 'pd-bread-white',
+            'productName': 'White bread loaf',
+            'quantity': 30,
+            'unitCostMinor': 4650,
+            'previousCostMinor': 4650,
+            'page': 0,
+          },
+        ],
+      },
+    };
+
 /// What the seeded business spent, over the last week of trading.
 ///
 /// **The document ID leads with the business date**, which is not decoration:
@@ -1096,6 +1155,7 @@ final class FakeTenantReader
         '$root/returns': seedReturns(),
         '$root/expenses': seedExpenses(),
         '$root/suppliers': seedSuppliers(),
+        '$root/supplier_deliveries': seedSupplierDeliveries(),
         '$root/stock_adjustments': seedStockAdjustments(),
         '$root/audit_logs': seedAuditLogs(),
         '$root/shift_amendments': seedShiftAmendments(),

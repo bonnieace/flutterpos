@@ -70,6 +70,7 @@ export {
   createProduct,
   getSalesComparison,
   importProducts,
+  receiveSupplierDelivery,
   recordReceiptReprint,
   removeProductBackground,
   renameCategory,

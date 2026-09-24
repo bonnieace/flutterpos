@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_application_1/suppliers/supplier.dart';
+import 'package:flutter_application_1/suppliers/supplier_delivery.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
@@ -240,6 +241,56 @@ void main() {
         'supplier-delivery-sd_1-p011',
       ]);
     });
+  });
+
+  test('the delivery writer queues every page on one path, in order', () async {
+    final intent = TenantSupplierDeliveryRepository(
+      session: _session(),
+      reader: const _Empty(),
+    ).buildIntent(
+      supplier: TenantSupplier.fromDocument(
+        path: 'tenants/tenant-a/suppliers/sp_abc',
+        data: const <String, Object?>{'name': 'ABC', 'active': true},
+      ),
+      reference: 'INV-1',
+      lines: <TenantDeliveryLineDraft>[
+        for (var index = 0; index < 20; index++)
+          TenantDeliveryLineDraft(
+            product: TenantProduct.fromDocument(
+              path: 'tenants/tenant-a/products/prod-$index',
+              data: <String, Object?>{
+                'name': 'Product $index',
+                'SKU': 'P$index',
+                'price': 10,
+                'quantity': 0,
+                'categoryId': 'cat-a',
+              },
+            ),
+            quantity: '1',
+          ),
+      ],
+      requestId: 'delivery-request-1',
+    );
+    var signalled = 0;
+
+    final result = await QueuedTenantSupplierDeliveryWriter(
+      store: store,
+      currentUid: () => 'user-a',
+      onQueued: () => signalled++,
+    ).receive(intent);
+
+    final records = await store.recordsForSession(
+      uid: 'user-a',
+      tenantId: 'tenant-a',
+    );
+    expect(result.operationIds, hasLength(2));
+    expect(records.map((record) => record.kind).toSet(), <TenantPendingMutationKind>{
+      TenantPendingMutationKind.supplierDeliveryPage,
+    });
+    expect(records.map((record) => record.targetPath).toSet(), <String>{intent.path});
+    expect(records.map((record) => record.payload['page']), <int>[0, 1]);
+    // One signal for the whole delivery, not one per page.
+    expect(signalled, 1);
   });
 
   group('a queued production batch', () {

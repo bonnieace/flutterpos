@@ -27,6 +27,7 @@ import '../inventory/catalog_management.dart';
 import '../inventory/stock_take.dart';
 import '../returns/return_request.dart';
 import '../suppliers/supplier.dart';
+import '../suppliers/supplier_delivery.dart';
 import 'tenant_pending_mutation.dart';
 import 'tenant_repository.dart';
 
@@ -274,6 +275,54 @@ final class QueuedTenantSupplierWriter implements TenantSupplierWriter {
     );
     _onQueued?.call();
     return TenantSupplierWriteResult.queued(operationId);
+  }
+}
+
+/// Durable-first supplier deliveries.
+///
+/// **Every page of one delivery is queued at once**, which is what lets a
+/// delivery be received with no connection. They share one target path - the
+/// delivery - so the worker carries them in order, each page all or none, and
+/// the overlay draws the stock each page brings in on the catalog the moment it
+/// is queued.
+final class QueuedTenantSupplierDeliveryWriter
+    implements TenantSupplierDeliveryWriter {
+  const QueuedTenantSupplierDeliveryWriter({
+    required TenantPendingMutationStore store,
+    required TenantPendingMutationUidProvider currentUid,
+    TenantQueuedMutationSignal? onQueued,
+  }) : _store = store,
+       _currentUid = currentUid,
+       _onQueued = onQueued;
+
+  final TenantPendingMutationStore _store;
+  final TenantPendingMutationUidProvider _currentUid;
+  final TenantQueuedMutationSignal? _onQueued;
+
+  @override
+  Future<TenantSupplierDeliveryWriteResult> receive(
+    TenantSupplierDeliveryIntent intent,
+  ) async {
+    final uid = _currentUid();
+    if (uid == null) {
+      throw const TenantSupplierDeliveryException('delivery_no_session');
+    }
+    final operationIds = <String>[];
+    for (final page in intent.pages()) {
+      await _store.enqueue(
+        uid: uid,
+        tenantId: page.tenantId,
+        operationId: page.operationId,
+        kind: TenantPendingMutationKind.supplierDeliveryPage,
+        targetPath: page.path,
+        payload: page.payload,
+      );
+      operationIds.add(page.operationId);
+    }
+    _onQueued?.call();
+    return TenantSupplierDeliveryWriteResult.queued(
+      List<String>.unmodifiable(operationIds),
+    );
   }
 }
 

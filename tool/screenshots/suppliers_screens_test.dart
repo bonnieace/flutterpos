@@ -26,22 +26,127 @@ final class _Writer implements TenantSupplierWriter {
   ) async => TenantSupplierWriteResult.queued('supplier-update-capture');
 }
 
-Widget _directory() => inSession(
-  TenantSuppliersScreen(
-    reader: FakeTenantReader.business(),
-    writer: const _Writer(),
-  ),
-  controller: seedSession(role: TenantRole.manager, uid: managerUid),
-);
+final class _DeliveryWriter implements TenantSupplierDeliveryWriter {
+  const _DeliveryWriter();
 
-Widget _record(String supplierId) => inSession(
-  TenantSupplierRecordScreen(
-    reader: FakeTenantReader.business(),
-    writer: const _Writer(),
-    supplierId: supplierId,
-  ),
-  controller: seedSession(role: TenantRole.manager, uid: managerUid),
-);
+  @override
+  Future<TenantSupplierDeliveryWriteResult> receive(
+    TenantSupplierDeliveryIntent intent,
+  ) async => const TenantSupplierDeliveryWriteResult.queued(<String>[]);
+}
+
+/// The seeded business, searchable the way the catalog is: by a word of the
+/// name, or the start of the code.
+///
+/// **Only here**, rather than on the shared fake, because every screen that
+/// reads the catalog prefers a search reader when it has one - the Inventory
+/// captures would start reading through this instead.
+final class _Searchable implements TenantDataReader, TenantProductSearchReader {
+  _Searchable() : _business = FakeTenantReader.business();
+
+  final FakeTenantReader _business;
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) =>
+      _business.getDocument(path);
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) => _business.getCollectionPage(query);
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantProducts(
+    TenantProductSearchQuery query,
+  ) async {
+    final prefix = query.searchPrefix;
+    final products = _business.collections[query.collectionPath] ??
+        const <String, Map<String, Object?>>{};
+    final ids = products.keys.toList()..sort();
+    return <TenantQueryDocumentSnapshot>[
+      for (final id in ids)
+        if (prefix == null ||
+            '${products[id]!['name']}'
+                .toLowerCase()
+                .split(RegExp(r'\s+'))
+                .any((word) => word.startsWith(prefix)) ||
+            '${products[id]!['SKU']}'.toLowerCase().startsWith(prefix))
+          TenantQueryDocumentSnapshot(
+            path: '${query.collectionPath}/$id',
+            data: products[id]!,
+          ),
+    ].take(query.limit).toList();
+  }
+}
+
+TenantSupplierDeliveryServices _deliveries(_Searchable reader) =>
+    TenantSupplierDeliveryServices(
+      writer: const _DeliveryWriter(),
+      productSearchReader: reader,
+    );
+
+Widget _directory() {
+  final reader = _Searchable();
+  return inSession(
+    TenantSuppliersScreen(
+      reader: reader,
+      writer: const _Writer(),
+      deliveries: _deliveries(reader),
+    ),
+    controller: seedSession(role: TenantRole.manager, uid: managerUid),
+  );
+}
+
+Widget _record(String supplierId) {
+  final reader = _Searchable();
+  return inSession(
+    TenantSupplierRecordScreen(
+      reader: reader,
+      writer: const _Writer(),
+      deliveries: _deliveries(reader),
+      supplierId: supplierId,
+    ),
+    controller: seedSession(role: TenantRole.manager, uid: managerUid),
+  );
+}
+
+/// Opens the delivery form from ABC's record and puts two lines on it.
+Future<void> _fillDelivery(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('supplier-record-receive')));
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    find.byKey(const ValueKey('delivery-reference')),
+    'INV-48520',
+  );
+  for (final (search, productId, quantity, cost) in <(String, String, String, String)>[
+    ('bread', 'pd-bread-white', '24', '49.50'),
+    ('soap', 'pd-bar-soap-blue', '36', ''),
+  ]) {
+    final add = find.byKey(const ValueKey('delivery-add-product'));
+    await tester.ensureVisible(add);
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('product-picker-search')),
+      search,
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('product-picker-choose-$productId')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(ValueKey('delivery-line-quantity-$productId')),
+      quantity,
+    );
+    if (cost.isNotEmpty) {
+      await tester.enterText(
+        find.byKey(ValueKey('delivery-line-cost-$productId')),
+        cost,
+      );
+    }
+    await tester.pumpAndSettle();
+  }
+}
 
 void main() {
   screenshotCase(
@@ -71,6 +176,52 @@ void main() {
   screenshotCase(
     'supplier-record-inactive',
     build: () => _record('sp_xyz'),
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    'supplier-delivery-form',
+    build: () => _record('sp_abc'),
+    afterPump: _fillDelivery,
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    'supplier-delivery-confirm',
+    build: () => _record('sp_abc'),
+    fullPage: false,
+    afterPump: (tester) async {
+      await _fillDelivery(tester);
+      // Scrolled to rather than assumed: a short viewport has not built the
+      // bottom of the form yet.
+      final submit = find.byKey(const ValueKey('delivery-submit'));
+      await tester.scrollUntilVisible(
+        submit,
+        300,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('delivery-form')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+    },
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    'supplier-record-deliveries-open',
+    build: () => _record('sp_abc'),
+    afterPump: (tester) async {
+      final lines = find.byKey(const ValueKey('delivery-lines-sd_2'));
+      await tester.ensureVisible(lines);
+      await tester.pumpAndSettle();
+      await tester.tap(lines);
+      await tester.pumpAndSettle();
+    },
     viewports: responsiveViewports,
   );
 
