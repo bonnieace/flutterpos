@@ -616,10 +616,9 @@ final class AppFieldWell extends StatelessWidget {
     final ring = colors.action.focusRing;
     final failed = error != null;
 
-    // **Focused takes the accent, which is the design's own input rule.** Its
-    // component CSS reads `border: 1px solid outline-variant` at rest and
-    // `border-color: primary` on focus, so the well's own outline is part of
-    // the focus signal rather than a constant the ring is drawn outside of.
+    // **Focused changes the well's own outline**, from `outline-variant` at
+    // rest to [AppFocusRing.fieldColor], so the outline is the focus signal
+    // rather than a constant a ring is drawn outside of.
     final borderColor = !enabled
         ? colors.action.disabledBorder
         : failed
@@ -628,7 +627,7 @@ final class AppFieldWell extends StatelessWidget {
         // edge rather than an outline that has to be seen on a dark well.
         ? colors.status.problem.fg
         : focused
-        ? colors.action.focusRing.color
+        ? ring.fieldColor
         : colors.surface.borderStrong;
 
     // §5.2: 48h at comfortable density. §3's own figure for the same surface is
@@ -643,25 +642,14 @@ final class AppFieldWell extends StatelessWidget {
     // target.
     final radius = BorderRadius.circular(tokens.radius.md);
     final gutter = ring.width + ring.offset;
-    // **A focused field is one 2px outline, not an outline and a ring.**
+    // **A focused field is one outline, not an outline and a ring.** The ring
+    // drawn 2px clear of the well read as a lit box, and on 2026-09-23 the
+    // 2px accent outline that replaced it did too; it is now one pixel of the
+    // accent, [AppFocusRing.fieldColor]. A **button** keeps `PressSurface`'s offset
+    // ring, because a button has no border of its own to change.
     //
-    // The design writes focus as `border-color: primary` plus
-    // `box-shadow: 0 0 0 1px primary` - two adjacent pixels of accent that
-    // composite into a single crisp edge. This app was drawing the accent
-    // border *and* §9's ring at its own 2px, 2px clear of the well, which
-    // spans ten device pixels on a 2x phone and reads as a lit box rather
-    // than a focused one. The product owner called it thick on 2026-08-23 and
-    // it was.
-    //
-    // **§9 is met by the outline rather than by the ring**: WCAG 2.2's focus
-    // appearance asks for a 2px perimeter, and this is one, contiguous, in the
-    // accent, against a well that is otherwise `outline-variant`. A **button**
-    // keeps `PressSurface`'s offset ring, because a button has no border of
-    // its own for the accent to move onto.
-    //
-    // `strokeAlignOutside` is what keeps it free: the second pixel is painted
-    // into the gutter that was already reserved for the ring, so a field does
-    // not reflow when the focus arrives.
+    // `strokeAlignOutside` keeps a focused field from reflowing: the outline
+    // is painted into the gutter already reserved for the ring.
     final focusedNow = focused && enabled;
 
     Widget well = DecoratedBox(
@@ -671,9 +659,12 @@ final class AppFieldWell extends StatelessWidget {
         // the table header and the code block, which genuinely are recessed.
         color: colors.surface.field,
         borderRadius: radius,
+        // **One pixel of the accent since 2026-09-24** - see
+        // [AppFocusRing.fieldColor]. A failed field keeps its problem colour at
+        // the same weight.
         border: Border.all(
           color: borderColor,
-          width: focusedNow ? ring.width : 1,
+          width: focusedNow ? ring.fieldWidth : 1,
           strokeAlign: focusedNow
               ? BorderSide.strokeAlignOutside
               : BorderSide.strokeAlignInside,

@@ -44,6 +44,66 @@ void main() {
       expect(find.text('Inside the sheet'), findsNothing);
     });
 
+    testWidgets('a drag down from full settles at half, it does not cancel', (
+      tester,
+    ) async {
+      // **Opened full, because half is already the bottom of the travel.** An
+      // earlier version of this opened at half, where a downward drag has
+      // nowhere to go, and so passed against a build that dismissed on a
+      // device. From full there is real distance to cover.
+      await _pump(tester, initialDetent: AppSheetDetent.full);
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // On the content, not the handle: the handle sits above the `ListView`
+      // and a drag on it never reaches the sheet's scroll controller at all.
+      await tester.fling(
+        find.text('Inside the sheet'),
+        const Offset(0, 900),
+        2000,
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Inside the sheet'),
+        findsOne,
+        reason:
+            'The gesture may move the sheet between its detents and nothing '
+            'else. Losing a half-filled form to a downward flick is the '
+            'defect this closes.',
+      );
+    });
+
+    testWidgets('scrolling the content up and back down keeps the sheet', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        content: (context) => const SizedBox(
+          height: 2000,
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Text('Inside the sheet'),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Up first, so the scrollable owns the gesture, then back down past
+      // where it started. This is the sequence reported from a device: it
+      // bypasses the route's own detector entirely, so switching that off
+      // left it working.
+      await tester.drag(find.byType(ListView), const Offset(0, -400));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, 1200));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListView), findsOne);
+    });
+
     testWidgets('a sheet that may not be dismissed keeps its scrim inert', (
       tester,
     ) async {
@@ -187,6 +247,7 @@ void main() {
 Future<void> _pump(
   WidgetTester tester, {
   bool dismissible = true,
+  AppSheetDetent initialDetent = AppSheetDetent.half,
   WidgetBuilder? content,
 }) async {
   await tester.pumpWidget(
@@ -199,6 +260,7 @@ Future<void> _pump(
               onPressed: () => showAppSheet<void>(
                 context,
                 dismissible: dismissible,
+                initialDetent: initialDetent,
                 builder: (context, controller) => ListView(
                   controller: controller,
                   children: <Widget>[

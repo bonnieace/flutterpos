@@ -484,9 +484,10 @@ final class HomeModuleGrid extends StatelessWidget {
                       // wanted the same six for their avatars, and a palette
                       // living inside one widget is a palette the next surface
                       // has to copy.
-                      accent: tokens.colors.accent.identity[(index * columns +
-                              column) %
-                          tokens.colors.accent.identity.length],
+                      accent:
+                          tokens.colors.accent.identity[(index * columns +
+                                  column) %
+                              tokens.colors.accent.identity.length],
                     ),
                   ),
                 ],
@@ -693,11 +694,17 @@ final class _HomeModuleCard extends StatelessWidget {
         enabled: enabled,
         role: role,
         radius: radius,
+        fillHeight: false,
         child: launcher,
       );
     }
 
     final card = Container(
+      // **The whole cell, both ways.** `PressSurface.fillWidth` widens what
+      // answers a tap, not what is drawn, so a card with a short sentence -
+      // *Staff*, or *Logs* with none - drew narrower and shorter than its row
+      // and sat centred in its column.
+      constraints: const BoxConstraints.expand(),
       padding: EdgeInsets.all(tokens.spacing.s20),
       decoration: BoxDecoration(
         color: container,
@@ -795,6 +802,7 @@ final class _HomeModuleCard extends StatelessWidget {
       enabled: enabled,
       role: role,
       radius: radius,
+      fillHeight: true,
       child: card,
     );
   }
@@ -803,6 +811,7 @@ final class _HomeModuleCard extends StatelessWidget {
     required bool enabled,
     required AppActionRole role,
     required BorderRadius radius,
+    required bool fillHeight,
     required Widget child,
   }) => Semantics(
     button: true,
@@ -823,6 +832,7 @@ final class _HomeModuleCard extends StatelessWidget {
         pressedOverlay: role.pressedWash(),
         minimumTapTarget: tokens.density.minimumTapTarget,
         fillWidth: true,
+        fillHeight: fillHeight,
         child: child,
       ),
     ),

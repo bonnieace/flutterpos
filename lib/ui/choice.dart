@@ -56,10 +56,21 @@ final class ChoiceCardOption<T> {
     required this.description,
     this.detail = const <ChoiceDetailRun>[],
     this.detailIcon,
+    this.icon,
     this.key,
   });
 
   final T value;
+
+  /// A glyph naming what the option is - a PDF, a spreadsheet - drawn in a well
+  /// at the card's leading edge.
+  ///
+  /// **With one, the radio moves to the trailing edge.** A radio, a glyph and
+  /// then the words is three things before the reader reaches the title; the
+  /// glyph is what identifies the option, so it leads, and the radio still
+  /// states the choice - which is what keeps a selection from being colour
+  /// alone.
+  final IconData? icon;
 
   /// The option's name, in the words the rest of the app uses for it.
   final String title;
@@ -325,6 +336,16 @@ final class _ChoiceCard<T> extends StatelessWidget {
         padding: EdgeInsets.all(tokens.spacing.s16),
         child: readOnly
             ? body
+            : option.icon != null
+            ? Row(
+                children: <Widget>[
+                  _GlyphWell(icon: option.icon!, selected: selected),
+                  SizedBox(width: tokens.spacing.s12),
+                  Expanded(child: body),
+                  SizedBox(width: tokens.spacing.s12),
+                  _Radio(selected: selected),
+                ],
+              )
             : Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -378,6 +399,41 @@ final class _ChoiceCard<T> extends StatelessWidget {
   static double _titleLineHeight(AppTokens tokens) {
     final style = tokens.typography.bodyLarge;
     return (style.fontSize ?? 0) * (style.height ?? 1);
+  }
+}
+
+/// The leading glyph of an option that has one.
+///
+/// **A sunken well in both states, and only the glyph changes.** The card's own
+/// wash and edge already say which is chosen; a well that filled as well would
+/// be a third fill on one card.
+final class _GlyphWell extends StatelessWidget {
+  const _GlyphWell({required this.icon, required this.selected});
+
+  final IconData icon;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    return ExcludeSemantics(
+      child: Container(
+        width: tokens.spacing.s48,
+        height: tokens.spacing.s48,
+        decoration: BoxDecoration(
+          color: colors.surface.sunken,
+          borderRadius: BorderRadius.circular(tokens.radius.md),
+        ),
+        child: Icon(
+          icon,
+          size: tokens.spacing.s24,
+          color: selected
+              ? colors.action.primary.container
+              : colors.text.secondary,
+        ),
+      ),
+    );
   }
 }
 

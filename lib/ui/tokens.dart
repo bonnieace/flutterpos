@@ -74,6 +74,41 @@ final class _Primitive {
   /// table there either, and it is the one value the document permits to fail
   /// AA - WCAG exempts disabled controls.
   static const Color sageDisabled = Color(0xFF5D7468);
+
+  // -------------------------------------------------------------------------
+  // Paper - the ground a generated document sits on, which is not a screen.
+  //
+  // **These exist because a report is not a surface.** Every colour above was
+  // chosen against a near-black ground, and the app is dark-only deliberately.
+  // A PDF and a workbook are neither: they open on white and they get printed,
+  // so the screen palette cannot simply be carried across. Darkening the screen
+  // series to clear contrast on white collapses it - four of its eight members
+  // are brand greens separated by *lightness*, and re-grounding them for paper
+  // pushes all four to within dE 45 of each other, which is one colour with
+  // four names.
+  //
+  // So paper separates by **hue** where the screen separates by lightness, and
+  // these are the values that fall out of that. Every series member clears 3:1
+  // against white (WCAG 1.4.11, non-text graphics) and no two are closer than
+  // dE 30. `test/ui/report_palette_test.dart` measures both, so neither can rot.
+  // -------------------------------------------------------------------------
+
+  static const Color paperWhite = Color(0xFFFFFFFF);
+  static const Color paperInk = Color(0xFF141A16);
+  static const Color paperMutedInk = Color(0xFF4A554E);
+  static const Color paperAxis = Color(0xFF5A665E);
+  static const Color paperRule = Color(0xFFD4DCD7);
+  static const Color paperGrid = Color(0xFFE3E8E5);
+  static const Color paperWash = Color(0xFFF4F7F5);
+
+  static const Color paperGreen = Color(0xFF25AB2E);
+  static const Color paperTeal = Color(0xFF1DA39E);
+  static const Color paperBlue = Color(0xFF398CF2);
+  static const Color paperOlive = Color(0xFF899C42);
+  static const Color paperSea = Color(0xFF45A66B);
+  static const Color paperCyan = Color(0xFF279ED4);
+  static const Color paperViolet = Color(0xFF763FF2);
+  static const Color paperPlum = Color(0xFFDE67CB);
 }
 
 /// The raw values of **Profound Verdant**, the Stitch redesign's design system.
@@ -557,16 +592,32 @@ final class AppFocusRing {
     required this.color,
     required this.width,
     required this.offset,
+    required this.fieldColor,
+    required this.fieldWidth,
   });
 
   final Color color;
   final double width;
   final double offset;
 
+  /// The outline a focused input well or select takes in place of its resting
+  /// border.
+  ///
+  /// **The accent, at one pixel.** On 2026-09-23 a 2px mint outline on every
+  /// focused field read as a lit box, and the fix went to one neutral pixel.
+  /// On 2026-09-24 the developer put the green back at that same single pixel:
+  /// it is the weight that was wrong, not the colour, and a field keeps its
+  /// thin look. Same value as [color], so a field and a button focus in one
+  /// green.
+  final Color fieldColor;
+  final double fieldWidth;
+
   static const AppFocusRing dark = AppFocusRing(
     color: _Primitive.mint400,
     width: 2,
     offset: 2,
+    fieldColor: _Primitive.mint400,
+    fieldWidth: 1,
   );
 
   /// The same ring under Profound Verdant: a new colour, the same geometry.
@@ -581,6 +632,8 @@ final class AppFocusRing {
     color: _ProfoundVerdant.primary,
     width: 2,
     offset: 2,
+    fieldColor: _ProfoundVerdant.primary,
+    fieldWidth: 1,
   );
 
   static AppFocusRing lerp(AppFocusRing a, AppFocusRing b, double t) =>
@@ -588,6 +641,8 @@ final class AppFocusRing {
         color: Color.lerp(a.color, b.color, t)!,
         width: lerpDouble(a.width, b.width, t)!,
         offset: lerpDouble(a.offset, b.offset, t)!,
+        fieldColor: Color.lerp(a.fieldColor, b.fieldColor, t)!,
+        fieldWidth: lerpDouble(a.fieldWidth, b.fieldWidth, t)!,
       );
 }
 
@@ -1046,6 +1101,143 @@ final class AppChartRoles {
       );
 }
 
+/// The ground a generated document sits on, and the colours it draws with.
+///
+/// **A document is not a surface, for the same reason a chart is not a status.**
+/// [AppChartRoles] was split out because a bar is not a panel and reusing the
+/// surface roles for one would have coupled two things that move for different
+/// reasons. This is that argument again, one step further out: a report leaves
+/// the device. It opens on white in whatever viewer the person has, it gets
+/// printed, and it gets photocopied. None of those is a dark near-black screen,
+/// and a document drawn in [AppChartRoles] would arrive either invisible or as
+/// a full-bleed black rectangle that empties a toner cartridge.
+///
+/// **Paper separates by hue; the screen separates by lightness.** That is the
+/// whole difference, and it is measured rather than asserted. Four of
+/// `chart.series`' eight members are brand greens that the eye tells apart by
+/// how light they are against near-black. Darkening those four far enough to
+/// clear contrast on white brings them within dE 45 of one another - one colour
+/// with four names, which on an eight-category expense ring is useless. So the
+/// series here holds hue constant against the brand and spreads *around* the
+/// wheel instead, green-led, with the two hues furthest from the brand last
+/// where only a business spending under eight separate headings at once reaches
+/// them.
+///
+/// **Neither status hue appears here either**, and for the reason
+/// [AppChartRoles] gives: red means problem and amber means attention
+/// everywhere else in this app, so a red slice for *Transport* would read as a
+/// warning about transport. The whole 0-60 band is excluded.
+///
+/// **A palette is still never the only signal.** `TenantReportVisual` cannot be
+/// constructed without the labelled figures that accompany it, so hard rule 4
+/// is kept by the type rather than by each report remembering it.
+@immutable
+final class AppReportRoles {
+  const AppReportRoles({
+    required this.paper,
+    required this.wash,
+    required this.ink,
+    required this.mutedInk,
+    required this.rule,
+    required this.accent,
+    required this.onAccent,
+    required this.bar,
+    required this.barEmphasis,
+    required this.gridLine,
+    required this.axisLabel,
+    required this.series,
+  });
+
+  /// The page itself.
+  final Color paper;
+
+  /// A banded row - a table header, the branding lockup behind the business
+  /// name. The substitute for a fill that would cost toner.
+  final Color wash;
+
+  /// Body text and figures. 17.7:1 on [paper].
+  final Color ink;
+
+  /// A caption, a note, a provenance line. 7.8:1 on [paper].
+  final Color mutedInk;
+
+  /// A hairline under a heading or between table rows.
+  final Color rule;
+
+  /// The one colour the document leads with - the title band, the emphasis bar.
+  final Color accent;
+
+  /// A label sitting on [accent].
+  final Color onAccent;
+
+  /// An ordinary bar.
+  final Color bar;
+
+  /// The bar the eye is meant to land on.
+  final Color barEmphasis;
+
+  /// The rules a height is read against, faint enough not to print heavy.
+  final Color gridLine;
+
+  /// Labels along the two axes. 6:1 on [paper], because an axis label is text.
+  final Color axisLabel;
+
+  /// The ordered categorical palette. Eight, because the expense categories are
+  /// a closed enum of eight and a ring must tell all of them apart.
+  final List<Color> series;
+
+  static const AppReportRoles dark = AppReportRoles(
+    paper: _Primitive.paperWhite,
+    wash: _Primitive.paperWash,
+    ink: _Primitive.paperInk,
+    mutedInk: _Primitive.paperMutedInk,
+    rule: _Primitive.paperRule,
+    accent: _Primitive.green600,
+    onAccent: _Primitive.paperWhite,
+    bar: _Primitive.green600,
+    barEmphasis: _Primitive.paperGreen,
+    gridLine: _Primitive.paperGrid,
+    axisLabel: _Primitive.paperAxis,
+    series: <Color>[
+      _Primitive.paperGreen,
+      _Primitive.paperTeal,
+      _Primitive.paperBlue,
+      _Primitive.paperOlive,
+      _Primitive.paperSea,
+      _Primitive.paperCyan,
+      _Primitive.paperViolet,
+      _Primitive.paperPlum,
+    ],
+  );
+
+  /// Paper does not change with the screen palette.
+  ///
+  /// Both instances are the same values, and that is the point rather than an
+  /// oversight: white paper is white whichever palette the app is wearing. The
+  /// second name exists only so [AppColorRoles.profoundVerdant] reads like its
+  /// siblings and a future third palette has an obvious place to differ.
+  static const AppReportRoles profoundVerdant = dark;
+
+  static AppReportRoles lerp(AppReportRoles a, AppReportRoles b, double t) =>
+      AppReportRoles(
+        paper: Color.lerp(a.paper, b.paper, t)!,
+        wash: Color.lerp(a.wash, b.wash, t)!,
+        ink: Color.lerp(a.ink, b.ink, t)!,
+        mutedInk: Color.lerp(a.mutedInk, b.mutedInk, t)!,
+        rule: Color.lerp(a.rule, b.rule, t)!,
+        accent: Color.lerp(a.accent, b.accent, t)!,
+        onAccent: Color.lerp(a.onAccent, b.onAccent, t)!,
+        bar: Color.lerp(a.bar, b.bar, t)!,
+        barEmphasis: Color.lerp(a.barEmphasis, b.barEmphasis, t)!,
+        gridLine: Color.lerp(a.gridLine, b.gridLine, t)!,
+        axisLabel: Color.lerp(a.axisLabel, b.axisLabel, t)!,
+        series: <Color>[
+          for (var index = 0; index < a.series.length; index++)
+            Color.lerp(a.series[index], b.series[index], t)!,
+        ],
+      );
+}
+
 /// Decorative identity colour, carried across from the app this one replaced.
 ///
 /// **Distinct, never ranked, and never a status.** These say *this is a
@@ -1140,6 +1332,7 @@ final class AppColorRoles {
     required this.status,
     required this.chart,
     required this.accent,
+    required this.report,
   });
 
   final AppSurfaceRoles surface;
@@ -1148,6 +1341,10 @@ final class AppColorRoles {
   final AppStatusRoles status;
   final AppChartRoles chart;
   final AppAccentRoles accent;
+
+  /// The paper a generated document is drawn on. See [AppReportRoles] for why
+  /// it is not [chart].
+  final AppReportRoles report;
 
   /// The only palette `design.md` defines.
   ///
@@ -1163,6 +1360,7 @@ final class AppColorRoles {
     status: AppStatusRoles.dark,
     chart: AppChartRoles.dark,
     accent: AppAccentRoles.dark,
+    report: AppReportRoles.dark,
   );
 
   /// The Profound Verdant palette - the second instance this class's doc above
@@ -1187,6 +1385,7 @@ final class AppColorRoles {
     status: AppStatusRoles.profoundVerdant,
     chart: AppChartRoles.profoundVerdant,
     accent: AppAccentRoles.profoundVerdant,
+    report: AppReportRoles.profoundVerdant,
   );
 
   static AppColorRoles lerp(AppColorRoles a, AppColorRoles b, double t) =>
@@ -1197,6 +1396,7 @@ final class AppColorRoles {
         status: AppStatusRoles.lerp(a.status, b.status, t),
         chart: AppChartRoles.lerp(a.chart, b.chart, t),
         accent: AppAccentRoles.lerp(a.accent, b.accent, t),
+        report: AppReportRoles.lerp(a.report, b.report, t),
       );
 }
 

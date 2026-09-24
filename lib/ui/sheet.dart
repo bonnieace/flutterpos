@@ -30,11 +30,13 @@ import 'tokens.dart';
 
 /// Where a sheet is allowed to come to rest, as a fraction of the screen.
 ///
-/// **Two resting positions plus dismissal, which is the difference §2.4 is
-/// about.** A sheet with only an open and a closed state is a dialog that slid
-/// up; being able to drag it taller, and have it stay there, is what makes it a
-/// sheet. Dragging below [half] dismisses it, so there are three outcomes to a
-/// gesture and two places it can come to rest.
+/// **Two resting positions, which is the difference §2.4 is about.** A sheet
+/// with only an open and a closed state is a dialog that slid up; being able to
+/// drag it taller, and have it stay there, is what makes it a sheet.
+///
+/// **A drag settles, it never dismisses**, at the developer's direction on
+/// 2026-09-23. Up reaches [full], down returns to [half], and that is the whole
+/// of what the gesture can do — see [showAppSheet] for why.
 enum AppSheetDetent {
   /// Enough for the sheet's first screenful — the cart's lines and its total.
   ///
@@ -67,6 +69,21 @@ enum AppSheetDetent {
 /// subject is a picture: a product photograph, not a form field about one. See
 /// [AppSheetMasthead] for why it is drawn by this component rather than by the
 /// caller.
+///
+/// **No drag dismisses a sheet**, at the developer's direction on 2026-09-23.
+/// The two mechanisms overlapped: the inner [DraggableScrollableSheet] owns the
+/// span between the detents, and the route's own drag owned everything below
+/// [AppSheetDetent.half]. So a flick down that was meant to return a sheet from
+/// full to half ran out of detent halfway through and carried straight on into
+/// the route's handler, throwing away whatever had been filled in. The inner
+/// drag is what a person is aiming at, and it is now the only one: up for
+/// [AppSheetDetent.full], down for [AppSheetDetent.half], and nothing further.
+///
+/// [dismissible] is therefore about the scrim alone — whether a tap outside the
+/// sheet closes it. A sheet holding a form people can lose work in passes
+/// false and offers a cancel control of its own; a sheet holding a paragraph
+/// leaves it true, because making someone hunt for a control to dismiss a
+/// glossary is its own kind of trap.
 Future<T?> showAppSheet<T>(
   BuildContext context, {
   required Widget Function(BuildContext context, ScrollController controller)
@@ -84,7 +101,9 @@ Future<T?> showAppSheet<T>(
     // silently clips.
     isScrollControlled: true,
     isDismissible: dismissible,
-    enableDrag: dismissible,
+    // The route's own drag, and the one that used to cancel the sheet out from
+    // under a half-finished form. See this function's doc comment.
+    enableDrag: false,
     backgroundColor: Colors.transparent,
     barrierColor: tokens.colors.surface.scrim,
     // The handle is drawn here rather than by Material, so it takes §2.1's
@@ -103,6 +122,20 @@ Future<T?> showAppSheet<T>(
         snapSizes: <double>[
           for (final detent in AppSheetDetent.values) detent.fraction,
         ],
+        // **The second way a drag could close a sheet, and the one that
+        // survived turning `enableDrag` off.** This defaults to true, and it
+        // is not about the route's gesture detector at all: reaching
+        // [minChildSize] makes the inner sheet emit a
+        // `DraggableScrollableNotification` asking its parent to close, which
+        // `showModalBottomSheet` obeys. So the sheet still went away on a drag
+        // down from full, and on the far commoner gesture of scrolling the
+        // content up and then back down - the scrollable takes that one, so it
+        // never touches the route's own detector and turning that off did
+        // nothing to it. Reported from a device on 2026-09-23.
+        //
+        // False makes [minChildSize] what it reads as: the bottom of the
+        // sheet's travel, not a trapdoor at the end of it.
+        shouldCloseOnMinExtent: false,
         builder: (context, controller) => _Surface(
           controller: controller,
           masthead: masthead,

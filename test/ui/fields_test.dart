@@ -424,21 +424,17 @@ void main() {
           .where(
             (decoration) =>
                 (decoration.border as Border?)?.top.color ==
-                _tokens.colors.action.focusRing.color,
+                _tokens.colors.action.focusRing.fieldColor,
           );
       expect(rings(), isEmpty);
       await tester.tap(find.byType(TextField));
       await tester.pumpAndSettle();
-      // **One outline, not an outline and a ring, since 2026-08-23.** The
-      // design writes focus as `border-color: primary` plus
-      // `box-shadow: 0 0 0 1px primary` - two adjacent pixels that composite
-      // into a single edge. Drawing §9's ring 2px clear of an already-accent
-      // border spanned ten device pixels on a 2x phone. §9's 2px perimeter is
-      // met by this outline; it is painted outside the stroke so the field
-      // does not reflow.
+      // **One outline, not an outline and a ring.** Since 2026-09-24 it is one
+      // pixel of the accent rather than two, which read as a lit box.
+      // It is painted outside the stroke so the field does not reflow.
       expect(rings(), hasLength(1));
       final outline = rings().single.border!.top;
-      expect(outline.width, _tokens.colors.action.focusRing.width);
+      expect(outline.width, _tokens.colors.action.focusRing.fieldWidth);
       expect(outline.strokeAlign, BorderSide.strokeAlignOutside);
     });
 
@@ -454,7 +450,7 @@ void main() {
       expect(tester.getRect(find.byType(TextField)), before);
     });
 
-    testWidgets('focus-visible: no glow - the outline takes the accent', (
+    testWidgets('focus-visible: no glow - the outline takes the field focus', (
       tester,
     ) async {
       // **The blurred halo is gone as of 2026-08-23.** The design draws focus
@@ -475,7 +471,7 @@ void main() {
       expect(_wellDecoration(tester).boxShadow, anyOf(isNull, isEmpty));
       expect(
         (_wellDecoration(tester).border! as Border).top.color,
-        _tokens.colors.action.focusRing.color,
+        _tokens.colors.action.focusRing.fieldColor,
       );
     });
 
