@@ -5,8 +5,17 @@ library;
 import 'package:flutter/material.dart';
 
 import '../checkout/checkout_draft.dart';
+import '../inventory/product_image_cache.dart';
 import '../reporting/reporting_currency.dart';
+import '../reports/analysis/production_analysis.dart';
+import '../reports/analysis/production_report.dart';
 import '../reports/analysis/report_prose.dart';
+import '../reports/report_document.dart';
+import '../reports/report_file.dart';
+import '../reports/report_identity_source.dart';
+import '../reports/report_period.dart';
+import '../reports/report_run.dart';
+import '../reports/ui/report_action.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -19,11 +28,6 @@ import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'production_batch.dart';
 import 'production_form_panel.dart';
-
-/// Builds the toolbar's report control for a session, when the build carries
-/// one - kept outside this folder so production does not import reporting.
-typedef TenantProductionReportAction =
-    Widget? Function(BuildContext context, TenantSession session);
 
 /// What the Production route reads first: the newest batches, and the
 /// currency their costs are stated in.
@@ -40,7 +44,9 @@ final class TenantProductionScreen extends StatefulWidget {
     super.key,
     required this.reader,
     this.services,
-    this.reportAction,
+    this.reportSaver,
+    this.imageCache,
+    this.clock,
   });
 
   final TenantDataReader reader;
@@ -48,7 +54,13 @@ final class TenantProductionScreen extends StatefulWidget {
   /// What recording a batch needs. Null renders the history read-only.
   final TenantProductionServices? services;
 
-  final TenantProductionReportAction? reportAction;
+  /// Where a generated production report goes. Null renders no report control.
+  final TenantReportSaver? reportSaver;
+
+  /// Lets a report's branding lockup reuse the logo this device already holds.
+  final TenantImageCache? imageCache;
+
+  final DateTime Function()? clock;
 
   /// How many batches one read shows before *Show older batches*.
   static const int pageSize = 20;
@@ -137,6 +149,61 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
     }
   }
 
+  DateTime _now() => (widget.clock ?? () => DateTime.now().toUtc())();
+
+  /// The production report, narrowed to one product made here or covering all
+  /// of them.
+  Widget? _reportAction(TenantSession session) {
+    final saver = widget.reportSaver;
+    if (saver == null) return null;
+    final repository = TenantProductionRepository(
+      session: session,
+      reader: widget.reader,
+    );
+    return TenantReportAction(
+      clock: _now,
+      run: TenantReportRun.withSubject(
+        kind: TenantReportKind.production,
+        support: TenantReportPeriodSupport.range,
+        saver: saver,
+        subject: TenantReportSubject(
+          label: 'Product',
+          allLabel: 'All products',
+          loadOptions: () async => <TenantReportSubjectOption>[
+            for (final product in await repository.loadMadeHereProducts())
+              TenantReportSubjectOption(
+                id: product.id,
+                label: product.name,
+                note: product.retired ? 'retired' : null,
+              ),
+          ],
+        ),
+        buildForSubject: (period, subject) async {
+          final read = await TenantProductionReportSource(
+            repository: repository,
+          ).gather(period, productId: subject?.id);
+          final identity = await readTenantReportIdentity(
+            session: session,
+            reader: widget.reader,
+            generatedAt: _now(),
+            imageCache: widget.imageCache,
+          );
+          return describeProductionReport(
+            identity: identity,
+            analysis: TenantProductionAnalysis.from(
+              period: period,
+              batches: read.batches,
+              subject: subject,
+              truncated: read.truncated,
+              reachedTo: read.reachedTo,
+              recordsRead: read.read,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     _composeLoaders();
@@ -163,7 +230,7 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
         final hasMore = _olderHasMore ?? view.page.hasMore;
         final cursor = _olderHasMore == null ? view.page.nextCursor : _olderCursor;
         return _ProductionFrame(
-          reportAction: widget.reportAction?.call(context, session),
+          reportAction: _reportAction(session),
           child: _ProductionContents(
             batches: batches,
             currency: view.currency,

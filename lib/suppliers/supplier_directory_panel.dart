@@ -11,7 +11,16 @@ library;
 import 'package:flutter/material.dart';
 
 import '../checkout/checkout_draft.dart';
+import '../inventory/product_image_cache.dart';
 import '../reports/analysis/report_prose.dart';
+import '../reports/analysis/supplier_analysis.dart';
+import '../reports/analysis/supplier_report.dart';
+import '../reports/report_document.dart';
+import '../reports/report_file.dart';
+import '../reports/report_identity_source.dart';
+import '../reports/report_period.dart';
+import '../reports/report_run.dart';
+import '../reports/ui/report_action.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -28,18 +37,10 @@ import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'supplier.dart';
+import 'supplier_delivery.dart';
 import 'supplier_delivery_panel.dart';
 import 'supplier_form.dart';
 import 'supplier_record_panel.dart';
-
-/// Builds the one extra control a surface outside this folder adds to the
-/// directory's toolbar - the report - without this folder importing it.
-typedef TenantSupplierDirectoryAction =
-    Widget? Function(
-      BuildContext context,
-      TenantSession session,
-      TenantSupplierDirectory directory,
-    );
 
 /// The Suppliers route, as the home tile opens it.
 final class TenantSuppliersScreen extends StatefulWidget {
@@ -48,7 +49,9 @@ final class TenantSuppliersScreen extends StatefulWidget {
     required this.reader,
     this.writer,
     this.deliveries,
-    this.reportAction,
+    this.reportSaver,
+    this.imageCache,
+    this.clock,
   });
 
   final TenantDataReader reader;
@@ -59,8 +62,15 @@ final class TenantSuppliersScreen extends StatefulWidget {
   /// What receiving a delivery needs. Null offers no *Receive delivery*.
   final TenantSupplierDeliveryServices? deliveries;
 
-  /// The toolbar's report control, when the build carries one.
-  final TenantSupplierDirectoryAction? reportAction;
+  /// Where a generated supplier report goes. Null renders no report control.
+  final TenantReportSaver? reportSaver;
+
+  /// Lets a report's branding lockup reuse the logo this device already holds.
+  final TenantImageCache? imageCache;
+
+  /// Injected so a test and a report generated at midnight agree about which
+  /// business day it is.
+  final DateTime Function()? clock;
 
   @override
   State<TenantSuppliersScreen> createState() => _TenantSuppliersScreenState();
@@ -181,6 +191,69 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
     _reload();
   }
 
+  DateTime _now() => (widget.clock ?? () => DateTime.now().toUtc())();
+
+  /// The supplier report, narrowed to one supplier or covering all of them.
+  ///
+  /// **The chooser lists the directory already read**, active suppliers first
+  /// and inactive ones after them, labelled - a period can include deliveries
+  /// from a supplier that has since been marked inactive, and leaving it out
+  /// would make that period's report impossible to produce.
+  Widget? _reportAction(TenantSession session, TenantSupplierDirectory directory) {
+    final saver = widget.reportSaver;
+    if (saver == null) return null;
+    return TenantReportAction(
+      clock: _now,
+      run: TenantReportRun.withSubject(
+        kind: TenantReportKind.suppliers,
+        support: TenantReportPeriodSupport.range,
+        saver: saver,
+        subject: TenantReportSubject(
+          label: 'Supplier',
+          allLabel: 'All suppliers',
+          loadOptions: () async => <TenantReportSubjectOption>[
+            for (final supplier in <TenantSupplier>[
+              ...directory.suppliers.where((supplier) => supplier.active),
+              ...directory.suppliers.where((supplier) => !supplier.active),
+            ])
+              TenantReportSubjectOption(
+                id: supplier.id,
+                label: supplier.name,
+                note: supplier.active ? null : 'inactive',
+              ),
+          ],
+        ),
+        buildForSubject: (period, subject) async {
+          final read = await TenantSupplierReportSource(
+            repository: TenantSupplierDeliveryRepository(
+              session: session,
+              reader: widget.reader,
+            ),
+          ).gather(period, supplierId: subject?.id);
+          final identity = await readTenantReportIdentity(
+            session: session,
+            reader: widget.reader,
+            generatedAt: _now(),
+            imageCache: widget.imageCache,
+          );
+          return describeSupplierReport(
+            identity: identity,
+            analysis: TenantSupplierAnalysis.from(
+              period: period,
+              deliveries: read.deliveries,
+              subject: subject,
+              restocksWithoutSupplier: read.restocks,
+              restocksTruncated: read.restocksTruncated,
+              truncated: read.truncated,
+              reachedTo: read.reachedTo,
+              recordsRead: read.read,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     _composeLoaders();
@@ -200,7 +273,7 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
         ),
       ),
       builder: (context, session, directory) => _SuppliersFrame(
-        reportAction: widget.reportAction?.call(context, session, directory),
+        reportAction: _reportAction(session, directory),
         child: _SuppliersContents(
           directory: directory,
           search: _search,
@@ -432,7 +505,8 @@ final class _SuppliersContents extends StatelessWidget {
       key: const ValueKey('suppliers-search'),
       controller: search,
       label: 'Search suppliers',
-      placeholder: 'Search by name',
+      // One word: the field is half a phone wide beside the filter.
+      placeholder: 'Search',
       dense: true,
       leading: Icons.search,
       onChanged: (_) => onSearchChanged(),

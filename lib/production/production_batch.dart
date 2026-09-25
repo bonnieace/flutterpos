@@ -17,6 +17,7 @@ import '../checkout/checkout_draft.dart';
 import '../inventory/catalog_management.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_id.dart';
+import '../tenancy/tenant_instant_range.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
@@ -296,6 +297,63 @@ final class TenantProductionRepository extends TenantReadRepository {
       hasMore: page.hasMore,
       nextCursor: page.nextCursor,
     );
+  }
+
+  /// Every batch recorded between [startAt] and [endAt], a page at a time.
+  ///
+  /// Forwarded past the overlay, like every period read: a report states what
+  /// the server holds.
+  Future<
+    ({List<TenantProductionBatch> items, TenantInstantRangePosition? next})
+  >
+  loadRange({
+    required DateTime startAt,
+    required DateTime endAt,
+    int pageSize = 50,
+    TenantInstantRangePosition? startAfter,
+  }) async {
+    _requireRole();
+    final page = await tenantInstantRangePage(
+      reader: _collectionReader,
+      collectionPath: paths.collectionPath(TenantCollection.productionBatches),
+      startAt: startAt,
+      endAt: endAt,
+      pageSize: pageSize,
+      startAfter: startAfter,
+    );
+    return (
+      items: <TenantProductionBatch>[
+        for (final snapshot in page.items)
+          TenantProductionBatch.fromSnapshot(snapshot),
+      ],
+      next: page.next,
+    );
+  }
+
+  /// The products marked made here, which a production report may be narrowed
+  /// to - one equality read against the stored flag, up to [maximumPages].
+  Future<List<TenantProduct>> loadMadeHereProducts({int maximumPages = 10}) async {
+    _requireRole();
+    final products = <TenantProduct>[];
+    String? cursor;
+    for (var page = 0; page < maximumPages; page++) {
+      final read = await readCollectionPage(
+        TenantCollection.products,
+        collectionReader: _collectionReader,
+        pageSize: 50,
+        cursor: cursor,
+        equalityFilters: <String, Object?>{
+          'costType': TenantProductCostType.produced.wireValue,
+        },
+      );
+      products.addAll(read.items.map(TenantProduct.fromSnapshot));
+      if (!read.hasMore || read.nextCursor == null) break;
+      cursor = read.nextCursor;
+    }
+    products.sort((left, right) => left.name.toLowerCase().compareTo(
+      right.name.toLowerCase(),
+    ));
+    return products;
   }
 
   /// The last batch made of [productId], which the form starts the next one

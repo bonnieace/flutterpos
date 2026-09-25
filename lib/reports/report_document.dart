@@ -33,7 +33,9 @@ enum TenantReportKind {
   expenses('expenses', 'Expenses report'),
   staff('staff', 'Staff report'),
   shifts('shifts', 'Shifts report'),
-  logs('logs', 'Activity report');
+  logs('logs', 'Activity report'),
+  suppliers('suppliers', 'Supplier report'),
+  production('production', 'Production report');
 
   const TenantReportKind(this.slug, this.title);
 
@@ -174,6 +176,7 @@ final class TenantReportDocument {
     required List<TenantReportFigure> headline,
     required List<TenantReportSection> sections,
     String? title,
+    this.subjectSlug,
   }) : title = title ?? kind.title,
        headline = List<TenantReportFigure>.unmodifiable(headline),
        sections = List<TenantReportSection>.unmodifiable(sections);
@@ -181,6 +184,11 @@ final class TenantReportDocument {
   final TenantReportKind kind;
 
   final String title;
+
+  /// The one thing the report is narrowed to, as a filename fragment, or null
+  /// when it covers everything - so two narrowed reports on one period do not
+  /// share a filename.
+  final String? subjectSlug;
 
   /// One sentence under the title saying what the reader is looking at.
   final String subtitle;
@@ -211,7 +219,9 @@ final class TenantReportDocument {
   /// folder that accumulates them and survives whatever filesystem the share
   /// sheet lands it on.
   String filename(TenantReportFormat format) =>
-      '${identity.slug}-${kind.slug}-${period.slug}.${format.extension}';
+      '${identity.slug}-${kind.slug}'
+      '${subjectSlug == null ? '' : '-$subjectSlug'}'
+      '-${period.slug}.${format.extension}';
 
   /// What the share sheet offers the file as.
   String get shareSubject => '$title - ${period.spelled}';

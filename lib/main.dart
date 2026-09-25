@@ -1175,6 +1175,8 @@ class SpiritPOSApp extends StatelessWidget {
                 ),
                 productSearchReader: tenantDataReader,
               ),
+              reportSaver: const SharedFileTenantReportSaver(),
+              imageCache: tenantImageCache,
             ),
             suppliersRoles: TenantSupplierRepository.allowedRoles,
             productionRoute: (reader) => TenantProductionScreen(
@@ -1189,6 +1191,8 @@ class SpiritPOSApp extends StatelessWidget {
                 ),
                 productSearchReader: tenantDataReader,
               ),
+              reportSaver: const SharedFileTenantReportSaver(),
+              imageCache: tenantImageCache,
             ),
             productionRoles: TenantProductionRepository.allowedRoles,
             receiptLookupRoute: (reader) => salesReport(reader),

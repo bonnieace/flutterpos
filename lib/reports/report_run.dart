@@ -28,16 +28,72 @@ import 'render/report_palette.dart';
 typedef TenantReportBuilder =
     Future<TenantReportDocument> Function(TenantReportPeriod period);
 
+/// One thing a report may be narrowed to: one supplier, one product.
+final class TenantReportSubjectOption {
+  const TenantReportSubjectOption({
+    required this.id,
+    required this.label,
+    this.note,
+  });
+
+  final String id;
+  final String label;
+
+  /// Said beside the label in the chooser - *inactive*.
+  final String? note;
+
+  /// The filename fragment: the label in lowercase ASCII, hyphenated.
+  String get slug {
+    final folded = label.toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-');
+    final trimmed = folded.replaceAll(RegExp('^-+|-+\$'), '');
+    return trimmed.isEmpty ? id : trimmed;
+  }
+}
+
+/// What a report may be narrowed to, and how the chooser words it.
+///
+/// **Optional, and a report that declares none is exactly as it was.** Eight
+/// reports shipped reading the period alone; a subject is a second question
+/// only the reports that can answer it ask.
+final class TenantReportSubject {
+  const TenantReportSubject({
+    required this.label,
+    required this.allLabel,
+    required this.loadOptions,
+  });
+
+  /// The chooser's name - *Supplier*.
+  final String label;
+
+  /// The first choice, and the one the sheet opens on - *All suppliers*.
+  final String allLabel;
+
+  /// Read when the sheet opens, so the chooser lists what the business holds
+  /// at the moment the person asks.
+  final Future<List<TenantReportSubjectOption>> Function() loadOptions;
+}
+
+/// Reads a period, narrowed to [subject] or to everything when it is null.
+typedef TenantReportSubjectBuilder =
+    Future<TenantReportDocument> Function(
+      TenantReportPeriod period,
+      TenantReportSubjectOption? subject,
+    );
+
 /// What the person asked for.
 final class TenantReportRequest {
   const TenantReportRequest({
     required this.period,
     required this.format,
     required this.destination,
+    this.subject,
   });
 
   final TenantReportPeriod period;
   final TenantReportFormat format;
+
+  /// The one thing the report is narrowed to, or null for all of them.
+  final TenantReportSubjectOption? subject;
 
   /// Where the finished file goes. The report sheet always asks for
   /// [TenantReportDestination.device] since 2026-09-23; the field stays so a
@@ -73,9 +129,28 @@ final class TenantReportRun {
     required this.saver,
     this.pdf,
     this.excel,
-  });
+  }) : subject = null,
+       _subjectBuild = null;
+
+  /// A report that may be narrowed to one [subject] as well as a period.
+  TenantReportRun.withSubject({
+    required this.kind,
+    required this.support,
+    required TenantReportSubject this.subject,
+    required TenantReportSubjectBuilder buildForSubject,
+    required this.saver,
+    this.pdf,
+    this.excel,
+  }) : build = ((period) => buildForSubject(period, null)),
+       _subjectBuild = buildForSubject;
 
   final TenantReportKind kind;
+
+  /// What the report may be narrowed to, or null when it reads the period
+  /// alone.
+  final TenantReportSubject? subject;
+
+  final TenantReportSubjectBuilder? _subjectBuild;
 
   /// What the records behind this report can honestly answer for.
   ///
@@ -107,7 +182,10 @@ final class TenantReportRun {
     if (delivery == null) return TenantReportSaveOutcome.unavailable;
 
     onStage?.call(TenantReportStage.gathering);
-    final document = await build(request.period);
+    final subjectBuild = _subjectBuild;
+    final document = subjectBuild == null
+        ? await build(request.period)
+        : await subjectBuild(request.period, request.subject);
 
     onStage?.call(TenantReportStage.rendering);
     final file = switch (request.format) {

@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 
 import '../../ui/buttons.dart';
 import '../../ui/choice.dart';
+import '../../ui/fields.dart';
 import '../../ui/period_picker.dart';
 import '../../ui/sheet.dart';
 import '../../ui/states.dart';
@@ -84,6 +85,7 @@ Future<TenantReportRequest?> showTenantReportSheet(
   required TenantReportKind kind,
   required TenantReportPeriodSupport support,
   required DateTime Function() clock,
+  TenantReportSubject? subject,
 }) => showAppSheet<TenantReportRequest>(
   context,
   // **Only Cancel closes this one.** A tap on the scrim while reaching for a
@@ -93,6 +95,7 @@ Future<TenantReportRequest?> showTenantReportSheet(
   builder: (sheetContext, controller) => _TenantReportSheet(
     kind: kind,
     support: support,
+    subject: subject,
     clock: clock,
     controller: controller,
   ),
@@ -102,12 +105,14 @@ final class _TenantReportSheet extends StatefulWidget {
   const _TenantReportSheet({
     required this.kind,
     required this.support,
+    required this.subject,
     required this.clock,
     required this.controller,
   });
 
   final TenantReportKind kind;
   final TenantReportPeriodSupport support;
+  final TenantReportSubject? subject;
   final DateTime Function() clock;
   final ScrollController controller;
 
@@ -128,6 +133,37 @@ final class _TenantReportSheetState extends State<_TenantReportSheet> {
   };
 
   TenantReportFormat _format = TenantReportFormat.pdf;
+
+  /// What the subject chooser offers, null while it is being read.
+  List<TenantReportSubjectOption>? _options;
+  bool _optionsFailed = false;
+
+  /// The one thing chosen, or null for *all of them* - which is what the sheet
+  /// opens on, so a report is never narrowed without somebody asking.
+  TenantReportSubjectOption? _subject;
+
+  @override
+  void initState() {
+    super.initState();
+    final subject = widget.subject;
+    if (subject != null) _readOptions(subject);
+  }
+
+  Future<void> _readOptions(TenantReportSubject subject) async {
+    try {
+      final options = await subject.loadOptions();
+      if (!mounted) return;
+      setState(() => _options = options);
+    } catch (_) {
+      // **The report is still offered, over everything.** A chooser that could
+      // not be filled is not a reason to refuse a report that needs no choice.
+      if (!mounted) return;
+      setState(() {
+        _options = const <TenantReportSubjectOption>[];
+        _optionsFailed = true;
+      });
+    }
+  }
 
   /// A business date read back as the local midnight the calendar speaks.
   static DateTime _day(String businessDate) => DateTime.parse(businessDate);
@@ -231,20 +267,10 @@ final class _TenantReportSheetState extends State<_TenantReportSheet> {
         ],
         SizedBox(height: tokens.spacing.s24),
 
-        if (!isSnapshot) ...<Widget>[
-          _label(tokens, 'Period'),
-          SizedBox(height: tokens.spacing.s8),
-          // **One button onto the calendar, the width of the sheet** - the
-          // control expenses opens its own period with, so a period is picked
-          // the same way on the page and in its report.
-          AppButton(
-            key: const ValueKey('report-sheet-period'),
-            label: _period.label(widget.clock()),
-            icon: Icons.calendar_today_outlined,
-            tier: AppButtonTier.secondary,
-            expand: true,
-            onPressed: _pickPeriod,
-          ),
+        if (widget.subject case final subject?)
+          _periodAndSubject(context, tokens, subject, isSnapshot: isSnapshot)
+        else if (!isSnapshot) ...<Widget>[
+          _periodBlock(tokens),
           SizedBox(height: tokens.spacing.s24),
         ],
 
@@ -315,6 +341,7 @@ final class _TenantReportSheetState extends State<_TenantReportSheet> {
               TenantReportRequest(
                 period: _period,
                 format: _format,
+                subject: _subject,
                 // **Saved, never asked**, at the developer's direction on
                 // 2026-09-23. The share path stays in the saver for a caller
                 // that wants it; this sheet no longer offers it.
@@ -326,6 +353,119 @@ final class _TenantReportSheetState extends State<_TenantReportSheet> {
       ),
     ),
   );
+
+  /// The period, as one button onto the calendar the width of its column.
+  Widget _periodBlock(AppTokens tokens) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: <Widget>[
+      _label(tokens, 'Period'),
+      SizedBox(height: tokens.spacing.s8),
+      // **One button onto the calendar** - the control expenses opens its own
+      // period with, so a period is picked the same way on the page and in its
+      // report.
+      AppButton(
+        key: const ValueKey('report-sheet-period'),
+        label: _period.label(widget.clock()),
+        icon: Icons.calendar_today_outlined,
+        tier: AppButtonTier.secondary,
+        expand: true,
+        onPressed: _pickPeriod,
+      ),
+    ],
+  );
+
+  /// What the report is narrowed to, *all* first.
+  Widget _subjectBlock(AppTokens tokens, TenantReportSubject subject) {
+    final options = _options;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _label(tokens, subject.label),
+        SizedBox(height: tokens.spacing.s8),
+        // Typed nullable, so *all of them* is a value rather than a sentinel.
+        AppSelect<String?>(
+          key: const ValueKey('report-sheet-subject'),
+          label: subject.label,
+          dense: true,
+          leading: Icons.filter_alt_outlined,
+          value: _subject?.id,
+          enabled: options != null && options.isNotEmpty,
+          items: <AppSelectItem<String?>>[
+            AppSelectItem<String?>(
+              key: const ValueKey('report-sheet-subject-all'),
+              value: null,
+              label: subject.allLabel,
+            ),
+            for (final option in options ?? const <TenantReportSubjectOption>[])
+              AppSelectItem<String?>(
+                key: ValueKey('report-sheet-subject-${option.id}'),
+                value: option.id,
+                label: option.note == null
+                    ? option.label
+                    : '${option.label} (${option.note})',
+              ),
+          ],
+          onChanged: (id) => setState(() {
+            _subject = id == null
+                ? null
+                : options?.firstWhere((option) => option.id == id);
+          }),
+        ),
+        if (_optionsFailed) ...<Widget>[
+          SizedBox(height: tokens.spacing.s8),
+          Text(
+            key: const ValueKey('report-sheet-subject-unread'),
+            'The list could not be read, so the report covers '
+            '${subject.allLabel.toLowerCase()}.',
+            style: tokens.typography.caption.copyWith(
+              color: tokens.colors.text.tertiary,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// The period and the subject side by side where the sheet is wide enough,
+  /// stacked on a phone - the two do not fit beside one another there.
+  Widget _periodAndSubject(
+    BuildContext context,
+    AppTokens tokens,
+    TenantReportSubject subject, {
+    required bool isSnapshot,
+  }) {
+    final subjectBlock = _subjectBlock(tokens, subject);
+    if (isSnapshot) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: tokens.spacing.s24),
+        child: subjectBlock,
+      );
+    }
+    final wide = AppLayout.contract.isAtLeast(
+      MediaQuery.sizeOf(context).width,
+      AppBreakpoint.medium,
+    );
+    return Padding(
+      padding: EdgeInsets.only(bottom: tokens.spacing.s24),
+      child: wide
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(child: _periodBlock(tokens)),
+                SizedBox(width: tokens.spacing.s12),
+                Expanded(child: subjectBlock),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _periodBlock(tokens),
+                SizedBox(height: tokens.spacing.s16),
+                subjectBlock,
+              ],
+            ),
+    );
+  }
 
   Widget _label(AppTokens tokens, String text) => Text(
     text.toUpperCase(),

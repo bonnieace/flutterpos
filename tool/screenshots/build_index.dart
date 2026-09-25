@@ -239,6 +239,9 @@ const Map<String, String> captions = <String, String>{
       'are typed.',
   'production-confirm':
       'The stock and cost change a batch makes, stated before it is queued.',
+  'supplier-report-sheet':
+      'The supplier report asks which period and, beside it, which supplier - '
+      'all of them first, inactive ones listed and labelled.',
   'supplier-add':
       'Adding a supplier. Only the name is required; the name is checked '
       'against every other supplier before it is queued.',

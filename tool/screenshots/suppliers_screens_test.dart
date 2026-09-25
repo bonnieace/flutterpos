@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/reports/report_file.dart';
 import 'package:flutter_application_1/suppliers/suppliers.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,17 @@ final class _DeliveryWriter implements TenantSupplierDeliveryWriter {
   Future<TenantSupplierDeliveryWriteResult> receive(
     TenantSupplierDeliveryIntent intent,
   ) async => const TenantSupplierDeliveryWriteResult.queued(<String>[]);
+}
+
+/// Saves nothing: these captures stop at the sheet.
+final class _Saver implements TenantReportSaver {
+  const _Saver();
+
+  @override
+  Future<TenantReportSaveOutcome> save(
+    TenantReportFile file, {
+    required TenantReportDestination destination,
+  }) async => TenantReportSaveOutcome.dismissed;
 }
 
 /// The seeded business, searchable the way the catalog is: by a word of the
@@ -92,6 +104,7 @@ Widget _directory() {
       reader: reader,
       writer: const _Writer(),
       deliveries: _deliveries(reader),
+      reportSaver: const _Saver(),
     ),
     controller: seedSession(role: TenantRole.manager, uid: managerUid),
   );
@@ -220,6 +233,17 @@ void main() {
       await tester.ensureVisible(lines);
       await tester.pumpAndSettle();
       await tester.tap(lines);
+      await tester.pumpAndSettle();
+    },
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    'supplier-report-sheet',
+    build: _directory,
+    fullPage: false,
+    afterPump: (tester) async {
+      await tester.tap(find.byKey(const ValueKey('report-action-suppliers')));
       await tester.pumpAndSettle();
     },
     viewports: responsiveViewports,

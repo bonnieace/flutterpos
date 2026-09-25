@@ -16,6 +16,7 @@ import '../checkout/checkout_draft.dart';
 import '../inventory/catalog_management.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_id.dart';
+import '../tenancy/tenant_instant_range.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import 'supplier.dart';
@@ -337,6 +338,71 @@ final class TenantSupplierDeliveryRepository extends TenantReadRepository {
       hasMore: page.hasMore,
       nextCursor: page.nextCursor,
     );
+  }
+
+  /// Every delivery recorded between [startAt] and [endAt], a page at a time,
+  /// ordered by when it was recorded.
+  ///
+  /// **Forwarded past the overlay, never drawn from it**, like every period
+  /// read: a report states what the server holds, and a delivery still on this
+  /// device is not yet something the business's records say.
+  Future<
+    ({List<TenantSupplierDelivery> items, TenantInstantRangePosition? next})
+  >
+  loadRange({
+    required DateTime startAt,
+    required DateTime endAt,
+    int pageSize = 50,
+    TenantInstantRangePosition? startAfter,
+  }) async {
+    _requireRole();
+    final page = await tenantInstantRangePage(
+      reader: _collectionReader,
+      collectionPath: paths.collectionPath(TenantCollection.supplierDeliveries),
+      startAt: startAt,
+      endAt: endAt,
+      pageSize: pageSize,
+      startAfter: startAfter,
+    );
+    return (
+      items: <TenantSupplierDelivery>[
+        for (final snapshot in page.items)
+          TenantSupplierDelivery.fromSnapshot(snapshot),
+      ],
+      next: page.next,
+    );
+  }
+
+  /// How many restocks were recorded between [startAt] and [endAt] with no
+  /// supplier named - stock that arrived through *Adjust stock* rather than as
+  /// a delivery - read up to [maximumPages] pages.
+  Future<({int count, bool truncated})> countRestocksWithoutSupplier({
+    required DateTime startAt,
+    required DateTime endAt,
+    int maximumPages = 12,
+  }) async {
+    _requireRole();
+    var count = 0;
+    TenantInstantRangePosition? position;
+    for (var page = 0; page < maximumPages; page++) {
+      final read = await tenantInstantRangePage(
+        reader: _collectionReader,
+        collectionPath: paths.collectionPath(TenantCollection.stockAdjustments),
+        startAt: startAt,
+        endAt: endAt,
+        pageSize: 50,
+        startAfter: position,
+      );
+      for (final snapshot in read.items) {
+        if (snapshot.data['sourceType'] == 'manual_adjustment' &&
+            snapshot.data['adjustmentType'] == 'restock') {
+          count++;
+        }
+      }
+      position = read.next;
+      if (position == null) return (count: count, truncated: false);
+    }
+    return (count: count, truncated: true);
   }
 
   /// An earlier delivery from [supplierId] under [reference], or null.

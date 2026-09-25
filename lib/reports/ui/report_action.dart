@@ -85,6 +85,7 @@ final class _TenantReportActionState extends State<TenantReportAction> {
       context,
       kind: run.kind,
       support: run.support,
+      subject: run.subject,
       clock: widget.clock,
     );
     if (request == null || !mounted) return;

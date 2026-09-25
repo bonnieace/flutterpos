@@ -34,22 +34,26 @@ import 'package:image/image.dart' as img;
 import 'package:flutter_application_1/reports/analysis/expense_report.dart';
 import 'package:flutter_application_1/reports/analysis/inventory_report.dart';
 import 'package:flutter_application_1/reports/analysis/logs_report.dart';
+import 'package:flutter_application_1/reports/analysis/production_report.dart';
 import 'package:flutter_application_1/reports/analysis/returns_report.dart';
 import 'package:flutter_application_1/reports/analysis/sales_report.dart';
 import 'package:flutter_application_1/reports/analysis/shifts_report.dart';
 import 'package:flutter_application_1/reports/analysis/staff_report.dart';
 import 'package:flutter_application_1/reports/analysis/stock_counts_report.dart';
+import 'package:flutter_application_1/reports/analysis/supplier_report.dart';
 import 'package:flutter_application_1/reports/render/excel_report.dart';
 
 import '../../test/reports/support/documents.dart';
 import '../../test/reports/support/expenses.dart';
 import '../../test/reports/support/inventory.dart';
 import '../../test/reports/support/logs.dart';
+import '../../test/reports/support/production.dart';
 import '../../test/reports/support/returns.dart';
 import '../../test/reports/support/sales.dart';
 import '../../test/reports/support/shifts.dart';
 import '../../test/reports/support/staff.dart';
 import '../../test/reports/support/stock_counts.dart';
+import '../../test/reports/support/suppliers.dart';
 
 const String _outputDirectory = 'screenshots/reports';
 
@@ -152,6 +156,14 @@ void main() {
       analysis: fixtureLogsAnalysis(),
       identity: fixtureIdentity(logo: logo),
       people: _fixturePeople,
+    );
+    samples['suppliers'] = describeSupplierReport(
+      analysis: fixtureSupplierAnalysis(),
+      identity: fixtureIdentity(logo: logo),
+    );
+    samples['production'] = describeProductionReport(
+      analysis: fixtureProductionAnalysis(),
+      identity: fixtureIdentity(logo: logo),
     );
 
     final workbooks = TenantExcelReportRenderer.standard();
