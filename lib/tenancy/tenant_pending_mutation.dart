@@ -150,13 +150,16 @@ bool tenantMutationResendConfirms(TenantPendingMutationKind kind) =>
 /// Whether the documents a record of [kind] touched are read from the server
 /// once it lands.
 ///
-/// **Only a new supplier, since 2026-09-25, and because one was seen.** Once a
-/// create is confirmed the overlay stops drawing it, and a document the server
-/// wrote is on this device only if something has read it since. A supplier
-/// added online was missing from every offline list until a list was opened
-/// online again; reading it back as it lands is that read, made on purpose.
+/// **A new supplier and a stock adjustment, since 2026-09-25, because each was
+/// seen.** Once a record is confirmed the overlay stops drawing it, and a
+/// document the server wrote is on this device only if something has read it
+/// since. A supplier added online was missing from every offline list until a
+/// list was opened online again, and an adjustment from 68 to 67 that landed in
+/// five seconds went on reading 68 offline. Reading back what it touched as it
+/// lands is that read, made on purpose.
 bool tenantMutationReadsBackOnLanding(TenantPendingMutationKind kind) =>
-    kind == TenantPendingMutationKind.supplierCreate;
+    kind == TenantPendingMutationKind.supplierCreate ||
+    kind == TenantPendingMutationKind.stockAdjust;
 
 enum TenantPendingMutationState {
   queued,

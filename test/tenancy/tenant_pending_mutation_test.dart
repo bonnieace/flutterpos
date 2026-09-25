@@ -214,7 +214,7 @@ void main() {
     expect((await _only(store)).state, TenantPendingMutationState.confirmed);
   });
 
-  group('an unanswered stock adjustment', () {
+  group('a stock adjustment', () {
     // Seen on SIT 2026-09-25. An adjustment whose send got no answer was only
     // ever sent again by the *second* pass after its retry fell due: the first
     // read the product back, which can never hold an adjustment, and pushed the
@@ -236,7 +236,7 @@ void main() {
       },
     );
 
-    test('is sent again on the first pass its retry is due', () async {
+    test('left unanswered is sent again on the first pass it is due', () async {
       final clock = _Clock(DateTime.utc(2026, 9, 1, 10));
       store = TenantPendingMutationStore.fromBox(box, clock: clock.call);
       await queueAdjustment();
@@ -266,7 +266,7 @@ void main() {
       expect((await _only(store)).state, TenantPendingMutationState.confirmed);
     });
 
-    test('asks for a pass when its retry falls due', () async {
+    test('left unanswered asks for a pass when its retry falls due', () async {
       final clock = _Clock(DateTime.utc(2026, 9, 1, 10));
       store = TenantPendingMutationStore.fromBox(box, clock: clock.call);
       await queueAdjustment();
@@ -293,7 +293,28 @@ void main() {
       expect(woken, 1);
     });
 
-    test('an adjustment left mid-send is sent again at once', () async {
+    test('has its product read back from the server once it lands', () async {
+      // Seen on SIT 2026-09-25: an adjustment from 68 to 67 landed in five
+      // seconds, and offline the correction sheet went on saying 68. Once it is
+      // confirmed the queue stops drawing it, and the product on this device
+      // was the one read before it was sent.
+      await queueAdjustment();
+      final gateway = _ReadLog();
+
+      await TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'device-a',
+      ).run(_session());
+
+      expect(gateway.events, <String>[
+        'submit stock-adjust-adjust-stock-abcdefgh',
+        'read tenants/tenant-a/products/pd_abc',
+      ]);
+    });
+
+    test('left mid-send is sent again at once', () async {
       // What a crash leaves: the record says it was being sent, and the lease
       // it was sent under has run out.
       final clock = _Clock(DateTime.utc(2026, 9, 1, 10));
