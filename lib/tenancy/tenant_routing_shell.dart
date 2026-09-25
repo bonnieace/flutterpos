@@ -145,6 +145,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.expensesRoles = const <TenantRole>[],
     this.suppliersRoute,
     this.suppliersRoles = const <TenantRole>[],
+    this.productionRoute,
+    this.productionRoles = const <TenantRole>[],
     this.receiptLookupRoute,
     this.receiptLookupRoles = const <TenantRole>[],
     this.returnFeedRoute,
@@ -425,6 +427,12 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles the suppliers route is offered to.
   final List<TenantRole> suppliersRoles;
+
+  /// Optional production route: what was made, and what it cost to make.
+  final Widget Function(TenantDataReader reader)? productionRoute;
+
+  /// The roles the production route is offered to.
+  final List<TenantRole> productionRoles;
 
   /// Optional guarded receipt-lookup route, injected for the same reason.
   final Widget Function(TenantDataReader reader)? receiptLookupRoute;
@@ -1350,6 +1358,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       expensesRoles: widget.expensesRoles,
       suppliersRoute: widget.suppliersRoute,
       suppliersRoles: widget.suppliersRoles,
+      productionRoute: widget.productionRoute,
+      productionRoles: widget.productionRoles,
       receiptLookupRoute: widget.receiptLookupRoute,
       receiptLookupRoles: widget.receiptLookupRoles,
       returnFeedRoute: widget.returnFeedRoute,
@@ -2681,6 +2691,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.expensesRoles = const <TenantRole>[],
     this.suppliersRoute,
     this.suppliersRoles = const <TenantRole>[],
+    this.productionRoute,
+    this.productionRoles = const <TenantRole>[],
     this.receiptLookupRoute,
     this.receiptLookupRoles = const <TenantRole>[],
     this.returnFeedRoute,
@@ -2801,6 +2813,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to, decided by the suppliers domain.
   final List<TenantRole> suppliersRoles;
+
+  /// Builds the production route; unreachable while it is absent.
+  final Widget Function(TenantDataReader reader)? productionRoute;
+
+  /// The roles that route is offered to, decided by the production domain.
+  final List<TenantRole> productionRoles;
 
   /// Optional guarded receipt-lookup route, injected for the same reason.
   final Widget Function(TenantDataReader reader)? receiptLookupRoute;
@@ -3661,6 +3679,30 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               builder: (_) => TenantSessionScope(
                 controller: controller,
                 child: suppliersRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    // **What was made, beside what was bought.** Always offered to the three
+    // roles, at the developer's direction on 2026-09-24, rather than hidden
+    // until a product is marked made here: every tile on this grid is decided
+    // by role, and one decided by the business's own data would be the only
+    // tile that appeared and vanished.
+    if (productionRoute != null && membership.role.canAccess(productionRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('production'),
+        label: 'Production',
+        description: 'Record what was made and what it cost to make.',
+        group: 'Inventory',
+        icon: Icons.bakery_dining_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: productionRoute!(reader),
               ),
             ),
           );

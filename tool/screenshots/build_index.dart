@@ -230,6 +230,15 @@ const Map<String, String> captions = <String, String>{
   'supplier-record-deliveries-open':
       'A supplier’s deliveries, newest first, one opened to its lines. The '
       'value says how many lines named no cost.',
+  'production-batches':
+      'Every batch made, newest first, with what one unit cost. One is opened '
+      'to its costs and says how the cost per unit moved.',
+  'production-record':
+      'Recording a batch, started from the last one of the same product. The '
+      'warning about Expenses is opened; the figures follow the rows as they '
+      'are typed.',
+  'production-confirm':
+      'The stock and cost change a batch makes, stated before it is queued.',
   'supplier-add':
       'Adding a supplier. Only the name is required; the name is checked '
       'against every other supplier before it is queued.',

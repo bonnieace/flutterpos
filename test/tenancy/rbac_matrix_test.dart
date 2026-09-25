@@ -47,6 +47,7 @@ import 'package:flutter_application_1/inventory/stock_movements.dart';
 import 'package:flutter_application_1/inventory/stock_take.dart';
 import 'package:flutter_application_1/inventory/stock_take_review.dart';
 import 'package:flutter_application_1/inventory/stock_take_schedule.dart';
+import 'package:flutter_application_1/production/production_batch.dart';
 import 'package:flutter_application_1/reporting/daily_metrics.dart';
 import 'package:flutter_application_1/reporting/profit_report.dart';
 import 'package:flutter_application_1/reporting/reconciliation_anomalies.dart';
@@ -314,6 +315,12 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
         'Suppliers, deliveries and production: the management three, as '
         'the roles that receive stock.',
   ),
+  'TenantProductionRepository.allowedRoles': (
+    expected: TenantProductionRepository.allowedRoles,
+    row:
+        'Production: the management three; a completed batch sets the '
+        'product\'s cost as a permanent record of how it was reached.',
+  ),
   // | Business details and logo | Full | Full | No | No |
   'TenantBrandingPublisher.allowedRoles': (
     expected: TenantBrandingPublisher.allowedRoles,
@@ -418,6 +425,7 @@ const Map<String, List<TenantRole>> _fromTheMatrix = <String, List<TenantRole>>{
   'TenantReturnHistoryRepository.allowedRoles': <TenantRole>[_o, _a, _m, _c],
   // Registered 2026-09-24 with suppliers and production.
   'TenantSupplierRepository.allowedRoles': _management,
+  'TenantProductionRepository.allowedRoles': _management,
 };
 
 /// Why this file does not assert which routes a role is offered.

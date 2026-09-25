@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter_application_1/production/production_batch.dart';
 import 'package:flutter_application_1/suppliers/supplier.dart';
 import 'package:flutter_application_1/suppliers/supplier_delivery.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
@@ -291,6 +292,44 @@ void main() {
     expect(records.map((record) => record.payload['page']), <int>[0, 1]);
     // One signal for the whole delivery, not one per page.
     expect(signalled, 1);
+  });
+
+  test('the production writer queues one batch on its own path', () async {
+    final intent = TenantProductionRepository(
+      session: _session(),
+      reader: const _Empty(),
+    ).buildIntent(
+      product: TenantProduct.fromDocument(
+        path: 'tenants/tenant-a/products/prod-bread',
+        data: const <String, Object?>{
+          'name': 'White bread loaf',
+          'SKU': 'BR-1',
+          'price': 50,
+          'quantity': 12,
+          'categoryId': 'cat-a',
+          'costType': 'produced',
+        },
+      ),
+      quantity: '100',
+      rows: const <TenantProductionRowDraft>[
+        TenantProductionRowDraft(description: 'Flour', amount: '3000'),
+      ],
+      requestId: 'production-request-1',
+      businessDate: '2026-09-24',
+    );
+
+    await QueuedTenantProductionWriter(
+      store: store,
+      currentUid: () => 'user-a',
+    ).complete(intent);
+
+    final record = (await store.recordsForSession(
+      uid: 'user-a',
+      tenantId: 'tenant-a',
+    )).single;
+    expect(record.kind, TenantPendingMutationKind.productionComplete);
+    expect(record.targetPath, intent.path);
+    expect(tenantMutationTouchedPaths(record).last, 'tenants/tenant-a/products/prod-bread');
   });
 
   group('a queued production batch', () {

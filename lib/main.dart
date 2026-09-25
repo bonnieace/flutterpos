@@ -29,6 +29,7 @@ import 'reporting/reporting.dart';
 import 'reports/report_saver.dart';
 import 'returns/returns.dart';
 import 'sales/sales.dart';
+import 'production/production.dart';
 import 'shift/shift.dart';
 import 'suppliers/suppliers.dart';
 import 'ui/scaffold.dart';
@@ -1176,6 +1177,20 @@ class SpiritPOSApp extends StatelessWidget {
               ),
             ),
             suppliersRoles: TenantSupplierRepository.allowedRoles,
+            productionRoute: (reader) => TenantProductionScreen(
+              reader: reader,
+              // A batch moves stock and sets a cost, so the till's offline
+              // catalog is stale the moment it is queued.
+              services: TenantProductionServices(
+                writer: QueuedTenantProductionWriter(
+                  store: tenantMutationStore,
+                  currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                  onQueued: checkoutSyncSignals.requestSyncAfterCatalogChange,
+                ),
+                productSearchReader: tenantDataReader,
+              ),
+            ),
+            productionRoles: TenantProductionRepository.allowedRoles,
             receiptLookupRoute: (reader) => salesReport(reader),
             receiptLookupRoles: TenantSaleHistoryRepository.reportRoles,
             returnFeedRoute: (reader) => TenantReturnFeedScreen(

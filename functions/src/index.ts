@@ -64,6 +64,7 @@ export {
 export {
   adjustStock,
   applyStockTake,
+  completeProduction,
   createCategory,
   createSupplier,
   drainStrandedSales,

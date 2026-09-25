@@ -606,6 +606,50 @@ Map<String, Map<String, Object?>> seedSupplierDeliveries() =>
       },
     };
 
+/// Two batches of the seeded bread, the later one costing more to make.
+///
+/// Keyed newest highest, for the reason the deliveries above are: the fake
+/// pages by document ID and the list reads newest first by `createdAt`.
+Map<String, Map<String, Object?>> seedProductionBatches() =>
+    <String, Map<String, Object?>>{
+      'pb_2': <String, Object?>{
+        'tenantId': seedTenantId,
+        'batchId': 'pb_2',
+        'batchNumber': 'PB-${seedBusinessDate(1).replaceAll('-', '')}-7F3A2C',
+        'productId': 'pd-bread-white',
+        'productName': 'White bread loaf',
+        'quantity': 100,
+        'expenses': <Map<String, Object?>>[
+          <String, Object?>{'description': 'Flour', 'amountMinor': 300000},
+          <String, Object?>{'description': 'Labour', 'amountMinor': 100000},
+          <String, Object?>{'description': 'Gas', 'amountMinor': 40000},
+          <String, Object?>{'description': 'Packaging', 'amountMinor': 40000},
+        ],
+        'totalCostMinor': 480000,
+        'unitCostMinor': 4800,
+        'previousCostMinor': 4650,
+        'actorUid': managerUid,
+        'createdAt': seedTimestamp(daysAgo: 1, hour: 5),
+      },
+      'pb_1': <String, Object?>{
+        'tenantId': seedTenantId,
+        'batchId': 'pb_1',
+        'batchNumber': 'PB-${seedBusinessDate(4).replaceAll('-', '')}-1B9E04',
+        'productId': 'pd-bread-white',
+        'productName': 'White bread loaf',
+        'quantity': 120,
+        'expenses': <Map<String, Object?>>[
+          <String, Object?>{'description': 'Flour', 'amountMinor': 360000},
+          <String, Object?>{'description': 'Labour', 'amountMinor': 120000},
+          <String, Object?>{'description': 'Gas', 'amountMinor': 38000},
+        ],
+        'totalCostMinor': 518000,
+        'unitCostMinor': 4317,
+        'actorUid': ownerUid,
+        'createdAt': seedTimestamp(daysAgo: 4, hour: 5),
+      },
+    };
+
 /// What the seeded business spent, over the last week of trading.
 ///
 /// **The document ID leads with the business date**, which is not decoration:
@@ -1156,6 +1200,7 @@ final class FakeTenantReader
         '$root/expenses': seedExpenses(),
         '$root/suppliers': seedSuppliers(),
         '$root/supplier_deliveries': seedSupplierDeliveries(),
+        '$root/production_batches': seedProductionBatches(),
         '$root/stock_adjustments': seedStockAdjustments(),
         '$root/audit_logs': seedAuditLogs(),
         '$root/shift_amendments': seedShiftAmendments(),

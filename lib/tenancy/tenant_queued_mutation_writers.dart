@@ -25,6 +25,7 @@ import '../checkout/checkout_configuration_writer.dart';
 import '../expenses/expense_request.dart';
 import '../inventory/catalog_management.dart';
 import '../inventory/stock_take.dart';
+import '../production/production_batch.dart';
 import '../returns/return_request.dart';
 import '../suppliers/supplier.dart';
 import '../suppliers/supplier_delivery.dart';
@@ -323,6 +324,46 @@ final class QueuedTenantSupplierDeliveryWriter
     return TenantSupplierDeliveryWriteResult.queued(
       List<String>.unmodifiable(operationIds),
     );
+  }
+}
+
+/// Durable-first production batches.
+///
+/// **Addressed to the batch, never the product**, so a batch the server refuses
+/// strands only itself and not every later stock change to what it made. The
+/// overlay draws the stock and the cost it brings on the catalog the moment it
+/// is queued.
+final class QueuedTenantProductionWriter implements TenantProductionWriter {
+  const QueuedTenantProductionWriter({
+    required TenantPendingMutationStore store,
+    required TenantPendingMutationUidProvider currentUid,
+    TenantQueuedMutationSignal? onQueued,
+  }) : _store = store,
+       _currentUid = currentUid,
+       _onQueued = onQueued;
+
+  final TenantPendingMutationStore _store;
+  final TenantPendingMutationUidProvider _currentUid;
+  final TenantQueuedMutationSignal? _onQueued;
+
+  @override
+  Future<TenantProductionWriteResult> complete(
+    TenantProductionIntent intent,
+  ) async {
+    final uid = _currentUid();
+    if (uid == null) {
+      throw const TenantProductionException('production_no_session');
+    }
+    await _store.enqueue(
+      uid: uid,
+      tenantId: intent.tenantId,
+      operationId: intent.operationId,
+      kind: TenantPendingMutationKind.productionComplete,
+      targetPath: intent.path,
+      payload: intent.payload(),
+    );
+    _onQueued?.call();
+    return TenantProductionWriteResult.queued(intent.operationId);
   }
 }
 

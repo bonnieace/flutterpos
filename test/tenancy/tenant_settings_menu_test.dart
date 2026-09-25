@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
+import 'package:flutter_application_1/production/production.dart';
 import 'package:flutter_application_1/suppliers/suppliers.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,8 +38,8 @@ void main() {
     });
   });
 
-  group('Suppliers is offered to the roles that receive stock', () {
-    testWidgets('an owner, an admin and a manager are offered it', (
+  group('Suppliers and Production are offered to the roles that receive stock', () {
+    testWidgets('an owner, an admin and a manager are offered both', (
       tester,
     ) async {
       for (final role in <TenantRole>[
@@ -47,19 +48,32 @@ void main() {
         TenantRole.manager,
       ]) {
         await _pumpLanding(tester, role: role);
-        expect(
-          find.byKey(const ValueKey('suppliers')),
-          findsOneWidget,
-          reason: role.name,
-        );
+        for (final tile in <String>['suppliers', 'production']) {
+          expect(
+            find.byKey(ValueKey(tile)),
+            findsOneWidget,
+            reason: '${role.name}: $tile',
+          );
+        }
         await _tearDown(tester);
       }
     });
 
-    testWidgets('a cashier is not', (tester) async {
+    testWidgets('a cashier is offered neither', (tester) async {
       await _pumpLanding(tester, role: TenantRole.cashier);
 
       expect(find.byKey(const ValueKey('suppliers')), findsNothing);
+      expect(find.byKey(const ValueKey('production')), findsNothing);
+    });
+
+    testWidgets('Production is offered before a single product is made here', (
+      tester,
+    ) async {
+      // Decided 2026-09-24: shown by role, like every other tile, and never
+      // by what the business happens to hold.
+      await _pumpLanding(tester, role: TenantRole.manager);
+
+      expect(find.byKey(const ValueKey('production')), findsOneWidget);
     });
   });
 
@@ -139,6 +153,8 @@ Future<void> _pumpLanding(
           settingsRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
           suppliersRoute: (reader) => const _Elsewhere(),
           suppliersRoles: TenantSupplierRepository.allowedRoles,
+          productionRoute: (reader) => const _Elsewhere(),
+          productionRoles: TenantProductionRepository.allowedRoles,
           stockTakeRoute: (reader) => const _Elsewhere(),
           stockTakeRoles: TenantStockTakeGateway.allowedRoles,
           stockTakeReviewRoute: (reader) => const _Elsewhere(),
