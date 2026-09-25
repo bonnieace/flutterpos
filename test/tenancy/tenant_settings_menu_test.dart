@@ -4,6 +4,7 @@ import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/production/production.dart';
 import 'package:flutter_application_1/suppliers/suppliers.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Where the home menu puts four things, decided 2026-09-13 and 2026-09-24.
@@ -38,8 +39,63 @@ void main() {
     });
   });
 
-  group('Suppliers and Production are offered to the roles that receive stock', () {
-    testWidgets('an owner, an admin and a manager are offered both', (
+  group(
+    'Suppliers and Production are offered to the roles that receive stock',
+    () {
+      testWidgets('an owner, an admin and a manager are offered both', (
+        tester,
+      ) async {
+        for (final role in <TenantRole>[
+          TenantRole.owner,
+          TenantRole.admin,
+          TenantRole.manager,
+        ]) {
+          await _pumpLanding(tester, role: role);
+          for (final tile in <String>['suppliers', 'production']) {
+            expect(
+              find.byKey(ValueKey(tile)),
+              findsOneWidget,
+              reason: '${role.name}: $tile',
+            );
+          }
+          await _tearDown(tester);
+        }
+      });
+
+      testWidgets('a cashier is offered neither', (tester) async {
+        await _pumpLanding(tester, role: TenantRole.cashier);
+
+        expect(find.byKey(const ValueKey('suppliers')), findsNothing);
+        expect(find.byKey(const ValueKey('production')), findsNothing);
+      });
+
+      testWidgets(
+        'Production is offered before a single product is made here',
+        (tester) async {
+          // Decided 2026-09-24: shown by role, like every other tile, and never
+          // by what the business happens to hold.
+          await _pumpLanding(tester, role: TenantRole.manager);
+
+          expect(find.byKey(const ValueKey('production')), findsOneWidget);
+        },
+      );
+    },
+  );
+
+  group('a tile wears its own colour, whatever else is on the home', () {
+    // **Pinned 2026-09-25 to what the owner's home wore before Suppliers and
+    // Production.** The colour used to be the tile's place in the grid, so the
+    // two new tiles and the retired Printer re-coloured six of the owner's
+    // tiles, and a manager - who is offered fewer - never saw the owner's.
+    const expected = <String, AppIdentityAccent>{
+      'stock-take-review': AppIdentityAccent.pink,
+      'suppliers': AppIdentityAccent.orange,
+      'production': AppIdentityAccent.teal,
+      'settings': AppIdentityAccent.teal,
+      'staff': AppIdentityAccent.purple,
+    };
+
+    testWidgets('an owner, an admin and a manager see the same colours', (
       tester,
     ) async {
       for (final role in <TenantRole>[
@@ -48,32 +104,30 @@ void main() {
         TenantRole.manager,
       ]) {
         await _pumpLanding(tester, role: role);
-        for (final tile in <String>['suppliers', 'production']) {
+        final checked = <String>[];
+        for (final MapEntry(key: key, value: accent) in expected.entries) {
+          final tile = find.byKey(ValueKey(key));
+          // Not every role is offered every tile; the ones it is must match.
+          if (tile.evaluate().isEmpty) continue;
+          checked.add(key);
+          final glyph = tester.widget<Icon>(
+            find.descendant(of: tile, matching: find.byType(Icon)),
+          );
           expect(
-            find.byKey(ValueKey(tile)),
-            findsOneWidget,
-            reason: '${role.name}: $tile',
+            glyph.color,
+            AppTokens.componentOf(
+              tester.element(tile),
+            ).colors.accent.identityAt(accent),
+            reason: '${role.name}: $key',
           );
         }
+        expect(
+          checked,
+          containsAll(<String>['suppliers', 'production']),
+          reason: role.name,
+        );
         await _tearDown(tester);
       }
-    });
-
-    testWidgets('a cashier is offered neither', (tester) async {
-      await _pumpLanding(tester, role: TenantRole.cashier);
-
-      expect(find.byKey(const ValueKey('suppliers')), findsNothing);
-      expect(find.byKey(const ValueKey('production')), findsNothing);
-    });
-
-    testWidgets('Production is offered before a single product is made here', (
-      tester,
-    ) async {
-      // Decided 2026-09-24: shown by role, like every other tile, and never
-      // by what the business happens to hold.
-      await _pumpLanding(tester, role: TenantRole.manager);
-
-      expect(find.byKey(const ValueKey('production')), findsOneWidget);
     });
   });
 

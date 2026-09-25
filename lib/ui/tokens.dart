@@ -1238,6 +1238,9 @@ final class AppReportRoles {
       );
 }
 
+/// One of [AppAccentRoles.identity]'s six, by name, in the list's own order.
+enum AppIdentityAccent { blue, teal, orange, purple, pink, green }
+
 /// Decorative identity colour, carried across from the app this one replaced.
 ///
 /// **Distinct, never ranked, and never a status.** These say *this is a
@@ -1296,6 +1299,13 @@ final class AppAccentRoles {
     hash = (hash * 0x7feb352d) & 0xffffffff;
     hash ^= hash >> 15;
     return identity[hash % identity.length];
+  }
+
+  /// The colour a named [slot] wears, for a surface that picks each thing's
+  /// colour by hand rather than hashing it - the home's tiles.
+  Color identityAt(AppIdentityAccent slot) {
+    if (identity.isEmpty) return privileged;
+    return identity[slot.index % identity.length];
   }
 
   static const AppAccentRoles dark = AppAccentRoles(

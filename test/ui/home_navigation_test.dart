@@ -183,6 +183,60 @@ void main() {
       expect(glyph.color, isNot(tokens.colors.status.problem.fg));
     });
 
+    // **A tile keeps its colour when a tile before it comes or goes.** Adding
+    // Suppliers and Production and removing Printer re-coloured six of the
+    // owner's tiles, because the colour was the tile's place in the grid.
+    testWidgets('a chosen colour stays with its tile wherever the tile sits', (
+      tester,
+    ) async {
+      const tokens = AppTokens.profoundVerdant;
+      Color? glyphOf(String label) => tester
+          .widget<Icon>(
+            find.descendant(
+              of: find.byKey(ValueKey(label)),
+              matching: find.byType(Icon),
+            ),
+          )
+          .color;
+      HomeDestination tile(String label, AppIdentityAccent accent) =>
+          HomeDestination(
+            destinationKey: ValueKey(label),
+            label: label,
+            icon: Icons.inventory_2_outlined,
+            accent: accent,
+            onPressed: () {},
+          );
+      final expenses = tile('Expenses', AppIdentityAccent.green);
+      final reports = tile('Reports', AppIdentityAccent.blue);
+
+      for (final before in <List<HomeDestination>>[
+        const <HomeDestination>[],
+        <HomeDestination>[_destination('Suppliers')],
+        <HomeDestination>[
+          _destination('Suppliers'),
+          tile('Production', AppIdentityAccent.teal),
+        ],
+      ]) {
+        await _pump(
+          tester,
+          HomeModuleGrid(
+            destinations: <HomeDestination>[...before, expenses, reports],
+          ),
+          width: 360,
+        );
+        expect(
+          glyphOf('Expenses'),
+          tokens.colors.accent.identityAt(AppIdentityAccent.green),
+          reason: '${before.length} tiles before it',
+        );
+        expect(
+          glyphOf('Reports'),
+          tokens.colors.accent.identityAt(AppIdentityAccent.blue),
+          reason: '${before.length} tiles before it',
+        );
+      }
+    });
+
     test('phones use a four-across launcher grid', () {
       expect(HomeModuleGrid.columnsFor(411), 4);
       expect(HomeModuleGrid.columnsFor(767), 4);

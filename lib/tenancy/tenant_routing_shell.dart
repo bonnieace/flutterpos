@@ -359,7 +359,6 @@ final class TenantRoutingShell extends StatefulWidget {
   /// tab inside it enforces for itself.
   final List<TenantRole> settingsRoles;
 
-
   /// How many receipts this device has not printed.
   ///
   /// **The badge on the top bar's glyph, since 2026-09-03.** It used to be the
@@ -2758,7 +2757,6 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// `configuration/{documentId}` admits for writing.
   final List<TenantRole> settingsRoles;
 
-
   /// See `TenantRoutingShell.printQueueCount`.
   final int? Function()? printQueueCount;
 
@@ -3510,6 +3508,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       // to read, and this one sells.
       HomeDestination(
         destinationKey: const ValueKey('start-checkout'),
+        accent: AppIdentityAccent.blue,
         label: 'Register',
         // **It promised two things this product does not have.** The line read
         // *Process sales, manage orders, and handle customer transactions*, and
@@ -3537,6 +3536,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         membership.role.canAccess(receiptLookupRoles))
       HomeDestination(
         destinationKey: const ValueKey('sales'),
+        accent: AppIdentityAccent.teal,
         label: 'Sales',
         description:
             'View sales reports, payment breakdowns, and transaction history.',
@@ -3557,6 +3557,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (returnFeedRoute != null && membership.role.canAccess(returnFeedRoles))
       HomeDestination(
         destinationKey: const ValueKey('returns'),
+        accent: AppIdentityAccent.orange,
         label: 'Returns',
         description: 'Review pending and verified returns across every sale.',
         group: 'Sales',
@@ -3584,6 +3585,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (catalogManagementRoute != null)
       HomeDestination(
         destinationKey: const ValueKey('inventory'),
+        accent: AppIdentityAccent.purple,
         label: 'Inventory',
         description: 'View all products, manage SKUs, pricing, and categories.',
         group: 'Inventory',
@@ -3607,6 +3609,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         membership.role.canAccess(stockTakeReviewRoles))
       HomeDestination(
         destinationKey: const ValueKey('stock-take-review'),
+        accent: AppIdentityAccent.pink,
         label: 'Stock counts',
         description: 'Review what was counted and correct the stock from it.',
         group: 'Inventory',
@@ -3639,6 +3642,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         !membership.role.canAccess(stockTakeReviewRoles))
       HomeDestination(
         destinationKey: const ValueKey('stock-take'),
+        accent: AppIdentityAccent.pink,
         // **A verb, because the row beside it is a noun.** *Stock count* and
         // *Stock counts* sat next to each other on this menu and differed by one
         // letter, which is not a distinction anybody should have to notice. This
@@ -3667,6 +3671,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (suppliersRoute != null && membership.role.canAccess(suppliersRoles))
       HomeDestination(
         destinationKey: const ValueKey('suppliers'),
+        accent: AppIdentityAccent.orange,
         label: 'Suppliers',
         description:
             'Who you buy stock from, and what each delivery brought in.',
@@ -3692,6 +3697,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (productionRoute != null && membership.role.canAccess(productionRoles))
       HomeDestination(
         destinationKey: const ValueKey('production'),
+        accent: AppIdentityAccent.teal,
         label: 'Production',
         description: 'Record what was made and what it cost to make.',
         group: 'Inventory',
@@ -3715,6 +3721,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (expensesRoute != null && membership.role.canAccess(expensesRoles))
       HomeDestination(
         destinationKey: const ValueKey('expenses'),
+        accent: AppIdentityAccent.green,
         label: 'Expenses',
         description:
             'Record rent, wages and running costs, and see what profit is '
@@ -3737,6 +3744,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         membership.role.canAccess(dailySummaryRoles))
       HomeDestination(
         destinationKey: const ValueKey('view-daily-summary'),
+        accent: AppIdentityAccent.blue,
         // **Renamed on 2026-08-27, and the route behind it changed with the
         // name.** The daily figures it used to open are the whole subject of
         // the Sales route, so this said the same thing twice; it now opens the
@@ -3781,6 +3789,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (settingsRoute != null && membership.role.canAccess(settingsRoles))
       HomeDestination(
         destinationKey: const ValueKey('settings'),
+        accent: AppIdentityAccent.teal,
         label: 'Settings',
         description:
             'What prices mean, what receipts print on and look like, and when '
@@ -3806,6 +3815,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (membership.role.canAccess(TenantStaffDirectoryScreen.allowedRoles))
       HomeDestination(
         destinationKey: const ValueKey('staff'),
+        accent: AppIdentityAccent.purple,
         label: 'Staff',
         description: 'Manage your team, their roles and access.',
         group: 'Settings',
@@ -3837,6 +3847,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (shiftHistoryRoute != null)
       HomeDestination(
         destinationKey: const ValueKey('shift-history'),
+        accent: AppIdentityAccent.pink,
         label: 'Shift history',
         description:
             'What each drawer was counted at, against the sales it took.',
@@ -3857,6 +3868,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (auditLogRoute != null && membership.role.canAccess(auditLogRoles))
       HomeDestination(
         destinationKey: const ValueKey('view-audit-log'),
+        accent: AppIdentityAccent.green,
         label: 'Logs',
         group: 'Settings',
         icon: Icons.fact_check_outlined,

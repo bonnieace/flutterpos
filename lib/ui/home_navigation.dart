@@ -59,7 +59,18 @@ final class HomeDestination {
     this.destinationKey,
     this.group,
     this.description,
+    this.accent,
   });
+
+  /// The colour this destination's tile wears on [HomeModuleGrid].
+  ///
+  /// **Chosen per destination, not by position.** Until 2026-09-25 a tile took
+  /// the palette colour at its place in the grid, so adding Suppliers and
+  /// Production and removing Printer moved the colour of every tile after
+  /// them, and a manager's home - which has fewer tiles - never matched the
+  /// owner's. Null falls back to the tile's position, for a list with no
+  /// colours chosen.
+  final AppIdentityAccent? accent;
 
   /// One sentence saying what is behind this destination, for the surface that
   /// has room to say it.
@@ -484,10 +495,13 @@ final class HomeModuleGrid extends StatelessWidget {
                       // wanted the same six for their avatars, and a palette
                       // living inside one widget is a palette the next surface
                       // has to copy.
-                      accent:
+                      accent: switch (destination.accent) {
+                        final slot? => tokens.colors.accent.identityAt(slot),
+                        null =>
                           tokens.colors.accent.identity[(index * columns +
                                   column) %
                               tokens.colors.accent.identity.length],
+                      },
                     ),
                   ),
                 ],
