@@ -88,8 +88,8 @@ final class TenantSupplierAnalysis {
   }) {
     final ordered = <TenantSupplierDelivery>[...deliveries]
       ..sort((left, right) {
-        final byTime = (left.createdAt ?? DateTime.utc(0)).compareTo(
-          right.createdAt ?? DateTime.utc(0),
+        final byTime = (left.occurredAt ?? DateTime.utc(0)).compareTo(
+          right.occurredAt ?? DateTime.utc(0),
         );
         return byTime != 0 ? byTime : left.id.compareTo(right.id);
       });
@@ -99,9 +99,9 @@ final class TenantSupplierAnalysis {
     var costless = 0;
     final rows = <TenantSupplierDeliveryRow>[];
     for (final delivery in ordered) {
-      final on = delivery.createdAt == null
+      final on = delivery.occurredAt == null
           ? period.startDate
-          : checkoutBusinessDate(delivery.createdAt!.toUtc());
+          : checkoutBusinessDate(delivery.occurredAt!.toUtc());
       final name = delivery.supplierName ?? delivery.supplierId;
       final totals = bySupplier.putIfAbsent(
         delivery.supplierId,

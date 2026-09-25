@@ -326,17 +326,20 @@ final class TenantShiftController extends ChangeNotifier {
           session: captured,
           reader: _reader,
         );
+        // One instant for the open: the record keeps it, the write sends it,
+        // and a replay sends it again.
+        final openedAt = _localState.now();
         final intent = repository.buildOpenIntent(
           shiftId: _validatedShiftId(),
           deviceId: _deviceId,
           businessDate: _businessDate(),
+          openedAt: openedAt,
           openingFloatMinor: openingFloatMinor,
         );
         if (!_owns(captured)) return _staleView();
 
         // The intent becomes durable before the write, so an unacknowledged
         // create is settled by a canonical read instead of being forgotten.
-        final openedAt = _localState.now();
         await _localState.save(
           TenantShiftLocalRecord(
             uid: captured.uid,
@@ -512,10 +515,14 @@ final class TenantShiftController extends ChangeNotifier {
           ? _settle(captured, errorCode: 'shift_not_open')
           : _offlineView(captured, errorCode: 'shift_not_open');
     }
+    // One instant for the close, for the reason the open takes one: the write
+    // sends it, and if the write cannot land the unsent record keeps it.
+    final closedAt = _localState.now();
     final intent = repository.buildCloseIntent(
       shift: shift,
       closingCashMinor: declaration.cashMinor,
       sales: sales,
+      closedAt: closedAt,
       declaration: declaration,
       settlementId: settlementId,
     );
@@ -538,7 +545,7 @@ final class TenantShiftController extends ChangeNotifier {
     // Unavailable or ambiguous. Either way the close is now a fact about
     // this device: the count is over, the till stops selling against this
     // shift, and `_replayUnsentClose` sends it on the next restore.
-    return _recordUnsentClose(captured, counted);
+    return _recordUnsentClose(captured, counted, closedAt: closedAt);
   });
 
   /// Closes a canonical open shift this device holds none of the sales for.
@@ -600,6 +607,7 @@ final class TenantShiftController extends ChangeNotifier {
       result = await _writer.closeShift(
         repository.buildRecoveryCloseIntent(
           shift: matches.single,
+          closedAt: _localState.now(),
           declaration: declaration,
           settlementId: settlementId,
         ),
@@ -674,10 +682,11 @@ final class TenantShiftController extends ChangeNotifier {
   /// nothing if it did.
   Future<TenantShiftState> _recordUnsentClose(
     TenantSession captured,
-    TenantShiftLocalRecord record,
-  ) async {
+    TenantShiftLocalRecord record, {
+    required DateTime closedAt,
+  }) async {
     final closed = record.copyWith(
-      closedAt: _localState.now(),
+      closedAt: closedAt,
       updatedAt: _localState.now(),
     );
     await _localState.save(closed);
@@ -893,6 +902,9 @@ final class TenantShiftController extends ChangeNotifier {
           shift: shift,
           closingCashMinor: countedCashMinor,
           sales: sales,
+          // The drawer was counted when the close was recorded here, however
+          // much later it is sent.
+          closedAt: record.closedAt ?? _localState.now(),
           declaration: declaration,
         ),
       );
@@ -958,6 +970,8 @@ final class TenantShiftController extends ChangeNotifier {
           shiftId: record.shiftId,
           deviceId: record.deviceId,
           businessDate: record.businessDate,
+          // When the cashier opened it, which the replay must not move to now.
+          openedAt: record.openedAt,
           // From the record, never recomputed: this is the float the cashier
           // typed when they opened offline, and it is the one the shift has to
           // land with.

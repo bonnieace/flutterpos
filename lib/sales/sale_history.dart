@@ -137,7 +137,7 @@ final class TenantSale implements CheckoutReceiptSale {
       schemaVersion: schemaVersion,
       tender: tender,
       recordedAt: _optionalInstant(data, 'createdAt'),
-      rungAt: _optionalClientInstant(data),
+      rungAt: _rungAt(data),
       lines: lines,
       subtotalMinor: subtotalMinor,
       discountMinor: discountMinor,
@@ -210,7 +210,9 @@ final class TenantSale implements CheckoutReceiptSale {
   ///
   /// **Never used to order anything.** It comes from the selling device's own
   /// clock, which nothing has checked, so a till set to the wrong hour must be
-  /// able to mislabel its own row and nothing else.
+  /// able to mislabel its own row and nothing else. Since 2026-09-25 it is
+  /// held to [recordedAt]: a clock running fast cannot put a sale after the
+  /// moment it arrived, which is also what the stock ledger now records.
   ///
   /// Null on a sale written before the field existed.
   final DateTime? rungAt;
@@ -721,6 +723,14 @@ DateTime? _optionalClientInstant(Map<String, Object?> data) {
 }
 
 const int _maximumClientCreatedAtMs = 4102444800000; // 2100-01-01T00:00:00Z.
+
+/// [TenantSale.rungAt]: the till's instant, never later than the server's.
+DateTime? _rungAt(Map<String, Object?> data) {
+  final rung = _optionalClientInstant(data);
+  final recorded = _optionalInstant(data, 'createdAt');
+  if (rung == null || recorded == null) return rung;
+  return rung.isAfter(recorded) ? recorded : rung;
+}
 
 DateTime? _optionalInstant(Map<String, Object?> data, String field) {
   final value = data[field];

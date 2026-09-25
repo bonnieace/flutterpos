@@ -66,7 +66,7 @@ final class TenantProductionReportSource {
         if (productId == null || batch.productId == productId) {
           batches.add(batch);
         }
-        if (batch.createdAt case final at?) {
+        if (batch.occurredAt case final at?) {
           reachedTo = checkoutBusinessDate(at.toUtc());
         }
       }

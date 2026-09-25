@@ -189,7 +189,7 @@ final class TenantProductionBatch {
            ? data['previousCostMinor'] as int
            : null,
        actorUid = _string(data['actorUid']),
-       createdAt = tenantStoredInstant(data['createdAt']);
+       occurredAt = tenantStoredInstant(data['occurredAt']);
 
   factory TenantProductionBatch.fromSnapshot(
     TenantQueryDocumentSnapshot snapshot,
@@ -211,7 +211,10 @@ final class TenantProductionBatch {
   /// What one unit cost before this batch, when a cost was recorded.
   final int? previousCostMinor;
   final String? actorUid;
-  final DateTime? createdAt;
+
+  /// When the batch was recorded on the device that made it, which is when it
+  /// was made - not when it reached the server, which may be the next morning.
+  final DateTime? occurredAt;
 
   static String _batchId(String path) {
     final parts = path.split('/');
@@ -287,7 +290,7 @@ final class TenantProductionRepository extends TenantReadRepository {
       pageSize: pageSize,
       cursor: cursor,
       descending: true,
-      order: TenantCollectionOrder.createdAt,
+      order: TenantCollectionOrder.occurredAt,
     );
     return TenantProductionPage(
       items: <TenantProductionBatch>[
@@ -299,7 +302,7 @@ final class TenantProductionRepository extends TenantReadRepository {
     );
   }
 
-  /// Every batch recorded between [startAt] and [endAt], a page at a time.
+  /// Every batch made between [startAt] and [endAt], a page at a time.
   ///
   /// Forwarded past the overlay, like every period read: a report states what
   /// the server holds.
@@ -319,6 +322,7 @@ final class TenantProductionRepository extends TenantReadRepository {
       startAt: startAt,
       endAt: endAt,
       pageSize: pageSize,
+      order: TenantCollectionOrder.occurredAt,
       startAfter: startAfter,
     );
     return (
@@ -365,7 +369,7 @@ final class TenantProductionRepository extends TenantReadRepository {
       collectionReader: _collectionReader,
       pageSize: 1,
       descending: true,
-      order: TenantCollectionOrder.createdAt,
+      order: TenantCollectionOrder.occurredAt,
       equalityFilters: <String, Object?>{'productId': productId},
     );
     return page.items.isEmpty

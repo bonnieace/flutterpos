@@ -743,25 +743,32 @@ final class TenantInstantRangePosition {
 /// move `TenantCollectionOrder.createdAt` already made for the stock ledger,
 /// and it is why the logs report could not be built before.
 final class TenantInstantRangeQuery {
-  const TenantInstantRangeQuery._({
+  TenantInstantRangeQuery._({
     required this.collectionPath,
     required this.limit,
     required this.startAt,
     required this.endAt,
+    required this.order,
     this.startAfter,
-  });
+  }) {
+    if (order.field == null) {
+      throw ArgumentError.value(order, 'order', 'Must name an instant field.');
+    }
+  }
 
   factory TenantInstantRangeQuery.scoped({
     required String collectionPath,
     required int limit,
     required DateTime startAt,
     required DateTime endAt,
+    TenantCollectionOrder order = TenantCollectionOrder.createdAt,
     TenantInstantRangePosition? startAfter,
   }) => TenantInstantRangeQuery._(
     collectionPath: collectionPath,
     limit: limit,
     startAt: startAt,
     endAt: endAt,
+    order: order,
     startAfter: startAfter,
   );
 
@@ -770,17 +777,24 @@ final class TenantInstantRangeQuery {
     required int limit,
     required DateTime startAt,
     required DateTime endAt,
+    TenantCollectionOrder order = TenantCollectionOrder.createdAt,
     TenantInstantRangePosition? startAfter,
   }) => TenantInstantRangeQuery._(
     collectionPath: collectionPath,
     limit: limit,
     startAt: startAt,
     endAt: endAt,
+    order: order,
     startAfter: startAfter,
   );
 
   final String collectionPath;
   final int limit;
+
+  /// Which instant the window bounds. `createdAt`, when the server wrote the
+  /// record, for the audit log; `occurredAt`, when it happened on the device
+  /// that made it, for anything a device can make offline and send later.
+  final TenantCollectionOrder order;
 
   /// Inclusive at both ends, in UTC.
   final DateTime startAt;
@@ -1195,7 +1209,7 @@ final class FirebaseTenantDocumentReader
   ) async {
     // The ordering the stock ledger already added, reused rather than a second
     // spelling of the same field name.
-    final field = TenantCollectionOrder.createdAt.field!;
+    final field = query.order.field!;
     Query<Map<String, dynamic>> request = _firestore
         .collection(query.collectionPath)
         .where(field, isGreaterThanOrEqualTo: Timestamp.fromDate(query.startAt))

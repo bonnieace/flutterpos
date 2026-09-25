@@ -1,4 +1,4 @@
-import {FieldValue, getFirestore} from "firebase-admin/firestore";
+import {FieldValue, Timestamp, getFirestore} from "firebase-admin/firestore";
 import type {
   DocumentData,
   DocumentSnapshot,
@@ -7,6 +7,7 @@ import type {
 } from "firebase-admin/firestore";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {requireTenantMember} from "../core/authorization";
+import {requireDeviceInstant} from "../core/deviceTime";
 import {runIdempotentFirestoreTransaction} from "../core/idempotency";
 import {requireDocumentId, requireObject, requireRequestId} from "../core/validation";
 import {
@@ -76,6 +77,7 @@ const ACCEPTED_REQUEST_KEYS = new Set<string>([
   "page",
   "isFinalPage",
   "lines",
+  "occurredAtMs",
 ]);
 
 /**
@@ -106,6 +108,12 @@ export interface DeliveryPageInput {
   page: number;
   isFinalPage: boolean;
   lines: DeliveryPageLine[];
+
+  /**
+   * When this page was saved on the device. Every page of one delivery is
+   * saved in the same instant, and the first to arrive dates the whole of it.
+   */
+  occurredAt: Timestamp;
 }
 
 /** The line as the delivery record stores it, once the product has been read. */
@@ -243,6 +251,7 @@ export function readDeliveryPageRequest(value: unknown): DeliveryPageInput {
     page: page as number,
     isFinalPage: data.isFinalPage,
     lines,
+    occurredAt: requireDeviceInstant(data.occurredAtMs, "occurredAtMs"),
   };
 }
 
@@ -456,6 +465,12 @@ export async function applyDeliveryPage(
     throw new HttpsError("not-found", "The supplier does not exist in this business.");
   }
   const supplierName = supplierSnapshot.get("name");
+  // **The delivery's time, not this page's.** Pages are saved together and may
+  // arrive a day apart, and a delivery happened once.
+  const storedOccurredAt = headerSnapshot.exists ? headerSnapshot.get("occurredAt") : undefined;
+  const occurredAt = storedOccurredAt instanceof Timestamp ?
+    storedOccurredAt :
+    input.occurredAt;
   const plan = planDeliveryPage({
     input,
     actorUid,
@@ -476,7 +491,7 @@ export async function applyDeliveryPage(
     });
   }
   for (const entry of plan.ledger) {
-    const record = {...entry.data, createdAt: FieldValue.serverTimestamp()};
+    const record = {...entry.data, occurredAt, createdAt: FieldValue.serverTimestamp()};
     transaction.create(tenantRef.collection("stock_adjustments").doc(entry.adjustmentId), record);
     transaction.create(
       tenantRef
@@ -487,19 +502,24 @@ export async function applyDeliveryPage(
       {
         ...record,
         movementId: entry.adjustmentId,
-        occurredAt: FieldValue.serverTimestamp(),
         recordedAt: FieldValue.serverTimestamp(),
       }
     );
   }
   transaction.set(headerRef, {
     ...plan.header,
+    occurredAt,
     createdAt: headerSnapshot.exists ?
       headerSnapshot.get("createdAt") ?? FieldValue.serverTimestamp() :
       FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  transaction.update(supplierRef, {lastDeliveryAt: FieldValue.serverTimestamp()});
+  // **Only ever later.** A delivery made offline last week that arrives today
+  // must not make a supplier who delivered yesterday look a week behind.
+  const lastDeliveryAt = supplierSnapshot.get("lastDeliveryAt");
+  if (!(lastDeliveryAt instanceof Timestamp) || lastDeliveryAt.toMillis() < occurredAt.toMillis()) {
+    transaction.update(supplierRef, {lastDeliveryAt: occurredAt});
+  }
   transaction.create(
     tenantRef.collection("audit_logs").doc(deliveryPageAuditId(input.deliveryId, input.page)),
     {

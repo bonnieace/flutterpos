@@ -32,6 +32,7 @@ List<TenantProductionBatch> fixtureProductionBatches() {
         ],
         'totalCostMinor': total,
         'unitCostMinor': productionUnitCostMinor(total, quantity),
+        'occurredAt': DateTime.utc(2026, 9, day, 4),
         'createdAt': DateTime.utc(2026, 9, day, 4),
       },
     );

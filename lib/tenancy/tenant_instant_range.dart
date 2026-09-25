@@ -1,5 +1,6 @@
 /// One page of an instant-ordered period read, for any tenant collection whose
-/// documents carry `createdAt`.
+/// documents carry the instant [order] names - `createdAt` unless told
+/// otherwise.
 ///
 /// **The proof `TenantAuditLogRepository.loadRecordedRange` makes, for any such
 /// collection**: every row is a direct child of the collection asked for, none
@@ -19,6 +20,7 @@ tenantInstantRangePage({
   required DateTime startAt,
   required DateTime endAt,
   required int pageSize,
+  TenantCollectionOrder order = TenantCollectionOrder.createdAt,
   TenantInstantRangePosition? startAfter,
 }) async {
   if (pageSize < 1 || pageSize > 50) {
@@ -38,9 +40,11 @@ tenantInstantRangePage({
       limit: requested,
       startAt: startAt.toUtc(),
       endAt: endAt.toUtc(),
+      order: order,
       startAfter: startAfter,
     ),
   );
+  final field = order.field!;
   if (snapshots.length > requested) {
     throw const TenantScopeViolation(
       'A period read returned more documents than requested.',
@@ -62,7 +66,7 @@ tenantInstantRangePage({
     }
     // Ordered by the instant, so every row must carry one inside the window;
     // a row without one was never in the index this asked of.
-    final at = tenantStoredInstant(snapshot.data['createdAt']);
+    final at = tenantStoredInstant(snapshot.data[field]);
     if (at == null ||
         at.isBefore(startAt.toUtc()) ||
         at.isAfter(endAt.toUtc())) {
@@ -78,7 +82,7 @@ tenantInstantRangePage({
     items: visible,
     next: hasMore
         ? TenantInstantRangePosition(
-            at: tenantStoredInstant(visible.last.data['createdAt'])!,
+            at: tenantStoredInstant(visible.last.data[field])!,
             documentId: visible.last.path.split('/').last,
           )
         : null,

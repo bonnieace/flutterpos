@@ -62,6 +62,9 @@ function pendingReturn({
     // the sale traded. Shape-checked only: binding it to `request.time` would
     // refuse every return the offline queue replays a day later.
     recordedOn: BUSINESS_DATE,
+    // When the device took it - before it arrived, as for every return the
+    // queue replays.
+    occurredAt: Timestamp.fromMillis(1785499000000),
     createdBy,
     status: "pending",
     reason: "Customer returned a damaged bottle",
@@ -287,6 +290,8 @@ test("a return must be exactly the frozen create contract", async () => {
     "no-recorded-on": { drop: ["recordedOn"] },
     "malformed-recorded-on": { recordedOn: "04-08-2026" },
     "recorded-on-not-a-string": { recordedOn: 20260804 },
+    "no-occurred-at": { drop: ["occurredAt"] },
+    "occurred-at-not-a-time": { occurredAt: "2026-08-04T09:00:00Z" },
     // A day the sale did not trade on would file the reversal against somebody
     // else's takings.
     "another-day": { businessDate: "2026-07-30" },

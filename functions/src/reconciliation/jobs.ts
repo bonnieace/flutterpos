@@ -9,6 +9,7 @@ import {
   Transaction,
 } from "firebase-admin/firestore";
 import {HttpsError} from "firebase-functions/v2/https";
+import {deviceInstantOrNow} from "../core/deviceTime";
 import {
   DirtyJobDecision,
   DirtyJobInput,
@@ -496,6 +497,11 @@ export async function registerSaleReceipt(
   const dirtyRef = tenantRef.collection("reconciliation_dirty_days").doc(input.businessDate);
   const receiptRef = tenantRef.collection("reconciliation_sale_receipts").doc(input.saleId);
   const {movements, invalidLineCount} = saleMovements(input.saleData.items);
+  // **When the sale was rung up, not when it arrived.** A till offline for a
+  // morning sends its sales at noon, and the stock left the shelf at 09:00. The
+  // till's clock is taken as it stands unless it claims a time after the sale
+  // reached the server, which no sale can have.
+  const rungAt = deviceInstantOrNow(input.saleData.clientCreatedAtMs, input.receivedAt.toDate());
 
   return db.runTransaction(async (transaction) => {
     const [jobSnapshot, dirtySnapshot, receiptSnapshot] = await transaction.getAll(
@@ -574,7 +580,7 @@ export async function registerSaleReceipt(
           sourceId: input.saleId,
           quantityDelta: movement.quantityDelta,
           lineCount: movement.lineCount,
-          occurredAt: input.receivedAt,
+          occurredAt: rungAt,
           recordedAt: FieldValue.serverTimestamp(),
           createdAt: FieldValue.serverTimestamp(),
         },

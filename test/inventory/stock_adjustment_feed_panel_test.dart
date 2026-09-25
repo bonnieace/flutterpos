@@ -100,7 +100,7 @@ void main() {
     // `sa_` plus a digest, so what this page used to be ordered by said nothing
     // about when anything happened.
     expect(reader.queries.single.descending, isTrue);
-    expect(reader.queries.single.order, TenantCollectionOrder.createdAt);
+    expect(reader.queries.single.order, TenantCollectionOrder.occurredAt);
     expect(reader.queries.single.equalityFilters, isEmpty);
   });
 
@@ -353,6 +353,7 @@ TenantQueryDocumentSnapshot _adjustment(
   String adjustmentId, {
   String tenantId = 'tenant-a',
   DateTime? recordedAt,
+  DateTime? occurredAt,
   Map<String, Object?>? overrides,
 }) {
   final data = <String, Object?>{
@@ -366,6 +367,9 @@ TenantQueryDocumentSnapshot _adjustment(
     'reason': 'Broken in transit',
     'actorUid': 'manager-a',
     'requestId': 'adjust-stock-abcdefgh',
+    'occurredAt': Timestamp.fromDate(
+      occurredAt ?? recordedAt ?? DateTime.utc(2026, 8, 1, 9),
+    ),
     'createdAt': Timestamp.fromDate(recordedAt ?? DateTime.utc(2026, 8, 1, 9)),
   };
   if (overrides != null) data.addAll(overrides);

@@ -8,6 +8,11 @@ import 'package:flutter_test/flutter_test.dart';
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
 const String _businessDate = '2026-07-31';
 
+/// When the cashier opened and closed the shift on the device - before the
+/// server times the fixtures carry, as for a shift worked offline.
+final DateTime _openedAt = DateTime.utc(2026, 7, 31, 5, 30);
+final DateTime _closedAt = DateTime.utc(2026, 7, 31, 17, 45);
+
 void main() {
   group('strict shift read model', () {
     test('parses a canonical open shift', () {
@@ -43,6 +48,61 @@ void main() {
       expect(shift.isOpen, isFalse);
       expect(shift.endedAt, DateTime.utc(2026, 7, 31, 18));
       expect(shift.closingCashMinor, 125000);
+    });
+
+    test('a shift opened and closed offline keeps when it happened', () {
+      final shift = TenantShift.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _document(
+          overrides: <String, Object?>{
+            'status': 'closed',
+            'openedAt': Timestamp.fromDate(DateTime.utc(2026, 7, 30, 18)),
+            'closedAt': Timestamp.fromDate(DateTime.utc(2026, 7, 30, 23)),
+            'endTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 7)),
+            'closingCashMinor': 125000,
+          },
+        ),
+      );
+
+      expect(shift.startedAt, DateTime.utc(2026, 7, 30, 18));
+      expect(shift.endedAt, DateTime.utc(2026, 7, 30, 23));
+    });
+
+    test(
+      'a device clock running ahead cannot move a shift past the server',
+      () {
+        final shift = TenantShift.fromDocument(
+          path: 'tenants/tenant-a/shifts/shift-a',
+          data: _document(
+            overrides: <String, Object?>{
+              'status': 'closed',
+              'openedAt': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 9)),
+              'closedAt': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 20)),
+              'endTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 18)),
+              'closingCashMinor': 125000,
+            },
+          ),
+        );
+
+        expect(shift.startedAt, DateTime.utc(2026, 7, 31, 6));
+        expect(shift.endedAt, DateTime.utc(2026, 7, 31, 18));
+      },
+    );
+
+    test('a close a slow clock dates before the open reads as the open', () {
+      final shift = TenantShift.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _document(
+          overrides: <String, Object?>{
+            'status': 'closed',
+            'closedAt': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 1)),
+            'endTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 18)),
+            'closingCashMinor': 125000,
+          },
+        ),
+      );
+
+      expect(shift.endedAt, shift.startedAt);
     });
 
     test('refuses a document that does not repeat its own identity', () {
@@ -157,6 +217,7 @@ void main() {
         shiftId: 'shift-a',
         deviceId: _deviceA,
         businessDate: _businessDate,
+        openedAt: _openedAt,
       );
 
       expect(intent.path, 'tenants/tenant-a/shifts/shift-a');
@@ -175,6 +236,7 @@ void main() {
         shiftId: 'shift-a',
         deviceId: _deviceA,
         businessDate: _businessDate,
+        openedAt: _openedAt,
         openingFloatMinor: 200000,
       );
 
@@ -191,6 +253,7 @@ void main() {
         shiftId: 'shift-a',
         deviceId: _deviceA,
         businessDate: _businessDate,
+        openedAt: _openedAt,
       );
 
       expect(intent.documentData().containsKey('openingFloatMinor'), isFalse);
@@ -208,6 +271,7 @@ void main() {
             shiftId: 'shift-a',
             deviceId: _deviceA,
             businessDate: _businessDate,
+            openedAt: _openedAt,
             openingFloatMinor: float,
           ),
           throwsA(_code('invalid_opening_float')),
@@ -240,6 +304,7 @@ void main() {
           shiftId: 'shift-a',
           deviceId: 'laptop-1',
           businessDate: _businessDate,
+          openedAt: _openedAt,
         ),
         throwsA(_code('invalid_shift_document')),
       );
@@ -248,6 +313,7 @@ void main() {
           shiftId: 'shift-a',
           deviceId: _deviceA,
           businessDate: '31-07-2026',
+          openedAt: _openedAt,
         ),
         throwsA(_code('invalid_shift_document')),
       );
@@ -267,6 +333,7 @@ void main() {
       const settlement = 'st-1789630427-a3f90c1d2e4b6789';
 
       final counted = repository.buildCloseIntent(
+        closedAt: _closedAt,
         shift: open,
         closingCashMinor: 125000,
         sales: const ShiftSalesSummary(
@@ -277,6 +344,7 @@ void main() {
         settlementId: settlement,
       );
       final swept = repository.buildRecoveryCloseIntent(
+        closedAt: _closedAt,
         shift: open,
         settlementId: settlement,
       );
@@ -296,6 +364,7 @@ void main() {
       );
 
       final intent = repository.buildCloseIntent(
+        closedAt: _closedAt,
         shift: open,
         closingCashMinor: 125000,
         sales: const ShiftSalesSummary(
@@ -321,6 +390,7 @@ void main() {
 
       expect(
         () => repository.buildCloseIntent(
+          closedAt: _closedAt,
           shift: TenantShift.fromDocument(
             path: 'tenants/tenant-a/shifts/shift-a',
             data: _document(overrides: <String, Object?>{'status': 'closed'}),
@@ -332,6 +402,7 @@ void main() {
       );
       expect(
         () => repository.buildCloseIntent(
+          closedAt: _closedAt,
           shift: open,
           closingCashMinor: -1,
           sales: ShiftSalesSummary.empty,
@@ -340,6 +411,7 @@ void main() {
       );
       expect(
         () => repository.buildCloseIntent(
+          closedAt: _closedAt,
           shift: TenantShift.fromDocument(
             path: 'tenants/tenant-b/shifts/shift-a',
             data: _document(
@@ -362,6 +434,7 @@ void main() {
 
       expect(
         () => repository.buildCloseIntent(
+          closedAt: _closedAt,
           shift: open,
           closingCashMinor: 0,
           sales: const ShiftSalesSummary(
@@ -375,6 +448,7 @@ void main() {
       );
       expect(
         () => repository.buildCloseIntent(
+          closedAt: _closedAt,
           shift: open,
           closingCashMinor: 0,
           sales: const ShiftSalesSummary(
@@ -454,7 +528,7 @@ void main() {
   });
 
   group('firestore shift writer', () {
-    test('writes server-owned instants and never a client clock', () async {
+    test("writes server-owned instants beside the device's own", () async {
       final creates = <(String, Map<String, Object?>)>[];
       final updates = <(String, Map<String, Object?>)>[];
       final writer = FirebaseTenantShiftWriter.forTesting(
@@ -469,10 +543,12 @@ void main() {
           shiftId: 'shift-a',
           deviceId: _deviceA,
           businessDate: _businessDate,
+          openedAt: _openedAt,
         ),
       );
       final closed = await writer.closeShift(
         repository.buildCloseIntent(
+          closedAt: _closedAt,
           shift: TenantShift.fromDocument(
             path: 'tenants/tenant-a/shifts/shift-a',
             data: _document(),
@@ -493,6 +569,10 @@ void main() {
       expect(creates.single.$2.containsKey('endTime'), isFalse);
       expect(updates.single.$2['endTime'], isA<FieldValue>());
       expect(updates.single.$2['status'], 'closed');
+      // The device's own times go beside the server's and never replace them:
+      // reconciliation reads `startTime` and `endTime`, and a person reads these.
+      expect(creates.single.$2['openedAt'], Timestamp.fromDate(_openedAt));
+      expect(updates.single.$2['closedAt'], Timestamp.fromDate(_closedAt));
     });
 
     test('never attempts a write while offline', () async {
@@ -511,6 +591,7 @@ void main() {
         shiftId: 'shift-a',
         deviceId: _deviceA,
         businessDate: _businessDate,
+        openedAt: _openedAt,
       );
 
       expect(
@@ -529,6 +610,7 @@ void main() {
         shiftId: 'shift-a',
         deviceId: _deviceA,
         businessDate: _businessDate,
+        openedAt: _openedAt,
       );
       Future<TenantShiftWriteResult> attempt(Object error) =>
           FirebaseTenantShiftWriter.forTesting(

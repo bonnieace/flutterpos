@@ -32,6 +32,31 @@ void main() {
       expect(analysis.restocksWithoutSupplier, 3);
     });
 
+    test('a delivery received offline is reported on the day it came in', () {
+      // Received on the evening of the 2nd, sent the next morning.
+      final analysis = TenantSupplierAnalysis.from(
+        period: fixturePeriod(),
+        deliveries: <TenantSupplierDelivery>[
+          _delivery(
+            'sd_late',
+            supplier: ('sp_abc', 'ABC Distributors'),
+            at: DateTime.utc(2026, 9, 2, 17),
+            arrivedAt: DateTime.utc(2026, 9, 3, 6),
+            lines: <Map<String, Object?>>[
+              <String, Object?>{
+                'productId': 'pd-soda',
+                'productName': 'Soda 500ml',
+                'quantity': 24,
+                'unitCostMinor': 4800,
+              },
+            ],
+          ),
+        ],
+      );
+
+      expect(analysis.rows.single.businessDate, '2026-09-02');
+    });
+
     test('a product whose unit cost moved is named with how far', () {
       final analysis = TenantSupplierAnalysis.from(
         period: fixturePeriod(),
@@ -198,6 +223,7 @@ TenantSupplierDelivery _delivery(
   required (String, String) supplier,
   required DateTime at,
   required List<Map<String, Object?>> lines,
+  DateTime? arrivedAt,
 }) => TenantSupplierDelivery.fromDocument(
   path: 'tenants/tenant-a/supplier_deliveries/$id',
   data: <String, Object?>{
@@ -205,7 +231,8 @@ TenantSupplierDelivery _delivery(
     'supplierName': supplier.$2,
     'reference': 'INV-$id',
     'complete': true,
-    'createdAt': at,
+    'occurredAt': at,
+    'createdAt': arrivedAt ?? at,
     'lines': lines,
   },
 );

@@ -545,3 +545,33 @@ test("past 120 characters of sale ID the movement ID becomes a hash", async () =
     assert.match(String(stored(db, path).sourceId), /^s{120}[st]$/);
   }
 });
+
+// ---------------------------------------------------------------------------
+// When the stock left the shelf
+// ---------------------------------------------------------------------------
+
+test("a sale rung up offline moves its stock when it was rung up", async () => {
+  const db = new FakeFirestore();
+  const rungUp = RECEIVED_AT.toMillis() - 3 * 60 * 60 * 1000;
+
+  await register(db, {
+    saleData: {items: [{productId: "product-01", quantity: 1}], clientCreatedAtMs: rungUp},
+  });
+
+  const movement = stored(db, movementPath("product-01", "sale_sale-1"));
+  assert.equal((movement.occurredAt as Timestamp).toMillis(), rungUp);
+});
+
+test("a till whose clock runs ahead cannot date a sale after it arrived", async () => {
+  const db = new FakeFirestore();
+
+  await register(db, {
+    saleData: {
+      items: [{productId: "product-01", quantity: 1}],
+      clientCreatedAtMs: RECEIVED_AT.toMillis() + 10 * 60 * 1000,
+    },
+  });
+
+  const movement = stored(db, movementPath("product-01", "sale_sale-1"));
+  assert.ok((movement.occurredAt as Timestamp).isEqual(RECEIVED_AT));
+});

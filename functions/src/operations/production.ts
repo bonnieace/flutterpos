@@ -1,7 +1,14 @@
 import {FieldValue, getFirestore} from "firebase-admin/firestore";
-import type {DocumentData, DocumentSnapshot, Firestore, Transaction} from "firebase-admin/firestore";
+import type {
+  DocumentData,
+  DocumentSnapshot,
+  Firestore,
+  Timestamp,
+  Transaction,
+} from "firebase-admin/firestore";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {requireTenantMember} from "../core/authorization";
+import {requireDeviceInstant} from "../core/deviceTime";
 import {runIdempotentFirestoreTransaction} from "../core/idempotency";
 import {requireDocumentId, requireObject, requireRequestId} from "../core/validation";
 import {addStockQuantity, immutableLedgerId, normalizeReason, requireStoredQuantity} from "./domain";
@@ -78,6 +85,7 @@ const ACCEPTED_REQUEST_KEYS = new Set<string>([
   "expenses",
   "totalCostMinor",
   "unitCostMinor",
+  "occurredAtMs",
 ]);
 
 const ACCEPTED_EXPENSE_KEYS = new Set<string>(["description", "amount"]);
@@ -97,6 +105,9 @@ export interface ProductionInput {
   expenses: ProductionExpense[];
   totalCostMinor: number;
   unitCostMinor: number;
+
+  /** When the batch was recorded on the device, which is when it was made. */
+  occurredAt: Timestamp;
 }
 
 /** The ledger ID one batch's units are written at. */
@@ -212,6 +223,7 @@ export function readProductionRequest(value: unknown): ProductionInput {
     expenses,
     totalCostMinor,
     unitCostMinor,
+    occurredAt: requireDeviceInstant(data.occurredAtMs, "occurredAtMs"),
   };
 }
 
@@ -342,13 +354,17 @@ export async function applyProduction(
     // minutes by reading this.
     updatedAt: FieldValue.serverTimestamp(),
   });
-  transaction.create(batchRef, {...plan.batch, createdAt: FieldValue.serverTimestamp()});
-  const record = {...plan.ledger, createdAt: FieldValue.serverTimestamp()};
+  const occurredAt = input.occurredAt;
+  transaction.create(batchRef, {
+    ...plan.batch,
+    occurredAt,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  const record = {...plan.ledger, occurredAt, createdAt: FieldValue.serverTimestamp()};
   transaction.create(tenantRef.collection("stock_adjustments").doc(plan.adjustmentId), record);
   transaction.create(productRef.collection("stock_movements").doc(plan.adjustmentId), {
     ...record,
     movementId: plan.adjustmentId,
-    occurredAt: FieldValue.serverTimestamp(),
     recordedAt: FieldValue.serverTimestamp(),
   });
   transaction.create(tenantRef.collection("audit_logs").doc(input.batchId), {

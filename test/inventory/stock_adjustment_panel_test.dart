@@ -209,14 +209,18 @@ void main() {
     await _pump(tester, _controller(), reader, callable: callable);
     await _submit(tester, units: '4', reason: 'Delivery  received');
 
-    expect(callable.payloads.single, <String, Object?>{
-      'tenantId': 'tenant-a',
-      'productId': 'product-1',
-      'quantityDelta': 4,
-      'type': 'restock',
-      'reason': 'Delivery received',
-      'requestId': 'adjust-stock-abcdefgh',
-    });
+    expect(
+      Map<String, Object?>.of(callable.payloads.single)..remove('occurredAtMs'),
+      <String, Object?>{
+        'tenantId': 'tenant-a',
+        'productId': 'product-1',
+        'quantityDelta': 4,
+        'type': 'restock',
+        'reason': 'Delivery received',
+        'requestId': 'adjust-stock-abcdefgh',
+      },
+    );
+    expect(callable.payloads.single['occurredAtMs'], isA<int>());
     expect(snackNotice(tester).message, 'Stock changed from 7 to 11.');
     // **This notice sits directly above the "Reconciliation found" section**,
     // which draws every recorded difference as a red `Callout`. A bare sentence

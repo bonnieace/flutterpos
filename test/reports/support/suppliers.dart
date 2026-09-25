@@ -22,6 +22,7 @@ List<TenantSupplierDelivery> fixtureSupplierDeliveries() {
       'supplierName': supplierName,
       'reference': 'INV-${48300 + day}',
       'complete': true,
+      'occurredAt': DateTime.utc(2026, 9, day, 6),
       'createdAt': DateTime.utc(2026, 9, day, 6),
       'lines': <Map<String, Object?>>[
         for (final (productId, name, quantity, cost) in lines)

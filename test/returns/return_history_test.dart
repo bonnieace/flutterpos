@@ -25,6 +25,35 @@ void main() {
       expect(record.recordedAt, DateTime.utc(2026, 7, 31, 12));
     });
 
+    test('a return taken offline is listed when it was taken', () {
+      final record = TenantReturn.fromDocument(
+        path: 'tenants/tenant-a/returns/ret-1',
+        data: _pending(
+          overrides: <String, Object?>{
+            'occurredAt': Timestamp.fromDate(DateTime.utc(2026, 7, 30, 19)),
+          },
+        ),
+      );
+
+      expect(record.recordedAt, DateTime.utc(2026, 7, 30, 19));
+    });
+
+    test(
+      'a device clock running ahead cannot list a return after it arrived',
+      () {
+        final record = TenantReturn.fromDocument(
+          path: 'tenants/tenant-a/returns/ret-1',
+          data: _pending(
+            overrides: <String, Object?>{
+              'occurredAt': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 13)),
+            },
+          ),
+        );
+
+        expect(record.recordedAt, DateTime.utc(2026, 7, 31, 12));
+      },
+    );
+
     test('accepts the evidence the verification callable writes back', () {
       final record = TenantReturn.fromDocument(
         path: 'tenants/tenant-a/returns/ret-1',

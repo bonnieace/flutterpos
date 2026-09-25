@@ -111,12 +111,12 @@ void main() {
         reader.queries.single.collectionPath,
         'tenants/tenant-a/stock_adjustments',
       );
-      // **Newest first, by `createdAt`, since 2026-09-14.** An adjustment ID is
-      // `sa_` plus a digest, so document order carries no time information -
-      // which used to make this page arbitrary and say so. The question the
-      // page exists for is what was corrected most recently.
+      // **Newest first, by when it was made, since 2026-09-25** - by
+      // `createdAt` from 2026-09-14, when the server heard of it. An adjustment
+      // ID is `sa_` plus a digest, so document order carries no time
+      // information, and an adjustment made offline arrives hours late.
       expect(reader.queries.single.descending, isTrue);
-      expect(reader.queries.single.order, TenantCollectionOrder.createdAt);
+      expect(reader.queries.single.order, TenantCollectionOrder.occurredAt);
       expect(reader.queries.single.equalityFilters, isEmpty);
       expect(page.items.single.id, 'sa_abc');
       expect(page.productId, isNull);
@@ -138,7 +138,7 @@ void main() {
         'productId': 'product-1',
       });
       expect(reader.queries.single.descending, isTrue);
-      expect(reader.queries.single.order, TenantCollectionOrder.createdAt);
+      expect(reader.queries.single.order, TenantCollectionOrder.occurredAt);
       expect(page.items.single.id, 'sa_abc');
       expect(page.productId, 'product-1');
       expect(page.isProductScoped, isTrue);
@@ -280,6 +280,7 @@ TenantStockAdjustmentRecord _record({
 /// The exact immutable record `functions/src/operations/stock.ts` creates.
 Map<String, Object?> _adjustmentData({
   DateTime? recordedAt,
+  DateTime? occurredAt,
 }) => <String, Object?>{
   'tenantId': 'tenant-a',
   'productId': 'product-1',
@@ -291,6 +292,9 @@ Map<String, Object?> _adjustmentData({
   'reason': 'Broken in transit',
   'actorUid': 'manager-a',
   'requestId': 'adjust-stock-abcdefgh',
+  'occurredAt': Timestamp.fromDate(
+    occurredAt ?? recordedAt ?? DateTime.utc(2026, 8, 1, 9),
+  ),
   'createdAt': Timestamp.fromDate(recordedAt ?? DateTime.utc(2026, 8, 1, 9)),
 };
 
@@ -326,7 +330,7 @@ final class _FeedReader implements TenantDataReader {
     }
     // Ordered, cursored and filtered the way Firestore would, because the
     // repository proves the order of what it is handed - and since the feed is
-    // newest-first by `createdAt`, a fake answering in ID order is answering a
+    // newest-first by `occurredAt`, a fake answering in ID order is answering a
     // query it was not asked.
     final documents = <TenantQueryDocumentSnapshot>[
       for (final entry in adjustments.entries)

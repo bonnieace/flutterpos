@@ -19,7 +19,16 @@ void main() {
         ),
       );
 
-      expect(callable.payloads.single, <String, Object?>{
+      final sent = Map<String, Object?>.of(callable.payloads.single);
+      // Sent straight away, so it happened now; the server dates the ledger by
+      // it and never takes one later than the moment it arrived.
+      final occurredAtMs = sent.remove('occurredAtMs');
+      expect(occurredAtMs, isA<int>());
+      expect(
+        DateTime.now().millisecondsSinceEpoch - (occurredAtMs! as int),
+        inInclusiveRange(0, 60000),
+      );
+      expect(sent, <String, Object?>{
         'tenantId': 'tenant-a',
         'productId': 'product-1',
         'quantityDelta': 6,

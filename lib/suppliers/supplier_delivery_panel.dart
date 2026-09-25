@@ -359,9 +359,9 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
     const listed = 8;
     final buffer = StringBuffer();
     if (earlier != null) {
-      final when = earlier.createdAt == null
+      final when = earlier.occurredAt == null
           ? ''
-          : ', recorded ${reportShortDate(checkoutBusinessDate(earlier.createdAt!))}';
+          : ', recorded ${reportShortDate(checkoutBusinessDate(earlier.occurredAt!))}';
       buffer.write(
         '${intent.supplier.name} already has a delivery under '
         '${intent.reference}$when. Check this is not the same one.\n\n',

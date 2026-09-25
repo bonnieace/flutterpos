@@ -75,8 +75,11 @@ final class TenantShift {
       deviceId: _requiredDeviceId(data),
       businessDate: _requiredBusinessDate(data),
       status: TenantShiftStatus.fromWire(data['status']),
-      startedAt: _optionalInstant(data, 'startTime'),
-      endedAt: _optionalInstant(data, 'endTime'),
+      startedAt: _earlier(
+        _optionalInstant(data, 'openedAt'),
+        _optionalInstant(data, 'startTime'),
+      ),
+      endedAt: _endedAt(data),
       closingCashMinor: _optionalNonNegativeInteger(data, 'closingCashMinor'),
       openingFloatMinor:
           _optionalNonNegativeInteger(data, 'openingFloatMinor') ?? 0,
@@ -106,7 +109,18 @@ final class TenantShift {
   final String deviceId;
   final String businessDate;
   final TenantShiftStatus status;
+
+  /// When the cashier opened the shift, by the device that opened it.
+  ///
+  /// **The device's `openedAt`, held to the server's `startTime`, since
+  /// 2026-09-25.** A shift opened offline reaches the server hours later, and
+  /// `startTime` alone said it began then. The device's clock is believed
+  /// unless it claims a time after the open arrived, which it cannot be; the
+  /// server keeps `startTime` for itself.
   final DateTime? startedAt;
+
+  /// When the drawer was counted and the shift closed - `closedAt` held to
+  /// `endTime`, as [startedAt] is, and never before [startedAt].
   final DateTime? endedAt;
   final int? closingCashMinor;
 
@@ -158,6 +172,7 @@ final class TenantShiftOpenIntent {
     required this.staffId,
     required this.deviceId,
     required this.businessDate,
+    required this.openedAt,
     required this.openingFloatMinor,
   });
 
@@ -167,6 +182,10 @@ final class TenantShiftOpenIntent {
   final String staffId;
   final String deviceId;
   final String businessDate;
+
+  /// When the cashier opened the shift, by this device's clock - written beside
+  /// the server's `startTime` as `openedAt`. See [TenantShift.startedAt].
+  final DateTime openedAt;
 
   /// The change the drawer starts with, in minor units. See
   /// [TenantShift.openingFloatMinor].
@@ -200,6 +219,7 @@ final class TenantShiftCloseIntent {
     required this.closingCashMinor,
     required this.totalSalesMinor,
     required this.transactionCount,
+    required this.closedAt,
     this.declaration,
     this.closedWithoutEvidence = false,
     this.settlementId,
@@ -208,6 +228,10 @@ final class TenantShiftCloseIntent {
   final String path;
   final String tenantId;
   final String shiftId;
+
+  /// When the drawer was counted, by this device's clock - written beside the
+  /// server's `endTime` as `closedAt`. See [TenantShift.endedAt].
+  final DateTime closedAt;
   final int closingCashMinor;
   final int totalSalesMinor;
   final int transactionCount;
@@ -306,6 +330,7 @@ final class TenantShiftRepository extends TenantReadRepository {
     required String shiftId,
     required String deviceId,
     required String businessDate,
+    required DateTime openedAt,
     int openingFloatMinor = 0,
   }) {
     if (openingFloatMinor < 0 || openingFloatMinor > maximumShiftCashMinor) {
@@ -327,6 +352,7 @@ final class TenantShiftRepository extends TenantReadRepository {
       staffId: session.uid,
       deviceId: safeDeviceId,
       businessDate: safeBusinessDate,
+      openedAt: openedAt.toUtc(),
       openingFloatMinor: openingFloatMinor,
     );
   }
@@ -335,6 +361,7 @@ final class TenantShiftRepository extends TenantReadRepository {
     required TenantShift shift,
     required int closingCashMinor,
     required ShiftSalesSummary sales,
+    required DateTime closedAt,
     ShiftTenderDeclaration? declaration,
     String? settlementId,
   }) {
@@ -367,6 +394,7 @@ final class TenantShiftRepository extends TenantReadRepository {
       closingCashMinor: closingCashMinor,
       totalSalesMinor: sales.totalMinor,
       transactionCount: sales.transactionCount,
+      closedAt: closedAt.toUtc(),
       declaration: declaration,
       settlementId: settlementId,
     );
@@ -397,6 +425,7 @@ final class TenantShiftRepository extends TenantReadRepository {
   /// declaration a current build should have recorded and did not.
   TenantShiftCloseIntent buildRecoveryCloseIntent({
     required TenantShift shift,
+    required DateTime closedAt,
     ShiftTenderDeclaration? declaration,
     String? settlementId,
   }) {
@@ -411,6 +440,7 @@ final class TenantShiftRepository extends TenantReadRepository {
       closingCashMinor: declaration?.cashMinor ?? 0,
       totalSalesMinor: 0,
       transactionCount: 0,
+      closedAt: closedAt.toUtc(),
       declaration: declaration,
       closedWithoutEvidence: true,
       settlementId: settlementId,
@@ -588,6 +618,7 @@ final class FirebaseTenantShiftWriter implements TenantShiftWriter {
       () => _create(intent.path, <String, Object?>{
         ...intent.documentData(),
         'startTime': FieldValue.serverTimestamp(),
+        'openedAt': Timestamp.fromDate(intent.openedAt),
       }),
     );
   }
@@ -599,6 +630,7 @@ final class FirebaseTenantShiftWriter implements TenantShiftWriter {
       () => _update(intent.path, <String, Object?>{
         ...intent.updateData(),
         'endTime': FieldValue.serverTimestamp(),
+        'closedAt': Timestamp.fromDate(intent.closedAt),
       }),
     );
   }
@@ -682,6 +714,34 @@ String _requiredBusinessDate(Map<String, Object?> data) {
   } on ArgumentError {
     throw const TenantShiftException('invalid_shift_document');
   }
+}
+
+/// The earlier of a device's instant and the server's for one event.
+///
+/// A device may be offline when it opens or closes a shift, so its own time is
+/// the one that happened - but a device clock running fast could claim a time
+/// after the server received the write, which no event can be. Either alone is
+/// used when the other is absent: a write still pending in the cache has no
+/// server time yet.
+DateTime? _earlier(DateTime? device, DateTime? server) {
+  if (device == null) return server;
+  if (server == null) return device;
+  return device.isBefore(server) ? device : server;
+}
+
+/// [TenantShift.endedAt], which a device clock running slow must not put
+/// before the shift began.
+DateTime? _endedAt(Map<String, Object?> data) {
+  final ended = _earlier(
+    _optionalInstant(data, 'closedAt'),
+    _optionalInstant(data, 'endTime'),
+  );
+  final started = _earlier(
+    _optionalInstant(data, 'openedAt'),
+    _optionalInstant(data, 'startTime'),
+  );
+  if (ended == null || started == null) return ended;
+  return ended.isBefore(started) ? started : ended;
 }
 
 DateTime? _optionalInstant(Map<String, Object?> data, String field) {

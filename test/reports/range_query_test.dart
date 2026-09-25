@@ -610,8 +610,10 @@ final class _RangeReader implements TenantDataReader, TenantReportRangeReader {
     TenantInstantRangeQuery query,
   ) async {
     instantQueries.add(query);
+    // Whichever instant the query bounds, as Firestore would index it.
+    final field = query.order.field!;
     DateTime? instantOf(Map<String, Object?> data) =>
-        (data['createdAt'] as Timestamp?)?.toDate();
+        (data[field] as Timestamp?)?.toDate();
 
     final entries = instantDocuments.entries.toList()
       ..sort((a, b) {

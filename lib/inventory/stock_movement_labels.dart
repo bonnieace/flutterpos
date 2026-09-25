@@ -83,10 +83,12 @@ String stockMovementRecordedLabel(
   TenantStockMovement movement,
   String actorLabel,
 ) {
-  final recordedAt = movement.recordedAt ?? movement.occurredAt;
-  final when = recordedAt == null
+  // When the stock moved, which the device that moved it says. The server's
+  // own time is when the entry arrived - hours later for a device offline.
+  final at = movement.occurredAt ?? movement.recordedAt;
+  final when = at == null
       ? 'Recorded instant unavailable'
-      : 'Recorded ${stockMovementInstant(recordedAt)}';
+      : 'Recorded ${stockMovementInstant(at)}';
   return '$when by $actorLabel';
 }
 
@@ -230,9 +232,9 @@ String stockAdjustmentRecordedLabel(
   TenantStockAdjustmentRecord record,
   String actorLabel,
 ) {
-  final recordedAt = record.recordedAt;
-  final when = recordedAt == null
+  final at = record.occurredAt ?? record.recordedAt;
+  final when = at == null
       ? 'Recorded instant unavailable'
-      : 'Recorded ${stockMovementInstant(recordedAt)}';
+      : 'Recorded ${stockMovementInstant(at)}';
   return '$when by $actorLabel';
 }

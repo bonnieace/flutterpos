@@ -74,6 +74,7 @@ final class TenantStockAdjustmentRecord {
       quantityDelta: quantityDelta,
       previousQuantity: previousQuantity,
       quantityAfter: quantityAfter,
+      occurredAt: _optionalInstant(data, 'occurredAt'),
       recordedAt: _optionalInstant(data, 'createdAt'),
     );
   }
@@ -91,6 +92,7 @@ final class TenantStockAdjustmentRecord {
     required this.quantityDelta,
     required this.previousQuantity,
     required this.quantityAfter,
+    required this.occurredAt,
     required this.recordedAt,
   });
 
@@ -118,6 +120,10 @@ final class TenantStockAdjustmentRecord {
   final int quantityDelta;
   final int previousQuantity;
   final int quantityAfter;
+
+  /// When the adjustment was made, by the clock of the device that made it -
+  /// hours before [recordedAt] when that device was offline.
+  final DateTime? occurredAt;
 
   /// The server instant this correction was committed.
   final DateTime? recordedAt;
@@ -192,7 +198,11 @@ final class TenantStockAdjustmentFeedRepository extends TenantReadRepository {
 
   /// Reads one bounded page newest first, optionally narrowed to one product.
   ///
-  /// **Ordered by `createdAt` since 2026-09-14.** It used to be ordered by
+  /// **Ordered by `occurredAt` since 2026-09-25**, when the adjustment was
+  /// made rather than when it reached the server - an adjustment made offline
+  /// arrives hours later, and belongs where it happened.
+  ///
+  /// **Ordered by `createdAt` from 2026-09-14.** It used to be ordered by
   /// ascending document ID and said so, because an adjustment ID is `sa_` plus
   /// a digest of the actor, operation, tenant and request ID - an order
   /// carrying no time information whatever. The investigation this page exists
@@ -224,7 +234,7 @@ final class TenantStockAdjustmentFeedRepository extends TenantReadRepository {
       pageSize: pageSize,
       cursor: cursor,
       descending: true,
-      order: TenantCollectionOrder.createdAt,
+      order: TenantCollectionOrder.occurredAt,
       equalityFilters: filteredProductId == null
           ? const <String, Object?>{}
           : <String, Object?>{'productId': filteredProductId},

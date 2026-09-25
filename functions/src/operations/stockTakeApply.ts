@@ -283,6 +283,10 @@ export const applyStockTake = onCall<
 
       const immutableRecord = {
         ...plan.ledgerData,
+        // Applying a count is only ever done online, and the stock changes
+        // when it is applied rather than when it was counted. Every adjustment
+        // carries this field, so the feed can be ordered by it.
+        occurredAt: FieldValue.serverTimestamp(),
         createdAt: FieldValue.serverTimestamp(),
       };
       transaction.update(productRefs[index], {
@@ -298,7 +302,6 @@ export const applyStockTake = onCall<
         {
           ...immutableRecord,
           movementId: plan.adjustmentId,
-          occurredAt: FieldValue.serverTimestamp(),
           recordedAt: FieldValue.serverTimestamp(),
         }
       );

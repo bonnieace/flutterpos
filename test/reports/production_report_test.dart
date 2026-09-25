@@ -129,6 +129,7 @@ TenantProductionBatch _batch(
     ],
     'totalCostMinor': total,
     'unitCostMinor': unit,
+    'occurredAt': DateTime.utc(2026, 9, day, 5),
     'createdAt': DateTime.utc(2026, 9, day, 5),
   },
 );

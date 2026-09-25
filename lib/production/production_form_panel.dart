@@ -481,7 +481,7 @@ final class _ProductionFormState extends State<_ProductionForm> {
           Text(
             key: const ValueKey('production-started-from'),
             'Started from batch ${startedFrom.batchNumber}'
-            '${startedFrom.createdAt == null ? '' : ' of ${reportShortDate(checkoutBusinessDate(startedFrom.createdAt!))}'}. '
+            '${startedFrom.occurredAt == null ? '' : ' of ${reportShortDate(checkoutBusinessDate(startedFrom.occurredAt!))}'}. '
             'Change anything that was different this time.',
             style: tokens.typography.caption.copyWith(
               color: tokens.colors.text.tertiary,

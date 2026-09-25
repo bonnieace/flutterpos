@@ -29,6 +29,26 @@ void main() {
       expect(sale.lines.single.name, 'Tusker');
       expect(sale.lines.single.quantity, 2);
       expect(sale.recordedAt, DateTime.utc(2026, 7, 31, 12));
+      // Rung up at 08:00 and sent at noon: the customer paid at 08:00.
+      expect(sale.rungAt, DateTime.utc(2026, 7, 31, 8));
+    });
+
+    test('a till clock running ahead cannot put a sale after it arrived', () {
+      final sale = TenantSale.fromDocument(
+        path: 'tenants/tenant-a/sales/co-1',
+        data: _sale(
+          overrides: <String, Object?>{
+            'clientCreatedAtMs': DateTime.utc(
+              2026,
+              7,
+              31,
+              13,
+            ).millisecondsSinceEpoch,
+          },
+        ),
+      );
+
+      expect(sale.rungAt, DateTime.utc(2026, 7, 31, 12));
     });
 
     test('refuses a document that disagrees with its own path or schema', () {

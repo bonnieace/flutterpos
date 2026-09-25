@@ -239,6 +239,7 @@ Map<String, Object?> _deliveryDocument({
   'supplierName': 'ABC Distributors',
   'reference': reference,
   'complete': complete,
+  'occurredAt': DateTime.utc(2026, 9, 22, 7),
   'createdAt': DateTime.utc(2026, 9, 22, 7),
   'lines': <Map<String, Object?>>[
     <String, Object?>{

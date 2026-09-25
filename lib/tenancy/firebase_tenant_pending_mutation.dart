@@ -5,6 +5,27 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 import 'tenant_pending_mutation.dart';
 
+/// When the change one queued record carries was made on this device, as the
+/// callables that record stock moving read it.
+///
+/// **The moment it was queued, which is the moment somebody saved it**, and
+/// frozen in the record: every replay of it says the same thing. Until
+/// 2026-09-25 nothing carried it, and the server dated a delivery received
+/// offline on the 24th by the morning of the 25th it was sent in. The server
+/// keeps its own time beside this one - it is when the change arrived - and
+/// never takes a time from here that is later than that.
+int tenantMutationOccurredAtMs(TenantPendingMutationRecord record) =>
+    record.createdAt.toUtc().millisecondsSinceEpoch;
+
+/// [record]'s payload with [tenantMutationOccurredAtMs] beside it: the whole
+/// request, for a callable whose payload already is one.
+Map<String, Object?> tenantTimedCallablePayload(
+  TenantPendingMutationRecord record,
+) => <String, Object?>{
+  ...record.payload,
+  'occurredAtMs': tenantMutationOccurredAtMs(record),
+};
+
 /// The `createProduct` request one queued create describes.
 ///
 /// **Derived from the record rather than stored in it**, which is what let the
@@ -21,6 +42,8 @@ Map<String, Object?> tenantProductCreateCallablePayload(
   'tenantId': record.tenantId,
   'productId': record.targetPath.split('/').last,
   'document': record.payload,
+  // Dates the opening stock, when the product is created holding some.
+  'occurredAtMs': tenantMutationOccurredAtMs(record),
 };
 
 /// The `createCategory` or `renameCategory` request one queued write describes.
@@ -117,10 +140,20 @@ final class FirebaseTenantMutationGateway
       final document = _firestore.doc(record.targetPath);
       switch (record.kind) {
         case TenantPendingMutationKind.expenseCreate:
+          await document
+              .set(<String, Object?>{
+                ...record.payload,
+                'createdAt': FieldValue.serverTimestamp(),
+              })
+              .timeout(deadline);
+        // **When it was taken, beside when it arrived.** An expense needs no
+        // such field - its business date is its own, and nothing shows the
+        // time of one - but a return is listed at the time it was taken.
         case TenantPendingMutationKind.pendingReturnCreate:
           await document
               .set(<String, Object?>{
                 ...record.payload,
+                'occurredAt': Timestamp.fromDate(record.createdAt.toUtc()),
                 'createdAt': FieldValue.serverTimestamp(),
               })
               .timeout(deadline);
@@ -182,13 +215,15 @@ final class FirebaseTenantMutationGateway
         // product was holding leave through a `stock_movements` entry written in
         // the same transaction as the flag, and no device may write that
         // collection - the same reason creating a product stopped being a `set`.
-        // The payload is the whole request, so nothing is derived here.
+        // The payload is the whole request, with when it was made beside it.
         case TenantPendingMutationKind.productRetire:
-          await _call('setProductRetired', record.payload);
+          await _call('setProductRetired', tenantTimedCallablePayload(record));
+        // No time: a correction moves no stock, and the audit entry it writes
+        // is dated by the server, as every audit entry is.
         case TenantPendingMutationKind.productCorrect:
           await _call('updateProduct', record.payload);
         case TenantPendingMutationKind.stockAdjust:
-          await _call('adjustStock', record.payload);
+          await _call('adjustStock', tenantTimedCallablePayload(record));
         // **A callable, and the one here a cashier may reach.** A count writes
         // nothing a client could write for itself - `stock_takes` is server-only
         // like the ledger it will be read against - and it moves no stock, which
@@ -207,12 +242,16 @@ final class FirebaseTenantMutationGateway
           await _call('updateSupplier', tenantSupplierCallablePayload(record));
         // **Callables because each moves stock and sets a cost** in one
         // transaction with the ledger entries that account for it. The payload
-        // is the whole request; the server keys a delivery page's idempotency
-        // record on the delivery and the page, and a batch's on the batch.
+        // is the whole request, with when it was made beside it; the server
+        // keys a delivery page's idempotency record on the delivery and the
+        // page, and a batch's on the batch.
         case TenantPendingMutationKind.supplierDeliveryPage:
-          await _call('receiveSupplierDelivery', record.payload);
+          await _call(
+            'receiveSupplierDelivery',
+            tenantTimedCallablePayload(record),
+          );
         case TenantPendingMutationKind.productionComplete:
-          await _call('completeProduction', record.payload);
+          await _call('completeProduction', tenantTimedCallablePayload(record));
       }
       return const TenantMutationSubmissionResult(
         TenantMutationSubmissionOutcome.committed,

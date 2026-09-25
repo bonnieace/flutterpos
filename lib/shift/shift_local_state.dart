@@ -61,12 +61,11 @@ final class TenantShiftLocalRecord {
   /// write on the next restore. Cleared by the record being cleared, which is
   /// what a confirmed close does.
   ///
-  /// It is deliberately *not* the shift's `endTime`. The server stamps that
-  /// when the write lands, exactly as it does for a close made online, so a
-  /// shift closed offline on Friday and synced on Monday is recorded as ending
-  /// on Monday. Recording the device's own clock as the end of a trading day
-  /// would be worse: it is unverifiable, and reconciliation is built on the
-  /// server's.
+  /// **It is the close's `closedAt`, and still not its `endTime`.** The
+  /// server stamps `endTime` when the write lands, and reconciliation is built
+  /// on that one. Since 2026-09-25 this instant is sent beside it, because a
+  /// shift closed offline on Friday and synced on Monday ended on Friday - and
+  /// every screen said Monday.
   final DateTime? closedAt;
 
   /// The change this drawer started with, in minor units.

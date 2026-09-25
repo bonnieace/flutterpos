@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {DocumentData, Transaction} from "firebase-admin/firestore";
+import {DocumentData, Timestamp, Transaction} from "firebase-admin/firestore";
 import {HttpsError} from "firebase-functions/v2/https";
 import {FakeFirestore} from "../testing/fakeFirestore";
 import {
@@ -19,6 +19,9 @@ import {
 const TENANT = "tenant-a";
 const DELIVERY = `sd_${"d".repeat(40)}`;
 const ACTOR = "uid-manager";
+
+/** When the delivery was received on the device: the evening before it was sent. */
+const SAVED_AT = Date.UTC(2026, 8, 24, 18, 2);
 
 function root(path: string): string {
   return `tenants/${TENANT}/${path}`;
@@ -60,6 +63,7 @@ function page(overrides: Record<string, unknown> = {}): Record<string, unknown> 
       {productId: "prod-bread", productName: "White bread loaf", quantity: 24, unitCost: 45.5},
       {productId: "prod-milk", quantity: 12},
     ],
+    occurredAtMs: SAVED_AT,
     ...overrides,
   };
 }
@@ -238,6 +242,10 @@ test("what a page may carry is bounded", async () => {
     page({isFinalPage: "yes"}),
     page({reference: "r".repeat(65)}),
     page({extra: 1}),
+    // Every queued page says when it was saved; one that does not was built by
+    // something other than the queue.
+    page({occurredAtMs: undefined}),
+    page({occurredAtMs: "2026-09-24"}),
   ];
   for (const request of cases) {
     const error = await refusal(() => readDeliveryPageRequest(request));
@@ -247,4 +255,69 @@ test("what a page may carry is bounded", async () => {
 
 test("a page carries at most sixteen lines, three writes each", () => {
   assert.equal(MAXIMUM_DELIVERY_PAGE_LINES, 16);
+});
+
+// ---------------------------------------------------------------------------
+// When the delivery happened
+// ---------------------------------------------------------------------------
+
+function millis(value: unknown): number {
+  assert.ok(value instanceof Timestamp, `${String(value)} is not a Timestamp.`);
+  return value.toMillis();
+}
+
+test("a delivery is dated when it was received, not when it reached the server", async () => {
+  const db = seeded();
+
+  await receive(db);
+
+  const header = db.read(root(`supplier_deliveries/${DELIVERY}`));
+  assert.equal(millis(header?.occurredAt), SAVED_AT);
+  // The server's own time is kept beside it: that is when it arrived.
+  assert.ok(millis(header?.createdAt) > SAVED_AT);
+  const adjustmentId = deliveryLineAdjustmentId(DELIVERY, "prod-bread");
+  assert.equal(millis(db.read(root(`stock_adjustments/${adjustmentId}`))?.occurredAt), SAVED_AT);
+  const movement = db.read(root(`products/prod-bread/stock_movements/${adjustmentId}`));
+  assert.equal(millis(movement?.occurredAt), SAVED_AT);
+  assert.ok(millis(movement?.recordedAt) > SAVED_AT);
+  assert.equal(millis(db.read(root("suppliers/sp_abc"))?.lastDeliveryAt), SAVED_AT);
+});
+
+test("the first page to arrive dates the whole delivery", async () => {
+  const db = seeded();
+
+  await receive(db, page({
+    page: 0,
+    isFinalPage: false,
+    lines: [{productId: "prod-bread", quantity: 24}],
+  }));
+  await receive(db, page({
+    page: 1,
+    isFinalPage: true,
+    lines: [{productId: "prod-milk", quantity: 12}],
+    occurredAtMs: SAVED_AT + 60_000,
+  }));
+
+  assert.equal(millis(db.read(root(`supplier_deliveries/${DELIVERY}`))?.occurredAt), SAVED_AT);
+  const milk = deliveryLineAdjustmentId(DELIVERY, "prod-milk");
+  assert.equal(millis(db.read(root(`stock_adjustments/${milk}`))?.occurredAt), SAVED_AT);
+});
+
+test("a delivery older than the supplier's last one leaves the last one alone", async () => {
+  const later = Timestamp.fromMillis(SAVED_AT + 60 * 60 * 1000);
+  const db = seeded({"suppliers/sp_abc": {name: "ABC Distributors", active: true, lastDeliveryAt: later}});
+
+  await receive(db);
+
+  assert.ok((db.read(root("suppliers/sp_abc"))?.lastDeliveryAt as Timestamp).isEqual(later));
+});
+
+test("a device clock running ahead cannot date a delivery after it arrived", async () => {
+  const db = seeded();
+  const before = Date.now();
+
+  await receive(db, page({occurredAtMs: Date.now() + 24 * 60 * 60 * 1000}));
+
+  const occurredAt = millis(db.read(root(`supplier_deliveries/${DELIVERY}`))?.occurredAt);
+  assert.ok(occurredAt >= before && occurredAt <= Date.now());
 });

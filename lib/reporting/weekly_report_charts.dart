@@ -559,7 +559,8 @@ final class _SaleRow extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final tender = sale.tender;
     final cash = tender == CheckoutTender.cash;
-    final at = sale.recordedAt;
+    // When the customer paid, not when a till that was offline sent it.
+    final at = sale.rungAt ?? sale.recordedAt;
     return Row(
       children: <Widget>[
         Container(

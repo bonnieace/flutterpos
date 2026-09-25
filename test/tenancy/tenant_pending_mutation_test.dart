@@ -504,10 +504,27 @@ void main() {
       // From the path, which is the only place a product ID is ever written.
       expect(payload['productId'], 'pd_abc');
       expect(payload['document'], composed());
-      // Exactly three keys: anything else would be a second source of truth for
+      // Exactly four keys: anything else would be a second source of truth for
       // something the record already knows.
-      expect(payload.keys, <String>['tenantId', 'productId', 'document']);
+      expect(payload.keys, <String>[
+        'tenantId',
+        'productId',
+        'document',
+        'occurredAtMs',
+      ]);
     });
+
+    test(
+      'says when the product was added, which dates its opening stock',
+      () async {
+        final record = await queued();
+
+        expect(
+          tenantProductCreateCallablePayload(record)['occurredAtMs'],
+          record.createdAt.millisecondsSinceEpoch,
+        );
+      },
+    );
 
     test('a create that opens no stock carries no quantity key', () async {
       // A product brought in with nothing on the shelf queues a document with
@@ -541,6 +558,47 @@ void main() {
 
       expect(second['productId'], first['productId']);
       expect(second['document'], first['document']);
+      // The record is the same record, so the time it was made is too.
+      expect(second['occurredAtMs'], first['occurredAtMs']);
+    });
+  });
+
+  group('a callable that moves stock says when it was made', () {
+    Future<TenantPendingMutationRecord> queued() => store.enqueue(
+      uid: 'user-a',
+      tenantId: 'tenant-a',
+      operationId: 'stock-adjust-req-12345678',
+      kind: TenantPendingMutationKind.stockAdjust,
+      targetPath: 'tenants/tenant-a/products/pd_abc',
+      payload: const <String, Object?>{
+        'tenantId': 'tenant-a',
+        'productId': 'pd_abc',
+        'quantityDelta': 6,
+        'type': 'restock',
+        'reason': 'Counted the back room',
+        'requestId': 'req-12345678',
+      },
+    );
+
+    test('the whole request, with the moment it was saved beside it', () async {
+      final record = await queued();
+
+      final request = tenantTimedCallablePayload(record);
+
+      expect(request, <String, Object?>{
+        ...record.payload,
+        'occurredAtMs': record.createdAt.millisecondsSinceEpoch,
+      });
+      // The stored payload is untouched: the overlay and the confirming read
+      // compare against it, and neither knows this key.
+      expect(record.payload.containsKey('occurredAtMs'), isFalse);
+    });
+
+    test('every replay of one record says the same moment', () async {
+      final first = tenantTimedCallablePayload(await queued());
+      final again = tenantTimedCallablePayload(await queued());
+
+      expect(again['occurredAtMs'], first['occurredAtMs']);
     });
   });
 }

@@ -418,7 +418,7 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
         receipt:
             '#'
             '${sale.receiptSequence.toString().padLeft(checkoutReceiptSequenceDigits, '0')}',
-        soldAt: sale.recordedAt,
+        soldAt: sale.rungAt ?? sale.recordedAt,
         returnedMinor: returnedMinor,
         currency: sale.currency,
       );

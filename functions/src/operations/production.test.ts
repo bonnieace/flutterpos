@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {Transaction} from "firebase-admin/firestore";
+import {Timestamp, Transaction} from "firebase-admin/firestore";
 import {HttpsError} from "firebase-functions/v2/https";
 import {FakeFirestore} from "../testing/fakeFirestore";
 import {
@@ -19,6 +19,9 @@ import {
 const TENANT = "tenant-a";
 const BATCH = `pb_${"b".repeat(40)}`;
 const ACTOR = "uid-manager";
+
+/** When the batch was recorded on the device: the evening before it was sent. */
+const SAVED_AT = Date.UTC(2026, 8, 24, 18, 2);
 
 function root(path: string): string {
   return `tenants/${TENANT}/${path}`;
@@ -56,6 +59,7 @@ function batch(overrides: Record<string, unknown> = {}): Record<string, unknown>
     // The device's own arithmetic, carried for its overlay and ignored here.
     totalCostMinor: 1,
     unitCostMinor: 1,
+    occurredAtMs: SAVED_AT,
     ...overrides,
   };
 }
@@ -124,6 +128,24 @@ test("the batch is saved with its rows, the cost it replaced, and its ledger ent
   assert.ok(db.read(root(`audit_logs/${BATCH}`)), "the audit entry");
 });
 
+test("a batch is dated when it was recorded, not when it reached the server", async () => {
+  const db = seeded();
+
+  await complete(db);
+
+  const saved = db.read(root(`production_batches/${BATCH}`));
+  assert.equal((saved?.occurredAt as Timestamp).toMillis(), SAVED_AT);
+  assert.ok((saved?.createdAt as Timestamp).toMillis() > SAVED_AT);
+  const id = productionAdjustmentId(BATCH);
+  assert.equal(
+    (db.read(root(`stock_adjustments/${id}`))?.occurredAt as Timestamp).toMillis(),
+    SAVED_AT
+  );
+  const movement = db.read(root(`products/prod-bread/stock_movements/${id}`));
+  assert.equal((movement?.occurredAt as Timestamp).toMillis(), SAVED_AT);
+  assert.ok((movement?.recordedAt as Timestamp).toMillis() > SAVED_AT);
+});
+
 test("cost per unit is rounded half up to the cent", () => {
   assert.equal(productionUnitCostMinor(100000, 3), 33333);
   assert.equal(productionUnitCostMinor(100, 8), 13); // 12.5 rounds up
@@ -159,6 +181,8 @@ test("what a batch may carry is bounded", async () => {
       })),
     }),
     batch({draft: true}),
+    batch({occurredAtMs: undefined}),
+    batch({occurredAtMs: "2026-09-24"}),
   ];
   for (const request of cases) {
     const error = await refusal(() => readProductionRequest(request));

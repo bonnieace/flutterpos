@@ -1,6 +1,7 @@
 import {FieldValue, getFirestore} from "firebase-admin/firestore";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {requireTenantMember} from "../core/authorization";
+import {requireDeviceInstant} from "../core/deviceTime";
 import {
   buildIdempotencyIdentity,
   runIdempotentFirestoreTransaction,
@@ -26,6 +27,7 @@ interface AdjustStockRequest {
   type?: unknown;
   reason?: unknown;
   requestId?: unknown;
+  occurredAtMs?: unknown;
 }
 
 export interface AdjustStockResponse {
@@ -48,6 +50,10 @@ export const adjustStock = onCall<AdjustStockRequest, Promise<AdjustStockRespons
     assertAdjustmentDirection(type, quantityDelta);
     const reason = normalizeReason(data.reason);
     const requestId = requireRequestId(data.requestId);
+    // When the adjustment was made on the device, which may be long before it
+    // arrived. Not part of the fingerprint: a replay of one request carries the
+    // same time, and a retry that somehow did not must still settle off the record.
+    const occurredAt = requireDeviceInstant(data.occurredAtMs, "occurredAtMs");
     const db = getFirestore();
 
     // Authorize before consulting the idempotency cache, then repeat inside the
@@ -97,6 +103,7 @@ export const adjustStock = onCall<AdjustStockRequest, Promise<AdjustStockRespons
         reason,
         actorUid: currentActor.uid,
         requestId,
+        occurredAt,
         createdAt: FieldValue.serverTimestamp(),
       };
 
@@ -108,7 +115,6 @@ export const adjustStock = onCall<AdjustStockRequest, Promise<AdjustStockRespons
       transaction.create(movementRef, {
         ...immutableRecord,
         movementId: adjustmentId,
-        occurredAt: FieldValue.serverTimestamp(),
         recordedAt: FieldValue.serverTimestamp(),
       });
       transaction.create(auditRef, {

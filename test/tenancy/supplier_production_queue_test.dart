@@ -231,6 +231,29 @@ void main() {
       expect(header.data['costlessLineCount'], 1);
     });
 
+    test(
+      'is dated when it was saved here, as the server will date it',
+      () async {
+        await queuePage();
+        final record = (await store.recordsForSession(
+          uid: 'user-a',
+          tenantId: 'tenant-a',
+        )).single;
+        final header = await _overlay(
+          store,
+        ).getDocument('tenants/tenant-a/supplier_deliveries/sd_1');
+
+        expect(header!.data['occurredAt'], record.createdAt);
+        expect(
+          TenantSupplierDelivery.fromDocument(
+            path: header.path,
+            data: header.data,
+          ).occurredAt,
+          record.createdAt,
+        );
+      },
+    );
+
     test('stops being drawn once the server refuses it', () async {
       await queuePage();
       final record = (await store.recordsForSession(
@@ -459,6 +482,22 @@ void main() {
       ]);
       expect(batch.data['actorUid'], 'user-a');
     });
+
+    test(
+      'is dated when it was saved here, as the server will date it',
+      () async {
+        await queueBatch();
+        final record = (await store.recordsForSession(
+          uid: 'user-a',
+          tenantId: 'tenant-a',
+        )).single;
+        final batch = await _overlay(
+          store,
+        ).getDocument('tenants/tenant-a/production_batches/pb_1');
+
+        expect(batch!.data['occurredAt'], record.createdAt);
+      },
+    );
 
     test('waits while its product is still an unsent create', () async {
       await store.enqueue(

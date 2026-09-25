@@ -431,6 +431,9 @@ final class TenantStockAdjustmentGateway {
         'type': intent.type.wireValue,
         'reason': intent.reason,
         'requestId': intent.requestId,
+        // Sent straight away, so it happened now. The queue sends the moment
+        // it was saved instead - see `tenantMutationOccurredAtMs`.
+        'occurredAtMs': DateTime.now().toUtc().millisecondsSinceEpoch,
       });
     } on FirebaseFunctionsException catch (error) {
       throw TenantStockAdjustmentException(_classify(error));

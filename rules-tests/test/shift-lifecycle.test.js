@@ -73,6 +73,9 @@ function openShiftDocument({
     businessDate: BUSINESS_DATE,
     status: "open",
     startTime: serverTimestamp(),
+    // The device's clock when the cashier opened it. In the past, as it is for
+    // every shift opened offline.
+    openedAt: Timestamp.fromMillis(Date.now() - 60 * 60 * 1000),
     ...overrides,
   };
 }
@@ -103,6 +106,7 @@ function closeShift(firestore, { shiftId = "shift-a", overrides = {} } = {}) {
     declaredMpesaMinor: 34050,
     declaredCardMinor: 0,
     endTime: serverTimestamp(),
+    closedAt: Timestamp.fromMillis(Date.now() - 60 * 1000),
     ...overrides,
   });
 }
@@ -135,6 +139,14 @@ test("a cashier opens and closes exactly one server-timed shift", async () => {
   }
   if (closed.startTime.toMillis() !== opened.startTime.toMillis()) {
     throw new Error("Closing rewrote the immutable start time.");
+  }
+  // The device's own times travel beside the server's, and are not the server's.
+  if (
+    !(closed.openedAt instanceof Timestamp) ||
+    !(closed.closedAt instanceof Timestamp) ||
+    closed.openedAt.toMillis() >= closed.startTime.toMillis()
+  ) {
+    throw new Error("The device's open and close times were not kept.");
   }
   if (closed.closingCashMinor !== 125000) {
     throw new Error("The counted cash was not recorded.");
@@ -317,6 +329,8 @@ test("a client cannot choose when a shift began or pre-close it", async () => {
       { startTime: Timestamp.fromDate(new Date("2020-01-01T00:00:00Z")) },
     ],
     ["missing-start", { startTime: null }],
+    ["missing-opened", { openedAt: null }],
+    ["string-opened", { openedAt: "2026-09-24T18:02:00Z" }],
     ["pre-closed", { status: "closed" }],
     ["already-ended", { endTime: serverTimestamp() }],
   ];
@@ -472,6 +486,9 @@ test("closing may not rewrite the shift envelope or skip the count", async () =>
     ["other-tenant", { tenantId: "tenant-b" }],
     ["rewritten-start", { startTime: serverTimestamp() }],
     ["client-end", { endTime: Timestamp.fromDate(new Date("2020-01-01Z")) }],
+    ["missing-closed", { closedAt: null }],
+    ["string-closed", { closedAt: "2026-09-24T18:02:00Z" }],
+    ["rewritten-opened", { openedAt: Timestamp.fromDate(new Date("2020-01-01Z")) }],
     ["missing-cash", { closingCashMinor: null }],
     ["negative-cash", { closingCashMinor: -1 }],
     ["string-cash", { closingCashMinor: "125000" }],

@@ -187,7 +187,7 @@ final class TenantSupplierDelivery {
        supplierName = _optionalString(data['supplierName']),
        reference = _optionalString(data['reference']),
        actorUid = _optionalString(data['actorUid']),
-       createdAt = tenantStoredInstant(data['createdAt']),
+       occurredAt = tenantStoredInstant(data['occurredAt']),
        lines = _lines(data['lines']),
        complete = data['complete'] == true;
 
@@ -206,7 +206,10 @@ final class TenantSupplierDelivery {
   final String? supplierName;
   final String? reference;
   final String? actorUid;
-  final DateTime? createdAt;
+
+  /// When the delivery was received on the device that took it in - not when
+  /// it reached the server, which may be the next morning.
+  final DateTime? occurredAt;
   final List<TenantSupplierDeliveryRecordLine> lines;
 
   /// Whether every page of the delivery has landed on the server.
@@ -313,7 +316,7 @@ final class TenantSupplierDeliveryRepository extends TenantReadRepository {
 
   /// One supplier's deliveries, newest first.
   ///
-  /// Served by the `supplierId` + `createdAt` composite index; offline, by the
+  /// Served by the `supplierId` + `occurredAt` composite index; offline, by the
   /// device's own copy, with a queued delivery drawn over it.
   Future<TenantSupplierDeliveryPage> loadForSupplier(
     String supplierId, {
@@ -327,7 +330,7 @@ final class TenantSupplierDeliveryRepository extends TenantReadRepository {
       pageSize: pageSize,
       cursor: cursor,
       descending: true,
-      order: TenantCollectionOrder.createdAt,
+      order: TenantCollectionOrder.occurredAt,
       equalityFilters: <String, Object?>{'supplierId': supplierId},
     );
     return TenantSupplierDeliveryPage(
@@ -340,8 +343,8 @@ final class TenantSupplierDeliveryRepository extends TenantReadRepository {
     );
   }
 
-  /// Every delivery recorded between [startAt] and [endAt], a page at a time,
-  /// ordered by when it was recorded.
+  /// Every delivery received between [startAt] and [endAt], a page at a time,
+  /// ordered by when it was received.
   ///
   /// **Forwarded past the overlay, never drawn from it**, like every period
   /// read: a report states what the server holds, and a delivery still on this
@@ -362,6 +365,7 @@ final class TenantSupplierDeliveryRepository extends TenantReadRepository {
       startAt: startAt,
       endAt: endAt,
       pageSize: pageSize,
+      order: TenantCollectionOrder.occurredAt,
       startAfter: startAfter,
     );
     return (
@@ -373,7 +377,7 @@ final class TenantSupplierDeliveryRepository extends TenantReadRepository {
     );
   }
 
-  /// How many restocks were recorded between [startAt] and [endAt] with no
+  /// How many restocks were made between [startAt] and [endAt] with no
   /// supplier named - stock that arrived through *Adjust stock* rather than as
   /// a delivery - read up to [maximumPages] pages.
   Future<({int count, bool truncated})> countRestocksWithoutSupplier({
@@ -391,6 +395,7 @@ final class TenantSupplierDeliveryRepository extends TenantReadRepository {
         startAt: startAt,
         endAt: endAt,
         pageSize: 50,
+        order: TenantCollectionOrder.occurredAt,
         startAfter: position,
       );
       for (final snapshot in read.items) {

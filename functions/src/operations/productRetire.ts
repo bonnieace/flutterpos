@@ -2,6 +2,7 @@ import {FieldValue, getFirestore} from "firebase-admin/firestore";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {requireTenantMember} from "../core/authorization";
 import {runIdempotentFirestoreTransaction} from "../core/idempotency";
+import {requireDeviceInstant} from "../core/deviceTime";
 import {
   requireDocumentId,
   requireObject,
@@ -40,6 +41,7 @@ interface SetProductRetiredRequest {
   productId?: unknown;
   requestId?: unknown;
   retired?: unknown;
+  occurredAtMs?: unknown;
 }
 
 export interface SetProductRetiredResponse {
@@ -177,6 +179,9 @@ export const setProductRetired = onCall<
     throw new HttpsError("invalid-argument", "retired must be true or false.");
   }
   const retired = data.retired;
+  // When the product was taken out (or put back) on the device. Outside the
+  // fingerprint, as `adjustStock` keeps it.
+  const occurredAt = requireDeviceInstant(data.occurredAtMs, "occurredAtMs");
   const db = getFirestore();
 
   const actor = await requireTenantMember(db, request, tenantId, PRODUCT_RETIRE_ROLES);
@@ -223,7 +228,7 @@ export const setProductRetired = onCall<
       retired,
       // Written on both, so a restored product does not keep claiming the
       // moment it was taken out.
-      retiredAt: retired ? FieldValue.serverTimestamp() : null,
+      retiredAt: retired ? occurredAt : null,
       ...(plan.clears ? {quantity: plan.quantity} : {}),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -236,6 +241,7 @@ export const setProductRetired = onCall<
     if (plan.ledgerData !== null && plan.adjustmentId !== null) {
       const immutableRecord = {
         ...plan.ledgerData,
+        occurredAt,
         createdAt: FieldValue.serverTimestamp(),
       };
       transaction.create(
@@ -247,7 +253,6 @@ export const setProductRetired = onCall<
         {
           ...immutableRecord,
           movementId: plan.adjustmentId,
-          occurredAt: FieldValue.serverTimestamp(),
           recordedAt: FieldValue.serverTimestamp(),
         }
       );

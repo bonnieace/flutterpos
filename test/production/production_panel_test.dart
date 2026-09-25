@@ -185,6 +185,7 @@ Map<String, Map<String, Object?>> _twoBatches() =>
         'totalCostMinor': 300000,
         'unitCostMinor': 3000,
         'previousCostMinor': 2800,
+        'occurredAt': DateTime.utc(2026, 9, 23, 5),
         'createdAt': DateTime.utc(2026, 9, 23, 5),
       },
       'pb_1': <String, Object?>{
@@ -197,6 +198,7 @@ Map<String, Map<String, Object?>> _twoBatches() =>
         ],
         'totalCostMinor': 280000,
         'unitCostMinor': 2800,
+        'occurredAt': DateTime.utc(2026, 9, 22, 5),
         'createdAt': DateTime.utc(2026, 9, 22, 5),
       },
     };

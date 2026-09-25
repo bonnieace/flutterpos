@@ -564,6 +564,7 @@ Map<String, Map<String, Object?>> seedSupplierDeliveries() =>
         'reference': 'INV-48392',
         'actorUid': managerUid,
         'complete': true,
+        'occurredAt': seedTimestamp(daysAgo: 2, hour: 7),
         'createdAt': seedTimestamp(daysAgo: 2, hour: 7),
         'lines': <Map<String, Object?>>[
           <String, Object?>{
@@ -592,6 +593,7 @@ Map<String, Map<String, Object?>> seedSupplierDeliveries() =>
         'reference': 'INV-47811',
         'actorUid': ownerUid,
         'complete': true,
+        'occurredAt': seedTimestamp(daysAgo: 9, hour: 8),
         'createdAt': seedTimestamp(daysAgo: 9, hour: 8),
         'lines': <Map<String, Object?>>[
           <String, Object?>{
@@ -629,6 +631,7 @@ Map<String, Map<String, Object?>> seedProductionBatches() =>
         'unitCostMinor': 4800,
         'previousCostMinor': 4650,
         'actorUid': managerUid,
+        'occurredAt': seedTimestamp(daysAgo: 1, hour: 5),
         'createdAt': seedTimestamp(daysAgo: 1, hour: 5),
       },
       'pb_1': <String, Object?>{
@@ -646,6 +649,7 @@ Map<String, Map<String, Object?>> seedProductionBatches() =>
         'totalCostMinor': 518000,
         'unitCostMinor': 4317,
         'actorUid': ownerUid,
+        'occurredAt': seedTimestamp(daysAgo: 4, hour: 5),
         'createdAt': seedTimestamp(daysAgo: 4, hour: 5),
       },
     };
@@ -797,6 +801,7 @@ Map<String, Map<String, Object?>> seedStockAdjustments() =>
         'reason': 'Cartons split in the crate',
         'actorUid': managerUid,
         'requestId': 'adjust-stock-a1b2c3d4',
+        'occurredAt': seedTimestamp(daysAgo: 2, hour: 9),
         'createdAt': seedTimestamp(daysAgo: 2, hour: 9),
       },
       'sa_000002': <String, Object?>{
@@ -810,6 +815,7 @@ Map<String, Map<String, Object?>> seedStockAdjustments() =>
         'reason': 'Morning delivery received',
         'actorUid': ownerUid,
         'requestId': 'adjust-stock-b2c3d4e5',
+        'occurredAt': seedTimestamp(daysAgo: 1, hour: 7),
         'createdAt': seedTimestamp(daysAgo: 1, hour: 7),
       },
       'sa_000003': <String, Object?>{
@@ -823,6 +829,7 @@ Map<String, Map<String, Object?>> seedStockAdjustments() =>
         'reason': 'Counted at close of month',
         'actorUid': adminUid,
         'requestId': 'adjust-stock-c3d4e5f6',
+        'occurredAt': seedTimestamp(hour: 10),
         'createdAt': seedTimestamp(hour: 10),
       },
     };

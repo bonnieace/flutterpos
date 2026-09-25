@@ -477,9 +477,12 @@ String _recordedLabel(TenantShiftSaleHistoryRequest request) {
 
 String _recordedAtLabel(TenantSale sale, String soldByLabel) {
   final recordedAt = sale.recordedAt;
+  // When it was rung up, once the server holds it. A sale sent late reached
+  // the server hours after the customer paid, and this line is about the
+  // customer.
   return recordedAt == null
       ? 'The server has not confirmed this sale yet.'
-      : 'Recorded ${_instant(recordedAt)} by $soldByLabel';
+      : 'Recorded ${_instant(sale.rungAt ?? recordedAt)} by $soldByLabel';
 }
 
 String _money(int minorUnits) => moneyTextOfMinor(minorUnits);

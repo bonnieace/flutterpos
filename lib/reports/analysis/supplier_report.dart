@@ -70,7 +70,7 @@ final class TenantSupplierReportSource {
         if (supplierId == null || delivery.supplierId == supplierId) {
           deliveries.add(delivery);
         }
-        if (delivery.createdAt case final at?) {
+        if (delivery.occurredAt case final at?) {
           reachedTo = checkoutBusinessDate(at.toUtc());
         }
       }

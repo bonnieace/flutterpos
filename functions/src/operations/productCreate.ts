@@ -4,6 +4,7 @@ import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {requireTenantMember} from "../core/authorization";
 import {TenantRole} from "../core/model";
 import {runIdempotentFirestoreTransaction} from "../core/idempotency";
+import {requireDeviceInstant} from "../core/deviceTime";
 import {
   requireDocumentId,
   requireObject,
@@ -55,6 +56,7 @@ interface CreateProductRequest {
   tenantId?: unknown;
   productId?: unknown;
   document?: unknown;
+  occurredAtMs?: unknown;
 }
 
 export interface CreateProductResponse {
@@ -374,6 +376,9 @@ export const createProduct = onCall<
   // a key the record cannot be found under again.
   requireRequestId(productId);
   const input = readProductCreateInput(data.document);
+  // When the product was added on the device, which dates its opening stock.
+  // Outside the fingerprint, as `adjustStock` keeps it.
+  const occurredAt = requireDeviceInstant(data.occurredAtMs, "occurredAtMs");
   const db = getFirestore();
 
   const actor = await requireTenantMember(db, request, tenantId, PRODUCT_UPDATE_ROLES);
@@ -438,6 +443,7 @@ export const createProduct = onCall<
     if (plan.ledgerData !== null && plan.adjustmentId !== null) {
       const immutableRecord = {
         ...plan.ledgerData,
+        occurredAt,
         createdAt: FieldValue.serverTimestamp(),
       };
       transaction.create(
@@ -449,7 +455,6 @@ export const createProduct = onCall<
         {
           ...immutableRecord,
           movementId: plan.adjustmentId,
-          occurredAt: FieldValue.serverTimestamp(),
           recordedAt: FieldValue.serverTimestamp(),
         }
       );

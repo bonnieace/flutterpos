@@ -453,6 +453,9 @@ final class FirebaseTenantReturnWriter implements TenantReturnWriter {
     try {
       await _create(intent.path, <String, Object?>{
         ...intent.documentData(),
+        // Written straight away, so it was taken now. The queue sends the
+        // moment it was saved instead.
+        'occurredAt': Timestamp.fromDate(DateTime.now().toUtc()),
         'createdAt': FieldValue.serverTimestamp(),
       }).timeout(_writeTimeout);
       return const TenantReturnWriteResult.committed();

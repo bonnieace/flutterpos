@@ -313,9 +313,10 @@ String _tenderLabel(TenantSale sale) {
 
 String _recordedLabel(TenantSale sale) {
   final recordedAt = sale.recordedAt;
+  // When it was rung up, as the sale history says - see `_recordedAtLabel`.
   return recordedAt == null
       ? 'The server has not confirmed this sale yet.'
-      : 'Recorded ${_instant(recordedAt)} on ${sale.businessDate}';
+      : 'Recorded ${_instant(sale.rungAt ?? recordedAt)} on ${sale.businessDate}';
 }
 
 String _money(int minorUnits) => moneyTextOfMinor(minorUnits);

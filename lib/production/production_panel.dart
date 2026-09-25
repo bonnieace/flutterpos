@@ -309,9 +309,9 @@ final class _ProductionContents extends StatelessWidget {
         ),
         RecordAttribute(
           label: 'Made',
-          value: batch.createdAt == null
+          value: batch.occurredAt == null
               ? 'Date not recorded'
-              : reportShortDate(checkoutBusinessDate(batch.createdAt!)),
+              : reportShortDate(checkoutBusinessDate(batch.occurredAt!)),
         ),
       ],
       actions: <RecordAction>[

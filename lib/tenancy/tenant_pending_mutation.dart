@@ -1132,10 +1132,18 @@ final class TenantPendingMutationOverlayReader
         if (held is! num || delta is! num) return canonical;
         return <String, Object?>{...canonical, 'quantity': held + delta};
       case TenantPendingMutationKind.expenseCreate:
+        return <String, Object?>{
+          if (canonical != null) ...canonical,
+          ...record.payload,
+          'createdAt': canonical?['createdAt'] ?? record.createdAt,
+        };
+      // The time it was taken is the one the gateway will send, so the row a
+      // queued return draws is the row the server will hold.
       case TenantPendingMutationKind.pendingReturnCreate:
         return <String, Object?>{
           if (canonical != null) ...canonical,
           ...record.payload,
+          'occurredAt': canonical?['occurredAt'] ?? record.createdAt,
           'createdAt': canonical?['createdAt'] ?? record.createdAt,
         };
       case TenantPendingMutationKind.expenseVoid:
@@ -1350,6 +1358,8 @@ Map<String, Object?> _deliveryHeader(
     'valueMinor': valueMinor,
     'costlessLineCount': costless,
     'complete': canonical?['complete'] ?? false,
+    // The first page's time dates the delivery, on the server and here.
+    'occurredAt': canonical?['occurredAt'] ?? record.createdAt,
     'createdAt': canonical?['createdAt'] ?? record.createdAt,
   };
 }
@@ -1420,6 +1430,7 @@ Map<String, Object?> _producedBatch(
     'totalCostMinor': record.payload['totalCostMinor'],
     'unitCostMinor': record.payload['unitCostMinor'],
     'actorUid': canonical?['actorUid'] ?? record.uid,
+    'occurredAt': canonical?['occurredAt'] ?? record.createdAt,
     'createdAt': canonical?['createdAt'] ?? record.createdAt,
   };
 }

@@ -741,6 +741,10 @@ export async function applyProductImport(
         rowIndex: write.rowIndex,
         actorUid: options.actorUid,
         requestId: options.requestId,
+        // An import is only ever sent online, so the stock arrives when the
+        // server writes it. Every adjustment carries this field, so the feed
+        // can be ordered by it.
+        occurredAt: FieldValue.serverTimestamp(),
         createdAt: FieldValue.serverTimestamp(),
       };
       transaction.create(
@@ -752,7 +756,6 @@ export async function applyProductImport(
         {
           ...immutableRecord,
           movementId: write.adjustmentId,
-          occurredAt: FieldValue.serverTimestamp(),
           recordedAt: FieldValue.serverTimestamp(),
         }
       );

@@ -67,8 +67,8 @@ final class TenantProductionAnalysis {
   }) {
     final ordered = <TenantProductionBatch>[...batches]
       ..sort((left, right) {
-        final byTime = (left.createdAt ?? DateTime.utc(0)).compareTo(
-          right.createdAt ?? DateTime.utc(0),
+        final byTime = (left.occurredAt ?? DateTime.utc(0)).compareTo(
+          right.occurredAt ?? DateTime.utc(0),
         );
         return byTime != 0 ? byTime : left.id.compareTo(right.id);
       });
@@ -86,9 +86,9 @@ final class TenantProductionAnalysis {
       totals.latestUnitCostMinor = batch.unitCostMinor;
       rows.add(
         TenantProductionBatchRow(
-          businessDate: batch.createdAt == null
+          businessDate: batch.occurredAt == null
               ? period.startDate
-              : checkoutBusinessDate(batch.createdAt!.toUtc()),
+              : checkoutBusinessDate(batch.occurredAt!.toUtc()),
           batch: batch,
         ),
       );

@@ -432,6 +432,13 @@ service cloud.firestore {
             '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
           )
           && request.resource.data.startTime == request.time
+          // **When the cashier opened it, by the device's clock, since
+          // 2026-09-25**, beside `startTime`, which is when it reached here. A
+          // shift opened offline arrives hours later, and every screen shows the
+          // earlier of the two. Only typed, never bounded: a bound would refuse
+          // the open of a till whose clock runs fast, and a refused open stops
+          // the till. `startTime` stays the time the server trusts.
+          && request.resource.data.openedAt is timestamp
           // The change the drawer starts the shift with. Optional - a shop
           // that floats no till writes no field, and reconciliation reads an
           // absent one as zero, which is what every shift opened before this
@@ -462,6 +469,9 @@ service cloud.firestore {
           && resource.data.status == 'open'
           && request.resource.data.status == 'closed'
           && request.resource.data.endTime == request.time
+          // When the drawer was counted, by the device's clock - the close's
+          // twin of `openedAt`, and typed and unbounded for the same reason.
+          && request.resource.data.closedAt is timestamp
           && request.resource.data.closingCashMinor is int
           && request.resource.data.closingCashMinor >= 0
           && request.resource.data.closingCashMinor <= 1000000000000
@@ -560,7 +570,7 @@ service cloud.firestore {
           )
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly([
-              'status', 'endTime', 'closingCashMinor', 'closingCash',
+              'status', 'endTime', 'closedAt', 'closingCashMinor', 'closingCash',
               'totalSales', 'totalSalesMinor', 'transactionCount',
               'declaredCashMinor', 'declaredMpesaMinor', 'declaredCardMinor',
               'closedWithoutEvidence', 'settlementId'
@@ -605,9 +615,13 @@ service cloud.firestore {
       // from the durable queue on Tuesday carries Monday's value while
       // `request.time` is Tuesday's, so binding the two would refuse exactly
       // the writes the queue exists to protect. `createdAt` stays the server's
-      // own and is the authority every screen displays; this field only drives
-      // the returns filter, and a device with a wrong clock mis-files itself in
-      // that one list rather than misstating when anything happened.
+      // own: it is when the return arrived.
+      //
+      // **`occurredAt` is when it was taken, by the device's clock, since
+      // 2026-09-25**, and it is what every screen shows - no later than
+      // `createdAt`, which readers hold it to. Before, a return taken offline on
+      // Monday was listed at Tuesday's replay. Typed only, for `recordedOn`'s
+      // reason: a bound would refuse a till whose clock runs fast.
       //
       // **`businessDate` is the sale's own, copied and bound here rather than
       // trusted.** A return carries no date a report can filter on otherwise -
@@ -639,13 +653,15 @@ service cloud.firestore {
           && request.resource.data.recordedOn.matches(
             '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
           )
+          && request.resource.data.occurredAt is timestamp
           && request.resource.data.reason is string
           && request.resource.data.reason.size() >= 3
           && request.resource.data.reason.size() <= 500
           && validSaleLines(request.resource.data.itemsReturned)
           && request.resource.data.keys().hasOnly([
             'returnId', 'tenantId', 'saleId', 'businessDate', 'recordedOn',
-            'createdBy', 'status', 'reason', 'itemsReturned', 'createdAt'
+            'occurredAt', 'createdBy', 'status', 'reason', 'itemsReturned',
+            'createdAt'
           ]);
         allow update, delete: if false;
       }

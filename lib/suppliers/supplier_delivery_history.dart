@@ -99,9 +99,9 @@ final class _TenantSupplierDeliveryHistoryState
   String _money(int minor) => _currency.format(minor / 100);
 
   RecordItem _record(TenantSupplierDelivery delivery) {
-    final day = delivery.createdAt == null
+    final day = delivery.occurredAt == null
         ? 'Date not recorded'
-        : reportShortDate(checkoutBusinessDate(delivery.createdAt!));
+        : reportShortDate(checkoutBusinessDate(delivery.occurredAt!));
     final products = delivery.lines.length;
     final open = _expanded.contains(delivery.id);
     return RecordItem(

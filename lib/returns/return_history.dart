@@ -119,7 +119,7 @@ final class TenantReturn {
       status: _requiredStatus(data),
       lines: _parseLines(data['itemsReturned']),
       verification: _verification(data),
-      recordedAt: _optionalInstant(data, 'createdAt'),
+      recordedAt: _takenAt(data),
     );
   }
 
@@ -169,7 +169,13 @@ final class TenantReturn {
   /// Present exactly when [status] is verified.
   final TenantReturnVerification? verification;
 
-  /// The server instant, absent only while a local create is still pending.
+  /// When the return was taken, by the device that took it.
+  ///
+  /// **The device's `occurredAt`, held to the server's `createdAt`, since
+  /// 2026-09-25.** A return taken offline on Monday reaches the server on
+  /// Tuesday, and `createdAt` alone listed it on Tuesday. The device's clock is
+  /// believed unless it claims a time after the return arrived. Absent only
+  /// where neither is held.
   final DateTime? recordedAt;
 
   bool get isVerified => status == TenantReturnStatus.verified;
@@ -654,6 +660,16 @@ DateTime _requiredInstant(Map<String, Object?> data, String field) {
     throw const TenantReturnException('invalid_return_document');
   }
   return value;
+}
+
+/// [TenantReturn.recordedAt]: the earlier of the device's time and the
+/// server's, or whichever one is held.
+DateTime? _takenAt(Map<String, Object?> data) {
+  final taken = _optionalInstant(data, 'occurredAt');
+  final arrived = _optionalInstant(data, 'createdAt');
+  if (taken == null) return arrived;
+  if (arrived == null) return taken;
+  return taken.isBefore(arrived) ? taken : arrived;
 }
 
 DateTime? _optionalInstant(Map<String, Object?> data, String field) {

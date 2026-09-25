@@ -367,9 +367,10 @@ void main() {
       _colleagueShiftRequest(),
     );
 
+    // When it was rung up (08:00), not when it reached the server (noon).
     expect(
       textAt(tester, 'sale-history-recorded-at-co-2'),
-      'Recorded 2026-07-31 12:00 UTC by Brian (user-b)',
+      'Recorded 2026-07-31 08:00 UTC by Brian (user-b)',
     );
   });
 
@@ -388,7 +389,7 @@ void main() {
 
     expect(
       textAt(tester, 'sale-history-recorded-at-co-1'),
-      'Recorded 2026-07-31 12:00 UTC by You',
+      'Recorded 2026-07-31 08:00 UTC by You',
     );
   });
 
@@ -409,7 +410,7 @@ void main() {
 
     expect(
       textAt(tester, 'sale-history-recorded-at-co-2'),
-      'Recorded 2026-07-31 12:00 UTC by user-b',
+      'Recorded 2026-07-31 08:00 UTC by user-b',
     );
     expect(find.byKey(const ValueKey('sale-history-failure')), findsNothing);
   });
