@@ -207,6 +207,10 @@ final class _ProductionFormState extends State<_ProductionForm> {
   bool _busy = false;
   String? _error;
 
+  /// A change to any field, which also retires a refusal about the last
+  /// attempt: left up, it went on naming a row that had since been corrected.
+  void _edited() => setState(() => _error = null);
+
   /// One request per batch, held until it is queued.
   String? _requestId;
 
@@ -219,11 +223,14 @@ final class _ProductionFormState extends State<_ProductionForm> {
     super.dispose();
   }
 
-  TenantProductionRepository get _repository =>
-      TenantProductionRepository(session: widget.session, reader: widget.reader);
+  TenantProductionRepository get _repository => TenantProductionRepository(
+    session: widget.session,
+    reader: widget.reader,
+  );
 
-  List<TenantProductionRowDraft> get _drafts =>
-      <TenantProductionRowDraft>[for (final row in _rows) row.draft];
+  List<TenantProductionRowDraft> get _drafts => <TenantProductionRowDraft>[
+    for (final row in _rows) row.draft,
+  ];
 
   TenantProductionPreview? get _preview =>
       TenantProductionPreview.of(quantity: _quantity.text, rows: _drafts);
@@ -456,7 +463,7 @@ final class _ProductionFormState extends State<_ProductionForm> {
           label: 'How many were made',
           leading: Icons.numbers,
           keyboardType: TextInputType.number,
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) => _edited(),
         ),
         SizedBox(height: tokens.spacing.s24),
         const SectionHeading('What it cost'),
@@ -495,9 +502,11 @@ final class _ProductionFormState extends State<_ProductionForm> {
                   controller: row.description,
                   enabled: !_busy,
                   label: 'Cost ${index + 1}',
-                  placeholder: 'Flour',
+                  // One example, on the first row. Repeated on every row it
+                  // read as a value the form had filled in.
+                  placeholder: index == 0 ? 'Flour' : null,
                   maxLength: maximumProductionDescriptionLength,
-                  onChanged: (_) => setState(() {}),
+                  onChanged: (_) => _edited(),
                 ),
               ),
               SizedBox(width: tokens.spacing.s8),
@@ -512,7 +521,7 @@ final class _ProductionFormState extends State<_ProductionForm> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  onChanged: (_) => setState(() {}),
+                  onChanged: (_) => _edited(),
                 ),
               ),
               IconButton(

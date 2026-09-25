@@ -1183,8 +1183,11 @@ final class TenantPendingMutationOverlayReader
           ...record.payload,
         };
       case TenantPendingMutationKind.supplierDeliveryPage:
-        return path == record.targetPath
-            ? _deliveryHeader(record, canonical)
+        if (path == record.targetPath) {
+          return _deliveryHeader(record, canonical);
+        }
+        return path.split('/')[2] == TenantCollection.suppliers.segment
+            ? _deliveringSupplier(record, canonical)
             : _deliveredProduct(record, path, canonical);
       case TenantPendingMutationKind.productionComplete:
         return path == record.targetPath
@@ -1292,8 +1295,7 @@ List<Map<String, Object?>> _deliveryLines(TenantPendingMutationRecord record) {
   ];
 }
 
-int? _minorOf(Object? major) =>
-    major is num ? (major * 100).round() : null;
+int? _minorOf(Object? major) => major is num ? (major * 100).round() : null;
 
 /// A queued delivery drawn as the server will hold it, page by page.
 ///
@@ -1375,6 +1377,23 @@ Map<String, Object?>? _deliveredProduct(
   return result;
 }
 
+/// The supplier of a queued delivery, with the delivery as its latest.
+///
+/// A supplier this device has never read is left alone rather than drawn from
+/// one field, the way [_deliveredProduct] leaves a product alone.
+Map<String, Object?>? _deliveringSupplier(
+  TenantPendingMutationRecord record,
+  Map<String, Object?>? canonical,
+) {
+  if (canonical == null) return null;
+  final held = tenantStoredInstant(canonical['lastDeliveryAt']);
+  return <String, Object?>{
+    ...canonical,
+    if (held == null || held.isBefore(record.createdAt))
+      'lastDeliveryAt': record.createdAt,
+  };
+}
+
 /// A queued production batch drawn as the server will hold it.
 Map<String, Object?> _producedBatch(
   TenantPendingMutationRecord record,
@@ -1429,14 +1448,19 @@ Map<String, Object?>? _producedProduct(
 /// so a refusal strands only that record. The overlay draws a queued record
 /// over every path here, so the stock a delivery brought in shows on the
 /// catalog the moment it is queued.
+///
+/// A delivery page also touches its supplier, whose last delivery the server
+/// stamps in the same transaction. Without it the directory went on saying
+/// *None yet* for a delivery the device had just received, until the server
+/// had it and the screen was opened again.
 List<String> tenantMutationTouchedPaths(TenantPendingMutationRecord record) {
   final paths = TenantPaths(record.tenantId);
   return switch (record.kind) {
     TenantPendingMutationKind.supplierDeliveryPage => <String>[
       record.targetPath,
-      for (final line in _deliveryLines(record))
-        if (_documentIdOrNull(line['productId']) case final productId?)
-          paths.product(productId),
+      ..._deliveredProductPaths(record),
+      if (_documentIdOrNull(record.payload['supplierId']) case final id?)
+        paths.supplier(id),
     ],
     TenantPendingMutationKind.productionComplete => <String>[
       record.targetPath,
@@ -1464,12 +1488,23 @@ List<String> tenantMutationDependencies(TenantPendingMutationRecord record) {
     TenantPendingMutationKind.supplierDeliveryPage => <String>[
       if (_documentIdOrNull(record.payload['supplierId']) case final id?)
         paths.supplier(id),
-      ...tenantMutationTouchedPaths(record).skip(1),
+      ..._deliveredProductPaths(record),
     ],
-    TenantPendingMutationKind.productionComplete =>
-      tenantMutationTouchedPaths(record).skip(1).toList(),
+    TenantPendingMutationKind.productionComplete => tenantMutationTouchedPaths(
+      record,
+    ).skip(1).toList(),
     _ => const <String>[],
   };
+}
+
+/// The products a delivery page restocks, one path each.
+List<String> _deliveredProductPaths(TenantPendingMutationRecord record) {
+  final paths = TenantPaths(record.tenantId);
+  return <String>[
+    for (final line in _deliveryLines(record))
+      if (_documentIdOrNull(line['productId']) case final productId?)
+        paths.product(productId),
+  ];
 }
 
 String? _documentIdOrNull(Object? value) {

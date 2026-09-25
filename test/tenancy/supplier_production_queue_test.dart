@@ -102,18 +102,76 @@ void main() {
       payload: _deliveryPage(page: page),
     );
 
-    test('touches the delivery and every product it restocks', () async {
+    test(
+      'touches the delivery, every product it restocks, and its supplier',
+      () async {
+        await queuePage();
+        final record = (await store.recordsForSession(
+          uid: 'user-a',
+          tenantId: 'tenant-a',
+        )).single;
+
+        expect(tenantMutationTouchedPaths(record), <String>[
+          'tenants/tenant-a/supplier_deliveries/sd_1',
+          'tenants/tenant-a/products/prod-bread',
+          'tenants/tenant-a/products/prod-milk',
+          'tenants/tenant-a/suppliers/sp_abc',
+        ]);
+      },
+    );
+
+    // **Found on a device, 2026-09-25.** The directory re-read the moment the
+    // delivery screen closed, before the page had reached the server, and went
+    // on saying *None yet* until it was opened again.
+    test("makes itself its supplier's last delivery at once", () async {
       await queuePage();
       final record = (await store.recordsForSession(
         uid: 'user-a',
         tenantId: 'tenant-a',
       )).single;
+      final overlay = _overlay(store, base: const _Shelf());
 
-      expect(tenantMutationTouchedPaths(record), <String>[
-        'tenants/tenant-a/supplier_deliveries/sd_1',
-        'tenants/tenant-a/products/prod-bread',
-        'tenants/tenant-a/products/prod-milk',
-      ]);
+      final supplier = await overlay.getDocument(
+        'tenants/tenant-a/suppliers/sp_abc',
+      );
+      final directory = await TenantSupplierRepository(
+        session: _session(),
+        reader: overlay,
+      ).loadDirectory();
+
+      expect(supplier!.data['lastDeliveryAt'], record.createdAt);
+      expect(directory.suppliers.single.lastDeliveryAt, record.createdAt);
+      expect(directory.suppliers.single.name, 'ABC Distributors');
+    });
+
+    test('keeps a later delivery the server already has', () async {
+      await queuePage();
+
+      final supplier = await _overlay(
+        store,
+        base: _Shelf(lastDeliveryAt: _farFuture),
+      ).getDocument('tenants/tenant-a/suppliers/sp_abc');
+
+      expect(supplier!.data['lastDeliveryAt'], _farFuture);
+    });
+
+    test('never invents a supplier this device holds no copy of', () async {
+      await queuePage();
+      final overlay = _overlay(store);
+
+      expect(
+        await overlay.getDocument('tenants/tenant-a/suppliers/sp_abc'),
+        isNull,
+      );
+      expect(
+        await overlay.getCollectionPage(
+          TenantCollectionQuery.forTesting(
+            collectionPath: 'tenants/tenant-a/suppliers',
+            limit: 10,
+          ),
+        ),
+        isEmpty,
+      );
     });
 
     test('raises each product it names, and sets the cost it names', () async {
@@ -162,9 +220,9 @@ void main() {
 
     test('draws the delivery itself, with its totals', () async {
       await queuePage();
-      final header = await _overlay(store).getDocument(
-        'tenants/tenant-a/supplier_deliveries/sd_1',
-      );
+      final header = await _overlay(
+        store,
+      ).getDocument('tenants/tenant-a/supplier_deliveries/sd_1');
 
       expect(header!.data['supplierId'], 'sp_abc');
       expect(header.data['lineCount'], 2);
@@ -181,46 +239,58 @@ void main() {
       )).single;
       await store.markRejected(record, 'invalid-argument');
 
-      final bread = await _overlay(store, base: const _Shelf()).getDocument(
-        'tenants/tenant-a/products/prod-bread',
-      );
+      final bread = await _overlay(
+        store,
+        base: const _Shelf(),
+      ).getDocument('tenants/tenant-a/products/prod-bread');
 
       expect(bread!.data['quantity'], 40);
     });
 
-    test('waits while its supplier or a product is still an unsent create', () async {
-      await store.enqueue(
-        uid: 'user-a',
-        tenantId: 'tenant-a',
-        operationId: 'supplier-create-sp_abc',
-        kind: TenantPendingMutationKind.supplierCreate,
-        targetPath: 'tenants/tenant-a/suppliers/sp_abc',
-        payload: const <String, Object?>{'name': 'ABC', 'active': true},
-      );
-      await queuePage();
-      final gateway = _Gateway(holdKind: TenantPendingMutationKind.supplierCreate);
-
-      await _worker(store, gateway).run(_session());
-
-      expect(gateway.submitted, <String>['supplier-create-sp_abc']);
-
-      // The supplier settles - its create is confirmed on the server - and the
-      // page goes on the next pass.
-      final supplierRecord = (await store.recordsForSession(
-        uid: 'user-a',
-        tenantId: 'tenant-a',
-      )).singleWhere((record) => record.operationId == 'supplier-create-sp_abc');
-      await store.markConfirmed(supplierRecord);
-      await _worker(store, _Gateway()).run(_session());
-      final states = <String, TenantPendingMutationState>{
-        for (final record in await store.recordsForSession(
+    test(
+      'waits while its supplier or a product is still an unsent create',
+      () async {
+        await store.enqueue(
           uid: 'user-a',
           tenantId: 'tenant-a',
-        ))
-          record.operationId: record.state,
-      };
-      expect(states['supplier-delivery-sd_1-p000'], TenantPendingMutationState.confirmed);
-    });
+          operationId: 'supplier-create-sp_abc',
+          kind: TenantPendingMutationKind.supplierCreate,
+          targetPath: 'tenants/tenant-a/suppliers/sp_abc',
+          payload: const <String, Object?>{'name': 'ABC', 'active': true},
+        );
+        await queuePage();
+        final gateway = _Gateway(
+          holdKind: TenantPendingMutationKind.supplierCreate,
+        );
+
+        await _worker(store, gateway).run(_session());
+
+        expect(gateway.submitted, <String>['supplier-create-sp_abc']);
+
+        // The supplier settles - its create is confirmed on the server - and the
+        // page goes on the next pass.
+        final supplierRecord =
+            (await store.recordsForSession(
+              uid: 'user-a',
+              tenantId: 'tenant-a',
+            )).singleWhere(
+              (record) => record.operationId == 'supplier-create-sp_abc',
+            );
+        await store.markConfirmed(supplierRecord);
+        await _worker(store, _Gateway()).run(_session());
+        final states = <String, TenantPendingMutationState>{
+          for (final record in await store.recordsForSession(
+            uid: 'user-a',
+            tenantId: 'tenant-a',
+          ))
+            record.operationId: record.state,
+        };
+        expect(
+          states['supplier-delivery-sd_1-p000'],
+          TenantPendingMutationState.confirmed,
+        );
+      },
+    );
 
     test('pages keep their order past the ninth', () async {
       // The queue orders one path's records by when they were queued and then
@@ -245,33 +315,34 @@ void main() {
   });
 
   test('the delivery writer queues every page on one path, in order', () async {
-    final intent = TenantSupplierDeliveryRepository(
-      session: _session(),
-      reader: const _Empty(),
-    ).buildIntent(
-      supplier: TenantSupplier.fromDocument(
-        path: 'tenants/tenant-a/suppliers/sp_abc',
-        data: const <String, Object?>{'name': 'ABC', 'active': true},
-      ),
-      reference: 'INV-1',
-      lines: <TenantDeliveryLineDraft>[
-        for (var index = 0; index < 20; index++)
-          TenantDeliveryLineDraft(
-            product: TenantProduct.fromDocument(
-              path: 'tenants/tenant-a/products/prod-$index',
-              data: <String, Object?>{
-                'name': 'Product $index',
-                'SKU': 'P$index',
-                'price': 10,
-                'quantity': 0,
-                'categoryId': 'cat-a',
-              },
-            ),
-            quantity: '1',
+    final intent =
+        TenantSupplierDeliveryRepository(
+          session: _session(),
+          reader: const _Empty(),
+        ).buildIntent(
+          supplier: TenantSupplier.fromDocument(
+            path: 'tenants/tenant-a/suppliers/sp_abc',
+            data: const <String, Object?>{'name': 'ABC', 'active': true},
           ),
-      ],
-      requestId: 'delivery-request-1',
-    );
+          reference: 'INV-1',
+          lines: <TenantDeliveryLineDraft>[
+            for (var index = 0; index < 20; index++)
+              TenantDeliveryLineDraft(
+                product: TenantProduct.fromDocument(
+                  path: 'tenants/tenant-a/products/prod-$index',
+                  data: <String, Object?>{
+                    'name': 'Product $index',
+                    'SKU': 'P$index',
+                    'price': 10,
+                    'quantity': 0,
+                    'categoryId': 'cat-a',
+                  },
+                ),
+                quantity: '1',
+              ),
+          ],
+          requestId: 'delivery-request-1',
+        );
     var signalled = 0;
 
     final result = await QueuedTenantSupplierDeliveryWriter(
@@ -285,38 +356,44 @@ void main() {
       tenantId: 'tenant-a',
     );
     expect(result.operationIds, hasLength(2));
-    expect(records.map((record) => record.kind).toSet(), <TenantPendingMutationKind>{
-      TenantPendingMutationKind.supplierDeliveryPage,
+    expect(
+      records.map((record) => record.kind).toSet(),
+      <TenantPendingMutationKind>{
+        TenantPendingMutationKind.supplierDeliveryPage,
+      },
+    );
+    expect(records.map((record) => record.targetPath).toSet(), <String>{
+      intent.path,
     });
-    expect(records.map((record) => record.targetPath).toSet(), <String>{intent.path});
     expect(records.map((record) => record.payload['page']), <int>[0, 1]);
     // One signal for the whole delivery, not one per page.
     expect(signalled, 1);
   });
 
   test('the production writer queues one batch on its own path', () async {
-    final intent = TenantProductionRepository(
-      session: _session(),
-      reader: const _Empty(),
-    ).buildIntent(
-      product: TenantProduct.fromDocument(
-        path: 'tenants/tenant-a/products/prod-bread',
-        data: const <String, Object?>{
-          'name': 'White bread loaf',
-          'SKU': 'BR-1',
-          'price': 50,
-          'quantity': 12,
-          'categoryId': 'cat-a',
-          'costType': 'produced',
-        },
-      ),
-      quantity: '100',
-      rows: const <TenantProductionRowDraft>[
-        TenantProductionRowDraft(description: 'Flour', amount: '3000'),
-      ],
-      requestId: 'production-request-1',
-      businessDate: '2026-09-24',
-    );
+    final intent =
+        TenantProductionRepository(
+          session: _session(),
+          reader: const _Empty(),
+        ).buildIntent(
+          product: TenantProduct.fromDocument(
+            path: 'tenants/tenant-a/products/prod-bread',
+            data: const <String, Object?>{
+              'name': 'White bread loaf',
+              'SKU': 'BR-1',
+              'price': 50,
+              'quantity': 12,
+              'categoryId': 'cat-a',
+              'costType': 'produced',
+            },
+          ),
+          quantity: '100',
+          rows: const <TenantProductionRowDraft>[
+            TenantProductionRowDraft(description: 'Flour', amount: '3000'),
+          ],
+          requestId: 'production-request-1',
+          businessDate: '2026-09-24',
+        );
 
     await QueuedTenantProductionWriter(
       store: store,
@@ -329,7 +406,10 @@ void main() {
     )).single;
     expect(record.kind, TenantPendingMutationKind.productionComplete);
     expect(record.targetPath, intent.path);
-    expect(tenantMutationTouchedPaths(record).last, 'tenants/tenant-a/products/prod-bread');
+    expect(
+      tenantMutationTouchedPaths(record).last,
+      'tenants/tenant-a/products/prod-bread',
+    );
   });
 
   group('a queued production batch', () {
@@ -357,9 +437,10 @@ void main() {
 
     test('raises its product and sets what one unit cost to make', () async {
       await queueBatch();
-      final bread = await _overlay(store, base: const _Shelf()).getDocument(
-        'tenants/tenant-a/products/prod-bread',
-      );
+      final bread = await _overlay(
+        store,
+        base: const _Shelf(),
+      ).getDocument('tenants/tenant-a/products/prod-bread');
 
       expect(bread!.data['quantity'], 140);
       expect(bread.data['cost'], 30);
@@ -367,9 +448,9 @@ void main() {
 
     test('is drawn as the batch the server will hold', () async {
       await queueBatch();
-      final batch = await _overlay(store).getDocument(
-        'tenants/tenant-a/production_batches/pb_1',
-      );
+      final batch = await _overlay(
+        store,
+      ).getDocument('tenants/tenant-a/production_batches/pb_1');
 
       expect(batch!.data['batchNumber'], 'PB-20260924-0001');
       expect(batch.data['expenses'], <Map<String, Object?>>[
@@ -386,10 +467,15 @@ void main() {
         operationId: 'product-create-prod-bread',
         kind: TenantPendingMutationKind.productCreate,
         targetPath: 'tenants/tenant-a/products/prod-bread',
-        payload: const <String, Object?>{'name': 'Bread', 'categoryId': 'cat-a'},
+        payload: const <String, Object?>{
+          'name': 'Bread',
+          'categoryId': 'cat-a',
+        },
       );
       await queueBatch();
-      final gateway = _Gateway(holdKind: TenantPendingMutationKind.productCreate);
+      final gateway = _Gateway(
+        holdKind: TenantPendingMutationKind.productCreate,
+      );
 
       await _worker(store, gateway).run(_session());
 
@@ -492,9 +578,24 @@ final class _Empty implements TenantCacheReadable, TenantProductSearchReader {
   ) async => const <TenantQueryDocumentSnapshot>[];
 }
 
-/// A base reader holding two products.
+final DateTime _farFuture = DateTime.utc(2999);
+
+/// A base reader holding two products and the supplier that delivers them.
 final class _Shelf implements TenantCacheReadable, TenantProductSearchReader {
-  const _Shelf();
+  const _Shelf({this.lastDeliveryAt});
+
+  /// When the supplier's copy says it last delivered, or null for never.
+  final DateTime? lastDeliveryAt;
+
+  Map<String, Map<String, Object?>> get _documents =>
+      <String, Map<String, Object?>>{
+        ..._products,
+        'tenants/tenant-a/suppliers/sp_abc': <String, Object?>{
+          'name': 'ABC Distributors',
+          'active': true,
+          if (lastDeliveryAt != null) 'lastDeliveryAt': lastDeliveryAt,
+        },
+      };
 
   static const Map<String, Map<String, Object?>> _products =
       <String, Map<String, Object?>>{
@@ -523,22 +624,24 @@ final class _Shelf implements TenantCacheReadable, TenantProductSearchReader {
 
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
-    final data = _products[path];
+    final data = _documents[path];
     return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
   }
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
-  ) async => _rows();
+  ) async => _rows(query.collectionPath);
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> searchTenantProducts(
     TenantProductSearchQuery query,
-  ) async => _rows();
+  ) async => _rows(query.collectionPath);
 
-  List<TenantQueryDocumentSnapshot> _rows() => <TenantQueryDocumentSnapshot>[
-    for (final entry in _products.entries)
-      TenantQueryDocumentSnapshot(path: entry.key, data: entry.value),
-  ];
+  List<TenantQueryDocumentSnapshot> _rows(String collectionPath) =>
+      <TenantQueryDocumentSnapshot>[
+        for (final entry in _documents.entries)
+          if (entry.key.startsWith('$collectionPath/'))
+            TenantQueryDocumentSnapshot(path: entry.key, data: entry.value),
+      ];
 }

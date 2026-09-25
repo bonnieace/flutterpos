@@ -325,7 +325,11 @@ enum TenantProductField {
 
   /// Bought in or made here. Descriptive, not money: see
   /// [TenantProductCostType].
-  costType('costType', 'Bought in or made here');
+  ///
+  /// A noun like the others, and the form's own heading for it: the banner
+  /// after a correction lists these, and *Corrected: bought in or made here*
+  /// read as a question rather than as what changed.
+  costType('costType', 'Where it comes from');
 
   const TenantProductField(this.wireKey, this.label);
 

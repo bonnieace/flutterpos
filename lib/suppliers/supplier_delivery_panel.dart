@@ -122,16 +122,17 @@ final class _TenantReceiveDeliveryScreenState
     _loadersFor = _generation;
     TenantGuardedLoader<TenantDeliveryFormView> readWith(
       TenantDataReader reader,
-    ) => (session) async => TenantDeliveryFormView(
-      directory: await TenantSupplierRepository(
-        session: session,
-        reader: reader,
-      ).loadDirectory(),
-      currency: await TenantReportingCurrency.read(
-        session: session,
-        reader: reader,
-      ),
-    );
+    ) =>
+        (session) async => TenantDeliveryFormView(
+          directory: await TenantSupplierRepository(
+            session: session,
+            reader: reader,
+          ).loadDirectory(),
+          currency: await TenantReportingCurrency.read(
+            session: session,
+            reader: reader,
+          ),
+        );
     _loader = readWith(widget.reader);
     final cached = widget.reader.cached;
     _loaderCached = cached == null ? null : readWith(cached);
@@ -151,7 +152,8 @@ final class _TenantReceiveDeliveryScreenState
         child: ErrorState(
           key: ValueKey('delivery-failure'),
           badgeLabel: 'Not read',
-          statement: 'The suppliers could not be read, so a delivery cannot be '
+          statement:
+              'The suppliers could not be read, so a delivery cannot be '
               'received yet.',
           stillTrue: 'Nothing has been recorded or changed.',
         ),
@@ -334,8 +336,7 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
         '$name is on this delivery twice. Put all of it on one line.',
       'retired_product' =>
         '$name has been retired, so stock cannot be received into it.',
-      'quantity_out_of_range' =>
-        '$name cannot hold that much more stock.',
+      'quantity_out_of_range' => '$name cannot hold that much more stock.',
       'invalid_reference' =>
         'A reference may be up to $maximumDeliveryReferenceLength characters on '
             'one line.',
@@ -551,7 +552,8 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
                 : checkoutMinorUnitsFromMajor(line.product.cost!) == null
                 ? 'Cost unreadable'
                 : 'Costs ${_money(checkoutMinorUnitsFromMajor(line.product.cost!)!)}',
-            onChanged: () => setState(() {}),
+            // A refusal is about the last attempt, and goes with any edit.
+            onChanged: () => setState(() => _error = null),
             onRemove: () => _remove(line),
           ),
         ],
@@ -657,10 +659,7 @@ final class _DeliveryLineCard extends StatelessWidget {
                   constraints: BoxConstraints.tight(
                     tokens.density.minimumTapTarget,
                   ),
-                  icon: Icon(
-                    Icons.close,
-                    color: tokens.colors.text.secondary,
-                  ),
+                  icon: Icon(Icons.close, color: tokens.colors.text.secondary),
                   onPressed: enabled ? onRemove : null,
                 ),
               ],

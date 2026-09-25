@@ -70,14 +70,15 @@ final class _TenantSupplierDeliveryHistoryState
           reader: widget.reader,
         );
       }
-      final page = await TenantSupplierDeliveryRepository(
-        session: widget.session,
-        reader: widget.reader,
-      ).loadForSupplier(
-        widget.supplier.id,
-        pageSize: TenantSupplierDeliveryHistory.pageSize,
-        cursor: first ? null : _cursor,
-      );
+      final page =
+          await TenantSupplierDeliveryRepository(
+            session: widget.session,
+            reader: widget.reader,
+          ).loadForSupplier(
+            widget.supplier.id,
+            pageSize: TenantSupplierDeliveryHistory.pageSize,
+            cursor: first ? null : _cursor,
+          );
       if (!mounted) return;
       setState(() {
         if (first) _deliveries.clear();
@@ -119,19 +120,34 @@ final class _TenantSupplierDeliveryHistoryState
               badgeKey: ValueKey('delivery-arriving-${delivery.id}'),
             ),
       attributes: <RecordAttribute>[
-        RecordAttribute(
-          label: 'Value received',
-          value: delivery.lines.isEmpty
-              ? 'Not recorded'
-              : delivery.costlessLineCount == delivery.lines.length
-              ? 'No costs recorded'
-              : delivery.costlessLineCount == 0
-              ? _money(delivery.valueMinor)
-              : '${_money(delivery.valueMinor)} (${delivery.costlessLineCount} '
-                    'without a cost)',
-          kind: RecordValueKind.money,
-          valueKey: ValueKey('delivery-value-${delivery.id}'),
-        ),
+        // **The figure and the words about it are two rows.** One value in the
+        // money face read *(1 without a cost)* as part of the amount.
+        if (delivery.lines.isEmpty ||
+            delivery.costlessLineCount == delivery.lines.length)
+          RecordAttribute(
+            label: 'Value received',
+            value: delivery.lines.isEmpty
+                ? 'Not recorded'
+                : 'No costs recorded',
+            valueKey: ValueKey('delivery-value-${delivery.id}'),
+          )
+        else ...<RecordAttribute>[
+          RecordAttribute(
+            label: 'Value received',
+            value: _money(delivery.valueMinor),
+            kind: RecordValueKind.money,
+            valueKey: ValueKey('delivery-value-${delivery.id}'),
+          ),
+          if (delivery.costlessLineCount > 0)
+            RecordAttribute(
+              label: 'Without a cost',
+              value:
+                  '${delivery.costlessLineCount} '
+                  '${delivery.costlessLineCount == 1 ? 'line' : 'lines'}, '
+                  'not in the value',
+              valueKey: ValueKey('delivery-costless-${delivery.id}'),
+            ),
+        ],
       ],
       actions: <RecordAction>[
         RecordAction(
@@ -230,14 +246,22 @@ final class _DeliveryLines extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: tokens.spacing.s12),
-                Text(
-                  line.unitCostMinor == null
-                      ? 'No cost'
-                      : '${money(line.unitCostMinor!)} each',
-                  style: tokens.typography.numericBody.copyWith(
-                    color: tokens.colors.text.money,
+                // Words in the interface face, a figure in the money one - the
+                // same split the value above makes.
+                if (line.unitCostMinor case final cost?)
+                  Text(
+                    '${money(cost)} each',
+                    style: tokens.typography.numericBody.copyWith(
+                      color: tokens.colors.text.money,
+                    ),
+                  )
+                else
+                  Text(
+                    'No cost',
+                    style: tokens.typography.bodyMedium.copyWith(
+                      color: tokens.colors.text.secondary,
+                    ),
                   ),
-                ),
               ],
             ),
           ),

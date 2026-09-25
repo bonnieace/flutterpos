@@ -108,6 +108,15 @@ void main() {
     expect(find.byKey(const ValueKey('delivery-error')), findsOneWidget);
     expect(find.textContaining('White bread loaf'), findsWidgets);
     expect(writer.received, isEmpty);
+
+    // The refusal is about that attempt, and goes as soon as the line is put
+    // right. Found on a device, 2026-09-25: it stayed up naming a fixed line.
+    await tester.enterText(
+      find.byKey(const ValueKey('delivery-line-cost-prod-bread')),
+      '45',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('delivery-error')), findsNothing);
   });
 
   testWidgets('a product already on the delivery is offered as added', (
@@ -144,6 +153,18 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('delivery-row-sd_old')), findsOneWidget);
+    // The amount alone in the money face, and the line without a cost beside
+    // it in words rather than inside the figure.
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('delivery-value-sd_old'))).data,
+      'KES 1092',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('delivery-costless-sd_old')))
+          .data,
+      '1 line, not in the value',
+    );
     // A delivery still arriving says so, in words.
     expect(find.byKey(const ValueKey('delivery-arriving-sd_old')), findsOneWidget);
     final showLines = find.byKey(const ValueKey('delivery-lines-sd_old'));
@@ -225,6 +246,12 @@ Map<String, Object?> _deliveryDocument({
       'productName': 'White bread loaf',
       'quantity': 24,
       'unitCostMinor': 4550,
+    },
+    <String, Object?>{
+      'productId': 'prod-milk',
+      'productName': 'Milk 500ml',
+      'quantity': 12,
+      'unitCostMinor': null,
     },
   ],
 };

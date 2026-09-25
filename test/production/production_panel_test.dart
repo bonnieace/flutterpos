@@ -108,6 +108,46 @@ void main() {
     expect(_submitEnabled(tester), isTrue);
   });
 
+  // **Both found on a device, 2026-09-25.** Every row said *Flour*, which read
+  // as a value the form had filled in, and a refusal stayed up after the row
+  // it named had been put right.
+  testWidgets('only the first cost suggests one, and a refusal goes with an edit', (
+    tester,
+  ) async {
+    await _pump(tester, _Reader(), writer: _Writer());
+
+    await tester.tap(find.byKey(const ValueKey('production-record')));
+    await tester.pumpAndSettle();
+    await _chooseProduct(tester, 'prod-bread');
+    final addRow = find.byKey(const ValueKey('production-add-row'));
+    await tester.ensureVisible(addRow);
+    await tester.tap(addRow);
+    await tester.pumpAndSettle();
+
+    expect(_placeholder(tester, 'production-row-description-0'), 'Flour');
+    expect(_placeholder(tester, 'production-row-description-1'), isNull);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('production-quantity')),
+      '100',
+    );
+    // An amount with no name: the button allows it and the form refuses it.
+    await tester.enterText(
+      find.byKey(const ValueKey('production-row-amount-0')),
+      '2000',
+    );
+    await tester.pumpAndSettle();
+    await _submit(tester);
+    expect(find.byKey(const ValueKey('production-error')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('production-row-description-0')),
+      'Flour',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('production-error')), findsNothing);
+  });
+
   testWidgets('only products made here are offered, and the rest are explained', (
     tester,
   ) async {
@@ -171,6 +211,16 @@ String? _fieldText(WidgetTester tester, String key) =>
         )
         .controller
         .text;
+
+String? _placeholder(WidgetTester tester, String key) => tester
+    .widget<TextField>(
+      find.descendant(
+        of: find.byKey(ValueKey(key)),
+        matching: find.byType(TextField),
+      ),
+    )
+    .decoration
+    ?.hintText;
 
 String? _text(WidgetTester tester, String key) =>
     tester.widget<Text>(find.byKey(ValueKey(key))).data;
