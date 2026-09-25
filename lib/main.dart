@@ -977,6 +977,7 @@ class SpiritPOSApp extends StatelessWidget {
                 submission: mutationGateway,
                 confirmation: mutationGateway,
                 workerId: deviceId,
+                onRetryDue: checkoutSyncSignals.requestSyncForRetry,
               );
               // Photographs, carried on the same passes as everything else. The
               // bytes never enter the mutation outbox - only the URL does, and
@@ -1011,11 +1012,14 @@ class SpiritPOSApp extends StatelessWidget {
               );
               return (trigger) async {
                 // A sale saved at the till needs submitting and confirming; it does
-                // not need the whole product catalog re-read.
+                // not need the whole product catalog re-read. Nor does a retry
+                // that fell due, which is only a send.
                 final session = sessionController.requireSession();
                 await Future.wait<void>(<Future<void>>[
                   pass.run(
-                    refreshDerivedData: trigger is! CheckoutSaveSyncRequest,
+                    refreshDerivedData:
+                        trigger is! CheckoutSaveSyncRequest &&
+                        trigger is! CheckoutRetrySyncRequest,
                   ),
                   // Sequential on purpose: a photograph waits for its product to
                   // exist on the server, and the mutation worker is what puts it

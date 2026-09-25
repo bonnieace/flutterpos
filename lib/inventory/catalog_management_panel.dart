@@ -732,6 +732,10 @@ final class _TenantCatalogManagementPanelState
     final open = widget.adjustStockRoute;
     if (open == null || _busy) return;
     await open(context, product);
+    // Read again on the way back, as every route opened from here does. Until
+    // 2026-09-25 this was the one that did not, and a correction from 68 to 67
+    // went on listing 68 until the catalog was opened again.
+    if (mounted) _reload();
   }
 
   Future<void> _openScopedRoute(Widget? Function()? build) async {

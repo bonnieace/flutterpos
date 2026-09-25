@@ -131,6 +131,33 @@ bool tenantMutationIsCallable(TenantPendingMutationKind kind) => switch (kind) {
   TenantPendingMutationKind.printerConfigurationMerge => false,
 };
 
+/// Whether sending a record of [kind] again is how a send that got no answer is
+/// confirmed.
+///
+/// **Only a stock adjustment, since 2026-09-25, and because one was seen.** An
+/// unanswered send is confirmed by reading its target back, and a product never
+/// holds the adjustment sent to it, so that read could never settle one: the
+/// record waited for a later pass to send it again, and was counted on the
+/// product a second time while it waited. The server settles a repeated request
+/// ID with the answer it already gave (`runIdempotentFirestoreTransaction`), so
+/// sending it again moves no stock twice - which is what SIT showed.
+///
+/// The other callables go through the same server helper and may read back no
+/// better. They are left as they were until one is seen doing it.
+bool tenantMutationResendConfirms(TenantPendingMutationKind kind) =>
+    kind == TenantPendingMutationKind.stockAdjust;
+
+/// Whether the documents a record of [kind] touched are read from the server
+/// once it lands.
+///
+/// **Only a new supplier, since 2026-09-25, and because one was seen.** Once a
+/// create is confirmed the overlay stops drawing it, and a document the server
+/// wrote is on this device only if something has read it since. A supplier
+/// added online was missing from every offline list until a list was opened
+/// online again; reading it back as it lands is that read, made on purpose.
+bool tenantMutationReadsBackOnLanding(TenantPendingMutationKind kind) =>
+    kind == TenantPendingMutationKind.supplierCreate;
+
 enum TenantPendingMutationState {
   queued,
   submitting,
@@ -301,6 +328,9 @@ final class TenantPendingMutationStore {
   bool isDue(TenantPendingMutationRecord record) =>
       record.retryAt?.isAfter(_clock().toUtc()) != true;
 
+  /// This store's clock, which [isDue] and every lease are measured against.
+  DateTime now() => _clock().toUtc();
+
   bool hasActiveLease(TenantPendingMutationRecord record) =>
       record.state == TenantPendingMutationState.submitting &&
       record.leaseExpiresAt?.isAfter(_clock().toUtc()) == true;
@@ -425,6 +455,29 @@ final class TenantPendingMutationStore {
     TenantPendingMutationRecord record,
   ) => _transition(record, TenantPendingMutationState.awaitingConfirmation);
 
+  /// [markAwaiting], with a time to send it again.
+  ///
+  /// For a kind whose resend is its confirmation - see
+  /// [tenantMutationResendConfirms] - nothing but sending it again can settle
+  /// it, so it needs a time for that, as a failed send does.
+  Future<TenantPendingMutationRecord> markAwaitingResend(
+    TenantPendingMutationRecord record,
+  ) => _change(
+    record,
+    (current, now) => current.copyWith(
+      state: TenantPendingMutationState.awaitingConfirmation,
+      updatedAt: now,
+      attemptCount: current.attemptCount,
+      retryAt: now.add(_backoff(current.attemptCount)),
+    ),
+  );
+
+  /// Back to [TenantPendingMutationState.queued] and due now, to be sent
+  /// again. See [tenantMutationResendConfirms].
+  Future<TenantPendingMutationRecord> requeue(
+    TenantPendingMutationRecord record,
+  ) => _transition(record, TenantPendingMutationState.queued);
+
   Future<TenantPendingMutationRecord> markConfirmed(
     TenantPendingMutationRecord record,
   ) => _transition(record, TenantPendingMutationState.confirmed);
@@ -449,22 +502,26 @@ final class TenantPendingMutationStore {
 
   Future<TenantPendingMutationRecord> retryLater(
     TenantPendingMutationRecord record,
-  ) => _change(record, (current, now) {
-    final exponent = current.attemptCount.clamp(1, 7) - 1;
+  ) => _change(
+    record,
+    (current, now) => current.copyWith(
+      state: TenantPendingMutationState.queued,
+      updatedAt: now,
+      attemptCount: current.attemptCount,
+      retryAt: now.add(_backoff(current.attemptCount)),
+    ),
+  );
+
+  static Duration _backoff(int attemptCount) {
+    final exponent = attemptCount.clamp(1, 7) - 1;
     final seconds = initialBackoff.inSeconds * (1 << exponent);
-    final delay = Duration(
+    return Duration(
       seconds: seconds.clamp(
         initialBackoff.inSeconds,
         maximumBackoff.inSeconds,
       ),
     );
-    return current.copyWith(
-      state: TenantPendingMutationState.queued,
-      updatedAt: now,
-      attemptCount: current.attemptCount,
-      retryAt: now.add(delay),
-    );
-  });
+  }
 
   Future<void> purgeConfirmed() async {
     final before = _clock().toUtc().subtract(confirmedRetention);
@@ -614,15 +671,31 @@ final class TenantPendingMutationWorker {
     required TenantMutationSubmissionGateway submission,
     required TenantMutationConfirmationGateway confirmation,
     required String workerId,
+    void Function()? onRetryDue,
+    Timer Function(Duration delay, void Function() callback)? timer,
   }) : _store = store,
        _submission = submission,
        _confirmation = confirmation,
-       _workerId = _keySegment(workerId, 'workerId');
+       _workerId = _keySegment(workerId, 'workerId'),
+       _onRetryDue = onRetryDue,
+       _timer = timer ?? Timer.new;
+
+  /// The soonest a pass is asked for after the one that asked. A retry already
+  /// due when a pass ends is woken this far on rather than at once.
+  static const Duration minimumWake = Duration(seconds: 1);
 
   final TenantPendingMutationStore _store;
   final TenantMutationSubmissionGateway _submission;
   final TenantMutationConfirmationGateway _confirmation;
   final String _workerId;
+
+  /// **Asks for a pass when a record this one left waiting falls due, since
+  /// 2026-09-25.** Passes ran only on a reconnect, a saved sale or a catalog
+  /// change, so a record put off by its retry time waited for whichever came
+  /// next - three hours, for an offline write-off on SIT. See [_scheduleWake].
+  final void Function()? _onRetryDue;
+  final Timer Function(Duration delay, void Function() callback) _timer;
+  Timer? _wake;
   Future<void>? _running;
 
   Future<void> run(TenantSession session) =>
@@ -646,10 +719,46 @@ final class TenantPendingMutationWorker {
     // refuses a category, a product or a supplier the business does not hold.
     // The record waits for what it depends on rather than racing it.
     final queuedCreates = _queuedCreatePaths(records);
+    final wakes = <DateTime>[];
     await Future.wait<void>(
-      byTarget.values.map((group) => _runTarget(group, queuedCreates)),
+      byTarget.values.map((group) => _runTarget(group, queuedCreates, wakes)),
     );
     await _store.purgeConfirmed();
+    _scheduleWake(wakes);
+  }
+
+  /// Asks for a pass at the soonest time a record this pass put off falls due.
+  ///
+  /// [wakes] holds only records left for the clock - not due yet, leased, or
+  /// just given a retry time - never one held back by another record, so every
+  /// wake has something to send and none can repeat for ever. Replaced by the
+  /// next pass's answer, which is read from the records as they then are.
+  void _scheduleWake(List<DateTime> wakes) {
+    final onRetryDue = _onRetryDue;
+    if (onRetryDue == null) return;
+    _wake?.cancel();
+    _wake = null;
+    if (wakes.isEmpty) return;
+    final soonest = wakes.reduce((a, b) => a.isBefore(b) ? a : b);
+    var delay = soonest.difference(_store.now());
+    if (delay < minimumWake) delay = minimumWake;
+    _wake = _timer(delay, () {
+      _wake = null;
+      onRetryDue();
+    });
+  }
+
+  /// Reads the documents [record] touched, so this device holds what the
+  /// server wrote. See [tenantMutationReadsBackOnLanding].
+  ///
+  /// The record is already confirmed, so a read that fails changes nothing
+  /// about it; the next screen that reads online fetches the copy instead.
+  Future<void> _readBack(TenantPendingMutationRecord record) async {
+    for (final path in tenantMutationTouchedPaths(record)) {
+      try {
+        await _confirmation.read(path);
+      } catch (_) {}
+    }
   }
 
   /// The documents this device has queued the creation of and not yet seen
@@ -684,6 +793,7 @@ final class TenantPendingMutationWorker {
   Future<void> _runTarget(
     List<TenantPendingMutationRecord> records,
     Set<String> queuedCreates,
+    List<DateTime> wakes,
   ) async {
     for (var record in records) {
       if (record.state == TenantPendingMutationState.rejected ||
@@ -697,11 +807,23 @@ final class TenantPendingMutationWorker {
       // depends on has simply not landed yet. The whole group returns, since a
       // correction to a product that does not exist yet cannot go either.
       if (_awaitsQueuedCreate(record, queuedCreates)) return;
+      var readBack = false;
       try {
-        if (_store.hasActiveLease(record)) continue;
+        if (_store.hasActiveLease(record)) {
+          wakes.add(record.leaseExpiresAt!);
+          continue;
+        }
         if (record.state == TenantPendingMutationState.awaitingConfirmation ||
             record.state == TenantPendingMutationState.submitting) {
+          final resends = tenantMutationResendConfirms(record.kind);
+          // Its own retry time, not whichever pass comes first: sending it
+          // again is what settles it, and that waits for the time it was given.
+          if (resends && !_store.isDue(record)) {
+            wakes.add(record.retryAt!);
+            continue;
+          }
           final canonical = await _confirmation.read(record.targetPath);
+          readBack = true;
           if (_containsPayload(canonical, record.payload)) {
             await _store.markConfirmed(record);
             continue;
@@ -717,13 +839,20 @@ final class TenantPendingMutationWorker {
               break;
             }
           }
-          record = await _store.retryLater(record);
+          // Sent again in this pass when that is the confirmation; otherwise
+          // read again at its retry time, as before.
+          record = resends
+              ? await _store.requeue(record)
+              : await _store.retryLater(record);
         }
-        if (!_store.isDue(record)) continue;
+        if (!_store.isDue(record)) {
+          wakes.add(record.retryAt!);
+          continue;
+        }
         // An earlier attempt had an uncertain outcome. Confirm the exact
         // target again at retry time; the first confirmation may have raced a
         // write that reached Firestore just after its deadline.
-        if (record.attemptCount > 0) {
+        if (record.attemptCount > 0 && !readBack) {
           final canonical = await _confirmation.read(record.targetPath);
           if (_containsPayload(canonical, record.payload)) {
             await _store.markConfirmed(record);
@@ -749,15 +878,24 @@ final class TenantPendingMutationWorker {
         switch (result.outcome) {
           case TenantMutationSubmissionOutcome.committed:
             await _store.markConfirmed(record);
+            if (tenantMutationReadsBackOnLanding(record.kind)) {
+              await _readBack(record);
+            }
           case TenantMutationSubmissionOutcome.uncertain:
-            await _store.markAwaiting(record);
+            if (tenantMutationResendConfirms(record.kind)) {
+              final awaiting = await _store.markAwaitingResend(record);
+              wakes.add(awaiting.retryAt!);
+            } else {
+              await _store.markAwaiting(record);
+            }
           case TenantMutationSubmissionOutcome.rejected:
             await _store.markRejected(record, result.reasonCode ?? 'rejected');
             return;
         }
       } catch (_) {
         try {
-          await _store.retryLater(record);
+          final later = await _store.retryLater(record);
+          wakes.add(later.retryAt!);
         } catch (_) {}
         return;
       }

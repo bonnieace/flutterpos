@@ -214,6 +214,208 @@ void main() {
     expect((await _only(store)).state, TenantPendingMutationState.confirmed);
   });
 
+  group('an unanswered stock adjustment', () {
+    // Seen on SIT 2026-09-25. An adjustment whose send got no answer was only
+    // ever sent again by the *second* pass after its retry fell due: the first
+    // read the product back, which can never hold an adjustment, and pushed the
+    // retry out again. An offline write-off sat unsent for three hours, and an
+    // online one was counted twice on the product until two reconnects.
+    Future<void> queueAdjustment() => store.enqueue(
+      uid: 'owner-a',
+      tenantId: 'tenant-a',
+      operationId: 'stock-adjust-adjust-stock-abcdefgh',
+      kind: TenantPendingMutationKind.stockAdjust,
+      targetPath: 'tenants/tenant-a/products/pd_abc',
+      payload: const <String, Object?>{
+        'tenantId': 'tenant-a',
+        'productId': 'pd_abc',
+        'quantityDelta': -1,
+        'type': 'damage',
+        'reason': 'Broken in transit',
+        'requestId': 'adjust-stock-abcdefgh',
+      },
+    );
+
+    test('is sent again on the first pass its retry is due', () async {
+      final clock = _Clock(DateTime.utc(2026, 9, 1, 10));
+      store = TenantPendingMutationStore.fromBox(box, clock: clock.call);
+      await queueAdjustment();
+      final gateway = _AnswersSecondTime(
+        product: const <String, Object?>{'quantity': 67},
+      );
+      final worker = TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'device-a',
+      );
+
+      await worker.run(_session());
+      expect(gateway.submissions, 1);
+      expect(
+        (await _only(store)).state,
+        TenantPendingMutationState.awaitingConfirmation,
+      );
+
+      clock.advance(const Duration(seconds: 31));
+      await worker.run(_session());
+
+      // Sending it again is the confirmation: the server settles a repeated
+      // request ID with the answer it already gave, and moves no stock twice.
+      expect(gateway.submissions, 2);
+      expect((await _only(store)).state, TenantPendingMutationState.confirmed);
+    });
+
+    test('asks for a pass when its retry falls due', () async {
+      final clock = _Clock(DateTime.utc(2026, 9, 1, 10));
+      store = TenantPendingMutationStore.fromBox(box, clock: clock.call);
+      await queueAdjustment();
+      final gateway = _AnswersSecondTime(
+        product: const <String, Object?>{'quantity': 67},
+      );
+      final timers = _Timers();
+      var woken = 0;
+      final worker = TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'device-a',
+        onRetryDue: () => woken++,
+        timer: timers.call,
+      );
+
+      await worker.run(_session());
+
+      // Nothing else would come: no reconnect, no sale, no catalog change.
+      expect(timers.requested, <Duration>[const Duration(seconds: 30)]);
+      expect(woken, 0);
+      timers.fire();
+      expect(woken, 1);
+    });
+
+    test('an adjustment left mid-send is sent again at once', () async {
+      // What a crash leaves: the record says it was being sent, and the lease
+      // it was sent under has run out.
+      final clock = _Clock(DateTime.utc(2026, 9, 1, 10));
+      store = TenantPendingMutationStore.fromBox(box, clock: clock.call);
+      await queueAdjustment();
+      await store.acquire(await _only(store), leaseOwner: 'previous-process');
+      clock.advance(const Duration(minutes: 2, seconds: 1));
+      final gateway = _Gateway();
+
+      await TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'new-process',
+      ).run(_session());
+
+      expect(gateway.submitted, <String>['stock-adjust-adjust-stock-abcdefgh']);
+      expect((await _only(store)).state, TenantPendingMutationState.confirmed);
+    });
+  });
+
+  group('the retry wake', () {
+    test('is not asked for when nothing waits on the clock', () async {
+      await store.enqueue(
+        uid: 'owner-a',
+        tenantId: 'tenant-a',
+        operationId: 'expense-create-settled-a',
+        kind: TenantPendingMutationKind.expenseCreate,
+        targetPath: 'tenants/tenant-a/expenses/settled-a',
+        payload: const <String, Object?>{'amountMinor': 500},
+      );
+      final timers = _Timers();
+      final gateway = _Gateway();
+
+      await TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'device-a',
+        onRetryDue: () {},
+        timer: timers.call,
+      ).run(_session());
+
+      expect(gateway.submitted, <String>['expense-create-settled-a']);
+      expect(timers.requested, isEmpty);
+    });
+
+    test('is asked for when a send fails outright', () async {
+      final clock = _Clock(DateTime.utc(2026, 9, 1, 10));
+      store = TenantPendingMutationStore.fromBox(box, clock: clock.call);
+      await store.enqueue(
+        uid: 'owner-a',
+        tenantId: 'tenant-a',
+        operationId: 'expense-create-failing-a',
+        kind: TenantPendingMutationKind.expenseCreate,
+        targetPath: 'tenants/tenant-a/expenses/failing-a',
+        payload: const <String, Object?>{'amountMinor': 500},
+      );
+      final timers = _Timers();
+
+      await TenantPendingMutationWorker(
+        store: store,
+        submission: const _Throws(),
+        confirmation: const _Throws(),
+        workerId: 'device-a',
+        onRetryDue: () {},
+        timer: timers.call,
+      ).run(_session());
+
+      expect((await _only(store)).state, TenantPendingMutationState.queued);
+      expect(timers.requested, <Duration>[const Duration(seconds: 30)]);
+    });
+  });
+
+  group('a supplier created here', () {
+    // Seen on SIT 2026-09-25: a supplier added online was missing from every
+    // offline list until a list was opened online again. Once its create is
+    // confirmed the queue stops drawing it, and nothing had read the supplier
+    // the server wrote, so the device held no copy of it.
+    Future<void> queueSupplier() => store.enqueue(
+      uid: 'owner-a',
+      tenantId: 'tenant-a',
+      operationId: 'supplier-create-sp_abc',
+      kind: TenantPendingMutationKind.supplierCreate,
+      targetPath: 'tenants/tenant-a/suppliers/sp_abc',
+      payload: const <String, Object?>{'name': 'ABC', 'active': true},
+    );
+
+    test('is read back from the server once it lands', () async {
+      await queueSupplier();
+      final gateway = _ReadLog();
+
+      await TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'device-a',
+      ).run(_session());
+
+      expect((await _only(store)).state, TenantPendingMutationState.confirmed);
+      expect(gateway.events, <String>[
+        'submit supplier-create-sp_abc',
+        'read tenants/tenant-a/suppliers/sp_abc',
+      ]);
+    });
+
+    test('a read that fails there changes nothing about the create', () async {
+      await queueSupplier();
+      final gateway = _ReadLog(readFails: true);
+
+      await TenantPendingMutationWorker(
+        store: store,
+        submission: gateway,
+        confirmation: gateway,
+        workerId: 'device-a',
+      ).run(_session());
+
+      expect((await _only(store)).state, TenantPendingMutationState.confirmed);
+      expect(gateway.events, hasLength(2));
+    });
+  });
+
   test('an active lease is not stolen after process recreation', () async {
     final clock = _Clock(DateTime.utc(2026, 9, 1, 10));
     store = TenantPendingMutationStore.fromBox(box, clock: clock.call);
@@ -674,6 +876,107 @@ final class _UncertainGateway
     return const TenantMutationSubmissionResult(
       TenantMutationSubmissionOutcome.uncertain,
       'write_timeout',
+    );
+  }
+}
+
+/// Timers the worker asks for, fired by hand.
+final class _Timers {
+  final List<Duration> requested = <Duration>[];
+  final List<void Function()> _callbacks = <void Function()>[];
+
+  Timer call(Duration delay, void Function() callback) {
+    requested.add(delay);
+    _callbacks.add(callback);
+    return _InertTimer();
+  }
+
+  void fire() => _callbacks.removeLast()();
+}
+
+final class _InertTimer implements Timer {
+  bool _cancelled = false;
+
+  @override
+  void cancel() => _cancelled = true;
+
+  @override
+  bool get isActive => !_cancelled;
+
+  @override
+  int get tick => 0;
+}
+
+/// Fails every send and every read, as an unreachable backend would.
+final class _Throws
+    implements
+        TenantMutationSubmissionGateway,
+        TenantMutationConfirmationGateway {
+  const _Throws();
+
+  @override
+  Future<Map<String, Object?>?> read(String targetPath) =>
+      Future<Map<String, Object?>?>.error(StateError('unavailable'));
+
+  @override
+  Future<TenantMutationSubmissionResult> submit(
+    TenantPendingMutationRecord record,
+  ) => Future<TenantMutationSubmissionResult>.error(StateError('unavailable'));
+}
+
+/// Gives no answer the first time a record is sent, and commits after that.
+final class _AnswersSecondTime
+    implements
+        TenantMutationSubmissionGateway,
+        TenantMutationConfirmationGateway {
+  _AnswersSecondTime({required this.product});
+
+  /// What reading the target returns: a product, which never holds the
+  /// adjustment that was sent to it.
+  final Map<String, Object?> product;
+  int submissions = 0;
+
+  @override
+  Future<Map<String, Object?>?> read(String targetPath) async => product;
+
+  @override
+  Future<TenantMutationSubmissionResult> submit(
+    TenantPendingMutationRecord record,
+  ) async {
+    submissions++;
+    return TenantMutationSubmissionResult(
+      submissions == 1
+          ? TenantMutationSubmissionOutcome.uncertain
+          : TenantMutationSubmissionOutcome.committed,
+      submissions == 1 ? 'write_timeout' : null,
+    );
+  }
+}
+
+/// Commits everything, and records every send and read in order.
+final class _ReadLog
+    implements
+        TenantMutationSubmissionGateway,
+        TenantMutationConfirmationGateway {
+  _ReadLog({this.readFails = false});
+
+  final bool readFails;
+  final List<String> events = <String>[];
+
+  @override
+  Future<Map<String, Object?>?> read(String targetPath) async {
+    events.add('read $targetPath');
+    if (readFails) throw StateError('unavailable');
+    return const <String, Object?>{'name': 'ABC', 'active': true};
+  }
+
+  @override
+  Future<TenantMutationSubmissionResult> submit(
+    TenantPendingMutationRecord record,
+  ) async {
+    events.add('submit ${record.operationId}');
+    return const TenantMutationSubmissionResult(
+      TenantMutationSubmissionOutcome.committed,
     );
   }
 }

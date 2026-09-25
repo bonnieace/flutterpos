@@ -11,6 +11,14 @@ final class CheckoutSaveSyncRequest {
   const CheckoutSaveSyncRequest();
 }
 
+/// Marks a sync run asked for because a queued change's retry time came.
+///
+/// Save-shaped for the same reason a sale is: what is due is a send, and a send
+/// does not need the catalog re-read. See `TenantPendingMutationWorker`.
+final class CheckoutRetrySyncRequest {
+  const CheckoutRetrySyncRequest();
+}
+
 /// The one seam between a saved sale and the workers that carry it to the
 /// server.
 ///
@@ -78,6 +86,13 @@ final class CheckoutSyncSignals {
   /// cannot sell a product that now exists and can still sell one that no longer
   /// does.
   void requestSyncAfterCatalogChange() => _add(_syncRequests, null);
+
+  /// A change this device queued is due to be sent again.
+  ///
+  /// **Since 2026-09-25.** Nothing else here fires on a clock, so a retry that
+  /// fell due waited for the next reconnect, save or catalog change.
+  void requestSyncForRetry() =>
+      _add(_syncRequests, const CheckoutRetrySyncRequest());
 
   /// A sync run finished, so what it settled is now worth re-reading.
   void reportEvidenceChanged() => _add(_evidenceChanges, null);

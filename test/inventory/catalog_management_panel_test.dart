@@ -252,6 +252,36 @@ void main() {
     expect(find.text('Viewing pd-1'), findsOneWidget);
   });
 
+  testWidgets('the list reads again when the stock correction closes', (
+    tester,
+  ) async {
+    // Seen on SIT 2026-09-25: a correction from 68 to 67 went on listing 68
+    // until the catalog was opened again, because every route this list opens
+    // re-read it on the way back except this sheet.
+    final reader = _Reader.seeded();
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      writer: _Writer(),
+      callable: _Callable(),
+      width: 411,
+      adjustStockRoute: (context, product) async {
+        // What closing the sheet leaves behind: a different figure to read.
+        reader._collections[_productsPath]!['pd-1']!['quantity'] = 36;
+      },
+      productStockRoles: const <TenantRole>[TenantRole.owner],
+    );
+    expect(_text(tester, 'catalog-management-product-stock-pd-1'), '40');
+
+    await tester.tap(find.byKey(const ValueKey('inventory-actions-pd-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inventory-adjust-pd-1')));
+    await tester.pumpAndSettle();
+
+    expect(_text(tester, 'catalog-management-product-stock-pd-1'), '36');
+  });
+
   testWidgets('the bulk explanation is kept, and it starts out of the way', (
     tester,
   ) async {
