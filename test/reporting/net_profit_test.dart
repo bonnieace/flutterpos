@@ -8,9 +8,9 @@
 /// assertions below are the ones that refuse to produce a number.
 library;
 
-import 'package:flutter_application_1/expenses/expense.dart';
-import 'package:flutter_application_1/reporting/net_profit.dart';
-import 'package:flutter_application_1/reporting/profit_report.dart';
+import 'package:uzapay_pos/expenses/expense.dart';
+import 'package:uzapay_pos/reporting/net_profit.dart';
+import 'package:uzapay_pos/reporting/profit_report.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

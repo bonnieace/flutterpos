@@ -30,11 +30,11 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/inventory/inventory.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/skeleton.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/inventory/inventory.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/skeleton.dart';
+import 'package:uzapay_pos/ui/tokens.dart';
 
 import 'fakes.dart';
 import 'harness.dart';

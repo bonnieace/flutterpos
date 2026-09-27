@@ -10,13 +10,13 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/audit/audit.dart';
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/inventory/inventory.dart';
-import 'package:flutter_application_1/reporting/reporting.dart';
-import 'package:flutter_application_1/sales/sales.dart';
-import 'package:flutter_application_1/shift/shift.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/audit/audit.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/inventory/inventory.dart';
+import 'package:uzapay_pos/reporting/reporting.dart';
+import 'package:uzapay_pos/sales/sales.dart';
+import 'package:uzapay_pos/shift/shift.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 

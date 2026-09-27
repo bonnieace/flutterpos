@@ -8,6 +8,7 @@ import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
 import 'return_history.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for the enabled `verifyReturnAndRestoreStock`
 /// mutation. It is the only path that restores stock.
@@ -24,9 +25,12 @@ final class FirebaseVerifyReturnCallable implements VerifyReturnCallable {
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('verifyReturnAndRestoreStock')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'verifyReturnAndRestoreStock',
+      () => _functions
+          .httpsCallable('verifyReturnAndRestoreStock')
+          .call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -306,7 +310,12 @@ final class TenantReturnVerificationGateway {
       throw const TenantReturnVerificationException(
         TenantReturnVerificationFailure.ambiguous,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'returns.verification_request',
+      );
       throw const TenantReturnVerificationException(
         TenantReturnVerificationFailure.ambiguous,
       );

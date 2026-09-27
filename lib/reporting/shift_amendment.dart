@@ -7,6 +7,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for `amendShiftSummary`.
 ///
@@ -27,9 +28,11 @@ final class FirebaseAmendShiftSummaryCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('amendShiftSummary')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'amendShiftSummary',
+      () =>
+          _functions.httpsCallable('amendShiftSummary').call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -295,7 +298,12 @@ final class TenantShiftAmendmentGateway {
       throw const TenantShiftAmendmentException(
         TenantShiftAmendmentFailure.ambiguous,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.shift_amendment_request',
+      );
       throw const TenantShiftAmendmentException(
         TenantShiftAmendmentFailure.ambiguous,
       );

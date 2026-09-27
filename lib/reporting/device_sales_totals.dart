@@ -8,6 +8,7 @@ import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import 'sales_totals.dart';
+import '../observability/app_telemetry.dart';
 
 /// Why a device total was deliberately withheld instead of presenting a
 /// provisional figure as trustworthy.
@@ -333,7 +334,12 @@ final class TenantDeviceSalesAggregator {
           candidate = _DeviceSale.fromOutbox(
             CheckoutSalePayload.fromOutboxRecord(record, session: _session),
           );
-        } catch (_) {
+        } catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            boundary: 'reporting.device_sale_decode',
+          );
           return TenantDeviceSalesTotals.refused(
             query: query,
             scannedRecordCount: merged.length,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../reporting/reconciliation_anomalies.dart';
 import '../reporting/reconciliation_labels.dart';
@@ -23,7 +24,6 @@ import '../ui/tokens.dart';
 import 'stock_actions.dart';
 import 'stock_adjustment.dart';
 import 'product_visual.dart';
-import 'stock_adjustment_feed_panel.dart';
 import 'stock_movement_labels.dart';
 import 'stock_movements.dart';
 
@@ -313,7 +313,12 @@ final class _TenantProductStockPanelState
         items: page.items,
         hasMore: page.hasMore,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'inventory.product_differences_read',
+      );
       return const _ProductDifferences.unreadable();
     }
   }
@@ -349,13 +354,6 @@ final class _TenantProductStockPanelState
         view: view,
         selfUid: session.uid,
         pageIndex: _pageIndex,
-        // The same domain owns both surfaces, so this route needs no injection
-        // from the composition root; it opens under this route's own scope.
-        onOpenAdjustments: () => openTenantStockAdjustmentFeed(
-          context,
-          reader: widget.reader,
-          product: view.stock.product,
-        ),
         onNextPage: () => _nextPage(view.stock.movements.nextCursor),
         onPreviousPage: _previousPage,
       ),
@@ -483,6 +481,19 @@ final class _TenantProductStockAdjustmentPanelState
   ) async {
     final callable = widget.actions?.adjustCallable;
     if (callable == null || _busy) return;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'inventory.adjust',
+      screen: 'stock_adjustment',
+      context: {
+        'user_id': session.uid,
+        'tenant_id': session.tenantId,
+        'product_id': product.id,
+        'product_name': product.name,
+        'quantity_delta': quantityDelta,
+        'adjustment_type': type.name,
+      },
+    );
     final capturedKey = _sessionKey(session);
     setState(() {
       _busy = true;
@@ -496,13 +507,18 @@ final class _TenantProductStockAdjustmentPanelState
         requestIdFactory: () => _requestId ??=
             (widget.requestIdFactory ?? secureStockAdjustmentRequestId)(),
       );
-      final result = await gateway.submit(
-        gateway.createIntent(
-          type: type,
-          quantityDelta: quantityDelta,
-          reason: reason,
+      final result = await telemetry.trace(
+        operation,
+        'save_adjustment',
+        () => gateway.submit(
+          gateway.createIntent(
+            type: type,
+            quantityDelta: quantityDelta,
+            reason: reason,
+          ),
         ),
       );
+      telemetry.recordStep(operation, 'saved_locally');
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
       // **The re-read is skipped when the sheet is closing**, and that is not a
@@ -515,7 +531,13 @@ final class _TenantProductStockAdjustmentPanelState
       );
       _answer(confirmation);
       if (widget.onCompleted == null) _reload();
-    } on TenantStockAdjustmentException catch (error) {
+    } on TenantStockAdjustmentException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'inventory.adjust',
+      );
       if (!_stillCurrent(capturedKey)) return;
       // **Two different questions, and answering one with the other moves
       // stock twice.** The key is held whenever an attempt under it may already
@@ -528,7 +550,13 @@ final class _TenantProductStockAdjustmentPanelState
       if (!error.retainsRequestId) _requestId = null;
       _answer(_adjustmentNotice(error.failure));
       if (error.retainsRequestId) _reload();
-    } on FormatException {
+    } on FormatException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'inventory.adjust',
+      );
       if (!_stillCurrent(capturedKey)) return;
       // The call may well have moved stock; only its answer was unusable.
       _answer(
@@ -747,7 +775,6 @@ final class _ProductStockContents extends StatelessWidget {
     required this.pageIndex,
     required this.onNextPage,
     required this.onPreviousPage,
-    required this.onOpenAdjustments,
   });
 
   final _StockView view;
@@ -755,9 +782,6 @@ final class _ProductStockContents extends StatelessWidget {
   final int pageIndex;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
-
-  /// Opens the manual-correction feed narrowed to this product.
-  final VoidCallback onOpenAdjustments;
 
   TenantProduct get product => view.stock.product;
   TenantStockMovementPage get page => view.stock.movements;
@@ -879,24 +903,10 @@ final class _ProductStockContents extends StatelessWidget {
             'No stock movements have been recorded for this product.',
           ),
         ),
-        SizedBox(height: tokens.spacing.s12),
-        // **Out of the page bar it was sharing, and that is the migration
-        // finding on this screen.** It is not pagination: it opens another
-        // route. It sat in the same `Wrap` only because the `Wrap` was where
-        // the buttons were, and `Pagination` owning its own form is what
-        // surfaced it.
-        //
-        // The ledger explains every movement; this narrows the business-wide
-        // correction record to the manual ones recorded against this product.
-        Align(
-          alignment: Alignment.centerLeft,
-          child: AppButton(
-            key: const ValueKey('product-stock-adjustments'),
-            label: 'Manual adjustments',
-            icon: Icons.fact_check_outlined,
-            onPressed: onOpenAdjustments,
-          ),
-        ),
+        // **No "Manual adjustments" button below the ledger**, removed at the
+        // developer's direction on 2026-09-27. The ledger above already lists
+        // every manual adjustment for this product among its movements, and
+        // the business-wide adjustment feed keeps its own entry point.
       ],
     );
   }

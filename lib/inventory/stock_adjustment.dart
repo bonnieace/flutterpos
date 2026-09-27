@@ -8,6 +8,7 @@ import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for the enabled `adjustStock` mutation.
 ///
@@ -27,9 +28,10 @@ final class FirebaseAdjustStockCallable implements AdjustStockCallable {
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('adjustStock')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'adjustStock',
+      () => _functions.httpsCallable('adjustStock').call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -441,7 +443,12 @@ final class TenantStockAdjustmentGateway {
       throw const TenantStockAdjustmentException(
         TenantStockAdjustmentFailure.ambiguous,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'inventory.stock_adjustment_request',
+      );
       throw const TenantStockAdjustmentException(
         TenantStockAdjustmentFailure.ambiguous,
       );

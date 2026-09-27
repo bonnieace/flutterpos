@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'checkout_outbox.dart';
+import '../observability/app_telemetry.dart';
 
 abstract interface class CheckoutOutboxSecureValueStore {
   Future<String?> read(String key);
@@ -93,7 +94,12 @@ final class SecureCheckoutOutboxEncryptionKeyProvider
           throw const FormatException();
         }
         return List<int>.unmodifiable(key);
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'checkout.outbox_key_read',
+        );
         throw const CheckoutOutboxException('invalid_stored_encryption_key');
       }
     }

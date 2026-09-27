@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../checkout/checkout_draft.dart';
+import '../observability/app_telemetry.dart';
 import '../checkout/checkout_outbox.dart';
 import '../expenses/expense.dart';
 import '../expenses/expense_repository.dart';
@@ -519,6 +520,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
   @override
   void initState() {
     super.initState();
+    _sessionController.addListener(_updateTelemetryIdentity);
     WidgetsBinding.instance.addObserver(this);
     // The other half of noticing a decision somebody else made: a guarded
     // surface that gets refused can say so, and this is what it says it to.
@@ -532,17 +534,43 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
     _subscribeToInvitationArrivals();
   }
 
+  void _updateTelemetryIdentity() {
+    final session = _sessionController.session;
+    RecordingAppTelemetry.safely(
+      () => AppTelemetry.current.updateIdentity({
+        if (_uid != null) 'user_id': _uid,
+        if (widget.memberName?.call() != null)
+          'user_name': widget.memberName?.call(),
+        if (widget.readEmail?.call() != null)
+          'user_email': widget.readEmail?.call(),
+        if (session != null) 'tenant_id': session.tenantId,
+        if (session != null) 'tenant_role': session.role.name,
+        if (_sessionController.membership != null)
+          'business_name': _sessionController.membership!.tenantName,
+      }),
+    );
+  }
+
   /// **Replaces whatever was pending, rather than queueing behind it.** Two
   /// invitations cannot be accepted at once, and the one just tapped is the one
   /// the person is looking at; the earlier one is still in their mailbox.
   void _subscribeToInvitationArrivals() {
-    _invitationSubscription = widget.invitationArrivals?.listen((arrival) {
-      if (!mounted) return;
-      setState(() {
-        _pendingInvitationLink = arrival.link;
-        _hasInvalidInvitationLink = arrival.invalid;
-      });
-    }, onError: (Object _, StackTrace _) {});
+    _invitationSubscription = widget.invitationArrivals?.listen(
+      (arrival) {
+        if (!mounted) return;
+        setState(() {
+          _pendingInvitationLink = arrival.link;
+          _hasInvalidInvitationLink = arrival.invalid;
+        });
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'invitation.arrival_stream',
+        );
+      },
+    );
   }
 
   void _subscribeToReconnects() {
@@ -616,6 +644,11 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
     _authSubscription = widget.authUidChanges.listen(
       _handleAuthUid,
       onError: (Object error, StackTrace stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'auth.uid_stream',
+        );
         final token = ++_flowToken;
         _sessionController.clear();
         if (!mounted || token != _flowToken) return;
@@ -630,14 +663,26 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
   void _subscribeToTenantRecoveryTriggers() {
     _tenantRecoverySubscription = widget.tenantRecoveryTriggers?.listen(
       _triggerTenantRecovery,
-      onError: (Object _, StackTrace _) {},
+      onError: (Object error, StackTrace stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'tenant.recovery_stream',
+        );
+      },
     );
   }
 
   void _subscribeToBootstrapRefreshRequests() {
     _bootstrapRefreshSubscription = widget.bootstrapRefreshRequests?.listen(
       (_) => _retry(),
-      onError: (Object _, StackTrace _) {},
+      onError: (Object error, StackTrace stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'tenant.refresh_stream',
+        );
+      },
     );
   }
 
@@ -671,6 +716,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
     final token = ++_flowToken;
     _sessionController.clear();
     _uid = nextUid;
+    _updateTelemetryIdentity();
     _bootstrapResult = null;
     _membership = null;
     _platformIdentity = null;
@@ -765,7 +811,13 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
     unawaited(
       widget.bootstrapService
           .rememberOpenedTenant(uid: uid, tenantId: membership.tenantId)
-          .catchError((_) {}),
+          .catchError((Object error, StackTrace stackTrace) {
+            AppTelemetry.captureHandled(
+              error,
+              stackTrace,
+              boundary: 'tenancy.remember_opened_tenant',
+            );
+          }),
     );
     _runTenantRecovery();
   }
@@ -931,6 +983,12 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
   }
 
   Future<TenantSwitchResult> _switchTenant(TenantMembership membership) async {
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'tenant.switch',
+      screen: 'tenant_selection',
+      context: {'target_tenant_id': membership.tenantId},
+    );
     final coordinator = _tenantSwitchCoordinator ??= TenantSwitchCoordinator(
       sessionController: _sessionController,
       bootstrapService: widget.bootstrapService,
@@ -942,7 +1000,33 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
         _triggerTenantRecovery();
       },
     );
-    return coordinator.switchTenant(membership.tenantId);
+    try {
+      final result = await telemetry.trace(
+        operation,
+        'switch_business',
+        () => coordinator.switchTenant(membership.tenantId),
+      );
+      if (result.switched) {
+        telemetry.recordStep(operation, 'confirmed');
+        telemetry.finishOperation(operation);
+      } else {
+        AppTelemetry.captureHandled(
+          StateError(result.blocker?.name ?? 'blocked'),
+          StackTrace.current,
+          operation: operation,
+          code: result.blocker?.name ?? 'blocked',
+        );
+      }
+      return result;
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'tenant.switch',
+      );
+      rethrow;
+    }
   }
 
   void _refreshAfterVisibleInvitationAcceptance() => _retry();
@@ -980,6 +1064,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
   }
 
   Future<void> _signOut() async {
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start('auth.sign_out', screen: 'account');
     ++_flowToken;
     _bootstrapRefreshDebounce?.cancel();
     _sessionController.clear();
@@ -989,8 +1075,17 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       _error = null;
     });
     try {
+      telemetry.recordStep(operation, 'submitted');
       await widget.signOut();
-    } catch (error) {
+      telemetry.recordStep(operation, 'confirmed');
+      telemetry.finishOperation(operation);
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'auth.sign_out',
+      );
       if (!mounted) return;
       _showFailure(error);
     }
@@ -1017,6 +1112,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
 
   @override
   void dispose() {
+    _sessionController.removeListener(_updateTelemetryIdentity);
     WidgetsBinding.instance.removeObserver(this);
     _flowToken++;
     _bootstrapRefreshDebounce?.cancel();
@@ -3025,7 +3121,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   static Future<T?> _quiet<T>(Future<T> Function() read) async {
     try {
       return await read();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'tenancy.quiet_read',
+      );
       return null;
     }
   }

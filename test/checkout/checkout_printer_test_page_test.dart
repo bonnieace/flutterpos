@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter_application_1/checkout/checkout.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;

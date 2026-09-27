@@ -3,9 +3,9 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/reports/report_file.dart';
-import 'package:flutter_application_1/suppliers/suppliers.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/reports/report_file.dart';
+import 'package:uzapay_pos/suppliers/suppliers.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -72,7 +72,8 @@ final class _Searchable implements TenantDataReader, TenantProductSearchReader {
     TenantProductSearchQuery query,
   ) async {
     final prefix = query.searchPrefix;
-    final products = _business.collections[query.collectionPath] ??
+    final products =
+        _business.collections[query.collectionPath] ??
         const <String, Map<String, Object?>>{};
     final ids = products.keys.toList()..sort();
     return <TenantQueryDocumentSnapshot>[
@@ -131,10 +132,11 @@ Future<void> _fillDelivery(WidgetTester tester) async {
     find.byKey(const ValueKey('delivery-reference')),
     'INV-48520',
   );
-  for (final (search, productId, quantity, cost) in <(String, String, String, String)>[
-    ('bread', 'pd-bread-white', '24', '49.50'),
-    ('soap', 'pd-bar-soap-blue', '36', ''),
-  ]) {
+  for (final (search, productId, quantity, cost)
+      in <(String, String, String, String)>[
+        ('bread', 'pd-bread-white', '24', '49.50'),
+        ('soap', 'pd-bar-soap-blue', '36', ''),
+      ]) {
     // The form opens with one search already out; each later product asks
     // for another.
     final field = find.byKey(const ValueKey('product-typeahead-search'));
@@ -176,7 +178,9 @@ void main() {
     afterPump: (tester) async {
       await tester.tap(find.byKey(const ValueKey('suppliers-standing-filter')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('suppliers-standing-all')).last);
+      await tester.tap(
+        find.byKey(const ValueKey('suppliers-standing-all')).last,
+      );
       await tester.pumpAndSettle();
     },
     viewports: responsiveViewports,
@@ -233,8 +237,6 @@ void main() {
     afterPump: (tester) async {
       final lines = find.byKey(const ValueKey('delivery-lines-sd_2'));
       await tester.ensureVisible(lines);
-      await tester.pumpAndSettle();
-      await tester.tap(lines);
       await tester.pumpAndSettle();
     },
     viewports: responsiveViewports,

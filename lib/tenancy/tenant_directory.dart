@@ -1,5 +1,6 @@
 import 'tenant_directory_cache.dart';
 import 'tenant_membership.dart';
+import '../observability/app_telemetry.dart';
 
 final class TenantListPage {
   TenantListPage({
@@ -126,7 +127,13 @@ final class TenantDirectory {
     final memberships = await _loadEveryPage();
     try {
       await _cache.write(uid, memberships);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'tenancy.directory_cache_write',
+      );
+    }
     return TenantDirectoryLoad(memberships: memberships, fromCache: false);
   }
 

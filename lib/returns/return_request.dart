@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 
 import '../checkout/checkout_draft.dart';
+import '../observability/app_telemetry.dart';
 import '../checkout/checkout_sale.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_id.dart';
@@ -465,7 +466,8 @@ final class FirebaseTenantReturnWriter implements TenantReturnWriter {
       return _rejectedCodes.contains(error.code)
           ? TenantReturnWriteResult.rejected(error.code)
           : TenantReturnWriteResult.ambiguous(error.code);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(error, stackTrace, boundary: 'returns.write');
       return const TenantReturnWriteResult.ambiguous('unknown_error');
     }
   }

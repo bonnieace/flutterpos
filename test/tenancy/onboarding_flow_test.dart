@@ -1,15 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/tenancy/account_profile.dart';
-import 'package:flutter_application_1/tenancy/account_registration.dart';
-import 'package:flutter_application_1/tenancy/account_verification.dart';
-import 'package:flutter_application_1/tenancy/email_delivery_status.dart';
-import 'package:flutter_application_1/tenancy/onboarding_flow.dart';
-import 'package:flutter_application_1/tenancy/tenant_bootstrap.dart';
-import 'package:flutter_application_1/ui/buttons.dart';
-import 'package:flutter_application_1/tenancy/tenant_request.dart';
-import 'package:flutter_application_1/theme.dart';
+import 'package:uzapay_pos/tenancy/account_profile.dart';
+import 'package:uzapay_pos/tenancy/account_registration.dart';
+import 'package:uzapay_pos/tenancy/account_verification.dart';
+import 'package:uzapay_pos/tenancy/email_delivery_status.dart';
+import 'package:uzapay_pos/tenancy/onboarding_flow.dart';
+import 'package:uzapay_pos/tenancy/tenant_bootstrap.dart';
+import 'package:uzapay_pos/ui/buttons.dart';
+import 'package:uzapay_pos/tenancy/tenant_request.dart';
+import 'package:uzapay_pos/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

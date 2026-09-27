@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter_application_1/theme.dart';
-import 'package:flutter_application_1/constants/colors.dart';
-import 'package:flutter_application_1/services/shift_service.dart';
+import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/constants/colors.dart';
+import 'package:uzapay_pos/services/shift_service.dart';
 
 class ShiftReportsPage extends StatefulWidget {
   const ShiftReportsPage({super.key});

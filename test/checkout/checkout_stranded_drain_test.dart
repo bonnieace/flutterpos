@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter_application_1/checkout/checkout_outbox.dart';
-import 'package:flutter_application_1/checkout/checkout_receipt.dart';
-import 'package:flutter_application_1/checkout/checkout_sale.dart';
-import 'package:flutter_application_1/checkout/checkout_stranded_drain.dart';
+import 'package:uzapay_pos/checkout/checkout_outbox.dart';
+import 'package:uzapay_pos/checkout/checkout_receipt.dart';
+import 'package:uzapay_pos/checkout/checkout_sale.dart';
+import 'package:uzapay_pos/checkout/checkout_stranded_drain.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 

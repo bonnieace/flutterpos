@@ -12,9 +12,9 @@
 library;
 
 import 'package:excel/excel.dart';
-import 'package:flutter_application_1/reporting/reporting_currency.dart';
-import 'package:flutter_application_1/reports/render/excel_report.dart';
-import 'package:flutter_application_1/reports/report_table.dart';
+import 'package:uzapay_pos/reporting/reporting_currency.dart';
+import 'package:uzapay_pos/reports/render/excel_report.dart';
+import 'package:uzapay_pos/reports/report_table.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/documents.dart';

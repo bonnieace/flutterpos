@@ -36,6 +36,7 @@ import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
 import 'product_image_store.dart';
+import '../observability/app_telemetry.dart';
 
 /// The side of the square that framing produces, in pixels.
 ///
@@ -229,7 +230,12 @@ Future<TenantProductImageCandidate> fetchProductImage(
     response = await (client?.get(url) ?? http.get(url)).timeout(_fetchTimeout);
   } on TimeoutException {
     throw const TenantProductImageException('image_unreachable');
-  } catch (_) {
+  } catch (error, stackTrace) {
+    AppTelemetry.captureHandled(
+      error,
+      stackTrace,
+      boundary: 'inventory.image_fetch',
+    );
     throw const TenantProductImageException('image_unreachable');
   }
   if (response.statusCode != 200) {

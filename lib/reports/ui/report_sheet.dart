@@ -29,6 +29,7 @@ import '../report_document.dart';
 import '../report_file.dart';
 import '../report_period.dart';
 import '../report_run.dart';
+import '../../observability/app_telemetry.dart';
 
 /// The spans a person picks without reaching for the calendar, offered as
 /// shortcuts above it.
@@ -154,7 +155,12 @@ final class _TenantReportSheetState extends State<_TenantReportSheet> {
       final options = await subject.loadOptions();
       if (!mounted) return;
       setState(() => _options = options);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reports.subject_options_read',
+      );
       // **The report is still offered, over everything.** A chooser that could
       // not be filled is not a reason to refuse a report that needs no choice.
       if (!mounted) return;

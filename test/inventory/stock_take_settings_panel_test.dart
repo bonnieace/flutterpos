@@ -1,10 +1,10 @@
 import 'dart:ui' show CheckedState, Tristate;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/checkout/checkout_configuration_writer.dart';
-import 'package:flutter_application_1/inventory/stock_take_settings_panel.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/checkout/checkout_configuration_writer.dart';
+import 'package:uzapay_pos/inventory/stock_take_settings_panel.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/collection_pages.dart';

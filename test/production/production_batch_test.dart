@@ -1,5 +1,5 @@
-import 'package:flutter_application_1/production/production.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/production/production.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// What a production form may send, and the arithmetic it shows while typing.

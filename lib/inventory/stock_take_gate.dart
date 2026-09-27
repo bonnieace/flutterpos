@@ -31,6 +31,7 @@ import '../ui/tokens.dart';
 import 'stock_take.dart';
 import 'stock_take_draft_store.dart';
 import 'stock_take_schedule.dart';
+import '../observability/app_telemetry.dart';
 
 /// Builds the counting screen for one scope, so this file need not know how.
 typedef TenantStockTakeRouteBuilder =
@@ -97,7 +98,12 @@ class _TenantStockTakeGateState extends State<TenantStockTakeGate> {
     TenantPublishedStockTakeSchedule published;
     try {
       published = await widget.loadSchedule(session);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'inventory.stock_take_schedule_read',
+      );
       // Fail open. See this file's header: the till must always open.
       published = const TenantPublishedStockTakeSchedule.absent();
     }

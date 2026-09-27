@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/reporting/reporting.dart';
-import 'package:flutter_application_1/shift/shift_history.dart';
-import 'package:flutter_application_1/theme.dart';
+import 'package:uzapay_pos/reporting/reporting.dart';
+import 'package:uzapay_pos/shift/shift_history.dart';
+import 'package:uzapay_pos/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

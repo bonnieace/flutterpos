@@ -1,4 +1,4 @@
-import 'package:flutter_application_1/tenancy/phone_number.dart';
+import 'package:uzapay_pos/tenancy/phone_number.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

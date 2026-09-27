@@ -5,8 +5,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/theme.dart';
-import 'package:flutter_application_1/ui/period_picker.dart';
+import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/ui/period_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _today = DateTime(2026, 9, 23);

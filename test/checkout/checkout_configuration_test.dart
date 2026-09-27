@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/checkout/checkout_configuration.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/checkout/checkout_configuration.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _configurationPath = 'tenants/tenant-a/configuration/checkout';

@@ -12,6 +12,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../tenancy/tenancy.dart';
+import '../observability/app_telemetry.dart';
 
 /// How far a count has got.
 enum TenantStockTakeStatus {
@@ -245,9 +246,7 @@ final class TenantStockTakeReviewRepository extends TenantReadRepository {
   /// **The upper bound reaches past the digest deliberately.** `￿` sorts
   /// after every character a digest can hold, so the last day of the period is
   /// included whole rather than cut at whichever take happens to sort first.
-  Future<
-    ({List<TenantStockTakeRecord> items, String? nextDocumentId})
-  >
+  Future<({List<TenantStockTakeRecord> items, String? nextDocumentId})>
   loadDateRange({
     required TenantCollectionReader collectionReader,
     required String startBusinessDate,
@@ -313,10 +312,7 @@ final class TenantStockTakeReviewRepository extends TenantReadRepository {
     final visible = hasMore
         ? records.take(pageSize).toList(growable: false)
         : records;
-    return (
-      items: visible,
-      nextDocumentId: hasMore ? visible.last.id : null,
-    );
+    return (items: visible, nextDocumentId: hasMore ? visible.last.id : null);
   }
 
   /// The lines of one count that differ from the books.
@@ -405,7 +401,12 @@ final class TenantStockTakeProductNames extends TenantReadRepository {
       data = await readDocument(TenantCollection.products, productId);
     } on TenantScopeViolation {
       rethrow;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'inventory.stock_take_product_read',
+      );
       // A product a count names may genuinely not be there - the unmatched case
       // `submitStockTake` records rather than refuses. The caller falls back to
       // the ID, which is the only thing that is certainly true about it.
@@ -432,9 +433,10 @@ final class FirebaseApplyStockTakeCallable implements ApplyStockTakeCallable {
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('applyStockTake')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'applyStockTake',
+      () => _functions.httpsCallable('applyStockTake').call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -505,7 +507,12 @@ Future<TenantStockTakeApplyOutcome> applyWholeStockTake({
       });
     } on FirebaseFunctionsException catch (error) {
       throw TenantStockTakeApplyException(_failureOf(error, applied));
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'inventory.stock_take_apply',
+      );
       throw TenantStockTakeApplyException(
         applied > 0
             ? TenantStockTakeApplyFailure.ambiguous

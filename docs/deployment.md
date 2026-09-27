@@ -97,6 +97,7 @@ authorized from day one, which is what [Hosting](#3b-hosting) exists to serve.
 | `STAFF_INVITATION_SENDER_EMAIL` | From-address for invitations specifically. |
 | `STAFF_INVITATION_SENDER_NAME` | From-name for invitations. |
 | `PLATFORM_ALERTS_URL` | Named in a platform alert email. |
+| `AUTH_ACTION_LINK_ORIGIN` | Host the Firebase verify/reset links are moved onto (`https://auth.uzapay.co.ke`). Empty keeps `<project>.firebaseapp.com`. Used because the console's Action URL returns `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED` on this project. |
 
 ## 3b. Hosting
 
@@ -447,6 +448,48 @@ has to look. See [Still open](#still-open).
 
 ---
 
+## 13. GlitchTip error reporting
+
+The Flutter app uses `sentry_flutter` to send errors to the UzaPay project at
+`https://glitchtip.uzanet.co.ke`. The confirmed HTTPS DSN is the default in
+`lib/main.dart`, so ordinary builds report to that project. `SENTRY_DSN` can
+override it with a DSN copied from another project's settings. A dashboard URL
+is not a DSN.
+
+These are Flutter build-time settings, separate from the Functions `.env` file:
+
+```powershell
+flutter build appbundle --release `
+  --dart-define=SENTRY_ENVIRONMENT=production `
+  --dart-define=SENTRY_RELEASE="ke.co.uzapay.pos@1.0.8+1"
+```
+
+Use `SENTRY_ENVIRONMENT=sit` for SIT builds, including release builds against
+SIT. The default environment is `sit`. Match `SENTRY_RELEASE` to the actual
+version and build number; omit it on Android to let the SDK derive the native
+app version. Rebuild the app after changing these values. Firebase deploy does
+not update them in an already-installed app.
+
+Pass `--dart-define=SENTRY_DSN=` to disable reporting. Runs against the Firebase emulators
+disable reporting even when a DSN is supplied. Both debug and release builds
+can report errors when configured. Performance tracing samples 1% of
+transactions; error events are not restricted to that 1% rate. Session
+tracking, replay, and profiling are disabled. The SDK's own PII collection is
+off, but the app deliberately attaches the signed-in user's ID, name and email,
+and the business ID, name and role, to every event and transaction. Passwords,
+tokens, URLs and customer records are scrubbed before sending.
+
+Every Cloud Functions call from the app is traced: inside a traced flow it is a
+span of that flow, otherwise a `server.<function>` transaction of its own. A
+connectivity failure caught outside any flow is recorded as a breadcrumb rather
+than an event, so an offline till does not flood the project.
+
+Before relying on release reporting, capture a controlled test exception from
+a configured release build and confirm its stack trace, release, and environment
+in GlitchTip. Configure project alerts and back up the GlitchTip database. If
+building with Dart obfuscation or split debug information, retain and upload the
+matching symbols so release stack traces remain readable.
+
 ## Still open
 
 Known and deliberate, so a deploy is not surprised by them:
@@ -476,7 +519,8 @@ Known and deliberate, so a deploy is not surprised by them:
   debug builds and Play Integrity in Android release builds; register the new
   Firebase Android app and its Play signing certificate with App Check before
   relying on release tokens.
-- **Sentry is off in release**, deliberately: the DSN is cleartext `http://`.
+- **GlitchTip release reporting** needs a verified test event from the release
+  app; see section 13 above.
 - **No alert on a new business request**, above.
 - **Returns never touch the money.** Reconciliation, `daily_metrics` and
   `getSalesComparison` aggregate `sales` only, and a return records no refund

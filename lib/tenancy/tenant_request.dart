@@ -13,6 +13,7 @@ import '../ui/tokens.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 import 'tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 typedef TenantRequestIdFactory = String Function();
 typedef TenantRequestCurrentCheck = bool Function();
@@ -36,9 +37,10 @@ final class FirebaseRequestTenantCallable implements RequestTenantCallable {
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     try {
-      final result = await _functions
-          .httpsCallable('requestTenant')
-          .call<Object?>(payload);
+      final result = await traceServerCall(
+        'requestTenant',
+        () => _functions.httpsCallable('requestTenant').call<Object?>(payload),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw TenantRequestCallableException(error.code);

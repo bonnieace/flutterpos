@@ -18,6 +18,7 @@ import {
   scanPlatformEligibility,
 } from "../platform/eligibility";
 import {AuthIdentity, resolveOrCreateAuthIdentity} from "./shared";
+import {logAbsorbedFailure} from "../core/absorbedFailure";
 
 const ABANDONED_IDENTITY_GRACE_MILLISECONDS = 24 * 60 * 60 * 1000;
 
@@ -459,6 +460,10 @@ export const cleanupAbandonedStaffIdentities = onSchedule(
         await cleanupAbandonedStaffIdentity(db, operationId);
       } catch (error) {
         const code = authErrorCode(error) ?? "cleanup_failed";
+        logAbsorbedFailure("staff.identity_cleanup_failed", error, {
+          operationId,
+          safeCode: code,
+        });
         const ref = db.collection("staff_identity_operations").doc(operationId);
         await db.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(ref);

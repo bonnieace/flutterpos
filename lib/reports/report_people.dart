@@ -26,6 +26,7 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_staff_names.dart';
 import 'report_scope.dart';
+import '../observability/app_telemetry.dart';
 
 /// Display names for the people one report names, by UID.
 final class TenantReportPeople {
@@ -97,7 +98,12 @@ Future<TenantReportPeople> readTenantReportPeople({
     // unavailable label, and the resolver deliberately rethrows it. A report
     // must not paper over it with UIDs.
     rethrow;
-  } catch (_) {
+  } catch (error, stackTrace) {
+    AppTelemetry.captureHandled(
+      error,
+      stackTrace,
+      boundary: 'reports.people_labels_read',
+    );
     // Everything else - offline, denied, malformed - is a label this report
     // does without.
     return const TenantReportPeople.none();

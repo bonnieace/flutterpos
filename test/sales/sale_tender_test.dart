@@ -1,9 +1,9 @@
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter_application_1/checkout/checkout_receipt.dart';
-import 'package:flutter_application_1/checkout/checkout_tender.dart';
-import 'package:flutter_application_1/sales/sale_history.dart';
-import 'package:flutter_application_1/sales/sale_tender.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/checkout/checkout_receipt.dart';
+import 'package:uzapay_pos/checkout/checkout_tender.dart';
+import 'package:uzapay_pos/sales/sale_history.dart';
+import 'package:uzapay_pos/sales/sale_tender.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';

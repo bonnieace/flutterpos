@@ -8,6 +8,7 @@ import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_switch.dart';
 import 'shift_declaration.dart';
+import '../storage/device_storage.dart';
 
 /// Raised when durable local shift state cannot be trusted.
 final class TenantShiftStateException implements Exception {
@@ -209,10 +210,10 @@ final class HiveTenantShiftState {
     if (key.length != encryptionKeyBytes) {
       throw const TenantShiftStateException('invalid_encryption_key');
     }
-    final box = await (hive ?? Hive).openBox<dynamic>(
+    final box = await openBoxRepairingTornTail<dynamic>(
+      hive ?? Hive,
       boxName,
-      encryptionCipher: HiveAesCipher(List<int>.from(key)),
-      crashRecovery: false,
+      cipher: HiveAesCipher(List<int>.from(key)),
     );
     return HiveTenantShiftState._(box, clock ?? _utcNow);
   }

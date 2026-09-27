@@ -7,8 +7,8 @@
 /// somebody may hand to an accountant.
 library;
 
-import 'package:flutter_application_1/reports/analysis/inventory_analysis.dart';
-import 'package:flutter_application_1/tenancy/tenant_catalog.dart';
+import 'package:uzapay_pos/reports/analysis/inventory_analysis.dart';
+import 'package:uzapay_pos/tenancy/tenant_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/inventory.dart';

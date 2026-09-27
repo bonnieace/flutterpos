@@ -10,12 +10,12 @@
 library;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/expenses/expense.dart';
-import 'package:flutter_application_1/expenses/expense_repository.dart';
-import 'package:flutter_application_1/expenses/expense_request.dart';
-import 'package:flutter_application_1/tenancy/tenant_repository.dart';
-import 'package:flutter_application_1/tenancy/tenant_session.dart';
-import 'package:flutter_application_1/tenancy/tenant_types.dart';
+import 'package:uzapay_pos/expenses/expense.dart';
+import 'package:uzapay_pos/expenses/expense_repository.dart';
+import 'package:uzapay_pos/expenses/expense_request.dart';
+import 'package:uzapay_pos/tenancy/tenant_repository.dart';
+import 'package:uzapay_pos/tenancy/tenant_session.dart';
+import 'package:uzapay_pos/tenancy/tenant_types.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

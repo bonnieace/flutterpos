@@ -6,6 +6,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
 import 'checkout_outbox.dart';
 import 'checkout_sale.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for `drainStrandedSales`.
 abstract interface class DrainStrandedSalesCallable {
@@ -22,9 +23,11 @@ final class FirebaseDrainStrandedSalesCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('drainStrandedSales')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'drainStrandedSales',
+      () =>
+          _functions.httpsCallable('drainStrandedSales').call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -134,7 +137,12 @@ final class CheckoutStrandedSalesDrainer {
             requireAccess: false,
           ).toSubmission().saleFields,
         );
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'checkout.stranded_record_decode',
+        );
         // **A record this device cannot read is left exactly where it is.** It
         // is still the only copy of that sale, and a payload that will not
         // parse is a question for somebody looking at the device rather than
@@ -158,7 +166,12 @@ final class CheckoutStrandedSalesDrainer {
         unreadable: unreadable,
         attempted: true,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'checkout.stranded_drain',
+      );
       return CheckoutStrandedDrainResult(
         unreadable: unreadable,
         attempted: true,

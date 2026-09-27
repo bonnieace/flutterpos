@@ -13,6 +13,7 @@ import 'tenant_id.dart';
 import 'tenant_membership.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
+import '../observability/app_telemetry.dart';
 
 typedef TenantDefaultRequestIdFactory = String Function();
 
@@ -31,9 +32,10 @@ final class FirebaseSetDefaultTenantCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('setDefaultTenant')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'setDefaultTenant',
+      () => _functions.httpsCallable('setDefaultTenant').call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -230,7 +232,12 @@ final class _TenantDefaultFormState extends State<TenantDefaultForm> {
     });
     try {
       await gateway.submit(intent);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'tenancy.default_tenant_submit',
+      );
       if (!mounted || !_isCurrent(controller, submittedSession)) return;
       setState(() {
         _submitting = false;
@@ -242,9 +249,7 @@ final class _TenantDefaultFormState extends State<TenantDefaultForm> {
     setState(() => _submitting = false);
     showAppSnackBar(
       context,
-      AppNotice.confirmed(
-        '${widget.membership.tenantName} is now default.',
-      ),
+      AppNotice.confirmed('${widget.membership.tenantName} is now default.'),
     );
     widget.onSuccess();
   }
@@ -267,7 +272,9 @@ final class _TenantDefaultFormState extends State<TenantDefaultForm> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionHeading('Make ${widget.membership.tenantName} your default business?'),
+        SectionHeading(
+          'Make ${widget.membership.tenantName} your default business?',
+        ),
         SizedBox(height: tokens.spacing.s8),
         const Text(
           'This business will be preferred when no valid device selection exists.',

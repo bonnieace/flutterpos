@@ -25,6 +25,7 @@ import 'shift_comparison_chart.dart';
 import 'sales_totals_choosers.dart';
 import 'sales_totals_session_context.dart';
 import 'device_sales_totals.dart';
+import '../observability/app_telemetry.dart';
 
 /// Route showing what a business has taken over a chosen stretch of days.
 ///
@@ -158,7 +159,12 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
             ? TenantShiftHistoryScope.everyCashier
             : TenantShiftHistoryScope.ownShifts,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.shift_slices_read',
+      );
       return const <TenantShiftDaySlice>[];
     }
   }
@@ -178,7 +184,12 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
         session: session,
         reader: reader,
       ).readRange(startDate: query.startDate, endDate: query.endDate);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.expenses_range_read',
+      );
       return null;
     }
   }

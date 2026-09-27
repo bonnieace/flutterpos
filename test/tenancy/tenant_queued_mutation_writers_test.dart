@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/expenses/expenses.dart';
-import 'package:flutter_application_1/inventory/inventory.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/expenses/expenses.dart';
+import 'package:uzapay_pos/inventory/inventory.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 

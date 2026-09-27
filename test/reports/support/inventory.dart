@@ -6,8 +6,8 @@
 /// Those are the cases the report has something to say about.
 library;
 
-import 'package:flutter_application_1/reports/analysis/inventory_analysis.dart';
-import 'package:flutter_application_1/tenancy/tenant_catalog.dart';
+import 'package:uzapay_pos/reports/analysis/inventory_analysis.dart';
+import 'package:uzapay_pos/tenancy/tenant_catalog.dart';
 
 TenantProduct productRecord({
   required String id,

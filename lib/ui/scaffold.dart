@@ -716,7 +716,7 @@ final class AppBrandLockup extends StatelessWidget {
             border: Border.all(color: tokens.colors.surface.borderStrong),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(3),
+            padding: EdgeInsets.all(tokens.spacing.s4),
             child: Image.asset('images/uzapay-mark.png', fit: BoxFit.contain),
           ),
         ),

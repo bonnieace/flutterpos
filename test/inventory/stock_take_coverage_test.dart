@@ -1,7 +1,7 @@
-import 'package:flutter_application_1/inventory/stock_take_coverage.dart';
-import 'package:flutter_application_1/inventory/stock_take_schedule.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/inventory/stock_take_coverage.dart';
+import 'package:uzapay_pos/inventory/stock_take_schedule.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _tenant = 'tenant-a';

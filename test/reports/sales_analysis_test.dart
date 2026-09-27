@@ -6,11 +6,11 @@
 /// than counted as pure profit.
 library;
 
-import 'package:flutter_application_1/checkout/checkout_tender.dart';
-import 'package:flutter_application_1/reports/analysis/sales_analysis.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
-import 'package:flutter_application_1/returns/return_offsets.dart';
-import 'package:flutter_application_1/sales/sale_history.dart';
+import 'package:uzapay_pos/checkout/checkout_tender.dart';
+import 'package:uzapay_pos/reports/analysis/sales_analysis.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
+import 'package:uzapay_pos/returns/return_offsets.dart';
+import 'package:uzapay_pos/sales/sale_history.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/sales.dart';

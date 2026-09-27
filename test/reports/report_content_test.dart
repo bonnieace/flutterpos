@@ -6,9 +6,9 @@
 /// was never measured cannot be written in a form anything will add up.
 library;
 
-import 'package:flutter_application_1/reports/report_document.dart';
-import 'package:flutter_application_1/reports/report_table.dart';
-import 'package:flutter_application_1/reports/report_visual.dart';
+import 'package:uzapay_pos/reports/report_document.dart';
+import 'package:uzapay_pos/reports/report_table.dart';
+import 'package:uzapay_pos/reports/report_visual.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/documents.dart';

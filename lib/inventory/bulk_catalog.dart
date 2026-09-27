@@ -8,6 +8,7 @@ import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
 import 'catalog_management.dart';
+import '../observability/app_telemetry.dart';
 
 /// Correcting many products at once, and creating many from a spreadsheet.
 ///
@@ -1216,9 +1217,10 @@ final class FirebaseUpdateProductsCallable implements UpdateProductsCallable {
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('updateProducts')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'updateProducts',
+      () => _functions.httpsCallable('updateProducts').call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -1232,9 +1234,10 @@ final class FirebaseImportProductsCallable implements ImportProductsCallable {
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('importProducts')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'importProducts',
+      () => _functions.httpsCallable('importProducts').call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -1890,7 +1893,12 @@ Future<Object?> _invoke(
     throw const TenantBulkCatalogRequestException(
       TenantBulkCatalogFailure.ambiguous,
     );
-  } catch (_) {
+  } catch (error, stackTrace) {
+    AppTelemetry.captureHandled(
+      error,
+      stackTrace,
+      boundary: 'inventory.bulk_catalog_request',
+    );
     throw const TenantBulkCatalogRequestException(
       TenantBulkCatalogFailure.ambiguous,
     );

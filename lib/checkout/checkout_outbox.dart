@@ -7,6 +7,8 @@ import 'package:hive/hive.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_switch.dart';
+import '../observability/app_telemetry.dart';
+import '../storage/device_storage.dart';
 
 enum CheckoutOutboxState {
   savedOffline,
@@ -200,10 +202,10 @@ final class HiveCheckoutOutbox {
     if (key.length != encryptionKeyBytes) {
       throw const CheckoutOutboxException('invalid_encryption_key');
     }
-    final box = await (hive ?? Hive).openBox<dynamic>(
+    final box = await openBoxRepairingTornTail<dynamic>(
+      hive ?? Hive,
       boxName,
-      encryptionCipher: HiveAesCipher(List<int>.from(key)),
-      crashRecovery: false,
+      cipher: HiveAesCipher(List<int>.from(key)),
     );
     return HiveCheckoutOutbox._(box, clock ?? _utcNow);
   }
@@ -583,7 +585,12 @@ CheckoutOutboxRecord _parseRecord(String key, Object? raw) {
       observedPayloadHash: observedHash,
       attentionReason: attentionReason,
     );
-  } catch (_) {
+  } catch (error, stackTrace) {
+    AppTelemetry.captureHandled(
+      error,
+      stackTrace,
+      boundary: 'checkout.outbox_record_decode',
+    );
     throw const CheckoutOutboxException('malformed_record');
   }
 }

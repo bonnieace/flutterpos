@@ -5,10 +5,10 @@
 library;
 
 import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
-import 'package:flutter_application_1/checkout/checkout_receipt.dart';
-import 'package:flutter_application_1/reports/analysis/sales_analysis.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
-import 'package:flutter_application_1/sales/sale_history.dart';
+import 'package:uzapay_pos/checkout/checkout_receipt.dart';
+import 'package:uzapay_pos/reports/analysis/sales_analysis.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
+import 'package:uzapay_pos/sales/sale_history.dart';
 
 const String fixtureDevice = 'dev-0123456789abcdef0123456789abcdef';
 const String _payloadHash =

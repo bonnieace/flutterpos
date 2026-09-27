@@ -19,6 +19,8 @@
 /// printer can be checked before it is saved.
 library;
 
+import 'package:uzapay_pos/observability/app_telemetry.dart';
+
 import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_repository.dart';
@@ -132,6 +134,18 @@ final class _TenantPrinterConfigurationPanelState
   ) async {
     final writer = widget.writer;
     if (writer == null || _busy) return;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'configuration.printer',
+      screen: 'printer_configuration',
+      context: {
+        'user_id': session.uid,
+        'tenant_id': session.tenantId,
+        'transport': values.transport.name,
+        'printer_host': values.host,
+        'printer_port': values.port,
+      },
+    );
     final capturedKey = _sessionKey(session);
 
     // The intent is built before anything is confirmed, so an address this
@@ -152,20 +166,44 @@ final class _TenantPrinterConfigurationPanelState
             bridgeToken: values.bridgeToken,
             configured: configured,
           );
-    } on TenantPrinterConfigurationException catch (error) {
+    } on TenantPrinterConfigurationException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'configuration.printer_validate',
+      );
       _report(_refusalNotice(error.code));
       return;
     }
-    if (!await _confirmed(intent) || !_stillCurrent(capturedKey)) return;
+    telemetry.recordStep(operation, 'validated');
+    if (!await _confirmed(intent) || !_stillCurrent(capturedKey)) {
+      telemetry.recordStep(operation, 'cancelled');
+      return;
+    }
+    telemetry.recordStep(operation, 'confirmed');
 
     setState(() {
       _busy = true;
     });
     try {
-      final result = await writer.merge(
-        path: intent.path,
-        data: intent.documentData(),
+      final result = await telemetry.trace(
+        operation,
+        'save_printer_configuration',
+        () => writer.merge(path: intent.path, data: intent.documentData()),
       );
+      if (result.kind == TenantConfigurationWriteKind.committed) {
+        telemetry.recordStep(operation, 'confirmed_on_server');
+      } else if (result.kind == TenantConfigurationWriteKind.queued) {
+        telemetry.recordStep(operation, 'saved_locally');
+      } else {
+        AppTelemetry.captureHandled(
+          StateError(result.kind.name),
+          StackTrace.current,
+          operation: operation,
+          code: result.kind.name,
+        );
+      }
       if (!_stillCurrent(capturedKey)) return;
       _report(_resultNotice(result));
       // A committed change and an unknown one are both re-read: the second
@@ -195,6 +233,12 @@ final class _TenantPrinterConfigurationPanelState
   Future<void> _test(_PrinterFormValues values) async {
     final testPrint = widget.testPrint;
     if (testPrint == null || _busy) return;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'printing.test_page',
+      screen: 'printer_configuration',
+      context: {'printer_host': values.host, 'printer_port': values.port},
+    );
     final parsedPort = int.tryParse(values.port.trim());
     final TenantPrinterConfiguration configuration;
     try {
@@ -206,10 +250,22 @@ final class _TenantPrinterConfigurationPanelState
         hasCutter: values.hasCutter,
         bridgeToken: values.bridgeToken,
       );
-    } on ArgumentError {
+    } on ArgumentError catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'printing.test_validate',
+      );
       _report(_refusalNotice('invalid_address'));
       return;
-    } on FormatException {
+    } on FormatException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'printing.test_validate',
+      );
       _report(_refusalNotice('invalid_address'));
       return;
     }
@@ -217,7 +273,14 @@ final class _TenantPrinterConfigurationPanelState
       _busy = true;
     });
     try {
-      await testPrint(configuration);
+      telemetry.recordStep(operation, 'submitted');
+      await telemetry.trace(
+        operation,
+        'send_test_page',
+        () => testPrint(configuration),
+      );
+      telemetry.recordStep(operation, 'confirmed');
+      telemetry.finishOperation(operation);
       if (!mounted) return;
       // **"Sent", never "printed".** `PrinterTransport.send` returning means
       // the bytes were handed off, and this app has no status read-back to
@@ -229,7 +292,13 @@ final class _TenantPrinterConfigurationPanelState
           'fills the width of the roll.',
         ),
       );
-    } on PrinterTransportException catch (error) {
+    } on PrinterTransportException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'printing.test_send',
+      );
       if (!mounted) return;
       // The transport's own vocabulary, mapped once at the UI edge exactly as
       // a failed receipt is. This screen invents no sentence of its own.

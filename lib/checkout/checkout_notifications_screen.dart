@@ -35,6 +35,7 @@ import 'checkout_evidence.dart';
 import 'checkout_notification_sources.dart';
 import 'checkout_print_jobs.dart';
 import 'checkout_print_queue_panel.dart';
+import '../observability/app_telemetry.dart';
 
 final class TenantNotificationsScreen extends StatelessWidget {
   const TenantNotificationsScreen({
@@ -149,7 +150,12 @@ class _PageState extends State<_Page> {
     try {
       final found = await read();
       if (mounted) setState(() => _abandoned = found);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'notifications.abandoned_shifts_read',
+      );
       // **Silence, and deliberately.** This is one source among several on a
       // page a person opened to see the others. A business read that fails -
       // offline, a role that changed underneath - must not replace the
@@ -167,7 +173,12 @@ class _PageState extends State<_Page> {
       await close(shift);
     } on AbandonedShiftCloseException catch (error) {
       failure = abandonedShiftCloseMessage(error.failure);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'notifications.abandoned_shift_close',
+      );
       failure = abandonedShiftCloseMessage(
         AbandonedShiftCloseFailure.ambiguous,
       );
@@ -201,7 +212,12 @@ class _PageState extends State<_Page> {
       // an unfiltered read lists the receipts of every business this phone has
       // served - and offers to reprint them.
       return widget.printQueue.pending(tenantId: widget.tenantId);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'notifications.print_queue_read',
+      );
       // A queue that cannot be listed is not a queue that is empty. The
       // unreadable count carries that, and this stands in only for a read that
       // failed before any of it could be counted.

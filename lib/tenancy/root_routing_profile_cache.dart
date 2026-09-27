@@ -4,6 +4,7 @@ import 'package:hive/hive.dart';
 
 import 'tenant_bootstrap.dart';
 import 'tenant_selection.dart';
+import '../observability/app_telemetry.dart';
 
 /// The root routing projection last answered for one authenticated account.
 final class CachedRootRoutingProfile {
@@ -69,7 +70,12 @@ final class HiveRootRoutingProfileCache implements RootRoutingProfileCache {
         ),
         cachedAt: DateTime.fromMillisecondsSinceEpoch(cachedAtMs, isUtc: true),
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'tenancy.root_profile_cache_read',
+      );
       return null;
     }
   }

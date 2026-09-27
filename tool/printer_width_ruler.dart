@@ -24,7 +24,7 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter_application_1/checkout/checkout_print_transport.dart';
+import 'package:uzapay_pos/checkout/checkout_print_transport.dart';
 
 /// `ESC @` - reset. `ESC M 0` - Font A, the font every column count above is
 /// quoted in; a printer left in Font B would measure narrower glyphs and give

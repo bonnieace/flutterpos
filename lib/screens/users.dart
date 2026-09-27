@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/pos/goods.dart';
-import 'package:flutter_application_1/theme.dart';
+import 'package:uzapay_pos/pos/goods.dart';
+import 'package:uzapay_pos/theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:flutter_application_1/screens/create_user.dart';
+import 'package:uzapay_pos/screens/create_user.dart';
 import '../screens/main_hub_screen.dart';
 import '../screens/users.dart';
 import '../pos/reports.dart';

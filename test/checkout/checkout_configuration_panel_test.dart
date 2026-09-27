@@ -1,10 +1,10 @@
 ﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/status.dart';
-import 'package:flutter_application_1/ui/snackbar.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/status.dart';
+import 'package:uzapay_pos/ui/snackbar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
@@ -382,7 +382,7 @@ void main() {
       for (final role in <TenantRole>[TenantRole.owner, TenantRole.admin]) {
         await _pumpLanding(tester, role: role);
         expect(
-          find.byKey(const ValueKey('settings')),
+          find.byKey(const ValueKey('configurations')),
           findsOne,
           reason: role.name,
         );
@@ -396,7 +396,7 @@ void main() {
       for (final role in <TenantRole>[TenantRole.manager, TenantRole.cashier]) {
         await _pumpLanding(tester, role: role);
         expect(
-          find.byKey(const ValueKey('settings')),
+          find.byKey(const ValueKey('configurations')),
           findsNothing,
           reason: role.name,
         );
@@ -409,14 +409,14 @@ void main() {
     ) async {
       await _pumpLanding(tester, role: TenantRole.owner, supplyRoute: false);
 
-      expect(find.byKey(const ValueKey('settings')), findsNothing);
+      expect(find.byKey(const ValueKey('configurations')), findsNothing);
     });
 
     testWidgets('it opens under the landing route\'s own session scope', (
       tester,
     ) async {
       await _pumpLanding(tester, role: TenantRole.owner);
-      await tester.tap(find.byKey(const ValueKey('settings')));
+      await tester.tap(find.byKey(const ValueKey('configurations')));
       await tester.pumpAndSettle();
 
       expect(find.text('Settings'), findsOne);
@@ -456,10 +456,11 @@ Future<void> _pumpLanding(
           membership: _membership('tenant-a', role: role),
           reader: reader,
           onSignOut: () async {},
-          // **One tabbed Settings route since 2026-09-13**, where this was
-          // three separate rows. The checkout settings are a tab inside it, so
-          // what this group pins is that the *route* is offered to the same two
-          // roles and that opening it lands on the currency.
+          // **Settings is three home destinations since 2026-09-27** -
+          // business details, printer and configurations - and the currency
+          // sits under *configurations*. What this group pins is that that
+          // destination is offered to the same two roles and that opening it
+          // reaches the currency.
           settingsRoute: supplyRoute
               ? (reader, initialSettingKey) => TenantSettingsScreen(
                   initialSettingKey: initialSettingKey,

@@ -1,7 +1,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter_application_1/constants/colors.dart';
-import 'package:flutter_application_1/pos/reports/paymentsfreq.dart';
-import 'package:flutter_application_1/theme.dart';
+import 'package:uzapay_pos/constants/colors.dart';
+import 'package:uzapay_pos/pos/reports/paymentsfreq.dart';
+import 'package:uzapay_pos/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';

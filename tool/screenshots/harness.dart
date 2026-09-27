@@ -46,9 +46,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_application_1/inventory/product_image_provider.dart';
-import 'package:flutter_application_1/theme.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
+import 'package:uzapay_pos/inventory/product_image_provider.dart';
+import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'image_http.dart';

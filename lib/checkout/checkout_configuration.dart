@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 final RegExp _currencyPattern = RegExp(r'^[A-Z]{3}$');
 
@@ -363,7 +364,12 @@ final class FirebaseTenantCheckoutConfigurationWriter
       return _rejectedCodes.contains(error.code)
           ? TenantCheckoutConfigurationWriteResult.rejected(error.code)
           : TenantCheckoutConfigurationWriteResult.ambiguous(error.code);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'configuration.checkout_write',
+      );
       return const TenantCheckoutConfigurationWriteResult.ambiguous(
         'unknown_error',
       );

@@ -5,9 +5,9 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/reports/report_document.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
-import 'package:flutter_application_1/reports/ui/report_sheet.dart';
+import 'package:uzapay_pos/reports/report_document.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
+import 'package:uzapay_pos/reports/ui/report_sheet.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'harness.dart';

@@ -17,9 +17,9 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/tenancy/tenant_session.dart';
-import 'package:flutter_application_1/tenancy/tenant_types.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/tenancy/tenant_session.dart';
+import 'package:uzapay_pos/tenancy/tenant_types.dart';
 import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart'
     show CapabilityProfile;
 import 'package:flutter_test/flutter_test.dart';

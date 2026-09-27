@@ -10,10 +10,10 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/theme.dart';
-import 'package:flutter_application_1/ui/record_list.dart';
-import 'package:flutter_application_1/ui/skeleton.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
+import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/ui/record_list.dart';
+import 'package:uzapay_pos/ui/skeleton.dart';
+import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -3,10 +3,10 @@ import 'dart:typed_data';
 
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/inventory/inventory.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/fields.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/inventory/inventory.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/fields.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';

@@ -30,6 +30,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 import 'package:flutter/services.dart';
 
 import '../checkout/checkout_catalog_cache.dart';
@@ -408,9 +409,24 @@ class _TenantStockTakePanelState extends State<TenantStockTakePanel> {
   Future<void> _submit(TenantSession session, int productsInScope) async {
     final draft = _draft;
     if (draft == null || draft.isEmpty || _submitting) return;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'inventory.stock_take',
+      screen: 'stock_count',
+      context: {
+        'user_id': session.uid,
+        'tenant_id': session.tenantId,
+        'counted_rows': draft.countedLineCount,
+        'products_in_scope': productsInScope,
+      },
+    );
     final skipped = productsInScope - draft.countedLineCount;
     final confirmed = await _confirm(draft, skipped);
-    if (!confirmed || !mounted) return;
+    if (!confirmed || !mounted) {
+      telemetry.recordStep(operation, 'cancelled');
+      return;
+    }
+    telemetry.recordStep(operation, 'confirmed');
 
     setState(() => _submitting = true);
     try {
@@ -418,10 +434,13 @@ class _TenantStockTakePanelState extends State<TenantStockTakePanel> {
       // needs no connection and nothing is half-sent: the pages are durable
       // together, and the worker carries them in order because they share the
       // take's path.
-      for (final page in TenantStockTakeGateway(session).pagesFor(draft)) {
-        await widget.writer.submitPage(page);
-      }
+      await telemetry.trace(operation, 'save_count_pages', () async {
+        for (final page in TenantStockTakeGateway(session).pagesFor(draft)) {
+          await widget.writer.submitPage(page);
+        }
+      });
       await widget.drafts.clear(uid: session.uid, tenantId: session.tenantId);
+      telemetry.recordStep(operation, 'saved_locally');
       // **The obligation is discharged here, not when the pages drain.** A
       // cashier held out of the till until a manager approves - or until the
       // signal comes back - is a shop that cannot trade, and the count is
@@ -446,9 +465,21 @@ class _TenantStockTakePanelState extends State<TenantStockTakePanel> {
           '${draft.countedLineCount == 1 ? 'product' : 'products'} recorded.',
         ),
       );
-    } on TenantStockTakeException catch (error) {
+    } on TenantStockTakeException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'inventory.stock_take_submit',
+      );
       _report(AppNotice.refused(_failureMessage(error.failure)));
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'inventory.stock_take_submit',
+      );
       // The pages that did reach the queue are still there, and re-handing in
       // sends them again harmlessly - the server keys each page by the take and
       // the page number.

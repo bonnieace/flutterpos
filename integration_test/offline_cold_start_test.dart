@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:flutter_application_1/main.dart' as app;
+import 'package:uzapay_pos/main.dart' as app;
 
 const String _phase = String.fromEnvironment(
   'OFFLINE_ACCEPTANCE_PHASE',

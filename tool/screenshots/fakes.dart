@@ -14,12 +14,12 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/inventory/inventory.dart';
-import 'package:flutter_application_1/reporting/reporting.dart';
-import 'package:flutter_application_1/returns/returns.dart';
-import 'package:flutter_application_1/shift/shift.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/inventory/inventory.dart';
+import 'package:uzapay_pos/reporting/reporting.dart';
+import 'package:uzapay_pos/returns/returns.dart';
+import 'package:uzapay_pos/shift/shift.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:hive/hive.dart';
 
 const String seedTenantId = 'dev-shop';

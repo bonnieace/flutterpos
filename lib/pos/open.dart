@@ -1,4 +1,4 @@
-// import 'package:flutter_application_1/pos/nav_menu.dart';
+// import 'package:uzapay_pos/pos/nav_menu.dart';
 // import 'package:flutter/material.dart';
 
 

@@ -18,7 +18,7 @@ library;
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:flutter_application_1/checkout/checkout.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 

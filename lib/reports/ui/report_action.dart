@@ -13,11 +13,13 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../../tenancy/tenant_session.dart';
 import '../../tenancy/tenant_session_controller.dart';
 import '../../ui/buttons.dart';
 import '../../ui/snackbar.dart';
+import '../report_file.dart';
 import '../report_run.dart';
 import 'report_sheet.dart';
 
@@ -90,19 +92,51 @@ final class _TenantReportActionState extends State<TenantReportAction> {
     );
     if (request == null || !mounted) return;
 
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'reports.export',
+      screen: 'reports',
+      context: {
+        'report_kind': run.kind.slug,
+        'format': request.format.name,
+        'destination': request.destination.name,
+        'subject_id': request.subject?.id,
+      },
+    );
     setState(() => _working = true);
     try {
-      final outcome = await run.deliver(request);
+      final outcome = await run.deliver(
+        request,
+        telemetryOperation: operation,
+        onStage: (stage) {
+          telemetry.recordStep(operation, stage.name);
+        },
+      );
+      if (outcome == TenantReportSaveOutcome.saved) {
+        telemetry.recordStep(operation, 'confirmed');
+        telemetry.finishOperation(operation);
+      } else if (outcome == TenantReportSaveOutcome.dismissed) {
+        telemetry.recordStep(operation, 'cancelled');
+      } else {
+        AppTelemetry.captureHandled(
+          StateError('export_unavailable'),
+          StackTrace.current,
+          operation: operation,
+          code: 'unavailable',
+        );
+      }
       if (!mounted) return;
       showAppSnackBar(
         context,
-        tenantReportNotice(
-          outcome,
-          run.kind,
-          destination: request.destination,
-        ),
+        tenantReportNotice(outcome, run.kind, destination: request.destination),
       );
     } on Object catch (error, stack) {
+      AppTelemetry.captureHandled(
+        error,
+        stack,
+        operation: operation,
+        boundary: 'reports.export',
+      );
       // **Logged as well as said.** The sentence below is what the person
       // needs; it is deliberately not the exception, because an operator
       // cannot act on a `StateError` and should not be shown one. But a
@@ -115,10 +149,7 @@ final class _TenantReportActionState extends State<TenantReportAction> {
       // **Said plainly, and the period is not claimed.** A report that could
       // not be read must not leave behind a half-built file or a sentence
       // implying one exists somewhere.
-      showAppSnackBar(
-        context,
-        tenantReportFailureNotice(error),
-      );
+      showAppSnackBar(context, tenantReportFailureNotice(error));
     } finally {
       if (mounted) setState(() => _working = false);
     }

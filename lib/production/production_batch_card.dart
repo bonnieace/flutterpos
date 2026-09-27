@@ -2,9 +2,10 @@
 ///
 /// **Built the way a supplier's delivery card is**, not from `RecordList`: what
 /// was made and how many in the heading, the two costs a person opens the
-/// screen to compare in a recessed well of their own, what the money went on
-/// as the rows under it, and when it was made in the foot beside the control
-/// that opens those rows.
+/// screen to compare in a recessed well of their own, and when it was made in
+/// the foot beside the control that opens what the money went on - a screen of
+/// its own since 2026-09-27 (`production_cost_screen.dart`), where it used to
+/// unfold as rows inside this card.
 library;
 
 import 'package:flutter/material.dart';
@@ -19,24 +20,20 @@ final class TenantProductionBatchCard extends StatelessWidget {
   const TenantProductionBatchCard({
     super.key,
     required this.batch,
-    required this.open,
     required this.money,
-    required this.onToggle,
+    required this.onOpenCosts,
   });
 
   final TenantProductionBatch batch;
-
-  /// Whether the cost rows are shown.
-  final bool open;
-
   final String Function(int minor) money;
-  final VoidCallback onToggle;
+
+  /// Opens the batch's cost of production.
+  final VoidCallback onOpenCosts;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final radius = BorderRadius.circular(tokens.radius.md);
-    final previous = batch.previousCostMinor;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: tokens.colors.surface.raised,
@@ -95,63 +92,6 @@ final class TenantProductionBatchCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (open)
-              Column(
-                key: ValueKey('production-costs-open-${batch.id}'),
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  for (final (index, row)
-                      in batch.expenses.indexed) ...<Widget>[
-                    Divider(
-                      height: 1,
-                      indent: index == 0 ? 0 : tokens.spacing.s16,
-                      endIndent: index == 0 ? 0 : tokens.spacing.s16,
-                      color: tokens.colors.surface.borderSubtle,
-                    ),
-                    Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: tokens.spacing.s16,
-                        vertical: tokens.spacing.s12,
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              row.description,
-                              style: tokens.typography.labelMedium.copyWith(
-                                color: tokens.colors.text.primary,
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: tokens.spacing.s12),
-                          Text(
-                            money(row.amountMinor),
-                            style: tokens.typography.numericBody.copyWith(
-                              color: tokens.colors.text.money,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (previous != null && previous != batch.unitCostMinor)
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        tokens.spacing.s16,
-                        0,
-                        tokens.spacing.s16,
-                        tokens.spacing.s12,
-                      ),
-                      child: Text(
-                        'Cost per unit went from ${money(previous)} to '
-                        '${money(batch.unitCostMinor)} with this batch.',
-                        style: tokens.typography.caption.copyWith(
-                          color: tokens.colors.text.tertiary,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
             Container(
               color: tokens.colors.surface.overlay,
               padding: EdgeInsetsDirectional.only(
@@ -177,11 +117,11 @@ final class TenantProductionBatchCard extends StatelessWidget {
                   SizedBox(width: tokens.spacing.s8),
                   AppButton(
                     key: ValueKey('production-costs-${batch.id}'),
-                    label: open ? 'Hide costs' : 'Show costs',
-                    icon: open ? Icons.expand_less : Icons.expand_more,
+                    label: 'View costs',
+                    icon: Icons.chevron_right,
                     tier: AppButtonTier.tertiary,
                     size: AppButtonSize.sm,
-                    onPressed: onToggle,
+                    onPressed: onOpenCosts,
                   ),
                 ],
               ),

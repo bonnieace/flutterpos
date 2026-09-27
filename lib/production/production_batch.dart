@@ -336,7 +336,9 @@ final class TenantProductionRepository extends TenantReadRepository {
 
   /// The products marked made here, which a production report may be narrowed
   /// to - one equality read against the stored flag, up to [maximumPages].
-  Future<List<TenantProduct>> loadMadeHereProducts({int maximumPages = 10}) async {
+  Future<List<TenantProduct>> loadMadeHereProducts({
+    int maximumPages = 10,
+  }) async {
     _requireRole();
     final products = <TenantProduct>[];
     String? cursor;
@@ -354,9 +356,10 @@ final class TenantProductionRepository extends TenantReadRepository {
       if (!read.hasMore || read.nextCursor == null) break;
       cursor = read.nextCursor;
     }
-    products.sort((left, right) => left.name.toLowerCase().compareTo(
-      right.name.toLowerCase(),
-    ));
+    products.sort(
+      (left, right) =>
+          left.name.toLowerCase().compareTo(right.name.toLowerCase()),
+    );
     return products;
   }
 
@@ -405,7 +408,10 @@ final class TenantProductionRepository extends TenantReadRepository {
     final expenses = <TenantProductionExpense>[];
     for (final (index, row) in rows.indexed) {
       if (row.isBlank) continue;
-      final description = row.description.trim().replaceAll(_whitespaceRun, ' ');
+      final description = row.description.trim().replaceAll(
+        _whitespaceRun,
+        ' ',
+      );
       if (description.isEmpty ||
           description.length > maximumProductionDescriptionLength ||
           _hasControl(description)) {

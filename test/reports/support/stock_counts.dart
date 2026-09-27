@@ -7,10 +7,10 @@
 library;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/inventory/stock_take_review.dart';
-import 'package:flutter_application_1/reports/analysis/stock_counts_analysis.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
-import 'package:flutter_application_1/tenancy/tenant_repository.dart';
+import 'package:uzapay_pos/inventory/stock_take_review.dart';
+import 'package:uzapay_pos/reports/analysis/stock_counts_analysis.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
+import 'package:uzapay_pos/tenancy/tenant_repository.dart';
 
 TenantStockTakeRecord countRecord({
   required String businessDate,

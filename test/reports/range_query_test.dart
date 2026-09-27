@@ -13,12 +13,12 @@
 library;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/audit/audit.dart';
-import 'package:flutter_application_1/inventory/stock_take_review.dart';
-import 'package:flutter_application_1/returns/return_history.dart';
-import 'package:flutter_application_1/shift/shift_history.dart';
-import 'package:flutter_application_1/shift/tenant_shift.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/audit/audit.dart';
+import 'package:uzapay_pos/inventory/stock_take_review.dart';
+import 'package:uzapay_pos/returns/return_history.dart';
+import 'package:uzapay_pos/shift/shift_history.dart';
+import 'package:uzapay_pos/shift/tenant_shift.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

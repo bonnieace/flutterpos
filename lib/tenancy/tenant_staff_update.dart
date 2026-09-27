@@ -17,6 +17,7 @@ import 'tenant_staff_request_ticket.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_staff_invitation.dart';
 import 'tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for the enabled `updateStaffUser` mutation.
 abstract interface class UpdateStaffUserCallable {
@@ -32,9 +33,10 @@ final class FirebaseUpdateStaffUserCallable implements UpdateStaffUserCallable {
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('updateStaffUser')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'updateStaffUser',
+      () => _functions.httpsCallable('updateStaffUser').call<Object?>(payload),
+    );
     return result.data;
   }
 }

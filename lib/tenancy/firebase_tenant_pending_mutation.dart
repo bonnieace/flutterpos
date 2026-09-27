@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../observability/app_telemetry.dart';
 import 'tenant_pending_mutation.dart';
 
 /// When the change one queued record carries was made on this device, as the
@@ -273,7 +274,12 @@ final class FirebaseTenantMutationGateway
             : TenantMutationSubmissionOutcome.uncertain,
         error.code,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'sync.mutation_submit',
+      );
       return const TenantMutationSubmissionResult(
         TenantMutationSubmissionOutcome.uncertain,
         'unknown_error',
@@ -282,7 +288,13 @@ final class FirebaseTenantMutationGateway
   }
 
   Future<void> _call(String name, Map<String, Object?> payload) =>
-      _functions.httpsCallable(name).call<Object?>(payload).timeout(deadline);
+      traceServerCall(
+        name,
+        () => _functions
+            .httpsCallable(name)
+            .call<Object?>(payload)
+            .timeout(deadline),
+      );
 
   /// Whether a refusal means the change is in place regardless.
   ///

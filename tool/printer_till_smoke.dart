@@ -27,10 +27,10 @@ library;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/theme.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart'
     show CapabilityProfile;
 import 'package:flutter_test/flutter_test.dart';

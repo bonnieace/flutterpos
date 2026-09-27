@@ -1,6 +1,6 @@
 // import 'package:flutter/material.dart';
 // import 'package:firebase_core/firebase_core.dart';
-// import 'package:flutter_application_1/pos/nav_menu.dart';
+// import 'package:uzapay_pos/pos/nav_menu.dart';
 
 // import 'firebase_options.dart';
 

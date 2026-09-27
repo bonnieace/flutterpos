@@ -13,6 +13,7 @@ import 'platform_tenant_console.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
 import 'tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 final class PlatformLifecycleTenantCursor {
   const PlatformLifecycleTenantCursor({
@@ -708,10 +709,7 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
           // §5.1's `AppTabs`, which is where the type roles, the indicator and
           // §9's 48dp height now live.
           const AppTabs(
-            tabs: <String>[
-              'Active & suspended',
-              'Global user status',
-            ],
+            tabs: <String>['Active & suspended', 'Global user status'],
           ),
           Expanded(
             child: TabBarView(
@@ -804,7 +802,12 @@ final class _PlatformLifecycleTenantScreenState
         _hasMore = page.hasMore;
         _loading = false;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'platform.tenant_page_read',
+      );
       if (!mounted || !_isCurrent(epoch)) return;
       setState(() {
         _loading = false;

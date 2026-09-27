@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter_application_1/checkout/checkout_draft.dart';
-import 'package:flutter_application_1/inventory/bulk_catalog.dart';
-import 'package:flutter_application_1/inventory/catalog_management.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/checkout/checkout_draft.dart';
+import 'package:uzapay_pos/inventory/bulk_catalog.dart';
+import 'package:uzapay_pos/inventory/catalog_management.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _productsPath = 'tenants/tenant-a/products';

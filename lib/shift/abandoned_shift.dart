@@ -23,6 +23,7 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
 import 'tenant_shift.dart';
+import '../observability/app_telemetry.dart';
 
 /// One open shift whose cashier can no longer close it.
 final class AbandonedShift {
@@ -121,7 +122,12 @@ final class TenantAbandonedShiftRepository extends TenantReadRepository {
       final status = data['status'];
       final name = data['displayName'] ?? data['name'];
       return (active: status == 'active', name: name is String ? name : null);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.abandoned_cashier_read',
+      );
       return null;
     }
   }
@@ -181,12 +187,20 @@ final class FirebaseCloseAbandonedShiftCallable
   @override
   Future<void> call(Map<String, Object?> payload) async {
     try {
-      await _functions
-          .httpsCallable('closeAbandonedShift')
-          .call<Object?>(payload);
+      await traceServerCall(
+        'closeAbandonedShift',
+        () => _functions
+            .httpsCallable('closeAbandonedShift')
+            .call<Object?>(payload),
+      );
     } on FirebaseFunctionsException catch (error) {
       throw AbandonedShiftCloseException(_failureOf(error.code));
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.abandoned_close_request',
+      );
       throw const AbandonedShiftCloseException(
         AbandonedShiftCloseFailure.ambiguous,
       );

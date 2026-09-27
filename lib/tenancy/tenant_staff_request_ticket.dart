@@ -40,6 +40,8 @@ import 'package:hive/hive.dart';
 
 import '../checkout/checkout_outbox.dart';
 import 'tenant_id.dart';
+import '../observability/app_telemetry.dart';
+import '../storage/device_storage.dart';
 
 /// Thrown when a ticket cannot be read or written.
 final class TenantStaffRequestTicketException implements Exception {
@@ -201,10 +203,10 @@ final class HiveTenantStaffRequestTickets extends ChangeNotifier
     if (key.length != HiveCheckoutOutbox.encryptionKeyBytes) {
       throw const TenantStaffRequestTicketException('ticket_unreadable');
     }
-    final box = await (hive ?? Hive).openBox<dynamic>(
+    final box = await openBoxRepairingTornTail<dynamic>(
+      hive ?? Hive,
       boxName,
-      encryptionCipher: HiveAesCipher(List<int>.from(key)),
-      crashRecovery: false,
+      cipher: HiveAesCipher(List<int>.from(key)),
     );
     return HiveTenantStaffRequestTickets._(box);
   }
@@ -257,7 +259,12 @@ final class HiveTenantStaffRequestTickets extends ChangeNotifier
         ).toStorage(),
       );
       notifyListeners();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'staff.request_ticket_write',
+      );
       // Same reasoning: a device that cannot write its own ticket can still
       // perform the mutation, it just cannot recover it deterministically.
     }
@@ -281,7 +288,12 @@ final class HiveTenantStaffRequestTickets extends ChangeNotifier
         ),
       );
       notifyListeners();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'staff.request_ticket_delete',
+      );
       // A ticket that cannot be deleted is re-sent once more and answered from
       // the server's record, which is the safe direction.
     }

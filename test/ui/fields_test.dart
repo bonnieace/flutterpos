@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/theme.dart';
-import 'package:flutter_application_1/ui/buttons.dart';
-import 'package:flutter_application_1/ui/fields.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
+import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/ui/buttons.dart';
+import 'package:uzapay_pos/ui/fields.dart';
+import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _tokens = spiritTheme.extension<AppTokens>()!;

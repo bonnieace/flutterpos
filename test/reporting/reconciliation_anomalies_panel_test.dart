@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/reporting/reporting.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/snackbar.dart';
-import 'package:flutter_application_1/ui/status.dart';
-import 'package:flutter_application_1/ui/scaffold.dart';
-import 'package:flutter_application_1/ui/fields.dart';
+import 'package:uzapay_pos/reporting/reporting.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/snackbar.dart';
+import 'package:uzapay_pos/ui/status.dart';
+import 'package:uzapay_pos/ui/scaffold.dart';
+import 'package:uzapay_pos/ui/fields.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';

@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -295,6 +296,22 @@ void main() {
       CheckoutSyncRunKind.noSelectedSession,
     );
     expect(gateway.submissions, isEmpty);
+  });
+
+  test('reports the actual submission stages without changing outbox state', () async {
+    await _save(outbox, 'instrumented');
+    final telemetry = RecordingAppTelemetry(retain: true);
+    final gateway = _FakeGateway(
+      (_) async => const CheckoutSubmissionResult.committed(),
+    );
+    final result = await AppTelemetry.withInstance(telemetry, () =>
+      _worker(sessions, outbox, gateway, clock).submitDueCheckouts());
+    expect(result.submitted, 1);
+    expect((await _read(outbox, 'instrumented')).state,
+      CheckoutOutboxState.awaitingConfirmation);
+    expect(telemetry.failures, isEmpty);
+    expect(telemetry.steps.map((step) => step['stage']),
+      ['started', 'submitted', 'confirmed']);
   });
 }
 

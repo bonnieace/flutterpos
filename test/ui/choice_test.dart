@@ -2,8 +2,8 @@ import 'dart:ui' show CheckedState, SemanticsFlags, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_application_1/ui/choice.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
+import 'package:uzapay_pos/ui/choice.dart';
+import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 enum _Pace { slow, steady, fast }

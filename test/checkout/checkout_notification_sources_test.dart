@@ -4,9 +4,9 @@
 /// and its honesty about what can be done; the screen above it is a layout.
 library;
 
-import 'package:flutter_application_1/checkout/checkout_notification_sources.dart';
-import 'package:flutter_application_1/shift/abandoned_shift.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/checkout/checkout_notification_sources.dart';
+import 'package:uzapay_pos/shift/abandoned_shift.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 AbandonedShift _shift({

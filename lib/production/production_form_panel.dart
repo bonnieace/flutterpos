@@ -6,6 +6,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../inventory/catalog_management.dart';
@@ -262,7 +263,12 @@ final class _ProductionFormState extends State<_ProductionForm> {
     TenantProductionBatch? last;
     try {
       last = await _repository.lastBatchOf(product.id);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'production.last_batch_read',
+      );
       // A batch that cannot be looked up is simply not offered as a start.
       last = null;
     }
@@ -330,6 +336,12 @@ final class _ProductionFormState extends State<_ProductionForm> {
   Future<void> _submit() async {
     final product = _product;
     if (product == null) return;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'production.complete',
+      screen: 'production',
+      context: {'product_id': product.id, 'product_name': product.name},
+    );
     final TenantProductionIntent intent;
     try {
       intent = _repository.buildIntent(
@@ -340,10 +352,25 @@ final class _ProductionFormState extends State<_ProductionForm> {
             (widget.requestIdFactory ?? secureTenantProductionRequestId)(),
         businessDate: checkoutBusinessDate(widget.clock()),
       );
-    } on TenantProductionException catch (error) {
+    } on TenantProductionException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'production.validate',
+      );
       setState(() => _error = _refusal(error));
       return;
     }
+    telemetry.recordStep(
+      operation,
+      'validated',
+      data: {
+        'request_id': _requestId,
+        'quantity': intent.quantity,
+        'total_cost_minor': intent.totalCostMinor,
+      },
+    );
     setState(() => _error = null);
     final previous = intent.previousCostMinor;
     final costSentence = previous == null
@@ -364,15 +391,35 @@ final class _ProductionFormState extends State<_ProductionForm> {
           'The batch is recorded permanently and cannot be edited. Sales '
           'already recorded keep the cost they were sold at.',
       confirmLabel: 'Complete',
-      tier: AppButtonTier.primary,
+      tier: AppButtonTier.secondary,
       confirmKey: const ValueKey('production-confirm'),
       cancelKey: const ValueKey('production-cancel'),
     );
-    if (!mounted || !confirmed) return;
+    if (!mounted || !confirmed) {
+      telemetry.recordStep(operation, 'cancelled');
+      return;
+    }
+    telemetry.recordStep(operation, 'confirmed');
     setState(() => _busy = true);
     try {
-      await widget.services.writer.complete(intent);
-    } catch (_) {
+      await telemetry.trace(
+        operation,
+        'save_batch',
+        () => widget.services.writer.complete(intent),
+      );
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'production.save',
+        data: {
+          'request_id': _requestId,
+          'product_id': product.id,
+          'quantity': intent.quantity,
+          'total_cost_minor': intent.totalCostMinor,
+        },
+      );
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -382,6 +429,7 @@ final class _ProductionFormState extends State<_ProductionForm> {
       });
       return;
     }
+    telemetry.recordStep(operation, 'saved_locally');
     if (!mounted) return;
     widget.onCompleted(
       AppNotice.confirmed(
@@ -577,7 +625,7 @@ final class _ProductionFormState extends State<_ProductionForm> {
           key: const ValueKey('production-submit'),
           label: 'Complete production',
           icon: Icons.check_circle_outline,
-          tier: AppButtonTier.primary,
+          tier: AppButtonTier.secondary,
           loading: _busy,
           expand: true,
           onPressed: _canSubmit ? _submit : null,

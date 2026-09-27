@@ -26,6 +26,8 @@ import '../ui/tokens.dart';
 import 'production_batch.dart';
 import 'production_batch_card.dart';
 import 'production_form_panel.dart';
+import '../observability/app_telemetry.dart';
+import 'production_cost_screen.dart';
 
 /// What the Production route reads first: the newest batches, and the
 /// currency their costs are stated in.
@@ -78,23 +80,23 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
   String? _olderCursor;
   bool? _olderHasMore;
   bool _readingOlder = false;
-  final Set<String> _expanded = <String>{};
 
   void _composeLoaders() {
     if (_loadersFor == _generation) return;
     _loadersFor = _generation;
     TenantGuardedLoader<TenantProductionView> readWith(
       TenantDataReader reader,
-    ) => (session) async => TenantProductionView(
-      page: await TenantProductionRepository(
-        session: session,
-        reader: reader,
-      ).loadBatches(pageSize: TenantProductionScreen.pageSize),
-      currency: await TenantReportingCurrency.read(
-        session: session,
-        reader: reader,
-      ),
-    );
+    ) =>
+        (session) async => TenantProductionView(
+          page: await TenantProductionRepository(
+            session: session,
+            reader: reader,
+          ).loadBatches(pageSize: TenantProductionScreen.pageSize),
+          currency: await TenantReportingCurrency.read(
+            session: session,
+            reader: reader,
+          ),
+        );
     _loader = readWith(widget.reader);
     final cached = widget.reader.cached;
     _loaderCached = cached == null ? null : readWith(cached);
@@ -135,7 +137,12 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
         _olderHasMore = page.hasMore;
         _readingOlder = false;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'production.history_page_read',
+      );
       if (!mounted) return;
       setState(() => _readingOlder = false);
       showAppSnackBar(
@@ -221,24 +228,19 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
         ),
       ),
       builder: (context, session, view) {
-        final batches = <TenantProductionBatch>[
-          ...view.page.items,
-          ..._older,
-        ];
+        final batches = <TenantProductionBatch>[...view.page.items, ..._older];
         final hasMore = _olderHasMore ?? view.page.hasMore;
-        final cursor = _olderHasMore == null ? view.page.nextCursor : _olderCursor;
+        final cursor = _olderHasMore == null
+            ? view.page.nextCursor
+            : _olderCursor;
         return _ProductionFrame(
           reportAction: _reportAction(session),
           child: _ProductionContents(
             batches: batches,
             currency: view.currency,
-            expanded: _expanded,
             hasMore: hasMore,
             readingOlder: _readingOlder,
             onRecord: widget.services == null ? null : _record,
-            onToggle: (batch) => setState(() {
-              if (!_expanded.remove(batch.id)) _expanded.add(batch.id);
-            }),
             onOlder: () => _readOlder(session, cursor),
           ),
         );
@@ -267,21 +269,17 @@ final class _ProductionContents extends StatelessWidget {
   const _ProductionContents({
     required this.batches,
     required this.currency,
-    required this.expanded,
     required this.hasMore,
     required this.readingOlder,
     required this.onRecord,
-    required this.onToggle,
     required this.onOlder,
   });
 
   final List<TenantProductionBatch> batches;
   final TenantReportingCurrency currency;
-  final Set<String> expanded;
   final bool hasMore;
   final bool readingOlder;
   final VoidCallback? onRecord;
-  final ValueChanged<TenantProductionBatch> onToggle;
   final VoidCallback onOlder;
 
   String _money(int minor) => currency.format(minor / 100);
@@ -304,7 +302,7 @@ final class _ProductionContents extends StatelessWidget {
             key: const ValueKey('production-record'),
             label: 'Record production',
             icon: Icons.add_circle_outline,
-            tier: AppButtonTier.primary,
+            tier: AppButtonTier.secondary,
             expand: true,
             onPressed: record,
           ),
@@ -325,9 +323,12 @@ final class _ProductionContents extends StatelessWidget {
             TenantProductionBatchCard(
               key: ValueKey('production-row-${batch.id}'),
               batch: batch,
-              open: expanded.contains(batch.id),
               money: _money,
-              onToggle: () => onToggle(batch),
+              onOpenCosts: () => openProductionCostScreen(
+                context,
+                batch: batch,
+                money: _money,
+              ),
             ),
           ],
         if (hasMore) ...<Widget>[

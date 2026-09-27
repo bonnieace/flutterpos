@@ -1,37 +1,42 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/suppliers/suppliers.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/suppliers/suppliers.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
 
 /// The Suppliers route, from the home tile to a supplier's record.
 void main() {
-  testWidgets('active suppliers are listed alphabetically, inactive ones on ask', (
-    tester,
-  ) async {
-    await _pump(tester, _Reader.seeded());
+  testWidgets(
+    'active suppliers are listed alphabetically, inactive ones on ask',
+    (tester) async {
+      await _pump(tester, _Reader.seeded());
 
-    expect(_names(tester), <String>['ABC Distributors', 'Mama Njeri Flour']);
+      expect(_names(tester), <String>['ABC Distributors', 'Mama Njeri Flour']);
 
-    await _choose(tester, 'suppliers-standing-filter', 'suppliers-standing-all');
+      await _choose(
+        tester,
+        'suppliers-standing-filter',
+        'suppliers-standing-all',
+      );
 
-    expect(_names(tester), <String>[
-      'ABC Distributors',
-      'Mama Njeri Flour',
-      'XYZ Wholesale',
-    ]);
-    // The exception wears a badge, the ordinary case does not.
-    expect(
-      find.byKey(const ValueKey('supplier-inactive-badge-sp_xyz')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('supplier-inactive-badge-sp_abc')),
-      findsNothing,
-    );
-  });
+      expect(_names(tester), <String>[
+        'ABC Distributors',
+        'Mama Njeri Flour',
+        'XYZ Wholesale',
+      ]);
+      // The exception wears a badge, the ordinary case does not.
+      expect(
+        find.byKey(const ValueKey('supplier-inactive-badge-sp_xyz')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('supplier-inactive-badge-sp_abc')),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('search narrows the list by name, whatever the case', (
     tester,
@@ -85,30 +90,28 @@ void main() {
     expect(reader.reads, greaterThan(readsBefore));
   });
 
-  testWidgets('a name another supplier already answers to is refused on the form', (
-    tester,
-  ) async {
-    final writer = _Writer();
-    await _pump(tester, _Reader.seeded(), writer: writer);
+  testWidgets(
+    'a name another supplier already answers to is refused on the form',
+    (tester) async {
+      final writer = _Writer();
+      await _pump(tester, _Reader.seeded(), writer: writer);
 
-    await tester.tap(find.byKey(const ValueKey('suppliers-add')));
-    await tester.pumpAndSettle();
-    // Inactive, and still the name: its history would split in two.
-    await tester.enterText(
-      find.byKey(const ValueKey('supplier-form-name')),
-      'xyz  wholesale',
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('supplier-form-submit')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('suppliers-add')));
+      await tester.pumpAndSettle();
+      // Inactive, and still the name: its history would split in two.
+      await tester.enterText(
+        find.byKey(const ValueKey('supplier-form-name')),
+        'xyz  wholesale',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('supplier-form-submit')));
+      await tester.pumpAndSettle();
 
-    expect(writer.created, isEmpty);
-    expect(
-      find.byKey(const ValueKey('supplier-form-error')),
-      findsOneWidget,
-    );
-    expect(find.textContaining('already has a supplier'), findsOneWidget);
-  });
+      expect(writer.created, isEmpty);
+      expect(find.byKey(const ValueKey('supplier-form-error')), findsOneWidget);
+      expect(find.textContaining('already has a supplier'), findsOneWidget);
+    },
+  );
 
   testWidgets('marking a supplier inactive asks first, then says what it did', (
     tester,
@@ -181,14 +184,17 @@ void main() {
 }
 
 List<String> _names(WidgetTester tester) => <String>[
-  for (final element in find
-      .byWidgetPredicate(
-        (widget) =>
-            widget is Text &&
-            widget.key is ValueKey<String> &&
-            (widget.key! as ValueKey<String>).value.startsWith('supplier-name-'),
-      )
-      .evaluate())
+  for (final element
+      in find
+          .byWidgetPredicate(
+            (widget) =>
+                widget is Text &&
+                widget.key is ValueKey<String> &&
+                (widget.key! as ValueKey<String>).value.startsWith(
+                  'supplier-name-',
+                ),
+          )
+          .evaluate())
     (element.widget as Text).data!,
 ];
 
@@ -216,7 +222,10 @@ Future<void> _pump(
     MaterialApp(
       home: TenantSessionScope(
         controller: controller,
-        child: TenantSuppliersScreen(reader: reader, writer: writer ?? _Writer()),
+        child: TenantSuppliersScreen(
+          reader: reader,
+          writer: writer ?? _Writer(),
+        ),
       ),
     ),
   );
@@ -250,7 +259,9 @@ final class _Writer implements TenantSupplierWriter {
     TenantSupplierCreateIntent intent,
   ) async {
     created.add(intent);
-    return TenantSupplierWriteResult.queued('supplier-create-${intent.supplierId}');
+    return TenantSupplierWriteResult.queued(
+      'supplier-create-${intent.supplierId}',
+    );
   }
 
   @override

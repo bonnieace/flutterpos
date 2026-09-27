@@ -12,6 +12,7 @@ import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
 import 'tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 enum PlatformGlobalStatus { active, disabled }
 
@@ -68,9 +69,12 @@ final class FirebaseGetGlobalUserStatusReviewCallable
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     try {
-      final result = await _functions
-          .httpsCallable('getGlobalUserStatusReview')
-          .call<Object?>(payload);
+      final result = await traceServerCall(
+        'getGlobalUserStatusReview',
+        () => _functions
+            .httpsCallable('getGlobalUserStatusReview')
+            .call<Object?>(payload),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw PlatformGlobalUserStatusCallableException(error.code);
@@ -555,9 +559,12 @@ final class FirebaseSetGlobalUserStatusCallable
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     try {
-      final result = await _functions
-          .httpsCallable('setGlobalUserStatus')
-          .call<Object?>(payload);
+      final result = await traceServerCall(
+        'setGlobalUserStatus',
+        () => _functions
+            .httpsCallable('setGlobalUserStatus')
+            .call<Object?>(payload),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw PlatformGlobalUserStatusCallableException(error.code);
@@ -1066,7 +1073,12 @@ final class _PlatformGlobalUserStatusScreenState
             ? 'No canonical user exists for that UID.'
             : null;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'platform.user_status_read',
+      );
       if (!_isCurrent(epoch)) return;
       setState(() {
         _loading = false;

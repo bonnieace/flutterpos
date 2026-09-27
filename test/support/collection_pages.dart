@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 
 /// Answers a collection page the way Firestore would, out of a fixed list.
 ///

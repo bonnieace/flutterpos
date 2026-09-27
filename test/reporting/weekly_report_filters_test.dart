@@ -16,11 +16,11 @@
 library;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/checkout/checkout_receipt.dart';
-import 'package:flutter_application_1/expenses/expense_repository.dart';
-import 'package:flutter_application_1/reporting/reporting.dart';
-import 'package:flutter_application_1/sales/sale_history.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/checkout/checkout_receipt.dart';
+import 'package:uzapay_pos/expenses/expense_repository.dart';
+import 'package:uzapay_pos/reporting/reporting.dart';
+import 'package:uzapay_pos/sales/sale_history.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Wednesday, so the current week holds three elapsed days of seven.

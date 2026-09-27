@@ -17,6 +17,7 @@ import 'tenant_staff_request_ticket.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_staff_invitation.dart';
 import 'tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for the enabled `cancelTenantInvitation` mutation.
 abstract interface class CancelTenantInvitationCallable {
@@ -33,9 +34,12 @@ final class FirebaseCancelTenantInvitationCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('cancelTenantInvitation')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'cancelTenantInvitation',
+      () => _functions
+          .httpsCallable('cancelTenantInvitation')
+          .call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -324,7 +328,12 @@ final class _TenantStaffInvitationCancellationFormState
         _safeError = null;
       });
       return;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'staff.invitation_cancel',
+      );
       if (!mounted ||
           !_isCurrent(
             controller,

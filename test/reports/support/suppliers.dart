@@ -1,8 +1,8 @@
 /// A period of supplier deliveries, for the supplier report's samples.
 library;
 
-import 'package:flutter_application_1/reports/analysis/supplier_analysis.dart';
-import 'package:flutter_application_1/suppliers/supplier_delivery.dart';
+import 'package:uzapay_pos/reports/analysis/supplier_analysis.dart';
+import 'package:uzapay_pos/suppliers/supplier_delivery.dart';
 
 import 'documents.dart';
 

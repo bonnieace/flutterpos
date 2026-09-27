@@ -2,17 +2,17 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/reporting/reporting.dart';
-import 'package:flutter_application_1/reports/analysis/sales_report.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
-import 'package:flutter_application_1/returns/return_offsets.dart';
-import 'package:flutter_application_1/sales/sales.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/fields.dart';
-import 'package:flutter_application_1/ui/press.dart';
-import 'package:flutter_application_1/ui/skeleton.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/reporting/reporting.dart';
+import 'package:uzapay_pos/reports/analysis/sales_report.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
+import 'package:uzapay_pos/returns/return_offsets.dart';
+import 'package:uzapay_pos/sales/sales.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/fields.dart';
+import 'package:uzapay_pos/ui/press.dart';
+import 'package:uzapay_pos/ui/skeleton.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';

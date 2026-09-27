@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'checkout_outbox.dart';
+import '../observability/app_telemetry.dart';
 
 enum CheckoutConfirmationKind {
   matching,
@@ -169,7 +170,12 @@ final class FirebaseCheckoutConfirmationGateway
       await _waitForPendingWrites().timeout(_pendingWritesTimeout);
     } on TimeoutException {
       return const CheckoutConfirmationResult.pendingWrites();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'checkout.confirmation_pending_writes',
+      );
       return const CheckoutConfirmationResult.unavailable();
     }
     if (!await _online()) {
@@ -182,7 +188,12 @@ final class FirebaseCheckoutConfirmationGateway
         record.tenantId,
         record.checkoutId,
       ).timeout(_serverReadTimeout);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'checkout.confirmation_server_read',
+      );
       return const CheckoutConfirmationResult.unavailable();
     }
     if (!snapshot.exists) {

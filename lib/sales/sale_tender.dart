@@ -12,6 +12,7 @@ import '../ui/dialogs.dart';
 import '../ui/press.dart';
 import '../ui/tokens.dart';
 import 'sale_history.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for `setSaleTender`.
 abstract interface class SetSaleTenderCallable {
@@ -27,9 +28,10 @@ final class FirebaseSetSaleTenderCallable implements SetSaleTenderCallable {
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('setSaleTender')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'setSaleTender',
+      () => _functions.httpsCallable('setSaleTender').call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -165,7 +167,12 @@ final class TenantSaleTenderGateway {
       throw TenantSaleTenderException(_classify(error));
     } on TimeoutException {
       throw const TenantSaleTenderException(TenantSaleTenderFailure.ambiguous);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'sales.tender_request',
+      );
       throw const TenantSaleTenderException(TenantSaleTenderFailure.ambiguous);
     }
   }

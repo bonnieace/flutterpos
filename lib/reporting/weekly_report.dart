@@ -28,6 +28,7 @@ import '../returns/return_offsets.dart';
 import 'net_profit.dart';
 import 'device_sales_totals.dart';
 import 'sales_totals.dart';
+import '../observability/app_telemetry.dart';
 
 /// One Monday-to-Sunday week, named by how many weeks back it is.
 ///
@@ -577,7 +578,12 @@ final class TenantWeeklyReportLoader {
         startDate: week.startBusinessDate,
         endDate: week.endBusinessDateAt(now),
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.weekly_expenses_read',
+      );
       return null;
     }
   }

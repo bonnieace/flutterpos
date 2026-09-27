@@ -15,6 +15,7 @@ import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
 import 'tenant_staff_request_ticket.dart';
 import 'tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 typedef TenantStaffRequestIdFactory = String Function();
 
@@ -45,9 +46,10 @@ final class FirebaseInviteStaffCallable implements InviteStaffCallable {
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('inviteStaff')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'inviteStaff',
+      () => _functions.httpsCallable('inviteStaff').call<Object?>(payload),
+    );
     return result.data;
   }
 }

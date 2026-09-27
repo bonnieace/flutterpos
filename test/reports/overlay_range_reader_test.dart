@@ -15,8 +15,8 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter_application_1/tenancy/tenant_pending_mutation.dart';
-import 'package:flutter_application_1/tenancy/tenant_repository.dart';
+import 'package:uzapay_pos/tenancy/tenant_pending_mutation.dart';
+import 'package:uzapay_pos/tenancy/tenant_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 

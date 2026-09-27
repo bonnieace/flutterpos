@@ -24,6 +24,7 @@ import 'package:hive/hive.dart';
 import '../checkout/checkout_outbox.dart';
 import '../tenancy/tenant_id.dart';
 import 'stock_take.dart';
+import '../storage/device_storage.dart';
 
 /// Where a count in progress is kept.
 abstract interface class TenantStockTakeDraftSource {
@@ -108,10 +109,10 @@ final class HiveTenantStockTakeDrafts extends ChangeNotifier
         TenantStockTakeFailure.draftUnreadable,
       );
     }
-    final box = await (hive ?? Hive).openBox<dynamic>(
+    final box = await openBoxRepairingTornTail<dynamic>(
+      hive ?? Hive,
       boxName,
-      encryptionCipher: HiveAesCipher(List<int>.from(key)),
-      crashRecovery: false,
+      cipher: HiveAesCipher(List<int>.from(key)),
     );
     return HiveTenantStockTakeDrafts._(box, clock ?? _utcNow);
   }

@@ -20,7 +20,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
+import 'observability/app_telemetry.dart';
 
 import 'keyboard_controller.dart';
 import 'keyboard_scope.dart';
@@ -298,8 +298,20 @@ class _LoginScreenState extends State<LoginScreen> {
     if (isLoading) return;
 
     final email = emailController.text.trim();
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'auth.password_reset',
+      screen: 'login',
+      context: {'attempted_email': email},
+    );
     final defect = passwordResetInputDefect(email: email);
     if (defect != null) {
+      telemetry.reportFailure(
+        ArgumentError(defect.name),
+        StackTrace.current,
+        operation: operation,
+        code: 'validation_missing_email',
+      );
       setState(() {
         _defect = SignInInputDefect.missingEmail;
         _notice = null;
@@ -314,8 +326,15 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      telemetry.recordStep(operation, 'validated');
+      telemetry.recordStep(operation, 'submitted');
       final gateway = _passwordReset;
-      await gateway.submit(gateway.createIntent(email: email));
+      await telemetry.trace(
+        operation,
+        'request_reset',
+        () => gateway.submit(gateway.createIntent(email: email)),
+      );
+      telemetry.recordStep(operation, 'confirmed_on_server');
       if (mounted) {
         setState(() {
           _resetAccepted = true;
@@ -323,6 +342,7 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     } catch (error, stackTrace) {
+      telemetry.reportFailure(error, stackTrace, operation: operation);
       if (mounted) {
         final failure = passwordResetFailure(error);
         setState(() {
@@ -337,7 +357,6 @@ class _LoginScreenState extends State<LoginScreen> {
           isLoading = false;
         });
       }
-      await Sentry.captureException(error, stackTrace: stackTrace);
     }
   }
 
@@ -346,6 +365,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final email = emailController.text.trim();
     final password = passwordController.text;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'auth.sign_in',
+      screen: 'login',
+      context: {'attempted_email': email},
+    );
 
     // Refused here rather than by the identity provider. An empty password is
     // not a credential, and sending one reached a platform channel that threw
@@ -353,6 +378,12 @@ class _LoginScreenState extends State<LoginScreen> {
     // channel name came to be printed on the first screen of this app.
     final defect = signInInputDefect(email: email, password: password);
     if (defect != null) {
+      telemetry.reportFailure(
+        ArgumentError(defect.name),
+        StackTrace.current,
+        operation: operation,
+        code: 'validation_${defect.name}',
+      );
       setState(() {
         _defect = defect;
         _notice = null;
@@ -367,16 +398,24 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await _signIn.call(
-        email: email,
-        password: password,
-        remember: rememberMe,
+      telemetry.recordStep(operation, 'validated');
+      telemetry.recordStep(operation, 'submitted');
+      await telemetry.trace(
+        operation,
+        'authenticate',
+        () => _signIn.call(
+          email: email,
+          password: password,
+          remember: rememberMe,
+        ),
       );
+      telemetry.recordStep(operation, 'confirmed_on_server');
       // Deliberately still loading. The routing shell replaces this screen once
       // the session opens, and releasing the button first offers a second
       // sign-in against a session that is already being built.
       return;
     } catch (error, stackTrace) {
+      telemetry.reportFailure(error, stackTrace, operation: operation);
       if (mounted) {
         setState(() {
           // Never the caught object and never its message: whatever was thrown,
@@ -388,7 +427,6 @@ class _LoginScreenState extends State<LoginScreen> {
       // Reported after the user has been answered, so a slow or failing
       // reporting transport can neither delay the sentence on screen nor
       // swallow it.
-      await Sentry.captureException(error, stackTrace: stackTrace);
     }
   }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/theme.dart';
-import 'package:flutter_application_1/ui/banner.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/ui/banner.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

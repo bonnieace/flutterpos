@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/theme.dart';
-import 'package:flutter_application_1/ui/buttons.dart';
-import 'package:flutter_application_1/ui/states.dart';
-import 'package:flutter_application_1/ui/status.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
+import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/ui/buttons.dart';
+import 'package:uzapay_pos/ui/states.dart';
+import 'package:uzapay_pos/ui/status.dart';
+import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

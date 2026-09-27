@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:hive/hive.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../checkout/checkout_outbox.dart';
 import 'tenant_id.dart';
@@ -10,6 +11,7 @@ import 'tenant_paths.dart';
 import 'tenant_repository.dart';
 import 'tenant_session.dart';
 import 'tenant_switch.dart';
+import '../storage/device_storage.dart';
 
 enum TenantPendingMutationKind {
   expenseCreate,
@@ -347,10 +349,10 @@ final class TenantPendingMutationStore {
     if (key.length != HiveCheckoutOutbox.encryptionKeyBytes) {
       throw const TenantPendingMutationException('invalid_encryption_key');
     }
-    final box = await (hive ?? Hive).openBox<dynamic>(
+    final box = await openBoxRepairingTornTail<dynamic>(
+      hive ?? Hive,
       boxName,
-      encryptionCipher: HiveAesCipher(List<int>.from(key)),
-      crashRecovery: false,
+      cipher: HiveAesCipher(List<int>.from(key)),
     );
     return TenantPendingMutationStore._(box, clock ?? _utcNow);
   }
@@ -369,6 +371,17 @@ final class TenantPendingMutationStore {
     required Map<String, Object?> payload,
     String? replacedValueFingerprint,
   }) async {
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'business.${kind.name}',
+      screen: kind.name,
+      context: {
+        'user_id': uid,
+        'tenant_id': tenantId,
+        'operation_id': operationId,
+        'target_path': targetPath,
+      },
+    );
     final key = tenantPendingMutationStorageKey(
       uid: uid,
       tenantId: tenantId,
@@ -377,7 +390,7 @@ final class TenantPendingMutationStore {
     _requireTarget(tenantId, targetPath, kind);
     final frozen = _freezeMap(payload);
     final hash = tenantMutationFingerprint(frozen);
-    return _serialized(key, () async {
+    final saved = await _serialized(key, () async {
       final raw = _box.get(key);
       if (raw != null) {
         final existing = _parseRecord(key, raw);
@@ -411,6 +424,12 @@ final class TenantPendingMutationStore {
       _changes.add(null);
       return record;
     });
+    telemetry.recordStep(
+      operation,
+      'saved_locally',
+      data: {'operation_id': operationId, 'state': saved.state.name},
+    );
+    return saved;
   }
 
   Future<List<TenantPendingMutationRecord>> recordsForSession({
@@ -778,7 +797,13 @@ final class TenantPendingMutationWorker {
     for (final path in tenantMutationTouchedPaths(record)) {
       try {
         await _confirmation.read(path);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'sync.read_back',
+        );
+      }
     }
   }
 
@@ -829,6 +854,7 @@ final class TenantPendingMutationWorker {
       // correction to a product that does not exist yet cannot go either.
       if (_awaitsQueuedCreate(record, queuedCreates)) return;
       var readBack = false;
+      TelemetryOperation? attempt;
       try {
         if (_store.hasActiveLease(record)) {
           wakes.add(record.leaseExpiresAt!);
@@ -895,14 +921,37 @@ final class TenantPendingMutationWorker {
           }
         }
         record = await _store.acquire(record, leaseOwner: _workerId);
-        final result = await _submission.submit(record);
+        attempt = AppTelemetry.current.start(
+          'business.${record.kind.name}.sync',
+          screen: 'sync',
+          context: {
+            'user_id': record.uid,
+            'tenant_id': record.tenantId,
+            'operation_id': record.operationId,
+            'target_path': record.targetPath,
+            'attempt_number': record.attemptCount,
+          },
+        );
+        AppTelemetry.current.recordStep(attempt, 'submitted');
+        final result = await AppTelemetry.current.trace(
+          attempt,
+          'submit_mutation',
+          () => _submission.submit(record),
+        );
         switch (result.outcome) {
           case TenantMutationSubmissionOutcome.committed:
             await _store.markConfirmed(record);
+            AppTelemetry.current.recordStep(attempt, 'confirmed_on_server');
             if (tenantMutationReadsBackOnLanding(record.kind)) {
               await _readBack(record);
             }
           case TenantMutationSubmissionOutcome.uncertain:
+            AppTelemetry.captureHandled(
+              StateError('submission_uncertain'),
+              StackTrace.current,
+              operation: attempt,
+              code: 'submission_uncertain',
+            );
             if (tenantMutationResendConfirms(record.kind)) {
               final awaiting = await _store.markAwaitingResend(record);
               wakes.add(awaiting.retryAt!);
@@ -911,13 +960,36 @@ final class TenantPendingMutationWorker {
             }
           case TenantMutationSubmissionOutcome.rejected:
             await _store.markRejected(record, result.reasonCode ?? 'rejected');
+            AppTelemetry.captureHandled(
+              StateError(result.reasonCode ?? 'rejected'),
+              StackTrace.current,
+              operation: attempt,
+              code: result.reasonCode ?? 'rejected',
+            );
             return;
         }
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          operation: attempt,
+          boundary: 'mutation.sync',
+          data: {
+            'operation_id': record.operationId,
+            'tenant_id': record.tenantId,
+            'attempt_number': record.attemptCount,
+          },
+        );
         try {
           final later = await _store.retryLater(record);
           wakes.add(later.retryAt!);
-        } catch (_) {}
+        } catch (retryError, retryStack) {
+          AppTelemetry.captureHandled(
+            retryError,
+            retryStack,
+            boundary: 'mutation.retry_schedule',
+          );
+        }
         return;
       }
     }
@@ -1803,7 +1875,12 @@ TenantPendingMutationRecord _parseRecord(String key, Object? raw) {
       updatedAt: _instant(map['updatedAtMs'])!,
       reasonCode: map['reasonCode'] as String?,
     );
-  } catch (_) {
+  } catch (error, stackTrace) {
+    AppTelemetry.captureHandled(
+      error,
+      stackTrace,
+      boundary: 'sync.record_decode',
+    );
     throw const TenantPendingMutationException('unreadable_record');
   }
 }

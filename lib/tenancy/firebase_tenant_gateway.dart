@@ -6,6 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 import 'tenant_bootstrap.dart';
 import 'tenant_directory.dart';
+import '../observability/app_telemetry.dart';
 
 final class FirebaseTenantGateway
     implements
@@ -86,16 +87,18 @@ final class FirebaseTenantGateway
   }) async {
     final HttpsCallableResult<Object?> result;
     try {
-      result = await _functions
-          .httpsCallable(
-            'listMyTenants',
-            options: HttpsCallableOptions(timeout: deadline),
-          )
-          .call<Object?>(<String, Object?>{
-            'pageSize': pageSize,
-            if (cursor != null) 'cursor': cursor,
-          })
-          .timeout(deadline);
+      result = await traceServerCall(
+        'listMyTenants',
+        () => _functions
+            .httpsCallable(
+              'listMyTenants',
+              options: HttpsCallableOptions(timeout: deadline),
+            )
+            .call<Object?>(<String, Object?>{
+              'pageSize': pageSize,
+              if (cursor != null) 'cursor': cursor,
+            }),
+      ).timeout(deadline);
     } on TimeoutException {
       throw const TenantDirectoryUnavailable('deadline-exceeded');
     } on FirebaseFunctionsException catch (error) {

@@ -6,8 +6,8 @@
 /// worse than naming it plainly under its raw wire value.
 library;
 
-import 'package:flutter_application_1/audit/audit_log.dart';
-import 'package:flutter_application_1/reports/analysis/logs_analysis.dart';
+import 'package:uzapay_pos/audit/audit_log.dart';
+import 'package:uzapay_pos/reports/analysis/logs_analysis.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/logs.dart';

@@ -7,6 +7,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for `requestTenantReconciliation`.
 ///
@@ -27,9 +28,12 @@ final class FirebaseRequestReconciliationCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('requestTenantReconciliation')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'requestTenantReconciliation',
+      () => _functions
+          .httpsCallable('requestTenantReconciliation')
+          .call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -247,7 +251,12 @@ final class TenantReconciliationRequestGateway {
       throw const TenantReconciliationRequestException(
         TenantReconciliationRequestFailure.ambiguous,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.reconciliation_request',
+      );
       throw const TenantReconciliationRequestException(
         TenantReconciliationRequestFailure.ambiguous,
       );

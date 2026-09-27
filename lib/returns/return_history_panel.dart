@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
@@ -212,6 +213,16 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
   ) async {
     final writer = widget.actions?.writer;
     if (writer == null || _busy) return;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'returns.record',
+      screen: 'returns',
+      context: {
+        'user_id': session.uid,
+        'tenant_id': session.tenantId,
+        'sale_id': widget.request.saleId,
+      },
+    );
     final capturedKey = _sessionKey(session);
     setState(() {
       _busy = true;
@@ -228,7 +239,24 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
             requestId: _requestId ??=
                 (widget.requestIdFactory ?? secureTenantReturnRequestId)(),
           );
-      final result = await writer.recordReturn(intent);
+      final result = await telemetry.trace(
+        operation,
+        'save_return',
+        () => writer.recordReturn(intent),
+      );
+      if (result.kind == TenantReturnWriteKind.queued) {
+        telemetry.recordStep(operation, 'saved_locally');
+      } else if (result.kind == TenantReturnWriteKind.committed) {
+        telemetry.recordStep(operation, 'confirmed_on_server');
+      } else {
+        AppTelemetry.captureHandled(
+          StateError(result.kind.name),
+          StackTrace.current,
+          operation: operation,
+          code: result.kind.name,
+          data: {'quantities': quantities},
+        );
+      }
       if (!_stillCurrent(capturedKey)) return;
       // Only an ambiguous outcome may have landed, so only it keeps the
       // request ID. A rejected or unattempted write left nothing behind, and
@@ -240,7 +268,14 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
       // the route on a settled outcome, and a `_reload` after it would start a
       // guarded read against a deactivated element.
       if (settled && widget.onCompleted == null) _reload();
-    } on TenantReturnException catch (error) {
+    } on TenantReturnException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'returns.record',
+        data: {'quantities': quantities},
+      );
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
       _answer(_refusalNotice(error.code));

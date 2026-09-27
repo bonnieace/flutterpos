@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../tenancy/tenant_paths.dart';
 import 'checkout_sale.dart';
+import '../observability/app_telemetry.dart';
 
 enum CheckoutSubmissionKind {
   /// The server acknowledged the one atomic batch.
@@ -116,7 +117,12 @@ final class FirebaseCheckoutSubmissionGateway
       return _rejectedCodes.contains(error.code)
           ? CheckoutSubmissionResult.rejected(error.code)
           : CheckoutSubmissionResult.ambiguous(error.code);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'checkout.submission',
+      );
       return const CheckoutSubmissionResult.ambiguous('unknown_error');
     }
   }

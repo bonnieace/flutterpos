@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter_application_1/theme.dart';
-import 'package:flutter_application_1/pos/services/returns_service.dart';
+import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/pos/services/returns_service.dart';
 
-import 'package:flutter_application_1/services/Receipt_service.dart' show buildTestReceiptService, ItemInfo;
+import 'package:uzapay_pos/services/Receipt_service.dart' show buildTestReceiptService, ItemInfo;
 import 'package:lottie/lottie.dart';
 class SalesReportPage extends StatefulWidget {
   const SalesReportPage({super.key});

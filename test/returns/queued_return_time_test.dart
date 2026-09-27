@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter_application_1/returns/returns.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/returns/returns.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 

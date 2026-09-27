@@ -42,6 +42,7 @@ import 'stock_adjustment.dart';
 import 'product_image_drafts.dart';
 import 'product_image_store.dart';
 import 'product_visual.dart';
+import '../observability/app_telemetry.dart';
 
 /// The catalog route that adds to, corrects, and retires from one business's
 /// catalog.
@@ -221,10 +222,7 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
       // the instant instead.
       build: (period) async {
         final source = TenantInventoryReportSource(
-          repository: TenantCatalogRepository(
-            session: session,
-            reader: reader,
-          ),
+          repository: TenantCatalogRepository(session: session, reader: reader),
         );
         final read = await source.gather();
         final names = await source.categoryNames();
@@ -892,7 +890,12 @@ final class _TenantCatalogManagementPanelState
         tenantId: session.tenantId,
         productId: productId,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'inventory.product_image_cleanup',
+      );
       // See above.
     }
   }
@@ -908,7 +911,12 @@ final class _TenantCatalogManagementPanelState
         productId: productId,
         imageUrl: imageUrl,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'inventory.product_image_cleanup',
+      );
       // Cleanup is best effort; the product outcome remains the primary fact.
     }
   }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/production/production.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/production/production.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/buttons.dart';
@@ -16,14 +16,15 @@ void main() {
 
     expect(find.byKey(const ValueKey('production-row-pb_2')), findsOneWidget);
     expect(find.text('White bread loaf · 100 made'), findsWidgets);
-    final show = find.byKey(const ValueKey('production-costs-pb_2'));
-    await tester.tap(show);
+    // The breakdown is a screen of its own now, not rows under the card.
+    await tester.tap(find.byKey(const ValueKey('production-costs-pb_2')));
     await tester.pumpAndSettle();
-    expect(find.text('Flour'), findsOneWidget);
     expect(
-      find.textContaining('Cost per unit went from KES 28 to KES 30'),
+      find.byKey(const ValueKey('production-cost-screen')),
       findsOneWidget,
     );
+    expect(find.text('Flour'), findsOneWidget);
+    expect(find.text('Was KES 28 before this batch'), findsOneWidget);
   });
 
   testWidgets('a business with no batches is told what to do first', (
@@ -152,7 +153,10 @@ void main() {
     await _chooseProduct(tester, 'prod-bread');
     // The card, and no search beside it.
     expect(find.byKey(const ValueKey('production-product')), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-typeahead-search')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('product-typeahead-search')),
+      findsNothing,
+    );
 
     await tester.tap(find.byKey(const ValueKey('production-product-edit')));
     await tester.pumpAndSettle();
@@ -166,7 +170,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('production-product-keep')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('production-product')), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-typeahead-search')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('product-typeahead-search')),
+      findsNothing,
+    );
   });
 
   // **Both found on a device, 2026-09-25.** Every row said *Flour*, which read

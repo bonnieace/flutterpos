@@ -16,6 +16,7 @@ import 'tenant_staff_request_ticket.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_staff_invitation.dart';
 import 'tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for the enabled `resendStaffInvitation` mutation.
 abstract interface class ResendStaffInvitationCallable {
@@ -32,9 +33,12 @@ final class FirebaseResendStaffInvitationCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('resendStaffInvitation')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'resendStaffInvitation',
+      () => _functions
+          .httpsCallable('resendStaffInvitation')
+          .call<Object?>(payload),
+    );
     return result.data;
   }
 }

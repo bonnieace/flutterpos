@@ -18,9 +18,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/checkout/checkout_receipt.dart';
-import 'package:flutter_application_1/returns/return_offsets.dart';
-import 'package:flutter_application_1/sales/sale_history.dart';
+import 'package:uzapay_pos/checkout/checkout_receipt.dart';
+import 'package:uzapay_pos/returns/return_offsets.dart';
+import 'package:uzapay_pos/sales/sale_history.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _tenant = 'tenant-a';

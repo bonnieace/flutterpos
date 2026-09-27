@@ -6,8 +6,8 @@
 /// for shelves nobody looked at.
 library;
 
-import 'package:flutter_application_1/inventory/stock_take_review.dart';
-import 'package:flutter_application_1/reports/analysis/stock_counts_analysis.dart';
+import 'package:uzapay_pos/inventory/stock_take_review.dart';
+import 'package:uzapay_pos/reports/analysis/stock_counts_analysis.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/stock_counts.dart';

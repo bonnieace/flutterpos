@@ -43,6 +43,8 @@ import {
   StoredStaffRecord,
   StoredTenantRecord,
 } from "./types";
+import {logAbsorbedFailure} from "../core/absorbedFailure";
+import {AUTH_ACTION_LINK_ORIGIN, rehostActionLink} from "../core/actionLink";
 
 export const STAFF_INVITATION_ACTION_BASE_URL = defineString(
   "STAFF_INVITATION_ACTION_BASE_URL"
@@ -409,6 +411,11 @@ export async function dispatchInvitationDelivery(
     });
     return "queued";
   } catch (error) {
+    logAbsorbedFailure("staff.invitation_enqueue_failed", error, {
+      deliveryId,
+      tenantId: task.tenantId,
+      attempt: task.dispatchAttempt,
+    });
     const nextAttemptAt = Timestamp.fromMillis(
       Date.now() + retryDelayMilliseconds(task.dispatchAttempt)
     );
@@ -449,10 +456,13 @@ async function defaultGenerateCredentialBootstrapLink(
   email: string,
   continueUrl: string
 ): Promise<string> {
-  return getAuth().generatePasswordResetLink(email, {
-    url: continueUrl,
-    handleCodeInApp: false,
-  });
+  return rehostActionLink(
+    await getAuth().generatePasswordResetLink(email, {
+      url: continueUrl,
+      handleCodeInApp: false,
+    }),
+    AUTH_ACTION_LINK_ORIGIN.value()
+  );
 }
 
 /** Selects a direct proof link or a transient Firebase credential-setup link. */
@@ -736,6 +746,13 @@ export const deliverStaffInvitation = onTaskDispatched<InvitationDeliveryTask>(
         error.safeCode : "provider_send_failed";
       const retryable = (error instanceof EmailProviderError ? error.retryable : true) &&
         task.dispatchAttempt < MAX_INVITATION_DELIVERY_ATTEMPTS;
+      logAbsorbedFailure("staff.invitation_send_failed", error, {
+        deliveryId: task.deliveryId,
+        tenantId: task.tenantId,
+        safeCode,
+        retryable,
+        attempt: task.dispatchAttempt,
+      });
       await db.runTransaction(async (transaction) => {
         const [current, staffSnapshot] = await transaction.getAll(
           deliveryRef,

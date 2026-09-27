@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_application_1/ui/spring.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
+import 'package:uzapay_pos/ui/spring.dart';
+import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A ticker provider for a drive under test, with no widget above it.

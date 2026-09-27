@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'checkout_draft.dart';
+import '../observability/app_telemetry.dart';
 
 /// Marks a sync run that was asked for because a sale just became durable.
 ///
@@ -132,7 +133,12 @@ final class CheckoutSyncOnSaveDraftSink implements CheckoutDraftSink {
     final saved = await _delegate.saveDraft(request);
     try {
       _signals.requestSyncAfterSave();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'checkout.sync_signal',
+      );
       // The sale is already durable. Reporting a failed signal as a failed save
       // would send a cashier to ring the same sale up twice, and the sale is
       // still picked up on the next reconnect or session open.

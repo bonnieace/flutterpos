@@ -19,7 +19,7 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter_application_1/checkout/checkout_print_transport.dart';
+import 'package:uzapay_pos/checkout/checkout_print_transport.dart';
 
 Future<void> main(List<String> args) async {
   final host = args.isNotEmpty

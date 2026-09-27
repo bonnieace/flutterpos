@@ -1,4 +1,5 @@
 import {GlobalStatus} from "../core/model";
+import {logAbsorbedFailure} from "../core/absorbedFailure";
 
 export type GlobalOperationStatus = "pending" | "completed" | "partially_failed";
 export type GlobalOperationStepStatus = "pending" | "completed" | "not_applicable";
@@ -250,6 +251,14 @@ export async function runGlobalUserStatusSaga(
     }
     return await adapter.complete(operation);
   } catch (error) {
-    return adapter.recordFailure(operation, safeLifecycleErrorCode(error));
+    const code = safeLifecycleErrorCode(error);
+    logAbsorbedFailure("lifecycle.global_status_failed", error, {
+      requestId: operation.requestId,
+      uid: operation.uid,
+      targetStatus: operation.targetStatus,
+      safeCode: code,
+      attempt: operation.attemptCount,
+    });
+    return adapter.recordFailure(operation, code);
   }
 }

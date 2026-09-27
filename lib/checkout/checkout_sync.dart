@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -123,7 +124,12 @@ final class CheckoutSubmissionWorker {
           uid: captured.uid,
           tenantId: captured.tenantId,
         );
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'checkout.sync_records_read',
+        );
         return const CheckoutSyncRunResult(
           CheckoutSyncRunKind.storageUnavailable,
         );
@@ -140,6 +146,16 @@ final class CheckoutSubmissionWorker {
           skipped++;
           continue;
         }
+        final telemetry = AppTelemetry.current;
+        final attempt = telemetry.start(
+          'checkout.submit',
+          screen: 'checkout_sync',
+          context: {
+            'user_id': record.uid,
+            'tenant_id': record.tenantId,
+            'checkout_id': record.checkoutId,
+          },
+        );
 
         final CheckoutSaleSubmission submission;
         try {
@@ -147,7 +163,14 @@ final class CheckoutSubmissionWorker {
             record,
             session: captured,
           ).toSubmission();
-        } catch (_) {
+        } catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            operation: attempt,
+            boundary: 'checkout.payload',
+            data: {'checkout_id': record.checkoutId},
+          );
           malformed++;
           continue;
         }
@@ -160,7 +183,13 @@ final class CheckoutSubmissionWorker {
             leaseOwner: _workerId,
             leaseDuration: _leaseDuration,
           );
-        } on CheckoutOutboxException catch (error) {
+        } on CheckoutOutboxException catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            operation: attempt,
+            boundary: 'checkout.lease',
+          );
           if (error.code == 'malformed_record') {
             return const CheckoutSyncRunResult(
               CheckoutSyncRunKind.storageUnavailable,
@@ -168,14 +197,25 @@ final class CheckoutSubmissionWorker {
           }
           skipped++;
           continue;
-        } catch (_) {
+        } catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            operation: attempt,
+            boundary: 'checkout.lease',
+          );
           return const CheckoutSyncRunResult(
             CheckoutSyncRunKind.storageUnavailable,
           );
         }
         if (!_owns(captured)) return _sessionChanged();
 
-        final result = await _submissionGateway.submit(submission);
+        telemetry.recordStep(attempt, 'submitted');
+        final result = await telemetry.trace(
+          attempt,
+          'submit_batch',
+          () => _submissionGateway.submit(submission),
+        );
         if (!_owns(captured)) return _sessionChanged();
         switch (result.kind) {
           case CheckoutSubmissionKind.committed:
@@ -187,18 +227,50 @@ final class CheckoutSubmissionWorker {
                 leaseOwner: _workerId,
               );
               submitted++;
-            } on CheckoutOutboxException {
+              telemetry.recordStep(attempt, 'confirmed');
+              telemetry.finishOperation(attempt);
+            } on CheckoutOutboxException catch (error, stackTrace) {
+              AppTelemetry.captureHandled(
+                error,
+                stackTrace,
+                operation: attempt,
+                boundary: 'checkout.awaiting_confirmation',
+              );
               ambiguous++;
-            } catch (_) {
+            } catch (error, stackTrace) {
+              AppTelemetry.captureHandled(
+                error,
+                stackTrace,
+                operation: attempt,
+                boundary: 'checkout.awaiting_confirmation',
+              );
               return const CheckoutSyncRunResult(
                 CheckoutSyncRunKind.storageUnavailable,
               );
             }
           case CheckoutSubmissionKind.rejected:
+            AppTelemetry.captureHandled(
+              StateError(result.reasonCode ?? 'rejected'),
+              StackTrace.current,
+              operation: attempt,
+              code: result.reasonCode ?? 'rejected',
+            );
             rejected++;
           case CheckoutSubmissionKind.ambiguous:
+            AppTelemetry.captureHandled(
+              StateError(result.reasonCode ?? 'ambiguous'),
+              StackTrace.current,
+              operation: attempt,
+              code: result.reasonCode ?? 'ambiguous',
+            );
             ambiguous++;
           case CheckoutSubmissionKind.unavailable:
+            AppTelemetry.captureHandled(
+              StateError('unavailable'),
+              StackTrace.current,
+              operation: attempt,
+              code: 'unavailable',
+            );
             ambiguous++;
             skipped += _remainingDueCount(records, record);
             return CheckoutSyncRunResult(

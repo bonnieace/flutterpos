@@ -16,6 +16,7 @@ import 'tenant_membership_labels.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_staff_request_ticket.dart';
 import 'tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 typedef TenantVisibleInvitationRequestIdFactory = String Function();
 typedef TenantVisibleInvitationCurrentCheck = bool Function();
@@ -37,9 +38,12 @@ final class FirebaseAcceptVisibleTenantInvitationCallable
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     try {
-      final result = await _functions
-          .httpsCallable('acceptVisibleTenantInvitation')
-          .call<Object?>(payload);
+      final result = await traceServerCall(
+        'acceptVisibleTenantInvitation',
+        () => _functions
+            .httpsCallable('acceptVisibleTenantInvitation')
+            .call<Object?>(payload),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw InvitationAcceptanceException(

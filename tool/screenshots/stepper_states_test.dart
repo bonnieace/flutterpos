@@ -14,8 +14,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/ui/stepper.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
+import 'package:uzapay_pos/ui/stepper.dart';
+import 'package:uzapay_pos/ui/tokens.dart';
 
 import 'harness.dart';
 

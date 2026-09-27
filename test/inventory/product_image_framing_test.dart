@@ -2,7 +2,7 @@ import 'dart:io' show SocketException;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:flutter_application_1/inventory/inventory.dart';
+import 'package:uzapay_pos/inventory/inventory.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';

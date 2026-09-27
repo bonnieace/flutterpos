@@ -1,5 +1,5 @@
-import 'package:flutter_application_1/suppliers/suppliers.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/suppliers/suppliers.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// What a delivery form may send, and the pages it is sent in.

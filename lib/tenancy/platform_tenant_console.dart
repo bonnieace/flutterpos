@@ -6,6 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
+import '../observability/app_telemetry.dart';
 
 /// The substrate every platform-administration screen shares.
 ///
@@ -120,9 +121,12 @@ final class FirebaseSetTenantLifecycleCallable
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     try {
-      final result = await _functions
-          .httpsCallable('setTenantLifecycle')
-          .call<Object?>(payload);
+      final result = await traceServerCall(
+        'setTenantLifecycle',
+        () => _functions
+            .httpsCallable('setTenantLifecycle')
+            .call<Object?>(payload),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw PlatformTenantCallableException(error.code);
@@ -145,6 +149,4 @@ String securePlatformRequestId() {
   return 'platform-${base64Url.encode(bytes).replaceAll('=', '')}';
 }
 
-final platformRequestIdPattern = RegExp(
-  r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$',
-);
+final platformRequestIdPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$');

@@ -8,6 +8,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../inventory/product_typeahead.dart';
@@ -402,6 +403,12 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
   Future<void> _submit() async {
     final supplier = _supplier;
     if (supplier == null) return;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'receiving.delivery',
+      screen: 'receiving',
+      context: {'supplier_id': supplier.id, 'supplier_name': supplier.name},
+    );
     final repository = TenantSupplierDeliveryRepository(
       session: widget.session,
       reader: widget.reader,
@@ -415,10 +422,21 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
         requestId: _requestId ??=
             (widget.requestIdFactory ?? secureTenantDeliveryRequestId)(),
       );
-    } on TenantSupplierDeliveryException catch (error) {
+    } on TenantSupplierDeliveryException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'receiving.validate',
+      );
       setState(() => _error = _refusal(error));
       return;
     }
+    telemetry.recordStep(
+      operation,
+      'validated',
+      data: {'request_id': _requestId, 'line_count': intent.lines.length},
+    );
     setState(() {
       _busy = true;
       _error = null;
@@ -430,7 +448,13 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
           supplierId: supplier.id,
           reference: reference,
         );
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          operation: operation,
+          boundary: 'receiving.reference_lookup',
+        );
         // A warning that cannot be checked is not a reason to refuse.
         earlier = null;
       }
@@ -448,15 +472,34 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
           'Sales already recorded keep the cost they were sold at.',
       // One word: the dialog's buttons share a phone's width with *Cancel*.
       confirmLabel: 'Receive',
-      tier: AppButtonTier.primary,
+      tier: AppButtonTier.secondary,
       confirmKey: const ValueKey('delivery-confirm'),
       cancelKey: const ValueKey('delivery-cancel'),
     );
-    if (!mounted || !confirmed) return;
+    if (!mounted || !confirmed) {
+      telemetry.recordStep(operation, 'cancelled');
+      return;
+    }
+    telemetry.recordStep(operation, 'confirmed');
     setState(() => _busy = true);
     try {
-      await widget.services.writer.receive(intent);
-    } catch (error) {
+      await telemetry.trace(
+        operation,
+        'save_delivery',
+        () => widget.services.writer.receive(intent),
+      );
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'receiving.save',
+        data: {
+          'request_id': _requestId,
+          'supplier_id': supplier.id,
+          'line_count': intent.lines.length,
+        },
+      );
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -469,6 +512,7 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
       });
       return;
     }
+    telemetry.recordStep(operation, 'saved_locally');
     if (!mounted) return;
     final products = intent.lines.length;
     widget.onCompleted(
@@ -622,7 +666,7 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
           key: const ValueKey('delivery-submit'),
           label: 'Receive delivery',
           icon: Icons.local_shipping_outlined,
-          tier: AppButtonTier.primary,
+          tier: AppButtonTier.secondary,
           loading: _busy,
           expand: true,
           onPressed: _canSubmit ? _submit : null,

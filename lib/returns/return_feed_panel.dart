@@ -35,6 +35,7 @@ import 'return_history.dart';
 import 'return_journal.dart';
 import 'return_offsets.dart';
 import 'return_verification.dart';
+import '../observability/app_telemetry.dart';
 
 /// Business-wide return history reached from the home screen.
 final class TenantReturnFeedScreen extends StatelessWidget {
@@ -101,10 +102,7 @@ final class TenantReturnFeedScreen extends StatelessWidget {
             session: session,
             reader: reader,
           ),
-          sales: TenantSaleHistoryRepository(
-            session: session,
-            reader: reader,
-          ),
+          sales: TenantSaleHistoryRepository(session: session, reader: reader),
         );
         final read = await source.gather(period);
         final valuation = await source.value(read.returns);
@@ -390,7 +388,12 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
       saleIds.map((id) async {
         try {
           return await repository.readSale(id);
-        } catch (_) {
+        } catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            boundary: 'returns.feed_sale_read',
+          );
           return null;
         }
       }),

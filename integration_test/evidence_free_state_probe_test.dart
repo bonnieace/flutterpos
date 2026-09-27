@@ -14,7 +14,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:flutter_application_1/firebase_options.dart';
+import 'package:uzapay_pos/firebase_options.dart';
 
 const String _email = String.fromEnvironment('H2_PROBE_EMAIL');
 const String _password = String.fromEnvironment('H2_PROBE_PASSWORD');

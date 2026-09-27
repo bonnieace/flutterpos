@@ -87,14 +87,20 @@ final class _TenantSupplierRecordScreenState
 
   void _reload() => setState(() => _generation++);
 
-  Future<void> _edit(TenantSession session, TenantSupplierRecordView view) async {
+  Future<void> _edit(
+    TenantSession session,
+    TenantSupplierRecordView view,
+  ) async {
     final writer = widget.writer;
     final supplier = view.supplier;
     if (writer == null || supplier == null) return;
     final notice = await showSupplierFormSheet(
       context,
       session: session,
-      repository: TenantSupplierRepository(session: session, reader: widget.reader),
+      repository: TenantSupplierRepository(
+        session: session,
+        reader: widget.reader,
+      ),
       writer: writer,
       directory: view.directory,
       supplier: supplier,
@@ -167,7 +173,8 @@ final class _TenantSupplierRecordScreenState
             child: EmptyState(
               key: ValueKey('supplier-record-missing'),
               title: 'This supplier is not in this business',
-              hint: 'It may have been added on a device that has not synced '
+              hint:
+                  'It may have been added on a device that has not synced '
                   'yet.',
               illustration: 'file-search.svg',
             ),
@@ -183,7 +190,7 @@ final class _TenantSupplierRecordScreenState
                     key: const ValueKey('supplier-record-receive'),
                     label: 'Receive delivery',
                     icon: Icons.local_shipping_outlined,
-                    tier: AppButtonTier.primary,
+                    tier: AppButtonTier.secondary,
                     expand: true,
                     onPressed: () => _receive(supplier),
                   ),
@@ -244,13 +251,16 @@ final class _RecordContents extends StatelessWidget {
         ? tokens.spacing.s16
         : tokens.spacing.s24;
     final facts = <(String, String, IconData)>[
-      if (supplier.phone case final phone?) ('Phone', phone, Icons.phone_outlined),
-      if (supplier.email case final email?) ('Email', email, Icons.mail_outline),
+      if (supplier.phone case final phone?)
+        ('Phone', phone, Icons.phone_outlined),
+      if (supplier.email case final email?)
+        ('Email', email, Icons.mail_outline),
       if (supplier.address case final address?)
         ('Address', address, Icons.place_outlined),
       if (supplier.taxReference case final reference?)
         ('Tax or business reference', reference, Icons.badge_outlined),
-      if (supplier.notes case final notes?) ('Notes', notes, Icons.notes_outlined),
+      if (supplier.notes case final notes?)
+        ('Notes', notes, Icons.notes_outlined),
     ];
     return ListView(
       key: const ValueKey('supplier-record'),
@@ -272,15 +282,19 @@ final class _RecordContents extends StatelessWidget {
           SizedBox(height: tokens.spacing.s12),
         ],
         if (onEdit != null || onSetActive != null) ...<Widget>[
-          Wrap(
-            spacing: tokens.spacing.s8,
-            runSpacing: tokens.spacing.s8,
-            children: <Widget>[
+          // Equal shares, at the developer's direction on 2026-09-27: *Edit*
+          // and *Mark inactive* fill the row as a pair under the full-width
+          // primary action, rather than sitting label-wide in their halves.
+          AppActionRow(
+            alignment: MainAxisAlignment.start,
+            expandActions: true,
+            actions: <Widget>[
               if (onEdit case final edit?)
                 AppButton(
                   key: const ValueKey('supplier-record-edit'),
                   label: 'Edit',
                   icon: Icons.edit_outlined,
+                  expand: true,
                   onPressed: edit,
                 ),
               if (onSetActive case final setActive?)
@@ -290,12 +304,14 @@ final class _RecordContents extends StatelessWidget {
                         label: 'Mark inactive',
                         icon: Icons.block_outlined,
                         tier: AppButtonTier.destructive,
+                        expand: true,
                         onPressed: () => setActive(false),
                       )
                     : AppButton(
                         key: const ValueKey('supplier-record-reactivate'),
                         label: 'Reactivate',
                         icon: Icons.replay_outlined,
+                        expand: true,
                         onPressed: () => setActive(true),
                       ),
             ],

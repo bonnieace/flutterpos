@@ -103,7 +103,7 @@ final RegExp _directive = RegExp(
 final RegExp _uri = RegExp(r"'([^']+\.dart)'");
 
 String? _resolve(String from, String uri) {
-  const prefix = 'package:flutter_application_1/';
+  const prefix = 'package:uzapay_pos/';
   if (uri.startsWith(prefix)) return 'lib/${uri.substring(prefix.length)}';
   if (uri.startsWith('package:') || uri.startsWith('dart:')) return null;
   final segments = <String>[

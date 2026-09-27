@@ -8,6 +8,7 @@ import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import 'shift_declaration.dart';
 import 'shift_sales_ledger.dart';
+import '../observability/app_telemetry.dart';
 
 // The bound moved to the declaration, which owns every money figure a close
 // records. Re-exported so the many callers that reach for it through this
@@ -646,7 +647,8 @@ final class FirebaseTenantShiftWriter implements TenantShiftWriter {
       return _rejectedCodes.contains(error.code)
           ? TenantShiftWriteResult.rejected(error.code)
           : TenantShiftWriteResult.ambiguous(error.code);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(error, stackTrace, boundary: 'shift.write');
       return const TenantShiftWriteResult.ambiguous('unknown_error');
     }
   }

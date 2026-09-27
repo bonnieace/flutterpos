@@ -11,6 +11,8 @@
 /// back to them - is the same for all of them and lives here.
 library;
 
+import 'package:uzapay_pos/observability/app_telemetry.dart';
+
 import 'report_document.dart';
 import 'report_file.dart';
 import 'report_period.dart';
@@ -177,33 +179,49 @@ final class TenantReportRun {
   Future<TenantReportSaveOutcome> deliver(
     TenantReportRequest request, {
     void Function(TenantReportStage stage)? onStage,
+    TelemetryOperation? telemetryOperation,
   }) async {
     final delivery = saver;
     if (delivery == null) return TenantReportSaveOutcome.unavailable;
+    Future<T> observed<T>(String stage, Future<T> Function() action) =>
+        telemetryOperation == null
+        ? action()
+        : AppTelemetry.current.trace(telemetryOperation, stage, action);
 
     onStage?.call(TenantReportStage.gathering);
     final subjectBuild = _subjectBuild;
-    final document = subjectBuild == null
-        ? await build(request.period)
-        : await subjectBuild(request.period, request.subject);
+    final document = await observed(
+      'gather_records',
+      () => subjectBuild == null
+          ? build(request.period)
+          : subjectBuild(request.period, request.subject),
+    );
 
     onStage?.call(TenantReportStage.rendering);
-    final file = switch (request.format) {
-      // **Loads the bundled faces rather than falling back to Helvetica.**
-      // `TenantPdfReportRenderer.standard()` is the built-in-faces renderer,
-      // meant for a test and for the sample tool. Reaching for it here is what
-      // put a device-generated report in Helvetica with nothing embedded while
-      // every sample rendered in the brand's own type - a gap no unit test
-      // could show, because they all pass `.standard()` deliberately.
-      TenantReportFormat.pdf => await (pdf ?? await _brandedPdf()).render(
-        document,
-      ),
-      TenantReportFormat.excel =>
-        await (excel ?? TenantExcelReportRenderer.standard()).render(document),
-    };
+    final file = await observed(
+      'render_file',
+      () async => switch (request.format) {
+        // **Loads the bundled faces rather than falling back to Helvetica.**
+        // `TenantPdfReportRenderer.standard()` is the built-in-faces renderer,
+        // meant for a test and for the sample tool. Reaching for it here is what
+        // put a device-generated report in Helvetica with nothing embedded while
+        // every sample rendered in the brand's own type - a gap no unit test
+        // could show, because they all pass `.standard()` deliberately.
+        TenantReportFormat.pdf => await (pdf ?? await _brandedPdf()).render(
+          document,
+        ),
+        TenantReportFormat.excel =>
+          await (excel ?? TenantExcelReportRenderer.standard()).render(
+            document,
+          ),
+      },
+    );
 
     onStage?.call(TenantReportStage.delivering);
-    return delivery.save(file, destination: request.destination);
+    return observed(
+      'save_file',
+      () => delivery.save(file, destination: request.destination),
+    );
   }
 
   /// A renderer set in the brand's own faces.

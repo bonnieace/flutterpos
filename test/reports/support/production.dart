@@ -1,8 +1,8 @@
 /// A period of production batches, for the production report's samples.
 library;
 
-import 'package:flutter_application_1/production/production_batch.dart';
-import 'package:flutter_application_1/reports/analysis/production_analysis.dart';
+import 'package:uzapay_pos/production/production_batch.dart';
+import 'package:uzapay_pos/reports/analysis/production_analysis.dart';
 
 import 'documents.dart';
 

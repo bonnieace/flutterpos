@@ -11,6 +11,7 @@ import '../ui/tokens.dart';
 import 'invitation_acceptance_failure.dart';
 import 'tenant_id.dart';
 import 'tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 typedef TenantInvitationAcceptanceRequestIdFactory = String Function();
 typedef TenantInvitationAcceptanceCurrentCheck = bool Function();
@@ -94,9 +95,12 @@ final class FirebaseAcceptTenantInvitationCallable
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     try {
-      final result = await _functions
-          .httpsCallable('acceptTenantInvitation')
-          .call<Object?>(payload);
+      final result = await traceServerCall(
+        'acceptTenantInvitation',
+        () => _functions
+            .httpsCallable('acceptTenantInvitation')
+            .call<Object?>(payload),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw InvitationAcceptanceException(

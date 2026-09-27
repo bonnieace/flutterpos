@@ -12,8 +12,8 @@
 /// than leaving a reader to guess what the string is.
 library;
 
-import 'package:flutter_application_1/reports/report_people.dart';
-import 'package:flutter_application_1/reports/report_scope.dart';
+import 'package:uzapay_pos/reports/report_people.dart';
+import 'package:uzapay_pos/reports/report_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -6,6 +6,7 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import 'reconciliation_status.dart';
+import '../observability/app_telemetry.dart';
 
 /// How many recorded differences the selected business has not settled.
 ///
@@ -71,7 +72,12 @@ final class TenantOpenDifferencesController extends ChangeNotifier {
         reader: _reader,
       ).readOpenDifferences();
       count = summary?.openCount;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.open_differences_read',
+      );
       // **Unknown rather than none.** A read that failed says nothing about the
       // shop, and a badge is not worth failing a home screen over.
       count = null;

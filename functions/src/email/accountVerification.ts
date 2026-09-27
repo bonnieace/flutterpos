@@ -40,6 +40,8 @@ import {
   stablePrivateId,
 } from "./recipientHash";
 import {isEmailEligibleRoot} from "./rootEligibility";
+import {logAbsorbedFailure} from "../core/absorbedFailure";
+import {AUTH_ACTION_LINK_ORIGIN, rehostActionLink} from "../core/actionLink";
 
 /**
  * How long *Send again* waits between presses, and how many it allows a day.
@@ -180,6 +182,13 @@ export async function processAccountVerificationTask(
       error.safeCode : "action_or_delivery_failure";
     const retryable = (error instanceof EmailProviderError ? error.retryable : true) &&
       attempt.attemptNumber < MAX_EMAIL_DELIVERY_ATTEMPTS;
+    logAbsorbedFailure("email.account_verification_send_failed", error, {
+      deliveryId: task.deliveryId,
+      targetUid: task.targetUid,
+      safeCode,
+      retryable,
+      attempt: attempt.attemptNumber,
+    });
     await dependencies.failed(task, attempt, safeCode, retryable);
     if (retryable) throw new Error("Account verification delivery will be retried.");
     return "permanent_failure";
@@ -241,10 +250,13 @@ function deployedDependencies(
       if (!/^https:\/\//i.test(continueUrl)) {
         throw new Error("EMAIL_VERIFICATION_CONTINUE_URL must be an HTTPS URL.");
       }
-      return auth.generateEmailVerificationLink(email, {
-        url: continueUrl,
-        handleCodeInApp: false,
-      });
+      return rehostActionLink(
+        await auth.generateEmailVerificationLink(email, {
+          url: continueUrl,
+          handleCodeInApp: false,
+        }),
+        AUTH_ACTION_LINK_ORIGIN.value()
+      );
     },
     async isSuppressed(hashes) {
       const snapshots = await db.getAll(...hashes.map((hash) =>

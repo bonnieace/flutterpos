@@ -15,6 +15,7 @@ import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'supplier.dart';
 import 'supplier_delivery.dart';
+import '../observability/app_telemetry.dart';
 
 /// One supplier's deliveries, as a section of its record.
 ///
@@ -44,7 +45,6 @@ final class TenantSupplierDeliveryHistory extends StatefulWidget {
 final class _TenantSupplierDeliveryHistoryState
     extends State<TenantSupplierDeliveryHistory> {
   final List<TenantSupplierDelivery> _deliveries = <TenantSupplierDelivery>[];
-  final Set<String> _expanded = <String>{};
   TenantReportingCurrency _currency = TenantReportingCurrency.unknown;
   String? _cursor;
   bool _hasMore = false;
@@ -86,7 +86,12 @@ final class _TenantSupplierDeliveryHistoryState
         _hasMore = page.hasMore;
         _loading = false;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'suppliers.delivery_history_read',
+      );
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -96,10 +101,6 @@ final class _TenantSupplierDeliveryHistoryState
   }
 
   String _money(int minor) => _currency.format(minor / 100);
-
-  void _toggle(TenantSupplierDelivery delivery) => setState(() {
-    if (!_expanded.remove(delivery.id)) _expanded.add(delivery.id);
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -140,9 +141,7 @@ final class _TenantSupplierDeliveryHistoryState
               _DeliveryCard(
                 key: ValueKey('delivery-row-${delivery.id}'),
                 delivery: delivery,
-                open: _expanded.contains(delivery.id),
                 money: _money,
-                onToggle: () => _toggle(delivery),
               ),
             ],
           if (_hasMore) ...<Widget>[
@@ -163,19 +162,17 @@ final class _TenantSupplierDeliveryHistoryState
 
 /// One delivery, drawn the way a sale card is: when and what it was worth in
 /// the heading, what came in as the rows under it, and the counts in the foot.
+///
+/// **Every line is on the card, with nothing to open**, at the developer's
+/// direction on 2026-09-27. The lines used to sit behind *Show lines*, so the
+/// one thing a person opens a supplier's deliveries to read took a tap per
+/// delivery. The rows are compact instead - name and quantity over cost, no
+/// icon tile - so a delivery of several products stays a readable height.
 final class _DeliveryCard extends StatelessWidget {
-  const _DeliveryCard({
-    super.key,
-    required this.delivery,
-    required this.open,
-    required this.money,
-    required this.onToggle,
-  });
+  const _DeliveryCard({super.key, required this.delivery, required this.money});
 
   final TenantSupplierDelivery delivery;
-  final bool open;
   final String Function(int minor) money;
-  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -273,9 +270,9 @@ final class _DeliveryCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (open)
+            if (delivery.lines.isNotEmpty)
               Column(
-                key: ValueKey('delivery-lines-open-${delivery.id}'),
+                key: ValueKey('delivery-lines-${delivery.id}'),
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   for (final (index, line)
@@ -296,61 +293,42 @@ final class _DeliveryCard extends StatelessWidget {
               ),
             Container(
               color: tokens.colors.surface.overlay,
-              padding: EdgeInsetsDirectional.only(
-                start: tokens.spacing.s16,
-                end: tokens.spacing.s4,
-                top: tokens.spacing.s4,
-                bottom: tokens.spacing.s4,
+              padding: EdgeInsets.symmetric(
+                horizontal: tokens.spacing.s16,
+                vertical: tokens.spacing.s8,
               ),
-              child: Row(
+              child: Wrap(
+                spacing: tokens.spacing.s12,
+                runSpacing: tokens.spacing.s4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: <Widget>[
-                  Expanded(
-                    child: Wrap(
-                      spacing: tokens.spacing.s12,
-                      runSpacing: tokens.spacing.s4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: <Widget>[
-                        _FootFact(
-                          label:
-                              '$products '
-                              '${products == 1 ? 'product' : 'products'} · '
-                              '${delivery.unitCount} '
-                              '${delivery.unitCount == 1 ? 'unit' : 'units'}',
-                        ),
-                        // **The figure and the words about it are apart.** One
-                        // value in the money face read *(1 without a cost)* as
-                        // part of the amount.
-                        if (costed && delivery.costlessLineCount > 0)
-                          _FootFact(
-                            textKey: ValueKey(
-                              'delivery-costless-${delivery.id}',
-                            ),
-                            label:
-                                '${delivery.costlessLineCount} '
-                                '${delivery.costlessLineCount == 1 ? 'line' : 'lines'}'
-                                ' without a cost, not in the value',
-                          ),
-                        // **Only a delivery still arriving says anything about
-                        // its standing**, and it says it in words.
-                        if (!delivery.complete)
-                          StatusBadge(
-                            key: ValueKey('delivery-arriving-${delivery.id}'),
-                            status: AppStatus.attention,
-                            icon: Icons.schedule,
-                            label: 'Still arriving',
-                          ),
-                      ],
+                  _FootFact(
+                    label:
+                        '$products '
+                        '${products == 1 ? 'product' : 'products'} · '
+                        '${delivery.unitCount} '
+                        '${delivery.unitCount == 1 ? 'unit' : 'units'}',
+                  ),
+                  // **The figure and the words about it are apart.** One
+                  // value in the money face read *(1 without a cost)* as
+                  // part of the amount.
+                  if (costed && delivery.costlessLineCount > 0)
+                    _FootFact(
+                      textKey: ValueKey('delivery-costless-${delivery.id}'),
+                      label:
+                          '${delivery.costlessLineCount} '
+                          '${delivery.costlessLineCount == 1 ? 'line' : 'lines'}'
+                          ' without a cost, not in the value',
                     ),
-                  ),
-                  SizedBox(width: tokens.spacing.s8),
-                  AppButton(
-                    key: ValueKey('delivery-lines-${delivery.id}'),
-                    label: open ? 'Hide lines' : 'Show lines',
-                    icon: open ? Icons.expand_less : Icons.expand_more,
-                    tier: AppButtonTier.tertiary,
-                    size: AppButtonSize.sm,
-                    onPressed: onToggle,
-                  ),
+                  // **Only a delivery still arriving says anything about
+                  // its standing**, and it says it in words.
+                  if (!delivery.complete)
+                    StatusBadge(
+                      key: ValueKey('delivery-arriving-${delivery.id}'),
+                      status: AppStatus.attention,
+                      icon: Icons.schedule,
+                      label: 'Still arriving',
+                    ),
                 ],
               ),
             ),
@@ -375,27 +353,10 @@ final class _DeliveryLineRow extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: tokens.spacing.s16,
-        vertical: tokens.spacing.s12,
+        vertical: tokens.spacing.s8,
       ),
       child: Row(
         children: <Widget>[
-          ExcludeSemantics(
-            child: SizedBox.square(
-              dimension: tokens.spacing.s40,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: tokens.colors.surface.overlay,
-                  borderRadius: BorderRadius.circular(tokens.radius.md),
-                ),
-                child: Icon(
-                  Icons.inventory_2_outlined,
-                  size: tokens.spacing.s20,
-                  color: tokens.colors.text.tertiary,
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: tokens.spacing.s12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

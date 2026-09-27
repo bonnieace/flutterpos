@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/reporting/reporting.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/home_navigation.dart';
-import 'package:flutter_application_1/ui/stats.dart';
-import 'package:flutter_application_1/ui/status.dart';
-import 'package:flutter_application_1/ui/scaffold.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/reporting/reporting.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/home_navigation.dart';
+import 'package:uzapay_pos/ui/stats.dart';
+import 'package:uzapay_pos/ui/status.dart';
+import 'package:uzapay_pos/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 

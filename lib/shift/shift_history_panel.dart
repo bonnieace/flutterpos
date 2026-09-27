@@ -32,6 +32,7 @@ import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'shift_history.dart';
 import 'shift_history_card.dart';
+import '../observability/app_telemetry.dart';
 
 /// Read-only shift history route for the selected tenant session.
 ///
@@ -405,7 +406,12 @@ final class _TenantShiftHistoryPanelState
       );
     } on TenantScopeViolation {
       rethrow;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.history_roster_read',
+      );
       return ShiftHistoryRoster.unread;
     }
   }

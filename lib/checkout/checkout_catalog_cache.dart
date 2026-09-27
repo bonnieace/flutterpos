@@ -10,6 +10,8 @@ import '../tenancy/tenant_session_controller.dart';
 import 'checkout_configuration.dart';
 import 'checkout_catalog_local_sales.dart';
 import 'checkout_outbox.dart';
+import '../observability/app_telemetry.dart';
+import '../storage/device_storage.dart';
 
 /// Raised when the local catalog cache cannot be opened or written safely.
 final class CheckoutCatalogCacheException implements Exception {
@@ -147,10 +149,10 @@ final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
     if (key.length != encryptionKeyBytes) {
       throw const CheckoutCatalogCacheException('invalid_encryption_key');
     }
-    final box = await (hive ?? Hive).openBox<dynamic>(
+    final box = await openBoxRepairingTornTail<dynamic>(
+      hive ?? Hive,
       boxName,
-      encryptionCipher: HiveAesCipher(List<int>.from(key)),
-      crashRecovery: false,
+      cipher: HiveAesCipher(List<int>.from(key)),
     );
     return HiveCheckoutCatalogCache._(box, clock ?? _utcNow, localSales);
   }
@@ -200,7 +202,12 @@ final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
     if (raw == null) return null;
     try {
       return _parseSnapshot(key, uid: uid, tenantId: tenantId, raw: raw);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'checkout.catalog_cache_parse',
+      );
       return null;
     }
   }
@@ -503,7 +510,12 @@ final class CheckoutCatalogCacheRefresher {
         return const CheckoutCatalogRefreshResult(
           CheckoutCatalogRefreshKind.configurationUnavailable,
         );
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'checkout.catalog_refresh',
+        );
         return const CheckoutCatalogRefreshResult(
           CheckoutCatalogRefreshKind.unavailable,
         );
@@ -525,7 +537,12 @@ final class CheckoutCatalogCacheRefresher {
             pageSize: _pageSize,
             cursor: cursor,
           );
-        } catch (_) {
+        } catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            boundary: 'checkout.catalog_refresh_categories',
+          );
           return const CheckoutCatalogRefreshResult(
             CheckoutCatalogRefreshKind.unavailable,
           );
@@ -549,7 +566,12 @@ final class CheckoutCatalogCacheRefresher {
             pageSize: _pageSize,
             cursor: cursor,
           );
-        } catch (_) {
+        } catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            boundary: 'checkout.catalog_refresh_products',
+          );
           return const CheckoutCatalogRefreshResult(
             CheckoutCatalogRefreshKind.unavailable,
           );
@@ -580,7 +602,12 @@ final class CheckoutCatalogCacheRefresher {
           products: products,
           complete: complete,
         );
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'checkout.catalog_cache_write',
+        );
         return const CheckoutCatalogRefreshResult(
           CheckoutCatalogRefreshKind.storageUnavailable,
         );

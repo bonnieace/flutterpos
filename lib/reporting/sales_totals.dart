@@ -9,6 +9,7 @@ import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
 import 'profit_report.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for the server's `getSalesComparison`.
 ///
@@ -49,12 +50,15 @@ final class FirebaseSalesTotalsCallable implements SalesTotalsCallable {
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable(
-          'getSalesComparison',
-          options: HttpsCallableOptions(timeout: deadline),
-        )
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'getSalesComparison',
+      () => _functions
+          .httpsCallable(
+            'getSalesComparison',
+            options: HttpsCallableOptions(timeout: deadline),
+          )
+          .call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -989,7 +993,12 @@ final class TenantSalesTotalsGateway {
       throw const TenantSalesTotalsException(
         TenantSalesTotalsFailure.unavailable,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.sales_comparison_request',
+      );
       throw const TenantSalesTotalsException(
         TenantSalesTotalsFailure.unavailable,
       );

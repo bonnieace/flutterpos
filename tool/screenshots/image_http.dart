@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
-import 'package:flutter_application_1/inventory/product_image_cache.dart';
+import 'package:uzapay_pos/inventory/product_image_cache.dart';
 
 /// Draws a deterministic product photograph used by the screenshot catalog.
 Future<Uint8List> screenshotProductImage() async {

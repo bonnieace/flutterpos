@@ -1,5 +1,5 @@
-import 'package:flutter_application_1/reporting/reporting.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/reporting/reporting.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 2026-08-29 09:00 UTC. The Africa/Nairobi business day is already the 29th.

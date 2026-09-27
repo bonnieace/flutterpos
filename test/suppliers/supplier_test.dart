@@ -1,5 +1,5 @@
-import 'package:flutter_application_1/suppliers/supplier.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/suppliers/supplier.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// What a supplier form may send, and how the directory reads back.

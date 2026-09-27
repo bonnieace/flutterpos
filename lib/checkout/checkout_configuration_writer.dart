@@ -30,6 +30,7 @@ library;
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../observability/app_telemetry.dart';
 
 /// The outcome of one attempted configuration write.
 ///
@@ -160,7 +161,12 @@ final class FirebaseTenantConfigurationDocumentWriter
       return _rejectedCodes.contains(error.code)
           ? TenantConfigurationWriteResult.rejected(error.code)
           : TenantConfigurationWriteResult.ambiguous(error.code);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'configuration.write',
+      );
       return const TenantConfigurationWriteResult.ambiguous('unknown_error');
     }
   }

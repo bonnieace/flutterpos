@@ -2,9 +2,9 @@
 /// shares with it.
 ///
 /// **Built the way the stock count card is**, not from `RecordList`. The whole
-/// card is the way into the record, so *View* stops being a button of its own;
-/// the corrections a person makes less often - *Edit*, *Mark inactive* - sit
-/// behind the overflow menu the sale cards use; and the one fact the directory
+/// card is the way into the record; the overflow menu the sale cards use holds
+/// *View* and *Receive delivery* first, then the corrections a person makes
+/// less often - *Edit*, *Mark inactive*; and the one fact the directory
 /// is scanned for, when stock last came in, has a recessed well of its own
 /// rather than a key-value row among equals.
 library;

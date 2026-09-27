@@ -22,9 +22,9 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/checkout/checkout_tender.dart';
-import 'package:flutter_application_1/reporting/reporting.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/checkout/checkout_tender.dart';
+import 'package:uzapay_pos/reporting/reporting.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final DateTime _now = DateTime.utc(2026, 8, 26, 12);

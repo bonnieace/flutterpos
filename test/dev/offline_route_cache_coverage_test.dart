@@ -15,7 +15,7 @@ Set<String> _libraries() => <String>{
 };
 
 String? _resolve(String from, String uri) {
-  const packagePrefix = 'package:flutter_application_1/';
+  const packagePrefix = 'package:uzapay_pos/';
   if (uri.startsWith(packagePrefix)) {
     return 'lib/${uri.substring(packagePrefix.length)}';
   }

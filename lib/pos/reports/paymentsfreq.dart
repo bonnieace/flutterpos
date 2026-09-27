@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:flutter_application_1/theme.dart';
+import 'package:uzapay_pos/theme.dart';
 
 
 class PaymentFrequencyPage extends StatefulWidget {

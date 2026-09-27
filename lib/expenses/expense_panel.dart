@@ -11,6 +11,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../inventory/product_image_cache.dart';
@@ -1256,6 +1257,16 @@ class _VoidExpenseFormState extends State<_VoidExpenseForm> {
   }
 
   Future<void> _submit() async {
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'expense.void',
+      screen: 'expenses',
+      context: {
+        'user_id': widget.session.uid,
+        'tenant_id': widget.session.tenantId,
+        'expense_id': widget.record.expenseId,
+      },
+    );
     final TenantExpenseVoidIntent intent;
     try {
       intent = TenantExpenseVoidIntent(
@@ -1264,7 +1275,13 @@ class _VoidExpenseFormState extends State<_VoidExpenseForm> {
         reason: _reason.text,
         voidedBy: widget.session.uid,
       );
-    } on TenantExpenseException {
+    } on TenantExpenseException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'expense.void_validate',
+      );
       setState(() => _error = 'Say in a few words why this is being removed.');
       return;
     }
@@ -1273,7 +1290,23 @@ class _VoidExpenseFormState extends State<_VoidExpenseForm> {
       _busy = true;
       _error = null;
     });
-    final result = await widget.writer.voidExpense(intent);
+    final result = await telemetry.trace(
+      operation,
+      'void_expense',
+      () => widget.writer.voidExpense(intent),
+    );
+    if (result.kind == TenantExpenseWriteKind.queued) {
+      telemetry.recordStep(operation, 'saved_locally');
+    } else if (result.kind == TenantExpenseWriteKind.committed) {
+      telemetry.recordStep(operation, 'confirmed_on_server');
+    } else {
+      AppTelemetry.captureHandled(
+        StateError(result.reasonCode ?? result.kind.name),
+        StackTrace.current,
+        operation: operation,
+        code: result.reasonCode ?? result.kind.name,
+      );
+    }
     if (!mounted) return;
     setState(() => _busy = false);
     switch (result.kind) {
@@ -1418,8 +1451,24 @@ class _RecordExpenseFormState extends State<_RecordExpenseForm> {
   }
 
   Future<void> _submit() async {
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'expense.create',
+      screen: 'expenses',
+      context: {
+        'user_id': widget.session.uid,
+        'tenant_id': widget.session.tenantId,
+        'currency': 'unavailable',
+      },
+    );
     final category = _category;
     if (category == null) {
+      AppTelemetry.captureHandled(
+        ArgumentError('missing_category'),
+        StackTrace.current,
+        operation: operation,
+        code: 'validation_missing_category',
+      );
       setState(() => _error = 'Choose what this expense was for.');
       return;
     }
@@ -1427,10 +1476,22 @@ class _RecordExpenseFormState extends State<_RecordExpenseForm> {
       double.tryParse(_amount.text.trim()) ?? -1,
     );
     if (amountMinor == null || amountMinor <= 0) {
+      AppTelemetry.captureHandled(
+        ArgumentError('invalid_amount'),
+        StackTrace.current,
+        operation: operation,
+        code: 'validation_invalid_amount',
+      );
       setState(() => _error = 'Enter an amount greater than zero.');
       return;
     }
     if (_description.text.trim().length < 3) {
+      AppTelemetry.captureHandled(
+        ArgumentError('missing_description'),
+        StackTrace.current,
+        operation: operation,
+        code: 'validation_missing_description',
+      );
       setState(() => _error = 'Say in a few words what this was for.');
       return;
     }
@@ -1446,7 +1507,13 @@ class _RecordExpenseFormState extends State<_RecordExpenseForm> {
         amountMinor: amountMinor,
         recordedBy: widget.session.uid,
       );
-    } on TenantExpenseException {
+    } on TenantExpenseException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'expense.validate',
+      );
       setState(() => _error = 'This expense could not be recorded as entered.');
       return;
     }
@@ -1455,7 +1522,28 @@ class _RecordExpenseFormState extends State<_RecordExpenseForm> {
       _busy = true;
       _error = null;
     });
-    final result = await widget.writer.recordExpense(intent);
+    final result = await telemetry.trace(
+      operation,
+      'save_expense',
+      () => widget.writer.recordExpense(intent),
+    );
+    if (result.kind == TenantExpenseWriteKind.queued) {
+      telemetry.recordStep(
+        operation,
+        'saved_locally',
+        data: {'amount_minor': amountMinor, 'currency': 'unavailable'},
+      );
+    } else if (result.kind == TenantExpenseWriteKind.committed) {
+      telemetry.recordStep(operation, 'confirmed_on_server');
+    } else {
+      AppTelemetry.captureHandled(
+        StateError(result.reasonCode ?? result.kind.name),
+        StackTrace.current,
+        operation: operation,
+        code: result.reasonCode ?? result.kind.name,
+        data: {'amount_minor': amountMinor, 'currency': 'unavailable'},
+      );
+    }
     if (!mounted) return;
     setState(() => _busy = false);
     switch (result.kind) {

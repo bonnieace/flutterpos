@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/suppliers/suppliers.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/suppliers/suppliers.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
@@ -220,11 +220,10 @@ void main() {
         find.byKey(const ValueKey('delivery-arriving-sd_old')),
         findsOneWidget,
       );
-      final showLines = find.byKey(const ValueKey('delivery-lines-sd_old'));
-      await tester.ensureVisible(showLines);
-      await tester.tap(showLines);
-      await tester.pumpAndSettle();
-
+      // Every line is on the card; nothing has to be opened to read it.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('delivery-lines-sd_old')),
+      );
       expect(find.text('White bread loaf'), findsOneWidget);
       expect(find.text('24 × KES 45.50'), findsOneWidget);
       expect(find.text('12 × no cost recorded'), findsOneWidget);

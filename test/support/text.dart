@@ -16,7 +16,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/ui/states.dart';
+import 'package:uzapay_pos/ui/states.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The sentence at [key], read off whichever widget states it.

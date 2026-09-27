@@ -20,8 +20,8 @@ library;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_application_1/ui/pagination.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
+import 'package:uzapay_pos/ui/pagination.dart';
+import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'harness.dart';

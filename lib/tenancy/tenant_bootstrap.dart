@@ -3,6 +3,7 @@ import 'tenant_id.dart';
 import 'tenant_membership.dart';
 import 'root_routing_profile_cache.dart';
 import 'tenant_selection.dart';
+import '../observability/app_telemetry.dart';
 
 enum RootAccountType { tenantUser, platformAdmin }
 
@@ -204,9 +205,21 @@ final class TenantBootstrapService {
           );
           try {
             await _rootCache.write(normalizedUid, migrated);
-          } catch (_) {}
+          } catch (error, stackTrace) {
+            AppTelemetry.captureHandled(
+              error,
+              stackTrace,
+              boundary: 'tenancy.root_profile_cache_write',
+            );
+          }
         }
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'tenancy.root_profile_migration',
+        );
+      }
     }
     final directory = await _directory.loadCached(uid: normalizedUid);
     if (root == null || directory == null) {
@@ -284,7 +297,13 @@ final class TenantBootstrapService {
     if (profile.accountType == RootAccountType.platformAdmin) {
       try {
         await _rootCache.write(normalizedUid, profile);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'tenancy.root_profile_cache_write',
+        );
+      }
       return TenantBootstrapResult(
         kind: TenantBootstrapKind.platform,
         profile: profile,
@@ -299,7 +318,13 @@ final class TenantBootstrapService {
     final directory = results[0]! as TenantDirectoryLoad;
     try {
       await _rootCache.write(normalizedUid, profile);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'tenancy.root_profile_cache_write',
+      );
+    }
     return _resolve(
       uid: normalizedUid,
       profile: profile,

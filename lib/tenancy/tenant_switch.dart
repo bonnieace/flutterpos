@@ -2,6 +2,7 @@ import 'tenant_bootstrap.dart';
 import 'tenant_membership.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
+import '../observability/app_telemetry.dart';
 
 enum TenantSwitchStateArea { checkout, pendingWrites, cashClose, workflow }
 
@@ -164,7 +165,12 @@ final class TenantSwitchCoordinator {
         TenantSwitchInspection? inspection;
         try {
           inspection = await source.inspect(current);
-        } catch (_) {
+        } catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            boundary: 'tenancy.switch_inspect',
+          );
           return const TenantSwitchResult.blocked(
             TenantSwitchBlocker.stateInspectionUnavailable,
           );
@@ -211,7 +217,12 @@ final class TenantSwitchCoordinator {
           );
         }
         target = match;
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'tenancy.switch_target_read',
+        );
         return const TenantSwitchResult.blocked(
           TenantSwitchBlocker.onlineTargetValidationUnavailable,
         );
@@ -230,7 +241,12 @@ final class TenantSwitchCoordinator {
           uid: current.uid,
           tenantId: target.tenantId,
         );
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'tenancy.switch_open',
+        );
         if (!_owns(openedTarget)) {
           return const TenantSwitchResult.blocked(
             TenantSwitchBlocker.sessionChanged,

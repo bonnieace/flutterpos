@@ -155,14 +155,15 @@ final class TenantSupplierDraft {
     this.notes = '',
   });
 
-  factory TenantSupplierDraft.of(TenantSupplier supplier) => TenantSupplierDraft(
-    name: supplier.name,
-    phone: supplier.phone ?? '',
-    email: supplier.email ?? '',
-    address: supplier.address ?? '',
-    taxReference: supplier.taxReference ?? '',
-    notes: supplier.notes ?? '',
-  );
+  factory TenantSupplierDraft.of(TenantSupplier supplier) =>
+      TenantSupplierDraft(
+        name: supplier.name,
+        phone: supplier.phone ?? '',
+        email: supplier.email ?? '',
+        address: supplier.address ?? '',
+        taxReference: supplier.taxReference ?? '',
+        notes: supplier.notes ?? '',
+      );
 
   final String name;
   final String phone;
@@ -182,10 +183,11 @@ final class TenantSupplierDraft {
 
   /// Every field normalized exactly as the server will store it, or a refusal
   /// naming the field that cannot be. Empty optional fields come back null.
-  Map<TenantSupplierField, String?> normalized() => <TenantSupplierField, String?>{
-    for (final field in TenantSupplierField.values)
-      field: normalizeSupplierField(field, raw(field)),
-  };
+  Map<TenantSupplierField, String?> normalized() =>
+      <TenantSupplierField, String?>{
+        for (final field in TenantSupplierField.values)
+          field: normalizeSupplierField(field, raw(field)),
+      };
 }
 
 /// One field, normalized as `functions/src/operations/suppliers.ts` normalizes
@@ -222,7 +224,8 @@ String? normalizeSupplierField(TenantSupplierField field, String value) {
     case TenantSupplierField.address:
       final address = _singleLine(value);
       if (address.isEmpty) return null;
-      if (address.length > maximumSupplierAddressLength || _hasControl(address)) {
+      if (address.length > maximumSupplierAddressLength ||
+          _hasControl(address)) {
         throw const TenantSupplierException('invalid_supplier_address');
       }
       return address;
@@ -508,7 +511,8 @@ final class TenantSupplierRepository extends TenantReadRepository {
       throw const TenantSupplierException('supplier_unchanged');
     }
     final name = changes[TenantSupplierField.name];
-    if (name != null && directory.holderOf(name, exceptId: supplier.id) != null) {
+    if (name != null &&
+        directory.holderOf(name, exceptId: supplier.id) != null) {
       throw const TenantSupplierException('duplicate_supplier_name');
     }
     return TenantSupplierUpdateIntent._(
@@ -589,7 +593,12 @@ String _deterministicSupplierId({
 }) {
   final digest = sha256.convert(
     utf8.encode(
-      <String>['createTenantSupplier', tenantId, createdBy, requestId].join(' '),
+      <String>[
+        'createTenantSupplier',
+        tenantId,
+        createdBy,
+        requestId,
+      ].join(' '),
     ),
   );
   return 'sp_${digest.toString().substring(0, 40)}';
@@ -601,7 +610,8 @@ void _requireRequestId(String requestId) {
   }
 }
 
-String _singleLine(String value) => value.trim().replaceAll(_whitespaceRun, ' ');
+String _singleLine(String value) =>
+    value.trim().replaceAll(_whitespaceRun, ' ');
 
 bool _hasControl(String value) {
   for (final codeUnit in value.codeUnits) {

@@ -1,10 +1,10 @@
-import 'package:flutter_application_1/production/production_batch.dart';
-import 'package:flutter_application_1/reports/analysis/production_analysis.dart';
-import 'package:flutter_application_1/reports/analysis/production_report.dart';
-import 'package:flutter_application_1/reports/render/excel_report.dart';
-import 'package:flutter_application_1/reports/render/pdf_report.dart';
-import 'package:flutter_application_1/reports/report_document.dart';
-import 'package:flutter_application_1/reports/report_run.dart';
+import 'package:uzapay_pos/production/production_batch.dart';
+import 'package:uzapay_pos/reports/analysis/production_analysis.dart';
+import 'package:uzapay_pos/reports/analysis/production_report.dart';
+import 'package:uzapay_pos/reports/render/excel_report.dart';
+import 'package:uzapay_pos/reports/render/pdf_report.dart';
+import 'package:uzapay_pos/reports/report_document.dart';
+import 'package:uzapay_pos/reports/report_run.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/documents.dart';

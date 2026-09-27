@@ -125,7 +125,11 @@ final class TenantSupplierDeliveryIntent {
   /// them in order.
   List<TenantSupplierDeliveryPageIntent> pages() {
     final pages = <TenantSupplierDeliveryPageIntent>[];
-    for (var start = 0; start < lines.length; start += maximumDeliveryPageLines) {
+    for (
+      var start = 0;
+      start < lines.length;
+      start += maximumDeliveryPageLines
+    ) {
       final page = start ~/ maximumDeliveryPageLines;
       final end = min(start + maximumDeliveryPageLines, lines.length);
       pages.add(
@@ -220,8 +224,9 @@ final class TenantSupplierDelivery {
   /// What the delivered stock cost, over the lines that named a cost.
   int get valueMinor => lines.fold(
     0,
-    (sum, line) =>
-        line.unitCostMinor == null ? sum : sum + line.quantity * line.unitCostMinor!,
+    (sum, line) => line.unitCostMinor == null
+        ? sum
+        : sum + line.quantity * line.unitCostMinor!,
   );
 
   int get costlessLineCount =>
@@ -250,27 +255,27 @@ final class TenantSupplierDelivery {
 
   static List<TenantSupplierDeliveryRecordLine> _lines(Object? value) {
     if (value is! List) return const <TenantSupplierDeliveryRecordLine>[];
-    return List<TenantSupplierDeliveryRecordLine>.unmodifiable(<
-      TenantSupplierDeliveryRecordLine
-    >[
-      for (final line in value)
-        if (line is Map &&
-            line['productId'] is String &&
-            line['quantity'] is int)
-          TenantSupplierDeliveryRecordLine(
-            productId: line['productId'] as String,
-            productName: line['productName'] is String
-                ? line['productName'] as String
-                : line['productId'] as String,
-            quantity: line['quantity'] as int,
-            unitCostMinor: line['unitCostMinor'] is int
-                ? line['unitCostMinor'] as int
-                : null,
-            previousCostMinor: line['previousCostMinor'] is int
-                ? line['previousCostMinor'] as int
-                : null,
-          ),
-    ]);
+    return List<TenantSupplierDeliveryRecordLine>.unmodifiable(
+      <TenantSupplierDeliveryRecordLine>[
+        for (final line in value)
+          if (line is Map &&
+              line['productId'] is String &&
+              line['quantity'] is int)
+            TenantSupplierDeliveryRecordLine(
+              productId: line['productId'] as String,
+              productName: line['productName'] is String
+                  ? line['productName'] as String
+                  : line['productId'] as String,
+              quantity: line['quantity'] as int,
+              unitCostMinor: line['unitCostMinor'] is int
+                  ? line['unitCostMinor'] as int
+                  : null,
+              previousCostMinor: line['previousCostMinor'] is int
+                  ? line['previousCostMinor'] as int
+                  : null,
+            ),
+      ],
+    );
   }
 }
 
@@ -591,7 +596,12 @@ String _deterministicDeliveryId({
 }) {
   final digest = sha256.convert(
     utf8.encode(
-      <String>['receiveSupplierDelivery', tenantId, actorUid, requestId].join(' '),
+      <String>[
+        'receiveSupplierDelivery',
+        tenantId,
+        actorUid,
+        requestId,
+      ].join(' '),
     ),
   );
   return 'sd_${digest.toString().substring(0, 40)}';

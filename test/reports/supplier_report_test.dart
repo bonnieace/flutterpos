@@ -1,11 +1,11 @@
-import 'package:flutter_application_1/reports/analysis/supplier_analysis.dart';
-import 'package:flutter_application_1/reports/analysis/supplier_report.dart';
-import 'package:flutter_application_1/reports/render/excel_report.dart';
-import 'package:flutter_application_1/reports/render/pdf_report.dart';
-import 'package:flutter_application_1/reports/report_document.dart';
-import 'package:flutter_application_1/reports/report_run.dart';
-import 'package:flutter_application_1/reports/report_scope.dart';
-import 'package:flutter_application_1/suppliers/supplier_delivery.dart';
+import 'package:uzapay_pos/reports/analysis/supplier_analysis.dart';
+import 'package:uzapay_pos/reports/analysis/supplier_report.dart';
+import 'package:uzapay_pos/reports/render/excel_report.dart';
+import 'package:uzapay_pos/reports/render/pdf_report.dart';
+import 'package:uzapay_pos/reports/report_document.dart';
+import 'package:uzapay_pos/reports/report_run.dart';
+import 'package:uzapay_pos/reports/report_scope.dart';
+import 'package:uzapay_pos/suppliers/supplier_delivery.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/documents.dart';

@@ -7,10 +7,10 @@
 /// against the smallest and flattest data it can be handed.
 library;
 
-import 'package:flutter_application_1/reports/render/pdf_report.dart';
-import 'package:flutter_application_1/reports/report_document.dart';
-import 'package:flutter_application_1/reports/report_scope.dart';
-import 'package:flutter_application_1/reports/report_visual.dart';
+import 'package:uzapay_pos/reports/render/pdf_report.dart';
+import 'package:uzapay_pos/reports/report_document.dart';
+import 'package:uzapay_pos/reports/report_scope.dart';
+import 'package:uzapay_pos/reports/report_visual.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/documents.dart';

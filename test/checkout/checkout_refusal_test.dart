@@ -1,4 +1,4 @@
-import 'package:flutter_application_1/checkout/checkout.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Every refusal a cashier can actually reach while saving a draft.

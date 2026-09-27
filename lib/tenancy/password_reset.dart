@@ -22,6 +22,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary over `requestPasswordReset`.
 abstract interface class RequestPasswordResetCallable {
@@ -54,9 +55,12 @@ final class FirebaseRequestPasswordResetCallable
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     try {
-      final result = await _functions
-          .httpsCallable('requestPasswordReset')
-          .call<Object?>(payload);
+      final result = await traceServerCall(
+        'requestPasswordReset',
+        () => _functions
+            .httpsCallable('requestPasswordReset')
+            .call<Object?>(payload),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw PasswordResetCallableException(error.code);
@@ -115,8 +119,7 @@ final class PasswordResetFailure {
 PasswordResetFailure passwordResetFailure(Object error) {
   if (error is! PasswordResetCallableException) return _passwordResetUnknown;
   return switch (error.code) {
-    'unavailable' ||
-    'deadline-exceeded' => const PasswordResetFailure(
+    'unavailable' || 'deadline-exceeded' => const PasswordResetFailure(
       kind: PasswordResetFailureKind.unreachable,
       message:
           'This device could not reach the server. Check the connection and '
@@ -131,8 +134,7 @@ PasswordResetFailure passwordResetFailure(Object error) {
     // The server would not accept this caller. App Check was the reason until
     // the function stopped enforcing it; nothing expected produces this now.
     // It is not the person's fault or their address's - so it names neither.
-    'unauthenticated' ||
-    'permission-denied' => const PasswordResetFailure(
+    'unauthenticated' || 'permission-denied' => const PasswordResetFailure(
       kind: PasswordResetFailureKind.refused,
       message:
           'This app could not prove itself to the server. Update the app, and '

@@ -27,6 +27,8 @@ import 'package:hive/hive.dart';
 import '../checkout/checkout_outbox.dart';
 import '../tenancy/tenant_id.dart';
 import 'product_image_store.dart';
+import '../observability/app_telemetry.dart';
+import '../storage/device_storage.dart';
 
 /// One photograph waiting to be uploaded.
 final class TenantProductImageDraft {
@@ -100,10 +102,10 @@ final class HiveTenantProductImageDrafts extends ChangeNotifier
     if (key.length != HiveCheckoutOutbox.encryptionKeyBytes) {
       throw const TenantProductImageException('invalid_encryption_key');
     }
-    final box = await (hive ?? Hive).openBox<dynamic>(
+    final box = await openBoxRepairingTornTail<dynamic>(
+      hive ?? Hive,
       boxName,
-      encryptionCipher: HiveAesCipher(List<int>.from(key)),
-      crashRecovery: false,
+      cipher: HiveAesCipher(List<int>.from(key)),
     );
     return HiveTenantProductImageDrafts._(box, clock ?? _utcNow);
   }
@@ -200,7 +202,12 @@ final class HiveTenantProductImageDrafts extends ChangeNotifier
           isUtc: true,
         ),
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'inventory.image_draft_decode',
+      );
       return null;
     }
   }

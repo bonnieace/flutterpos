@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/checkout/checkout_print_configuration_panel.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/buttons.dart';
-import 'package:flutter_application_1/ui/snackbar.dart';
-import 'package:flutter_application_1/ui/states.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/checkout/checkout_print_configuration_panel.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/buttons.dart';
+import 'package:uzapay_pos/ui/snackbar.dart';
+import 'package:uzapay_pos/ui/states.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';

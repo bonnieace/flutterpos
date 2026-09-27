@@ -39,6 +39,7 @@ import {
   RecipientHmacKeyring,
   stablePrivateId,
 } from "./recipientHash";
+import {logAbsorbedFailure} from "../core/absorbedFailure";
 
 const ALERT_LEASE_MILLISECONDS = 10 * 60 * 1000;
 const PLATFORM_PAGE_SIZE = 100;
@@ -260,6 +261,13 @@ async function sendOperatorPage(
         error.safeCode : "operator_notification_failure";
       const retryable = (error instanceof EmailProviderError ? error.retryable : true) &&
         attempt.attemptNumber < MAX_EMAIL_DELIVERY_ATTEMPTS;
+      logAbsorbedFailure("email.platform_alert_send_failed", error, {
+        deliveryId: identity.deliveryId,
+        platformAlertId: alert.alertId,
+        safeCode: code,
+        retryable,
+        attempt: attempt.attemptNumber,
+      });
       await failActionDelivery(db, identity, attempt, code, retryable);
       if (retryable) result.retryable += 1;
       else result.permanent += 1;

@@ -10,12 +10,12 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/expenses/expense.dart';
-import 'package:flutter_application_1/expenses/expense_charts.dart';
-import 'package:flutter_application_1/expenses/expense_panel.dart';
-import 'package:flutter_application_1/expenses/expense_request.dart';
-import 'package:flutter_application_1/ui/buttons.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/expenses/expense.dart';
+import 'package:uzapay_pos/expenses/expense_charts.dart';
+import 'package:uzapay_pos/expenses/expense_panel.dart';
+import 'package:uzapay_pos/expenses/expense_request.dart';
+import 'package:uzapay_pos/ui/buttons.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

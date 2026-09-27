@@ -7,9 +7,9 @@
 library;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/reports/analysis/shifts_analysis.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
-import 'package:flutter_application_1/shift/shift_history.dart';
+import 'package:uzapay_pos/reports/analysis/shifts_analysis.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
+import 'package:uzapay_pos/shift/shift_history.dart';
 
 const String _device = 'dev-0123456789abcdef0123456789abcdef';
 

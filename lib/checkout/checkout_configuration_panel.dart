@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -116,6 +117,16 @@ final class _TenantCheckoutConfigurationPanelState
   ) async {
     final writer = widget.writer;
     if (writer == null || _busy) return;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'configuration.currency',
+      screen: 'business_configuration',
+      context: {
+        'user_id': session.uid,
+        'tenant_id': session.tenantId,
+        'currency': currency,
+      },
+    );
     final capturedKey = _sessionKey(session);
 
     // The intent is built before anything is confirmed, so a code this boundary
@@ -128,17 +139,42 @@ final class _TenantCheckoutConfigurationPanelState
         session: session,
         reader: widget.reader,
       ).buildUpdateIntent(currency: currency, published: published);
-    } on TenantCheckoutConfigurationException catch (error) {
+    } on TenantCheckoutConfigurationException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'configuration.currency_validate',
+      );
       _report(_refusalNotice(error.code));
       return;
     }
-    if (!await _confirmed(intent) || !_stillCurrent(capturedKey)) return;
+    telemetry.recordStep(operation, 'validated');
+    if (!await _confirmed(intent) || !_stillCurrent(capturedKey)) {
+      telemetry.recordStep(operation, 'cancelled');
+      return;
+    }
+    telemetry.recordStep(operation, 'confirmed');
 
     setState(() {
       _busy = true;
     });
     try {
-      final result = await writer.publish(intent);
+      final result = await telemetry.trace(
+        operation,
+        'publish_currency',
+        () => writer.publish(intent),
+      );
+      if (result.kind == TenantCheckoutConfigurationWriteKind.committed) {
+        telemetry.recordStep(operation, 'confirmed_on_server');
+      } else {
+        AppTelemetry.captureHandled(
+          StateError(result.kind.name),
+          StackTrace.current,
+          operation: operation,
+          code: result.kind.name,
+        );
+      }
       if (!_stillCurrent(capturedKey)) return;
       _report(_resultNotice(result));
       // A committed change and an unknown one are both re-read: the second
@@ -150,7 +186,13 @@ final class _TenantCheckoutConfigurationPanelState
       if (result.kind == TenantCheckoutConfigurationWriteKind.committed) {
         widget.onPublished?.call();
       }
-    } on TenantCheckoutConfigurationException catch (error) {
+    } on TenantCheckoutConfigurationException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'configuration.currency_publish',
+      );
       if (!_stillCurrent(capturedKey)) return;
       _report(_refusalNotice(error.code));
     } finally {

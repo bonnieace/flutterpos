@@ -31,6 +31,7 @@ import '../checkout/checkout_print_configuration.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
 import 'sale_history.dart';
+import '../observability/app_telemetry.dart';
 
 /// The roles a second copy of a receipt is a decision for.
 ///
@@ -116,9 +117,12 @@ final class FirebaseRecordReceiptReprintCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('recordReceiptReprint')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'recordReceiptReprint',
+      () => _functions
+          .httpsCallable('recordReceiptReprint')
+          .call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -188,7 +192,12 @@ final class CheckoutTenantReceiptReprinter implements TenantReceiptReprinter {
     final TenantReceiptPrintContext context;
     try {
       context = await _readContext(session);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'sales.reprint_context_read',
+      );
       return const TenantReceiptReprintReport.refused(
         PrinterTransportCode.notConfigured,
       );
@@ -255,7 +264,12 @@ final class CheckoutTenantReceiptReprinter implements TenantReceiptReprinter {
         'deadline-exceeded' => TenantReceiptReprintCode.unavailable,
         _ => TenantReceiptReprintCode.refused,
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'sales.reprint_request',
+      );
       throw const _ReprintRefused(TenantReceiptReprintCode.unavailable);
     }
   }

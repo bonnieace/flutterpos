@@ -42,6 +42,7 @@ import 'supplier_delivery.dart';
 import 'supplier_delivery_panel.dart';
 import 'supplier_form.dart';
 import 'supplier_record_panel.dart';
+import '../observability/app_telemetry.dart';
 
 /// The Suppliers route, as the home tile opens it.
 final class TenantSuppliersScreen extends StatefulWidget {
@@ -103,14 +104,17 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
     if (_loadersFor == _generation) return;
     _loadersFor = _generation;
     final reader = widget.reader;
-    _loader = (session) =>
-        TenantSupplierRepository(session: session, reader: reader)
-            .loadDirectory();
+    _loader = (session) => TenantSupplierRepository(
+      session: session,
+      reader: reader,
+    ).loadDirectory();
     final cached = reader.cached;
     _loaderCached = cached == null
         ? null
-        : (session) => TenantSupplierRepository(session: session, reader: cached)
-              .loadDirectory();
+        : (session) => TenantSupplierRepository(
+            session: session,
+            reader: cached,
+          ).loadDirectory();
   }
 
   void _reload() => setState(() => _generation++);
@@ -130,7 +134,10 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
     final notice = await showSupplierFormSheet(
       context,
       session: session,
-      repository: TenantSupplierRepository(session: session, reader: widget.reader),
+      repository: TenantSupplierRepository(
+        session: session,
+        reader: widget.reader,
+      ),
       writer: writer,
       directory: directory,
       supplier: supplier,
@@ -178,7 +185,8 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
     if (mounted) _reload();
   }
 
-  Future<void> _receive() async {
+  /// Receives a delivery, from [supplier] when a card's menu names one.
+  Future<void> _receive([TenantSupplier? supplier]) async {
     final deliveries = widget.deliveries;
     if (deliveries == null) return;
     final notice = await openReceiveDeliveryScreen(
@@ -186,6 +194,7 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
       reader: widget.reader,
       services: deliveries,
       supplierWriter: widget.writer,
+      supplierId: supplier?.id,
     );
     if (!mounted || notice == null) return;
     showAppSnackBar(context, notice);
@@ -200,7 +209,10 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
   /// and inactive ones after them, labelled - a period can include deliveries
   /// from a supplier that has since been marked inactive, and leaving it out
   /// would make that period's report impossible to produce.
-  Widget? _reportAction(TenantSession session, TenantSupplierDirectory directory) {
+  Widget? _reportAction(
+    TenantSession session,
+    TenantSupplierDirectory directory,
+  ) {
     final saver = widget.reportSaver;
     if (saver == null) return null;
     return TenantReportAction(
@@ -287,9 +299,9 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
                   key: const ValueKey('suppliers-receive'),
                   label: 'Receive delivery',
                   icon: Icons.local_shipping_outlined,
-                  tier: AppButtonTier.primary,
+                  tier: AppButtonTier.secondary,
                   expand: true,
-                  onPressed: _receive,
+                  onPressed: () => _receive(),
                 ),
           onSearchChanged: () => setState(() => _pageIndex = 0),
           onStandingChanged: _setStanding,
@@ -297,6 +309,7 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
               ? null
               : () => _openForm(session, directory),
           onView: _openRecord,
+          onReceive: widget.deliveries == null ? null : _receive,
           onEdit: widget.writer == null
               ? null
               : (supplier) => _openForm(session, directory, supplier: supplier),
@@ -349,7 +362,12 @@ Future<AppNotice?> setSupplierStanding(
     await writer.updateSupplier(intent);
   } on TenantSupplierException catch (error) {
     return AppNotice.refused(supplierRefusalMessage(error.code));
-  } catch (_) {
+  } catch (error, stackTrace) {
+    AppTelemetry.captureHandled(
+      error,
+      stackTrace,
+      boundary: 'suppliers.update',
+    );
     return const AppNotice.refused(
       'This change could not be saved on this device, so nothing was '
       'recorded. Try again.',
@@ -397,6 +415,7 @@ final class _SuppliersContents extends StatelessWidget {
     required this.onStandingChanged,
     required this.onAdd,
     required this.onView,
+    required this.onReceive,
     required this.onEdit,
     required this.onSetActive,
     required this.onPrevious,
@@ -413,6 +432,9 @@ final class _SuppliersContents extends StatelessWidget {
   final ValueChanged<TenantSupplierStanding> onStandingChanged;
   final VoidCallback? onAdd;
   final ValueChanged<TenantSupplier> onView;
+
+  /// Null offers no *Receive delivery*, as on the page's own action.
+  final ValueChanged<TenantSupplier>? onReceive;
   final ValueChanged<TenantSupplier>? onEdit;
   final void Function(TenantSupplier supplier, bool active)? onSetActive;
   final VoidCallback? onPrevious;
@@ -422,9 +444,24 @@ final class _SuppliersContents extends StatelessWidget {
       search.text.trim().isNotEmpty ||
       standing != TenantSupplierStanding.active;
 
-  /// *View* is not among them: the whole card opens the record.
+  /// *View* and *Receive delivery* lead, at the developer's direction on
+  /// 2026-09-27. The whole card still opens the record; the menu names it too.
+  /// Receiving is offered only for an active supplier, as the record does.
   List<SupplierMenuAction> _actions(TenantSupplier supplier) =>
       <SupplierMenuAction>[
+        SupplierMenuAction(
+          label: 'View',
+          icon: Icons.visibility_outlined,
+          itemKey: ValueKey('supplier-menu-view-${supplier.id}'),
+          onSelected: () => onView(supplier),
+        ),
+        if (onReceive case final receive? when supplier.active)
+          SupplierMenuAction(
+            label: 'Receive delivery',
+            icon: Icons.local_shipping_outlined,
+            itemKey: ValueKey('supplier-receive-${supplier.id}'),
+            onSelected: () => receive(supplier),
+          ),
         if (onEdit case final edit?)
           SupplierMenuAction(
             label: 'Edit',
@@ -542,7 +579,8 @@ final class _SuppliersContents extends StatelessWidget {
           const Callout(
             key: ValueKey('suppliers-read-only'),
             status: AppStatus.info,
-            message: 'This build cannot change suppliers, so the list is '
+            message:
+                'This build cannot change suppliers, so the list is '
                 'read-only here.',
           ),
           SizedBox(height: tokens.spacing.s12),
@@ -591,7 +629,9 @@ final class _SuppliersContents extends StatelessWidget {
         ],
         if (shown.isEmpty)
           EmptyState(
-            key: ValueKey(_hasQuery ? 'suppliers-no-matches' : 'suppliers-empty'),
+            key: ValueKey(
+              _hasQuery ? 'suppliers-no-matches' : 'suppliers-empty',
+            ),
             title: _hasQuery ? 'No matching suppliers' : 'No suppliers yet',
             hint: _hasQuery
                 ? 'Try another name, or show every supplier.'

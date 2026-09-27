@@ -31,6 +31,7 @@ import '../suppliers/supplier.dart';
 import '../suppliers/supplier_delivery.dart';
 import 'tenant_pending_mutation.dart';
 import 'tenant_repository.dart';
+import '../observability/app_telemetry.dart';
 
 /// Fires once a change is durable on this device, so the worker that carries it
 /// to the server can start now rather than at the next reconnect.
@@ -451,7 +452,12 @@ final class QueuedTenantConfigurationWriter
     TenantDocumentSnapshot? before;
     try {
       before = await _cacheReader.getDocument(path);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'sync.fingerprint_read',
+      );
       // An empty fingerprint is safe: if a server value exists, confirmation
       // will detect the mismatch and retain this edit for review. A damaged or
       // absent local projection must not make an offline edit disappear.

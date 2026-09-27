@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import 'package:flutter/material.dart';
 
@@ -319,9 +320,18 @@ final class _CheckoutEvidenceScopeState extends State<CheckoutEvidenceScope> {
   }
 
   void _subscribe() {
-    _subscription = widget.refreshSignals?.listen((_) {
-      if (mounted) setState(() => _generation++);
-    }, onError: (Object _, StackTrace _) {});
+    _subscription = widget.refreshSignals?.listen(
+      (_) {
+        if (mounted) setState(() => _generation++);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'checkout.evidence_stream',
+        );
+      },
+    );
   }
 
   @override

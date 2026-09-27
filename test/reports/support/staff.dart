@@ -6,12 +6,12 @@
 /// one on the roster who rang nothing up at all.
 library;
 
-import 'package:flutter_application_1/reports/analysis/staff_analysis.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
-import 'package:flutter_application_1/sales/sale_history.dart';
-import 'package:flutter_application_1/tenancy/tenant_repository.dart';
-import 'package:flutter_application_1/tenancy/tenant_staff_directory.dart';
-import 'package:flutter_application_1/tenancy/tenant_types.dart';
+import 'package:uzapay_pos/reports/analysis/staff_analysis.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
+import 'package:uzapay_pos/sales/sale_history.dart';
+import 'package:uzapay_pos/tenancy/tenant_repository.dart';
+import 'package:uzapay_pos/tenancy/tenant_staff_directory.dart';
+import 'package:uzapay_pos/tenancy/tenant_types.dart';
 
 import 'sales.dart';
 

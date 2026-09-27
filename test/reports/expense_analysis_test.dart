@@ -8,9 +8,9 @@
 /// item that must be counted without being totalled.
 library;
 
-import 'package:flutter_application_1/expenses/expense.dart';
-import 'package:flutter_application_1/reports/analysis/expense_analysis.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
+import 'package:uzapay_pos/expenses/expense.dart';
+import 'package:uzapay_pos/reports/analysis/expense_analysis.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 TenantExpense _expense({

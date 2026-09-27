@@ -7,8 +7,8 @@
 /// because a drawer nobody could check is not a drawer that balanced.
 library;
 
-import 'package:flutter_application_1/reports/analysis/shifts_analysis.dart';
-import 'package:flutter_application_1/shift/shift_history.dart';
+import 'package:uzapay_pos/reports/analysis/shifts_analysis.dart';
+import 'package:uzapay_pos/shift/shift_history.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/shifts.dart';

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../checkout/checkout_receipt.dart';
@@ -232,7 +233,7 @@ final class TenantShiftController extends ChangeNotifier {
   /// The signature matches `TenantRouteGuard`, so the guard supplies the exact
   /// session it authorized.
   Future<TenantShiftState> restore(TenantSession session) =>
-      _run(session, (captured) async {
+      _run('shift.restore', session, (captured) async {
         await _discardUnfinishedCashCount(captured);
         // **Draw what this device already knows, before asking the server.**
         // This is the other half of the "checking your shift" flash: the
@@ -282,7 +283,7 @@ final class TenantShiftController extends ChangeNotifier {
   /// with. It defaults to none, so a caller that does not ask for one opens a
   /// shift whose takings are compared against its sales alone.
   Future<TenantShiftState> openShift({int openingFloatMinor = 0}) =>
-      _run(_sessionController.session, (captured) async {
+      _run('shift.open', _sessionController.session, (captured) async {
         final existing = await _localState.read(
           uid: captured.uid,
           tenantId: captured.tenantId,
@@ -387,45 +388,51 @@ final class TenantShiftController extends ChangeNotifier {
       });
 
   /// Starts an unfinished cash count, which blocks tenant switching at once.
-  Future<TenantShiftState> startCashCount() =>
-      _run(_sessionController.session, (captured) async {
-        final record = await _localState.read(
-          uid: captured.uid,
-          tenantId: captured.tenantId,
-        );
-        if (record == null) {
-          return _settle(captured, errorCode: 'no_open_shift');
-        }
-        if (record.closeInProgress) return _settle(captured);
-        await _localState.save(
-          record.copyWith(
-            closeInProgress: true,
-            clearDeclaration: true,
-            updatedAt: _localState.now(),
-          ),
-        );
-        return _settle(captured);
-      });
+  Future<TenantShiftState> startCashCount() => _run(
+    'shift.start_cash_count',
+    _sessionController.session,
+    (captured) async {
+      final record = await _localState.read(
+        uid: captured.uid,
+        tenantId: captured.tenantId,
+      );
+      if (record == null) {
+        return _settle(captured, errorCode: 'no_open_shift');
+      }
+      if (record.closeInProgress) return _settle(captured);
+      await _localState.save(
+        record.copyWith(
+          closeInProgress: true,
+          clearDeclaration: true,
+          updatedAt: _localState.now(),
+        ),
+      );
+      return _settle(captured);
+    },
+  );
 
   /// Abandons an unfinished cash count without closing the shift.
-  Future<TenantShiftState> cancelCashCount() =>
-      _run(_sessionController.session, (captured) async {
-        final record = await _localState.read(
-          uid: captured.uid,
-          tenantId: captured.tenantId,
-        );
-        if (record == null || !record.closeInProgress) {
-          return _settle(captured);
-        }
-        await _localState.save(
-          record.copyWith(
-            closeInProgress: false,
-            clearDeclaration: true,
-            updatedAt: _localState.now(),
-          ),
-        );
+  Future<TenantShiftState> cancelCashCount() => _run(
+    'shift.cancel_cash_count',
+    _sessionController.session,
+    (captured) async {
+      final record = await _localState.read(
+        uid: captured.uid,
+        tenantId: captured.tenantId,
+      );
+      if (record == null || !record.closeInProgress) {
         return _settle(captured);
-      });
+      }
+      await _localState.save(
+        record.copyWith(
+          closeInProgress: false,
+          clearDeclaration: true,
+          updatedAt: _localState.now(),
+        ),
+      );
+      return _settle(captured);
+    },
+  );
 
   /// Completes the cash count and closes the canonical shift.
   ///
@@ -446,7 +453,7 @@ final class TenantShiftController extends ChangeNotifier {
   Future<TenantShiftState> closeShift({
     required ShiftTenderDeclaration declaration,
     String? settlementId,
-  }) => _run(_sessionController.session, (captured) async {
+  }) => _run('shift.close', _sessionController.session, (captured) async {
     final record = await _localState.read(
       uid: captured.uid,
       tenantId: captured.tenantId,
@@ -503,7 +510,12 @@ final class TenantShiftController extends ChangeNotifier {
     final TenantShift? shift;
     try {
       shift = await repository.readShift(record.shiftId);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.close_shift_read',
+      );
       // A cache with no copy of the shift cannot prove it is open, and a
       // close must never be recorded against a shift this device cannot
       // describe.
@@ -579,7 +591,9 @@ final class TenantShiftController extends ChangeNotifier {
     required String shiftId,
     ShiftTenderDeclaration? declaration,
     String? settlementId,
-  }) => _run(_sessionController.session, (captured) async {
+  }) => _run('shift.close_without_evidence', _sessionController.session, (
+    captured,
+  ) async {
     if (!await _online()) {
       return _offlineView(captured, errorCode: 'orphan_close_needs_connection');
     }
@@ -663,7 +677,12 @@ final class TenantShiftController extends ChangeNotifier {
         session: captured,
         reader: _reader,
       ).findOpenShifts(collectionReader: _reader);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.open_shifts_read',
+      );
       return const <String>[];
     }
     if (!_owns(captured)) return const <String>[];
@@ -845,7 +864,12 @@ final class TenantShiftController extends ChangeNotifier {
         reader: reader,
       ).readShift(shiftId);
       return shift != null;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.shift_exists_read',
+      );
       return false;
     }
   }
@@ -1245,6 +1269,7 @@ final class TenantShiftController extends ChangeNotifier {
   }
 
   Future<TenantShiftState> _run(
+    String operationName,
     TenantSession? captured,
     Future<TenantShiftState> Function(TenantSession session) body,
   ) {
@@ -1253,24 +1278,76 @@ final class TenantShiftController extends ChangeNotifier {
     _tail = release.future;
     return Future<TenantShiftState>(() async {
       await previous;
+      final telemetry = AppTelemetry.current;
+      final operation = operationName == 'shift.restore'
+          ? null
+          : telemetry.start(
+              operationName,
+              screen: 'shift',
+              context: {
+                'user_id': captured?.uid,
+                'tenant_id': captured?.tenantId,
+              },
+            );
       try {
         if (captured == null || !captured.canAccess()) {
+          AppTelemetry.captureHandled(
+            StateError('no_selected_session'),
+            StackTrace.current,
+            operation: operation,
+            code: 'no_selected_session',
+          );
           return const TenantShiftState(
             phase: TenantShiftPhase.unavailable,
             errorCode: 'no_selected_session',
           );
         }
         if (!_owns(captured)) return _staleView();
-        return await body(captured);
-      } on TenantShiftStateException catch (error) {
+        final result = operation == null
+            ? await body(captured)
+            : await telemetry.trace(
+                operation,
+                'shift_operation',
+                () => body(captured),
+              );
+        if (result.errorCode != null && result.errorCode != 'offline') {
+          AppTelemetry.captureHandled(
+            StateError(result.errorCode!),
+            StackTrace.current,
+            operation: operation,
+            code: result.errorCode,
+          );
+        } else {
+          if (operation != null) {
+            telemetry.recordStep(
+              operation,
+              result.errorCode == 'offline' ? 'saved_locally' : 'confirmed',
+            );
+            if (result.errorCode != 'offline') {
+              telemetry.finishOperation(operation);
+            }
+          }
+        }
+        return result;
+      } on TenantShiftStateException catch (error, stackTrace) {
+        AppTelemetry.captureHandled(error, stackTrace, operation: operation);
         return _publishIfCurrent(captured, error.code);
-      } on TenantShiftException catch (error) {
+      } on TenantShiftException catch (error, stackTrace) {
+        AppTelemetry.captureHandled(error, stackTrace, operation: operation);
         return _publishIfCurrent(captured, error.code);
-      } on ShiftSalesLedgerException catch (error) {
+      } on ShiftSalesLedgerException catch (error, stackTrace) {
+        AppTelemetry.captureHandled(error, stackTrace, operation: operation);
         return _publishIfCurrent(captured, error.code);
-      } on TenantScopeViolation {
+      } on TenantScopeViolation catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          operation: operation,
+          code: 'cross_tenant_shift',
+        );
         return _publishIfCurrent(captured, 'cross_tenant_shift');
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(error, stackTrace, operation: operation);
         return _publishIfCurrent(captured, 'shift_unavailable');
       } finally {
         release.complete();

@@ -1,4 +1,4 @@
-import 'package:flutter_application_1/constants/colors.dart';
+import 'package:uzapay_pos/constants/colors.dart';
 import 'package:flutter/material.dart';
 
 import 'utils/device/device_utility.dart';

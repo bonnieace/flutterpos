@@ -16,7 +16,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:uzapay_pos/ui/buttons.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Whether the control under [key] can be pressed.

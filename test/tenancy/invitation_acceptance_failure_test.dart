@@ -1,4 +1,4 @@
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Every code the two acceptance callables can answer with, plus a few they

@@ -6,9 +6,9 @@
 /// report has something to say about.
 library;
 
-import 'package:flutter_application_1/expenses/expense.dart';
-import 'package:flutter_application_1/reports/analysis/expense_analysis.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
+import 'package:uzapay_pos/expenses/expense.dart';
+import 'package:uzapay_pos/reports/analysis/expense_analysis.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
 
 TenantExpense expenseRecord({
   required int amountMinor,

@@ -81,6 +81,7 @@ final class StatTile extends StatelessWidget {
     this.detail,
     this.status,
     this.statusLabel,
+    this.statusIcon,
     this.valueKey,
     this.money = false,
     this.rolling = false,
@@ -115,6 +116,10 @@ final class StatTile extends StatelessWidget {
 
   /// The word the badge carries. Required with [status] and refused without it.
   final String? statusLabel;
+
+  /// The badge's glyph, where the status's own would say the wrong thing - an
+  /// *Up* under `attention`'s clock reads as "pending". Null keeps the default.
+  final IconData? statusIcon;
 
   /// Key on the figure's own `Text`, for a caller whose tests address the number
   /// rather than the tile around it.
@@ -254,7 +259,11 @@ final class StatTile extends StatelessWidget {
                 ),
               if (status case final standing?) ...<Widget>[
                 SizedBox(height: tokens.spacing.s8),
-                StatusBadge(status: standing, label: statusLabel!),
+                StatusBadge(
+                  status: standing,
+                  label: statusLabel!,
+                  icon: statusIcon,
+                ),
               ],
               if (detail case final line?) ...<Widget>[
                 SizedBox(height: tokens.spacing.s4),

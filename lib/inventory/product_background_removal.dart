@@ -26,6 +26,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../tenancy/tenant_session.dart';
 import 'catalog_management.dart';
 import 'product_image_store.dart';
+import '../observability/app_telemetry.dart';
 
 /// Why a background was not removed. The image the operator chose is untouched
 /// in every one of these cases.
@@ -94,9 +95,12 @@ final class FirebaseRemoveProductBackgroundCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('removeProductBackground')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'removeProductBackground',
+      () => _functions
+          .httpsCallable('removeProductBackground')
+          .call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -139,7 +143,12 @@ final class CallableTenantProductBackgroundRemover
       throw const TenantBackgroundRemovalException(
         TenantBackgroundRemovalFailure.unavailable,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'inventory.background_removal_request',
+      );
       throw const TenantBackgroundRemovalException(
         TenantBackgroundRemovalFailure.unavailable,
       );

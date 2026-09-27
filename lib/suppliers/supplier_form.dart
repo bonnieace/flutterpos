@@ -7,6 +7,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
@@ -149,6 +150,12 @@ class _SupplierFormState extends State<_SupplierForm> {
       _busy = true;
       _error = null;
     });
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      _editing ? 'suppliers.update' : 'suppliers.create',
+      screen: 'suppliers',
+      context: {'supplier_id': widget.supplier?.id},
+    );
     try {
       final supplier = widget.supplier;
       final String supplierId;
@@ -160,7 +167,11 @@ class _SupplierFormState extends State<_SupplierForm> {
           requestId: _requestId ??=
               widget.requestIdOverride ?? secureTenantSupplierRequestId(),
         );
-        await widget.writer.createSupplier(intent);
+        await telemetry.trace(
+          operation,
+          'save_supplier',
+          () => widget.writer.createSupplier(intent),
+        );
         supplierId = intent.supplierId;
         name = intent.name;
       } else {
@@ -169,10 +180,15 @@ class _SupplierFormState extends State<_SupplierForm> {
           draft: _draft,
           directory: widget.directory,
         );
-        await widget.writer.updateSupplier(intent);
+        await telemetry.trace(
+          operation,
+          'save_supplier',
+          () => widget.writer.updateSupplier(intent),
+        );
         supplierId = supplier.id;
         name = intent.name ?? supplier.name;
       }
+      telemetry.recordStep(operation, 'saved_locally');
       if (!mounted) return;
       widget.onSaved?.call(supplierId);
       widget.onCompleted(
@@ -184,13 +200,15 @@ class _SupplierFormState extends State<_SupplierForm> {
                     'and is on its way to the server now.',
         ),
       );
-    } on TenantSupplierException catch (error) {
+    } on TenantSupplierException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(error, stackTrace, operation: operation);
       if (!mounted) return;
       setState(() {
         _busy = false;
         _error = supplierRefusalMessage(error.code);
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(error, stackTrace, operation: operation);
       // Nothing durable could be written on this device - a full disk, an
       // unreadable box. Nothing was recorded anywhere, so the same entry may
       // simply be tried again.
@@ -299,7 +317,7 @@ class _SupplierFormState extends State<_SupplierForm> {
         AppButton(
           key: const ValueKey('supplier-form-submit'),
           label: _editing ? 'Save supplier' : 'Add supplier',
-          tier: AppButtonTier.primary,
+          tier: AppButtonTier.secondary,
           loading: _busy,
           expand: true,
           onPressed: _canSubmit ? _submit : null,

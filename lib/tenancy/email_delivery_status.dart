@@ -1,6 +1,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../ui/status.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for `getMyEmailDeliveryStatus`.
 ///
@@ -32,9 +33,12 @@ final class FirebaseEmailDeliveryStatusCallable
   @override
   Future<Object?> call() async {
     try {
-      final result = await _functions
-          .httpsCallable('getMyEmailDeliveryStatus')
-          .call<Object?>();
+      final result = await traceServerCall(
+        'getMyEmailDeliveryStatus',
+        () => _functions
+            .httpsCallable('getMyEmailDeliveryStatus')
+            .call<Object?>(),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw EmailDeliveryStatusCallableException(error.code);

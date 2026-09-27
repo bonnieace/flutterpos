@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter_application_1/checkout/checkout_outbox.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/checkout/checkout_outbox.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 

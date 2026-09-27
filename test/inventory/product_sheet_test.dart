@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:excel/excel.dart' as xlsx;
-import 'package:flutter_application_1/inventory/inventory.dart';
+import 'package:uzapay_pos/inventory/inventory.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The template a person takes away, and the file they bring back.

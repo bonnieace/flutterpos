@@ -7,8 +7,8 @@
 /// from the books.
 library;
 
-import 'package:flutter_application_1/reports/analysis/returns_analysis.dart';
-import 'package:flutter_application_1/returns/return_history.dart';
+import 'package:uzapay_pos/reports/analysis/returns_analysis.dart';
+import 'package:uzapay_pos/returns/return_history.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/returns.dart';

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../observability/app_telemetry.dart';
 
 import '../ui/states.dart';
 import 'tenant_session.dart';
@@ -202,8 +203,24 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
   }
 
   Future<void> _load(TenantSession captured, int generation) async {
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'screen.load',
+      screen: 'tenant_guard',
+      context: {
+        'user_id': captured.uid,
+        'tenant_id': captured.tenantId,
+        'view_type': '$T',
+        'generation': generation,
+      },
+    );
     try {
-      final value = await widget.load(captured);
+      final value = await telemetry.trace(
+        operation,
+        'load_records',
+        () => widget.load(captured),
+      );
+      telemetry.recordStep(operation, 'confirmed_on_server');
       if (!_isCurrent(captured, generation)) return;
       setState(() {
         _value = value;
@@ -214,7 +231,13 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
         _error = null;
         _phase = _TenantGuardPhase.ready;
       });
-    } catch (error) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'screen.load',
+      );
       if (!_isCurrent(captured, generation)) return;
       setState(() {
         _error = error;
@@ -243,7 +266,12 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
     final T value;
     try {
       value = await widget.loadCached!(captured);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'screen.cached_load',
+      );
       return;
     }
     if (!_isCurrent(captured, generation)) return;

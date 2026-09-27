@@ -16,11 +16,11 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter_application_1/reporting/reporting_currency.dart';
-import 'package:flutter_application_1/reports/render/report_fonts.dart';
-import 'package:flutter_application_1/reports/render/pdf_report.dart';
-import 'package:flutter_application_1/reports/report_document.dart';
-import 'package:flutter_application_1/reports/report_scope.dart';
+import 'package:uzapay_pos/reporting/reporting_currency.dart';
+import 'package:uzapay_pos/reports/render/report_fonts.dart';
+import 'package:uzapay_pos/reports/render/pdf_report.dart';
+import 'package:uzapay_pos/reports/report_document.dart';
+import 'package:uzapay_pos/reports/report_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/documents.dart';

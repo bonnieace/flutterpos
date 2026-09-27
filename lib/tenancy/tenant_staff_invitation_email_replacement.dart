@@ -17,6 +17,7 @@ import 'tenant_staff_request_ticket.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_staff_invitation.dart';
 import 'tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 /// Narrow callable boundary for the enabled `replacePendingStaffEmail` mutation.
 abstract interface class ReplacePendingStaffEmailCallable {
@@ -33,9 +34,12 @@ final class FirebaseReplacePendingStaffEmailCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('replacePendingStaffEmail')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'replacePendingStaffEmail',
+      () => _functions
+          .httpsCallable('replacePendingStaffEmail')
+          .call<Object?>(payload),
+    );
     return result.data;
   }
 }

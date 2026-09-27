@@ -43,6 +43,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
@@ -441,38 +442,47 @@ class _OnboardingFlowState extends State<OnboardingFlow>
   /// first, because a person who pressed *Sign out* does not need to be told
   /// their session ended.
   void _subscribeToIdentityChanges() {
-    _identitySubscription = widget.identityChanges?.listen((_) {
-      if (!mounted) return;
-      final uid = widget.readIdentity().uid;
-      final lost = uid == null && _seenUid != null && !_leaving;
-      // **A different account never inherits these keys.** They are recorded
-      // against the uid that minted them, so a retry under somebody else's
-      // identity would address the previous person's operation. The accessors
-      // compare the input; only this can see the identity move underneath
-      // them. `account_verification.dart` makes the same guard for the same
-      // reason.
-      final changedIdentity =
-          uid != null && _seenUid != null && uid != _seenUid;
-      if (changedIdentity) {
-        _signupIntent = null;
-        _emailChangeIntent = null;
-        _verificationIntent = null;
-      }
-      setState(() {
-        if (uid != null) {
-          _seenUid = uid;
-          _sessionEnded = false;
-        } else if (lost) {
-          _sessionEnded = true;
-          _poll?.cancel();
-          _poll = null;
-          _busy = false;
-          _reauthRequired = false;
-          _reauthController.clear();
-          _clearNotice();
+    _identitySubscription = widget.identityChanges?.listen(
+      (_) {
+        if (!mounted) return;
+        final uid = widget.readIdentity().uid;
+        final lost = uid == null && _seenUid != null && !_leaving;
+        // **A different account never inherits these keys.** They are recorded
+        // against the uid that minted them, so a retry under somebody else's
+        // identity would address the previous person's operation. The accessors
+        // compare the input; only this can see the identity move underneath
+        // them. `account_verification.dart` makes the same guard for the same
+        // reason.
+        final changedIdentity =
+            uid != null && _seenUid != null && uid != _seenUid;
+        if (changedIdentity) {
+          _signupIntent = null;
+          _emailChangeIntent = null;
+          _verificationIntent = null;
         }
-      });
-    }, onError: (Object _, StackTrace _) {});
+        setState(() {
+          if (uid != null) {
+            _seenUid = uid;
+            _sessionEnded = false;
+          } else if (lost) {
+            _sessionEnded = true;
+            _poll?.cancel();
+            _poll = null;
+            _busy = false;
+            _reauthRequired = false;
+            _reauthController.clear();
+            _clearNotice();
+          }
+        });
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'auth.identity_stream',
+        );
+      },
+    );
   }
 
   @override
@@ -571,7 +581,12 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     }
     try {
       await widget.reloadIdentity();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'auth.identity_reload',
+      );
       // A refresh that could not reach the server says nothing about whether
       // the address is verified, so it changes nothing and is not an error the
       // person needs to read. The next tick asks again.
@@ -645,7 +660,12 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     final EmailDeliveryStatus status;
     try {
       status = await EmailDeliveryStatusReader(callable: callable).read();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'auth.email_delivery_status_read',
+      );
       return;
     }
     // The answer is about the address the send was made from. An identity that
@@ -697,6 +717,15 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     if (_busy || !_isCurrent()) return;
     final identity = widget.readIdentity();
     final creating = identity.uid == null;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'auth.signup',
+      screen: 'onboarding',
+      context: {
+        'attempted_email': _emailController.text.trim(),
+        'user_id': identity.uid,
+      },
+    );
 
     final nameDefect = accountNameDefect(_nameController.text);
     final phoneDefect = phoneNumberDefect(
@@ -712,6 +741,12 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       );
     }
     if (nameDefect != null || phoneDefect != null || credentialDefect != null) {
+      AppTelemetry.captureHandled(
+        ArgumentError('registration_input'),
+        StackTrace.current,
+        operation: operation,
+        code: 'validation_registration_input',
+      );
       setState(() {
         _nameError = nameDefect == null
             ? null
@@ -741,26 +776,37 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       _phoneError = null;
     });
     try {
+      telemetry.recordStep(operation, 'validated');
       if (creating) {
         final registration =
             widget.registration ?? FirebaseEmailPasswordRegistration();
-        await registration.call(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
+        await telemetry.trace(
+          operation,
+          'create_identity',
+          () => registration.call(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          ),
         );
+        telemetry.recordStep(operation, 'submitted');
       }
       final phone = normalizeE164(
         dialCode: _dialCode,
         localNumber: _phoneController.text,
       );
       final gateway = _profileGateway;
-      await gateway.completeSignup(
-        _signupIntentFor(
-          gateway,
-          displayName: _nameController.text,
-          phone: phone,
+      await telemetry.trace(
+        operation,
+        'save_profile',
+        () => gateway.completeSignup(
+          _signupIntentFor(
+            gateway,
+            displayName: _nameController.text,
+            phone: phone,
+          ),
         ),
       );
+      telemetry.recordStep(operation, 'confirmed_on_server');
       if (!mounted) return;
       setState(() {
         _savedDisplayName = _nameController.text.trim();
@@ -778,7 +824,13 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       // place it can be asked about.
       final sentUid = widget.readIdentity().uid;
       if (sentUid != null) unawaited(_readDeliveryStatus(sentUid));
-    } catch (error) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'auth.signup',
+      );
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -822,6 +874,12 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     final identity = widget.readIdentity();
     final uid = identity.uid;
     if (_busy || !_isCurrent()) return;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'auth.verification_resend',
+      screen: 'onboarding',
+      context: {'user_id': uid},
+    );
     // **Says so rather than doing nothing.** This guard used to return in
     // silence, so a session that had ended left *Send again* rendering as an
     // enabled button that swallowed every press without a word. The flow now
@@ -829,6 +887,12 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     // this is a backstop; a backstop that says nothing is how the original
     // defect hid for so long.
     if (uid == null) {
+      AppTelemetry.captureHandled(
+        StateError('session_ended'),
+        StackTrace.current,
+        operation: operation,
+        code: 'session_ended',
+      );
       setState(() {
         _sessionEnded = true;
         _clearNotice();
@@ -840,6 +904,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       _clearNotice();
     });
     try {
+      telemetry.recordStep(operation, 'submitted');
       final gateway = AccountVerificationGateway(
         identity: AccountVerificationIdentity(
           uid: uid,
@@ -854,7 +919,12 @@ class _OnboardingFlowState extends State<OnboardingFlow>
         // told about it. See `AccountVerificationGateway`.
         refreshSession: widget.refreshSession,
       );
-      await gateway.send(_verificationIntentFor(gateway));
+      await telemetry.trace(
+        operation,
+        'send_verification',
+        () => gateway.send(_verificationIntentFor(gateway)),
+      );
+      telemetry.recordStep(operation, 'confirmed_on_server');
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -868,7 +938,13 @@ class _OnboardingFlowState extends State<OnboardingFlow>
         _raise(const AppNotice.confirmed('Another email has been requested.'));
       });
       unawaited(_readDeliveryStatus(uid));
-    } catch (error) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'auth.verification_resend',
+      );
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -915,7 +991,12 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     });
     try {
       await reauthenticate(password);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'auth.reauthenticate',
+      );
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -935,15 +1016,27 @@ class _OnboardingFlowState extends State<OnboardingFlow>
 
   Future<void> _changeEmail() async {
     if (_busy || !_isCurrent()) return;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'auth.change_email',
+      screen: 'onboarding',
+      context: {'attempted_email': _newEmailController.text.trim()},
+    );
     setState(() {
       _busy = true;
       _clearNotice();
     });
     try {
+      telemetry.recordStep(operation, 'submitted');
       final gateway = _profileGateway;
-      final change = await gateway.changeEmail(
-        _addressIntentFor(gateway, _newEmailController.text),
+      final change = await telemetry.trace(
+        operation,
+        'change_address',
+        () => gateway.changeEmail(
+          _addressIntentFor(gateway, _newEmailController.text),
+        ),
       );
+      telemetry.recordStep(operation, 'confirmed_on_server');
       final email = change.email;
       // **Before the frame that reports success.** The old refresh token is
       // already doomed at this point and the SDK will notice within seconds;
@@ -955,7 +1048,14 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       if (resume != null && token != null) {
         try {
           await resume(token);
-        } catch (_) {}
+        } catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            operation: operation,
+            boundary: 'auth.resume_after_email_change',
+          );
+        }
       }
       if (!mounted) return;
       setState(() {
@@ -986,7 +1086,13 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       // The address moved, so the wait restarts and the eager cadence with it.
       _verifyingSince = null;
       _syncPolling();
-    } catch (error) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'auth.change_email',
+      );
       if (!mounted) return;
       setState(() {
         _busy = false;

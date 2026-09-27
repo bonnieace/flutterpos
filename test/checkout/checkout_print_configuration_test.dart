@@ -1,5 +1,5 @@
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/tenancy/tenant_types.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/tenancy/tenant_types.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Map<String, Object?> _document({

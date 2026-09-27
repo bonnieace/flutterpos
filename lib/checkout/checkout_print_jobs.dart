@@ -30,12 +30,14 @@
 library;
 
 import 'dart:async';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import 'package:hive/hive.dart';
 
 import 'checkout_outbox.dart';
 import 'checkout_print_transport_base.dart';
 import 'checkout_receipt.dart';
+import 'package:uzapay_pos/storage/device_storage.dart';
 
 /// The states a print job moves through, mirroring [CheckoutOutboxState].
 enum PrintJobState {
@@ -275,10 +277,10 @@ final class HivePrintJobQueue {
     if (key.length != encryptionKeyBytes) {
       throw const PrintJobException('invalid_encryption_key');
     }
-    final box = await (hive ?? Hive).openBox<dynamic>(
+    final box = await openBoxRepairingTornTail<dynamic>(
+      hive ?? Hive,
       boxName,
-      encryptionCipher: HiveAesCipher(List<int>.from(key)),
-      crashRecovery: false,
+      cipher: HiveAesCipher(List<int>.from(key)),
     );
     return HivePrintJobQueue._(box, clock ?? _utcNow);
   }
@@ -404,20 +406,57 @@ final class HivePrintJobQueue {
       // Re-read inside the mutex: a concurrent runner may have finished it
       // between the check above and this line.
       if (current.state == PrintJobState.printed) return current;
+      final telemetry = AppTelemetry.current;
+      final operation = telemetry.start(
+        'printing.receipt',
+        screen: 'print_queue',
+        context: {
+          'tenant_id': current.tenantId,
+          'receipt_number': current.receiptNumber,
+          'attempt_number': current.attemptCount + 1,
+        },
+      );
       final started = await _move(
         current,
         PrintJobState.printing,
         attemptCount: current.attemptCount + 1,
       );
       try {
-        await transport.send(started.endpoint, started.bytes);
-      } on PrinterTransportException catch (error) {
+        telemetry.recordStep(operation, 'submitted');
+        await telemetry.trace(
+          operation,
+          'send_to_printer',
+          () => transport.send(started.endpoint, started.bytes),
+        );
+      } on PrinterTransportException catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          operation: operation,
+          boundary: 'printing.send',
+          data: {
+            'receipt_number': receiptNumber,
+            'printer_host': started.host,
+            'printer_port': started.port,
+            'attempt_number': started.attemptCount,
+          },
+        );
         return _move(
           started,
           PrintJobState.needsAttention,
           attentionReason: error.code,
         );
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          operation: operation,
+          boundary: 'printing.send',
+          data: {
+            'receipt_number': receiptNumber,
+            'attempt_number': started.attemptCount,
+          },
+        );
         // An unknown throw is still a failed print and must not leave the job
         // stuck in `printing` forever.
         return _move(
@@ -426,7 +465,10 @@ final class HivePrintJobQueue {
           attentionReason: PrinterTransportCode.unreachable,
         );
       }
-      return _move(started, PrintJobState.printed);
+      final printed = await _move(started, PrintJobState.printed);
+      telemetry.recordStep(operation, 'confirmed');
+      telemetry.finishOperation(operation);
+      return printed;
     });
   }
 

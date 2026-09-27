@@ -16,6 +16,7 @@ import '../checkout/checkout_sale.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import 'expense.dart';
+import '../observability/app_telemetry.dart';
 
 /// One expense a person has asked to record.
 ///
@@ -305,7 +306,12 @@ final class FirebaseTenantExpenseWriter implements TenantExpenseWriter {
       return _rejectedCodes.contains(error.code)
           ? TenantExpenseWriteResult.rejected(error.code)
           : TenantExpenseWriteResult.ambiguous(error.code);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'expenses.write',
+      );
       return const TenantExpenseWriteResult.ambiguous('unknown_error');
     }
   }

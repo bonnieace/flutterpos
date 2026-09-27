@@ -22,6 +22,7 @@ import 'reconciliation_status.dart';
 import 'profit_report.dart';
 import 'profit_statement.dart';
 import 'reporting_currency.dart';
+import '../observability/app_telemetry.dart';
 
 /// Builds the guarded reconciliation status route for one exact business date.
 ///
@@ -204,7 +205,12 @@ final class _TenantDailySummaryPanelState
         session: session,
         reader: expenseReader,
       ).readRange(startDate: dates.first, endDate: dates.last);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.daily_expenses_read',
+      );
       return null;
     }
   }
@@ -255,7 +261,12 @@ final class _TenantDailySummaryPanelState
         totals[day.businessDate] = await aggregator.load(
           aggregator.createBusinessDateQuery(businessDate: day.businessDate),
         );
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'reporting.daily_totals_read',
+        );
         // Nothing for this day; the badge says what it always said.
       }
     }

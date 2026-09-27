@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../tenancy/tenant_id.dart';
-import '../tenancy/tenant_access.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import 'checkout_catalog_cache.dart';
@@ -235,7 +235,49 @@ final class CheckoutDraftService implements CheckoutDraftSink {
   /// Saves one draft and reports only what a surface may know about it.
   @override
   Future<CheckoutSavedDraft> saveDraft(CheckoutDraftRequest request) async {
-    final record = await createDraft(request);
+    final session = _sessionController.session;
+    final telemetry = AppTelemetry.current;
+    final operation = telemetry.start(
+      'checkout.save',
+      screen: 'checkout',
+      context: {
+        'user_id': session?.uid,
+        'tenant_id': session?.tenantId,
+        'line_count': request.lines.length,
+      },
+    );
+    final CheckoutOutboxRecord record;
+    try {
+      record = await telemetry.trace(
+        operation,
+        'persist_checkout',
+        () => createDraft(request),
+      );
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        operation: operation,
+        boundary: 'checkout.save',
+        data: {
+          'lines': request.lines
+              .map(
+                (line) => {
+                  'product_id': line.productId,
+                  'quantity': line.quantity,
+                },
+              )
+              .toList(),
+          'discount_minor': request.discountMinor,
+        },
+      );
+      rethrow;
+    }
+    telemetry.recordStep(
+      operation,
+      'saved_locally',
+      data: {'checkout_id': record.checkoutId},
+    );
     // **Told here, after the sale is durable and before anything can fail.**
     // A sale deliberately does not refresh the catalog, so without this the
     // register goes on reporting the stock the last refresh saw - and the
@@ -299,7 +341,13 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     if (session == null || !session.canAccess()) return null;
     try {
       return await hook(record, session);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'printing.queue_receipt',
+        data: {'checkout_id': record.checkoutId, 'tenant_id': record.tenantId},
+      );
       return 'receipt_not_queued';
     }
   }
@@ -502,7 +550,12 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     final CheckoutShiftBinding binding;
     try {
       binding = await _shiftBinder.bindCheckoutShift(captured);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'checkout.shift_binding',
+      );
       throw const CheckoutDraftException('checkout_start_unavailable');
     }
     final refusal = binding.refusalCode;
@@ -547,7 +600,12 @@ final class CheckoutDraftService implements CheckoutDraftSink {
       return await _receipts.resolveDeviceId();
     } on CheckoutReceiptException catch (error) {
       throw CheckoutDraftException(error.code);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'checkout.device_identity',
+      );
       throw const CheckoutDraftException('device_identity_unavailable');
     }
   }

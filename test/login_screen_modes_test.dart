@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/login_screen.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/theme.dart';
+import 'package:uzapay_pos/login_screen.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

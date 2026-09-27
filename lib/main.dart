@@ -5,7 +5,12 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'observability/app_telemetry.dart';
+import 'observability/glitchtip_telemetry.dart';
+import 'storage/device_storage.dart';
+import 'storage/device_storage_screen.dart';
 import 'login_screen.dart';
 import 'tenancy/tenancy.dart';
 import 'tenancy/tenant_configuration_screens.dart';
@@ -35,48 +40,40 @@ import 'shift/shift.dart';
 import 'suppliers/suppliers.dart';
 
 Future<void> main() async {
+  AppTelemetry.install(GlitchTipTelemetry());
   await SentryFlutter.init(
     (options) {
-      // **Off in release, decided 2026-08-29 for the first live deployment.**
-      // The collector is reached over cleartext `http://`, which Android has
-      // blocked by default since API 28 and which the release manifest merges
-      // no `network_security_config` to permit - so release crash reporting was
-      // already dead. What made that worth acting on rather than leaving is
-      // what it would have done had it worked: `maskAllText` and
-      // `maskAllImages` were both off with session replay at 1.0, on a till, so
-      // every customer name, line item and figure on screen would have been
-      // recorded and sent to that host in the clear.
-      //
-      // A till trades without a crash reporter more safely than it trades with
-      // one that leaks. This comes back when the collector has TLS.
-      //
-      // **The empty string is what disables Sentry; leaving the DSN unset does
-      // not.** `SentryFlutter.init` throws `Invalid argument(s): DSN is
-      // required.` on a null DSN, and it throws it *before* `appRunner`, so the
-      // app never reaches its first frame: a device run against the emulators
-      // used to stop on the splash screen with nothing on screen to say why. An
-      // empty DSN is the SDK's own documented "run disabled".
-      //
-      // An emulator run is disabled for its own separate reason, unchanged: the
-      // events would be a developer's local noise, and the transport cannot
-      // reach the collector over cleartext from a handset anyway.
-      if (!kDebugMode || firebaseEmulatorsRequested) {
-        options.dsn = '';
-      } else {
-        options.dsn =
-            'http://f620ef1faeb840549bc58d8bb3d52ac5@glitchtip-oaeu77z41o045sbhwwdwngfk.5.189.157.23.sslip.io/1';
-        options.tracesSampleRate = 1.0;
-        options.profilesSampleRate = 1.0;
-        // **Masked even here.** A debug build is a developer's own machine, but
-        // this product's first live site runs on `multitenant-pos-b8326` - the
-        // same project a debug build points at - so what is on screen during a
-        // debug session can be a real shop's real customer. Replay is kept for
-        // errors only rather than for whole sessions.
-        options.replay.sessionSampleRate = 0.0;
-        options.replay.onErrorSampleRate = 1.0;
-        options.privacy.maskAllImages = true;
-        options.privacy.maskAllText = true;
+      // Build-time settings apply to debug and release builds. An empty DSN
+      // disables reporting while allowing the app to start normally.
+      options.dsn = firebaseEmulatorsRequested
+          ? ''
+          : const String.fromEnvironment(
+              'SENTRY_DSN',
+              defaultValue:
+                  'https://fa5d44ec2b4745d6862d85ebfe2a5f36@glitchtip.uzanet.co.ke/1',
+            );
+      options.environment = const String.fromEnvironment(
+        'SENTRY_ENVIRONMENT',
+        defaultValue: 'sit',
+      );
+      const release = String.fromEnvironment('SENTRY_RELEASE');
+      if (release.isNotEmpty) {
+        options.release = release;
       }
+      // Otherwise the SDK derives the release from the native app version.
+      options.tracesSampleRate = 1.0;
+      options.sampleRate = 1.0;
+      options.maxBreadcrumbs = 100;
+      options.beforeSend = scrubGlitchTipEvent;
+      options.beforeSendTransaction = scrubGlitchTipTransaction;
+      options.enableAutoSessionTracking = false;
+      // GlitchTip uses error reports and sampled traces. Leave profiling at
+      // its disabled default and disable both replay capture modes.
+      options.replay.sessionSampleRate = 0.0;
+      options.replay.onErrorSampleRate = 0.0;
+      options.sendDefaultPii = false;
+      options.privacy.maskAllImages = true;
+      options.privacy.maskAllText = true;
     },
     appRunner: () async {
       WidgetsFlutterBinding.ensureInitialized();
@@ -109,22 +106,50 @@ Future<void> main() async {
         );
       }
       await Hive.initFlutter();
+      // **No store that fails to open may stop the till for good.** Each one
+      // below opens through the gate: a torn final write is repaired, anything
+      // else asks whoever is holding the phone whether to try again or carry
+      // on without that store, whose file is then set aside rather than
+      // deleted. See `lib/storage/device_storage.dart`.
+      DeviceStorage.directory = (await getApplicationDocumentsDirectory()).path;
+      var storageQuestion = 0;
+      final deviceStorage = DeviceStorageGate(
+        ask: (store, {required canContinue}) {
+          final answer = Completer<DeviceStorageChoice>();
+          runApp(
+            DeviceStorageProblemApp(
+              theme: spiritTheme,
+              store: store,
+              canContinue: canContinue,
+              onChoice: answer.complete,
+              attempt: storageQuestion++,
+            ),
+          );
+          return answer.future;
+        },
+      );
       final tenantSelectionBox = await Hive.openBox<String>(
         HiveTenantSelectionStore.boxName,
       );
       const secureValueStore = FlutterSecureCheckoutOutboxValueStore(
         FlutterSecureStorage(),
       );
-      final checkoutOutbox = await HiveCheckoutOutbox.open(
-        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: secureValueStore,
+      final checkoutOutbox = await deviceStorage.open(
+        DeviceStore.checkoutOutbox,
+        () => HiveCheckoutOutbox.open(
+          keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+            storage: secureValueStore,
+          ),
         ),
       );
-      final tenantMutationStore = await TenantPendingMutationStore.open(
-        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: secureValueStore,
-          storageKey: SecureCheckoutOutboxEncryptionKeyProvider
-              .tenantMutationStorageKey,
+      final tenantMutationStore = await deviceStorage.open(
+        DeviceStore.tenantMutations,
+        () => TenantPendingMutationStore.open(
+          keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+            storage: secureValueStore,
+            storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+                .tenantMutationStorageKey,
+          ),
         ),
       );
       // **What the till has sold since the catalog was last read.** A sale
@@ -135,56 +160,71 @@ Future<void> main() async {
       // the tally never needs to outlive the process. One instance, because
       // the cache subtracts what the draft service records.
       final checkoutCatalogLocalSales = CheckoutCatalogLocalSales();
-      final checkoutCatalogCache = await HiveCheckoutCatalogCache.open(
-        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: secureValueStore,
-          storageKey:
-              SecureCheckoutOutboxEncryptionKeyProvider.catalogCacheStorageKey,
+      final checkoutCatalogCache = await deviceStorage.open(
+        DeviceStore.catalogCache,
+        () => HiveCheckoutCatalogCache.open(
+          keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+            storage: secureValueStore,
+            storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+                .catalogCacheStorageKey,
+          ),
+          localSales: checkoutCatalogLocalSales,
         ),
-        localSales: checkoutCatalogLocalSales,
       );
       // Product photographs waiting for Storage. Its own box and its own key
       // for the reasons `productImageDraftStorageKey` gives: these are
       // megabytes of a shop's own pictures with no second copy anywhere, and
       // they must not share a fate with the record of a sale.
-      final productImageDrafts = await HiveTenantProductImageDrafts.open(
-        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: secureValueStore,
-          storageKey: SecureCheckoutOutboxEncryptionKeyProvider
-              .productImageDraftStorageKey,
+      final productImageDrafts = await deviceStorage.open(
+        DeviceStore.productImageDrafts,
+        () => HiveTenantProductImageDrafts.open(
+          keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+            storage: secureValueStore,
+            storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+                .productImageDraftStorageKey,
+          ),
         ),
       );
       // A stock count in progress. Its own box, because a count is an hour of
       // somebody's attention with no second copy anywhere and must not share a
       // fate with the record of a sale - the same argument the photograph
       // drafts above make for themselves.
-      final stockTakeDrafts = await HiveTenantStockTakeDrafts.open(
-        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: secureValueStore,
-          storageKey: SecureCheckoutOutboxEncryptionKeyProvider
-              .productImageDraftStorageKey,
+      final stockTakeDrafts = await deviceStorage.open(
+        DeviceStore.stockTakeDrafts,
+        () => HiveTenantStockTakeDrafts.open(
+          keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+            storage: secureValueStore,
+            storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+                .productImageDraftStorageKey,
+          ),
         ),
       );
       // The request IDs of an import that has not finished. Its own box for the
       // reason the count above has one: what it holds is the only thing that
       // can tell a stopped import from a fresh one, and losing it with a sale
       // would mean creating four hundred products twice.
-      final productImportAttempts = await HiveTenantProductImportAttempts.open(
-        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: secureValueStore,
-          storageKey: SecureCheckoutOutboxEncryptionKeyProvider
-              .productImageDraftStorageKey,
+      final productImportAttempts = await deviceStorage.open(
+        DeviceStore.productImportAttempts,
+        () => HiveTenantProductImportAttempts.open(
+          keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+            storage: secureValueStore,
+            storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+                .productImageDraftStorageKey,
+          ),
         ),
       );
       // The request id of a staff mutation this device started and has not had
       // an answer to. It is the difference between *press Invite again after a
       // restart and be refused because the person already exists* and *press
       // Invite again and be told what the first attempt actually did*.
-      final staffRequestTickets = await HiveTenantStaffRequestTickets.open(
-        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: secureValueStore,
-          storageKey: SecureCheckoutOutboxEncryptionKeyProvider
-              .productImageDraftStorageKey,
+      final staffRequestTickets = await deviceStorage.open(
+        DeviceStore.staffRequestTickets,
+        () => HiveTenantStaffRequestTickets.open(
+          keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+            storage: secureValueStore,
+            storageKey: SecureCheckoutOutboxEncryptionKeyProvider
+                .productImageDraftStorageKey,
+          ),
         ),
       );
       // Photographs this device has already downloaded, so a catalog draws on a
@@ -195,7 +235,14 @@ Future<void> main() async {
       final tenantImageCache = await HiveTenantImageCache.open()
           .then<HiveTenantImageCache?>(
             (cache) => cache,
-            onError: (Object _) => null,
+            onError: (Object error, StackTrace stackTrace) {
+              AppTelemetry.captureHandled(
+                error,
+                stackTrace,
+                boundary: 'inventory.image_cache_open',
+              );
+              return null;
+            },
           );
       // Receipt counters, shift state, and the outbox share one key: a sale,
       // the receipt numbering it draws from, and the shift it belongs to must
@@ -204,26 +251,35 @@ Future<void> main() async {
       // An identity minted before the platform could be asked is rebound to this
       // device on the next launch that holds no shift - and "holds no shift" is
       // this box's answer to give.
-      final tenantShiftState = await HiveTenantShiftState.open(
-        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: secureValueStore,
+      final tenantShiftState = await deviceStorage.open(
+        DeviceStore.shiftState,
+        () => HiveTenantShiftState.open(
+          keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+            storage: secureValueStore,
+          ),
         ),
       );
-      final checkoutReceiptCounters = await HiveCheckoutReceiptCounters.open(
-        // The platform's own answer to "which device is this", so an identity
-        // minted after a reinstall still names the till it is running on.
-        hardwareIdentity: const MethodChannelDeviceHardwareIdentity(),
-        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: secureValueStore,
+      final checkoutReceiptCounters = await deviceStorage.open(
+        DeviceStore.receiptCounters,
+        () => HiveCheckoutReceiptCounters.open(
+          // The platform's own answer to "which device is this", so an identity
+          // minted after a reinstall still names the till it is running on.
+          hardwareIdentity: const MethodChannelDeviceHardwareIdentity(),
+          keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+            storage: secureValueStore,
+          ),
         ),
       );
       // The printing slice's durable half, and the last piece it was missing.
       // Its own key, for the reason `printJobsStorageKey` gives.
-      final checkoutPrintJobs = await HivePrintJobQueue.open(
-        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: secureValueStore,
-          storageKey:
-              SecureCheckoutOutboxEncryptionKeyProvider.printJobsStorageKey,
+      final checkoutPrintJobs = await deviceStorage.open(
+        DeviceStore.printJobs,
+        () => HivePrintJobQueue.open(
+          keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+            storage: secureValueStore,
+            storageKey:
+                SecureCheckoutOutboxEncryptionKeyProvider.printJobsStorageKey,
+          ),
         ),
       );
       // **Loaded once, here, because it reads an asset.**
@@ -239,6 +295,10 @@ Future<void> main() async {
       // The installation identity is resolved once at startup so every shift
       // and receipt this device records names the same device.
       final deviceId = await checkoutReceiptCounters.resolveDeviceId();
+      AppTelemetry.current.updateDevice({
+        'installation_id': deviceId,
+        'platform': defaultTargetPlatform.name,
+      });
       final connectivity = Connectivity();
       // The one seam between a saved sale and the workers that carry it to the
       // server. Connectivity is piped into it here, once, rather than in
@@ -247,9 +307,21 @@ Future<void> main() async {
       // Lives as long as the app, like the sync signals above it, because the
       // shell subscribes once and compares the stream by identity.
       final bootstrapRefreshSignals = TenantBootstrapRefreshSignals();
-      connectivity.onConnectivityChanged
-          .where((result) => result != ConnectivityResult.none)
-          .listen((_) => checkoutSyncSignals.requestSyncAfterReconnect());
+      connectivity.onConnectivityChanged.listen(
+        (result) {
+          AppTelemetry.current.updateDevice({'connectivity': result.name});
+          if (result != ConnectivityResult.none) {
+            checkoutSyncSignals.requestSyncAfterReconnect();
+          }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            boundary: 'device.connectivity_stream',
+          );
+        },
+      );
 
       // Configure Firestore for offline persistence
       FirebaseFirestore firestore = FirebaseFirestore.instance;
@@ -341,10 +413,24 @@ Future<void> main() async {
 /// the drawer; the tile and the sentence are both gone, and the receipts
 /// themselves are a section of the notifications page. A queue that cannot be
 /// listed is a queue with no figure rather than a queue with none in it.
+TenantConfiguredPrinter _absentPrinter(Object error, StackTrace stackTrace) {
+  AppTelemetry.captureHandled(
+    error,
+    stackTrace,
+    boundary: 'printing.configuration_load',
+  );
+  return const TenantConfiguredPrinter.absent();
+}
+
 int? _printQueueCount(HivePrintJobQueue queue, {String? tenantId}) {
   try {
     return queue.pending(tenantId: tenantId).jobs.length;
-  } catch (_) {
+  } catch (error, stackTrace) {
+    AppTelemetry.captureHandled(
+      error,
+      stackTrace,
+      boundary: 'print_queue.count',
+    );
     return null;
   }
 }
@@ -365,7 +451,12 @@ Future<TenantBranding?> _receiptBranding(
       session: session,
       reader: reader,
     ).loadOrRegistered();
-  } catch (_) {
+  } catch (error, stackTrace) {
+    AppTelemetry.captureHandled(
+      error,
+      stackTrace,
+      boundary: 'receipt.branding',
+    );
     return null;
   }
 }
@@ -551,7 +642,7 @@ class SpiritPOSApp extends StatelessWidget {
         TenantPrinterConfigurationRepository(
           session: session,
           reader: cacheReader,
-        ).load().catchError((_) => const TenantConfiguredPrinter.absent()),
+        ).load().catchError(_absentPrinter),
         _receiptBranding(session, cacheReader),
       ]);
       final sale = CheckoutSalePayload.fromOutboxRecord(
@@ -600,7 +691,7 @@ class SpiritPOSApp extends StatelessWidget {
       final printer = await TenantPrinterConfigurationRepository(
         session: session,
         reader: tenantDataReader.cacheOnly,
-      ).load().catchError((_) => const TenantConfiguredPrinter.absent());
+      ).load().catchError(_absentPrinter);
       final configuration = printer.require();
       await printerTransport.send(
         configuration.endpoint,
@@ -631,7 +722,7 @@ class SpiritPOSApp extends StatelessWidget {
           TenantPrinterConfigurationRepository(
             session: session,
             reader: cacheReader,
-          ).load().catchError((_) => const TenantConfiguredPrinter.absent()),
+          ).load().catchError(_absentPrinter),
           _receiptBranding(session, cacheReader),
         ]);
         final printer = reads[0]! as TenantConfiguredPrinter;

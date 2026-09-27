@@ -47,6 +47,7 @@ import 'sale_history.dart';
 import 'sale_tender.dart';
 import 'sale_line_products.dart';
 import 'sale_reprint.dart';
+import '../observability/app_telemetry.dart';
 
 /// One tenant-safe Sales destination for daily browsing, lookup, and returns.
 /// The toolbar control that takes a sales report away.
@@ -651,7 +652,12 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
         session: session,
         reader: reader,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'sales.report_currency_read',
+      );
       currency = TenantReportingCurrency.unknown;
     }
     return SalesTotalsSessionContext(
@@ -1709,6 +1715,14 @@ final class _TotalsBand extends StatelessWidget {
   );
 }
 
+void _reportTotalsBandFailure(Object error, StackTrace stackTrace) {
+  AppTelemetry.captureHandled(
+    error,
+    stackTrace,
+    boundary: 'sales.totals_band_read',
+  );
+}
+
 final class _TotalsBandController extends ChangeNotifier {
   _TotalsBandController({
     required Future<_TotalsBandData>? local,
@@ -1720,7 +1734,9 @@ final class _TotalsBandController extends ChangeNotifier {
           data = value;
           notifyListeners();
         })
-        .catchError((Object _) {});
+        .catchError((Object error, StackTrace stackTrace) {
+          _reportTotalsBandFailure(error, stackTrace);
+        });
     server
         ?.then((value) {
           if (_disposed) return;
@@ -1733,7 +1749,9 @@ final class _TotalsBandController extends ChangeNotifier {
             notifyListeners();
           }
         })
-        .catchError((Object _) {});
+        .catchError((Object error, StackTrace stackTrace) {
+          _reportTotalsBandFailure(error, stackTrace);
+        });
   }
 
   _TotalsBandData? data;

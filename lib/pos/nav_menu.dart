@@ -1,7 +1,7 @@
-// import 'package:flutter_application_1/pos/goods.dart';
-// import 'package:flutter_application_1/pos/inv.dart';
-// import 'package:flutter_application_1/pos/pos.dart';
-// import 'package:flutter_application_1/pos/reports.dart';
+// import 'package:uzapay_pos/pos/goods.dart';
+// import 'package:uzapay_pos/pos/inv.dart';
+// import 'package:uzapay_pos/pos/pos.dart';
+// import 'package:uzapay_pos/pos/reports.dart';
 // import 'package:flutter/material.dart';
 // import 'package:get/get.dart';
 // import 'package:iconsax/iconsax.dart';

@@ -1,5 +1,5 @@
-import 'package:flutter_application_1/tenancy/account_profile.dart';
-import 'package:flutter_application_1/tenancy/sign_in.dart' show SignInFailureKind;
+import 'package:uzapay_pos/tenancy/account_profile.dart';
+import 'package:uzapay_pos/tenancy/sign_in.dart' show SignInFailureKind;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

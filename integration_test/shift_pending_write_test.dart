@@ -43,9 +43,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:flutter_application_1/firebase_options.dart';
-import 'package:flutter_application_1/shift/tenant_shift.dart';
-import 'package:flutter_application_1/tenancy/tenant_repository.dart';
+import 'package:uzapay_pos/firebase_options.dart';
+import 'package:uzapay_pos/shift/tenant_shift.dart';
+import 'package:uzapay_pos/tenancy/tenant_repository.dart';
 
 /// Passed at the command line so no credential is written into this file.
 const String _email = String.fromEnvironment('H2_PROBE_EMAIL');

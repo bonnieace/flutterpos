@@ -19,6 +19,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import 'sign_in.dart' show SignInFailureKind;
+import '../observability/app_telemetry.dart';
 
 typedef AccountProfileRequestIdFactory = String Function();
 
@@ -52,9 +53,12 @@ final class FirebaseCompleteSelfSignupCallable
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     try {
-      final result = await _functions
-          .httpsCallable('completeSelfSignup')
-          .call<Object?>(payload);
+      final result = await traceServerCall(
+        'completeSelfSignup',
+        () => _functions
+            .httpsCallable('completeSelfSignup')
+            .call<Object?>(payload),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw AccountProfileException(error.code);
@@ -72,9 +76,12 @@ final class FirebaseChangeSignupEmailCallable
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     try {
-      final result = await _functions
-          .httpsCallable('changeSignupEmail')
-          .call<Object?>(payload);
+      final result = await traceServerCall(
+        'changeSignupEmail',
+        () => _functions
+            .httpsCallable('changeSignupEmail')
+            .call<Object?>(payload),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw AccountProfileException(error.code);
@@ -232,7 +239,9 @@ final class AccountProfileGateway {
     if (response is! Map ||
         response['displayName'] is! String ||
         response['phone'] is! String) {
-      throw const FormatException('completeSelfSignup returned an invalid result.');
+      throw const FormatException(
+        'completeSelfSignup returned an invalid result.',
+      );
     }
   }
 
@@ -258,7 +267,9 @@ final class AccountProfileGateway {
       'requestId': intent.requestId,
     });
     if (response is! Map || response['email'] is! String) {
-      throw const FormatException('changeSignupEmail returned an invalid result.');
+      throw const FormatException(
+        'changeSignupEmail returned an invalid result.',
+      );
     }
     final token = response['sessionToken'];
     return AccountAddressChange(
@@ -292,7 +303,8 @@ final class AccountProfileGateway {
     ),
     'resource-exhausted' => (
       kind: SignInFailureKind.refused,
-      message: 'That has been changed too many times today. Try again tomorrow.',
+      message:
+          'That has been changed too many times today. Try again tomorrow.',
     ),
     'failed-precondition' => (
       kind: SignInFailureKind.refused,
@@ -310,7 +322,8 @@ final class AccountProfileGateway {
     // step - so this says the part that is actually wrong.
     'not-found' || 'unimplemented' => (
       kind: SignInFailureKind.unreachable,
-      message: 'This app is newer than the server. Update the app, or ask '
+      message:
+          'This app is newer than the server. Update the app, or ask '
           'support to finish the deployment.',
     ),
     'unavailable' || 'deadline-exceeded' => (
@@ -319,7 +332,8 @@ final class AccountProfileGateway {
     ),
     _ => (
       kind: SignInFailureKind.refused,
-      message: 'Something went wrong. Try again, and contact support if it '
+      message:
+          'Something went wrong. Try again, and contact support if it '
           'keeps happening.',
     ),
   };

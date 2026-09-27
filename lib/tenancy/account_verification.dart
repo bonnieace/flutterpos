@@ -11,6 +11,7 @@ import '../ui/tokens.dart';
 import 'email_delivery_status.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
+import '../observability/app_telemetry.dart';
 
 typedef AccountVerificationRequestIdFactory = String Function();
 typedef AccountVerificationCurrentCheck = bool Function();
@@ -68,6 +69,7 @@ enum AccountVerificationRefusal {
 
   notSignedIn,
   accountInactive,
+
   /// Another email was requested within the last minute.
   throttled,
 
@@ -87,9 +89,10 @@ AccountVerificationRefusal accountVerificationRefusalOf(Object error) {
     'aborted' => AccountVerificationRefusal.staleSession,
     'unauthenticated' => AccountVerificationRefusal.notSignedIn,
     'permission-denied' => AccountVerificationRefusal.accountInactive,
-    'resource-exhausted' => error.reason == 'daily_cap'
-        ? AccountVerificationRefusal.throttledToday
-        : AccountVerificationRefusal.throttled,
+    'resource-exhausted' =>
+      error.reason == 'daily_cap'
+          ? AccountVerificationRefusal.throttledToday
+          : AccountVerificationRefusal.throttled,
     _ => AccountVerificationRefusal.unknown,
   };
 }
@@ -137,9 +140,12 @@ final class FirebaseSendAccountVerificationCallable
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
     try {
-      final result = await _functions
-          .httpsCallable('sendAccountVerification')
-          .call<Object?>(payload);
+      final result = await traceServerCall(
+        'sendAccountVerification',
+        () => _functions
+            .httpsCallable('sendAccountVerification')
+            .call<Object?>(payload),
+      );
       return result.data;
     } on FirebaseFunctionsException catch (error) {
       throw AccountVerificationCallableException(
@@ -429,7 +435,12 @@ final class _AccountVerificationPanelState
     final EmailDeliveryStatus status;
     try {
       status = await EmailDeliveryStatusReader(callable: callable).read();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'auth.email_delivery_status_read',
+      );
       return;
     }
     if (!mounted || !_isStillCurrent(sentUid, intent)) return;

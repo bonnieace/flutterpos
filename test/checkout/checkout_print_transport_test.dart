@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter_application_1/checkout/checkout.dart';
-import 'package:flutter_application_1/checkout/checkout_print_transport_io.dart';
-import 'package:flutter_application_1/checkout/checkout_print_transport_unsupported.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/checkout/checkout_print_transport_io.dart';
+import 'package:uzapay_pos/checkout/checkout_print_transport_unsupported.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

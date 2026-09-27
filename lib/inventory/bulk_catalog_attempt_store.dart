@@ -30,6 +30,7 @@ import 'package:hive/hive.dart';
 import '../checkout/checkout_outbox.dart';
 import '../tenancy/tenant_id.dart';
 import 'bulk_catalog.dart';
+import '../storage/device_storage.dart';
 
 /// Where an import that has not finished is kept.
 abstract interface class TenantProductImportAttemptSource {
@@ -81,10 +82,10 @@ final class HiveTenantProductImportAttempts extends ChangeNotifier
     if (key.length != HiveCheckoutOutbox.encryptionKeyBytes) {
       throw const TenantBulkCatalogException('attempt_unreadable');
     }
-    final box = await (hive ?? Hive).openBox<dynamic>(
+    final box = await openBoxRepairingTornTail<dynamic>(
+      hive ?? Hive,
       boxName,
-      encryptionCipher: HiveAesCipher(List<int>.from(key)),
-      crashRecovery: false,
+      cipher: HiveAesCipher(List<int>.from(key)),
     );
     return HiveTenantProductImportAttempts._(box);
   }

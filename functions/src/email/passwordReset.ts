@@ -38,6 +38,8 @@ import {
   stablePrivateId,
 } from "./recipientHash";
 import {isEmailEligibleRoot} from "./rootEligibility";
+import {logAbsorbedFailure} from "../core/absorbedFailure";
+import {AUTH_ACTION_LINK_ORIGIN, rehostActionLink} from "../core/actionLink";
 
 const DELIVERY_LEASE_MILLISECONDS = 5 * 60 * 1000;
 const MAXIMUM_DELIVERY_ATTEMPTS = 8;
@@ -205,6 +207,12 @@ export async function processPasswordResetTask(
       error.safeCode : "action_or_delivery_failure";
     const retryable = (error instanceof EmailProviderError ? error.retryable : true) &&
       attempt.attemptNumber < MAXIMUM_DELIVERY_ATTEMPTS;
+    logAbsorbedFailure("email.password_reset_send_failed", error, {
+      deliveryId: task.deliveryId,
+      safeCode,
+      retryable,
+      attempt: attempt.attemptNumber,
+    });
     await dependencies.markFailure(task, attempt, safeCode, retryable);
     if (retryable) throw new Error("Password reset delivery will be retried.");
     return "permanent_failure";
@@ -236,10 +244,13 @@ class FirebasePasswordResetIdentityGateway implements PasswordResetIdentityGatew
   }
 
   async createActionLink(normalizedEmail: string): Promise<string> {
-    return this.auth.generatePasswordResetLink(normalizedEmail, {
-      url: this.continueUrl,
-      handleCodeInApp: false,
-    });
+    return rehostActionLink(
+      await this.auth.generatePasswordResetLink(normalizedEmail, {
+        url: this.continueUrl,
+        handleCodeInApp: false,
+      }),
+      AUTH_ACTION_LINK_ORIGIN.value()
+    );
   }
 }
 

@@ -5,7 +5,7 @@
 // import 'package:cloud_firestore/cloud_firestore.dart';
 // import 'package:firebase_storage/firebase_storage.dart';
 // import 'package:image_picker/image_picker.dart';
-// import 'package:flutter_application_1/theme.dart';
+// import 'package:uzapay_pos/theme.dart';
 
 // class SystemConfigurationPage extends StatefulWidget {
 //   const SystemConfigurationPage({super.key});

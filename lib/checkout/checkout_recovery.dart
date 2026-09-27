@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -90,7 +91,12 @@ final class CheckoutRecoveryCoordinator {
           uid: captured.uid,
           tenantId: captured.tenantId,
         );
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'checkout.recovery_records_read',
+        );
         return const CheckoutRecoveryRunResult(
           CheckoutRecoveryRunKind.storageUnavailable,
         );
@@ -111,7 +117,12 @@ final class CheckoutRecoveryCoordinator {
               tenantId: record.tenantId,
               checkoutId: record.checkoutId,
             );
-          } catch (_) {
+          } catch (error, stackTrace) {
+            AppTelemetry.captureHandled(
+              error,
+              stackTrace,
+              boundary: 'checkout.recovery_record_update',
+            );
             return const CheckoutRecoveryRunResult(
               CheckoutRecoveryRunKind.storageUnavailable,
             );
@@ -122,6 +133,17 @@ final class CheckoutRecoveryCoordinator {
           continue;
         }
 
+        final telemetry = AppTelemetry.current;
+        final operation = telemetry.start(
+          'checkout.confirm',
+          screen: 'checkout_recovery',
+          context: {
+            'user_id': record.uid,
+            'tenant_id': record.tenantId,
+            'checkout_id': record.checkoutId,
+          },
+        );
+        telemetry.recordStep(operation, 'submitted');
         final result = await _confirmationGateway.check(record);
         if (!_owns(captured)) return _sessionChanged();
         try {
@@ -134,6 +156,7 @@ final class CheckoutRecoveryCoordinator {
                 observedPayloadHash: result.observedPayloadHash!,
               );
               confirmed++;
+              telemetry.recordStep(operation, 'confirmed_on_server');
             case CheckoutConfirmationKind.mismatching:
               await _outbox.recordConfirmation(
                 uid: record.uid,
@@ -142,18 +165,42 @@ final class CheckoutRecoveryCoordinator {
                 observedPayloadHash: result.observedPayloadHash!,
               );
               needsAttention++;
+              AppTelemetry.captureHandled(
+                StateError('payload_mismatch'),
+                StackTrace.current,
+                operation: operation,
+                code: 'payload_mismatch',
+              );
             case CheckoutConfirmationKind.missing:
               await _outbox.markRetryableAfterMissingSale(
                 proof: result.missingSaleProof!,
                 backoff: _retryBackoff,
               );
               retryable++;
-            case CheckoutConfirmationKind.pendingWrites ||
-                CheckoutConfirmationKind.unavailable ||
+              telemetry.recordStep(
+                operation,
+                'cancelled',
+                data: {'reason': 'sale_missing_after_confirmation'},
+              );
+            case CheckoutConfirmationKind.pendingWrites:
+              retained++;
+            case CheckoutConfirmationKind.unavailable ||
                 CheckoutConfirmationKind.malformed:
+              AppTelemetry.captureHandled(
+                StateError(result.kind.name),
+                StackTrace.current,
+                operation: operation,
+                code: result.kind.name,
+              );
               retained++;
           }
-        } catch (_) {
+        } catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            operation: operation,
+            boundary: 'checkout.confirm',
+          );
           return const CheckoutRecoveryRunResult(
             CheckoutRecoveryRunKind.storageUnavailable,
           );

@@ -7,6 +7,7 @@ import '../expenses/expense.dart';
 import '../shift/shift_history.dart';
 import 'net_profit.dart';
 import 'sales_totals.dart';
+import '../observability/app_telemetry.dart';
 
 /// The categories one session may filter by, and whether they could be read.
 ///
@@ -221,7 +222,12 @@ final class SalesTotalsSessionContextLoader {
       );
     } on TenantScopeViolation {
       rethrow;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.category_options_read',
+      );
       return const SalesTotalsCategoryOptions.unreadable();
     }
   }
@@ -249,7 +255,12 @@ final class SalesTotalsSessionContextLoader {
       );
     } on TenantScopeViolation {
       rethrow;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.staff_options_read',
+      );
       return const SalesTotalsStaffOptions.unreadable();
     }
   }

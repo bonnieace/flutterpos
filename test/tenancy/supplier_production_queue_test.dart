@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter_application_1/production/production_batch.dart';
-import 'package:flutter_application_1/suppliers/supplier.dart';
-import 'package:flutter_application_1/suppliers/supplier_delivery.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/production/production_batch.dart';
+import 'package:uzapay_pos/suppliers/supplier.dart';
+import 'package:uzapay_pos/suppliers/supplier_delivery.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 

@@ -15,9 +15,9 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/checkout/checkout_tender.dart';
-import 'package:flutter_application_1/shift/shift.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/checkout/checkout_tender.dart';
+import 'package:uzapay_pos/shift/shift.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:hive/hive.dart';
 
 const String shiftDeviceId = 'dev-0123456789abcdef0123456789abcdef';

@@ -12,6 +12,7 @@ import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
+import '../observability/app_telemetry.dart';
 
 /// The longest product or category name this surface writes.
 ///
@@ -1073,9 +1074,10 @@ final class FirebaseUpdateProductCallable implements UpdateProductCallable {
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('updateProduct')
-        .call<Object?>(payload);
+    final result = await traceServerCall(
+      'updateProduct',
+      () => _functions.httpsCallable('updateProduct').call<Object?>(payload),
+    );
     return result.data;
   }
 }
@@ -1512,7 +1514,12 @@ final class TenantProductUpdateGateway {
       throw const TenantProductUpdateException(
         TenantProductUpdateFailure.ambiguous,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'inventory.product_update_request',
+      );
       throw const TenantProductUpdateException(
         TenantProductUpdateFailure.ambiguous,
       );

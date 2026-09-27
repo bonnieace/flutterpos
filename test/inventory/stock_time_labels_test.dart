@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/inventory/inventory.dart';
+import 'package:uzapay_pos/inventory/inventory.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// **A stock change is labelled when it was made, since 2026-09-25**, not when

@@ -2,8 +2,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/production/production.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:uzapay_pos/production/production.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -105,6 +105,12 @@ void main() {
   screenshotCase(
     'production-batches',
     build: _production,
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    'production-cost',
+    build: _production,
     afterPump: (tester) async {
       await tester.tap(find.byKey(const ValueKey('production-costs-pb_2')));
       await tester.pumpAndSettle();
@@ -118,7 +124,9 @@ void main() {
     afterPump: (tester) async {
       await _fillBatch(tester);
       // The warning opened, so the capture shows what it says.
-      await tester.tap(find.byKey(const ValueKey('production-expenses-warning')));
+      await tester.tap(
+        find.byKey(const ValueKey('production-expenses-warning')),
+      );
       await tester.pumpAndSettle();
     },
     viewports: responsiveViewports,

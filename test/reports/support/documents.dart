@@ -7,14 +7,14 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:flutter_application_1/reporting/reporting_currency.dart';
-import 'package:flutter_application_1/reports/report_document.dart';
-import 'package:flutter_application_1/reports/report_identity.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
-import 'package:flutter_application_1/reports/report_scope.dart';
-import 'package:flutter_application_1/reports/report_table.dart';
-import 'package:flutter_application_1/reports/report_visual.dart';
-import 'package:flutter_application_1/tenancy/tenant_types.dart';
+import 'package:uzapay_pos/reporting/reporting_currency.dart';
+import 'package:uzapay_pos/reports/report_document.dart';
+import 'package:uzapay_pos/reports/report_identity.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
+import 'package:uzapay_pos/reports/report_scope.dart';
+import 'package:uzapay_pos/reports/report_table.dart';
+import 'package:uzapay_pos/reports/report_visual.dart';
+import 'package:uzapay_pos/tenancy/tenant_types.dart';
 
 /// The instant every fixture is generated at, so nothing drifts with the clock.
 DateTime fixtureClock() => DateTime.utc(2026, 9, 22, 11, 30);

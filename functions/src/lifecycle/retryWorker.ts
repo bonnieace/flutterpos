@@ -16,6 +16,7 @@ import {
   runGlobalUserStatusSaga,
 } from "./globalStatusCore";
 import {createGlobalStatusSagaAdapter} from "./globalStatusStore";
+import {logAbsorbedFailure} from "../core/absorbedFailure";
 
 const RETRY_LEASE_MILLISECONDS = 10 * 60 * 1000;
 const MAX_QUERY_DOCUMENTS = 200;
@@ -153,6 +154,9 @@ async function claimRetryableOperation(
       input = parseRetryableGlobalStatusOperation(snapshot.id, data);
     } catch (error) {
       const reason = error instanceof Error ? error.message : "invalid_operation";
+      logAbsorbedFailure("lifecycle.operation_quarantined", error, {
+        operationId: snapshot.id,
+      });
       transaction.update(document.ref, {
         status: "quarantined",
         lastErrorCode: `lifecycle/${reason}`.slice(0, 128),

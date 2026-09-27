@@ -8,9 +8,9 @@
 library;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_application_1/reports/analysis/returns_analysis.dart';
-import 'package:flutter_application_1/reports/report_period.dart';
-import 'package:flutter_application_1/returns/return_history.dart';
+import 'package:uzapay_pos/reports/analysis/returns_analysis.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
+import 'package:uzapay_pos/returns/return_history.dart';
 
 TenantReturn returnRecord({
   required String id,

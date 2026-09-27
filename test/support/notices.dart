@@ -13,9 +13,9 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/ui/dialogs.dart';
-import 'package:flutter_application_1/ui/snackbar.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/ui/dialogs.dart';
+import 'package:uzapay_pos/ui/snackbar.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The `Callout` a panel drew its notice in.

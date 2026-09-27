@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/inventory/inventory.dart';
-import 'package:flutter_application_1/tenancy/tenancy.dart';
-import 'package:flutter_application_1/ui/record_list.dart';
-import 'package:flutter_application_1/ui/snackbar.dart';
-import 'package:flutter_application_1/ui/status.dart';
+import 'package:uzapay_pos/inventory/inventory.dart';
+import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/record_list.dart';
+import 'package:uzapay_pos/ui/snackbar.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/collection_pages.dart';
@@ -417,25 +417,19 @@ void main() {
     expect(find.byKey(const ValueKey('product-stock-entry-mv-3')), findsOne);
   });
 
-  testWidgets('the ledger opens this product\'s manual corrections', (
+  testWidgets('no manual adjustments button sits below the ledger', (
     tester,
   ) async {
-    // Both surfaces belong to the inventory domain, so the route needs no
-    // injection; it opens under this route's own session scope.
     final reader = _Reader()..respondMovements(<TenantQueryDocumentSnapshot>[]);
 
     await _pump(tester, _controller(), reader);
-    await tester.tap(find.byKey(const ValueKey('product-stock-adjustments')));
-    await tester.pumpAndSettle();
 
-    expect(find.text('Adjustments: Cold lager'), findsOne);
+    expect(find.byKey(const ValueKey('product-stock-empty')), findsOne);
     expect(
-      reader.queries.last.collectionPath,
-      'tenants/tenant-a/stock_adjustments',
+      find.byKey(const ValueKey('product-stock-adjustments')),
+      findsNothing,
     );
-    expect(reader.queries.last.equalityFilters, <String, Object?>{
-      'productId': 'product-1',
-    });
+    expect(find.text('Manual adjustments'), findsNothing);
   });
 
   testWidgets('a stock difference is stated where the correction is made', (

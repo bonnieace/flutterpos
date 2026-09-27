@@ -2,6 +2,7 @@ import '../checkout/checkout_configuration.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/money_text.dart';
+import '../observability/app_telemetry.dart';
 
 /// The ISO 4217 code a reported figure is labelled with, or nothing at all.
 ///
@@ -45,7 +46,12 @@ final class TenantReportingCurrency {
           : TenantReportingCurrency._(configuration.currency);
     } on TenantScopeViolation {
       rethrow;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'reporting.currency_read',
+      );
       return unknown;
     }
   }

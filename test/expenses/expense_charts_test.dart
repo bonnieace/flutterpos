@@ -9,11 +9,11 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/expenses/expense.dart';
-import 'package:flutter_application_1/expenses/expense_charts.dart';
-import 'package:flutter_application_1/reporting/reporting_currency.dart';
-import 'package:flutter_application_1/ui/tokens.dart';
-import 'package:flutter_application_1/theme.dart';
+import 'package:uzapay_pos/expenses/expense.dart';
+import 'package:uzapay_pos/expenses/expense_charts.dart';
+import 'package:uzapay_pos/reporting/reporting_currency.dart';
+import 'package:uzapay_pos/ui/tokens.dart';
+import 'package:uzapay_pos/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter_application_1/theme.dart';
+import 'package:uzapay_pos/theme.dart';
 
 class ProfitReportsPage extends StatefulWidget {
   const ProfitReportsPage({super.key});
