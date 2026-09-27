@@ -15,6 +15,7 @@ import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'supplier.dart';
+import 'supplier_card.dart';
 import 'supplier_delivery_history.dart';
 import 'supplier_delivery_panel.dart';
 import 'supplier_directory_panel.dart';
@@ -250,11 +251,6 @@ final class _RecordContents extends StatelessWidget {
       if (supplier.taxReference case final reference?)
         ('Tax or business reference', reference, Icons.badge_outlined),
       if (supplier.notes case final notes?) ('Notes', notes, Icons.notes_outlined),
-      (
-        'Last delivery',
-        supplierLastDeliveryLabel(supplier),
-        Icons.local_shipping_outlined,
-      ),
     ];
     return ListView(
       key: const ValueKey('supplier-record'),
@@ -306,16 +302,73 @@ final class _RecordContents extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.s16),
         ],
-        const SectionHeading('How to reach them'),
-        SizedBox(height: tokens.spacing.s8),
+        // **One card, led by the figure, as the sales report's summary is.**
+        // When stock last came in is what a person opens a supplier to check
+        // before they ring them, so it is the headline and the ways to reach
+        // them are the lines under it.
         AppCard(
+          key: const ValueKey('supplier-record-summary'),
+          padding: EdgeInsets.all(tokens.spacing.s20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              for (final (index, fact) in facts.indexed) ...<Widget>[
-                if (index > 0) SizedBox(height: tokens.spacing.s12),
-                _Fact(label: fact.$1, value: fact.$2, icon: fact.$3),
-              ],
+              Row(
+                children: <Widget>[
+                  SupplierMonogram(name: supplier.name),
+                  SizedBox(width: tokens.spacing.s12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          'Last delivery',
+                          style: tokens.typography.labelMedium.copyWith(
+                            color: tokens.colors.text.secondary,
+                          ),
+                        ),
+                        SizedBox(height: tokens.spacing.s4),
+                        Text(
+                          supplierLastDeliveryLabel(supplier),
+                          key: const ValueKey('supplier-record-last-delivery'),
+                          // *None yet* is words, so the interface face; a date
+                          // is a figure, so the figures' one.
+                          style: supplier.lastDeliveryAt == null
+                              ? tokens.typography.titleMedium.copyWith(
+                                  color: tokens.colors.text.tertiary,
+                                )
+                              : tokens.typography.numericCompact.copyWith(
+                                  color: tokens.colors.text.primary,
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: tokens.spacing.s16),
+              Divider(height: 1, color: tokens.colors.surface.borderSubtle),
+              SizedBox(height: tokens.spacing.s12),
+              Text(
+                'How to reach them',
+                style: tokens.typography.titleMedium.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+              SizedBox(height: tokens.spacing.s12),
+              if (facts.isEmpty)
+                Text(
+                  'No contact details are recorded for this supplier.',
+                  key: const ValueKey('supplier-record-no-contact'),
+                  style: tokens.typography.bodyMedium.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                )
+              else
+                for (final (index, fact) in facts.indexed) ...<Widget>[
+                  if (index > 0) SizedBox(height: tokens.spacing.s12),
+                  _Fact(label: fact.$1, value: fact.$2, icon: fact.$3),
+                ],
             ],
           ),
         ),
@@ -342,7 +395,23 @@ final class _Fact extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Icon(icon, size: AppButton.iconSize, color: tokens.colors.text.tertiary),
+        // The *Paid by* rows' tile: a glyph on `surface.overlay`.
+        ExcludeSemantics(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: tokens.colors.surface.overlay,
+              borderRadius: BorderRadius.circular(tokens.radius.sm),
+            ),
+            child: SizedBox.square(
+              dimension: tokens.spacing.s40,
+              child: Icon(
+                icon,
+                size: AppButton.iconSize,
+                color: tokens.colors.action.primary.container,
+              ),
+            ),
+          ),
+        ),
         SizedBox(width: tokens.spacing.s12),
         Expanded(
           child: Column(

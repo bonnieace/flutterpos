@@ -451,21 +451,31 @@ has to look. See [Still open](#still-open).
 
 Known and deliberate, so a deploy is not surprised by them:
 
-- **Application ID and signing.** `android/app/build.gradle.kts` still carries
-  `com.example.flutter_application_1` and signs release with the **debug**
-  keystore; the iOS bundle ID is the template default. Changing the ID needs a
-  matching `google-services.json` from a newly registered app.
+- **Android Play registration and signing.** The Android application ID is
+  `ke.co.uzapay.pos`. Register that package as a new Android app in the existing
+  Firebase project, then regenerate `android/app/google-services.json`,
+  `lib/firebase_options.dart` and `firebase.json` with FlutterFire. The old
+  Firebase Android app cannot be renamed. Create a private Play upload key,
+  copy `android/key.properties.example` to the ignored
+  `android/key.properties`, fill in its values, and keep the keystore private.
+  The release build uses this key, not the debug key. The iOS bundle ID is
+  still the template default and can be changed before an App Store launch.
+- **Play App Links certificate.** `public/.well-known/assetlinks.json` names
+  `ke.co.uzapay.pos` and the current local debug certificate. Once the first
+  bundle is uploaded, add the **Play app-signing** SHA-256 from Play Console to
+  `sha256_cert_fingerprints`; the upload key's SHA-256 is not the certificate
+  Google uses to sign installed apps. Deploy Hosting after updating this file.
+- **Custom auth domain.** The email continue URLs point at
+  `auth.uzapay.co.ke`. Confirm that domain is authorized in Firebase Auth before
+  deploying Functions, then test verification, password reset and invitations
+  from a Play-installed build.
 - **Nothing enforces App Check.** `requestPasswordReset` was the only callable
   that did, and it stopped on 2026-09-24. It is also the only one a stranger
   can call, and it has no per-recipient cooldown, so a script can ask for reset
-  mail to a real account over and over. The client still installs a debug-only
-  provider (`lib/main.dart`); nothing checks the token it sends.
-- **No App Links.** Hosting now exists (see [Hosting](#3b-hosting)), but
-  `/.well-known/assetlinks.json` is not published and the app declares no intent
-  filter, so no emailed link can open the app.
-- **Emailed invitation links cannot open the app.** `Uri.base` on Android is a
-  `file://` path, and there is no `app_links` dependency or intent-filter.
-  Mobile staff must use the in-app visible-acceptance path in the selector.
+  mail to a real account over and over. The client uses the debug provider in
+  debug builds and Play Integrity in Android release builds; register the new
+  Firebase Android app and its Play signing certificate with App Check before
+  relying on release tokens.
 - **Sentry is off in release**, deliberately: the DSN is cleartext `http://`.
 - **No alert on a new business request**, above.
 - **Returns never touch the money.** Reconciliation, `daily_metrics` and

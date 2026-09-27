@@ -343,20 +343,12 @@ final class TenantRoutingShell extends StatefulWidget {
   /// was started in.
   final Widget Function(TenantSessionController sessions)? checkoutRoute;
 
-  /// Opens the guarded settings screen, which holds the business's settings as
-  /// tabs rather than as separate routes.
-  ///
-  /// **One route where there were three.** What a price means, what the business
-  /// is called and what it prints on are three settings and one subject, and two
-  /// of them are things a newly approved business must set before it can trade
-  /// at all: until a currency is published the till cannot sell, and until a
-  /// printer is named every receipt queues unprinted.
+  /// Opens Business details, Printer or Configs by destination key.
+  /// Each destination is offered only to its publisher roles.
   final Widget Function(TenantDataReader reader, String? initialTabKey)?
   settingsRoute;
 
-  /// The roles that route is offered to. Owner and administrator, which is what
-  /// `configuration/{documentId}` admits for writing and therefore what every
-  /// tab inside it enforces for itself.
+  /// The roles offered these destinations. Each panel keeps its own guard.
   final List<TenantRole> settingsRoles;
 
   /// How many receipts this device has not printed.
@@ -2868,9 +2860,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   final List<TenantRole> auditLogRoles;
 
   @override
-  Widget build(BuildContext context) => _RereadOnReturn(
-    builder: (context) => _guard(context),
-  );
+  Widget build(BuildContext context) =>
+      _RereadOnReturn(builder: (context) => _guard(context));
 
   Widget _guard(BuildContext context) => TenantRouteGuard<_HomeOverview>(
     load: (session) => _readOverviewWith(reader, session),
@@ -3323,7 +3314,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           // ones this register happens to know about would understate the
           // number on exactly the days more than one till traded. So this tile
           // still waits, and names which figure is waiting.
-          detail: metrics == null ? 'Counted at reconciliation' : 'Closed today',
+          detail: metrics == null
+              ? 'Counted at reconciliation'
+              : 'Closed today',
         ),
         // **Profit, which is the fourth figure this app actually holds.** The
         // export's fourth tile is *Low stock — 5 items* and there is no
@@ -3483,13 +3476,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   ///
   /// **The areas are the five the redesign's shell names**, and they are the
   /// order a shop uses them in rather than the order the code grew in: the
-  /// till, then *Sales*, *Inventory*, *Reports*, *Settings*, and *Business*
-  /// last. *New sale* carries no group at all - it is the one primary, and it
+  /// till, then *Sales*, *Inventory*, *Reports*, and *Business*.
+  /// *New sale* carries no group at all - it is the one primary, and it
   /// sits above every heading rather than inside one.
   ///
   /// **Nothing here decides what a role may see.** A group's heading exists
   /// only where that role was given a row that carries it, so a cashier's menu
-  /// simply has no *Settings* heading rather than an empty one. The order
+  /// simply has no *Business* heading rather than an empty one. The order
   /// below is what `tool/screenshots/home_navigation_test.dart` photographs.
   /// The open-difference count for the business this screen is showing.
   int? _openDifferences(BuildContext context) =>
@@ -3701,7 +3694,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         label: 'Production',
         description: 'Record what was made and what it cost to make.',
         group: 'Inventory',
-        icon: Icons.bakery_dining_outlined,
+        icon: Icons.factory_outlined,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3777,24 +3770,53 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           );
         },
       ),
-    // **One Settings route, tabbed, since 2026-09-13.** These were three
-    // separate rows opening three separate pages - what a price means, what the
-    // business is called, what it prints on - which are three settings and one
-    // subject. `TenantSettingsScreen` holds them as tabs, so changing two of
-    // them is one visit rather than two.
-    //
-    // *Staff* and *Logs* below deliberately stay their own routes: one is
-    // people and permissions and the other is a record of what happened, and
-    // neither is a setting.
     if (settingsRoute != null && membership.role.canAccess(settingsRoles))
       HomeDestination(
-        destinationKey: const ValueKey('settings'),
+        destinationKey: const ValueKey('business-details'),
         accent: AppIdentityAccent.teal,
-        label: 'Settings',
-        description:
-            'What prices mean, what receipts print on and look like, and when '
-            'stock is counted.',
-        group: 'Settings',
+        label: 'Business details',
+        description: 'Manage your business name, slogan and logo on receipts.',
+        group: 'Business',
+        icon: Icons.storefront_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: settingsRoute!(reader, 'business-details'),
+              ),
+            ),
+          );
+        },
+      ),
+    if (settingsRoute != null && membership.role.canAccess(settingsRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('printer'),
+        accent: AppIdentityAccent.teal,
+        label: 'Printer',
+        description: 'Connect a receipt printer and print a test page.',
+        group: 'Business',
+        icon: Icons.print_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: settingsRoute!(reader, 'printer'),
+              ),
+            ),
+          );
+        },
+      ),
+    if (settingsRoute != null && membership.role.canAccess(settingsRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('configurations'),
+        accent: AppIdentityAccent.teal,
+        label: 'Configs',
+        description: 'Choose currency and schedule stock counts.',
+        group: 'Business',
         icon: Icons.tune_outlined,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
@@ -3802,23 +3824,19 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             AppPageRoute<void>(
               builder: (_) => TenantSessionScope(
                 controller: controller,
-                child: settingsRoute!(reader, null),
+                child: settingsRoute!(reader, 'configurations'),
               ),
             ),
           );
         },
       ),
-    // **No Printer tile since 2026-09-24, at the developer's direction.** It
-    // opened this same Settings screen at its printer tab, to exactly the roles
-    // Settings is offered to, so removing it strands nobody; the room went to
-    // Suppliers and Production. The printer is one tab inside Settings.
     if (membership.role.canAccess(TenantStaffDirectoryScreen.allowedRoles))
       HomeDestination(
         destinationKey: const ValueKey('staff'),
         accent: AppIdentityAccent.purple,
         label: 'Staff',
         description: 'Manage your team, their roles and access.',
-        group: 'Settings',
+        group: 'Business',
         icon: Icons.people_outline,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
@@ -3870,7 +3888,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         destinationKey: const ValueKey('view-audit-log'),
         accent: AppIdentityAccent.green,
         label: 'Logs',
-        group: 'Settings',
+        group: 'Business',
         icon: Icons.fact_check_outlined,
         onPressed: () {
           final controller = TenantSessionScope.of(context);

@@ -1,0 +1,6 @@
+# Copy to android/key.properties and fill in values from your private upload key.
+# Keep both that file and the keystore out of Git.
+storePassword=YOUR_STORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=C:\\path\\to\\upload-keystore.jks

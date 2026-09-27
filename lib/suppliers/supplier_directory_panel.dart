@@ -26,10 +26,10 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
+import '../ui/card.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/pagination.dart';
-import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
@@ -37,6 +37,7 @@ import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'supplier.dart';
+import 'supplier_card.dart';
 import 'supplier_delivery.dart';
 import 'supplier_delivery_panel.dart';
 import 'supplier_form.dart';
@@ -421,59 +422,38 @@ final class _SuppliersContents extends StatelessWidget {
       search.text.trim().isNotEmpty ||
       standing != TenantSupplierStanding.active;
 
-  List<RecordAction> _actions(TenantSupplier supplier) => <RecordAction>[
-    RecordAction(
-      label: 'View',
-      icon: Icons.visibility_outlined,
-      actionKey: ValueKey('supplier-view-${supplier.id}'),
-      onPressed: () => onView(supplier),
-    ),
-    if (onEdit case final edit?)
-      RecordAction(
-        label: 'Edit',
-        icon: Icons.edit_outlined,
-        actionKey: ValueKey('supplier-edit-${supplier.id}'),
-        onPressed: () => edit(supplier),
-      ),
-    if (onSetActive case final setActive?)
-      supplier.active
-          ? RecordAction(
-              label: 'Mark inactive',
-              icon: Icons.block_outlined,
-              destructive: true,
-              actionKey: ValueKey('supplier-inactive-${supplier.id}'),
-              onPressed: () => setActive(supplier, false),
-            )
-          : RecordAction(
-              label: 'Reactivate',
-              icon: Icons.replay_outlined,
-              actionKey: ValueKey('supplier-reactivate-${supplier.id}'),
-              onPressed: () => setActive(supplier, true),
-            ),
-  ];
-
-  RecordItem _record(TenantSupplier supplier) => RecordItem(
-    id: supplier.id,
-    recordKey: ValueKey('supplier-row-${supplier.id}'),
-    title: supplier.name,
-    titleKey: ValueKey('supplier-name-${supplier.id}'),
-    subtitle: supplier.phone ?? supplier.email,
-    // **Only the exception wears a badge.** An active supplier is the
-    // ordinary case, and a list where every row is badged has no signal in it.
-    status: supplier.active
-        ? null
-        : RecordStatus(
-            status: AppStatus.neutral,
-            label: 'Inactive',
-            badgeKey: ValueKey('supplier-inactive-badge-${supplier.id}'),
+  /// *View* is not among them: the whole card opens the record.
+  List<SupplierMenuAction> _actions(TenantSupplier supplier) =>
+      <SupplierMenuAction>[
+        if (onEdit case final edit?)
+          SupplierMenuAction(
+            label: 'Edit',
+            icon: Icons.edit_outlined,
+            itemKey: ValueKey('supplier-edit-${supplier.id}'),
+            onSelected: () => edit(supplier),
           ),
-    attributes: <RecordAttribute>[
-      RecordAttribute(
-        label: 'Last delivery',
-        value: supplierLastDeliveryLabel(supplier),
-        valueKey: ValueKey('supplier-last-delivery-${supplier.id}'),
-      ),
-    ],
+        if (onSetActive case final setActive?)
+          supplier.active
+              ? SupplierMenuAction(
+                  label: 'Mark inactive',
+                  icon: Icons.block_outlined,
+                  destructive: true,
+                  itemKey: ValueKey('supplier-inactive-${supplier.id}'),
+                  onSelected: () => setActive(supplier, false),
+                )
+              : SupplierMenuAction(
+                  label: 'Reactivate',
+                  icon: Icons.replay_outlined,
+                  itemKey: ValueKey('supplier-reactivate-${supplier.id}'),
+                  onSelected: () => setActive(supplier, true),
+                ),
+      ];
+
+  Widget _card(TenantSupplier supplier) => TenantSupplierCard(
+    key: ValueKey('supplier-row-${supplier.id}'),
+    supplier: supplier,
+    lastDeliveryLabel: supplierLastDeliveryLabel(supplier),
+    onOpen: () => onView(supplier),
     actions: _actions(supplier),
   );
 
@@ -597,10 +577,20 @@ final class _SuppliersContents extends StatelessWidget {
             ],
           ),
         SizedBox(height: tokens.spacing.s16),
-        RecordList(
-          identityLabel: 'Supplier',
-          items: <RecordItem>[for (final supplier in shown) _record(supplier)],
-          empty: EmptyState(
+        if (directory.suppliers.isNotEmpty) ...<Widget>[
+          // Inset by the focus ring's gutter, which every button and card on
+          // this page reserves around itself, so the four edges line up.
+          Padding(
+            padding: EdgeInsets.all(
+              tokens.colors.action.focusRing.width +
+                  tokens.colors.action.focusRing.offset,
+            ),
+            child: _DirectorySummary(directory: directory),
+          ),
+          SizedBox(height: tokens.spacing.s16),
+        ],
+        if (shown.isEmpty)
+          EmptyState(
             key: ValueKey(_hasQuery ? 'suppliers-no-matches' : 'suppliers-empty'),
             title: _hasQuery ? 'No matching suppliers' : 'No suppliers yet',
             hint: _hasQuery
@@ -608,8 +598,151 @@ final class _SuppliersContents extends StatelessWidget {
                 : 'Add the businesses you buy stock from, so each delivery can '
                       'say where it came from.',
             illustration: _hasQuery ? 'file-search.svg' : 'logistics.svg',
+          )
+        else
+          for (final (index, supplier) in shown.indexed) ...<Widget>[
+            if (index > 0) SizedBox(height: tokens.spacing.s12),
+            _card(supplier),
+          ],
+      ],
+    );
+  }
+}
+
+/// The directory's headline, drawn the way the sales report leads with its
+/// takings: a mark, the figure the screen is about, and the one beside it.
+///
+/// **Counted over the whole directory, not the filtered page**, so the figures
+/// do not move while somebody types a name - the list below narrows and this
+/// keeps describing the business. Nothing here is read that the list has not
+/// already read.
+final class _DirectorySummary extends StatelessWidget {
+  const _DirectorySummary({required this.directory});
+
+  final TenantSupplierDirectory directory;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final active = directory.suppliers.where((supplier) => supplier.active);
+    final inactive = directory.suppliers.length - active.length;
+    TenantSupplier? latest;
+    for (final supplier in directory.suppliers) {
+      final at = supplier.lastDeliveryAt;
+      if (at == null) continue;
+      if (latest == null || at.isAfter(latest.lastDeliveryAt!)) {
+        latest = supplier;
+      }
+    }
+    return AppCard(
+      key: const ValueKey('suppliers-summary'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      child: Row(
+        children: <Widget>[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: tokens.colors.status.ok.bg,
+              borderRadius: BorderRadius.circular(tokens.radius.md),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(tokens.spacing.s12),
+              child: Icon(
+                Icons.storefront_outlined,
+                size: tokens.spacing.s24,
+                color: tokens.colors.action.primary.container,
+              ),
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(
+            child: _SummaryFigure(
+              caption: 'Active suppliers',
+              value: '${active.length}',
+              valueKey: const ValueKey('suppliers-summary-active'),
+              detail: inactive == 0 ? 'None inactive' : '$inactive inactive',
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(
+            child: _SummaryFigure(
+              caption: 'Last delivery',
+              value: latest == null
+                  ? 'None yet'
+                  : supplierLastDeliveryLabel(latest),
+              valueKey: const ValueKey('suppliers-summary-last-delivery'),
+              detail: latest?.name,
+              end: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One headline figure: `label.md` over `numeric.hero` over `caption`.
+final class _SummaryFigure extends StatelessWidget {
+  const _SummaryFigure({
+    required this.caption,
+    required this.value,
+    required this.valueKey,
+    this.detail,
+    this.end = false,
+  });
+
+  final String caption;
+  final String value;
+  final Key valueKey;
+  final String? detail;
+
+  /// Whether the figure sits against the card's far edge.
+  final bool end;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final align = end ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    return Column(
+      crossAxisAlignment: align,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          caption,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: tokens.typography.labelMedium.copyWith(
+            color: tokens.colors.text.secondary,
           ),
         ),
+        SizedBox(height: tokens.spacing.s4),
+        // A figure that does not fit is drawn smaller, never cut: a truncated
+        // date is a wrong date.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: end
+              ? AlignmentDirectional.centerEnd
+              : AlignmentDirectional.centerStart,
+          child: Text(
+            value,
+            key: valueKey,
+            maxLines: 1,
+            style: tokens.typography.numericHero.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
+        ),
+        if (detail case final line?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s4),
+          Text(
+            line,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: end ? TextAlign.end : TextAlign.start,
+            style: tokens.typography.caption.copyWith(
+              color: tokens.colors.text.tertiary,
+            ),
+          ),
+        ],
       ],
     );
   }

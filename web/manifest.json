@@ -1,11 +1,11 @@
 {
-    "name": "flutter_application_1",
-    "short_name": "flutter_application_1",
+    "name": "UzaPay",
+    "short_name": "UzaPay",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#FFFFFF",
-    "theme_color": "#FFFFFF",
-    "description": "A new Flutter project.",
+    "background_color": "#071610",
+    "theme_color": "#071610",
+    "description": "UzaPay POS",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

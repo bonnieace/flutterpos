@@ -13,7 +13,7 @@
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="ChillTentPOS"
+        android:label="UzaPay"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -64,7 +64,7 @@
                       android:host="multitenant-pos-b8326.web.app"
                       android:path="/auth/verified"/>
                 <data android:scheme="https"
-                      android:host="swahilipro.com"
+                      android:host="auth.uzapay.co.ke"
                       android:path="/auth/verified"/>
             </intent-filter>
             <!--
@@ -91,7 +91,7 @@
                       android:host="multitenant-pos-b8326.web.app"
                       android:path="/staff/invitation"/>
                 <data android:scheme="https"
-                      android:host="swahilipro.com"
+                      android:host="auth.uzapay.co.ke"
                       android:path="/staff/invitation"/>
             </intent-filter>
         </activity>

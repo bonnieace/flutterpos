@@ -34,50 +34,57 @@ void main() {
     expect(find.byKey(const ValueKey('production-empty')), findsOneWidget);
   });
 
-  testWidgets('a batch is recorded from the last one, and every change stated first', (
-    tester,
-  ) async {
-    final writer = _Writer();
-    await _pump(tester, _Reader(batches: _twoBatches()), writer: writer);
+  testWidgets(
+    'a batch is recorded from the last one, and every change stated first',
+    (tester) async {
+      final writer = _Writer();
+      await _pump(tester, _Reader(batches: _twoBatches()), writer: writer);
 
-    await tester.tap(find.byKey(const ValueKey('production-record')));
-    await tester.pumpAndSettle();
-    // The warning that decides whether profit is counted right is on the form.
-    expect(
-      find.byKey(const ValueKey('production-expenses-warning')),
-      findsOneWidget,
-    );
-    await _chooseProduct(tester, 'prod-bread');
+      await tester.tap(find.byKey(const ValueKey('production-record')));
+      await tester.pumpAndSettle();
+      // The warning that decides whether profit is counted right is on the form.
+      expect(
+        find.byKey(const ValueKey('production-expenses-warning')),
+        findsOneWidget,
+      );
+      await _chooseProduct(tester, 'prod-bread');
 
-    // The last batch's rows are the start, and it says so.
-    expect(find.byKey(const ValueKey('production-started-from')), findsOneWidget);
-    expect(_fieldText(tester, 'production-row-description-0'), 'Flour');
-    expect(_fieldText(tester, 'production-row-amount-0'), '2000');
+      // The last batch's rows are the start, and it says so.
+      expect(
+        find.byKey(const ValueKey('production-started-from')),
+        findsOneWidget,
+      );
+      expect(_fieldText(tester, 'production-row-description-0'), 'Flour');
+      expect(_fieldText(tester, 'production-row-amount-0'), '2000');
 
-    await tester.enterText(
-      find.byKey(const ValueKey('production-quantity')),
-      '100',
-    );
-    await tester.pumpAndSettle();
-    expect(_text(tester, 'production-total'), 'KES 3000');
-    expect(_text(tester, 'production-unit-cost'), 'KES 30');
+      await tester.enterText(
+        find.byKey(const ValueKey('production-quantity')),
+        '100',
+      );
+      await tester.pumpAndSettle();
+      expect(_text(tester, 'production-total'), 'KES 3000');
+      expect(_text(tester, 'production-unit-cost'), 'KES 30');
 
-    await _submit(tester);
-    expect(find.textContaining('12 to 112 in stock'), findsOneWidget);
-    expect(
-      find.textContaining('Its cost changes from KES 28 to KES 30'),
-      findsOneWidget,
-    );
-    await tester.tap(find.byKey(const ValueKey('production-confirm')));
-    await tester.pumpAndSettle();
+      await _submit(tester);
+      expect(find.textContaining('12 to 112 in stock'), findsOneWidget);
+      expect(
+        find.textContaining('Its cost changes from KES 28 to KES 30'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('production-confirm')));
+      await tester.pumpAndSettle();
 
-    final intent = writer.completed.single;
-    expect(intent.product.id, 'prod-bread');
-    expect(intent.quantity, 100);
-    expect(intent.unitCostMinor, 3000);
-    expect(snackNotice(tester).status, AppStatus.ok);
-    expect(snackNotice(tester).message, contains('100 White bread loaf recorded'));
-  });
+      final intent = writer.completed.single;
+      expect(intent.product.id, 'prod-bread');
+      expect(intent.quantity, 100);
+      expect(intent.unitCostMinor, 3000);
+      expect(snackNotice(tester).status, AppStatus.ok);
+      expect(
+        snackNotice(tester).message,
+        contains('100 White bread loaf recorded'),
+      );
+    },
+  );
 
   testWidgets('complete stays unavailable until the batch has a cost', (
     tester,
@@ -108,65 +115,125 @@ void main() {
     expect(_submitEnabled(tester), isTrue);
   });
 
-  // **Both found on a device, 2026-09-25.** Every row said *Flour*, which read
-  // as a value the form had filled in, and a refusal stayed up after the row
-  // it named had been put right.
-  testWidgets('only the first cost suggests one, and a refusal goes with an edit', (
+  testWidgets('editing the selected product clears that selection', (
     tester,
   ) async {
     await _pump(tester, _Reader(), writer: _Writer());
-
     await tester.tap(find.byKey(const ValueKey('production-record')));
     await tester.pumpAndSettle();
     await _chooseProduct(tester, 'prod-bread');
-    final addRow = find.byKey(const ValueKey('production-add-row'));
-    await tester.ensureVisible(addRow);
-    await tester.tap(addRow);
+    expect(find.byKey(const ValueKey('production-product')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('production-product-edit')));
     await tester.pumpAndSettle();
-
-    expect(_placeholder(tester, 'production-row-description-0'), 'Flour');
-    expect(_placeholder(tester, 'production-row-description-1'), isNull);
-
     await tester.enterText(
-      find.byKey(const ValueKey('production-quantity')),
-      '100',
-    );
-    // An amount with no name: the button allows it and the form refuses it.
-    await tester.enterText(
-      find.byKey(const ValueKey('production-row-amount-0')),
-      '2000',
+      find.byKey(const ValueKey('product-typeahead-search')),
+      'mi',
     );
     await tester.pumpAndSettle();
-    await _submit(tester);
-    expect(find.byKey(const ValueKey('production-error')), findsOneWidget);
 
-    await tester.enterText(
-      find.byKey(const ValueKey('production-row-description-0')),
-      'Flour',
-    );
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('production-error')), findsNothing);
+    expect(find.byKey(const ValueKey('production-product')), findsNothing);
+    expect(find.byKey(const ValueKey('production-product-keep')), findsNothing);
+    expect(_submitEnabled(tester), isFalse);
   });
 
-  testWidgets('only products made here are offered, and the rest are explained', (
+  testWidgets('the chosen product replaces the search, and Edit swaps back', (
     tester,
   ) async {
     await _pump(tester, _Reader(), writer: _Writer());
-
     await tester.tap(find.byKey(const ValueKey('production-record')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('production-choose-product')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('product-picker-search')),
-      'mi',
+    expect(
+      find.byKey(const ValueKey('product-typeahead-search')),
+      findsOneWidget,
     );
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('production-product')), findsNothing);
 
-    expect(find.byKey(const ValueKey('product-picker-choose-prod-milk')), findsNothing);
-    expect(find.byKey(const ValueKey('product-picker-refused')), findsOneWidget);
+    await _chooseProduct(tester, 'prod-bread');
+    // The card, and no search beside it.
+    expect(find.byKey(const ValueKey('production-product')), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-typeahead-search')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('production-product-edit')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('production-product')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('product-typeahead-search')),
+      findsOneWidget,
+    );
+
+    // Backing out keeps the product that was chosen.
+    await tester.tap(find.byKey(const ValueKey('production-product-keep')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('production-product')), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-typeahead-search')), findsNothing);
   });
+
+  // **Both found on a device, 2026-09-25.** Every row said *Flour*, which read
+  // as a value the form had filled in, and a refusal stayed up after the row
+  // it named had been put right.
+  testWidgets(
+    'only the first cost suggests one, and a refusal goes with an edit',
+    (tester) async {
+      await _pump(tester, _Reader(), writer: _Writer());
+
+      await tester.tap(find.byKey(const ValueKey('production-record')));
+      await tester.pumpAndSettle();
+      await _chooseProduct(tester, 'prod-bread');
+      final addRow = find.byKey(const ValueKey('production-add-row'));
+      await tester.ensureVisible(addRow);
+      await tester.tap(addRow);
+      await tester.pumpAndSettle();
+
+      expect(_placeholder(tester, 'production-row-description-0'), 'Flour');
+      expect(_placeholder(tester, 'production-row-description-1'), isNull);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('production-quantity')),
+        '100',
+      );
+      // An amount with no name: the button allows it and the form refuses it.
+      await tester.enterText(
+        find.byKey(const ValueKey('production-row-amount-0')),
+        '2000',
+      );
+      await tester.pumpAndSettle();
+      await _submit(tester);
+      expect(find.byKey(const ValueKey('production-error')), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('production-row-description-0')),
+        'Flour',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('production-error')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'only products made here are offered, and the rest are explained',
+    (tester) async {
+      await _pump(tester, _Reader(), writer: _Writer());
+
+      await tester.tap(find.byKey(const ValueKey('production-record')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('product-typeahead-search')),
+        'mi',
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('product-typeahead-prod-milk')),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('Some products that match are bought in'),
+        findsWidgets,
+      );
+    },
+  );
 }
 
 List<Map<String, Object?>> _rows() => <Map<String, Object?>>[
@@ -203,16 +270,15 @@ Map<String, Map<String, Object?>> _twoBatches() =>
       },
     };
 
-String? _fieldText(WidgetTester tester, String key) =>
-    tester
-        .widget<EditableText>(
-          find.descendant(
-            of: find.byKey(ValueKey(key)),
-            matching: find.byType(EditableText),
-          ),
-        )
-        .controller
-        .text;
+String? _fieldText(WidgetTester tester, String key) => tester
+    .widget<EditableText>(
+      find.descendant(
+        of: find.byKey(ValueKey(key)),
+        matching: find.byType(EditableText),
+      ),
+    )
+    .controller
+    .text;
 
 String? _placeholder(WidgetTester tester, String key) => tester
     .widget<TextField>(
@@ -231,15 +297,13 @@ bool _submitEnabled(WidgetTester tester) =>
     pressable(tester, 'production-submit');
 
 Future<void> _chooseProduct(WidgetTester tester, String productId) async {
-  await tester.tap(find.byKey(const ValueKey('production-choose-product')));
-  await tester.pumpAndSettle();
   await tester.enterText(
-    find.byKey(const ValueKey('product-picker-search')),
+    find.byKey(const ValueKey('product-typeahead-search')),
     'br',
   );
   await tester.pump(const Duration(seconds: 1));
   await tester.pumpAndSettle();
-  await tester.tap(find.byKey(ValueKey('product-picker-choose-$productId')));
+  await tester.tap(find.byKey(ValueKey('product-typeahead-$productId')));
   await tester.pumpAndSettle();
 }
 

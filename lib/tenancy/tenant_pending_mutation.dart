@@ -726,6 +726,24 @@ final class TenantPendingMutationWorker {
     await Future.wait<void>(
       byTarget.values.map((group) => _runTarget(group, queuedCreates, wakes)),
     );
+    // A create can settle after its dependent group was skipped in this pass.
+    // Wake only when that dependency actually cleared, not while it remains
+    // unresolved, so an offline or rejected chain cannot spin on a timer.
+    if (queuedCreates.isNotEmpty) {
+      final remaining = await _store.recordsForSession(
+        uid: session.uid,
+        tenantId: session.tenantId,
+      );
+      final remainingCreates = _queuedCreatePaths(remaining);
+      if (remaining.any(
+        (record) =>
+            record.isUnresolved &&
+            _awaitsQueuedCreate(record, queuedCreates) &&
+            !_awaitsQueuedCreate(record, remainingCreates),
+      )) {
+        wakes.add(_store.now());
+      }
+    }
     await _store.purgeConfirmed();
     _scheduleWake(wakes);
   }

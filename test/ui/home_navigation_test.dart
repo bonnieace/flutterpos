@@ -183,10 +183,40 @@ void main() {
       expect(glyph.color, isNot(tokens.colors.status.problem.fg));
     });
 
-    // **A tile keeps its colour when a tile before it comes or goes.** Adding
-    // Suppliers and Production and removing Printer re-coloured six of the
-    // owner's tiles, because the colour was the tile's place in the grid.
-    testWidgets('a chosen colour stays with its tile wherever the tile sits', (
+    testWidgets('phone colours repeat diagonally without adjacent duplicates', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        HomeModuleGrid(
+          destinations: <HomeDestination>[
+            for (var index = 0; index < 12; index++)
+              HomeDestination(
+                destinationKey: ValueKey('tile-$index'),
+                label: 'Tile $index',
+                icon: Icons.inventory_2_outlined,
+                accent: AppIdentityAccent.teal,
+                onPressed: () {},
+              ),
+          ],
+        ),
+        width: 411,
+      );
+
+      final palette = AppTokens.profoundVerdant.colors.accent.identity;
+      for (var index = 0; index < 12; index++) {
+        final glyph = tester.widget<Icon>(
+          find.descendant(
+            of: find.byKey(ValueKey('tile-$index')),
+            matching: find.byType(Icon),
+          ),
+        );
+        expect(glyph.color, palette[index % palette.length]);
+      }
+    });
+
+    // Wider layouts keep a feature's named colour when another tile is added.
+    testWidgets('a chosen colour stays with its tile on wider layouts', (
       tester,
     ) async {
       const tokens = AppTokens.profoundVerdant;
@@ -222,7 +252,7 @@ void main() {
           HomeModuleGrid(
             destinations: <HomeDestination>[...before, expenses, reports],
           ),
-          width: 360,
+          width: 800,
         );
         expect(
           glyphOf('Expenses'),

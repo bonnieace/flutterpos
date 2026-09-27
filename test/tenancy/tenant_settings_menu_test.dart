@@ -7,35 +7,43 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Where the home menu puts four things, decided 2026-09-13 and 2026-09-24.
-///
-/// **All three are menu-layer decisions and nothing else.** Every panel behind
-/// them keeps its own guard and its own role list, so what anybody may *do* is
-/// unchanged; these pin only what each role is offered, which is the part a
-/// refactor of the menu can silently get wrong.
+/// The home destinations for business details, printing and configurations.
 void main() {
-  group('the printer lives inside Settings', () {
-    testWidgets('no role is offered a Printer tile of its own', (tester) async {
-      // **Removed 2026-09-24, at the developer's direction.** The tile opened
-      // this same Settings screen at its printer tab, to exactly the roles
-      // Settings is offered to, so nobody loses the printer by losing it.
+  group('configuration destinations', () {
+    testWidgets('only owners and admins receive the three destinations', (
+      tester,
+    ) async {
       for (final role in TenantRole.values) {
         await _pumpLanding(tester, role: role);
-        expect(
-          find.byKey(const ValueKey('printer-settings')),
-          findsNothing,
-          reason: role.name,
-        );
+        final allowed = role == TenantRole.owner || role == TenantRole.admin;
+        for (final key in <String>[
+          'business-details',
+          'printer',
+          'configurations',
+        ]) {
+          expect(
+            find.byKey(ValueKey(key)),
+            allowed ? findsOneWidget : findsNothing,
+            reason: '${role.name}: $key',
+          );
+        }
+        expect(find.byKey(const ValueKey('settings')), findsNothing);
         await _tearDown(tester);
       }
     });
 
-    testWidgets('Settings itself still opens on its first tab', (tester) async {
-      await _pumpLanding(tester, role: TenantRole.owner);
-      await tester.tap(find.byKey(const ValueKey('settings')));
-      await tester.pumpAndSettle();
-
-      expect(_openedTabKey, isNull);
+    testWidgets('each destination opens its own route', (tester) async {
+      for (final key in <String>[
+        'business-details',
+        'printer',
+        'configurations',
+      ]) {
+        await _pumpLanding(tester, role: TenantRole.owner);
+        await tester.tap(find.byKey(ValueKey(key)));
+        await tester.pumpAndSettle();
+        expect(_openedTabKey, key);
+        await _tearDown(tester);
+      }
     });
   });
 
@@ -85,13 +93,15 @@ void main() {
   group('a tile wears its own colour, whatever else is on the home', () {
     // **Pinned 2026-09-25 to what the owner's home wore before Suppliers and
     // Production.** The colour used to be the tile's place in the grid, so the
-    // two new tiles and the retired Printer re-coloured six of the owner's
+    // two new tiles re-coloured six of the owner's
     // tiles, and a manager - who is offered fewer - never saw the owner's.
     const expected = <String, AppIdentityAccent>{
       'stock-take-review': AppIdentityAccent.pink,
       'suppliers': AppIdentityAccent.orange,
       'production': AppIdentityAccent.teal,
-      'settings': AppIdentityAccent.teal,
+      'business-details': AppIdentityAccent.teal,
+      'printer': AppIdentityAccent.teal,
+      'configurations': AppIdentityAccent.teal,
       'staff': AppIdentityAccent.purple,
     };
 
@@ -192,10 +202,8 @@ Future<void> _pumpLanding(
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(
-        controller: TenantSessionController()..open(
-          uid: 'user-1',
-          membership: _membership(role),
-        ),
+        controller: TenantSessionController()
+          ..open(uid: 'user-1', membership: _membership(role)),
         child: TenantSafeLandingScreen(
           membership: _membership(role),
           reader: const _Reader(),

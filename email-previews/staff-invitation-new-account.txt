@@ -1,0 +1,18 @@
+UZAPAY
+
+You have been invited to a business
+
+Someone has added you to their business on UzaPay. Set a password first, then accept the invitation in the app.
+
+The button asks for a new password first, and continues to the invitation once it is set. Wherever it lands you, the invitation itself is in the app, and signing in with this address is all it takes to reach it.
+
+1. Set a password for this email address.
+2. Install UzaPay if it is not on this phone already.
+3. Sign in with this address and the password you just set. The invitation is on the first screen.
+
+Set your password:
+https://example.com/verify-email?preview=true
+
+GOOD FOR SEVEN DAYS: After that the invitation stops working and whoever invited you can send a fresh one. Accepting is the only thing that admits you - nobody can add you to a business you have not agreed to join.
+
+You are receiving this because this address was invited to a business on UzaPay. If you were not expecting it, ignore this message and no one is given access to anything.

@@ -116,6 +116,8 @@ void main() {
     final writer = _Writer();
     await _pump(tester, _Reader.seeded(), writer: writer);
 
+    await tester.tap(find.byKey(const ValueKey('supplier-actions-sp_abc')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('supplier-inactive-sp_abc')));
     await tester.pumpAndSettle();
     expect(find.textContaining('stays on record'), findsOneWidget);
@@ -132,6 +134,8 @@ void main() {
     final writer = _Writer();
     await _pump(tester, _Reader.seeded(), writer: writer);
 
+    await tester.tap(find.byKey(const ValueKey('supplier-actions-sp_abc')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('supplier-inactive-sp_abc')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('supplier-inactive-cancel')));

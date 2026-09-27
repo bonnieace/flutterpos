@@ -9,7 +9,6 @@ import '../reports/analysis/report_prose.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
-import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
@@ -98,70 +97,9 @@ final class _TenantSupplierDeliveryHistoryState
 
   String _money(int minor) => _currency.format(minor / 100);
 
-  RecordItem _record(TenantSupplierDelivery delivery) {
-    final day = delivery.occurredAt == null
-        ? 'Date not recorded'
-        : reportShortDate(checkoutBusinessDate(delivery.occurredAt!));
-    final products = delivery.lines.length;
-    final open = _expanded.contains(delivery.id);
-    return RecordItem(
-      id: delivery.id,
-      recordKey: ValueKey('delivery-row-${delivery.id}'),
-      title: delivery.reference == null ? day : '$day · ${delivery.reference}',
-      subtitle:
-          '$products ${products == 1 ? 'product' : 'products'} · '
-          '${delivery.unitCount} ${delivery.unitCount == 1 ? 'unit' : 'units'}',
-      // **Only a delivery still arriving says anything about its standing.**
-      status: delivery.complete
-          ? null
-          : RecordStatus(
-              status: AppStatus.attention,
-              label: 'Still arriving',
-              badgeKey: ValueKey('delivery-arriving-${delivery.id}'),
-            ),
-      attributes: <RecordAttribute>[
-        // **The figure and the words about it are two rows.** One value in the
-        // money face read *(1 without a cost)* as part of the amount.
-        if (delivery.lines.isEmpty ||
-            delivery.costlessLineCount == delivery.lines.length)
-          RecordAttribute(
-            label: 'Value received',
-            value: delivery.lines.isEmpty
-                ? 'Not recorded'
-                : 'No costs recorded',
-            valueKey: ValueKey('delivery-value-${delivery.id}'),
-          )
-        else ...<RecordAttribute>[
-          RecordAttribute(
-            label: 'Value received',
-            value: _money(delivery.valueMinor),
-            kind: RecordValueKind.money,
-            valueKey: ValueKey('delivery-value-${delivery.id}'),
-          ),
-          if (delivery.costlessLineCount > 0)
-            RecordAttribute(
-              label: 'Without a cost',
-              value:
-                  '${delivery.costlessLineCount} '
-                  '${delivery.costlessLineCount == 1 ? 'line' : 'lines'}, '
-                  'not in the value',
-              valueKey: ValueKey('delivery-costless-${delivery.id}'),
-            ),
-        ],
-      ],
-      actions: <RecordAction>[
-        RecordAction(
-          label: open ? 'Hide lines' : 'Show lines',
-          icon: open ? Icons.expand_less : Icons.expand_more,
-          actionKey: ValueKey('delivery-lines-${delivery.id}'),
-          onPressed: () => setState(() {
-            if (!_expanded.remove(delivery.id)) _expanded.add(delivery.id);
-          }),
-        ),
-      ],
-      details: open ? _DeliveryLines(delivery: delivery, money: _money) : null,
-    );
-  }
+  void _toggle(TenantSupplierDelivery delivery) => setState(() {
+    if (!_expanded.remove(delivery.id)) _expanded.add(delivery.id);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -189,18 +127,24 @@ final class _TenantSupplierDeliveryHistoryState
         else if (_loading && _deliveries.isEmpty)
           const LoadingState(message: 'Reading deliveries')
         else ...<Widget>[
-          RecordList(
-            identityLabel: 'Delivery',
-            items: <RecordItem>[
-              for (final delivery in _deliveries) _record(delivery),
-            ],
-            empty: const EmptyState(
+          if (_deliveries.isEmpty)
+            const EmptyState(
               key: ValueKey('supplier-deliveries-empty'),
               title: 'No deliveries yet',
               hint: 'Each delivery received from this supplier is listed here.',
               illustration: 'logistics.svg',
-            ),
-          ),
+            )
+          else
+            for (final (index, delivery) in _deliveries.indexed) ...<Widget>[
+              if (index > 0) SizedBox(height: tokens.spacing.s12),
+              _DeliveryCard(
+                key: ValueKey('delivery-row-${delivery.id}'),
+                delivery: delivery,
+                open: _expanded.contains(delivery.id),
+                money: _money,
+                onToggle: () => _toggle(delivery),
+              ),
+            ],
           if (_hasMore) ...<Widget>[
             SizedBox(height: tokens.spacing.s12),
             AppButton(
@@ -217,55 +161,305 @@ final class _TenantSupplierDeliveryHistoryState
   }
 }
 
-/// The product lines of one delivery.
-final class _DeliveryLines extends StatelessWidget {
-  const _DeliveryLines({required this.delivery, required this.money});
+/// One delivery, drawn the way a sale card is: when and what it was worth in
+/// the heading, what came in as the rows under it, and the counts in the foot.
+final class _DeliveryCard extends StatelessWidget {
+  const _DeliveryCard({
+    super.key,
+    required this.delivery,
+    required this.open,
+    required this.money,
+    required this.onToggle,
+  });
 
   final TenantSupplierDelivery delivery;
+  final bool open;
+  final String Function(int minor) money;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final radius = BorderRadius.circular(tokens.radius.md);
+    final day = delivery.occurredAt == null
+        ? 'Date not recorded'
+        : reportShortDate(checkoutBusinessDate(delivery.occurredAt!));
+    final products = delivery.lines.length;
+    final costed =
+        delivery.lines.isNotEmpty &&
+        delivery.costlessLineCount < delivery.lines.length;
+    final valueKey = ValueKey('delivery-value-${delivery.id}');
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: tokens.colors.surface.raised,
+        border: Border.all(color: tokens.colors.surface.cardEdge),
+        borderRadius: radius,
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: EdgeInsets.all(tokens.spacing.s16),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.local_shipping_outlined,
+                    size: AppButton.iconSize,
+                    color: tokens.colors.action.primary.container,
+                  ),
+                  SizedBox(width: tokens.spacing.s8),
+                  Expanded(
+                    child: Row(
+                      children: <Widget>[
+                        Flexible(
+                          child: Text(
+                            day,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            // The figures' face at the title size, as a sale
+                            // card's time is: the day is what the list is
+                            // scanned by.
+                            style: tokens.typography.numericBody.copyWith(
+                              color: tokens.colors.text.primary,
+                              fontSize: tokens.typography.titleMedium.fontSize,
+                            ),
+                          ),
+                        ),
+                        if (delivery.reference
+                            case final reference?) ...<Widget>[
+                          SizedBox(width: tokens.spacing.s8),
+                          Flexible(
+                            child: Text(
+                              reference,
+                              key: ValueKey(
+                                'delivery-reference-${delivery.id}',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tokens.typography.caption.copyWith(
+                                color: tokens.colors.text.tertiary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: tokens.spacing.s8),
+                  // **The figure alone in the money face.** Where there is no
+                  // figure the words say why, in the interface face, so
+                  // *No costs recorded* is never read as an amount.
+                  if (costed)
+                    Text(
+                      money(delivery.valueMinor),
+                      key: valueKey,
+                      style: tokens.typography.numericBody.copyWith(
+                        color: tokens.colors.text.money,
+                        fontSize: tokens.typography.bodyLarge.fontSize,
+                      ),
+                    )
+                  else
+                    Text(
+                      delivery.lines.isEmpty
+                          ? 'Not recorded'
+                          : 'No costs recorded',
+                      key: valueKey,
+                      style: tokens.typography.caption.copyWith(
+                        color: tokens.colors.text.secondary,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (open)
+              Column(
+                key: ValueKey('delivery-lines-open-${delivery.id}'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  for (final (index, line)
+                      in delivery.lines.indexed) ...<Widget>[
+                    Divider(
+                      height: 1,
+                      indent: index == 0 ? 0 : tokens.spacing.s16,
+                      endIndent: index == 0 ? 0 : tokens.spacing.s16,
+                      color: tokens.colors.surface.borderSubtle,
+                    ),
+                    _DeliveryLineRow(
+                      key: ValueKey('delivery-line-${delivery.id}-$index'),
+                      line: line,
+                      money: money,
+                    ),
+                  ],
+                ],
+              ),
+            Container(
+              color: tokens.colors.surface.overlay,
+              padding: EdgeInsetsDirectional.only(
+                start: tokens.spacing.s16,
+                end: tokens.spacing.s4,
+                top: tokens.spacing.s4,
+                bottom: tokens.spacing.s4,
+              ),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Wrap(
+                      spacing: tokens.spacing.s12,
+                      runSpacing: tokens.spacing.s4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: <Widget>[
+                        _FootFact(
+                          label:
+                              '$products '
+                              '${products == 1 ? 'product' : 'products'} · '
+                              '${delivery.unitCount} '
+                              '${delivery.unitCount == 1 ? 'unit' : 'units'}',
+                        ),
+                        // **The figure and the words about it are apart.** One
+                        // value in the money face read *(1 without a cost)* as
+                        // part of the amount.
+                        if (costed && delivery.costlessLineCount > 0)
+                          _FootFact(
+                            textKey: ValueKey(
+                              'delivery-costless-${delivery.id}',
+                            ),
+                            label:
+                                '${delivery.costlessLineCount} '
+                                '${delivery.costlessLineCount == 1 ? 'line' : 'lines'}'
+                                ' without a cost, not in the value',
+                          ),
+                        // **Only a delivery still arriving says anything about
+                        // its standing**, and it says it in words.
+                        if (!delivery.complete)
+                          StatusBadge(
+                            key: ValueKey('delivery-arriving-${delivery.id}'),
+                            status: AppStatus.attention,
+                            icon: Icons.schedule,
+                            label: 'Still arriving',
+                          ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: tokens.spacing.s8),
+                  AppButton(
+                    key: ValueKey('delivery-lines-${delivery.id}'),
+                    label: open ? 'Hide lines' : 'Show lines',
+                    icon: open ? Icons.expand_less : Icons.expand_more,
+                    tier: AppButtonTier.tertiary,
+                    size: AppButtonSize.sm,
+                    onPressed: onToggle,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One product line of a delivery, as a sale card draws one of its lines.
+final class _DeliveryLineRow extends StatelessWidget {
+  const _DeliveryLineRow({super.key, required this.line, required this.money});
+
+  final TenantSupplierDeliveryRecordLine line;
   final String Function(int minor) money;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return Column(
-      key: ValueKey('delivery-lines-open-${delivery.id}'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        for (final line in delivery.lines)
-          Padding(
-            padding: EdgeInsets.only(top: tokens.spacing.s8),
-            child: Row(
+    final cost = line.unitCostMinor;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.s16,
+        vertical: tokens.spacing.s12,
+      ),
+      child: Row(
+        children: <Widget>[
+          ExcludeSemantics(
+            child: SizedBox.square(
+              dimension: tokens.spacing.s40,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: tokens.colors.surface.overlay,
+                  borderRadius: BorderRadius.circular(tokens.radius.md),
+                ),
+                child: Icon(
+                  Icons.inventory_2_outlined,
+                  size: tokens.spacing.s20,
+                  color: tokens.colors.text.tertiary,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Expanded(
-                  child: Text(
-                    '${line.productName} × ${line.quantity}',
-                    style: tokens.typography.bodyMedium.copyWith(
-                      color: tokens.colors.text.primary,
-                    ),
+                Text(
+                  line.productName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: tokens.typography.labelMedium.copyWith(
+                    color: tokens.colors.text.primary,
                   ),
                 ),
-                SizedBox(width: tokens.spacing.s12),
-                // Words in the interface face, a figure in the money one - the
-                // same split the value above makes.
-                if (line.unitCostMinor case final cost?)
-                  Text(
-                    '${money(cost)} each',
-                    style: tokens.typography.numericBody.copyWith(
-                      color: tokens.colors.text.money,
-                    ),
-                  )
-                else
-                  Text(
-                    'No cost',
-                    style: tokens.typography.bodyMedium.copyWith(
-                      color: tokens.colors.text.secondary,
-                    ),
+                Text(
+                  cost == null
+                      ? '${line.quantity} × no cost recorded'
+                      : '${line.quantity} × ${money(cost)}',
+                  style: tokens.typography.caption.copyWith(
+                    color: tokens.colors.text.tertiary,
                   ),
+                ),
               ],
             ),
           ),
-      ],
+          SizedBox(width: tokens.spacing.s12),
+          // Words in the interface face, a figure in the money one - the same
+          // split the heading makes.
+          if (cost == null)
+            Text(
+              'No cost',
+              style: tokens.typography.caption.copyWith(
+                color: tokens.colors.text.secondary,
+              ),
+            )
+          else
+            Text(
+              money(cost * line.quantity),
+              style: tokens.typography.numericBody.copyWith(
+                color: tokens.colors.text.money,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One fact in a delivery card's foot: `caption` at `text.secondary`, the sale
+/// card's foot exactly.
+final class _FootFact extends StatelessWidget {
+  const _FootFact({required this.label, this.textKey});
+
+  final String label;
+  final Key? textKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Text(
+      label,
+      key: textKey,
+      style: tokens.typography.caption.copyWith(
+        color: tokens.colors.text.secondary,
+      ),
     );
   }
 }

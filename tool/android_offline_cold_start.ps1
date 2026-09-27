@@ -5,7 +5,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$package = 'com.example.flutter_application_1'
+$package = 'ke.co.uzapay.pos'
 $test = 'integration_test/offline_cold_start_test.dart'
 $common = @(
   'test', $test, '-d', $Device,

@@ -4,7 +4,7 @@
       "android": {
         "default": {
           "projectId": "multitenant-pos-b8326",
-          "appId": "1:299444269776:android:f1cfbad329eb5a790ea4d5",
+          "appId": "1:299444269776:android:bbc9bef45e4ed6240ea4d5",
           "fileOutput": "android/app/google-services.json"
         }
       },
@@ -12,7 +12,7 @@
         "lib/firebase_options.dart": {
           "projectId": "multitenant-pos-b8326",
           "configurations": {
-            "android": "1:299444269776:android:f1cfbad329eb5a790ea4d5",
+            "android": "1:299444269776:android:bbc9bef45e4ed6240ea4d5",
             "ios": "1:299444269776:ios:0725ebe12011f8750ea4d5",
             "macos": "1:299444269776:ios:0725ebe12011f8750ea4d5",
             "web": "1:299444269776:web:eab14d29ab5cc5a50ea4d5",

@@ -1,0 +1,14 @@
+UZAPAY
+
+A critical alert needs an operator
+
+Something on the platform has raised an alert that only a platform administrator can clear. The detail stays in the app.
+
+This message names the alert and nothing else. No tenant, no account and no reason for the alert leaves the platform by email.
+
+Open the operator dashboard:
+https://example.com/verify-email?preview=true
+
+CRITICAL: Alert type: operator_action_required
+
+You are receiving this because your account holds a platform administrator grant. Alerts are visible only to accounts that hold one.

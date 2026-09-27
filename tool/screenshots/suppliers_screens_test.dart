@@ -135,17 +135,19 @@ Future<void> _fillDelivery(WidgetTester tester) async {
     ('bread', 'pd-bread-white', '24', '49.50'),
     ('soap', 'pd-bar-soap-blue', '36', ''),
   ]) {
-    final add = find.byKey(const ValueKey('delivery-add-product'));
-    await tester.ensureVisible(add);
-    await tester.tap(add);
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('product-picker-search')),
-      search,
-    );
+    // The form opens with one search already out; each later product asks
+    // for another.
+    final field = find.byKey(const ValueKey('product-typeahead-search'));
+    if (field.evaluate().isEmpty) {
+      final add = find.byKey(const ValueKey('delivery-add-product'));
+      await tester.ensureVisible(add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+    }
+    await tester.enterText(field, search);
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(ValueKey('product-picker-choose-$productId')));
+    await tester.tap(find.byKey(ValueKey('product-typeahead-$productId')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(ValueKey('delivery-line-quantity-$productId')),

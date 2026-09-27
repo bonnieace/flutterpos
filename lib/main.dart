@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'login_screen.dart';
-import 'tenancy/onboarding_flow.dart';
 import 'tenancy/tenancy.dart';
+import 'tenancy/tenant_configuration_screens.dart';
 import 'theme.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -32,8 +33,6 @@ import 'sales/sales.dart';
 import 'production/production.dart';
 import 'shift/shift.dart';
 import 'suppliers/suppliers.dart';
-import 'ui/scaffold.dart';
-import 'ui/tokens.dart';
 
 Future<void> main() async {
   await SentryFlutter.init(
@@ -103,6 +102,10 @@ Future<void> main() async {
         await FirebaseAppCheck.instance.activate(
           providerAndroid: const AndroidDebugProvider(),
           providerApple: const AppleDebugProvider(),
+        );
+      } else if (defaultTargetPlatform == TargetPlatform.android) {
+        await FirebaseAppCheck.instance.activate(
+          providerAndroid: const AndroidPlayIntegrityProvider(),
         );
       }
       await Hive.initFlutter();
@@ -1350,37 +1353,8 @@ class SpiritPOSApp extends StatelessWidget {
             // A commit asks for a full sync pass, because the catalog refresh is the
             // only thing that re-reads the document: without it this device would
             // keep pricing new sales with the code that was just replaced.
-            // **One settings route holding four tabs, since 2026-09-13.**
-            // Each tab is the *panel* its own route already wrapped in a
-            // scaffold, so every guard, role list and refusal inside them is
-            // untouched - this is a container change and nothing else.
-            //
-            // Two of these are what a newly approved business must set before
-            // it can trade at all: the catalog refresher refuses outright while
-            // no currency is published, and `docs/printer_transport.md` §6
-            // forbids guessing a printer address, so until each has been used
-            // once the till cannot sell and no paper comes out.
-            settingsRoute: (reader, initialSettingKey) => TenantSettingsScreen(
-              initialSettingKey: initialSettingKey,
-              // **One bounded collection page answers every row's standing.**
-              // Every setting is a document in one collection, so the index
-              // states what is set and what is not for one query rather than
-              // one each - and rather than the nothing it could state while each
-              // panel read its own document only once its tab had been opened.
-              //
-              // It is a read the screen did not make before. See
-              // `tenant_settings_standings.dart`: this is a deliberate
-              // behaviour change, and passing null here is supported and costs
-              // nothing.
-              standings: (session) => TenantSettingsStandingsRepository(
-                session: session,
-                reader: reader,
-              ).read(collectionReader: reader),
-              destinations: <TenantSettingsDestination>[
-                // **No *Business details* row since 2026-09-23.** The
-                // registered name is not edited anywhere, and the receipt's
-                // brand name, slogan and logo live on the *Printer* page.
-                //
+            settingsRoute: (reader, initialSettingKey) {
+              final destinations = <TenantSettingsDestination>[
                 // **The setting that stops every sale on every device, on a row
                 // that says so.** A commit asks for a full sync pass, because
                 // the catalog refresh is the only thing that re-reads the
@@ -1408,92 +1382,47 @@ class SpiritPOSApp extends StatelessWidget {
                   icon: Icons.print_outlined,
                   allowedRoles:
                       TenantPrinterConfigurationPublisher.allowedRoles,
-                  // **The printer, then what its receipts are headed with.**
-                  // The brand name, slogan and logo were a *Business details*
-                  // setting of their own until 2026-09-23; printing is the
-                  // only thing they are for, so they sit under the printer
-                  // they print on.
-                  builder: (context) => Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      TenantPrinterConfigurationPanel(
-                        reader: reader,
-                        writer: QueuedTenantConfigurationWriter(
-                          store: tenantMutationStore,
-                          cacheReader: reader.cached ?? reader,
-                          currentUid: () =>
-                              FirebaseAuth.instance.currentUser?.uid,
-                          remote: FirebaseTenantConfigurationDocumentWriter(
-                            firestore: FirebaseFirestore.instance,
-                            isOnline: isOnline,
+                  builder: (context) => TenantPrinterConfigurationPanel(
+                    reader: reader,
+                    writer: QueuedTenantConfigurationWriter(
+                      store: tenantMutationStore,
+                      cacheReader: reader.cached ?? reader,
+                      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                      remote: FirebaseTenantConfigurationDocumentWriter(
+                        firestore: FirebaseFirestore.instance,
+                        isOnline: isOnline,
+                      ),
+                    ),
+                    // Puts a page on the roll against what is typed,
+                    // before it is saved, headed with the receipt
+                    // branding this device holds - logo included - so the
+                    // page shows what a receipt will look like. The
+                    // branding read is the receipt's own cache-only one,
+                    // and a failed read prints the page unbranded.
+                    testPrint: (configuration) async {
+                      final session = TenantSessionScope.read(context).session;
+                      final branding = session == null
+                          ? null
+                          : await _receiptBranding(
+                              session,
+                              tenantDataReader.cacheOnly,
+                            );
+                      await printerTransport.send(
+                        configuration.endpoint,
+                        CheckoutPrinterTestPage(
+                          profile: printerCapabilityProfile,
+                          configuration: configuration,
+                        ).build(
+                          at: DateTime.now(),
+                          businessName: branding?.companyName,
+                          slogan: branding?.slogan,
+                          logo: await _receiptLogo(
+                            branding?.logoUrl,
+                            tenantImageCache,
                           ),
                         ),
-                        // Puts a page on the roll against what is typed,
-                        // before it is saved, headed with the receipt
-                        // branding this device holds - logo included - so the
-                        // page shows what a receipt will look like. The
-                        // branding read is the receipt's own cache-only one,
-                        // and a failed read prints the page unbranded.
-                        testPrint: (configuration) async {
-                          final session = TenantSessionScope.read(
-                            context,
-                          ).session;
-                          final branding = session == null
-                              ? null
-                              : await _receiptBranding(
-                                  session,
-                                  tenantDataReader.cacheOnly,
-                                );
-                          await printerTransport.send(
-                            configuration.endpoint,
-                            CheckoutPrinterTestPage(
-                              profile: printerCapabilityProfile,
-                              configuration: configuration,
-                            ).build(
-                              at: DateTime.now(),
-                              businessName: branding?.companyName,
-                              slogan: branding?.slogan,
-                              logo: await _receiptLogo(
-                                branding?.logoUrl,
-                                tenantImageCache,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      SizedBox(
-                        height: AppTokens.componentOf(context).spacing.s32,
-                      ),
-                      const SectionHeading('Receipt branding'),
-                      SizedBox(
-                        height: AppTokens.componentOf(context).spacing.s12,
-                      ),
-                      TenantBrandingPanel(
-                        reader: reader,
-                        writer: QueuedTenantConfigurationWriter(
-                          store: tenantMutationStore,
-                          cacheReader: reader.cached ?? reader,
-                          currentUid: () =>
-                              FirebaseAuth.instance.currentUser?.uid,
-                          remote: FirebaseTenantConfigurationDocumentWriter(
-                            isOnline: isOnline,
-                          ),
-                        ),
-                        // The logo's own prefix in Storage, gated in
-                        // `storage.rules` to the two roles that may publish
-                        // the document it goes in.
-                        logoStore: FirebaseTenantBrandingLogoStore(),
-                        // The catalog form's own cut-out, offered against a
-                        // logo for the same reason it is offered against a
-                        // product photograph.
-                        backgroundRemover:
-                            CallableTenantProductBackgroundRemover(
-                              callable:
-                                  FirebaseRemoveProductBackgroundCallable(),
-                            ),
-                        printProof: printBrandingProof,
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
                 TenantSettingsDestination(
@@ -1522,8 +1451,40 @@ class SpiritPOSApp extends StatelessWidget {
                     ),
                   ),
                 ),
-              ],
-            ),
+              ];
+              final currency = destinations[0];
+              final printer = destinations[1];
+              final stockCounts = destinations[2];
+              return switch (initialSettingKey) {
+                'business-details' => TenantConfigurationPage(
+                  title: 'Business details',
+                  builder: (context) => TenantBrandingPanel(
+                    reader: reader,
+                    writer: QueuedTenantConfigurationWriter(
+                      store: tenantMutationStore,
+                      cacheReader: reader.cached ?? reader,
+                      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                      remote: FirebaseTenantConfigurationDocumentWriter(
+                        isOnline: isOnline,
+                      ),
+                    ),
+                    logoStore: FirebaseTenantBrandingLogoStore(),
+                    backgroundRemover: CallableTenantProductBackgroundRemover(
+                      callable: FirebaseRemoveProductBackgroundCallable(),
+                    ),
+                    printProof: printBrandingProof,
+                  ),
+                ),
+                'printer' => TenantConfigurationPage(
+                  title: 'Printer',
+                  builder: printer.builder,
+                ),
+                _ => TenantConfigurationsScreen(
+                  currencyBuilder: currency.builder,
+                  stockCountsBuilder: stockCounts.builder,
+                ),
+              };
+            },
             settingsRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
             printQueueCount: () => _printQueueCount(checkoutPrintJobs),
             // Nightly reconciliation has been recording differences that nobody

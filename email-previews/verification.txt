@@ -1,0 +1,12 @@
+UZAPAY
+
+Confirm your email address
+
+Confirming this address is the last step before UzaPay can secure the account and let you set up your business.
+
+Verify this address:
+https://example.com/verify-email?preview=true
+
+NEXT IN THE APP: Tell us about your business, and you can start selling. There is nothing else to fill in on the web.
+
+You are receiving this because this address was used to create a UzaPay account. If that was not you, ignore this message and the account stays unverified and unusable.

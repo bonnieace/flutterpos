@@ -11,14 +11,9 @@
 /// comment about one instance of this - `**/.*` in `ignore` kept `.well-known/`
 /// out of every deploy - which is the evidence that it is worth a test.
 ///
-/// **The live hazard is the signing key.** `android/app/build.gradle.kts` still
-/// signs release with the *debug* key, and the fingerprint declared today is the
-/// debug keystore's. The day that TODO is done - or the day the app ships
-/// through Play App Signing, where Google re-signs the upload with a key that is
-/// not this one - every App Link in the product stops working and nothing here
-/// would have noticed. That is what *a release signed with a new key needs a new
-/// fingerprint* is for: it fails the moment the signing config changes, so the
-/// fingerprint is updated in the same commit rather than discovered in support.
+/// The debug fingerprint is tracked here for local installs. Play re-signs
+/// distributed installs; its app-signing SHA-256 must be added after the first
+/// upload key and Play app-signing certificate exist.
 ///
 /// **What this cannot check.** Whether Android actually verified the link on a
 /// given device, and whether a host outside this repo serves the file at all.
@@ -45,11 +40,11 @@ const String _deployedEnvPath = 'functions/.env.multitenant-pos-b8326';
 const Map<String, String> _hostOrigins = <String, String>{
   'multitenant-pos-b8326.web.app':
       'public/.well-known/assetlinks.json, deployed with `firebase deploy '
-          '--only hosting` - the default Hosting domain for the dev project.',
-  'swahilipro.com':
+      '--only hosting` - the default Hosting domain for the dev project.',
+  'auth.uzapay.co.ke':
       'the same Hosting site once the custom domain is attached to it. Served '
-          'from anywhere else, this host never verifies and its links open a '
-          'browser.',
+      'from anywhere else, this host never verifies and its links open a '
+      'browser.',
 };
 
 /// Emails whose link is meant to land back in the app.
@@ -141,8 +136,7 @@ List<String> _declaredFingerprints() => <String>[
 /// The debug keystore's SHA-256, or null where it cannot be read.
 ///
 /// Null is a skip rather than a failure: a machine with no Android SDK on it
-/// still runs the rest of this file, and the signing-config tripwire is what
-/// carries the guarantee when this cannot run.
+/// still runs the manifest and hosted-file checks.
 String? _debugKeystoreFingerprint() {
   final home =
       Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'];
@@ -258,24 +252,13 @@ void main() {
     }
   });
 
-  test('a release signed with a new key needs a new fingerprint', () {
-    // **The tripwire.** While release borrows the debug key, the one declared
-    // fingerprint is correct for every build this repo can produce. The moment
-    // that stops being true the declaration is wrong for release builds only -
-    // which is the build nobody tests App Links on.
+  test('release does not use the debug signing key', () {
     expect(
       _releaseBuildType(),
-      contains('signingConfigs.getByName("debug")'),
+      contains('signingConfigs.getByName("release")'),
       reason:
-          'The release build type no longer signs with the debug key. Add the '
-          "release key's SHA-256 to $_assetlinksPath alongside the debug one, "
-          'then update this test.\n'
-          '\n'
-          'If the app ships through Play App Signing, the fingerprint needed '
-          'is NOT the upload key: Google re-signs the APK, and the one to '
-          'declare is the app signing certificate under Play Console -> Setup '
-          '-> App integrity. Getting this wrong breaks every App Link in '
-          'production while every local build keeps working.',
+          'Google Play uploads must use the private upload key configured in '
+          'android/key.properties, never the public debug key.',
     );
   });
 
@@ -284,9 +267,7 @@ void main() {
     () {
       final actual = _debugKeystoreFingerprint();
       if (actual == null) {
-        // No Android SDK on this machine. The signing-config tripwire above
-        // still holds; this is the check that proves the recorded value, not a
-        // requirement for running the suite.
+        // No Android SDK on this machine. The remaining checks still run.
         return;
       }
 

@@ -9,47 +9,51 @@ import '../support/notices.dart';
 /// Receiving a delivery, from a supplier's record to the queued pages, and the
 /// history it leaves behind.
 void main() {
-  testWidgets('a delivery is received from a supplier\'s record, with every change stated first', (
-    tester,
-  ) async {
-    final writer = _DeliveryWriter();
-    await _pumpRecord(tester, _Reader(), writer: writer);
+  testWidgets(
+    'a delivery is received from a supplier\'s record, with every change stated first',
+    (tester) async {
+      final writer = _DeliveryWriter();
+      await _pumpRecord(tester, _Reader(), writer: writer);
 
-    await tester.tap(find.byKey(const ValueKey('supplier-record-receive')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('delivery-reference')),
-      'INV-48392',
-    );
-    await _addProduct(tester, search: 'br', productId: 'prod-bread');
-    await tester.enterText(
-      find.byKey(const ValueKey('delivery-line-quantity-prod-bread')),
-      '24',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('delivery-line-cost-prod-bread')),
-      '45.50',
-    );
-    await tester.pumpAndSettle();
-    await _submit(tester);
+      await tester.tap(find.byKey(const ValueKey('supplier-record-receive')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('delivery-reference')),
+        'INV-48392',
+      );
+      await _addProduct(tester, search: 'br', productId: 'prod-bread');
+      await tester.enterText(
+        find.byKey(const ValueKey('delivery-line-quantity-prod-bread')),
+        '24',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('delivery-line-cost-prod-bread')),
+        '45.50',
+      );
+      await tester.pumpAndSettle();
+      await _submit(tester);
 
-    // The confirmation states each stock and cost change as from and to.
-    expect(find.textContaining('40 to 64 in stock'), findsOneWidget);
-    expect(
-      // The app's money format: whole amounts carry no decimals.
-      find.textContaining('Cost changes from KES 40 to KES 45.50'),
-      findsOneWidget,
-    );
-    await tester.tap(find.byKey(const ValueKey('delivery-confirm')));
-    await tester.pumpAndSettle();
+      // The confirmation states each stock and cost change as from and to.
+      expect(find.textContaining('40 to 64 in stock'), findsOneWidget);
+      expect(
+        // The app's money format: whole amounts carry no decimals.
+        find.textContaining('Cost changes from KES 40 to KES 45.50'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('delivery-confirm')));
+      await tester.pumpAndSettle();
 
-    final intent = writer.received.single;
-    expect(intent.supplier.id, 'sp_abc');
-    expect(intent.reference, 'INV-48392');
-    expect(intent.lines.single.unitCostMinor, 4550);
-    expect(snackNotice(tester).status, AppStatus.ok);
-    expect(snackNotice(tester).message, contains('Delivery from ABC Distributors'));
-  });
+      final intent = writer.received.single;
+      expect(intent.supplier.id, 'sp_abc');
+      expect(intent.reference, 'INV-48392');
+      expect(intent.lines.single.unitCostMinor, 4550);
+      expect(snackNotice(tester).status, AppStatus.ok);
+      expect(
+        snackNotice(tester).message,
+        contains('Delivery from ABC Distributors'),
+      );
+    },
+  );
 
   testWidgets('a reference already on file is warned about, never refused', (
     tester,
@@ -85,39 +89,40 @@ void main() {
     expect(writer.received, hasLength(1));
   });
 
-  testWidgets('a line that cannot be received is named, and nothing is queued', (
-    tester,
-  ) async {
-    final writer = _DeliveryWriter();
-    await _pumpRecord(tester, _Reader(), writer: writer);
+  testWidgets(
+    'a line that cannot be received is named, and nothing is queued',
+    (tester) async {
+      final writer = _DeliveryWriter();
+      await _pumpRecord(tester, _Reader(), writer: writer);
 
-    await tester.tap(find.byKey(const ValueKey('supplier-record-receive')));
-    await tester.pumpAndSettle();
-    await _addProduct(tester, search: 'br', productId: 'prod-bread');
-    await tester.enterText(
-      find.byKey(const ValueKey('delivery-line-quantity-prod-bread')),
-      '3',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('delivery-line-cost-prod-bread')),
-      '0',
-    );
-    await tester.pumpAndSettle();
-    await _submit(tester);
+      await tester.tap(find.byKey(const ValueKey('supplier-record-receive')));
+      await tester.pumpAndSettle();
+      await _addProduct(tester, search: 'br', productId: 'prod-bread');
+      await tester.enterText(
+        find.byKey(const ValueKey('delivery-line-quantity-prod-bread')),
+        '3',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('delivery-line-cost-prod-bread')),
+        '0',
+      );
+      await tester.pumpAndSettle();
+      await _submit(tester);
 
-    expect(find.byKey(const ValueKey('delivery-error')), findsOneWidget);
-    expect(find.textContaining('White bread loaf'), findsWidgets);
-    expect(writer.received, isEmpty);
+      expect(find.byKey(const ValueKey('delivery-error')), findsOneWidget);
+      expect(find.textContaining('White bread loaf'), findsWidgets);
+      expect(writer.received, isEmpty);
 
-    // The refusal is about that attempt, and goes as soon as the line is put
-    // right. Found on a device, 2026-09-25: it stayed up naming a fixed line.
-    await tester.enterText(
-      find.byKey(const ValueKey('delivery-line-cost-prod-bread')),
-      '45',
-    );
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('delivery-error')), findsNothing);
-  });
+      // The refusal is about that attempt, and goes as soon as the line is put
+      // right. Found on a device, 2026-09-25: it stayed up naming a fixed line.
+      await tester.enterText(
+        find.byKey(const ValueKey('delivery-line-cost-prod-bread')),
+        '45',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('delivery-error')), findsNothing);
+    },
+  );
 
   testWidgets('a product already on the delivery is offered as added', (
     tester,
@@ -129,51 +134,102 @@ void main() {
     await _addProduct(tester, search: 'br', productId: 'prod-bread');
     await tester.tap(find.byKey(const ValueKey('delivery-add-product')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('product-picker-search')), 'br');
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const ValueKey('delivery-product-field-1')),
+        matching: find.byKey(const ValueKey('product-typeahead-search')),
+      ),
+      'br',
+    );
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey('product-picker-added-prod-bread')),
+      find.byKey(const ValueKey('product-typeahead-added-prod-bread')),
       findsOneWidget,
     );
   });
 
-  testWidgets('a supplier\'s record lists its deliveries and opens their lines', (
-    tester,
-  ) async {
-    await _pumpRecord(
-      tester,
-      _Reader(
-        deliveries: <String, Map<String, Object?>>{
-          'sd_old': _deliveryDocument(reference: 'INV-1', complete: false),
-        },
-      ),
-      writer: _DeliveryWriter(),
-    );
+  testWidgets(
+    'Add product opens another inline search and adds a second line',
+    (tester) async {
+      await _pumpRecord(tester, _Reader(), writer: _DeliveryWriter());
+      await tester.tap(find.byKey(const ValueKey('supplier-record-receive')));
+      await tester.pumpAndSettle();
+      await _addProduct(tester, search: 'br', productId: 'prod-bread');
 
-    expect(find.byKey(const ValueKey('delivery-row-sd_old')), findsOneWidget);
-    // The amount alone in the money face, and the line without a cost beside
-    // it in words rather than inside the figure.
-    expect(
-      tester.widget<Text>(find.byKey(const ValueKey('delivery-value-sd_old'))).data,
-      'KES 1092',
-    );
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('delivery-costless-sd_old')))
-          .data,
-      '1 line, not in the value',
-    );
-    // A delivery still arriving says so, in words.
-    expect(find.byKey(const ValueKey('delivery-arriving-sd_old')), findsOneWidget);
-    final showLines = find.byKey(const ValueKey('delivery-lines-sd_old'));
-    await tester.ensureVisible(showLines);
-    await tester.tap(showLines);
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('delivery-add-product')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const ValueKey('delivery-product-field-1')),
+          matching: find.byKey(const ValueKey('product-typeahead-search')),
+        ),
+        'mi',
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('product-typeahead-prod-milk')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('White bread loaf × 24'), findsOneWidget);
-  });
+      expect(
+        find.byKey(const ValueKey('delivery-line-prod-bread')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('delivery-line-prod-milk')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'a supplier\'s record lists its deliveries and opens their lines',
+    (tester) async {
+      await _pumpRecord(
+        tester,
+        _Reader(
+          deliveries: <String, Map<String, Object?>>{
+            'sd_old': _deliveryDocument(reference: 'INV-1', complete: false),
+          },
+        ),
+        writer: _DeliveryWriter(),
+      );
+
+      expect(find.byKey(const ValueKey('delivery-row-sd_old')), findsOneWidget);
+      // The amount alone in the money face, and the line without a cost beside
+      // it in words rather than inside the figure.
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('delivery-value-sd_old')))
+            .data,
+        'KES 1092',
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('delivery-costless-sd_old')),
+            )
+            .data,
+        '1 line without a cost, not in the value',
+      );
+      // A delivery still arriving says so, in words.
+      expect(
+        find.byKey(const ValueKey('delivery-arriving-sd_old')),
+        findsOneWidget,
+      );
+      final showLines = find.byKey(const ValueKey('delivery-lines-sd_old'));
+      await tester.ensureVisible(showLines);
+      await tester.tap(showLines);
+      await tester.pumpAndSettle();
+
+      expect(find.text('White bread loaf'), findsOneWidget);
+      expect(find.text('24 × KES 45.50'), findsOneWidget);
+      expect(find.text('12 × no cost recorded'), findsOneWidget);
+    },
+  );
 }
 
 Future<void> _addProduct(
@@ -181,14 +237,13 @@ Future<void> _addProduct(
   required String search,
   required String productId,
 }) async {
-  final add = find.byKey(const ValueKey('delivery-add-product'));
-  await tester.ensureVisible(add);
-  await tester.tap(add);
-  await tester.pumpAndSettle();
-  await tester.enterText(find.byKey(const ValueKey('product-picker-search')), search);
+  await tester.enterText(
+    find.byKey(const ValueKey('product-typeahead-search')),
+    search,
+  );
   await tester.pump(const Duration(seconds: 1));
   await tester.pumpAndSettle();
-  await tester.tap(find.byKey(ValueKey('product-picker-choose-$productId')));
+  await tester.tap(find.byKey(ValueKey('product-typeahead-$productId')));
   await tester.pumpAndSettle();
 }
 

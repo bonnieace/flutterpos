@@ -62,14 +62,11 @@ final class HomeDestination {
     this.accent,
   });
 
-  /// The colour this destination's tile wears on [HomeModuleGrid].
+  /// The colour this destination's tile wears on wider [HomeModuleGrid] layouts.
   ///
-  /// **Chosen per destination, not by position.** Until 2026-09-25 a tile took
-  /// the palette colour at its place in the grid, so adding Suppliers and
-  /// Production and removing Printer moved the colour of every tile after
-  /// them, and a manager's home - which has fewer tiles - never matched the
-  /// owner's. Null falls back to the tile's position, for a list with no
-  /// colours chosen.
+  /// Phone launchers use the six-colour position sequence so adjacent tiles
+  /// remain distinct. Wider layouts keep each destination's chosen colour.
+  /// Null falls back to its position in those layouts too.
   final AppIdentityAccent? accent;
 
   /// One sentence saying what is behind this destination, for the surface that
@@ -495,13 +492,16 @@ final class HomeModuleGrid extends StatelessWidget {
                       // wanted the same six for their avatars, and a palette
                       // living inside one widget is a palette the next surface
                       // has to copy.
-                      accent: switch (destination.accent) {
-                        final slot? => tokens.colors.accent.identityAt(slot),
-                        null =>
-                          tokens.colors.accent.identity[(index * columns +
-                                  column) %
-                              tokens.colors.accent.identity.length],
-                      },
+                      // Six colours across four phone columns repeat two
+                      // places to the right on the next row. On larger layouts
+                      // the destination keeps its named colour.
+                      accent: compact || destination.accent == null
+                          ? tokens.colors.accent.identity[(index * columns +
+                                    column) %
+                                tokens.colors.accent.identity.length]
+                          : tokens.colors.accent.identityAt(
+                              destination.accent!,
+                            ),
                     ),
                   ),
                 ],

@@ -52,7 +52,7 @@ export const STAFF_INVITATION_SENDER_EMAIL = defineString(
 );
 export const STAFF_INVITATION_SENDER_NAME = defineString(
   "STAFF_INVITATION_SENDER_NAME",
-  {default: "ChillTent"}
+  {default: "UzaPay"}
 );
 
 const DELIVERY_QUEUE_FUNCTION = "deliverStaffInvitation";

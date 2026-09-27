@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyBz0J7TdtMer-rsYH9GtaLotx5rNSyc0bQ',
-    appId: '1:299444269776:android:f1cfbad329eb5a790ea4d5',
+    appId: '1:299444269776:android:bbc9bef45e4ed6240ea4d5',
     messagingSenderId: '299444269776',
     projectId: 'multitenant-pos-b8326',
     storageBucket: 'multitenant-pos-b8326.firebasestorage.app',

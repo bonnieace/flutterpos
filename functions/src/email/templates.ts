@@ -73,11 +73,6 @@ export function accountVerificationEmail(actionUrl: string): RenderedEmail {
     title: "Confirm your email address",
     lead: "Confirming this address is the last step before " + BRAND_NAME +
       " can secure the account and let you set up your business.",
-    body: [
-      "On a phone with the app installed, the button opens the app straight " +
-      "onto the next step. Anywhere else it opens a page that tells you to " +
-      "switch back - the app notices the confirmation on its own either way.",
-    ],
     action: {label: "Verify this address", url: actionUrl},
     notice: {
       tone: "info",

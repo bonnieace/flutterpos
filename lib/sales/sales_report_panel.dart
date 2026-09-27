@@ -18,7 +18,6 @@ import '../returns/return_actions.dart';
 import '../returns/return_history_panel.dart';
 import '../returns/return_offsets.dart';
 import '../inventory/product_image_cache.dart';
-import '../reports/analysis/sales_analysis.dart';
 import '../reports/analysis/sales_report.dart';
 import '../reports/report_document.dart';
 import '../reports/report_file.dart';
@@ -90,25 +89,19 @@ Widget _salesReportAction(
             session: session,
             reader: reader,
           ),
+          returnsLoader: TenantDayReturnsLoader(
+            session: session,
+            reader: reader,
+          ),
         );
-        final read = await source.gather(period);
-        final previous = await source.gatherPrevious(period);
+        final analysis = await source.gatherAnalysis(period);
         final identity = await readTenantReportIdentity(
           session: session,
           reader: reader,
           generatedAt: now(),
           imageCache: imageCache,
         );
-        return describeSalesReport(
-          identity: identity,
-          analysis: TenantSalesAnalysis.from(
-            period: period,
-            sales: read.sales,
-            previous: previous,
-            truncated: read.truncated,
-            documentsRead: read.sales.length + (previous?.length ?? 0),
-          ),
-        );
+        return describeSalesReport(identity: identity, analysis: analysis);
       },
     ),
   );

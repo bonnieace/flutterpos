@@ -9,7 +9,8 @@ import 'package:flutter/material.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../inventory/catalog_management.dart';
-import '../inventory/product_picker.dart';
+import '../inventory/product_visual.dart';
+import '../inventory/product_typeahead.dart';
 import '../reporting/reporting_currency.dart';
 import '../reports/analysis/report_prose.dart';
 import '../tenancy/tenant_catalog.dart';
@@ -202,6 +203,11 @@ final class _ProductionFormState extends State<_ProductionForm> {
   final List<_RowState> _rows = <_RowState>[_RowState()];
   TenantProduct? _product;
 
+  /// Whether the search is open again over a product already chosen, after
+  /// *Edit*. The chosen product holds until another is picked or the search is
+  /// typed into, so opening the search and backing out loses nothing.
+  bool _choosingProduct = false;
+
   /// The batch the rows were started from, said so beside them.
   TenantProductionBatch? _startedFrom;
   bool _busy = false;
@@ -246,21 +252,10 @@ final class _ProductionFormState extends State<_ProductionForm> {
 
   String _money(int minor) => widget.currency.format(minor / 100);
 
-  Future<void> _chooseProduct() async {
-    final product = await showTenantProductPicker(
-      context,
-      session: widget.session,
-      reader: widget.reader,
-      productSearchReader: widget.services.productSearchReader,
-      admits: (product) => product.costType == TenantProductCostType.produced,
-      refusedHint:
-          'Some products that match are bought in. Mark a product as Made '
-          'here when you edit it in Inventory to record production for it.',
-      title: 'What was made?',
-    );
-    if (product == null || !mounted) return;
+  Future<void> _selectProduct(TenantProduct product) async {
     setState(() {
       _product = product;
+      _choosingProduct = false;
       _startedFrom = null;
       _error = null;
     });
@@ -413,47 +408,63 @@ final class _ProductionFormState extends State<_ProductionForm> {
       children: <Widget>[
         const SectionHeading('What was made'),
         SizedBox(height: tokens.spacing.s8),
-        if (product == null)
-          AppButton(
-            key: const ValueKey('production-choose-product'),
-            label: 'Choose the product',
-            icon: Icons.bakery_dining_outlined,
-            expand: true,
-            onPressed: _busy ? null : _chooseProduct,
-          )
-        else
-          AppCard(
-            key: const ValueKey('production-product'),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        product.name,
-                        style: tokens.typography.titleMedium.copyWith(
-                          color: tokens.colors.text.primary,
-                        ),
-                      ),
-                      SizedBox(height: tokens.spacing.s4),
-                      Text(
-                        '${product.quantity} in stock · '
-                        '${product.cost == null ? 'No cost recorded' : 'Costs ${_money(checkoutMinorUnitsFromMajor(product.cost!) ?? 0)}'}',
-                        style: tokens.typography.caption.copyWith(
-                          color: tokens.colors.text.tertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                AppButton(
-                  key: const ValueKey('production-change-product'),
-                  label: 'Change',
-                  onPressed: _busy ? null : _chooseProduct,
-                ),
-              ],
+        // **The search or the product, never both.** Once a product is chosen
+        // the search gives way to the product itself, and *Edit* brings the
+        // search back.
+        if (product == null || _choosingProduct) ...<Widget>[
+          // **Above the search, not under it**: the search opens its
+          // suggestions downward the moment *Edit* focuses it, and a way back
+          // drawn beneath the field sat under that list.
+          if (product != null) ...<Widget>[
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: AppButton(
+                key: const ValueKey('production-product-keep'),
+                label: 'Keep ${product.name}',
+                icon: Icons.undo,
+                tier: AppButtonTier.tertiary,
+                size: AppButtonSize.sm,
+                onPressed: _busy
+                    ? null
+                    : () => setState(() => _choosingProduct = false),
+              ),
             ),
+            SizedBox(height: tokens.spacing.s4),
+          ],
+          TenantProductTypeAhead(
+            key: const ValueKey('production-product-search'),
+            session: widget.session,
+            reader: widget.reader,
+            productSearchReader: widget.services.productSearchReader,
+            label: 'Product made',
+            selected: product,
+            enabled: !_busy,
+            // Focused only when *Edit* opened it: on arrival the form's first
+            // question is read before the keyboard covers it.
+            autofocus: _choosingProduct,
+            admits: (item) => item.costType == TenantProductCostType.produced,
+            refusedHint:
+                'Some products that match are bought in. Mark a product as '
+                'Made here when you edit it in Inventory to record production '
+                'for it.',
+            onSelected: _selectProduct,
+            onEdited: () => setState(() {
+              _product = null;
+              _choosingProduct = false;
+              _startedFrom = null;
+              _error = null;
+            }),
+          ),
+        ] else
+          _ChosenProduct(
+            product: product,
+            costLabel: product.cost == null
+                ? 'No cost recorded'
+                : 'Costs '
+                      '${_money(checkoutMinorUnitsFromMajor(product.cost!) ?? 0)}',
+            onEdit: _busy
+                ? null
+                : () => setState(() => _choosingProduct = true),
           ),
         SizedBox(height: tokens.spacing.s12),
         AppTextField(
@@ -576,7 +587,78 @@ final class _ProductionFormState extends State<_ProductionForm> {
   }
 }
 
-/// The total and the cost per unit, as the rows add up so far.
+/// The product a batch is being recorded for, once it is chosen: the catalog's
+/// own picture or initials, what is on the shelf now, and *Edit* to choose
+/// again.
+final class _ChosenProduct extends StatelessWidget {
+  const _ChosenProduct({
+    required this.product,
+    required this.costLabel,
+    required this.onEdit,
+  });
+
+  final TenantProduct product;
+  final String costLabel;
+
+  /// Null while the batch is being saved.
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return AppCard(
+      key: const ValueKey('production-product'),
+      child: Row(
+        children: <Widget>[
+          SizedBox.square(
+            dimension: tokens.spacing.s48,
+            child: TenantProductVisual(
+              product: product,
+              semanticLabel: '${product.name} product image',
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  product.name,
+                  key: const ValueKey('production-product-name'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: tokens.typography.titleMedium.copyWith(
+                    color: tokens.colors.text.primary,
+                  ),
+                ),
+                SizedBox(height: tokens.spacing.s4),
+                Text(
+                  '${product.quantity} in stock · $costLabel',
+                  style: tokens.typography.caption.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s8),
+          AppButton(
+            key: const ValueKey('production-product-edit'),
+            label: 'Edit',
+            icon: Icons.edit_outlined,
+            size: AppButtonSize.md,
+            onPressed: onEdit,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The cost per unit and the total, as the rows add up so far - led by the
+/// figure the batch exists to settle, the way the sales report leads with its
+/// takings.
 final class _Figures extends StatelessWidget {
   const _Figures({required this.total, required this.perUnit});
 
@@ -586,43 +668,78 @@ final class _Figures extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    Widget line(String label, String value, Key key, {bool emphasis = false}) =>
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(
-                label,
-                style: tokens.typography.bodyMedium.copyWith(
-                  color: tokens.colors.text.secondary,
-                ),
-              ),
-            ),
-            Text(
-              key: key,
-              value,
-              style:
-                  (emphasis
-                          ? tokens.typography.numericHero
-                          : tokens.typography.numericBody)
-                      .copyWith(color: tokens.colors.text.money),
-            ),
-          ],
-        );
+    final label = tokens.typography.labelMedium.copyWith(
+      color: tokens.colors.text.secondary,
+    );
+    // A figure is set in the money face; the words standing in for one until
+    // it can be worked out are set in the interface face, so neither is read
+    // as the other.
+    final waiting = tokens.typography.bodyMedium.copyWith(
+      color: tokens.colors.text.tertiary,
+    );
     return AppCard(
       key: const ValueKey('production-figures'),
-      child: Column(
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      child: Row(
         children: <Widget>[
-          line(
-            'Total',
-            total ?? 'Enter the costs',
-            const ValueKey('production-total'),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: tokens.colors.status.ok.bg,
+              borderRadius: BorderRadius.circular(tokens.radius.md),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(tokens.spacing.s12),
+              child: Icon(
+                Icons.calculate_outlined,
+                size: tokens.spacing.s24,
+                color: tokens.colors.action.primary.container,
+              ),
+            ),
           ),
-          SizedBox(height: tokens.spacing.s8),
-          line(
-            'Cost per unit',
-            perUnit ?? (total == null ? '-' : 'Enter how many were made'),
-            const ValueKey('production-unit-cost'),
-            emphasis: perUnit != null,
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text('Cost per unit', style: label),
+                SizedBox(height: tokens.spacing.s4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    key: const ValueKey('production-unit-cost'),
+                    perUnit ??
+                        (total == null ? '-' : 'Enter how many were made'),
+                    maxLines: 1,
+                    style: perUnit == null
+                        ? waiting
+                        : tokens.typography.numericHero.copyWith(
+                            color: tokens.colors.text.money,
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text('Total', style: label),
+              SizedBox(height: tokens.spacing.s4),
+              Text(
+                key: const ValueKey('production-total'),
+                total ?? 'Enter the costs',
+                style: total == null
+                    ? waiting
+                    : tokens.typography.numericBody.copyWith(
+                        color: tokens.colors.text.money,
+                        fontSize: tokens.typography.bodyLarge.fontSize,
+                      ),
+              ),
+            ],
           ),
         ],
       ),

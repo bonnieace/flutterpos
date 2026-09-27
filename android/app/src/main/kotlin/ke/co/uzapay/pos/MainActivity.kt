@@ -1,4 +1,4 @@
-package com.example.flutter_application_1
+package ke.co.uzapay.pos
 
 import android.content.Intent
 import android.provider.Settings

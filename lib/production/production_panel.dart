@@ -4,12 +4,10 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../checkout/checkout_draft.dart';
 import '../inventory/product_image_cache.dart';
 import '../reporting/reporting_currency.dart';
 import '../reports/analysis/production_analysis.dart';
 import '../reports/analysis/production_report.dart';
-import '../reports/analysis/report_prose.dart';
 import '../reports/report_document.dart';
 import '../reports/report_file.dart';
 import '../reports/report_identity_source.dart';
@@ -20,13 +18,13 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
-import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'production_batch.dart';
+import 'production_batch_card.dart';
 import 'production_form_panel.dart';
 
 /// What the Production route reads first: the newest batches, and the
@@ -288,44 +286,6 @@ final class _ProductionContents extends StatelessWidget {
 
   String _money(int minor) => currency.format(minor / 100);
 
-  RecordItem _record(TenantProductionBatch batch) {
-    final open = expanded.contains(batch.id);
-    return RecordItem(
-      id: batch.id,
-      recordKey: ValueKey('production-row-${batch.id}'),
-      title: '${batch.productName} · ${batch.quantity} made',
-      subtitle: batch.batchNumber,
-      attributes: <RecordAttribute>[
-        RecordAttribute(
-          label: 'Cost per unit',
-          value: _money(batch.unitCostMinor),
-          kind: RecordValueKind.money,
-          valueKey: ValueKey('production-unit-${batch.id}'),
-        ),
-        RecordAttribute(
-          label: 'Total cost',
-          value: _money(batch.totalCostMinor),
-          kind: RecordValueKind.money,
-        ),
-        RecordAttribute(
-          label: 'Made',
-          value: batch.occurredAt == null
-              ? 'Date not recorded'
-              : reportShortDate(checkoutBusinessDate(batch.occurredAt!)),
-        ),
-      ],
-      actions: <RecordAction>[
-        RecordAction(
-          label: open ? 'Hide costs' : 'Show costs',
-          icon: open ? Icons.expand_less : Icons.expand_more,
-          actionKey: ValueKey('production-costs-${batch.id}'),
-          onPressed: () => onToggle(batch),
-        ),
-      ],
-      details: open ? _Costs(batch: batch, money: _money) : null,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -350,18 +310,26 @@ final class _ProductionContents extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.s16),
         ],
-        RecordList(
-          identityLabel: 'Batch',
-          items: <RecordItem>[for (final batch in batches) _record(batch)],
-          empty: const EmptyState(
+        if (batches.isEmpty)
+          const EmptyState(
             key: ValueKey('production-empty'),
             title: 'No batches yet',
             hint:
                 'Record what was made and what it cost, and its stock and its '
                 'cost follow. Mark a product as Made here in Inventory first.',
             illustration: 'approve.svg',
-          ),
-        ),
+          )
+        else
+          for (final (index, batch) in batches.indexed) ...<Widget>[
+            if (index > 0) SizedBox(height: tokens.spacing.s12),
+            TenantProductionBatchCard(
+              key: ValueKey('production-row-${batch.id}'),
+              batch: batch,
+              open: expanded.contains(batch.id),
+              money: _money,
+              onToggle: () => onToggle(batch),
+            ),
+          ],
         if (hasMore) ...<Widget>[
           SizedBox(height: tokens.spacing.s12),
           AppButton(
@@ -372,59 +340,6 @@ final class _ProductionContents extends StatelessWidget {
             onPressed: readingOlder ? null : onOlder,
           ),
         ],
-      ],
-    );
-  }
-}
-
-/// What one batch spent, row by row.
-final class _Costs extends StatelessWidget {
-  const _Costs({required this.batch, required this.money});
-
-  final TenantProductionBatch batch;
-  final String Function(int minor) money;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    final previous = batch.previousCostMinor;
-    return Column(
-      key: ValueKey('production-costs-open-${batch.id}'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        for (final row in batch.expenses)
-          Padding(
-            padding: EdgeInsets.only(top: tokens.spacing.s8),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    row.description,
-                    style: tokens.typography.bodyMedium.copyWith(
-                      color: tokens.colors.text.primary,
-                    ),
-                  ),
-                ),
-                Text(
-                  money(row.amountMinor),
-                  style: tokens.typography.numericBody.copyWith(
-                    color: tokens.colors.text.money,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (previous != null && previous != batch.unitCostMinor)
-          Padding(
-            padding: EdgeInsets.only(top: tokens.spacing.s8),
-            child: Text(
-              'Cost per unit went from ${money(previous)} to '
-              '${money(batch.unitCostMinor)} with this batch.',
-              style: tokens.typography.caption.copyWith(
-                color: tokens.colors.text.tertiary,
-              ),
-            ),
-          ),
       ],
     );
   }

@@ -19,7 +19,7 @@ export const EMAIL_BREVO_WEBHOOK_SECRET = defineSecret(
 
 export const EMAIL_SENDER_ADDRESS = defineString("EMAIL_SENDER_ADDRESS");
 export const EMAIL_SENDER_NAME = defineString("EMAIL_SENDER_NAME", {
-  default: "ChillTent",
+  default: "UzaPay",
 });
 export const PASSWORD_RESET_CONTINUE_URL = defineString(
   "PASSWORD_RESET_CONTINUE_URL"

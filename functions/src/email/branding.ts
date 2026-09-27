@@ -1,70 +1,38 @@
-/**
- * The one place an outgoing email decides what it looks like.
- *
- * **Every template renders through here, and none of them writes a colour.**
- * Before this file existed, four emails carried four hand-written `<p>` tags in
- * two different modules, and the only thing they had in common was that neither
- * looked like the app. The palette below is the app's own - `AppColorRoles`
- * `profoundVerdant` in `lib/ui/tokens.dart`, value for value - so an email and
- * the screen it hands off to are the same product.
- *
- * **Email is not a browser and this file assumes the worst one.** Three rules
- * follow from that and every helper below obeys them:
- *
- * 1. **Layout is tables and paint is inline.** The `<style>` block carries only
- *    what a stripped client can afford to lose - the mobile media query and the
- *    forced-dark-mode overrides. A client that drops it still gets the finished
- *    design, because every colour, size and space is also on the element.
- * 2. **The call to action is drawn twice.** Outlook renders through Word, which
- *    has no padding on an anchor and no border radius, so the button is a VML
- *    roundrect there and an anchor everywhere else. Conditional comments keep
- *    each client seeing exactly one of them.
- * 3. **No image, no web font, no tracker.** An image the recipient must agree
- *    to load is a design that arrives broken by default, and the send path sets
- *    `X-Mailin-Track-Clicks: 0` deliberately. The mark is drawn in table cells
- *    and the type is a stack, headed by the family the app bundles for anyone
- *    whose client already has it.
+/** Shared UzaPay email layout, matching the approved landing-page identity.
+ * Table layouts, inline styles and Outlook VML preserve the action in mail clients.
+ * The hosted logo has a text alternative; no external fonts or trackers are loaded.
  */
+export const BRAND_NAME = "UzaPay";
 
-/** The wordmark. Its first letter is also the mark, so a rename moves both. */
-export const BRAND_NAME = "ChillTent";
-
-/**
- * `AppColorRoles.profoundVerdant`, transcribed.
- *
- * The names are the roles' names rather than the primitives', so a value that
- * moves in `lib/ui/tokens.dart` has one obvious line to move to here.
- */
+/** Landing-page colours, with darker text accents on the light email surface. */
 export const brandPalette = {
-  canvas: "#03110B",
-  surface: "#071610",
-  card: "#0D1F16",
-  elevated: "#132A1F",
-  raised: "#283831",
-  ink: "#D4E7DD",
-  muted: "#BCCBB9",
-  outline: "#869585",
-  hairline: "#3D4A3D",
-  primary: "#4BE277",
-  primaryBright: "#6BFF8F",
-  primaryContainer: "#22C55E",
-  onPrimary: "#003915",
-  secondary: "#B0CDBD",
-  critical: "#EF4444",
-  warning: "#F2C14E",
-  info: "#6FB7F2",
+  canvas: "#f8f8f4",
+  surface: "#f3f5ef",
+  card: "#ffffff",
+  elevated: "#f3f5ef",
+  raised: "#dbe1da",
+  ink: "#0e1511",
+  muted: "#536158",
+  outline: "#667269",
+  hairline: "#dbe1da",
+  primary: "#c8ff5f",
+  primaryBright: "#d4ff7f",
+  primaryContainer: "#c8ff5f",
+  onPrimary: "#0c1510",
+  secondary: "#355c49",
+  critical: "#b42318",
+  warning: "#87600d",
+  info: "#355c49",
 } as const;
 
-/**
- * Hanken Grotesk first, for the minority of clients that already hold it, then
- * the grotesques a mail client is actually likely to have. The fallbacks are
- * ordered by how close their x-height and terminals sit to the real family, so
- * the layout does not reflow between one recipient and the next.
- */
-const INTERFACE_STACK = "'Hanken Grotesk', 'Segoe UI', Roboto, " +
+/** Landing-page font names with installed system fallbacks. */
+const INTERFACE_STACK = "'DM Sans', 'Segoe UI', Roboto, " +
   "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif";
 
-/** The app's figure and identifier family, with the same treatment. */
+const HEADING_STACK = "'Space Grotesk', 'Segoe UI', Roboto, " +
+  "'Helvetica Neue', Arial, sans-serif";
+
+/** Monospace fallback links and step numbers. */
 const MONO_STACK = "'JetBrains Mono', ui-monospace, SFMono-Regular, " +
   "'Cascadia Mono', Consolas, 'Liberation Mono', monospace";
 
@@ -111,7 +79,7 @@ function toneColour(tone: BrandTone): string {
   if (tone === "critical") return brandPalette.critical;
   if (tone === "warning") return brandPalette.warning;
   if (tone === "info") return brandPalette.info;
-  return brandPalette.primary;
+  return brandPalette.secondary;
 }
 
 const PARAGRAPH_STYLE = `margin:0;font-family:${INTERFACE_STACK};` +
@@ -139,7 +107,7 @@ function steps(values: string[]): string {
     "<tr>" +
     `<td width="28" valign="top" style="padding:0 0 12px;` +
     `font-family:${MONO_STACK};font-size:13px;line-height:24px;` +
-    `font-weight:500;color:${brandPalette.primary};">` +
+    `font-weight:500;color:${brandPalette.secondary};">` +
     `${index + 1}.</td>` +
     `<td valign="top" style="padding:0 0 12px;` +
     `font-family:${INTERFACE_STACK};font-size:15px;line-height:24px;` +
@@ -148,7 +116,7 @@ function steps(values: string[]): string {
   ).join("");
   return `<tr><td style="padding-top:20px;">` +
     `<table role="presentation" cellpadding="0" cellspacing="0" ` +
-    `border="0" width="100%">${rows}</table></td></tr>`;
+    `border="0" width="100%" style="table-layout:fixed;">${rows}</table></td></tr>`;
 }
 
 /**
@@ -198,12 +166,12 @@ function actionFallback(action: BrandedAction): string {
     "</td></tr>" +
     `<tr><td style="padding-top:10px;">` +
     `<table role="presentation" cellpadding="0" cellspacing="0" ` +
-    `border="0" width="100%"><tr>` +
+    `border="0" width="100%" style="table-layout:fixed;"><tr>` +
     `<td bgcolor="${brandPalette.surface}" style="padding:14px 16px;` +
     `border:1px solid ${brandPalette.hairline};border-radius:10px;` +
     `font-family:${MONO_STACK};font-size:12px;line-height:20px;` +
     `word-break:break-all;overflow-wrap:break-word;">` +
-    `<a href="${url}" style="color:${brandPalette.primary};` +
+    `<a href="${url}" style="color:${brandPalette.secondary};` +
     `text-decoration:none;word-break:break-all;">${url}</a>` +
     "</td></tr></table></td></tr>";
 }
@@ -213,7 +181,7 @@ function noticePanel(notice: BrandedNotice): string {
   const colour = toneColour(notice.tone);
   return `<tr><td style="padding-top:32px;">` +
     `<table role="presentation" cellpadding="0" cellspacing="0" ` +
-    `border="0" width="100%"><tr>` +
+    `border="0" width="100%" style="table-layout:fixed;"><tr>` +
     `<td bgcolor="${brandPalette.elevated}" style="padding:18px 20px;` +
     `border-left:3px solid ${colour};border-radius:4px 10px 10px 4px;">` +
     `<p style="margin:0 0 6px;font-family:${INTERFACE_STACK};` +
@@ -225,41 +193,23 @@ function noticePanel(notice: BrandedNotice): string {
     "</td></tr></table></td></tr>";
 }
 
-/**
- * The wordmark: a mint tile carrying the brand's initial, beside the name in
- * tracked caps. Outlook squares off the tile's corners and nothing else about
- * it changes, which is the whole reason the mark is a letter in a cell rather
- * than a shape that has to be a picture.
- */
+/** Approved UzaPay logo on the landing page's deep-green header. */
 function masthead(): string {
-  return `<tr><td style="padding:0 0 28px;">` +
-    `<table role="presentation" cellpadding="0" cellspacing="0" ` +
-    `border="0"><tr>` +
-    `<td width="40" height="40" align="center" valign="middle" ` +
-    `bgcolor="${brandPalette.primary}" style="width:40px;height:40px;` +
-    `border-radius:11px;font-family:${INTERFACE_STACK};font-size:20px;` +
-    `line-height:40px;font-weight:700;color:${brandPalette.onPrimary};">` +
-    `${htmlEscape(BRAND_NAME.slice(0, 1))}</td>` +
-    `<td style="padding-left:12px;` +
-    `font-family:${INTERFACE_STACK};font-size:15px;line-height:40px;` +
-    `font-weight:600;letter-spacing:0.14em;text-transform:uppercase;` +
-    `color:${brandPalette.ink};">${htmlEscape(BRAND_NAME)}</td>` +
-    "</tr></table></td></tr>";
+  return '<tr><td bgcolor="#0c1510" ' +
+    'style="padding:30px 40px;background-color:#0c1510;' +
+    'border-radius:18px 18px 0 0;">' +
+    '<img src="https://uzapay.co.ke/assets/brand/uzapay-logo.webp" ' +
+    'width="160" alt="UzaPay" style="display:block;width:160px;' +
+    'max-width:100%;height:auto;color:#f7f9f4;font-family:Arial,sans-serif;' +
+    'font-size:24px;"></td></tr>';
 }
 
-/**
- * Progressive enhancement only.
- *
- * The mobile query tightens the gutters and stretches the button; the
- * `[data-ogsc]` and `[data-ogsb]` selectors are Outlook.com's dark mode, which
- * repaints a palette it thinks is light and has to be told this one is not.
- * Losing all of it costs the design nothing a recipient would name.
- */
+/** Mobile spacing and explicit colours for clients that support overrides. */
 const PROGRESSIVE_STYLES = `
-    :root { color-scheme: dark; supported-color-schemes: dark; }
+    :root { color-scheme: light; supported-color-schemes: light; }
     body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
     table { border-collapse: collapse; }
-    a { color: ${brandPalette.primary}; }
+    a { color: ${brandPalette.secondary}; }
     .cta:hover { background-color: ${brandPalette.primaryBright} !important; }
     [data-ogsc] .ink { color: ${brandPalette.ink} !important; }
     [data-ogsc] .muted { color: ${brandPalette.outline} !important; }
@@ -274,14 +224,13 @@ const PROGRESSIVE_STYLES = `
 
 export function renderBrandedEmailHtml(email: BrandedEmail): string {
   const sections = [
-    masthead(),
     "<tr><td>" +
       `<p style="margin:0;font-family:${INTERFACE_STACK};font-size:12px;` +
       `line-height:16px;font-weight:700;letter-spacing:0.12em;` +
-      `text-transform:uppercase;color:${brandPalette.primary};">` +
+      `text-transform:uppercase;color:${brandPalette.secondary};">` +
       `${htmlEscape(email.eyebrow)}</p></td></tr>`,
     `<tr><td style="padding-top:12px;">` +
-      `<h1 class="title ink" style="margin:0;font-family:${INTERFACE_STACK};` +
+      `<h1 class="title ink" style="margin:0;font-family:${HEADING_STACK};` +
       `font-size:30px;line-height:38px;font-weight:700;` +
       `letter-spacing:-0.02em;color:${brandPalette.ink};">` +
       `${htmlEscape(email.title)}</h1></td></tr>`,
@@ -306,8 +255,8 @@ export function renderBrandedEmailHtml(email: BrandedEmail): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="x-ua-compatible" content="ie=edge">
 <meta name="x-apple-disable-message-reformatting">
-<meta name="color-scheme" content="dark">
-<meta name="supported-color-schemes" content="dark">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
 <title>${htmlEscape(email.title)}</title>
 <!--[if mso]>
 <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
@@ -320,9 +269,10 @@ export function renderBrandedEmailHtml(email: BrandedEmail): string {
 <table role="presentation" class="canvas" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="${brandPalette.canvas}" style="background-color:${brandPalette.canvas};">
 <tr><td class="gutter" align="center" style="padding:40px 24px;">
 <!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600"><tr><td><![endif]-->
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;">
-<tr><td class="card pad" bgcolor="${brandPalette.card}" style="padding:40px;background-color:${brandPalette.card};border:1px solid ${brandPalette.hairline};border-radius:18px;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">${sections}</table>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;table-layout:fixed;">
+${masthead()}
+<tr><td class="card pad" bgcolor="${brandPalette.card}" style="padding:40px;background-color:${brandPalette.card};border:1px solid ${brandPalette.hairline};border-radius:0 0 18px 18px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed;">${sections}</table>
 </td></tr>
 <tr><td style="padding:24px 8px 0;">
 <p class="muted" style="margin:0;font-family:${INTERFACE_STACK};font-size:12px;line-height:19px;color:${brandPalette.outline};">${htmlEscape(email.footnote)}</p>

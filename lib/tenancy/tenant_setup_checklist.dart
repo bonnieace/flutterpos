@@ -5,13 +5,13 @@
 /// `configurationUnavailable` until it does. Nothing on the home said so. The
 /// owner of a brand-new shop tapped *Register*, got a refusal naming a
 /// configuration they had never heard of, and had no way to learn that the
-/// answer was two taps away under *Settings*.
+/// answer was two taps away under *Configs*.
 ///
 /// **Two steps, and they are the two that actually stop a sale.** Currency,
 /// because the till will not price anything without it, and at least one
 /// product, because there is nothing to ring up. Business details and the
 /// printer matter and are *not* here: neither blocks a sale, both are one tap
-/// away in *Settings*, and a checklist that lists everything is a checklist
+/// away in *Business*, and a checklist that lists everything is a checklist
 /// nobody finishes.
 ///
 /// **It costs no Firestore read, which is the constraint it was built under.**
@@ -212,7 +212,7 @@ final class _SetupRow extends StatelessWidget {
             child: AppButton(
               key: ValueKey('setup-open-${step.name}'),
               label: switch (step) {
-                TenantSetupStep.currency => 'Open settings',
+                TenantSetupStep.currency => 'Open Configs',
                 TenantSetupStep.products => 'Open inventory',
               },
               tier: AppButtonTier.secondary,

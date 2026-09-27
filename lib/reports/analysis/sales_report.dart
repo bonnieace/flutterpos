@@ -30,8 +30,7 @@ final class TenantSalesReportSource {
 
   final TenantSaleHistoryRepository repository;
 
-  /// Nets takings against what came back. Optional: a report without it prints
-  /// gross takings and says so.
+  /// Required by [gatherAnalysis]. Raw sales readers may omit this loader.
   final TenantDayReturnsLoader? returnsLoader;
 
   /// The repository's own ceiling. Asking for more is a `RangeError`.
@@ -72,7 +71,7 @@ final class TenantSalesReportSource {
 
   /// The same read over the preceding comparable window.
   ///
-  /// **Allowed to fail, and allowed to be short.** It is the comparison, not
+  /// **Allowed to fail, but never compared when short.** It is the comparison, not
   /// the report: a business a month old has no earlier period, and a read that
   /// could not reach one must not stop the figures the person asked for.
   /// Null where the earlier window could not be read at all, which the report
@@ -83,10 +82,58 @@ final class TenantSalesReportSource {
   }) async {
     try {
       final read = await gather(period.precedingComparable, staffId: staffId);
-      return read.sales;
+      return read.truncated ? null : read.sales;
     } on Object {
       return null;
     }
+  }
+
+  /// Reads and nets both windows. A failed return read must never silently
+  /// turn the requested period into gross takings. An unreadable comparison
+  /// can be omitted without losing the requested report.
+  Future<TenantSalesAnalysis> gatherAnalysis(TenantReportPeriod period) async {
+    if (returnsLoader == null) {
+      throw StateError('Sales reports require return offsets.');
+    }
+    final read = await gather(period);
+    final offsets = await _returnOffsets(read.sales);
+    var previous = await gatherPrevious(period);
+    var previousOffsets = <String, TenantSaleReturnOffset>{};
+    if (previous != null) {
+      try {
+        previousOffsets = await _returnOffsets(previous);
+      } on Object {
+        previous = null;
+      }
+    }
+    return TenantSalesAnalysis.from(
+      period: period,
+      sales: read.sales,
+      previous: previous,
+      returnOffsets: offsets,
+      previousReturnOffsets: previousOffsets,
+      truncated: read.truncated,
+      documentsRead: read.sales.length + (previous?.length ?? 0),
+    );
+  }
+
+  Future<Map<String, TenantSaleReturnOffset>> _returnOffsets(
+    List<TenantSale> sales,
+  ) async {
+    final byDate = <String, List<TenantSale>>{};
+    for (final sale in sales) {
+      byDate.putIfAbsent(sale.businessDate, () => []).add(sale);
+    }
+    final offsets = <String, TenantSaleReturnOffset>{};
+    for (final entry in byDate.entries) {
+      final returns = await returnsLoader!.load(entry.key);
+      for (final sale in entry.value) {
+        if (returns.offsetFor(sale) case final offset?) {
+          offsets[sale.id] = offset;
+        }
+      }
+    }
+    return offsets;
   }
 }
 
@@ -117,16 +164,13 @@ TenantReportDocument describeSalesReport({
             : analysis.previousRevenueMinor! / 100,
         note: analysis.returnedMinor == 0
             ? null
-            : '${money(analysis.returnedMinor)} was handed back, leaving '
-                  '${money(analysis.netRevenueMinor)} net.',
+            : 'After ${money(analysis.returnedMinor)} in returns.',
       ),
       // The margin figure carries its own denominator rather than leaving the
       // qualification to a scope block somebody may not read.
       TenantReportFigure(
         label: 'Gross margin',
-        value: analysis.lineCount == 0
-            ? money(0)
-            : money(analysis.marginMinor),
+        value: analysis.lineCount == 0 ? money(0) : money(analysis.marginMinor),
         amount: analysis.marginMinor / 100,
         note: analysis.isCostComplete
             ? null
@@ -173,9 +217,8 @@ TenantReportScope _scope(TenantSalesAnalysis analysis) {
       const TenantReportCaveat(
         kind: TenantReportCaveatKind.noEvidence,
         sentence:
-            'The period before this one could not be read, so nothing here is '
-            'compared against it. The figures for the period asked for are '
-            'complete.',
+            'The period before this one could not be read completely, so '
+            'nothing here is compared against it.',
       ),
   ];
 
@@ -482,6 +525,3 @@ const int _rankedProducts = 10;
 
 /// How many rows the product table carries. The workbook has every one.
 const int _listedProducts = 30;
-
-
-

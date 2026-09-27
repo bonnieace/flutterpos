@@ -84,16 +84,14 @@ Widget _production() {
 Future<void> _fillBatch(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('production-record')));
   await tester.pumpAndSettle();
-  await tester.tap(find.byKey(const ValueKey('production-choose-product')));
-  await tester.pumpAndSettle();
   await tester.enterText(
-    find.byKey(const ValueKey('product-picker-search')),
+    find.byKey(const ValueKey('product-typeahead-search')),
     'bread',
   );
   await tester.pump(const Duration(seconds: 1));
   await tester.pumpAndSettle();
   await tester.tap(
-    find.byKey(const ValueKey('product-picker-choose-pd-bread-white')),
+    find.byKey(const ValueKey('product-typeahead-pd-bread-white')),
   );
   await tester.pumpAndSettle();
   await tester.enterText(

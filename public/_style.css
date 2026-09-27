@@ -1,240 +1,104 @@
-/*
-  The stylesheet behind every page an emailed link can land on.
-
-  These pages are the only part of the product a customer sees in a browser, and
-  until now they were the only part that did not look like the product: a warm
-  light card on `#f6f5f2` with a bottle-green accent, none of which appears
-  anywhere in the app. Every value below is `AppColorRoles.profoundVerdant` and
-  `AppTypeRoles.profoundVerdant` from `lib/ui/tokens.dart`, so a page reached
-  from an email, the email itself, and the screen the app opens next are the
-  same three surfaces.
-
-  The palette is dark and has no light variant on purpose. `lib/ui/tokens.dart`
-  says it plainly - the design system defines one scheme, "no light palette to
-  write down and none is invented here" - so this file declares `color-scheme:
-  dark` and commits, rather than inventing a second palette that no screen in
-  the app could be checked against.
-*/
-
-/* ------------------------------------------------------------------ */
-/* The brand family, self-hosted.                                     */
-/*                                                                    */
-/* Two weights, not four: 400 carries the body and 700 carries every  */
-/* heading, wordmark and eyebrow, which is the whole of what these     */
-/* pages set. `swap` means the first paint uses the stack below and    */
-/* upgrades in place, so a slow network costs a reflow rather than a   */
-/* blank card.                                                        */
-/* ------------------------------------------------------------------ */
-@font-face {
-  font-family: 'Hanken Grotesk';
-  src: url('/_fonts/HankenGrotesk-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Hanken Grotesk';
-  src: url('/_fonts/HankenGrotesk-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
+/* UzaPay email-link pages: shared palette and layout with the email templates. */
 :root {
-  color-scheme: dark;
-
-  /* Surfaces, darkest to lightest. */
-  --canvas: #03110b;
-  --surface: #071610;
-  --card: #0d1f16;
-  --elevated: #132a1f;
-  --raised: #283831;
-
-  /* Content on those surfaces. */
-  --ink: #d4e7dd;
-  --muted: #bccbb9;
-  --outline: #869585;
-  --hairline: #3d4a3d;
-
-  /* The action greens, and the three status tiers. */
-  --primary: #4be277;
-  --primary-bright: #6bff8f;
-  --on-primary: #003915;
-  --critical: #ef4444;
-  --warning: #f2c14e;
-  --info: #6fb7f2;
-
-  --interface: 'Hanken Grotesk', 'Segoe UI', Roboto, -apple-system,
+  color-scheme: light;
+  --canvas: #f8f8f4;
+  --surface: #f3f5ef;
+  --card: #ffffff;
+  --header: #0c1510;
+  --ink: #0e1511;
+  --muted: #536158;
+  --outline: #667269;
+  --hairline: #dbe1da;
+  --primary: #c8ff5f;
+  --accent: #355c49;
+  --critical: #b42318;
+  --warning: #87600d;
+  --info: #355c49;
+  --interface: 'DM Sans', 'Segoe UI', Roboto, -apple-system,
     BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --heading: 'Space Grotesk', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, 'Cascadia Mono', Consolas,
     'Liberation Mono', monospace;
-
-  --radius-card: 18px;
-  --radius-inset: 10px;
 }
-
 * { box-sizing: border-box; }
-
 body {
   margin: 0;
   min-height: 100vh;
   min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 32px 20px;
+  padding: 40px 24px;
+  background: var(--canvas);
   color: var(--ink);
-  font: 400 16px/1.5 var(--interface);
+  font: 400 15px/1.6 var(--interface);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-
-  /*
-    A verdant wash off the top of the page, over the flat canvas beneath it.
-    The gradient is decoration and the `background-color` underneath it is the
-    contract: a browser that refuses the gradient still gets a dark ground with
-    the same contrast against the card, rather than white.
-  */
-  background-color: var(--canvas);
-  background-image:
-    radial-gradient(90rem 45rem at 50% -20%, #0f2c1f 0%, transparent 62%),
-    radial-gradient(38rem 26rem at 82% 8%, rgba(75, 226, 119, 0.07) 0%,
-      transparent 70%);
-  background-repeat: no-repeat;
-  background-attachment: fixed;
 }
-
 main {
   width: 100%;
-  max-width: 32rem;
-  padding: 40px 36px;
+  min-width: 0;
+  max-width: 600px;
   background: var(--card);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-card);
-
-  /*
-    Two shadows: a wide, nearly black one that lifts the card off the canvas,
-    and a one-pixel inner highlight along the top edge that reads as a lit
-    surface rather than a lighter rectangle.
-  */
-  box-shadow:
-    0 24px 60px -24px rgba(0, 0, 0, 0.75),
-    inset 0 1px 0 rgba(212, 231, 221, 0.05);
+  border-radius: 18px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
-
-/* ------------------------------------------------------------------ */
-/* The lockup: the same mint tile and tracked wordmark the emails set,  */
-/* so a page reached from one is recognisably the message continuing.   */
-/* ------------------------------------------------------------------ */
-.mark {
+.brand-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  margin: 0 0 28px;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink);
+  gap: 16px;
+  padding: 30px 40px;
+  background: var(--header);
+  color: #f7f9f4;
 }
-.mark::before {
-  content: 'C';
-  flex: none;
-  margin-right: 12px;
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: 11px;
-  background: var(--primary);
-  color: var(--on-primary);
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-.mark .sub { color: var(--outline); }
-
-/* `label-caps`: 12 / 1.0 / 700 / +0.05em, the design's own small-label role. */
+.brand-logo { display: block; width: 160px; max-width: 100%; height: auto; }
+.brand-header .sub { color: #f7f9f4; font-size: 13px; }
+.content { padding: 40px; }
 .eyebrow {
   margin: 0 0 12px;
   font-size: 12px;
-  line-height: 1;
+  line-height: 16px;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--primary);
+  color: var(--accent);
 }
-
-/* `headline-lg`: 32 / 1.2 / 700 / -0.02em. */
 h1 {
   margin: 0 0 14px;
+  font-family: var(--heading);
   font-size: 30px;
-  line-height: 1.2;
+  line-height: 38px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -.02em;
   color: var(--ink);
 }
-
-p {
-  margin: 0 0 14px;
-  color: var(--muted);
-}
-p.lead {
-  color: var(--ink);
-  font-size: 17px;
-  line-height: 1.6;
-}
-p:last-of-type { margin-bottom: 0; }
-
-a {
-  color: var(--primary);
-  text-decoration: none;
-  border-bottom: 1px solid rgba(75, 226, 119, 0.35);
-}
-a:hover { color: var(--primary-bright); border-bottom-color: currentColor; }
-
-/*
-  Accessibility is pass/fail, and a focus ring is the half of it a mouse never
-  exercises. Two colours so the ring is visible whichever surface it lands on.
-*/
-:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* ------------------------------------------------------------------ */
-/* The confirmation roundel. An inline SVG tick rather than `&check;`,  */
-/* which renders as a different glyph in every third font and has no    */
-/* accessible name of its own.                                          */
-/* ------------------------------------------------------------------ */
+p { margin: 0 0 16px; color: var(--muted); }
+p.lead { color: var(--ink); font-size: 17px; line-height: 27px; }
+p:last-child { margin-bottom: 0; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:hover { color: var(--header); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .tick {
   width: 52px;
   height: 52px;
   display: grid;
   place-items: center;
-  margin: 0 0 22px;
+  margin: 0 0 24px;
   border-radius: 50%;
   background: var(--primary);
-  color: var(--on-primary);
-  box-shadow: 0 0 0 8px rgba(75, 226, 119, 0.1);
+  color: var(--header);
 }
 .tick svg { display: block; width: 26px; height: 26px; }
-
-/* ------------------------------------------------------------------ */
-/* Numbered steps, drawn to match the numbered rows in the emails.      */
-/* ------------------------------------------------------------------ */
-ol.steps {
-  margin: 22px 0 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
-}
+ol.steps { margin: 22px 0; padding: 0; list-style: none; counter-reset: step; }
 ol.steps li {
   counter-increment: step;
   position: relative;
   padding: 0 0 14px 34px;
   color: var(--ink);
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 24px;
 }
 ol.steps li:last-child { padding-bottom: 0; }
 ol.steps li::before {
@@ -244,17 +108,24 @@ ol.steps li::before {
   top: 0;
   font-family: var(--mono);
   font-size: 13px;
-  line-height: 24px;
-  color: var(--primary);
+  color: var(--accent);
 }
-
-/* A tinted panel for the one line that must not be skimmed past. */
 .notice {
-  margin: 26px 0 0;
-  padding: 16px 18px;
-  background: var(--elevated);
-  border-left: 3px solid var(--primary);
-  border-radius: 4px var(--radius-inset) var(--radius-inset) 4px;
+  margin: 32px 0 0;
+  padding: 18px 20px;
+  background: var(--surface);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px 10px 10px 4px;
+}
+.notice p { margin: 0; color: var(--ink); font-size: 14px; line-height: 22px; }
+.notice .notice-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 .notice.warning { border-left-color: var(--warning); }
 .notice.warning .notice-title { color: var(--warning); }
@@ -262,33 +133,16 @@ ol.steps li::before {
 .notice.critical .notice-title { color: var(--critical); }
 .notice.info { border-left-color: var(--info); }
 .notice.info .notice-title { color: var(--info); }
-.notice-title {
-  margin: 0 0 6px;
-  font-size: 12px;
-  line-height: 1;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--primary);
-}
-.notice p { margin: 0; color: var(--ink); font-size: 14px; line-height: 1.6; }
-
 footer {
   margin-top: 28px;
   padding-top: 18px;
   border-top: 1px solid var(--hairline);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 19px;
   color: var(--outline);
 }
 footer strong { color: var(--muted); font-weight: 700; }
-footer p {
-  margin: 0;
-  color: inherit;
-  font-size: inherit;
-  line-height: inherit;
-}
-
+footer p { margin: 0; color: inherit; font-size: inherit; line-height: inherit; }
 code {
   font-family: var(--mono);
   font-size: 12px;
@@ -299,26 +153,9 @@ code {
   color: var(--muted);
   word-break: break-all;
 }
-
-/*
-  The card rises once on load. It is spatial, so it is a spring rather than a
-  curve, and it is decoration, so `prefers-reduced-motion` removes it outright
-  instead of shortening it.
-*/
-@media (prefers-reduced-motion: no-preference) {
-  main {
-    animation: rise 620ms linear(
-      0, 0.35 12%, 0.72 22%, 0.95 31%, 1.04 41%, 1.02 57%, 1) both;
-  }
-  @keyframes rise {
-    from { opacity: 0; transform: translateY(14px); }
-    to { opacity: 1; transform: none; }
-  }
-}
-
-@media (max-width: 30rem) {
-  body { padding: 20px 14px; }
-  main { padding: 30px 22px; border-radius: 16px; }
-  h1 { font-size: 26px; }
-  p.lead { font-size: 16px; }
+@media (max-width: 600px) {
+  body { padding: 24px 16px; }
+  .brand-header { padding: 28px 22px; }
+  .content { padding: 28px 22px; }
+  h1 { font-size: 26px; line-height: 34px; }
 }

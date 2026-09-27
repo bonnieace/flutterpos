@@ -1,29 +1,30 @@
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "images/logo.png"
+  image_path: "images/uzapay-app-icon.png"
   
   # Android specific
-  adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "images/logo.png"
+  adaptive_icon_background: "#071610"
+  adaptive_icon_foreground: "images/uzapay-app-icon.png"
   
   # Remove alpha channel for iOS (required)
   remove_alpha_ios: true
+  background_color_ios: "#071610"
   
   # Web
   web:
     generate: true
-    image_path: "images/logo.png"
-    background_color: "#FFFFFF"
-    theme_color: "#FFFFFF"
+    image_path: "images/uzapay-app-icon.png"
+    background_color: "#071610"
+    theme_color: "#071610"
   
   # Windows
   windows:
     generate: true
-    image_path: "images/logo.png"
+    image_path: "images/uzapay-app-icon.png"
     icon_size: 48
   
   # macOS
   macos:
     generate: true
-    image_path: "images/logo.png"
+    image_path: "images/uzapay-app-icon.png"

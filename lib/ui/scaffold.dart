@@ -685,7 +685,7 @@ final class _NavigationColumn extends StatelessWidget {
 /// The product's mark and name, for [AppScaffold.toolbarTitle].
 ///
 /// The export's top-bar lockup: a bordered 32-square tile carrying the mark,
-/// then `Chilltent POS` at `body.lg` weight 700 in the accent. Every value is
+/// then `UzaPay` at `body.lg` weight 700 in the accent. Every value is
 /// a role - `surface.field` behind the tile, `border.strong` around it,
 /// `radius.sm` on its corner, and `action.primary.container` for both the
 /// glyph and the name.
@@ -715,7 +715,10 @@ final class AppBrandLockup extends StatelessWidget {
             borderRadius: BorderRadius.circular(tokens.radius.sm),
             border: Border.all(color: tokens.colors.surface.borderStrong),
           ),
-          child: Icon(Icons.storefront, size: 18, color: accent),
+          child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: Image.asset('images/uzapay-mark.png', fit: BoxFit.contain),
+          ),
         ),
         SizedBox(width: tokens.spacing.s8),
         // **Flexible, because the toolbar shares its middle slot.** A title
@@ -725,7 +728,7 @@ final class AppBrandLockup extends StatelessWidget {
         // name on two lines in a 56-high toolbar is worse than an ellipsis.
         Flexible(
           child: Text(
-            'Chilltent POS',
+            'UzaPay',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: tokens.typography.bodyLarge.copyWith(

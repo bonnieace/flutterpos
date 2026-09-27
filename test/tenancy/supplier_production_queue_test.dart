@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_application_1/production/production_batch.dart';
@@ -312,6 +313,46 @@ void main() {
           states['supplier-delivery-sd_1-p000'],
           TenantPendingMutationState.confirmed,
         );
+      },
+    );
+
+    test(
+      'wakes a delivery when its supplier commits in the same pass',
+      () async {
+        await store.enqueue(
+          uid: 'user-a',
+          tenantId: 'tenant-a',
+          operationId: 'supplier-create-sp_abc',
+          kind: TenantPendingMutationKind.supplierCreate,
+          targetPath: 'tenants/tenant-a/suppliers/sp_abc',
+          payload: const <String, Object?>{'name': 'ABC', 'active': true},
+        );
+        await queuePage();
+        final gateway = _Gateway();
+        void Function()? scheduled;
+        var wakeSignals = 0;
+        Timer? timer;
+        final worker = TenantPendingMutationWorker(
+          store: store,
+          submission: gateway,
+          confirmation: gateway,
+          workerId: 'device-a',
+          onRetryDue: () => wakeSignals++,
+          timer: (delay, callback) {
+            expect(delay, TenantPendingMutationWorker.minimumWake);
+            scheduled = callback;
+            return timer = Timer(const Duration(days: 1), () {});
+          },
+        );
+
+        await worker.run(_session());
+        expect(gateway.submitted, <String>['supplier-create-sp_abc']);
+        expect(scheduled, isNotNull);
+        timer!.cancel();
+        scheduled!();
+        expect(wakeSignals, 1);
+        await worker.run(_session());
+        expect(gateway.submitted, contains('supplier-delivery-sd_1-p000'));
       },
     );
 

@@ -76,7 +76,6 @@ dependencies:
   # and an App Check token together, and "No AppCheckProvider installed"
   # makes that pair fail as "1 out of 2 underlying tasks failed".
   firebase_app_check: ^0.4.0
-  # flutter_typeahead: ^4.8.0
   flutter_launcher_icons: ^0.14.4
 
   fl_chart: ^1.1.1
@@ -100,6 +99,7 @@ dependencies:
   excel: ^4.0.6
   sentry_flutter: ^9.21.0
   flutter_svg: ^2.3.0
+  flutter_typeahead: 6.0.0
   
   
 
@@ -205,21 +205,22 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: "AppIcon"
-  image_path: "images/logo.png"
+  image_path: "images/uzapay-app-icon.png"
   min_sdk_android: 21
   remove_alpha_ios: true
+  background_color_ios: "#071610"
 
 flutter_native_splash:
-  color: "#FFFFFF"
-  color_dark: "#000000"
-  image: images/logo.png
-  image_dark: images/logo.png
+  color: "#071610"
+  color_dark: "#071610"
+  image: images/uzapay-mark.png
+  image_dark: images/uzapay-mark.png
 
   android_12:
-    color: "#FFFFFF"
-    color_dark: "#000000"
-    image: images/logo.png
-    image_dark: images/logo.png
+    color: "#071610"
+    color_dark: "#071610"
+    image: images/uzapay-android12.png
+    image_dark: images/uzapay-android12.png
 
  
   web: true

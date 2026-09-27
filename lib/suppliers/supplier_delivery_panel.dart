@@ -10,7 +10,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../checkout/checkout_draft.dart';
-import '../inventory/product_picker.dart';
+import '../inventory/product_typeahead.dart';
 import '../reporting/reporting_currency.dart';
 import '../reports/analysis/report_prose.dart';
 import '../tenancy/tenant_catalog.dart';
@@ -249,6 +249,8 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
 
   final TextEditingController _reference = TextEditingController();
   final List<_LineState> _lines = <_LineState>[];
+  final List<int> _openProductFields = <int>[0];
+  int _nextProductField = 1;
   bool _busy = false;
   String? _error;
 
@@ -302,21 +304,22 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
     if (added case final id?) widget.onSupplierAdded(id);
   }
 
-  Future<void> _addProduct() async {
-    final product = await showTenantProductPicker(
-      context,
-      session: widget.session,
-      reader: widget.reader,
-      productSearchReader: widget.services.productSearchReader,
-      excludedIds: <String>{for (final line in _lines) line.product.id},
-      title: 'Add a product to this delivery',
-    );
-    if (product == null || !mounted) return;
+  void _addProduct() => setState(() {
+    _openProductFields.add(_nextProductField++);
+  });
+
+  void _selectProduct(int field, TenantProduct product) {
+    if (_lines.any((line) => line.product.id == product.id)) return;
     setState(() {
+      _openProductFields.remove(field);
       _lines.add(_LineState(product));
       _error = null;
     });
   }
+
+  void _removeProductField(int field) => setState(() {
+    _openProductFields.remove(field);
+  });
 
   void _remove(_LineState line) => setState(() {
     _lines.remove(line);
@@ -565,13 +568,44 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
               color: tokens.colors.text.tertiary,
             ),
           ),
+        for (final field in _openProductFields) ...<Widget>[
+          SizedBox(height: tokens.spacing.s12),
+          Row(
+            key: ValueKey('delivery-product-field-$field'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: TenantProductTypeAhead(
+                  session: widget.session,
+                  reader: widget.reader,
+                  productSearchReader: widget.services.productSearchReader,
+                  label: 'Product',
+                  excludedIds: <String>{
+                    for (final line in _lines) line.product.id,
+                  },
+                  enabled: !_busy,
+                  onSelected: (product) => _selectProduct(field, product),
+                ),
+              ),
+              IconButton(
+                key: ValueKey('delivery-product-field-remove-$field'),
+                tooltip: 'Remove product search',
+                icon: Icon(Icons.close, color: tokens.colors.text.secondary),
+                onPressed: _busy ? null : () => _removeProductField(field),
+              ),
+            ],
+          ),
+        ],
         SizedBox(height: tokens.spacing.s12),
         AppButton(
           key: const ValueKey('delivery-add-product'),
           label: 'Add product',
           icon: Icons.add,
           expand: true,
-          onPressed: _busy || _lines.length >= maximumDeliveryLines
+          onPressed:
+              _busy ||
+                  _lines.length + _openProductFields.length >=
+                      maximumDeliveryLines
               ? null
               : _addProduct,
         ),

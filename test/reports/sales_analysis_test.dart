@@ -9,6 +9,7 @@ library;
 import 'package:flutter_application_1/checkout/checkout_tender.dart';
 import 'package:flutter_application_1/reports/analysis/sales_analysis.dart';
 import 'package:flutter_application_1/reports/report_period.dart';
+import 'package:flutter_application_1/returns/return_offsets.dart';
 import 'package:flutter_application_1/sales/sale_history.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -45,6 +46,81 @@ TenantSale _sale({
 );
 
 void main() {
+  test('partial returns net every sales measure and the comparison', () {
+    final current = fixtureSale(
+      id: 'co-current',
+      businessDate: '2026-09-10',
+      discountMinor: 2000,
+      lines: <Map<String, Object?>>[
+        saleLine(
+          productId: 'p-1',
+          name: 'Thing',
+          quantity: 2,
+          unitPriceMinor: 10000,
+          unitCostMinor: 6000,
+        ),
+      ],
+    );
+    final prior = fixtureSale(
+      id: 'co-prior',
+      businessDate: '2026-09-03',
+      lines: <Map<String, Object?>>[
+        saleLine(
+          productId: 'p-1',
+          name: 'Thing',
+          quantity: 2,
+          unitPriceMinor: 10000,
+          unitCostMinor: 6000,
+        ),
+      ],
+    );
+    final analysis = TenantSalesAnalysis.from(
+      period: _period(),
+      sales: <TenantSale>[current],
+      previous: <TenantSale>[prior],
+      returnOffsets: <String, TenantSaleReturnOffset>{
+        current.id: describeReturnOffset(current, const {'p-1': 1}),
+      },
+      previousReturnOffsets: <String, TenantSaleReturnOffset>{
+        prior.id: describeReturnOffset(prior, const {'p-1': 1}),
+      },
+    );
+
+    expect(analysis.revenueMinor, 9000);
+    expect(analysis.costMinor, 6000);
+    expect(analysis.discountMinor, 1000);
+    expect(analysis.transactions, 1);
+    expect(analysis.itemsSold, 1);
+    expect(analysis.items.single.revenueMinor, 9000);
+    expect(analysis.items.single.quantity, 1);
+    expect(analysis.tenders.single.minor, 9000);
+    expect(analysis.dailyMinor['2026-09-10'], 9000);
+    expect(analysis.previousRevenueMinor, 10000);
+    expect(analysis.previousTransactions, 1);
+  });
+
+  test('fully returned sale leaves no transaction, cost, or product', () {
+    final sale = _sale(
+      id: 'co-full',
+      soldById: 'user-a',
+      unitPriceMinor: 10000,
+    );
+    final analysis = TenantSalesAnalysis.from(
+      period: _period(),
+      sales: <TenantSale>[sale],
+      returnOffsets: <String, TenantSaleReturnOffset>{
+        sale.id: describeReturnOffset(sale, const {'p-1': 1}),
+      },
+    );
+
+    expect(analysis.revenueMinor, 0);
+    expect(analysis.transactions, 0);
+    expect(analysis.itemsSold, 0);
+    expect(analysis.items, isEmpty);
+    expect(analysis.tenders, isEmpty);
+    expect(analysis.fullyReturnedSales, 1);
+  });
+
   group('the best seller is not the best earner', () {
     test('margin ranks differently from takings', () {
       final analysis = _analysis(<TenantSale>[
@@ -88,7 +164,8 @@ void main() {
       expect(
         analysis.sellerEarnerDiffer,
         isTrue,
-        reason: 'The condition for printing the sentence is a field, so a '
+        reason:
+            'The condition for printing the sentence is a field, so a '
             'renderer cannot forget to make the comparison.',
       );
     });
@@ -197,7 +274,12 @@ void main() {
               unitPriceMinor: 1000,
               unitCostMinor: 600,
             ),
-            saleLine(productId: 'c', name: 'C', quantity: 1, unitPriceMinor: 1000),
+            saleLine(
+              productId: 'c',
+              name: 'C',
+              quantity: 1,
+              unitPriceMinor: 1000,
+            ),
           ],
         ),
       ]);
@@ -438,16 +520,9 @@ void main() {
       // a claim about the evidence rather than about the shop. Read-and-empty
       // and not-read are different facts and the report says different things
       // about them.
-      final empty = _analysis(
-        <TenantSale>[
-          _sale(
-            id: 'co-1',
-            soldById: 'u-a',
-            unitPriceMinor: 12000,
-          ),
-        ],
-        previous: const <TenantSale>[],
-      );
+      final empty = _analysis(<TenantSale>[
+        _sale(id: 'co-1', soldById: 'u-a', unitPriceMinor: 12000),
+      ], previous: const <TenantSale>[]);
 
       expect(
         empty.previousRevenueMinor,
@@ -521,11 +596,7 @@ void main() {
         isFalse,
         reason: 'Soap records no cost, which is the ordinary case.',
       );
-      expect(
-        analysis.quietDays,
-        1,
-        reason: 'The shop was shut on the 14th.',
-      );
+      expect(analysis.quietDays, 1, reason: 'The shop was shut on the 14th.');
       expect(analysis.change, isNotNull);
     });
   });

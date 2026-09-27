@@ -4,6 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
+import 'package:flutter_application_1/reports/analysis/sales_report.dart';
+import 'package:flutter_application_1/reports/report_period.dart';
+import 'package:flutter_application_1/returns/return_offsets.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/fields.dart';
@@ -24,6 +27,69 @@ const _hash =
 
 void main() {
   group('tenant sales report repository', () {
+    test(
+      'export analysis nets a pending return from the current day',
+      () async {
+        final reader = _SalesReader(
+          <TenantQueryDocumentSnapshot>[
+            _sale('co-2', sequence: 2, tender: 'cash'),
+            _sale('co-1', sequence: 1, tender: 'cash'),
+          ],
+          returns: <TenantQueryDocumentSnapshot>[
+            _returnRecord('rt-1', saleId: 'co-1'),
+          ],
+        );
+        final session = _session(role: TenantRole.manager);
+        final source = TenantSalesReportSource(
+          repository: TenantSaleHistoryRepository(
+            session: session,
+            reader: reader,
+            reportReader: reader,
+          ),
+          returnsLoader: TenantDayReturnsLoader(
+            session: session,
+            reader: reader,
+          ),
+        );
+
+        final analysis = await source.gatherAnalysis(
+          TenantReportPeriod(startDate: _businessDate, endDate: _businessDate),
+        );
+
+        expect(analysis.revenueMinor, 900);
+        expect(analysis.transactions, 1);
+        expect(analysis.returnedMinor, 900);
+        expect(analysis.tenders.single.minor, 900);
+        expect(analysis.items.single.quantity, 2);
+      },
+    );
+
+    test(
+      'a truncated preceding period is not offered as a comparison',
+      () async {
+        final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+          _sale('co-2', sequence: 2, businessDate: '2026-08-23'),
+          _sale('co-1', sequence: 1, businessDate: '2026-08-23'),
+        ]);
+        final source = TenantSalesReportSource(
+          repository: TenantSaleHistoryRepository(
+            session: _session(role: TenantRole.manager),
+            reader: reader,
+            reportReader: reader,
+          ),
+          pageSize: 1,
+          maximumPages: 1,
+        );
+
+        final previous = await source.gatherPrevious(
+          TenantReportPeriod(startDate: _businessDate, endDate: _businessDate),
+        );
+
+        expect(previous, isNull);
+        expect(reader.salesQueries.single.limit, 2);
+      },
+    );
+
     test('management receives a stable business-wide range page', () async {
       final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
         _sale('co-3', sequence: 3, soldById: 'user-b'),

@@ -112,7 +112,8 @@ final class TenantSalesAnalysis {
     // into an empty list made a shop with no trading last month look like a
     // shop whose last month could not be reached.
     List<TenantSale>? previous,
-    TenantDayReturns? returns,
+    Map<String, TenantSaleReturnOffset> returnOffsets = const {},
+    Map<String, TenantSaleReturnOffset> previousReturnOffsets = const {},
     bool truncated = false,
     int documentsRead = 0,
   }) {
@@ -122,32 +123,71 @@ final class TenantSalesAnalysis {
     var linesWithoutCost = 0;
     var lineCount = 0;
     var itemsSold = 0;
+    var transactions = 0;
+    var returnedMinor = 0;
+    var fullyReturnedSales = 0;
 
-    final daily = <String, int>{for (final date in period.businessDates) date: 0};
+    final daily = <String, int>{
+      for (final date in period.businessDates) date: 0,
+    };
     final weekday = List<int>.filled(DateTime.daysPerWeek, 0);
     final baskets = <int>[];
     final byProduct = <String, TenantSalesItem>{};
     final byTender = <CheckoutTender?, ({int minor, int count})>{};
 
     for (final sale in sales) {
-      revenue += sale.totalMinor;
-      discount += sale.discountMinor;
-      if (daily.containsKey(sale.businessDate)) {
-        daily[sale.businessDate] = daily[sale.businessDate]! + sale.totalMinor;
+      final offset = returnOffsets[sale.id];
+      returnedMinor += offset?.returnedMinor ?? 0;
+      if (offset?.isFullyReturned == true) {
+        fullyReturnedSales++;
+        continue;
       }
-      weekday[_weekdayIndex(sale.businessDate)] += sale.totalMinor;
-      baskets.add(sale.lines.fold(0, (sum, line) => sum + line.quantity));
+      transactions++;
+      final net = sale.totalMinor - (offset?.returnedMinor ?? 0);
+      revenue += net;
+      final returnedGross = sale.lines.fold<int>(
+        0,
+        (sum, line) =>
+            sum +
+            (offset?.returnedUnitsInScope[line.productId] ?? 0) *
+                line.unitPriceMinor,
+      );
+      discount +=
+          sale.discountMinor - returnedGross + (offset?.returnedMinor ?? 0);
+      if (daily.containsKey(sale.businessDate)) {
+        daily[sale.businessDate] = daily[sale.businessDate]! + net;
+      }
+      weekday[_weekdayIndex(sale.businessDate)] += net;
+      baskets.add(
+        sale.lines.fold(
+          0,
+          (sum, line) =>
+              sum +
+              line.quantity -
+              (offset?.returnedUnitsInScope[line.productId] ?? 0),
+        ),
+      );
 
       final tender = byTender[sale.tender];
       byTender[sale.tender] = (
-        minor: (tender?.minor ?? 0) + sale.totalMinor,
+        minor: (tender?.minor ?? 0) + net,
         count: (tender?.count ?? 0) + 1,
       );
 
+      // Use the canonical discount allocation for the original sale as well
+      // as its returns, so product revenue adds up to the net headline.
+      final charged = describeReturnOffset(sale, {
+        for (final line in sale.lines) line.productId: line.quantity,
+      }).returnedMinorByProduct;
       for (final line in sale.lines) {
+        final quantity =
+            line.quantity - (offset?.returnedUnitsInScope[line.productId] ?? 0);
+        if (quantity == 0) continue;
         lineCount++;
-        itemsSold += line.quantity;
-        final lineCost = line.lineCostMinor;
+        itemsSold += quantity;
+        final lineCost = line.unitCostMinor == null
+            ? null
+            : line.unitCostMinor! * quantity;
         if (lineCost == null) {
           linesWithoutCost++;
         } else {
@@ -158,8 +198,11 @@ final class TenantSalesAnalysis {
         byProduct[line.productId] = TenantSalesItem(
           productId: line.productId,
           name: line.name,
-          quantity: (held?.quantity ?? 0) + line.quantity,
-          revenueMinor: (held?.revenueMinor ?? 0) + line.lineTotalMinor,
+          quantity: (held?.quantity ?? 0) + quantity,
+          revenueMinor:
+              (held?.revenueMinor ?? 0) +
+              charged[line.productId]! -
+              (offset?.returnedMinorByProduct[line.productId] ?? 0),
           costMinor: (held?.costMinor ?? 0) + (lineCost ?? 0),
           linesWithoutCost:
               (held?.linesWithoutCost ?? 0) + (lineCost == null ? 1 : 0),
@@ -167,17 +210,25 @@ final class TenantSalesAnalysis {
       }
     }
 
-    final previousDaily = <String, int>{};
+    final previousDaily = <String, int>{
+      if (previous != null)
+        for (final date in period.precedingComparable.businessDates) date: 0,
+    };
     final previousWeekday = List<int>.filled(DateTime.daysPerWeek, 0);
     var previousRevenue = 0;
+    var previousTransactions = 0;
     for (final sale in previous ?? const <TenantSale>[]) {
-      previousRevenue += sale.totalMinor;
+      final offset = previousReturnOffsets[sale.id];
+      if (offset?.isFullyReturned == true) continue;
+      previousTransactions++;
+      final net = sale.totalMinor - (offset?.returnedMinor ?? 0);
+      previousRevenue += net;
       previousDaily.update(
         sale.businessDate,
-        (held) => held + sale.totalMinor,
-        ifAbsent: () => sale.totalMinor,
+        (held) => held + net,
+        ifAbsent: () => net,
       );
-      previousWeekday[_weekdayIndex(sale.businessDate)] += sale.totalMinor;
+      previousWeekday[_weekdayIndex(sale.businessDate)] += net;
     }
 
     return TenantSalesAnalysis._(
@@ -186,8 +237,8 @@ final class TenantSalesAnalysis {
       previousRevenueMinor: previous == null ? null : previousRevenue,
       costMinor: cost,
       discountMinor: discount,
-      transactions: sales.length,
-      previousTransactions: previous?.length,
+      transactions: transactions,
+      previousTransactions: previous == null ? null : previousTransactions,
       linesWithoutCost: linesWithoutCost,
       lineCount: lineCount,
       itemsSold: itemsSold,
@@ -212,8 +263,8 @@ final class TenantSalesAnalysis {
           ..sort((a, b) => b.minor.compareTo(a.minor)),
       ),
       basketSizes: List<int>.unmodifiable(baskets..sort()),
-      returnedMinor: returns?.returnedMinor ?? 0,
-      fullyReturnedSales: returns?.fullyReturnedSales ?? 0,
+      returnedMinor: returnedMinor,
+      fullyReturnedSales: fullyReturnedSales,
       truncated: truncated,
       documentsRead: documentsRead,
     );
@@ -297,8 +348,8 @@ final class TenantSalesAnalysis {
     return gross == 0 ? null : discountMinor / gross;
   }
 
-  /// Takings net of what was handed back.
-  int get netRevenueMinor => revenueMinor - returnedMinor;
+  /// Takings are already net of returns throughout the analysis.
+  int get netRevenueMinor => revenueMinor;
 
   /// How far takings moved, or null where there is nothing to compare.
   double? get change {
@@ -345,7 +396,9 @@ final class TenantSalesAnalysis {
   bool get sellerEarnerDiffer {
     final seller = bestSeller;
     final earner = bestEarner;
-    return seller != null && earner != null && seller.productId != earner.productId;
+    return seller != null &&
+        earner != null &&
+        seller.productId != earner.productId;
   }
 
   /// The busiest trading day, or null where nothing was taken.
@@ -365,9 +418,7 @@ final class TenantSalesAnalysis {
         if (weekdayMinor[i] > 0) i,
     ];
     if (traded.isEmpty) return null;
-    return traded.reduce(
-      (a, b) => weekdayMinor[b] < weekdayMinor[a] ? b : a,
-    );
+    return traded.reduce((a, b) => weekdayMinor[b] < weekdayMinor[a] ? b : a);
   }
 
   /// Days in the period on which nothing was sold.
