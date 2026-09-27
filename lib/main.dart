@@ -38,6 +38,7 @@ import 'sales/sales.dart';
 import 'production/production.dart';
 import 'shift/shift.dart';
 import 'suppliers/suppliers.dart';
+import 'ui/routes.dart';
 
 Future<void> main() async {
   AppTelemetry.install(GlitchTipTelemetry());
@@ -244,6 +245,21 @@ Future<void> main() async {
               return null;
             },
           );
+      // Which businesses chose *Don't show again* on the till's no-printer
+      // notice. A failure to open it is a till that keeps reminding, never one
+      // that will not start.
+      final printerSetupReminder = await HiveCheckoutPrinterSetupReminder.open()
+          .then<CheckoutPrinterSetupReminder?>(
+            (reminder) => reminder,
+            onError: (Object error, StackTrace stackTrace) {
+              AppTelemetry.captureHandled(
+                error,
+                stackTrace,
+                boundary: 'checkout.printer_setup_reminder_open',
+              );
+              return null;
+            },
+          );
       // Receipt counters, shift state, and the outbox share one key: a sale,
       // the receipt numbering it draws from, and the shift it belongs to must
       // share exactly one fate.
@@ -388,6 +404,7 @@ Future<void> main() async {
             productImportAttempts: productImportAttempts,
             staffRequestTickets: staffRequestTickets,
             tenantImageCache: tenantImageCache,
+            printerSetupReminder: printerSetupReminder,
             checkoutCatalogCache: checkoutCatalogCache,
             checkoutReceiptCounters: checkoutReceiptCounters,
             checkoutPrintJobs: checkoutPrintJobs,
@@ -505,6 +522,7 @@ class SpiritPOSApp extends StatelessWidget {
     required this.productImportAttempts,
     required this.staffRequestTickets,
     required this.tenantImageCache,
+    required this.printerSetupReminder,
     required this.checkoutCatalogCache,
     required this.checkoutReceiptCounters,
     required this.checkoutPrintJobs,
@@ -537,6 +555,10 @@ class SpiritPOSApp extends StatelessWidget {
   /// would not open, which draws every picture from the network exactly as the
   /// app did before the store existed.
   final TenantImageCache? tenantImageCache;
+
+  /// Null where its box would not open, which leaves the till's no-printer
+  /// notice without *Don't show again*.
+  final CheckoutPrinterSetupReminder? printerSetupReminder;
   final HiveCheckoutCatalogCache checkoutCatalogCache;
   final HiveCheckoutReceiptCounters checkoutReceiptCounters;
 
@@ -952,6 +974,134 @@ class SpiritPOSApp extends StatelessWidget {
       reportSaver: const SharedFileTenantReportSaver(),
       imageCache: tenantImageCache,
     );
+
+    // **Every settings page, built in one place.** The business home opens it
+    // from its three Business tiles, and the till opens its printer page when a
+    // receipt could not print because no printer is set up yet.
+    Widget settingsPage(TenantDataReader reader, String? initialSettingKey) {
+      final destinations = <TenantSettingsDestination>[
+        // **The setting that stops every sale on every device, on a row
+        // that says so.** A commit asks for a full sync pass, because
+        // the catalog refresh is the only thing that re-reads the
+        // document: without it this device would keep pricing new sales
+        // with the code that was just replaced.
+        TenantSettingsDestination(
+          settingKey: 'currency',
+          kind: TenantSettingKind.currency,
+          icon: Icons.payments_outlined,
+          allowedRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
+          builder: (_) => TenantCheckoutConfigurationPanel(
+            reader: reader,
+            writer: FirebaseTenantCheckoutConfigurationWriter(
+              firestore: FirebaseFirestore.instance,
+              isOnline: isOnline,
+            ),
+            onPublished:
+                checkoutSyncSignals.requestSyncAfterConfigurationChange,
+          ),
+        ),
+        TenantSettingsDestination(
+          settingKey: 'printer',
+          kind: TenantSettingKind.printer,
+          icon: Icons.print_outlined,
+          allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
+          builder: (context) => TenantPrinterConfigurationPanel(
+            reader: reader,
+            writer: QueuedTenantConfigurationWriter(
+              store: tenantMutationStore,
+              cacheReader: reader.cached ?? reader,
+              currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+              remote: FirebaseTenantConfigurationDocumentWriter(
+                firestore: FirebaseFirestore.instance,
+                isOnline: isOnline,
+              ),
+            ),
+            // Puts a page on the roll against what is typed,
+            // before it is saved, headed with the receipt
+            // branding this device holds - logo included - so the
+            // page shows what a receipt will look like. The
+            // branding read is the receipt's own cache-only one,
+            // and a failed read prints the page unbranded.
+            testPrint: (configuration) async {
+              final session = TenantSessionScope.read(context).session;
+              final branding = session == null
+                  ? null
+                  : await _receiptBranding(session, tenantDataReader.cacheOnly);
+              await printerTransport.send(
+                configuration.endpoint,
+                CheckoutPrinterTestPage(
+                  profile: printerCapabilityProfile,
+                  configuration: configuration,
+                ).build(
+                  at: DateTime.now(),
+                  businessName: branding?.companyName,
+                  slogan: branding?.slogan,
+                  logo: await _receiptLogo(branding?.logoUrl, tenantImageCache),
+                ),
+              );
+            },
+          ),
+        ),
+        TenantSettingsDestination(
+          settingKey: 'stock-take',
+          kind: TenantSettingKind.stockCounts,
+          icon: Icons.fact_check_outlined,
+          allowedRoles: TenantStockTakeSchedulePublisher.allowedRoles,
+          // **Not queued, and that is deliberate.** The queued writer
+          // carries `branding` and `printer` and passes everything else
+          // straight at the server, which is what this wants: deciding
+          // a counting rota is an owner sitting down with the business,
+          // not an operational act taken on a shop floor with no
+          // signal. The till reads the published document from cache
+          // and treats an unreadable one as "no count is due", so a
+          // schedule that never reaches a device interrupts nobody.
+          builder: (_) => TenantStockTakeSettingsPanel(
+            reader: reader,
+            writer: QueuedTenantConfigurationWriter(
+              store: tenantMutationStore,
+              cacheReader: reader.cached ?? reader,
+              currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+              remote: FirebaseTenantConfigurationDocumentWriter(
+                firestore: FirebaseFirestore.instance,
+                isOnline: isOnline,
+              ),
+            ),
+          ),
+        ),
+      ];
+      final currency = destinations[0];
+      final printer = destinations[1];
+      final stockCounts = destinations[2];
+      return switch (initialSettingKey) {
+        'business-details' => TenantConfigurationPage(
+          title: 'Business details',
+          builder: (context) => TenantBrandingPanel(
+            reader: reader,
+            writer: QueuedTenantConfigurationWriter(
+              store: tenantMutationStore,
+              cacheReader: reader.cached ?? reader,
+              currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+              remote: FirebaseTenantConfigurationDocumentWriter(
+                isOnline: isOnline,
+              ),
+            ),
+            logoStore: FirebaseTenantBrandingLogoStore(),
+            backgroundRemover: CallableTenantProductBackgroundRemover(
+              callable: FirebaseRemoveProductBackgroundCallable(),
+            ),
+            printProof: printBrandingProof,
+          ),
+        ),
+        'printer' => TenantConfigurationPage(
+          title: 'Printer',
+          builder: printer.builder,
+        ),
+        _ => TenantConfigurationsScreen(
+          currencyBuilder: currency.builder,
+          stockCountsBuilder: stockCounts.builder,
+        ),
+      };
+    }
 
     // **Above `MaterialApp`, so every route is inside it.** A staged photograph
     // has to be drawable wherever a product is - the catalog, the till's
@@ -1431,6 +1581,21 @@ class SpiritPOSApp extends StatelessWidget {
                       onSaved: printReceipt,
                     ),
                   ),
+                  printerSetupReminder: printerSetupReminder,
+                  // The same page the business home's Printer tile opens. The
+                  // till offers it only to the roles that can change the
+                  // printer.
+                  onSetUpPrinter: (context) {
+                    final controller = TenantSessionScope.of(context);
+                    Navigator.of(context).push(
+                      AppPageRoute<void>(
+                        builder: (_) => TenantSessionScope(
+                          controller: controller,
+                          child: settingsPage(tenantDataReader, 'printer'),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -1444,138 +1609,7 @@ class SpiritPOSApp extends StatelessWidget {
             // A commit asks for a full sync pass, because the catalog refresh is the
             // only thing that re-reads the document: without it this device would
             // keep pricing new sales with the code that was just replaced.
-            settingsRoute: (reader, initialSettingKey) {
-              final destinations = <TenantSettingsDestination>[
-                // **The setting that stops every sale on every device, on a row
-                // that says so.** A commit asks for a full sync pass, because
-                // the catalog refresh is the only thing that re-reads the
-                // document: without it this device would keep pricing new sales
-                // with the code that was just replaced.
-                TenantSettingsDestination(
-                  settingKey: 'currency',
-                  kind: TenantSettingKind.currency,
-                  icon: Icons.payments_outlined,
-                  allowedRoles:
-                      TenantCheckoutConfigurationPublisher.allowedRoles,
-                  builder: (_) => TenantCheckoutConfigurationPanel(
-                    reader: reader,
-                    writer: FirebaseTenantCheckoutConfigurationWriter(
-                      firestore: FirebaseFirestore.instance,
-                      isOnline: isOnline,
-                    ),
-                    onPublished:
-                        checkoutSyncSignals.requestSyncAfterConfigurationChange,
-                  ),
-                ),
-                TenantSettingsDestination(
-                  settingKey: 'printer',
-                  kind: TenantSettingKind.printer,
-                  icon: Icons.print_outlined,
-                  allowedRoles:
-                      TenantPrinterConfigurationPublisher.allowedRoles,
-                  builder: (context) => TenantPrinterConfigurationPanel(
-                    reader: reader,
-                    writer: QueuedTenantConfigurationWriter(
-                      store: tenantMutationStore,
-                      cacheReader: reader.cached ?? reader,
-                      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
-                      remote: FirebaseTenantConfigurationDocumentWriter(
-                        firestore: FirebaseFirestore.instance,
-                        isOnline: isOnline,
-                      ),
-                    ),
-                    // Puts a page on the roll against what is typed,
-                    // before it is saved, headed with the receipt
-                    // branding this device holds - logo included - so the
-                    // page shows what a receipt will look like. The
-                    // branding read is the receipt's own cache-only one,
-                    // and a failed read prints the page unbranded.
-                    testPrint: (configuration) async {
-                      final session = TenantSessionScope.read(context).session;
-                      final branding = session == null
-                          ? null
-                          : await _receiptBranding(
-                              session,
-                              tenantDataReader.cacheOnly,
-                            );
-                      await printerTransport.send(
-                        configuration.endpoint,
-                        CheckoutPrinterTestPage(
-                          profile: printerCapabilityProfile,
-                          configuration: configuration,
-                        ).build(
-                          at: DateTime.now(),
-                          businessName: branding?.companyName,
-                          slogan: branding?.slogan,
-                          logo: await _receiptLogo(
-                            branding?.logoUrl,
-                            tenantImageCache,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                TenantSettingsDestination(
-                  settingKey: 'stock-take',
-                  kind: TenantSettingKind.stockCounts,
-                  icon: Icons.fact_check_outlined,
-                  allowedRoles: TenantStockTakeSchedulePublisher.allowedRoles,
-                  // **Not queued, and that is deliberate.** The queued writer
-                  // carries `branding` and `printer` and passes everything else
-                  // straight at the server, which is what this wants: deciding
-                  // a counting rota is an owner sitting down with the business,
-                  // not an operational act taken on a shop floor with no
-                  // signal. The till reads the published document from cache
-                  // and treats an unreadable one as "no count is due", so a
-                  // schedule that never reaches a device interrupts nobody.
-                  builder: (_) => TenantStockTakeSettingsPanel(
-                    reader: reader,
-                    writer: QueuedTenantConfigurationWriter(
-                      store: tenantMutationStore,
-                      cacheReader: reader.cached ?? reader,
-                      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
-                      remote: FirebaseTenantConfigurationDocumentWriter(
-                        firestore: FirebaseFirestore.instance,
-                        isOnline: isOnline,
-                      ),
-                    ),
-                  ),
-                ),
-              ];
-              final currency = destinations[0];
-              final printer = destinations[1];
-              final stockCounts = destinations[2];
-              return switch (initialSettingKey) {
-                'business-details' => TenantConfigurationPage(
-                  title: 'Business details',
-                  builder: (context) => TenantBrandingPanel(
-                    reader: reader,
-                    writer: QueuedTenantConfigurationWriter(
-                      store: tenantMutationStore,
-                      cacheReader: reader.cached ?? reader,
-                      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
-                      remote: FirebaseTenantConfigurationDocumentWriter(
-                        isOnline: isOnline,
-                      ),
-                    ),
-                    logoStore: FirebaseTenantBrandingLogoStore(),
-                    backgroundRemover: CallableTenantProductBackgroundRemover(
-                      callable: FirebaseRemoveProductBackgroundCallable(),
-                    ),
-                    printProof: printBrandingProof,
-                  ),
-                ),
-                'printer' => TenantConfigurationPage(
-                  title: 'Printer',
-                  builder: printer.builder,
-                ),
-                _ => TenantConfigurationsScreen(
-                  currencyBuilder: currency.builder,
-                  stockCountsBuilder: stockCounts.builder,
-                ),
-              };
-            },
+            settingsRoute: settingsPage,
             settingsRoles: TenantCheckoutConfigurationPublisher.allowedRoles,
             printQueueCount: () => _printQueueCount(checkoutPrintJobs),
             // Nightly reconciliation has been recording differences that nobody

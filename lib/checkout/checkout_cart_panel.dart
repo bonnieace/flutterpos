@@ -64,7 +64,10 @@ import '../ui/stepper.dart';
 import '../ui/tokens.dart';
 import 'checkout_catalog_cache.dart';
 import 'checkout_draft.dart';
+import 'checkout_print_configuration.dart';
 import 'checkout_print_failures.dart';
+import 'checkout_print_transport_base.dart';
+import 'checkout_printer_setup_reminder.dart';
 import 'checkout_refusal.dart';
 import 'checkout_sale.dart';
 import 'checkout_tender.dart';
@@ -176,7 +179,13 @@ const AppNotice _unavailable = AppNotice.offline(
 /// flex, cart pane fixed 420"*, and a till that gave back the edges of a wide
 /// screen would be spending the space a cashier is aiming at.
 final class TenantCheckoutScreen extends StatelessWidget {
-  const TenantCheckoutScreen({super.key, required this.cache, this.drafts});
+  const TenantCheckoutScreen({
+    super.key,
+    required this.cache,
+    this.drafts,
+    this.printerSetupReminder,
+    this.onSetUpPrinter,
+  });
 
   final CheckoutCatalogSource cache;
 
@@ -184,11 +193,22 @@ final class TenantCheckoutScreen extends StatelessWidget {
   /// sale but cannot save one, exactly as the returns route behaves.
   final CheckoutDraftSink? drafts;
 
+  /// See [TenantCheckoutPanel.printerSetupReminder].
+  final CheckoutPrinterSetupReminder? printerSetupReminder;
+
+  /// See [TenantCheckoutPanel.onSetUpPrinter].
+  final void Function(BuildContext context)? onSetUpPrinter;
+
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Register',
     contentWidth: AppContentWidth.full,
-    body: TenantCheckoutPanel(cache: cache, drafts: drafts),
+    body: TenantCheckoutPanel(
+      cache: cache,
+      drafts: drafts,
+      printerSetupReminder: printerSetupReminder,
+      onSetUpPrinter: onSetUpPrinter,
+    ),
   );
 }
 
@@ -238,10 +258,25 @@ final class TenantCheckoutScreen extends StatelessWidget {
 ///   what is drawn and never what can be sold: a capped-out product is still
 ///   reachable by search and still reachable by its code.
 final class TenantCheckoutPanel extends StatefulWidget {
-  const TenantCheckoutPanel({super.key, required this.cache, this.drafts});
+  const TenantCheckoutPanel({
+    super.key,
+    required this.cache,
+    this.drafts,
+    this.printerSetupReminder,
+    this.onSetUpPrinter,
+  });
 
   final CheckoutCatalogSource cache;
   final CheckoutDraftSink? drafts;
+
+  /// Remembers a business that chose *Don't show again* on the no-printer
+  /// notice. Absent, the notice offers no opt-out and is shown every time.
+  final CheckoutPrinterSetupReminder? printerSetupReminder;
+
+  /// Opens the printer settings page over the till. Offered on the no-printer
+  /// notice only to the roles that can change the printer; absent, it is
+  /// offered to nobody.
+  final void Function(BuildContext context)? onSetUpPrinter;
 
   /// Whether [screenWidth] gets the two-pane till.
   ///
@@ -345,6 +380,14 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
           key: ValueKey('checkout-editor-${_sessionKey(session)}'),
           snapshot: snapshot,
           drafts: widget.drafts,
+          tenantId: session.tenantId,
+          printerSetupReminder: widget.printerSetupReminder,
+          onSetUpPrinter:
+              session.canAccess(
+                allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
+              )
+              ? widget.onSetUpPrinter
+              : null,
           onSaved: () {
             if (mounted) setState(() => _generation++);
           },
@@ -632,6 +675,9 @@ final class _CartEditor extends StatefulWidget {
     super.key,
     required this.snapshot,
     required this.drafts,
+    required this.tenantId,
+    this.printerSetupReminder,
+    this.onSetUpPrinter,
     this.onSaved,
   });
 
@@ -640,6 +686,11 @@ final class _CartEditor extends StatefulWidget {
 
   final CheckoutCatalogSnapshot snapshot;
   final CheckoutDraftSink? drafts;
+  final String tenantId;
+  final CheckoutPrinterSetupReminder? printerSetupReminder;
+
+  /// Already narrowed to the session's role by the panel.
+  final void Function(BuildContext context)? onSetUpPrinter;
 
   @override
   State<_CartEditor> createState() => _CartEditorState();
@@ -1359,32 +1410,73 @@ final class _CartEditorState extends State<_CartEditor> {
     }
 
     if (printNotice != null) {
+      // **No printer is the one print outcome a business can choose.** Every
+      // other code is a printer that should have answered; this one is a shop
+      // that has not set one up, which may be on purpose. So it alone offers
+      // the setup page, to the roles that can use it, and can be silenced.
+      final noPrinter = printFailure == PrinterTransportCode.notConfigured;
+      final reminder = noPrinter ? widget.printerSetupReminder : null;
+      if (reminder != null && reminder.isSilenced(widget.tenantId)) {
+        _reportSaved(context, receipt);
+        return;
+      }
       unawaited(
-        showAppNoticeDialog(
-          context,
-          title: 'Saved as $receipt',
+        _reportPrintFailure(
+          receipt: receipt,
           notice: printNotice,
-          // **Where the receipt went, which the notice above cannot say.**
-          // Those sentences are read by the print queue panel too, so telling
-          // somebody already standing in that queue to open it would be
-          // nonsense - the route belongs here, at the surface that needs it.
-          //
-          // It names a destination and does not become one: `Receipts waiting`
-          // is a real entry on the business home, and a button here would be a
-          // routing condition, which hard rule 1 keeps out of a visual change.
-          stillTrue:
-              'The sale itself is saved and syncs on its own. Open Receipts '
-              'waiting from the business home to send this one again.',
-          dismissKey: const ValueKey('checkout-dismiss-receipt'),
+          // With no printer the receipt is refused before it is queued, so
+          // there is nothing waiting to send again.
+          queued: !noPrinter,
+          setUp: noPrinter ? widget.onSetUpPrinter : null,
+          reminder: reminder,
         ),
       );
       return;
     }
 
-    showAppSnackBar(
+    _reportSaved(context, receipt);
+  }
+
+  void _reportSaved(BuildContext context, String receipt) => showAppSnackBar(
+    context,
+    AppNotice.confirmed('Saved as $receipt. It syncs on its own.'),
+  );
+
+  /// The modal for a sale that saved and a receipt that did not print, and
+  /// whatever the person chose on it.
+  Future<void> _reportPrintFailure({
+    required String receipt,
+    required AppNotice notice,
+    required bool queued,
+    required void Function(BuildContext context)? setUp,
+    required CheckoutPrinterSetupReminder? reminder,
+  }) async {
+    final choice = await showAppNoticeDialog(
       context,
-      AppNotice.confirmed('Saved as $receipt. It syncs on its own.'),
+      title: 'Saved as $receipt',
+      notice: notice,
+      // **Where the receipt went, which the notice above cannot say.** Those
+      // sentences are read by the print queue panel too, so telling somebody
+      // already standing in that queue to open it would be nonsense - the
+      // route belongs here, at the surface that needs it.
+      stillTrue: queued
+          ? 'The sale itself is saved and syncs on its own. Open Receipts '
+                'waiting from the business home to send this one again.'
+          : 'The sale itself is saved and syncs on its own.',
+      dismissKey: const ValueKey('checkout-dismiss-receipt'),
+      actionLabel: setUp == null ? null : 'Set up printer',
+      actionKey: const ValueKey('checkout-set-up-printer'),
+      optOutLabel: reminder == null ? null : 'Don’t show again',
+      optOutKey: const ValueKey('checkout-printer-reminder-opt-out'),
     );
+    switch (choice) {
+      case NoticeDialogChoice.action:
+        if (mounted) setUp?.call(context);
+      case NoticeDialogChoice.optedOut:
+        await reminder?.silence(widget.tenantId);
+      case NoticeDialogChoice.dismissed:
+        break;
+    }
   }
 
   /// The catalog: what is sellable, and how it is found.

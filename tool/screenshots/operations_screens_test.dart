@@ -250,6 +250,33 @@ void main() {
     },
   );
 
+  // No printer set up, seen by an owner: the one print outcome that offers its
+  // setup page and can be silenced for the business.
+  screenshotCase(
+    '15b-sale-saved-no-printer',
+    build: () => inSession(
+      TenantCheckoutScreen(
+        cache: FakeCatalogSource(),
+        drafts: FakeDraftSink(
+          printFailure: PrinterTransportCode.notConfigured,
+        ),
+        printerSetupReminder: _NeverSilenced(),
+        onSetUpPrinter: (_) {},
+      ),
+      controller: seedSession(),
+    ),
+    afterPump: (tester) async {
+      await _press(tester, 'checkout-product-pd-bread-white');
+      final openCart = find.byKey(const ValueKey('checkout-open-cart'));
+      if (openCart.evaluate().isNotEmpty) {
+        await tester.tap(openCart);
+        await tester.pumpAndSettle();
+      }
+      await _press(tester, 'checkout-tender-cash');
+      await _press(tester, 'checkout-save');
+    },
+  );
+
   // **The sale that was not written, which is the till state no image held.**
   // Hard rule 5 asks for a component's whole matrix in the harness; `15` is the
   // cart before a save, `15b` is a sale that saved, and the refusal branch - the
@@ -1850,3 +1877,12 @@ List<TenantSettingsDestination> _settingsDestinations(
     builder: (_) => TenantStockTakeSettingsPanel(reader: reader),
   ),
 ];
+
+/// A business that has not chosen *Don't show again*.
+final class _NeverSilenced implements CheckoutPrinterSetupReminder {
+  @override
+  bool isSilenced(String tenantId) => false;
+
+  @override
+  Future<void> silence(String tenantId) async {}
+}

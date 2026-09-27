@@ -412,6 +412,12 @@ final class NoticeDialog extends StatelessWidget {
     this.dismissLabel = 'Close',
     this.onDismiss,
     this.dismissKey,
+    this.actionLabel,
+    this.onAction,
+    this.actionKey,
+    this.optOutLabel,
+    this.onOptOut,
+    this.optOutKey,
   });
 
   /// What happened, as a phrase rather than a question. §8 rule 4: this dialog
@@ -430,9 +436,24 @@ final class NoticeDialog extends StatelessWidget {
   final VoidCallback? onDismiss;
   final Key? dismissKey;
 
+  /// The one thing that fixes what [notice] reports, when there is one - *Set
+  /// up printer* beside a receipt that had nowhere to go. It takes the primary
+  /// tier, and the dismissal steps down to secondary beside it.
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final Key? actionKey;
+
+  /// *Don't show again*, for a notice a person may reasonably not want. Under
+  /// the reassurance rather than in the action row: the row never wraps, and a
+  /// third button there would squeeze all three labels on a phone.
+  final String? optOutLabel;
+  final VoidCallback? onOptOut;
+  final Key? optOutKey;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final hasAction = actionLabel != null;
     return _DialogFrame(
       title: title,
       content: Column(
@@ -456,45 +477,82 @@ final class NoticeDialog extends StatelessWidget {
               ),
             ),
           ],
+          if (optOutLabel case final label?) ...<Widget>[
+            SizedBox(height: tokens.spacing.s8),
+            AppButton(
+              key: optOutKey ?? const ValueKey('notice-dialog-opt-out'),
+              label: label,
+              tier: AppButtonTier.tertiary,
+              onPressed: onOptOut,
+            ),
+          ],
         ],
       ),
       actions: <Widget>[
         AppButton(
           key: dismissKey ?? const ValueKey('notice-dialog-dismiss'),
           label: dismissLabel,
-          // `primary`: it is the only control here, and §2.1 permits exactly
-          // one primary per region. A lone `tertiary` would read as though the
-          // dialog had a second answer somewhere off screen.
-          tier: AppButtonTier.primary,
+          // `primary` while it is the only control here, and §2.1 permits
+          // exactly one primary per region. A lone `tertiary` would read as
+          // though the dialog had a second answer somewhere off screen.
+          tier: hasAction ? AppButtonTier.secondary : AppButtonTier.primary,
           onPressed: onDismiss,
         ),
+        if (actionLabel case final label?)
+          AppButton(
+            key: actionKey ?? const ValueKey('notice-dialog-action'),
+            label: label,
+            tier: AppButtonTier.primary,
+            onPressed: onAction,
+          ),
       ],
     );
   }
 }
+
+/// Which way out of a [NoticeDialog] a person took.
+enum NoticeDialogChoice { dismissed, action, optedOut }
 
 /// Shows [notice] as a modal that has to be dismissed before anything else.
 ///
 /// **The barrier does not dismiss it.** Every other route out of this dialog is
 /// a deliberate press, because the whole reason it is a modal rather than a
 /// snack bar is that the outcome must not be able to disappear unnoticed.
-Future<void> showAppNoticeDialog(
+///
+/// **It answers with the press rather than acting on it.** The dialog is off
+/// the screen before the caller opens anything, so a route pushed for
+/// [actionLabel] lands on the page the dialog came from, not over the dialog.
+Future<NoticeDialogChoice> showAppNoticeDialog(
   BuildContext context, {
   required String title,
   required AppNotice notice,
   String? stillTrue,
   String dismissLabel = 'Close',
   Key? dismissKey,
-}) => showDialog<void>(
-  context: context,
-  barrierDismissible: false,
-  barrierColor: AppTokens.componentOf(context).colors.surface.scrim,
-  builder: (context) => NoticeDialog(
-    title: title,
-    notice: notice,
-    stillTrue: stillTrue,
-    dismissLabel: dismissLabel,
-    dismissKey: dismissKey,
-    onDismiss: () => Navigator.of(context).pop(),
-  ),
-);
+  String? actionLabel,
+  Key? actionKey,
+  String? optOutLabel,
+  Key? optOutKey,
+}) async {
+  final choice = await showDialog<NoticeDialogChoice>(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: AppTokens.componentOf(context).colors.surface.scrim,
+    builder: (context) => NoticeDialog(
+      title: title,
+      notice: notice,
+      stillTrue: stillTrue,
+      dismissLabel: dismissLabel,
+      dismissKey: dismissKey,
+      onDismiss: () => Navigator.of(context).pop(NoticeDialogChoice.dismissed),
+      actionLabel: actionLabel,
+      actionKey: actionKey,
+      onAction: () => Navigator.of(context).pop(NoticeDialogChoice.action),
+      optOutLabel: optOutLabel,
+      optOutKey: optOutKey,
+      onOptOut: () => Navigator.of(context).pop(NoticeDialogChoice.optedOut),
+    ),
+  );
+  // A system back press is the one way out that is not a button.
+  return choice ?? NoticeDialogChoice.dismissed;
+}

@@ -1095,6 +1095,139 @@ void main() {
       expect(dialogNotice(tester).status, AppStatus.attention);
     });
 
+    testWidgets('no printer hands an owner the page that sets one up', (
+      tester,
+    ) async {
+      sessions.open(
+        uid: 'user-a',
+        membership: _membership('tenant-a', role: TenantRole.owner),
+      );
+      drafts.printFailure = PrinterTransportCode.notConfigured;
+      final opened = <BuildContext>[];
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        printerSetupReminder: _Reminder(),
+        onSetUpPrinter: opened.add,
+      );
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      // Nothing was queued without a printer, so nothing is waiting to send.
+      expect(
+        find.text('The sale itself is saved and syncs on its own.'),
+        findsOne,
+      );
+      expect(find.textContaining('Open Receipts waiting'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('checkout-set-up-printer')));
+      await tester.pumpAndSettle();
+
+      // The dialog is off the screen before the page opens, so the page lands
+      // over the till rather than over the dialog.
+      expect(find.byType(NoticeDialog), findsNothing);
+      expect(opened, hasLength(1));
+    });
+
+    testWidgets('a cashier is told, but not offered a page they cannot open', (
+      tester,
+    ) async {
+      drafts.printFailure = PrinterTransportCode.notConfigured;
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        printerSetupReminder: _Reminder(),
+        onSetUpPrinter: (_) => fail('a cashier cannot change the printer'),
+      );
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(find.byType(NoticeDialog), findsOne);
+      expect(
+        find.byKey(const ValueKey('checkout-set-up-printer')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('checkout-printer-reminder-opt-out')),
+        findsOne,
+      );
+    });
+
+    testWidgets('don’t show again turns the next sale into a snack bar', (
+      tester,
+    ) async {
+      final reminder = _Reminder();
+      drafts.printFailure = PrinterTransportCode.notConfigured;
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        printerSetupReminder: reminder,
+      );
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+      await tester.tap(
+        find.byKey(const ValueKey('checkout-printer-reminder-opt-out')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(reminder.silenced, <String>{'tenant-a'});
+      expect(find.byType(NoticeDialog), findsNothing);
+
+      // Still no printer, and now reported the way a printed sale is.
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(find.byType(NoticeDialog), findsNothing);
+      expect(find.byType(AppSnackBar), findsOne);
+    });
+
+    testWidgets('a printer that does not answer is never silenced', (
+      tester,
+    ) async {
+      // Silencing is for a shop with no printer. One that is set up and does
+      // not answer is a fault, and a setup page would not fix it.
+      sessions.open(
+        uid: 'user-a',
+        membership: _membership('tenant-a', role: TenantRole.owner),
+      );
+      drafts.printFailure = PrinterTransportCode.unreachable;
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        printerSetupReminder: _Reminder()..silenced.add('tenant-a'),
+        onSetUpPrinter: (_) {},
+      );
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(find.byType(NoticeDialog), findsOne);
+      expect(
+        find.byKey(const ValueKey('checkout-set-up-printer')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('checkout-printer-reminder-opt-out')),
+        findsNothing,
+      );
+    });
+
     testWidgets('a receipt that printed adds no second notice', (tester) async {
       // **Null is ambiguous by contract** - it means sent, and it also means a
       // build that queues no receipts at all - so the till draws nothing. Where
@@ -1594,8 +1727,10 @@ Future<void> _pump(
   WidgetTester tester,
   TenantSessionController controller,
   _Catalog catalog,
-  CheckoutDraftSink? drafts,
-) => _pumpAt(
+  CheckoutDraftSink? drafts, {
+  CheckoutPrinterSetupReminder? printerSetupReminder,
+  void Function(BuildContext context)? onSetUpPrinter,
+}) => _pumpAt(
   tester,
   controller,
   catalog,
@@ -1604,6 +1739,8 @@ Future<void> _pump(
   // test that is not about layout wants to be: it puts the whole till on
   // screen at once.
   const Size(1400, 4000),
+  printerSetupReminder: printerSetupReminder,
+  onSetUpPrinter: onSetUpPrinter,
 );
 
 /// Pumps the till into a surface of an exact size.
@@ -1615,8 +1752,10 @@ Future<void> _pumpAt(
   TenantSessionController controller,
   _Catalog catalog,
   CheckoutDraftSink? drafts,
-  Size size,
-) async {
+  Size size, {
+  CheckoutPrinterSetupReminder? printerSetupReminder,
+  void Function(BuildContext context)? onSetUpPrinter,
+}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -1625,7 +1764,12 @@ Future<void> _pumpAt(
     MaterialApp(
       home: TenantSessionScope(
         controller: controller,
-        child: TenantCheckoutScreen(cache: catalog, drafts: drafts),
+        child: TenantCheckoutScreen(
+          cache: catalog,
+          drafts: drafts,
+          printerSetupReminder: printerSetupReminder,
+          onSetUpPrinter: onSetUpPrinter,
+        ),
       ),
     ),
   );
@@ -1828,14 +1972,27 @@ TenantCategory _category(String tenantId, String categoryId) =>
       ),
     );
 
-TenantMembership _membership(String tenantId) => TenantMembership(
+final class _Reminder implements CheckoutPrinterSetupReminder {
+  final Set<String> silenced = <String>{};
+
+  @override
+  bool isSilenced(String tenantId) => silenced.contains(tenantId);
+
+  @override
+  Future<void> silence(String tenantId) async => silenced.add(tenantId);
+}
+
+TenantMembership _membership(
+  String tenantId, {
+  TenantRole role = TenantRole.cashier,
+}) => TenantMembership(
   tenantId: tenantId,
   tenantName: tenantId,
   tenantSlug: tenantId,
-  role: TenantRole.cashier,
+  role: role,
   membershipStatus: MembershipStatus.active,
   tenantStatus: TenantStatus.active,
-  isOwner: false,
+  isOwner: role == TenantRole.owner,
   mirrorVersion: 1,
   createdAt: DateTime.utc(2026, 1, 1),
   updatedAt: DateTime.utc(2026, 1, 1),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:uzapay_pos/theme.dart';
 import 'package:uzapay_pos/ui/buttons.dart';
 import 'package:uzapay_pos/ui/dialogs.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -317,6 +318,125 @@ void main() {
       );
     });
   });
+
+  group('showAppNoticeDialog', () {
+    testWidgets('a lone dismissal is the primary and the only control', (
+      tester,
+    ) async {
+      await _openNotice(tester);
+
+      expect(_tierOf(tester, 'notice-dialog-dismiss'), AppButtonTier.primary);
+      expect(find.byKey(const ValueKey('notice-dialog-action')), findsNothing);
+      expect(find.byKey(const ValueKey('notice-dialog-opt-out')), findsNothing);
+    });
+
+    testWidgets('an action takes the primary and the dismissal steps down', (
+      tester,
+    ) async {
+      // §2.1 permits one primary per region, so the dismissal cannot keep it
+      // beside the action that fixes the problem.
+      await _openNotice(
+        tester,
+        actionLabel: 'Set up printer',
+        optOutLabel: 'Don’t show again',
+      );
+
+      expect(_tierOf(tester, 'notice-dialog-action'), AppButtonTier.primary);
+      expect(_tierOf(tester, 'notice-dialog-dismiss'), AppButtonTier.secondary);
+      expect(_tierOf(tester, 'notice-dialog-opt-out'), AppButtonTier.tertiary);
+    });
+
+    testWidgets('all three fit a phone without leaving the action row', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _openNotice(
+        tester,
+        actionLabel: 'Set up printer',
+        optOutLabel: 'Don’t show again',
+      );
+
+      expect(tester.takeException(), isNull);
+      final close = tester.getRect(find.text('Close'));
+      final setUp = tester.getRect(find.text('Set up printer'));
+      expect(close.center.dy, setUp.center.dy);
+      expect(close.right, lessThan(setUp.left));
+      // The opt-out sits above the row rather than squeezing into it.
+      expect(
+        tester.getRect(find.text('Don’t show again')).bottom,
+        lessThan(close.top),
+      );
+    });
+
+    testWidgets('answers with the press it was given', (tester) async {
+      for (final (key, choice) in <(String?, NoticeDialogChoice)>[
+        ('notice-dialog-dismiss', NoticeDialogChoice.dismissed),
+        ('notice-dialog-action', NoticeDialogChoice.action),
+        ('notice-dialog-opt-out', NoticeDialogChoice.optedOut),
+      ]) {
+        final answer = await _openNotice(
+          tester,
+          actionLabel: 'Set up printer',
+          optOutLabel: 'Don’t show again',
+          press: key,
+        );
+        expect(await answer, choice, reason: key);
+      }
+    });
+
+    testWidgets('is not dismissed by a tap on the scrim', (tester) async {
+      await _openNotice(tester);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NoticeDialog), findsOne);
+    });
+  });
+}
+
+AppButtonTier _tierOf(WidgetTester tester, String key) =>
+    tester.widget<AppButton>(find.byKey(ValueKey(key))).tier;
+
+/// Opens a notice dialog, optionally presses one of its buttons, and hands
+/// back what `showAppNoticeDialog` will answer.
+Future<Future<NoticeDialogChoice>> _openNotice(
+  WidgetTester tester, {
+  String? actionLabel,
+  String? optOutLabel,
+  String? press,
+}) async {
+  late Future<NoticeDialogChoice> answer;
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: spiritTheme,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: AppButton(
+              label: 'Open',
+              onPressed: () => answer = showAppNoticeDialog(
+                context,
+                title: 'Saved as CT-1',
+                notice: const AppNotice.offline('No printer is set up.'),
+                stillTrue: 'The sale itself is saved.',
+                actionLabel: actionLabel,
+                optOutLabel: optOutLabel,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('Open'));
+  await tester.pumpAndSettle();
+  if (press != null) {
+    await tester.tap(find.byKey(ValueKey(press)));
+    await tester.pumpAndSettle();
+  }
+  return answer;
 }
 
 AppButton _confirm(WidgetTester tester) => tester.widget<AppButton>(
