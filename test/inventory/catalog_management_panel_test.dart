@@ -496,7 +496,81 @@ void main() {
       find.byKey(const ValueKey('inventory-categories-empty')),
       findsOneWidget,
     );
+    // The way to add one is at the head of the page, and it opens rather than
+    // commits, so it is live before anything has been typed.
+    expect(_enabled(tester, 'inventory-categories-add'), isTrue);
+    await _openCategorySheet(tester);
     expect(_enabled(tester, 'catalog-management-add-category'), isFalse);
+  });
+
+  testWidgets('the category sheet opens from the head of the page', (
+    tester,
+  ) async {
+    final reader = _Reader.seeded();
+    final writer = _Writer();
+    await _pump(tester, _controller(), reader, writer: writer);
+    await tester.tap(find.byKey(const ValueKey('inventory-categories')));
+    await tester.pumpAndSettle();
+
+    // Above the first category rather than below the paginator.
+    expect(
+      tester
+          .getTopLeft(find.byKey(const ValueKey('inventory-categories-add')))
+          .dy,
+      lessThan(
+        tester
+            .getTopLeft(
+              find.byKey(const ValueKey('inventory-rename-cat-bakery')),
+            )
+            .dy,
+      ),
+    );
+    // Nothing to type into until the sheet is open.
+    expect(
+      find.byKey(const ValueKey('catalog-management-category-name')),
+      findsNothing,
+    );
+
+    await _openCategorySheet(tester);
+    final field = find.byKey(
+      const ValueKey('catalog-management-category-name'),
+    );
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+
+    // Cancel writes nothing and asks nothing, and keeps what was typed.
+    await tester.enterText(field, 'Frozen');
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-add-category-cancel')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('catalog-management-category-sheet')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('catalog-management-confirm')),
+      findsNothing,
+    );
+    expect(writer.categories, isEmpty);
+
+    // The keyboard's done key submits, into the same confirmation.
+    await _openCategorySheet(tester);
+    expect(find.text('Frozen'), findsOneWidget);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('It can be renamed later'), findsOne);
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+    expect(writer.categories.single.name, 'Frozen');
   });
 
   testWidgets('a category is confirmed, written, and re-read', (tester) async {
@@ -513,6 +587,7 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('inventory-categories')));
     await tester.pumpAndSettle();
+    await _openCategorySheet(tester);
     await tester.enterText(
       find.byKey(const ValueKey('catalog-management-category-name')),
       '  Cold  drinks  ',
@@ -545,6 +620,40 @@ void main() {
       reader.pages.where((path) => path == _categoriesPath).length,
       greaterThanOrEqualTo(2),
     );
+  });
+
+  testWidgets('typing a category name does not read the list again', (
+    tester,
+  ) async {
+    final reader = _Reader.seeded();
+    await _pump(tester, _controller(), reader, writer: _Writer());
+    await tester.tap(find.byKey(const ValueKey('inventory-categories')));
+    await tester.pumpAndSettle();
+    final readsBefore = reader.pages
+        .where((path) => path == _categoriesPath)
+        .length;
+
+    await _openCategorySheet(tester);
+    final field = find.byKey(
+      const ValueKey('catalog-management-category-name'),
+    );
+    for (final typed in <String>['C', 'Co', 'Col', 'Cold']) {
+      await tester.enterText(field, typed);
+      await tester.pump();
+      // The list stays up while the name is typed, rather than going back to
+      // its loading state after each character.
+      expect(find.text('Reading your categories'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('inventory-rename-cat-bakery')),
+        findsOneWidget,
+      );
+    }
+
+    expect(
+      reader.pages.where((path) => path == _categoriesPath).length,
+      readsBefore,
+    );
+    expect(_enabled(tester, 'catalog-management-add-category'), isTrue);
   });
 
   testWidgets('renaming a category preserves its document identity', (
@@ -2187,6 +2296,16 @@ Iterable<String> _documentIdsOnScreen(WidgetTester tester) => tester
 String _field(WidgetTester tester, String key) => fieldText(tester, key);
 
 bool _enabled(WidgetTester tester, String key) => pressable(tester, key);
+
+/// Opens the add-category sheet from the head of the categories route.
+Future<void> _openCategorySheet(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('inventory-categories-add')));
+  await tester.pumpAndSettle();
+  expect(
+    find.byKey(const ValueKey('catalog-management-category-sheet')),
+    findsOneWidget,
+  );
+}
 
 TenantSessionController _controller({TenantRole role = TenantRole.owner}) =>
     TenantSessionController()..open(

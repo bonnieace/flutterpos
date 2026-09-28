@@ -28,6 +28,7 @@ import '../ui/records.dart';
 import '../ui/states.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/sheet.dart';
 import '../ui/skeleton.dart';
 import '../ui/snackbar.dart';
 import '../ui/status.dart';
@@ -3596,6 +3597,14 @@ final class _RenameCategoryDialogState extends State<_RenameCategoryDialog> {
 /// and both controls keep the keys they had. What changed is that a category
 /// is drawn as a record now - a mark, a name, one affordance - instead of as a
 /// label beside a button competing with it for width.
+///
+/// **Adding one starts from the head of the page, in a sheet, at the
+/// developer's direction on 2026-09-28** - the arrangement Expenses, Staff and
+/// Suppliers already have. The name field used to sit in a card under the
+/// list and the paginator, which put the one thing a new shop comes here to do
+/// below the fold, and further below it the more categories there were. The
+/// sheet only takes the name: the confirmation, the write and its notice run
+/// exactly as they did from the card, once the sheet has closed.
 final class _CategoriesScreen extends StatefulWidget {
   const _CategoriesScreen({
     required this.session,
@@ -3627,25 +3636,69 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
   int _generation = 0;
   bool _working = false;
 
+  /// The read on screen, started only when the page or generation changes.
+  ///
+  /// Started from `build` until 2026-09-28, which made every rebuild a fresh
+  /// read: each character typed into the name below put the list back to
+  /// "Reading your categories" and asked the server again.
+  late Future<TenantCatalogPage<TenantCategory>> _read = _load();
+
   Future<TenantCatalogPage<TenantCategory>> _load() => TenantCatalogRepository(
     session: widget.session,
     reader: widget.reader,
   ).loadCategories(pageSize: widget.pageSize, cursor: _cursors[_page]);
+
+  @override
+  void didUpdateWidget(_CategoriesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session != widget.session ||
+        oldWidget.reader != widget.reader ||
+        oldWidget.pageSize != widget.pageSize) {
+      _read = _load();
+    }
+  }
 
   Future<void> _run(Future<void> Function() action) async {
     if (_working || widget.busy) return;
     setState(() => _working = true);
     try {
       await action();
-      if (mounted) setState(() => _generation++);
+      if (mounted) {
+        setState(() {
+          _generation++;
+          _read = _load();
+        });
+      }
     } finally {
       if (mounted) setState(() => _working = false);
     }
   }
 
+  /// Asks for the name in a sheet, then adds it the way the card under the
+  /// list used to.
+  ///
+  /// The sheet shares [_CategoriesScreen.name] with the panel rather than
+  /// holding its own, so a name typed and then cancelled is still there the
+  /// next time the sheet opens, and a refused one can be corrected rather
+  /// than typed again.
+  Future<void> _openAddSheet() async {
+    final submit = await showAppSheet<bool>(
+      context,
+      builder: (sheetContext, scrollController) => _AddCategorySheet(
+        name: widget.name,
+        scrollController: scrollController,
+        onSubmit: () => Navigator.of(sheetContext).pop(true),
+        onCancel: () => Navigator.of(sheetContext).pop(),
+      ),
+    );
+    if (submit == true && mounted) await _run(widget.onAdd);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final ring = tokens.colors.action.focusRing;
+    final ringGutter = ring.width + ring.offset;
     return AppScaffold(
       key: const ValueKey('inventory-categories-screen'),
       title: 'Categories',
@@ -3654,7 +3707,7 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
       contentWidth: AppContentWidth.reading,
       body: FutureBuilder<TenantCatalogPage<TenantCategory>>(
         key: ValueKey('inventory-category-page-$_page-$_generation'),
-        future: _load(),
+        future: _read,
         builder: (context, snapshot) {
           final page = snapshot.data;
           final reading = snapshot.connectionState != ConnectionState.done;
@@ -3667,6 +3720,21 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
               tokens.spacing.s24,
             ),
             children: <Widget>[
+              // **The page's own action, the width of the page**, as on
+              // Expenses and Suppliers: secondary, because the page is mostly
+              // for reading, and drawn in every read state so the list under it
+              // never jumps when the read lands.
+              if (widget.writer != null) ...<Widget>[
+                AppButton(
+                  key: const ValueKey('inventory-categories-add'),
+                  label: 'Add category',
+                  icon: Icons.new_label_outlined,
+                  tier: AppButtonTier.secondary,
+                  expand: true,
+                  onPressed: _working || widget.busy ? null : _openAddSheet,
+                ),
+                SizedBox(height: tokens.spacing.s12),
+              ],
               if (reading)
                 const LoadingState(message: 'Reading your categories')
               else if (snapshot.hasError)
@@ -3689,18 +3757,26 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
                   illustration: 'my-files.svg',
                 )
               else
-                _CategoryList(
-                  categories: page.items,
-                  onRename: _working
-                      ? null
-                      : (category) => _run(() => widget.onRename(category)),
+                // Inset by the focus ring's gutter, which the button above
+                // reserves around itself, so the two share one edge.
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: ringGutter),
+                  child: _CategoryList(
+                    categories: page.items,
+                    onRename: _working
+                        ? null
+                        : (category) => _run(() => widget.onRename(category)),
+                  ),
                 ),
               if (page != null && !reading)
                 ...Pagination(
                   pageNumber: _page + 1,
                   onPrevious: _page == 0 || _working
                       ? null
-                      : () => setState(() => _page--),
+                      : () => setState(() {
+                          _page--;
+                          _read = _load();
+                        }),
                   onNext: page.hasMore && !_working
                       ? () => setState(() {
                           _cursors = <String?>[
@@ -3708,27 +3784,22 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
                             page.nextCursor,
                           ];
                           _page++;
+                          _read = _load();
                         })
                       : null,
                   endOfList: !page.hasMore,
                 ).withGapAbove(tokens.spacing.s16),
-              if (widget.writer != null) ...<Widget>[
-                SizedBox(height: tokens.spacing.s24),
-                _CategoryComposer(
-                  name: widget.name,
-                  busy: _working || widget.busy,
-                  onAdd: () => _run(widget.onAdd),
-                  onChanged: () => setState(() {}),
-                ),
-              ],
               SizedBox(height: tokens.spacing.s16),
               // The one fact about this screen that is not visible on it, and
               // the one somebody hunting for a delete control needs.
-              Text(
-                'Categories are renamed here, never deleted.',
-                key: const ValueKey('inventory-categories-scope'),
-                style: tokens.typography.caption.copyWith(
-                  color: tokens.colors.text.tertiary,
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: ringGutter),
+                child: Text(
+                  'Categories are renamed here, never deleted.',
+                  key: const ValueKey('inventory-categories-scope'),
+                  style: tokens.typography.caption.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
                 ),
               ),
             ],
@@ -3862,53 +3933,85 @@ final class _CategoryMark extends StatelessWidget {
   }
 }
 
-/// Adding one: kept where it was in the order, given a surface of its own.
-final class _CategoryComposer extends StatelessWidget {
-  const _CategoryComposer({
+/// The add sheet's form: one name, the commit over the way out, as every sheet
+/// form in the app ends.
+///
+/// **It collects the name and nothing else.** Building the intent, the
+/// confirmation and the write stay with the panel, so a refusal is reported
+/// the way it always was, and this form cannot disagree with the card it
+/// replaced about what may be added.
+final class _AddCategorySheet extends StatelessWidget {
+  const _AddCategorySheet({
     required this.name,
-    required this.busy,
-    required this.onAdd,
-    required this.onChanged,
+    required this.scrollController,
+    required this.onSubmit,
+    required this.onCancel,
   });
 
   final TextEditingController name;
-  final bool busy;
-  final VoidCallback onAdd;
-  final VoidCallback onChanged;
+  final ScrollController scrollController;
+  final VoidCallback onSubmit;
+  final VoidCallback onCancel;
+
+  bool get _canSubmit => name.text.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Text(
-            'Add a category',
-            style: tokens.typography.labelEyebrow.copyWith(
-              color: tokens.colors.text.secondary,
-            ),
+    return ListView(
+      key: const ValueKey('catalog-management-category-sheet'),
+      controller: scrollController,
+      padding: EdgeInsets.all(tokens.spacing.s24),
+      children: <Widget>[
+        Text(
+          'Add category',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
           ),
-          SizedBox(height: tokens.spacing.s12),
-          AppTextField(
-            key: const ValueKey('catalog-management-category-name'),
-            controller: name,
-            maxLength: maximumCatalogNameLength,
-            label: 'Category name',
-            onChanged: (_) => onChanged(),
+        ),
+        SizedBox(height: tokens.spacing.s8),
+        Text(
+          'Products are filed under it, and the register filters by it.',
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
           ),
-          SizedBox(height: tokens.spacing.s12),
-          AppButton(
+        ),
+        SizedBox(height: tokens.spacing.s24),
+        // Focused on open: the sheet has one field, and the keyboard is the
+        // next thing anybody who opened it needs.
+        AppTextField(
+          key: const ValueKey('catalog-management-category-name'),
+          controller: name,
+          maxLength: maximumCatalogNameLength,
+          label: 'Category name',
+          placeholder: 'e.g. Cold drinks',
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) {
+            if (_canSubmit) onSubmit();
+          },
+        ),
+        SizedBox(height: tokens.spacing.s32),
+        // Only the button follows the typing, so a keystroke rebuilds one
+        // button rather than the form.
+        ListenableBuilder(
+          listenable: name,
+          builder: (context, _) => AppButton(
             key: const ValueKey('catalog-management-add-category'),
             label: 'Add category',
-            icon: Icons.new_label_outlined,
             tier: AppButtonTier.primary,
             expand: true,
-            onPressed: busy || name.text.trim().isEmpty ? null : onAdd,
+            onPressed: _canSubmit ? onSubmit : null,
           ),
-        ],
-      ),
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        AppButton(
+          key: const ValueKey('catalog-management-add-category-cancel'),
+          label: 'Cancel',
+          expand: true,
+          onPressed: onCancel,
+        ),
+      ],
     );
   }
 }

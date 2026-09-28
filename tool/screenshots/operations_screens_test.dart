@@ -685,27 +685,13 @@ void main() {
     afterPump: (tester) async {
       await tester.tap(find.byKey(const ValueKey('inventory-categories')));
       await tester.pumpAndSettle();
+      // The name is asked for in a sheet from the head of the page since
+      // 2026-09-28, so there is nothing to scroll to any more.
+      await tester.tap(find.byKey(const ValueKey('inventory-categories-add')));
+      await tester.pumpAndSettle();
       final field = find.byKey(
         const ValueKey('catalog-management-category-name'),
       );
-      await tester.scrollUntilVisible(
-        field,
-        300,
-        // **The categories route's own scrollable, by key.** It is a pushed
-        // route since 2026-09-04, so the catalog list underneath is still in
-        // the tree and `find.byType(Scrollable).first` reaches that one.
-        scrollable: find
-            .descendant(
-              of: find.byKey(const ValueKey('inventory-categories-scroll')),
-              matching: find.byType(Scrollable),
-            )
-            .first,
-        maxScrolls: 30,
-      );
-      // `scrollUntilVisible` stops when a widget is built rather than when it is
-      // on screen, which is the trap `19-correct-a-product` was quietly failing.
-      await tester.ensureVisible(field);
-      await tester.pumpAndSettle();
       await tester.enterText(field, 'Frozen');
       await tester.pumpAndSettle();
       await tester.tap(
@@ -732,6 +718,47 @@ void main() {
       // reader, so the re-read the panel correctly performs returns the same
       // three seeded categories. That is the fixture rather than the screen, and
       // it is said here so nobody reads the image as a defect.
+    },
+    viewports: responsiveViewports,
+  );
+
+  // **The categories route, with the way to add one at its head.** Nothing
+  // photographed this route before 2026-09-28; `18b` only passed through it.
+  screenshotCase(
+    '18f-categories',
+    build: () => inSession(
+      TenantCatalogManagementScreen(
+        reader: FakeTenantReader.business(),
+        writer: FakeCatalogWriter(),
+        updateCallable: FakeCallable(),
+      ),
+    ),
+    afterPump: (tester) async {
+      await tester.tap(find.byKey(const ValueKey('inventory-categories')));
+      await tester.pumpAndSettle();
+    },
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    '18g-category-sheet',
+    build: () => inSession(
+      TenantCatalogManagementScreen(
+        reader: FakeTenantReader.business(),
+        writer: FakeCatalogWriter(),
+        updateCallable: FakeCallable(),
+      ),
+    ),
+    afterPump: (tester) async {
+      await tester.tap(find.byKey(const ValueKey('inventory-categories')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('inventory-categories-add')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('catalog-management-category-name')),
+        'Frozen',
+      );
+      await tester.pumpAndSettle();
     },
     viewports: responsiveViewports,
   );
