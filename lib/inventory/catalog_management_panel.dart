@@ -3437,9 +3437,9 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
             enabled: !widget.busy,
             maxLength: maximumCatalogSkuLength,
             onChanged: (_) => setState(() {}),
-            label: 'Code (SKU or barcode)',
+            label: 'SKU',
             leading: Icons.tag,
-            helper: 'What the register matches a scan against. No spaces.',
+            placeholder: 'e.g. 30ml',
           ),
           SizedBox(height: tokens.spacing.s8),
           AppTextField(
