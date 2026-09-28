@@ -410,6 +410,76 @@ void main() {
     await fixture.dispose(tester);
   });
 
+  testWidgets(
+    'a launch refresh that runs out its deadline leaves the card up until '
+    'the network changes',
+    (tester) async {
+      // **What a connected phone showed on 2026-09-28, on Wi-Fi and on 4G.**
+      // The users read at launch did not answer inside the gateway's 8 seconds
+      // - Firestore was waiting on an App Check token, which Play Integrity
+      // took 10-15 seconds to refuse - so the gateway reported
+      // `deadline-exceeded`, the cached bootstrap stood, and the card said the
+      // device was offline while it was not. Nothing asks the server again on
+      // its own: the card stays until a connectivity change, which is why
+      // switching networks in either direction looked like the fix.
+      //
+      // This pins the shell's half of that as it stands. A retry while the
+      // cached bootstrap is up would change the middle expectation, and would
+      // be a decision of its own.
+      final reconnects = StreamController<Object?>.broadcast();
+      addTearDown(reconnects.close);
+      final launchRead = Completer<RootRoutingProfile>();
+      final fixture = _ShellFixture(
+        memberships: [_membership('tenant-a')],
+        localTenantId: 'tenant-a',
+        profileFuture: launchRead.future,
+        reconnectSignals: reconnects.stream,
+        rootCache: _MemoryRootCache(
+          CachedRootRoutingProfile(
+            profile: _activeProfile,
+            cachedAt: DateTime.utc(2026, 9, 28, 13),
+          ),
+        ),
+        directoryCache: _MemoryDirectoryCache(
+          CachedTenantDirectory(
+            memberships: [_membership('tenant-a')],
+            cachedAt: DateTime.utc(2026, 9, 28, 13),
+          ),
+        ),
+      );
+      await fixture.pump(tester);
+      fixture.auth.add('user-a');
+      await _pumpRouting(tester);
+
+      final card = find.byKey(const ValueKey('offline-bootstrap-banner'));
+      expect(card, findsNothing, reason: 'nothing to say while it is asking');
+
+      // The gateway's own deadline, as `FirebaseTenantGateway` reports it.
+      launchRead.completeError(
+        const TenantBootstrapUnavailable('deadline-exceeded'),
+      );
+      await _pumpRouting(tester);
+      expect(card, findsOneWidget);
+      expect(fixture.gateway.rootCalls, 1);
+
+      // A minute later, with a network that has been working all along, the
+      // card is still up and the server has not been asked again.
+      fixture.gateway.profileFuture = null;
+      fixture.gateway.profile = _activeProfile;
+      await tester.pump(const Duration(minutes: 1));
+      await _pumpRouting(tester);
+      expect(card, findsOneWidget);
+      expect(fixture.gateway.rootCalls, 1);
+
+      // Any connectivity change asks again, and a read that answers clears it.
+      reconnects.add(null);
+      await _pumpRouting(tester);
+      expect(fixture.gateway.rootCalls, 2);
+      expect(card, findsNothing);
+      await fixture.dispose(tester);
+    },
+  );
+
   testWidgets('the offline card belongs to the home and to nothing else', (
     tester,
   ) async {

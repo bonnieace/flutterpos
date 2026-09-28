@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
@@ -16,7 +15,6 @@ import 'login_screen.dart';
 import 'tenancy/tenancy.dart';
 import 'tenancy/tenant_configuration_screens.dart';
 import 'theme.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -82,31 +80,18 @@ Future<void> main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      // **A callable will not leave the device without an App Check provider,
-      // and that is what this line is for.** `FirebaseContextProvider` in the
-      // Android callable SDK fetches an auth token and an App Check token as one
-      // pair; with no provider installed the second throws *No AppCheckProvider
-      // installed* and the pair fails as *1 out of 2 underlying tasks failed* —
-      // so `listMyTenants` never reaches the wire and the routing shell reports
-      // "We could not open your business account", naming a connection that is
-      // in fact fine.
+      // **No App Check provider, and no plugin to install one, since
+      // 2026-09-28.** One was activated here - the debug provider in debug,
+      // Play Integrity in release - for an app nobody had registered, against
+      // a backend that enforces nothing. Every Firebase SDK waits for a token
+      // before it sends, so on a phone the launch's `users` read waited 10-15
+      // seconds for Play Integrity to be refused, ran out its 8-second
+      // deadline, and told the person they were offline on every cold start.
       //
-      // **Debug builds only, and the debug provider.** It mints a local token
-      // that the emulator suite does not verify, which is exactly what a local
-      // run needs. A release build is deliberately left as it was: real
-      // attestation is Play Integrity plus a registered app in the console, and
-      // turning that on here without either would swap one silent failure for
-      // another.
-      if (kDebugMode) {
-        await FirebaseAppCheck.instance.activate(
-          providerAndroid: const AndroidDebugProvider(),
-          providerApple: const AppleDebugProvider(),
-        );
-      } else if (defaultTargetPlatform == TargetPlatform.android) {
-        await FirebaseAppCheck.instance.activate(
-          providerAndroid: const AndroidPlayIntegrityProvider(),
-        );
-      }
+      // App Check's component is still in the build, through the native
+      // Storage SDK. With no provider a token request fails at once and every
+      // SDK sends without one, which a phone confirmed on Wi-Fi and 4G.
+      // `app_check_off_test.dart` says what bringing App Check back takes.
       await Hive.initFlutter();
       // **No store that fails to open may stop the till for good.** Each one
       // below opens through the gate: a torn final write is repaired, anything

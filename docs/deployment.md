@@ -515,10 +515,16 @@ Known and deliberate, so a deploy is not surprised by them:
 - **Nothing enforces App Check.** `requestPasswordReset` was the only callable
   that did, and it stopped on 2026-09-24. It is also the only one a stranger
   can call, and it has no per-recipient cooldown, so a script can ask for reset
-  mail to a real account over and over. The client uses the debug provider in
-  debug builds and Play Integrity in Android release builds; register the new
-  Firebase Android app and its Play signing certificate with App Check before
-  relying on release tokens.
+  mail to a real account over and over. **The client installs no App Check
+  provider since 2026-09-28**: activating Play Integrity for an unregistered
+  app made every cold start wait 10-15 seconds for a refused token and report
+  the device offline. App Check's component still ships (the native Storage
+  SDK depends on it); with no provider, token requests fail at once and every
+  SDK sends without one. Bringing it back is one change, not several: the
+  `firebase_app_check` plugin and a provider, `ke.co.uzapay.pos` registered
+  with App Check with its Play signing certificate, and enforcement switched
+  on. `test/dev/app_check_off_test.dart` fails until the first of those is
+  undone on purpose.
 - **GlitchTip release reporting** needs a verified test event from the release
   app; see section 13 above.
 - **No alert on a new business request**, above.
