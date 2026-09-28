@@ -79,6 +79,7 @@ final class TenantBrandingPanel extends StatefulWidget {
     this.logoStore,
     this.backgroundRemover,
     this.printProof,
+    this.onRequestAccountDeletion,
   });
 
   final TenantDataReader reader;
@@ -86,6 +87,10 @@ final class TenantBrandingPanel extends StatefulWidget {
   final TenantBrandingLogoStore? logoStore;
   final TenantProductBackgroundRemover? backgroundRemover;
   final TenantBrandingProofPrint? printProof;
+
+  /// Opens the page where a person asks for their account to be deleted. Null
+  /// offers nothing.
+  final VoidCallback? onRequestAccountDeletion;
 
   @override
   State<TenantBrandingPanel> createState() => _TenantBrandingPanelState();
@@ -505,6 +510,21 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
               loading: _saving,
               onPressed: canPublish ? () => _publish(session, published) : null,
             ),
+            // **Here since 2026-09-28, at the developer's direction**, moved
+            // from the foot of the home. Play asks that deleting an account be
+            // reachable inside the app. It opens the request page and deletes
+            // nothing itself, so it does not wait on a save.
+            if (widget.onRequestAccountDeletion
+                case final requestDeletion?) ...<Widget>[
+              SizedBox(height: tokens.spacing.s32),
+              AppButton(
+                key: const ValueKey('request-account-deletion'),
+                label: 'Delete account',
+                tier: AppButtonTier.destructive,
+                expand: true,
+                onPressed: requestDeletion,
+              ),
+            ],
           ],
         );
       },

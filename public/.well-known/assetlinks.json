@@ -5,6 +5,8 @@
       "namespace": "android_app",
       "package_name": "ke.co.uzapay.pos",
       "sha256_cert_fingerprints": [
+        "59:2E:6A:3A:21:2E:69:48:0A:C1:95:2E:95:E6:56:E5:76:7E:8A:8E:24:CC:DC:FB:7B:D9:97:08:39:DE:92:86",
+        "C0:D0:5A:3D:7B:B6:96:54:F7:3E:D0:A4:6F:01:6B:DB:31:6C:2F:C0:0F:77:9F:86:B7:7E:92:35:14:19:5D:5D",
         "46:B8:9F:B5:74:37:B9:58:D3:1F:57:E7:8C:56:B4:F1:1F:54:F5:92:75:0F:F7:38:E0:AF:FD:6B:B0:C3:99:E7"
       ]
     }

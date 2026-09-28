@@ -74,6 +74,17 @@ h1 {
   letter-spacing: -.02em;
   color: var(--ink);
 }
+h2 {
+  margin: 32px 0 10px;
+  font-family: var(--heading);
+  font-size: 19px;
+  line-height: 26px;
+  font-weight: 700;
+  color: var(--ink);
+}
+ul { margin: 0 0 16px; padding-left: 20px; color: var(--muted); }
+ul li { margin: 0 0 8px; }
+ul li strong { color: var(--ink); }
 p { margin: 0 0 16px; color: var(--muted); }
 p.lead { color: var(--ink); font-size: 17px; line-height: 27px; }
 p:last-child { margin-bottom: 0; }

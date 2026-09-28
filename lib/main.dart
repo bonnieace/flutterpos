@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'observability/app_telemetry.dart';
 import 'observability/glitchtip_telemetry.dart';
 import 'storage/device_storage.dart';
@@ -1090,6 +1091,14 @@ class SpiritPOSApp extends StatelessWidget {
               callable: FirebaseRemoveProductBackgroundCallable(),
             ),
             printProof: printBrandingProof,
+            // The hosted page that takes the request. Deletion is done by hand
+            // for now, so the page is the whole of the process.
+            onRequestAccountDeletion: () => unawaited(
+              launchUrl(
+                Uri.parse('https://auth.uzapay.co.ke/account-deletion'),
+                mode: LaunchMode.externalApplication,
+              ),
+            ),
           ),
         ),
         'printer' => TenantConfigurationPage(
