@@ -164,9 +164,18 @@ final class SalesTotalsSessionContextLoader {
     required this.reader,
     this.categoryPageSize = 50,
     this.staffPageSize = 25,
+    this.cacheOnly = false,
   });
 
   final TenantDataReader reader;
+
+  /// Whether [reader] answers only from what this device holds.
+  ///
+  /// **A cache-only failure is not reported.** That reader answers a document
+  /// the device never downloaded as absent, so the staff directory's owner
+  /// check reads "not downloaded yet" as a business with no owner. Anything
+  /// really wrong is read again by the server pass beside it, which reports it.
+  final bool cacheOnly;
 
   /// The most categories offered as filters, in one page.
   final int categoryPageSize;
@@ -223,11 +232,13 @@ final class SalesTotalsSessionContextLoader {
     } on TenantScopeViolation {
       rethrow;
     } catch (error, stackTrace) {
-      AppTelemetry.captureHandled(
-        error,
-        stackTrace,
-        boundary: 'reporting.category_options_read',
-      );
+      if (!cacheOnly) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'reporting.category_options_read',
+        );
+      }
       return const SalesTotalsCategoryOptions.unreadable();
     }
   }
@@ -256,11 +267,13 @@ final class SalesTotalsSessionContextLoader {
     } on TenantScopeViolation {
       rethrow;
     } catch (error, stackTrace) {
-      AppTelemetry.captureHandled(
-        error,
-        stackTrace,
-        boundary: 'reporting.staff_options_read',
-      );
+      if (!cacheOnly) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'reporting.staff_options_read',
+        );
+      }
       return const SalesTotalsStaffOptions.unreadable();
     }
   }

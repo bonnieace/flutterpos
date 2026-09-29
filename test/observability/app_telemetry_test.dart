@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:uzapay_pos/observability/app_telemetry.dart';
@@ -99,6 +100,30 @@ void main() {
       telemetry.failures.last.operation.context['parent_attempt_id'],
       operation.attemptId,
     );
+  });
+
+  test('an Android token fetch that failed offline is connectivity', () {
+    final telemetry = RecordingAppTelemetry(retain: true);
+    final operation = telemetry.start('server.getSalesComparison');
+    telemetry.reportFailure(
+      FirebaseFunctionsException(
+        code: 'unknown',
+        message:
+            'java.util.concurrent.ExecutionException: '
+            '1 out of 2 underlying tasks failed',
+      ),
+      StackTrace.current,
+      operation: operation,
+    );
+    expect(telemetry.failures.single.kind, 'connectivity');
+
+    // Any other `unknown` is still a fault nobody has explained.
+    telemetry.reportFailure(
+      FirebaseFunctionsException(code: 'unknown', message: 'INTERNAL'),
+      StackTrace.current,
+      operation: telemetry.start('server.getSalesComparison'),
+    );
+    expect(telemetry.failures.last.kind, 'unexpected');
   });
 
   test('a connectivity fallback outside any operation is not an event', () {

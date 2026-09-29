@@ -446,6 +446,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
         session,
         reader: reader,
         management: management,
+        cacheOnly: cacheOnly,
       );
       final appliedStaffId =
           management &&
@@ -526,6 +527,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
                 session,
                 reader: cache,
                 management: true,
+                cacheOnly: true,
               );
               final aggregator = TenantDeviceSalesAggregator(
                 session: session,
@@ -563,6 +565,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
                 session,
                 reader: widget.reader,
                 management: true,
+                cacheOnly: false,
               );
               final appliedStaffId =
                   chosenStaffId != null && context.staff.contains(chosenStaffId)
@@ -627,6 +630,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
     TenantSession session, {
     required TenantDataReader reader,
     required bool management,
+    required bool cacheOnly,
   }) {
     final key =
         '${session.uid}:${session.tenantId}:${session.epoch}:$management:'
@@ -637,6 +641,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           ? SalesTotalsSessionContextLoader(
               reader: reader,
               staffPageSize: widget.staffPageSize,
+              cacheOnly: cacheOnly,
             ).load(session)
           : _cashierContext(session, reader),
     );

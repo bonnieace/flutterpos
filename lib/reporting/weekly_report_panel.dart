@@ -185,6 +185,7 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
     return (session) async {
       final context = await SalesTotalsSessionContextLoader(
         reader: reader,
+        cacheOnly: deviceOnly,
       ).load(session);
       // A repository factory supplied by the live route may close over its
       // Firestore reader. Never reuse it for the cached branch.

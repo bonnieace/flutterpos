@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:uzapay_pos/checkout/checkout_tender.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 import 'package:uzapay_pos/reporting/reporting.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -603,6 +604,29 @@ void main() {
           _failure(TenantSalesTotalsFailure.unavailable),
         );
       }
+    });
+  });
+
+  group('reporting a failure', () {
+    // The home's quiet read, offline: the report that reached SIT as an error.
+    test('unavailable is connectivity, so a fallback is not an event', () {
+      final telemetry = RecordingAppTelemetry(retain: true);
+      telemetry.reportFailure(
+        const TenantSalesTotalsException(TenantSalesTotalsFailure.unavailable),
+        StackTrace.current,
+        boundary: 'tenancy.quiet_read',
+      );
+      expect(telemetry.failures, isEmpty);
+    });
+
+    test('a refusal is still reported, under its own kind', () {
+      final telemetry = RecordingAppTelemetry(retain: true);
+      telemetry.reportFailure(
+        const TenantSalesTotalsException(TenantSalesTotalsFailure.forbidden),
+        StackTrace.current,
+        boundary: 'tenancy.quiet_read',
+      );
+      expect(telemetry.failures.single.kind, 'permission');
     });
   });
 

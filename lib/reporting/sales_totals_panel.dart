@@ -279,6 +279,7 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
             reader: cache,
             categoryPageSize: widget.categoryPageSize,
             staffPageSize: widget.staffPageSize,
+            cacheOnly: true,
           );
     _loaderCached = cache == null
         ? null

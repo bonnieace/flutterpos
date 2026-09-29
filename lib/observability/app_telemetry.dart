@@ -388,6 +388,13 @@ String classifyTelemetryFailure(String code, Object error) {
   ).hasMatch(value)) {
     return 'connectivity';
   }
+  // The Android Functions SDK fetches the sign-in tokens before it sends
+  // anything, and when that fails with no signal it reports `unknown` over this
+  // message rather than `unavailable`. The request never left the device.
+  if (value == 'unknown' &&
+      error.toString().contains('underlying tasks failed')) {
+    return 'connectivity';
+  }
   if (RegExp(r'permission|forbidden|unauthoriz').hasMatch(value)) {
     return 'permission';
   }

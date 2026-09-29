@@ -131,6 +131,11 @@ final class TenantSalesTotalsException implements Exception {
 
   final TenantSalesTotalsFailure failure;
 
+  /// The failure, as the code telemetry classifies by. Without it an offline
+  /// read is filed under the class name as `unexpected`, and every till that
+  /// opens its home with no signal reports an error.
+  String get code => failure.name;
+
   @override
   String toString() => 'TenantSalesTotalsException(${failure.name})';
 }
