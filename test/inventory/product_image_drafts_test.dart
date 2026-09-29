@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:uzapay_pos/inventory/inventory.dart';
+import 'package:uzapay_pos/observability/app_telemetry.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
@@ -50,6 +51,48 @@ void main() {
       expect(drafts.bytesFor(tenantId: 'tenant-a', productId: 'pd-2'), isNull);
     },
   );
+
+  test('a product with no staged photograph reports nothing', () {
+    final telemetry = RecordingAppTelemetry(retain: true);
+
+    // Every product tile asks this on every build, and almost every answer
+    // is "none". The answer must not arrive as an error event.
+    final bytes = AppTelemetry.withInstance(
+      telemetry,
+      () => drafts.bytesFor(tenantId: 'tenant-a', productId: 'pd-1'),
+    );
+
+    expect(bytes, isNull);
+    expect(
+      telemetry.failures.map(
+        (failure) =>
+            '${failure.operation.name} ${failure.errorType}: ${failure.message}',
+      ),
+      isEmpty,
+    );
+  });
+
+  test('a damaged staged photograph is still reported', () async {
+    await draftsBox.put(
+      tenantProductImageDraftKey(tenantId: 'tenant-a', productId: 'pd-1'),
+      <String, Object?>{
+        'schemaVersion': TenantProductImageDraft.schemaVersion,
+        'tenantId': 'tenant-a',
+      },
+    );
+    final telemetry = RecordingAppTelemetry(retain: true);
+
+    final bytes = AppTelemetry.withInstance(
+      telemetry,
+      () => drafts.bytesFor(tenantId: 'tenant-a', productId: 'pd-1'),
+    );
+
+    expect(bytes, isNull);
+    expect(
+      telemetry.failures.single.operation.name,
+      'inventory.image_draft_decode',
+    );
+  });
 
   test(
     'a photograph waits for the product its creation is still queued for',

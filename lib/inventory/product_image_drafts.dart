@@ -184,8 +184,11 @@ final class HiveTenantProductImageDrafts extends ChangeNotifier
   Future<void> close() => _box.close();
 
   TenantProductImageDraft? _parse(Object? raw) {
+    // No record is the ordinary answer for nearly every product drawn, not a
+    // failure. Only a record that exists and cannot be read is reported.
+    if (raw == null) return null;
     try {
-      final map = Map<Object?, Object?>.from(raw! as Map);
+      final map = Map<Object?, Object?>.from(raw as Map);
       if (map['schemaVersion'] != TenantProductImageDraft.schemaVersion) {
         return null;
       }
