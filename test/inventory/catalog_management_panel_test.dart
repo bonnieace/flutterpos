@@ -148,7 +148,7 @@ void main() {
         const Size.square(48),
       );
       expect(find.text('CATEGORY'), width < 1024 ? findsNothing : findsOne);
-      expect(find.text('UNIT COST'), width < 1200 ? findsNothing : findsOne);
+      expect(find.text('BUYING PRICE'), width < 1200 ? findsNothing : findsOne);
       expect(find.text('RETAIL VALUE'), width < 1200 ? findsNothing : findsOne);
     }
   });
@@ -197,7 +197,7 @@ void main() {
         width: 1440,
       );
       final maySeeCost = role == TenantRole.owner || role == TenantRole.admin;
-      expect(find.text('UNIT COST'), maySeeCost ? findsOne : findsNothing);
+      expect(find.text('BUYING PRICE'), maySeeCost ? findsOne : findsNothing);
       expect(find.text('RETAIL VALUE'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('inventory-actions-pd-1')),
@@ -733,6 +733,103 @@ void main() {
     );
   });
 
+  testWidgets('a category added from the product form files the product', (
+    tester,
+  ) async {
+    final writer = _Writer();
+    await _pump(tester, _controller(), _Reader.seeded(), writer: writer);
+    await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-product-category')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add new category').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('catalog-management-category-sheet')),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-category-name')),
+      'Cold drinks',
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-add-category')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+
+    final category = writer.categories.single;
+    expect(category.name, 'Cold drinks');
+    // Chosen for the product in the form it was added from.
+    expect(
+      tester
+          .widget<AppSelect<String>>(
+            find.byKey(const ValueKey('catalog-management-product-category')),
+          )
+          .value,
+      category.categoryId,
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-product-name')),
+      'Soda',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-product-sku')),
+      'S-1',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-product-price')),
+      '60',
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-add-product')),
+    );
+    await tester.pumpAndSettle();
+
+    // The catalog was read before the category existed; the product is filed
+    // under it all the same.
+    final product = writer.products.single;
+    expect(product.categoryId, category.categoryId);
+    expect(product.categoryName, 'Cold drinks');
+  });
+
+  testWidgets('cancelling the category sheet leaves the choice as it was', (
+    tester,
+  ) async {
+    final writer = _Writer();
+    await _pump(tester, _controller(), _Reader.seeded(), writer: writer);
+    await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-product-category')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add new category').last);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-add-category-cancel')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(writer.categories, isEmpty);
+    expect(
+      tester
+          .widget<AppSelect<String>>(
+            find.byKey(const ValueKey('catalog-management-product-category')),
+          )
+          .value,
+      '',
+    );
+  });
+
   testWidgets('a failed product write removes its staged owned image', (
     tester,
   ) async {
@@ -889,7 +986,7 @@ void main() {
     expect(writer.products, isEmpty);
     expect(
       snackNotice(tester).message,
-      startsWith('Enter a price as a plain amount'),
+      startsWith('Enter the selling price as a plain amount'),
     );
   });
 
@@ -974,7 +1071,7 @@ void main() {
     expect(
       find.text(
         'Production batches are recorded against it, and each completed '
-        'batch sets its unit cost.',
+        'batch sets its buying price.',
       ),
       findsOneWidget,
     );
@@ -1455,7 +1552,7 @@ void main() {
       'requestId': 'catalog-test-request-0000',
       'price': 70.0,
     });
-    expect(snackNotice(tester).message, startsWith('Corrected: unit price.'));
+    expect(snackNotice(tester).message, startsWith('Corrected: selling price.'));
     // The catalog is re-read and the till is asked to re-read its own copy,
     // without which this device would keep selling at the old price.
     expect(reader.pages.where((path) => path == _productsPath).length, 2);

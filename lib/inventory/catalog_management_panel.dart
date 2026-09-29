@@ -526,9 +526,11 @@ final class _TenantCatalogManagementPanelState
         reader: widget.reader,
       );
 
-  Future<void> _addCategory(TenantSession session) async {
+  /// Adds the category named in [_categoryName], and answers it once it is
+  /// written or queued, so a product form can file under it at once.
+  Future<TenantCategory?> _addCategory(TenantSession session) async {
     final writer = widget.writer;
-    if (writer == null || _busy) return;
+    if (writer == null || _busy) return null;
     final capturedKey = _sessionKey(session);
 
     // The intent is built before anything is confirmed, so a name this boundary
@@ -542,7 +544,7 @@ final class _TenantCatalogManagementPanelState
     } on TenantCatalogManagementException catch (error) {
       _categoryRequestId = null;
       _report(_refusalNotice(error.code));
-      return;
+      return null;
     }
     if (!await _confirmed(
           title: 'Add the category "${intent.name}"?',
@@ -554,7 +556,7 @@ final class _TenantCatalogManagementPanelState
           action: 'Add category',
         ) ||
         !_stillCurrent(capturedKey)) {
-      return;
+      return null;
     }
 
     setState(() {
@@ -562,7 +564,7 @@ final class _TenantCatalogManagementPanelState
     });
     try {
       final result = await writer.createCategory(intent);
-      if (!_stillCurrent(capturedKey)) return;
+      if (!_stillCurrent(capturedKey)) return null;
       // Only an unknown outcome may have landed, so only it keeps the request
       // ID. A rejected or unattempted write left nothing behind, and reusing
       // its ID would deny an edited retry as a replay.
@@ -575,12 +577,47 @@ final class _TenantCatalogManagementPanelState
         _categoryName.clear();
         widget.onChanged?.call();
       }
+      // Queued is what a write returns on every device, online included, and
+      // the overlay already lists it. An ambiguous one may not exist, so it is
+      // left for the re-read to show rather than chosen.
+      return switch (result.kind) {
+        TenantCatalogWriteKind.committed ||
+        TenantCatalogWriteKind.queued => TenantCategory.fromSnapshot(
+          TenantQueryDocumentSnapshot(
+            path: intent.path,
+            data: <String, Object?>{'name': intent.name},
+          ),
+        ),
+        _ => null,
+      };
     } on TenantCatalogManagementException catch (error) {
-      if (!_stillCurrent(capturedKey)) return;
+      if (!_stillCurrent(capturedKey)) return null;
       _report(_refusalNotice(error.code));
+      return null;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// The add-category sheet over a product form, then [_addCategory].
+  ///
+  /// The same sheet, confirmation and write as the Categories page, so a
+  /// category added here is added exactly as it is there.
+  Future<TenantCategory?> _addCategoryOver(
+    BuildContext formContext,
+    TenantSession session,
+  ) async {
+    final submit = await showAppSheet<bool>(
+      formContext,
+      builder: (sheetContext, scrollController) => _AddCategorySheet(
+        name: _categoryName,
+        scrollController: scrollController,
+        onSubmit: () => Navigator.of(sheetContext).pop(true),
+        onCancel: () => Navigator.of(sheetContext).pop(),
+      ),
+    );
+    if (submit != true || !mounted) return null;
+    return _addCategory(session);
   }
 
   Future<void> _renameCategory(
@@ -673,6 +710,9 @@ final class _TenantCatalogManagementPanelState
   }
 
   Future<void> _openAddProduct(TenantSession session, _CatalogView view) async {
+    // Categories added from inside the form. [view] was read before any of
+    // them existed, and the product is checked against its categories.
+    final added = <TenantCategory>[];
     final submit = await _openProductFormRoute<bool>(
       form: () => _AddProductScreen(
         categories: view.categories.items,
@@ -691,6 +731,13 @@ final class _TenantCatalogManagementPanelState
         onCategorySelected: (categoryId) {
           _selectedCategoryId = categoryId;
         },
+        onAddCategory: widget.writer == null
+            ? null
+            : (formContext) async {
+                final category = await _addCategoryOver(formContext, session);
+                if (category != null) added.add(category);
+                return category;
+              },
         costType: _productCostType,
         onCostTypeSelected: (costType) => _productCostType = costType,
         onChooseImage: widget.imageStore == null ? null : _chooseProductImage,
@@ -699,7 +746,9 @@ final class _TenantCatalogManagementPanelState
         backgroundRemover: widget.backgroundRemover,
       ),
     );
-    if (submit == true && mounted) await _addProduct(session, view);
+    if (submit == true && mounted) {
+      await _addProduct(session, view, addedCategories: added);
+    }
   }
 
   Future<void> _openCategories(TenantSession session) async {
@@ -750,7 +799,11 @@ final class _TenantCatalogManagementPanelState
     if (mounted) _reload();
   }
 
-  Future<void> _addProduct(TenantSession session, _CatalogView view) async {
+  Future<void> _addProduct(
+    TenantSession session,
+    _CatalogView view, {
+    List<TenantCategory> addedCategories = const <TenantCategory>[],
+  }) async {
     final writer = widget.writer;
     if (writer == null || _busy) return;
     final capturedKey = _sessionKey(session);
@@ -764,7 +817,10 @@ final class _TenantCatalogManagementPanelState
         cost: _productCost.text,
         openingQuantity: _productQuantity.text,
         categoryId: _selectedCategoryId ?? '',
-        categories: view.categories.items,
+        categories: <TenantCategory>[
+          ...view.categories.items,
+          ...addedCategories,
+        ],
         requestId: _productRequestId ??= _newRequestId(),
         costType: _productCostType,
       );
@@ -2653,8 +2709,8 @@ final class _InventoryProductTable extends StatelessWidget {
               product: const _InventoryTableHeader('Product'),
               category: const _InventoryTableHeader('Category'),
               stock: const _InventoryTableHeader('In stock'),
-              price: const _InventoryTableHeader('Unit price'),
-              cost: const _InventoryTableHeader('Unit cost'),
+              price: const _InventoryTableHeader('Selling price'),
+              cost: const _InventoryTableHeader('Buying price'),
               value: const _InventoryTableHeader('Retail value'),
               actions: const _InventoryTableHeader(
                 'Actions',
@@ -3106,9 +3162,9 @@ String _updateMessage(TenantProductUpdateResult result) {
   // echoing `cost` and `costMinor`.
   final cost = result.changedFields.contains(TenantProductField.cost)
       ? result.costMinor == null
-            ? ' Its unit cost is no longer recorded, so its sales report no '
-                  'profit and are counted as missing cost data.'
-            : ' Its unit cost is now ${_money(result.costMinor!)}.'
+            ? ' Its buying price is no longer recorded, so its sales report '
+                  'no profit and are counted as missing cost data.'
+            : ' Its buying price is now ${_money(result.costMinor!)}.'
       : '';
   return 'Corrected: $fields.$cost What each field held before is recorded '
       'against the product. The catalog below has been re-read; this device '
@@ -3204,20 +3260,23 @@ String _refusalMessage(String code) => switch (code) {
     'Enter a code of at most $maximumCatalogSkuLength characters, with no '
         'spaces - it is what the register matches a scan against.',
   'invalid_price' =>
-    'Enter a price as a plain amount with at most two decimal places, such as '
-        '65 or 19.99.',
+    'Enter the selling price as a plain amount with at most two decimal '
+        'places, such as 65 or 19.99.',
   'price_not_representable' =>
-    'That price is larger than a sale in this app can record. It is refused '
-        'here rather than at the register, where it would stop a customer.',
+    'That selling price is larger than a sale in this app can record. It is '
+        'refused here rather than at the register, where it would stop a '
+        'customer.',
   'invalid_cost' =>
-    'Enter the unit cost as a plain amount with at most two decimal places, '
-        'such as 40 or 12.50 - or leave it blank if you do not track it.',
+    'Enter the buying price as a plain amount with at most two decimal '
+        'places, such as 40 or 12.50 - or leave it blank if you do not track '
+        'it.',
   'cost_not_representable' =>
-    'That unit cost is larger than a sale in this app can record. A sale '
-        'records the cost alongside the price, so it is refused here.',
+    'That buying price is larger than a sale in this app can record. A sale '
+        'records the buying price alongside the selling price, so it is '
+        'refused here.',
   'cost_forbidden' =>
     'Only an owner or administrator may record what a product costs. Leave the '
-        'unit cost blank, or ask one of them to set it.',
+        'buying price blank, or ask one of them to set it.',
   'price_forbidden' =>
     'Only an owner or administrator may change a price. Nothing was sent, so '
         'the other fields were not changed either.',
@@ -3335,6 +3394,7 @@ final class _AddProductScreen extends StatefulWidget {
     required this.image,
     required this.busy,
     required this.onCategorySelected,
+    required this.onAddCategory,
     required this.costType,
     required this.onCostTypeSelected,
     required this.onChooseImage,
@@ -3361,6 +3421,11 @@ final class _AddProductScreen extends StatefulWidget {
   final TenantProductImageCandidate? image;
   final bool busy;
   final ValueChanged<String> onCategorySelected;
+
+  /// Adds a category over this form and answers it, or null when none was
+  /// added. Null offers no *Add new category*, as the delivery form offers no
+  /// *Add new supplier* without a writer.
+  final Future<TenantCategory?> Function(BuildContext context)? onAddCategory;
   final TenantProductCostType costType;
   final ValueChanged<TenantProductCostType> onCostTypeSelected;
   final Future<TenantProductImageCandidate?> Function()? onChooseImage;
@@ -3376,6 +3441,13 @@ final class _AddProductScreen extends StatefulWidget {
 }
 
 final class _AddProductScreenState extends State<_AddProductScreen> {
+  static const String _newCategory = '__new_category__';
+
+  /// The categories read with the catalog, and any added from this form.
+  late final List<TenantCategory> _categories = <TenantCategory>[
+    ...widget.categories,
+  ];
+
   late String _categoryId =
       widget.categories.any(
         (category) => category.id == widget.selectedCategoryId,
@@ -3400,6 +3472,20 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
   void _removeImage() {
     setState(() => _image = null);
     widget.onImageChanged(null);
+  }
+
+  Future<void> _addCategory() async {
+    final add = widget.onAddCategory;
+    if (add == null) return;
+    final category = await add(context);
+    if (category == null || !mounted) return;
+    setState(() {
+      if (!_categories.any((known) => known.id == category.id)) {
+        _categories.add(category);
+      }
+      _categoryId = category.id;
+    });
+    widget.onCategorySelected(category.id);
   }
 
   @override
@@ -3449,7 +3535,7 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
             enabled: !widget.busy,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             onChanged: (_) => setState(() {}),
-            label: 'Unit price',
+            label: 'Selling price',
             leading: Icons.payments_outlined,
           ),
           if (widget.canRecordCost) ...<Widget>[
@@ -3461,7 +3547,7 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              label: 'Unit cost (optional)',
+              label: 'Buying price (optional)',
               leading: Icons.payments_outlined,
             ),
           ],
@@ -3488,10 +3574,6 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
             keyboardType: const TextInputType.numberWithOptions(decimal: false),
             label: 'Opening stock (optional)',
             leading: Icons.inventory_2_outlined,
-            helper:
-                'How many units are on the shelf now. It is recorded in the '
-                'stock ledger as an opening balance, so the figure says where '
-                'it came from.',
           ),
           SizedBox(height: tokens.spacing.s8),
           AppSelect<String>(
@@ -3507,15 +3589,25 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
                 : null,
             items: <AppSelectItem<String>>[
               const AppSelectItem<String>(value: '', label: 'Choose category'),
-              for (final category in widget.categories)
+              for (final category in _categories)
                 AppSelectItem<String>(
                   value: category.id,
                   label: category.name,
                   key: ValueKey('catalog-management-category-${category.id}'),
                 ),
+              if (widget.onAddCategory != null)
+                const AppSelectItem<String>(
+                  key: ValueKey('catalog-management-category-new'),
+                  value: _newCategory,
+                  label: 'Add new category',
+                ),
             ],
             onChanged: (value) {
               if (value == null) return;
+              if (value == _newCategory) {
+                _addCategory();
+                return;
+              }
               setState(() => _categoryId = value);
               if (value.isNotEmpty) widget.onCategorySelected(value);
             },
@@ -4209,11 +4301,11 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
             'about the product changes: its stock is untouched, its identity '
             'stays the same, and every sale, return, and reported figure '
             'already recorded still names it.\n\n'
-            'A new price applies to the next sale, and sales already recorded '
-            'keep the price they were sold at. A unit cost works the same way: '
-            'every sale records what a unit cost at the moment of that sale, '
-            'so correcting it prices the next sale and never changes a profit '
-            'already reported.\n\n'
+            'A new selling price applies to the next sale, and sales already '
+            'recorded keep the price they were sold at. A buying price works '
+            'the same way: every sale records the buying price at the moment '
+            'of that sale, so correcting it prices the next sale and never '
+            'changes a profit already reported.\n\n'
             'The register matches a scan against the code, so changing it stops '
             'the old one finding this product. Nothing makes a code unique '
             'either - if another product already scans as the new one, the '
@@ -4232,11 +4324,8 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
           key: const ValueKey('catalog-management-edit-sku'),
           controller: _sku,
           maxLength: maximumCatalogSkuLength,
-          label: 'Code (SKU or barcode)',
+          label: 'SKU',
           leading: Icons.tag,
-          helper:
-              'What the register matches a scan against. No spaces. The old '
-              'code stops finding this product.',
         ),
         SizedBox(height: tokens.spacing.s12),
         _ProductCostTypeChoice(
@@ -4251,11 +4340,8 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
             key: const ValueKey('catalog-management-edit-price'),
             controller: _price,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            label: 'Unit price',
+            label: 'Selling price',
             leading: Icons.payments_outlined,
-            helper:
-                'Applies to the next sale. Sales already recorded keep '
-                'the price they were sold at.',
           ),
           SizedBox(height: tokens.spacing.s8),
           AppTextField(
@@ -4263,26 +4349,15 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
             controller: _cost,
             enabled: !_clearCost,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            label: 'Unit cost',
+            label: 'Buying price (optional)',
             leading: Icons.payments_outlined,
-            helper: widget.product.cost == null
-                ? 'No unit cost is recorded. Enter one to start recording '
-                      'it; leave it blank to keep reporting no profit for '
-                      'this product.'
-                : 'Leaving this blank keeps the recorded cost as it is. '
-                      'Removing it is a separate act, below.',
           ),
           if (widget.product.cost != null)
             CheckboxListTile(
               key: const ValueKey('catalog-management-edit-clear-cost'),
               value: _clearCost,
               contentPadding: EdgeInsets.zero,
-              title: const Text('Remove the recorded unit cost'),
-              subtitle: const Text(
-                'Its sales then report no profit and are counted as '
-                'missing cost data, rather than reporting the whole price '
-                'as profit.',
-              ),
+              title: const Text('Remove the recorded buying price'),
               onChanged: (value) => setState(() => _clearCost = value ?? false),
             ),
         ] else ...[
@@ -4430,9 +4505,9 @@ final class _ProductCostTypeChoice extends StatelessWidget {
           key: ValueKey('${choiceKey.value}-consequence'),
           value == TenantProductCostType.produced
               ? 'Production batches are recorded against it, and each '
-                    'completed batch sets its unit cost.'
+                    'completed batch sets its buying price.'
               : 'It is restocked from suppliers, and a delivery that names a '
-                    'unit cost sets its unit cost.',
+                    'buying price sets its buying price.',
           style: tokens.typography.caption.copyWith(
             color: tokens.colors.text.secondary,
           ),

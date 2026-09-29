@@ -314,7 +314,7 @@ final class _ProductionContents extends StatelessWidget {
             title: 'No batches yet',
             hint:
                 'Record what was made and what it cost, and its stock and its '
-                'cost follow. Mark a product as Made here in Inventory first.',
+                'cost follow. Mark a product as Produced in Inventory first.',
             illustration: 'approve.svg',
           )
         else

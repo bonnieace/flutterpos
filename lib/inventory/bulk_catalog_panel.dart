@@ -1305,22 +1305,15 @@ final class _BulkCatalogContents extends StatelessWidget {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           onChanged: (_) => onFormChanged(),
           label: field == TenantProductField.price
-              ? 'Unit price for every product chosen'
-              : 'Unit cost for every product chosen',
-          helper: field == TenantProductField.price
-              ? 'At most two decimal places. A new price applies to the next '
-                    'sale; sales already recorded keep the price they were '
-                    'sold at.'
-              : 'At most two decimal places. Every sale records the cost as '
-                    'it stands at that moment, so this prices the next sale '
-                    'and never changes a profit already reported.',
+              ? 'Selling price for every product chosen'
+              : 'Buying price for every product chosen',
         )
       else
         const Text(
           key: ValueKey('bulk-catalog-clear-cost-note'),
-          'Every product chosen stops having a recorded unit cost. Their sales '
-          'then report no profit and are counted as missing cost data, rather '
-          'than reporting the whole price as profit.',
+          'Every product chosen stops having a recorded buying price. Their '
+          'sales then report no profit and are counted as missing cost data, '
+          'rather than reporting the whole price as profit.',
         ),
       SizedBox(height: tokens.spacing.s20),
       // **The second `Row` on this route that had only ever been laid out
@@ -1606,13 +1599,13 @@ final class _BulkCatalogContents extends StatelessWidget {
 /// filter bar in the app to serve one screen.
 enum _BulkFieldChoice {
   category(TenantProductField.categoryId, false, 'categoryId', 'Category'),
-  price(TenantProductField.price, false, 'price', 'Unit price'),
-  cost(TenantProductField.cost, false, 'cost', 'Unit cost'),
+  price(TenantProductField.price, false, 'price', 'Selling price'),
+  cost(TenantProductField.cost, false, 'cost', 'Buying price'),
   clearCost(
     TenantProductField.cost,
     true,
     'clear-cost',
-    'Remove the unit cost',
+    'Remove the buying price',
   );
 
   const _BulkFieldChoice(this.field, this.clearsCost, this.slug, this.label);
@@ -1825,9 +1818,9 @@ String _batchConfirmation(
             ? '\n\nTheir sales then report no profit and are counted as '
                   'missing cost data. Profit already reported does not move: '
                   'every sale recorded the cost as it stood at that moment.'
-            : '\n\nEvery sale records what a unit cost at the moment of that '
-                  'sale, so this prices the next sale and never changes a '
-                  'profit already reported.',
+            : '\n\nEvery sale records the buying price at the moment of '
+                  'that sale, so this prices the next sale and never changes '
+                  'a profit already reported.',
       );
     case TenantProductField.categoryId:
       buffer.write(

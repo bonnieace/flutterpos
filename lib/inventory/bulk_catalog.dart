@@ -2001,7 +2001,7 @@ String _describeImportedProduct(
 ) {
   final cost = product.costMinor;
   return '${product.sku} • ${tenantCatalogMajorUnits(product.priceMinor)} '
-      '• ${cost == null ? 'no unit cost' : 'costs ${tenantCatalogMajorUnits(cost)}'} '
+      '• ${cost == null ? 'no buying price' : 'costs ${tenantCatalogMajorUnits(cost)}'} '
       '• opens holding ${product.quantity ?? 0} '
       '• filed under ${_importedCategory(product.categoryId, row, names)}';
 }
@@ -2055,10 +2055,10 @@ String bulkCatalogRefusalMessage(
     'That price is larger than a sale in this app can record, so it is '
         'refused here rather than at the register.',
   'invalid_cost' =>
-    'The unit cost must be a plain amount with at most two decimal places, '
-        'or blank.',
+    'The buying price must be a plain amount with at most two decimal '
+        'places, or blank.',
   'cost_not_representable' =>
-    'That unit cost is larger than a sale in this app can record.',
+    'That buying price is larger than a sale in this app can record.',
   'invalid_product_name' =>
     'The product name must not be blank and must be at most '
         '$maximumCatalogNameLength characters.',

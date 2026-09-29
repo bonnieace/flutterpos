@@ -236,7 +236,7 @@ void main() {
         findsNothing,
       );
       expect(
-        find.textContaining('Some products that match are bought in'),
+        find.textContaining('Some products that match are purchased'),
         findsWidgets,
       );
     },

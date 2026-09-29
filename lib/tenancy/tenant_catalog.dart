@@ -97,8 +97,8 @@ const int _categoryScanPageSize = 50;
 /// manager may set it, and it sits beside the descriptive fields rather than
 /// beside the money.
 enum TenantProductCostType {
-  purchased('purchased', 'Bought in'),
-  produced('produced', 'Made here');
+  purchased('purchased', 'Purchased'),
+  produced('produced', 'Produced');
 
   const TenantProductCostType(this.wireValue, this.label);
 
@@ -301,7 +301,7 @@ List<RecordAttribute> tenantProductAttributes(
     valueKey: ValueKey('$keyPrefix-stock-${product.id}'),
   ),
   RecordAttribute(
-    label: 'Unit price',
+    label: 'Selling price',
     value: moneyText(product.price),
     kind: RecordValueKind.money,
     valueKey: ValueKey('$keyPrefix-price-${product.id}'),

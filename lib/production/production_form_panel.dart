@@ -325,7 +325,7 @@ final class _ProductionFormState extends State<_ProductionForm> {
             'were made.',
       'cost_too_large' => 'The cost per unit is larger than a sale can record.',
       'not_made_here' =>
-        'That product is bought in. Mark it as Made here in Inventory first.',
+        'That product is purchased. Mark it as Produced in Inventory first.',
       'retired_product' => 'That product has been retired.',
       'production_forbidden' =>
         'Only an owner, administrator or manager may record production.',
@@ -492,8 +492,8 @@ final class _ProductionFormState extends State<_ProductionForm> {
             autofocus: _choosingProduct,
             admits: (item) => item.costType == TenantProductCostType.produced,
             refusedHint:
-                'Some products that match are bought in. Mark a product as '
-                'Made here when you edit it in Inventory to record production '
+                'Some products that match are purchased. Mark a product as '
+                'Produced when you edit it in Inventory to record production '
                 'for it.',
             onSelected: _selectProduct,
             onEdited: () => setState(() {

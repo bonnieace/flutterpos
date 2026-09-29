@@ -257,7 +257,7 @@ void main() {
       expect(attributes.map((attribute) => attribute.label), <String>[
         'Code',
         'In stock',
-        'Unit price',
+        'Selling price',
       ]);
       expect(attributes.map((attribute) => attribute.value), <String>[
         'LAGER-001',

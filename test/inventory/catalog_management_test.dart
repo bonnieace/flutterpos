@@ -559,8 +559,8 @@ void main() {
       expect(intent.fields, <TenantProductField>[TenantProductField.costType]);
       // Not money, so a manager's correction carrying it is not refused.
       expect(intent.changesMoney, isFalse);
-      expect(intent.changes.single.previous, 'Bought in');
-      expect(intent.changes.single.next, 'Made here');
+      expect(intent.changes.single.previous, 'Purchased');
+      expect(intent.changes.single.next, 'Produced');
     });
 
     test('a cost type the product already holds is not a correction', () {
@@ -742,7 +742,7 @@ void main() {
       expect(intent.clearsCost, isTrue);
       expect(
         intent.changes.single.toString(),
-        'Unit cost: was 40, now not recorded',
+        'Buying price: was 40, now not recorded',
       );
     });
 
@@ -756,7 +756,7 @@ void main() {
       expect(intent.payload()['cost'], 12.5);
       expect(
         intent.changes.single.toString(),
-        'Unit cost: was not recorded, now 12.50',
+        'Buying price: was not recorded, now 12.50',
       );
     });
 

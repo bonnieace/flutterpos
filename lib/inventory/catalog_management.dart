@@ -319,8 +319,8 @@ final class TenantProductRetireIntent {
 enum TenantProductField {
   name('name', 'Name'),
   sku('sku', 'Code'),
-  price('price', 'Unit price'),
-  cost('cost', 'Unit cost'),
+  price('price', 'Selling price'),
+  cost('cost', 'Buying price'),
   categoryId('categoryId', 'Category'),
   image('image', 'Image'),
 
