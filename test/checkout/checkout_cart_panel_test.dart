@@ -135,6 +135,28 @@ void main() {
     );
   });
 
+  testWidgets('the till holds a Play update only while it holds a sale', (
+    tester,
+  ) async {
+    final activity = CheckoutCartActivity();
+    await _pump(tester, sessions, catalog, drafts, cartActivity: activity);
+    expect(activity.saleInProgress, isFalse);
+
+    await _tap(tester, 'checkout-product-product-a');
+    expect(activity.saleInProgress, isTrue);
+
+    await _tap(tester, 'checkout-tender-cash');
+    await _tap(tester, 'checkout-save');
+    expect(drafts.requests, hasLength(1));
+    expect(activity.saleInProgress, isFalse);
+
+    // A till closed with a cart on it has nothing left to protect.
+    await _tap(tester, 'checkout-product-product-b');
+    expect(activity.saleInProgress, isTrue);
+    await tester.pumpWidget(const SizedBox());
+    expect(activity.saleInProgress, isFalse);
+  });
+
   testWidgets('a refused sale keeps the cart and saves nothing', (
     tester,
   ) async {
@@ -1730,6 +1752,7 @@ Future<void> _pump(
   CheckoutDraftSink? drafts, {
   CheckoutPrinterSetupReminder? printerSetupReminder,
   void Function(BuildContext context)? onSetUpPrinter,
+  CheckoutCartActivity? cartActivity,
 }) => _pumpAt(
   tester,
   controller,
@@ -1741,6 +1764,7 @@ Future<void> _pump(
   const Size(1400, 4000),
   printerSetupReminder: printerSetupReminder,
   onSetUpPrinter: onSetUpPrinter,
+  cartActivity: cartActivity,
 );
 
 /// Pumps the till into a surface of an exact size.
@@ -1755,6 +1779,7 @@ Future<void> _pumpAt(
   Size size, {
   CheckoutPrinterSetupReminder? printerSetupReminder,
   void Function(BuildContext context)? onSetUpPrinter,
+  CheckoutCartActivity? cartActivity,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -1769,6 +1794,7 @@ Future<void> _pumpAt(
           drafts: drafts,
           printerSetupReminder: printerSetupReminder,
           onSetUpPrinter: onSetUpPrinter,
+          cartActivity: cartActivity,
         ),
       ),
     ),

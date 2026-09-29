@@ -99,6 +99,7 @@ dependencies:
   sentry_flutter: ^9.21.0
   flutter_svg: ^2.3.0
   flutter_typeahead: 6.0.0
+  in_app_update: ^5.0.0
   
   
 

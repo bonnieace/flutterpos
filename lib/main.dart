@@ -30,6 +30,7 @@ import 'dev/firebase_emulators.dart';
 import 'expenses/expenses.dart';
 import 'inventory/inventory.dart';
 import 'platform/device_identity.dart';
+import 'platform/play_update_gate.dart';
 import 'reporting/reporting.dart';
 import 'reports/report_saver.dart';
 import 'returns/returns.dart';
@@ -379,29 +380,34 @@ Future<void> main() async {
       );
       await invitationIntake.start();
 
+      final cartActivity = CheckoutCartActivity();
       runApp(
         SentryWidget(
-          child: SpiritPOSApp(
-            bootstrapService: bootstrapService,
-            checkoutOutbox: checkoutOutbox,
-            tenantMutationStore: tenantMutationStore,
-            productImageDrafts: productImageDrafts,
-            stockTakeDrafts: stockTakeDrafts,
-            productImportAttempts: productImportAttempts,
-            staffRequestTickets: staffRequestTickets,
-            tenantImageCache: tenantImageCache,
-            printerSetupReminder: printerSetupReminder,
-            checkoutCatalogCache: checkoutCatalogCache,
-            checkoutReceiptCounters: checkoutReceiptCounters,
-            checkoutPrintJobs: checkoutPrintJobs,
-            printerCapabilityProfile: printerCapabilityProfile,
-            printerTransport: printerTransport,
-            tenantShiftState: tenantShiftState,
-            deviceId: deviceId,
-            connectivity: connectivity,
-            invitationIntake: invitationIntake,
-            checkoutSyncSignals: checkoutSyncSignals,
-            bootstrapRefreshSignals: bootstrapRefreshSignals,
+          child: PlayUpdateGate(
+            saleInProgress: () => cartActivity.saleInProgress,
+            child: SpiritPOSApp(
+              bootstrapService: bootstrapService,
+              checkoutOutbox: checkoutOutbox,
+              tenantMutationStore: tenantMutationStore,
+              productImageDrafts: productImageDrafts,
+              stockTakeDrafts: stockTakeDrafts,
+              productImportAttempts: productImportAttempts,
+              staffRequestTickets: staffRequestTickets,
+              tenantImageCache: tenantImageCache,
+              printerSetupReminder: printerSetupReminder,
+              checkoutCatalogCache: checkoutCatalogCache,
+              checkoutReceiptCounters: checkoutReceiptCounters,
+              checkoutPrintJobs: checkoutPrintJobs,
+              printerCapabilityProfile: printerCapabilityProfile,
+              printerTransport: printerTransport,
+              tenantShiftState: tenantShiftState,
+              deviceId: deviceId,
+              connectivity: connectivity,
+              invitationIntake: invitationIntake,
+              checkoutSyncSignals: checkoutSyncSignals,
+              bootstrapRefreshSignals: bootstrapRefreshSignals,
+              cartActivity: cartActivity,
+            ),
           ),
         ),
       );
@@ -520,6 +526,7 @@ class SpiritPOSApp extends StatelessWidget {
     required this.checkoutSyncSignals,
     required this.bootstrapRefreshSignals,
     this.invitationIntake,
+    this.cartActivity,
   });
 
   final TenantBootstrapService bootstrapService;
@@ -567,6 +574,9 @@ class SpiritPOSApp extends StatelessWidget {
   /// The emailed invitation the app was opened on, and the ones that arrive
   /// later. Null in a host that no link can reach.
   final InvitationLinkIntake? invitationIntake;
+
+  /// Whether the till holds an unsaved sale, for the Play update to wait on.
+  final CheckoutCartActivity? cartActivity;
 
   /// Mints a newer ID token for the signed-in identity.
   ///
@@ -1555,6 +1565,7 @@ class SpiritPOSApp extends StatelessWidget {
                 ),
                 child: TenantCheckoutScreen(
                   cache: checkoutCatalogCache,
+                  cartActivity: cartActivity,
                   // The decorator is what makes a saved sale reach the server while the
                   // till stays open. It is wrapped here rather than inside the screen so
                   // the screen still knows only how to save.

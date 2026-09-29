@@ -62,6 +62,7 @@ import '../ui/skeleton.dart';
 import '../ui/status.dart';
 import '../ui/stepper.dart';
 import '../ui/tokens.dart';
+import 'checkout_cart_activity.dart';
 import 'checkout_catalog_cache.dart';
 import 'checkout_draft.dart';
 import 'checkout_print_configuration.dart';
@@ -185,6 +186,7 @@ final class TenantCheckoutScreen extends StatelessWidget {
     this.drafts,
     this.printerSetupReminder,
     this.onSetUpPrinter,
+    this.cartActivity,
   });
 
   final CheckoutCatalogSource cache;
@@ -192,6 +194,9 @@ final class TenantCheckoutScreen extends StatelessWidget {
   /// Absent until the composition root supplies it; the cart then prices a
   /// sale but cannot save one, exactly as the returns route behaves.
   final CheckoutDraftSink? drafts;
+
+  /// See [TenantCheckoutPanel.cartActivity].
+  final CheckoutCartActivity? cartActivity;
 
   /// See [TenantCheckoutPanel.printerSetupReminder].
   final CheckoutPrinterSetupReminder? printerSetupReminder;
@@ -208,6 +213,7 @@ final class TenantCheckoutScreen extends StatelessWidget {
       drafts: drafts,
       printerSetupReminder: printerSetupReminder,
       onSetUpPrinter: onSetUpPrinter,
+      cartActivity: cartActivity,
     ),
   );
 }
@@ -264,10 +270,15 @@ final class TenantCheckoutPanel extends StatefulWidget {
     this.drafts,
     this.printerSetupReminder,
     this.onSetUpPrinter,
+    this.cartActivity,
   });
 
   final CheckoutCatalogSource cache;
   final CheckoutDraftSink? drafts;
+
+  /// Told whether the cart holds a sale not yet saved, so a Play update can
+  /// wait for it. Absent, nothing is told.
+  final CheckoutCartActivity? cartActivity;
 
   /// Remembers a business that chose *Don't show again* on the no-printer
   /// notice. Absent, the notice offers no opt-out and is shown every time.
@@ -382,6 +393,7 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
           drafts: widget.drafts,
           tenantId: session.tenantId,
           printerSetupReminder: widget.printerSetupReminder,
+          cartActivity: widget.cartActivity,
           onSetUpPrinter:
               session.canAccess(
                 allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
@@ -679,6 +691,7 @@ final class _CartEditor extends StatefulWidget {
     this.printerSetupReminder,
     this.onSetUpPrinter,
     this.onSaved,
+    this.cartActivity,
   });
 
   /// Told once a sale is durable, so the till can read the stock again.
@@ -691,6 +704,7 @@ final class _CartEditor extends StatefulWidget {
 
   /// Already narrowed to the session's role by the panel.
   final void Function(BuildContext context)? onSetUpPrinter;
+  final CheckoutCartActivity? cartActivity;
 
   @override
   State<_CartEditor> createState() => _CartEditorState();
@@ -757,10 +771,17 @@ final class _CartEditorState extends State<_CartEditor> {
   void setState(VoidCallback fn) {
     super.setState(fn);
     _revision.value++;
+    // Here for the reason [_revision] is: every change to the cart passes
+    // through, including the save that empties it.
+    widget.cartActivity?.report(
+      this,
+      holdsSale: _quantities.isNotEmpty || _saving,
+    );
   }
 
   @override
   void dispose() {
+    widget.cartActivity?.report(this, holdsSale: false);
     _search.dispose();
     _revision.dispose();
     super.dispose();
