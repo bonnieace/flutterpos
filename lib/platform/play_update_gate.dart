@@ -40,7 +40,10 @@ final class InAppPlayUpdates implements PlayUpdates {
 ///
 /// **An install Play does not own is not a failure.** A sideloaded SIT build,
 /// or an emulator with no Play Store, is refused by Play every time it asks,
-/// so those refusals are dropped and anything else is reported.
+/// so those refusals are dropped and anything else is reported. So is a device
+/// whose Play Store the app cannot bind to, which the `google_apis` emulator
+/// is: Play Core fails that with a bare "Failed to bind to the service." and no
+/// install error code.
 final class PlayUpdateGate extends StatefulWidget {
   const PlayUpdateGate({
     super.key,
@@ -64,6 +67,9 @@ final class _PlayUpdateGateState extends State<PlayUpdateGate>
   static const _notUpdatableByPlay = <int>{-10, -9, -3};
 
   static final _installError = RegExp(r'Install Error\((-?\d+)\)');
+
+  /// Play Core's message when it cannot reach the Play Store's update service.
+  static const _unbound = 'Failed to bind to the service';
 
   bool _checking = false;
 
@@ -111,9 +117,12 @@ final class _PlayUpdateGateState extends State<PlayUpdateGate>
         );
       }
     } on PlatformException catch (error, stackTrace) {
-      final match = _installError.firstMatch(error.message ?? '');
+      final message = error.message ?? '';
+      final match = _installError.firstMatch(message);
       final code = match == null ? null : int.parse(match.group(1)!);
-      if (_notUpdatableByPlay.contains(code)) return;
+      if (_notUpdatableByPlay.contains(code) || message.contains(_unbound)) {
+        return;
+      }
       AppTelemetry.captureHandled(
         error,
         stackTrace,

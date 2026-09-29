@@ -99,6 +99,19 @@ void main() {
     expect(telemetry.failures, isEmpty);
   });
 
+  testWidgets('a Play Store the app cannot bind to reports nothing', (
+    tester,
+  ) async {
+    // Seen on the google_apis emulator on 2026-09-29: Play Core's own
+    // exception, with no install error code in it.
+    play.failure = PlatformException(
+      code: 'TASK_FAILURE',
+      message: 'Failed to bind to the service.',
+    );
+    await pump(tester);
+    expect(telemetry.failures, isEmpty);
+  });
+
   testWidgets('any other Play refusal is reported with its code', (
     tester,
   ) async {
