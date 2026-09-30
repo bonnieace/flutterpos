@@ -682,6 +682,63 @@ final class FirebaseTenantShiftWriter implements TenantShiftWriter {
       (path, data) => firestore.doc(path).update(data);
 }
 
+/// Counts one shift's sales on the server with a single aggregate query.
+///
+/// **One read per thousand sales rather than one per sale**, which is why this
+/// is an aggregate and not a page walk: it runs on every close. Filtered to the
+/// cashier as well as the shift because the Rules let a cashier query `sales`
+/// only where every possible result is provably their own - and a shift is
+/// only ever its cashier's, so the filter narrows nothing that belongs.
+///
+/// Always from the server. An aggregate cannot be answered from the cache, and
+/// a figure the cache made up is exactly what the fallback exists to avoid.
+final class FirebaseShiftServerSalesTotals implements ShiftServerSalesTotals {
+  FirebaseShiftServerSalesTotals({
+    FirebaseFirestore? firestore,
+    Duration timeout = const Duration(seconds: 10),
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _timeout = timeout;
+
+  final FirebaseFirestore _firestore;
+  final Duration _timeout;
+
+  @override
+  Future<ShiftServerTotals?> read({
+    required String tenantId,
+    required String uid,
+    required String shiftId,
+  }) async {
+    try {
+      final snapshot = await _firestore
+          .collection(TenantPaths(tenantId).sales)
+          .where('shiftId', isEqualTo: shiftId)
+          .where('soldById', isEqualTo: uid)
+          .aggregate(count(), sum('totalMinor'))
+          .get(source: AggregateSource.server)
+          .timeout(_timeout);
+      final transactionCount = snapshot.count;
+      final total = snapshot.getSum('totalMinor');
+      if (transactionCount == null || transactionCount < 0 || total == null) {
+        return null;
+      }
+      // Stored as whole minor units, so a sum that is not one is a record
+      // this cannot vouch for.
+      if (total < 0 || total != total.roundToDouble()) return null;
+      return ShiftServerTotals(
+        transactionCount: transactionCount,
+        totalMinor: total.toInt(),
+      );
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.server_totals_read',
+      );
+      return null;
+    }
+  }
+}
+
 String _requiredDocumentId(Map<String, Object?> data, String field) {
   final value = data[field];
   if (value is! String) {

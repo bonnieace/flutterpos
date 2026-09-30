@@ -24,6 +24,8 @@ const Map<String, bool> _codes = <String, bool>{
   'duplicate_product': true,
   'invalid_quantity': true,
   'invalid_discount': true,
+  'agreed_price_out_of_range': true,
+  'agreed_price_reason_required': true,
   'invalid_product_id': false,
   'invalid_business_date': false,
   'invalid_checkout_id': false,

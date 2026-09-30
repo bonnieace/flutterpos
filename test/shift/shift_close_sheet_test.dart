@@ -88,10 +88,7 @@ void main() {
     // Typed as money - what the till holds - and recorded as minor units. The
     // card box is left empty on purpose: an empty box is zero, because a shift
     // that took no card must not need a typed nought to close.
-    await tester.enterText(
-      find.byKey(const ValueKey('declared-cash')),
-      '1250',
-    );
+    await tester.enterText(find.byKey(const ValueKey('declared-cash')), '1250');
     await tester.enterText(
       find.byKey(const ValueKey('declared-mpesa')),
       '340.50',
@@ -134,13 +131,15 @@ void main() {
     // at all where two candidates exist, so a cashier holding three shifts had
     // two quietly left open and no surface offering to close them.
     //
-    // One is on another phone and one was left by an earlier install of this
-    // phone. Both are the same drawer as far as the cashier is concerned, and
-    // it is counted once, here.
+    // One is on another phone, one was left by an earlier install of this
+    // phone, and one more on a third phone. **This phone joins the newest**
+    // since 2026-09-29 - a shift belongs to its cashier on any phone - and the
+    // count here closes it with the figures and sweeps the other two onto it.
     server.shifts['tenants/tenant-a/shifts/shift-other-phone'] = shiftDocument(
       overrides: <String, Object?>{
         'shiftId': 'shift-other-phone',
         'deviceId': 'dev-ffffffffffffffffffffffffffffffff',
+        'startTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 7)),
       },
     );
     server.shifts['tenants/tenant-a/shifts/shift-earlier-install'] =
@@ -150,15 +149,18 @@ void main() {
             'deviceId': 'dev-0123456789abcdef01234567deadbeef',
           },
         );
+    server.shifts['tenants/tenant-a/shifts/shift-third-phone'] = shiftDocument(
+      overrides: <String, Object?>{
+        'shiftId': 'shift-third-phone',
+        'deviceId': 'dev-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+      },
+    );
 
     await _pumpPanel(tester, state, server);
-    await tester.tap(find.byKey(const ValueKey('open-shift')));
-    await _settle(tester);
+    // Joined on restore, so there is no shift to open - only one to close.
+    expect(find.byKey(const ValueKey('open-shift')), findsNothing);
     await _openShiftSheet(tester);
-    await tester.enterText(
-      find.byKey(const ValueKey('declared-cash')),
-      '900',
-    );
+    await tester.enterText(find.byKey(const ValueKey('declared-cash')), '900');
     await _tapInSheet(tester, 'close-shift-confirm');
 
     // Counted, because "a shift" over two of them would understate what was
@@ -173,10 +175,14 @@ void main() {
     };
     expect(closed.keys, hasLength(3));
 
-    // The count went onto the shift that was counted, and only that one. The
-    // others state no figures rather than stating zero - which is what
+    // The count went onto the joined shift, with its figures.
+    final counted = closed['tenants/tenant-a/shifts/shift-other-phone']!;
+    expect(counted['declaredCashMinor'], 90000);
+    expect(counted.containsKey('closedWithoutEvidence'), isFalse);
+
+    // The others state no figures rather than stating zero - which is what
     // `closedWithoutEvidence` means and what reconciliation reads it as.
-    for (final id in <String>['shift-other-phone', 'shift-earlier-install']) {
+    for (final id in <String>['shift-earlier-install', 'shift-third-phone']) {
       final other = closed['tenants/tenant-a/shifts/$id'];
       expect(other, isNotNull, reason: '$id must have been closed');
       expect(other!['closedWithoutEvidence'], isTrue);
@@ -189,16 +195,14 @@ void main() {
     // shared name it measured this one drawer against the counted shift's sales
     // alone - reporting it as over by exactly what the other two took, and
     // those two as unverifiable.
-    // `sharedShiftControllerFactory` numbers the shifts it opens.
-    final settlement =
-        closed['tenants/tenant-a/shifts/shift-1']!['settlementId'];
+    final settlement = counted['settlementId'];
     expect(settlement, isA<String>());
     expect(
       settlement,
       matches(RegExp(r'^st-[0-9]{1,15}-[0-9a-f]{16}$')),
       reason: 'the rules refuse any other shape',
     );
-    for (final id in <String>['shift-other-phone', 'shift-earlier-install']) {
+    for (final id in <String>['shift-earlier-install', 'shift-third-phone']) {
       expect(
         closed['tenants/tenant-a/shifts/$id']!['settlementId'],
         settlement,
@@ -282,17 +286,18 @@ void main() {
     );
     expect(find.textContaining('Expected cash'), findsNothing);
     expect(find.textContaining('Confirmed sales'), findsNothing);
-    // The disclaimer is now always present, because the sheet always names
-    // three payment methods.
-    expect(find.text(checkoutTenderDisclaimer), findsWidgets);
+    // **Asked for in five words, and nothing else, since 2026-09-29.** The
+    // product owner removed the tender disclaimer and `Refresh shift` from this
+    // sheet: it asks for the count and offers the two ways out of it.
+    expect(find.text('Enter what you took today.'), findsOneWidget);
+    expect(find.text(checkoutTenderDisclaimer), findsNothing);
+    expect(find.byKey(const ValueKey('refresh-shift')), findsNothing);
 
-    await tester.enterText(
-      find.byKey(const ValueKey('declared-cash')),
-      '250',
-    );
+    await tester.enterText(find.byKey(const ValueKey('declared-cash')), '250');
     await _tapInSheet(tester, 'close-shift-confirm');
 
     expect(find.text('Shift closed'), findsOneWidget);
+    expect(find.text(checkoutTenderDisclaimer), findsNothing);
     expect(find.byKey(const ValueKey('shift-close-sales')), findsNothing);
     expect(find.textContaining('Confirmed sales'), findsNothing);
     expect(find.textContaining('Expected cash'), findsNothing);
@@ -351,10 +356,7 @@ void main() {
     expect(server.updated, isEmpty);
 
     // Corrected, with the other two boxes left empty.
-    await tester.enterText(
-      find.byKey(const ValueKey('declared-cash')),
-      '80',
-    );
+    await tester.enterText(find.byKey(const ValueKey('declared-cash')), '80');
     await _tapInSheet(tester, 'close-shift-confirm');
 
     expect(find.text('Shift closed'), findsOneWidget);

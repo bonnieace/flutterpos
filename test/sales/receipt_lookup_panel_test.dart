@@ -34,6 +34,26 @@ void main() {
     expect(reader.queries, isEmpty);
   });
 
+  testWidgets('the number as printed is named and sent to the day search', (
+    tester,
+  ) async {
+    // Printed since 2026-09-29 with no date in it, which this screen's search
+    // needs; the day's sales search has one.
+    final reader = _Reader();
+
+    await _pump(tester, _controller(), reader);
+    await _lookUp(tester, 'JOHN-CT-7F2-001');
+
+    expect(
+      find.text(
+        'That is the number as printed, which has no date in it. Search for '
+        'it in the day’s sales, with the date on the receipt.',
+      ),
+      findsOneWidget,
+    );
+    expect(reader.queries, isEmpty);
+  });
+
   testWidgets('a found receipt shows its sale and opens returns', (
     tester,
   ) async {

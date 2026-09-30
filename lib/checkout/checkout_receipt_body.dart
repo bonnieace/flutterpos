@@ -39,6 +39,7 @@ import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
 import 'package:image/image.dart' as img;
 
 import 'checkout_print_configuration.dart';
+import 'checkout_receipt.dart' show printedCheckoutReceiptNumber;
 import 'checkout_sale.dart';
 import 'checkout_tender.dart';
 
@@ -150,10 +151,11 @@ abstract final class ReceiptWords {
   /// mapping here would be a second vocabulary for one thing, drifting the
   /// moment somebody renames M-Pesa on screen and not on paper.
   ///
-  /// The null case is a sale that recorded no tender. **Not blank** — a blank
-  /// beside "Paid by" reads as a printer fault rather than as missing data.
-  static String tender(CheckoutTender? tender) =>
-      tender?.label ?? 'Not recorded';
+  /// Null for a sale that recorded no tender, and **the receipt then prints no
+  /// "Paid by" line at all**, since 2026-09-29 - the product owner removed the
+  /// "Not recorded" it used to print. A blank beside the label would read as a
+  /// printer fault, so the label goes with the value.
+  static String? tender(CheckoutTender? tender) => tender?.label;
 
   /// Every word above, for the test that measures them.
   static const List<String> all = <String>[
@@ -513,17 +515,27 @@ final class CheckoutReceiptBody {
     String? servedBy,
   ) => <int>[
     // The receipt number is the thing a person quotes on the phone, so it is
-    // first and it is emphasised. It is also the queue's idempotency key, which
-    // means the paper and the durable record cannot disagree about which sale
-    // this is.
+    // first and it is emphasised.
+    //
+    // **Printed in its readable form since 2026-09-29** - `JOHN-CT-7F2-001` -
+    // derived from the stored number and nothing else but the name below, so
+    // the paper still names exactly one sale once the date line is read with
+    // it. The stored number stays the queue's idempotency key.
     //
     // **The whole row is bold, not just the number.** Emphasising one half of a
     // line needs two writes to that line, and two writes to one line is exactly
     // what was mis-positioning them.
     ...generator.text(
-      _pair(ReceiptWords.receiptLabel, sale.receiptNumber),
+      _pair(
+        ReceiptWords.receiptLabel,
+        ReceiptText.forPrinter(
+          printedCheckoutReceiptNumber(sale.receiptNumber, servedBy: servedBy),
+        ),
+      ),
       styles: const PosStyles(bold: true),
     ),
+    // **Required now, not decoration.** The printed number carries no date and
+    // restarts every day, so this line is what makes it one sale.
     ...generator.text(_pair(ReceiptWords.dateLabel, sale.businessDate)),
     if (servedBy != null && servedBy.trim().isNotEmpty)
       ...generator.text(
@@ -566,8 +578,16 @@ final class CheckoutReceiptBody {
   List<int> _lines(Generator generator, CheckoutReceiptSale sale) {
     final bytes = <int>[];
     for (final line in sale.lines) {
+      // **The code follows the name on the same line, and wraps with it** -
+      // the owner's choice on 2026-09-29 over a row of its own. It is one
+      // word to [_wrapped], so on a 58mm roll it usually takes the row the
+      // amount is on, whole, and on an 80mm roll the line often fits as is.
+      // A line sold before the code was recorded prints none.
+      final sku = line.sku;
       final description = ReceiptText.forPrinter(
-        '${line.quantity} x ${line.name}',
+        sku == null
+            ? '${line.quantity} x ${line.name}'
+            : '${line.quantity} x ${line.name} $sku',
       );
       final amount = _money(sale.currency, line.lineTotalMinor);
       final rows = _wrapped(description, _nameColumn(amount));
@@ -662,9 +682,8 @@ final class CheckoutReceiptBody {
   ];
 
   List<int> _footer(Generator generator, CheckoutReceiptSale sale) => <int>[
-    ...generator.text(
-      _pair(ReceiptWords.paidByLabel, ReceiptWords.tender(sale.tender)),
-    ),
+    if (ReceiptWords.tender(sale.tender) case final paid?)
+      ...generator.text(_pair(ReceiptWords.paidByLabel, paid)),
     ...generator.emptyLines(1),
     ...generator.text(_centred(ReceiptText.forPrinter(ReceiptWords.footer))),
   ];

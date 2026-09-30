@@ -36,6 +36,7 @@ import 'dart:io' show Directory, File;
 
 import 'package:uzapay_pos/audit/audit_log.dart';
 import 'package:uzapay_pos/checkout/checkout_configuration.dart';
+import 'package:uzapay_pos/checkout/checkout_price_agreement.dart';
 import 'package:uzapay_pos/checkout/checkout_print_configuration.dart';
 import 'package:uzapay_pos/expenses/expense_repository.dart';
 import 'package:uzapay_pos/inventory/bulk_catalog.dart';
@@ -186,6 +187,15 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
   'TenantStockTakeSchedulePublisher.allowedRoles': (
     expected: TenantStockTakeSchedulePublisher.allowedRoles,
     row: 'Set the counting schedule, from the settings tab that publishes it.',
+  ),
+  // | Set who can agree a price | Full | Full | No | No |
+  'TenantPriceAgreementRepository.writeRoles': (
+    expected: TenantPriceAgreementRepository.writeRoles,
+    row: 'Set who can agree a price.',
+  ),
+  'TenantPriceAgreementPublisher.allowedRoles': (
+    expected: TenantPriceAgreementPublisher.allowedRoles,
+    row: 'Set who can agree a price, from the settings tab that publishes it.',
   ),
   // | Daily summary | Full | Full | Full | No |
   'TenantDailyMetricsRepository.allowedRoles': (
@@ -389,6 +399,8 @@ const Map<String, List<TenantRole>> _fromTheMatrix = <String, List<TenantRole>>{
   'TenantStockTakeReviewRepository.allowedRoles': _management,
   'TenantStockTakeScheduleRepository.writeRoles': <TenantRole>[_o, _a],
   'TenantStockTakeSchedulePublisher.allowedRoles': <TenantRole>[_o, _a],
+  'TenantPriceAgreementRepository.writeRoles': <TenantRole>[_o, _a],
+  'TenantPriceAgreementPublisher.allowedRoles': <TenantRole>[_o, _a],
   'TenantDailyMetricsRepository.allowedRoles': _management,
   'TenantSalesTotalsGateway.allowedRoles': _management,
   'TenantReconciliationStatusRepository.allowedRoles': _management,

@@ -32,6 +32,33 @@ const int maximumCheckoutLineQuantity = 1000000;
 /// The largest sale amount, in integer minor currency units.
 const int maximumCheckoutMinorAmount = 100000000000;
 
+/// The shortest reason a price agreed at the till is recorded with.
+///
+/// **Three, which is what voiding a shift already asks for.** A reason is
+/// required so an agreed price is answerable later, and a single letter
+/// answers nothing.
+const int minimumCheckoutDiscountReasonLength = 3;
+
+/// The longest reason a price agreed at the till is recorded with.
+const int maximumCheckoutDiscountReasonLength = 200;
+
+/// [value] as a sale records it, or null where it cannot be a reason.
+///
+/// Trimmed, within the two bounds above, and free of control characters -
+/// the same test every other string on a sale is held to - so the till's own
+/// field and the frozen payload contract can never disagree about it.
+String? checkoutDiscountReason(String value) {
+  final reason = value.trim();
+  if (reason.length < minimumCheckoutDiscountReasonLength ||
+      reason.length > maximumCheckoutDiscountReasonLength) {
+    return null;
+  }
+  for (final codeUnit in reason.codeUnits) {
+    if (codeUnit < 0x20 || codeUnit == 0x7f) return null;
+  }
+  return reason;
+}
+
 const int _maximumLineQuantity = maximumCheckoutLineQuantity;
 const int _maximumMinorAmount = maximumCheckoutMinorAmount;
 const int _minorUnitsPerMajorUnit = 100;
@@ -53,12 +80,14 @@ const Set<String> _allowedPayloadKeys = <String>{
   'items',
   'subtotalMinor',
   'discountMinor',
+  'discountReason',
   'totalMinor',
 };
 
 const Set<String> _allowedLineKeys = <String>{
   'productId',
   'name',
+  'sku',
   'categoryId',
   'quantity',
   'unitPriceMinor',
@@ -88,6 +117,10 @@ final class CheckoutSaleFormatException implements Exception {
 /// takes what it prints rather than which of them it came from.
 abstract interface class CheckoutReceiptLine {
   String get name;
+
+  /// The product's code as it stood when the line was sold, or null for a
+  /// product that had none - and for every line sold before it was recorded.
+  String? get sku;
   int get quantity;
   int get unitPriceMinor;
   int get lineTotalMinor;
@@ -117,6 +150,7 @@ final class CheckoutSaleLine implements CheckoutReceiptLine {
   const CheckoutSaleLine._({
     required this.productId,
     required this.name,
+    required this.sku,
     required this.categoryId,
     required this.quantity,
     required this.unitPriceMinor,
@@ -128,6 +162,11 @@ final class CheckoutSaleLine implements CheckoutReceiptLine {
   final String productId;
   @override
   final String name;
+
+  /// Frozen onto the line the way [name] is, since 2026-09-29, so a receipt
+  /// reprinted after the catalog changes still prints the code it sold under.
+  @override
+  final String? sku;
   final String? categoryId;
   @override
   final int quantity;
@@ -141,6 +180,7 @@ final class CheckoutSaleLine implements CheckoutReceiptLine {
   Map<String, Object?> toSaleLineFields() => <String, Object?>{
     'productId': productId,
     'name': name,
+    if (sku != null) 'sku': sku,
     if (categoryId != null) 'categoryId': categoryId,
     'quantity': quantity,
     'unitPriceMinor': unitPriceMinor,
@@ -223,6 +263,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
     required List<CheckoutSaleLine> lines,
     required this.subtotalMinor,
     required this.discountMinor,
+    required this.discountReason,
     required this.totalMinor,
   }) : lines = List<CheckoutSaleLine>.unmodifiable(lines),
        _paths = TenantPaths(tenantId);
@@ -387,6 +428,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
         'totalMinor must equal subtotalMinor minus discountMinor.',
       );
     }
+    final discountReason = _discountReason(payload, discountMinor);
 
     return CheckoutSalePayload._(
       uid: session.uid,
@@ -405,6 +447,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
       lines: lines,
       subtotalMinor: subtotalMinor,
       discountMinor: discountMinor,
+      discountReason: discountReason,
       totalMinor: totalMinor,
     );
   }
@@ -453,6 +496,12 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
   final int subtotalMinor;
   @override
   final int discountMinor;
+
+  /// Why the price was agreed at the till, or null where nothing came off.
+  ///
+  /// **Not on the receipt**, which is why [CheckoutReceiptSale] does not name
+  /// it: the customer is told the discount, and the reason is the business's.
+  final String? discountReason;
   @override
   final int totalMinor;
   final TenantPaths _paths;
@@ -499,9 +548,36 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
     'subtotal': _majorUnits(subtotalMinor),
     'discountMinor': discountMinor,
     'discount': _majorUnits(discountMinor),
+    // **Only where there is one.** Rules do not freeze a sale's key set, so an
+    // earlier build that never writes it and this one that does both commit.
+    if (discountReason != null) 'discountReason': discountReason,
     'totalMinor': totalMinor,
     'total': _majorUnits(totalMinor),
   };
+}
+
+/// Reads why the price was agreed, which only a discounted sale may carry.
+///
+/// **Absent is still legal on a discount**, because the contract predates the
+/// reason and a durable draft that parses today must go on parsing: refusing
+/// it would strand a sale the customer has already paid for. The till's
+/// draft builder is what requires one for an agreed price. A reason that is
+/// present must be one, and on a sale with nothing off it is a corrupt record.
+String? _discountReason(Map<String, Object?> payload, int discountMinor) {
+  if (!payload.containsKey('discountReason')) return null;
+  if (discountMinor == 0) {
+    throw const CheckoutSaleFormatException(
+      'discountReason is recorded only on a sale with a discount.',
+    );
+  }
+  final value = payload['discountReason'];
+  if (value is! String || checkoutDiscountReason(value) != value) {
+    throw CheckoutSaleFormatException(
+      'discountReason must be between $minimumCheckoutDiscountReasonLength '
+      'and $maximumCheckoutDiscountReasonLength trimmed characters.',
+    );
+  }
+  return value;
 }
 
 /// Reads the tender exactly as the payload's own schema version allows it.
@@ -589,6 +665,9 @@ List<CheckoutSaleLine> _parseLines(Object? raw) {
       CheckoutSaleLine._(
         productId: productId,
         name: _requiredString(line, 'name'),
+        // Absent on every line written before the code was recorded, and on
+        // a product that has none. Present, it is held to the name's rules.
+        sku: line.containsKey('sku') ? _requiredString(line, 'sku') : null,
         categoryId: _optionalDocumentId(line, 'categoryId'),
         quantity: quantity,
         unitPriceMinor: unitPriceMinor,

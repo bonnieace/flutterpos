@@ -65,6 +65,9 @@ void main() {
     expect(fields.containsKey('createdAt'), isFalse);
     expect((fields['subtotalMinor'], fields['subtotal']), (65000, 650.0));
     expect((fields['discountMinor'], fields['discount']), (5000, 50.0));
+    // A discount with no reason predates the reason, and still commits.
+    expect(payload.discountReason, isNull);
+    expect(fields.containsKey('discountReason'), isFalse);
     expect((fields['totalMinor'], fields['total']), (60000, 600.0));
 
     final items = fields['items']! as List<Object?>;
@@ -196,6 +199,122 @@ void main() {
       'negative-discount': _payload(overrides: {'discountMinor': -1}),
       'excess-discount': _payload(discountMinor: 65001),
       'missing-total': _payload(overrides: {'totalMinor': null}),
+    };
+
+    for (final entry in cases.entries) {
+      final record = await _save(
+        outbox,
+        entry.value,
+        checkoutId: 'checkout-${entry.key}',
+      );
+      expect(
+        () => CheckoutSalePayload.fromOutboxRecord(record, session: session),
+        _throwsSaleFormat,
+        reason: entry.key,
+      );
+    }
+  });
+
+  test('carries each line\'s code onto the sale, and none where absent', () async {
+    final record = await _save(
+      outbox,
+      _payload(
+        items: <Object?>[
+          _line(overrides: <String, Object?>{'sku': '6161100000019'}),
+          _line(productId: 'product-b', name: 'Tea'),
+        ],
+      ),
+    );
+
+    final payload = CheckoutSalePayload.fromOutboxRecord(
+      record,
+      session: session,
+    );
+    final items = payload.toSubmission().saleFields['items']! as List<Object?>;
+
+    expect(payload.lines.first.sku, '6161100000019');
+    expect((items.first! as Map<String, Object?>)['sku'], '6161100000019');
+    expect(payload.lines.last.sku, isNull);
+    expect((items.last! as Map<String, Object?>).containsKey('sku'), isFalse);
+  });
+
+  test('refuses a code the till would never have written', () async {
+    final cases = <String, Object?>{
+      'empty': '',
+      'padded': ' 6161100000019',
+      'control-character': '6161\n100',
+      'numeric': 6161100000019,
+    };
+
+    for (final entry in cases.entries) {
+      final record = await _save(
+        outbox,
+        _payload(
+          items: <Object?>[
+            _line(overrides: <String, Object?>{'sku': entry.value}),
+          ],
+        ),
+        checkoutId: 'checkout-sku-${entry.key}',
+      );
+      expect(
+        () => CheckoutSalePayload.fromOutboxRecord(record, session: session),
+        _throwsSaleFormat,
+        reason: entry.key,
+      );
+    }
+  });
+
+  test('carries why a price was agreed onto the sale', () async {
+    final record = await _save(
+      outbox,
+      _payload(
+        discountMinor: 5000,
+        overrides: {'discountReason': 'Bought two'},
+      ),
+    );
+
+    final payload = CheckoutSalePayload.fromOutboxRecord(
+      record,
+      session: session,
+    );
+
+    expect(payload.discountReason, 'Bought two');
+    expect(payload.toSubmission().saleFields['discountReason'], 'Bought two');
+  });
+
+  test('refuses a reason the till would never have written', () async {
+    final cases = <String, Map<String, Object?>>{
+      'nothing-off': _payload(overrides: {'discountReason': 'Bought two'}),
+      'empty': _payload(
+        discountMinor: 5000,
+        overrides: {'discountReason': ''},
+      ),
+      'padded': _payload(
+        discountMinor: 5000,
+        overrides: {'discountReason': ' Bought two'},
+      ),
+      'too-short': _payload(
+        discountMinor: 5000,
+        overrides: {'discountReason': 'ok'},
+      ),
+      'too-long': _payload(
+        discountMinor: 5000,
+        overrides: {
+          'discountReason': 'x' * (maximumCheckoutDiscountReasonLength + 1),
+        },
+      ),
+      'control-character': _payload(
+        discountMinor: 5000,
+        overrides: {'discountReason': 'Bought\ntwo'},
+      ),
+      'numeric': _payload(
+        discountMinor: 5000,
+        overrides: {'discountReason': 7},
+      ),
+      'null': _payload(
+        discountMinor: 5000,
+        overrides: {'discountReason': null},
+      ),
     };
 
     for (final entry in cases.entries) {

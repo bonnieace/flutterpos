@@ -124,7 +124,9 @@ export function receiptNumber(deviceId, businessDate, sequence) {
  * The canonical open shift every sale must be attributed to.
  *
  * Sales are denied unless a shift document exists for the same tenant,
- * cashier, device, and business date, so suites that commit sales seed one.
+ * cashier, and business date, so suites that commit sales seed one. The
+ * shift's device is the phone that opened it; since 2026-09-29 a sale from any
+ * of the cashier's phones may be filed under it.
  */
 export function openShiftDocuments({
   tenantId = "tenant-a",

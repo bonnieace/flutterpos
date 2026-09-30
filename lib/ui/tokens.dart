@@ -1961,6 +1961,60 @@ final class AppEffects {
 }
 
 // ---------------------------------------------------------------------------
+// Iconography
+// ---------------------------------------------------------------------------
+
+/// The sizes a glyph is drawn at, and the Material Symbols axes it is drawn
+/// with.
+///
+/// **Sizes and axes are one token because the font is variable.** Material
+/// Symbols carries an optical-size axis, and a static 24 design drawn at 28 is
+/// that design scaled up, strokes and all - heavier than anyone drew it to be.
+/// [opticalSizeFor] answers the size a glyph is shown at, so each one is drawn
+/// for it.
+///
+/// **The axes are harmless on a static font.** `Icon` hands them to the engine
+/// as font variations, and a font without those axes ignores them, so an
+/// `Icons.*` glyph passed through the same widget draws exactly as before.
+@immutable
+final class AppIconography {
+  const AppIconography();
+
+  static const AppIconography standard = AppIconography();
+
+  /// A menu row's glyph, beside `body.lg`.
+  double get row => 18;
+
+  /// A module card's glyph, inside its own well.
+  double get card => 24;
+
+  /// The phone launcher's glyph.
+  double get launcher => 28;
+
+  /// The square well the launcher glyph sits centred in.
+  double get launcherWell => 56;
+
+  /// `wght`. 400 is Symbols' regular, the weight the static Material font was
+  /// drawn at.
+  double get weight => 400;
+
+  /// `GRAD`. Material's own figure for a light glyph on a dark ground: light
+  /// strokes on dark bloom, and -25 takes back what the bloom adds.
+  double get grade => -25;
+
+  /// `FILL` for an ordinary glyph, which is outlined.
+  double get fill => 0;
+
+  /// `FILL` for the one primary destination on a screen. The till's glyph was
+  /// the only solid one on the old hub, and the axis says that in the same
+  /// drawing as its neighbours rather than in a different one.
+  double get primaryFill => 1;
+
+  /// `opsz` for a glyph shown at [size], held to the font's 20 to 48 range.
+  double opticalSizeFor(double size) => size.clamp(20, 48).toDouble();
+}
+
+// ---------------------------------------------------------------------------
 // Motion - design.md §2.4
 // ---------------------------------------------------------------------------
 
@@ -2475,6 +2529,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     required this.density,
     required this.layout,
     this.effects = AppEffects.standard,
+    this.icons = AppIconography.standard,
   });
 
   final AppColorRoles colors;
@@ -2514,6 +2569,9 @@ final class AppTokens extends ThemeExtension<AppTokens> {
   /// `AppTokens` directly — keeps compiling without naming a value it never
   /// varies.
   final AppEffects effects;
+
+  /// See [AppIconography]. Defaulted for the same reason as [effects].
+  final AppIconography icons;
 
   /// The one token set `design.md` defines.
   static const AppTokens dark = AppTokens(
@@ -2619,6 +2677,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     AppDensity? density,
     AppLayout? layout,
     AppEffects? effects,
+    AppIconography? icons,
   }) => AppTokens(
     colors: colors ?? this.colors,
     typography: typography ?? this.typography,
@@ -2628,6 +2687,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     density: density ?? this.density,
     layout: layout ?? this.layout,
     effects: effects ?? this.effects,
+    icons: icons ?? this.icons,
   );
 
   @override
@@ -2649,6 +2709,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
       layout: t < 0.5 ? layout : other.layout,
       // A single value, same reasoning as spacing and radius above.
       effects: t < 0.5 ? effects : other.effects,
+      icons: t < 0.5 ? icons : other.icons,
     );
   }
 }

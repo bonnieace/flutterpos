@@ -31,6 +31,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:uzapay_pos/ui/home_navigation.dart';
 import 'package:uzapay_pos/ui/scaffold.dart';
 import 'package:uzapay_pos/ui/tokens.dart';
@@ -158,6 +159,172 @@ List<HomeDestination> _cashier() => <HomeDestination>[
   ),
 ];
 
+/// Every tile the landing route's module grid can hold, with the glyphs,
+/// groups and accents `tenant_routing_shell.dart` gives them.
+///
+/// **No one role is offered all sixteen.** *Count stock* goes to a person who
+/// counts and *Stock counts* to one who reviews, never both. The capture is
+/// the glyph set side by side, which is what a change of icon family needs to
+/// be judged on.
+List<HomeDestination> _modules() {
+  HomeDestination tile(
+    String label,
+    IconData icon,
+    AppIdentityAccent accent, {
+    String? group,
+    String? description,
+    bool isPrimary = false,
+  }) => HomeDestination(
+    label: label,
+    icon: icon,
+    accent: accent,
+    group: group,
+    description: description,
+    isPrimary: isPrimary,
+    onPressed: () {},
+  );
+
+  return <HomeDestination>[
+    tile(
+      'Register',
+      Symbols.point_of_sale_rounded,
+      AppIdentityAccent.blue,
+      description: 'Ring up a sale, take the payment, and print the receipt.',
+      isPrimary: true,
+    ),
+    tile(
+      'Sales',
+      Symbols.bar_chart_rounded,
+      AppIdentityAccent.teal,
+      group: 'Sales',
+      description:
+          'View sales reports, payment breakdowns, and transaction history.',
+    ),
+    tile(
+      'Returns',
+      Symbols.assignment_return_rounded,
+      AppIdentityAccent.orange,
+      group: 'Sales',
+      description: 'Review pending and verified returns across every sale.',
+    ),
+    tile(
+      'Inventory',
+      Symbols.inventory_2_rounded,
+      AppIdentityAccent.purple,
+      group: 'Inventory',
+      description: 'View all products, manage SKUs, pricing, and categories.',
+    ),
+    tile(
+      'Stock counts',
+      Symbols.rule_rounded,
+      AppIdentityAccent.pink,
+      group: 'Inventory',
+      description: 'Review what was counted and correct the stock from it.',
+    ),
+    tile(
+      'Count stock',
+      Symbols.fact_check_rounded,
+      AppIdentityAccent.pink,
+      group: 'Inventory',
+      description: 'Count what is on the shelf and hand the figures in.',
+    ),
+    tile(
+      'Suppliers',
+      Symbols.local_shipping_rounded,
+      AppIdentityAccent.orange,
+      group: 'Inventory',
+      description: 'Who you buy stock from, and what each delivery brought in.',
+    ),
+    tile(
+      'Production',
+      Symbols.factory_rounded,
+      AppIdentityAccent.teal,
+      group: 'Inventory',
+      description: 'Record what was made and what it cost to make.',
+    ),
+    tile(
+      'Expenses',
+      Symbols.account_balance_wallet_rounded,
+      AppIdentityAccent.green,
+      group: 'Reports',
+      description:
+          'Record rent, wages and running costs, and see what profit is left '
+          'after them.',
+    ),
+    tile(
+      'Reports',
+      Symbols.insights_rounded,
+      AppIdentityAccent.blue,
+      group: 'Reports',
+      description:
+          'Weekly sales, profit and best sellers, and every other report from '
+          'the figures themselves.',
+    ),
+    tile(
+      'Shift history',
+      Symbols.work_history_rounded,
+      AppIdentityAccent.pink,
+      group: 'Reports',
+      description:
+          'What each drawer was counted at, against the sales it took.',
+    ),
+    tile(
+      'Business details',
+      Symbols.storefront_rounded,
+      AppIdentityAccent.teal,
+      group: 'Business',
+      description: 'Manage your business name, slogan and logo on receipts.',
+    ),
+    tile(
+      'Printer',
+      Symbols.print_rounded,
+      AppIdentityAccent.teal,
+      group: 'Business',
+      description: 'Connect a receipt printer and print a test page.',
+    ),
+    tile(
+      'Configs',
+      Symbols.tune_rounded,
+      AppIdentityAccent.teal,
+      group: 'Business',
+      description: 'Choose currency and schedule stock counts.',
+    ),
+    tile(
+      'Staff',
+      Symbols.group_rounded,
+      AppIdentityAccent.purple,
+      group: 'Business',
+      description: 'Manage your team, their roles and access.',
+    ),
+    tile(
+      'Logs',
+      Symbols.history_edu_rounded,
+      AppIdentityAccent.green,
+      group: 'Business',
+    ),
+  ];
+}
+
+final class _ModulePage extends StatelessWidget {
+  const _ModulePage();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final inset = AppScaffold.horizontalInset(tokens.spacing);
+    return AppScaffold(
+      title: 'Dev Corner Shop',
+      contentWidth: AppContentWidth.records,
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(inset, 0, inset, tokens.spacing.s24),
+          child: HomeModuleGrid(destinations: _modules()),
+        ),
+      ),
+    );
+  }
+}
+
 final class _Page extends StatelessWidget {
   const _Page({required this.destinations});
 
@@ -214,5 +381,11 @@ void main() {
     '95-home-navigation-cashier',
     viewports: responsiveViewports,
     build: () => _Page(destinations: _cashier()),
+  );
+
+  screenshotCase(
+    '95-home-module-grid',
+    viewports: responsiveViewports,
+    build: () => const _ModulePage(),
   );
 }

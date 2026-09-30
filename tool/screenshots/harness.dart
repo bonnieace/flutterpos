@@ -40,6 +40,7 @@
 /// note on each viewport below says which region it is there for.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -231,8 +232,8 @@ ThemeData screenshotTheme() => spiritTheme;
 
 bool _fontsLoaded = false;
 
-/// Loads the app's bundled faces from `fonts/`, and the Material icon font
-/// from the Flutter SDK's cache.
+/// Loads the app's bundled faces from `fonts/`, the Material icon font from the
+/// Flutter SDK's cache, and Material Symbols Rounded from the pub cache.
 ///
 /// The two families and the six faces below are exactly what `pubspec.yaml`
 /// declares. They are listed again here rather than parsed out of the manifest
@@ -280,7 +281,37 @@ Future<void> loadScreenshotFonts() async {
       _fontBytes(_materialFontsDirectory(), 'materialicons-regular.otf'),
     );
   await icons.load();
+
+  // **Material Symbols comes out of the pub cache, and only the style the app
+  // draws.** The family carries the `packages/` prefix because that is the name
+  // an `IconData` with a `fontPackage` asks the engine for.
+  final symbols =
+      FontLoader('packages/material_symbols_icons/MaterialSymbolsRounded')
+        ..addFont(
+          _fontBytes(
+            _packageDirectory('material_symbols_icons', 'lib/fonts'),
+            'MaterialSymbolsRounded.ttf',
+          ),
+        );
+  await symbols.load();
   _fontsLoaded = true;
+}
+
+/// [subdirectory] of [package]'s root, read from the package config `pub get`
+/// wrote, since a test binary has no asset bundle to find a package font in.
+Directory _packageDirectory(String package, String subdirectory) {
+  final config = File('.dart_tool/package_config.json');
+  final json = jsonDecode(config.readAsStringSync()) as Map<String, Object?>;
+  for (final entry in (json['packages']! as List<Object?>)
+      .cast<Map<String, Object?>>()) {
+    if (entry['name'] != package) continue;
+    final root = config.absolute.uri.resolve('${entry['rootUri']}/');
+    return Directory.fromUri(root.resolve(subdirectory));
+  }
+  throw StateError(
+    '`$package` is not in .dart_tool/package_config.json. Run `flutter pub '
+    'get` from the repository root.',
+  );
 }
 
 Future<ByteData> _fontBytes(Directory directory, String name) async {

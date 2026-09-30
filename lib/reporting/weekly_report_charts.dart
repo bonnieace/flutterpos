@@ -571,7 +571,15 @@ final class _SaleRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(tokens.radius.sm),
           ),
           child: Icon(
-            cash ? Icons.payments_outlined : Icons.credit_card,
+            // A sale that names no method draws a receipt rather than a card:
+            // with no badge beside it since 2026-09-29, a card would be the
+            // only thing on the row saying how it was paid, and it would be a
+            // guess.
+            tender == null
+                ? Icons.receipt_long_outlined
+                : cash
+                ? Icons.payments_outlined
+                : Icons.credit_card,
             color: tokens.colors.status.ok.fg,
             size: WeeklyReportMetrics.cardGlyph,
           ),
@@ -612,11 +620,15 @@ final class _SaleRow extends StatelessWidget {
                 color: tokens.colors.text.money,
               ),
             ),
-            SizedBox(height: tokens.spacing.s4),
-            StatusBadge(
-              status: cash ? AppStatus.ok : AppStatus.info,
-              label: tender?.label ?? 'Not recorded',
-            ),
+            // **Nothing where no method was set**, since 2026-09-29: the
+            // product owner removed the "Not recorded" badge from this page.
+            if (tender case final paid?) ...<Widget>[
+              SizedBox(height: tokens.spacing.s4),
+              StatusBadge(
+                status: cash ? AppStatus.ok : AppStatus.info,
+                label: paid.label,
+              ),
+            ],
           ],
         ),
       ],

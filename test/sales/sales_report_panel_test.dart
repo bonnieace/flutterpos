@@ -284,6 +284,53 @@ void main() {
       },
     );
 
+    testWidgets('an agreed price is its own row, with the reason under it', (
+      tester,
+    ) async {
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale('co-1', tender: 'cash', discountReason: 'Bought two'),
+      ]);
+      await _pump(tester, reader, width: 411, role: TenantRole.cashier);
+
+      final row = find.byKey(const ValueKey('sales-agreed-price-co-1'));
+      expect(row, findsOneWidget);
+      expect(
+        find.descendant(of: row, matching: find.text('Agreed price')),
+        findsOneWidget,
+      );
+      expect(_text(tester, 'sales-agreed-price-reason-co-1'), 'Bought two');
+      // The lines are the listed 10.00 and the header is the 9.00 paid; this
+      // row is what makes the two agree.
+      expect(_text(tester, 'sales-agreed-price-amount-co-1'), '−KES 1');
+      expect(_text(tester, 'sales-total-co-1'), 'KES 9');
+      expect(
+        tester.getTopLeft(row).dy,
+        greaterThan(
+          tester.getTopLeft(find.byKey(const ValueKey('sales-item-co-1-0'))).dy,
+        ),
+        reason: 'under the lines it came off',
+      );
+    });
+
+    testWidgets('a discount with no reason does not claim an agreement', (
+      tester,
+    ) async {
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale('co-1', tender: 'cash'),
+      ]);
+      await _pump(tester, reader, width: 411, role: TenantRole.cashier);
+
+      final row = find.byKey(const ValueKey('sales-agreed-price-co-1'));
+      expect(
+        find.descendant(of: row, matching: find.text('Discount')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sales-agreed-price-reason-co-1')),
+        findsNothing,
+      );
+    });
+
     testWidgets("a sale rung offline shows when it was rung, not when it synced", (
       tester,
     ) async {
@@ -1482,6 +1529,7 @@ TenantQueryDocumentSnapshot _sale(
   String deviceId = _deviceId,
   DateTime? rungAt,
   DateTime? createdAt,
+  String? discountReason,
 }) {
   final data = <String, Object?>{
     'checkoutId': id,
@@ -1515,6 +1563,7 @@ TenantQueryDocumentSnapshot _sale(
     'subtotal': 10.0,
     'discountMinor': 100,
     'discount': 1.0,
+    if (discountReason != null) 'discountReason': discountReason,
     'totalMinor': 900,
     'total': 9.0,
     'createdAt': Timestamp.fromDate(

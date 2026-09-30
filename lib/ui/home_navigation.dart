@@ -343,7 +343,12 @@ final class _HomeMenuRow extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          Icon(destination.icon, size: 18, color: foreground),
+          _DestinationGlyph(
+            destination: destination,
+            tokens: tokens,
+            size: tokens.icons.row,
+            color: foreground,
+          ),
           SizedBox(width: tokens.spacing.s12),
           // **Three shares to the label and two to its condition.** An even
           // split is what a bare `Expanded` and `Flexible` give, and in a
@@ -656,8 +661,8 @@ final class _HomeModuleCard extends StatelessWidget {
               children: <Widget>[
                 Container(
                   key: ValueKey('home-module-icon-${destination.label}'),
-                  width: _compactGlyphWell,
-                  height: _compactGlyphWell,
+                  width: tokens.icons.launcherWell,
+                  height: tokens.icons.launcherWell,
                   decoration: BoxDecoration(
                     color: enabled
                         ? glyph.withValues(alpha: 0.14)
@@ -669,9 +674,10 @@ final class _HomeModuleCard extends StatelessWidget {
                           : colors.surface.borderSubtle,
                     ),
                   ),
-                  child: Icon(
-                    destination.icon,
-                    size: _compactGlyphSize,
+                  child: _DestinationGlyph(
+                    destination: destination,
+                    tokens: tokens,
+                    size: tokens.icons.launcher,
                     color: enabled ? glyph : colors.text.disabled,
                   ),
                 ),
@@ -756,9 +762,10 @@ final class _HomeModuleCard extends StatelessWidget {
                     : colors.surface.borderSubtle,
               ),
             ),
-            child: Icon(
-              destination.icon,
-              size: _glyphSize,
+            child: _DestinationGlyph(
+              destination: destination,
+              tokens: tokens,
+              size: tokens.icons.card,
               color: enabled ? accent : colors.text.disabled,
             ),
           ),
@@ -851,12 +858,41 @@ final class _HomeModuleCard extends StatelessWidget {
       ),
     ),
   );
+}
 
-  /// The card's glyph. Larger than a menu row's 18 because a card has room
-  /// for it and the old hub drew it that way.
-  static const double _glyphSize = 24;
-  static const double _compactGlyphSize = 28;
-  static const double _compactGlyphWell = 56;
+/// A destination's glyph at [size], drawn with the Material Symbols axes
+/// [AppIconography] names.
+///
+/// **One widget for all three hosts** - the menu row, the card and the
+/// launcher - so a destination is the same drawing at every size, and the one
+/// primary destination is solid everywhere it appears rather than only where
+/// somebody remembered to ask for it.
+final class _DestinationGlyph extends StatelessWidget {
+  const _DestinationGlyph({
+    required this.destination,
+    required this.tokens,
+    required this.size,
+    required this.color,
+  });
+
+  final HomeDestination destination;
+  final AppTokens tokens;
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final icons = tokens.icons;
+    return Icon(
+      destination.icon,
+      size: size,
+      color: color,
+      fill: destination.isPrimary ? icons.primaryFill : icons.fill,
+      weight: icons.weight,
+      grade: icons.grade,
+      opticalSize: icons.opticalSizeFor(size),
+    );
+  }
 }
 
 /// One area's name, above the first row that belongs to it.

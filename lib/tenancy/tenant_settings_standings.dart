@@ -9,7 +9,7 @@
 /// all but the second panel down inside *Business details*.
 ///
 /// **One query, not three.** Every setting is a document in one collection -
-/// `tenants/{tenantId}/configuration/{checkout,printer,stock_take}` - so a
+/// `tenants/{tenantId}/configuration/{checkout,printer,stock_take,...}` - so a
 /// single bounded collection page answers every standing. The per-setting
 /// reads are untouched: opening a setting still mounts its panel and reads its
 /// document, exactly as opening a tab did.
@@ -26,6 +26,7 @@
 library;
 
 import '../checkout/checkout_configuration.dart';
+import '../checkout/checkout_price_agreement.dart';
 import '../checkout/checkout_print_configuration.dart';
 import '../inventory/stock_take_schedule.dart';
 import '../ui/status.dart';
@@ -41,7 +42,8 @@ import 'tenant_repository.dart';
 enum TenantSettingKind {
   currency,
   printer,
-  stockCounts;
+  stockCounts,
+  agreedPrices;
 
   /// The document in `configuration` this setting is published as.
   String get documentId => switch (this) {
@@ -51,6 +53,7 @@ enum TenantSettingKind {
       TenantPrinterConfigurationRepository.documentId,
     TenantSettingKind.stockCounts =>
       TenantStockTakeScheduleRepository.documentId,
+    TenantSettingKind.agreedPrices => TenantPriceAgreementRepository.documentId,
   };
 
   /// The word on the row. Sentence case, §8 rule 7.
@@ -58,6 +61,7 @@ enum TenantSettingKind {
     TenantSettingKind.currency => 'Currency',
     TenantSettingKind.printer => 'Printer',
     TenantSettingKind.stockCounts => 'Stock counts',
+    TenantSettingKind.agreedPrices => 'Agreed prices',
   };
 }
 
@@ -283,6 +287,41 @@ final class TenantSettingsStandingsRepository extends TenantReadRepository {
             detail:
                 'Nobody is being asked to count while it stays that way, and '
                 'the register is unaffected.',
+          );
+        }
+
+      case TenantSettingKind.agreedPrices:
+        // **Absent is `set`, as the counting rota's is.** No published policy
+        // is `TenantPriceAgreementPolicy.none` - every till sells at the listed
+        // price - which is a working state and the one a business starts in.
+        if (data == null) {
+          return const TenantSettingStanding(
+            kind: TenantSettingKind.agreedPrices,
+            state: TenantSettingState.set,
+            detail: 'Nobody can agree a price.',
+          );
+        }
+        try {
+          final allowed = TenantPriceAgreementPolicy.fromMap(
+            data,
+          ).allowed.length;
+          return TenantSettingStanding(
+            kind: TenantSettingKind.agreedPrices,
+            state: TenantSettingState.set,
+            detail: allowed == 0
+                ? 'Nobody can agree a price.'
+                : '$allowed ${allowed == 1 ? 'person' : 'people'} can agree a '
+                      'price',
+          );
+        } on FormatException {
+          return const TenantSettingStanding(
+            kind: TenantSettingKind.agreedPrices,
+            state: TenantSettingState.unreadable,
+            // The panel's own two halves: nobody can, and every till sells at
+            // the listed price.
+            detail:
+                'Nobody can agree a price while it stays that way, and every '
+                'till sells at the listed price.',
           );
         }
     }

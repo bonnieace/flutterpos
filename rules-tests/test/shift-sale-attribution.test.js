@@ -3,10 +3,16 @@ import { after, afterEach, before, test } from "node:test";
 import { assertFails, assertSucceeds } from "@firebase/rules-unit-testing";
 import {
   Timestamp,
+  collection,
+  count,
   doc,
+  getAggregateFromServer,
   getDoc,
   increment,
+  query,
   serverTimestamp,
+  sum,
+  where,
   writeBatch,
 } from "firebase/firestore";
 
@@ -198,30 +204,110 @@ test("a sale cannot be filed under a colleague's shift", async () => {
   }
 });
 
-test("a sale must share its shift's device and business day", async () => {
+test("a sale must share its shift's business day", async () => {
   await seedShiftTenant();
-  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
 
-  // The receipt is internally valid in both cases; only the shift disagrees.
+  // The receipt is internally valid; only the shift's day disagrees.
   await assertFails(
-    checkoutBatch(firestore, {
+    checkoutBatch(authenticatedFirestore(testEnvironment, "cashier-a"), {
       checkoutId: "checkout-other-day",
       shiftId: "shift-yesterday",
     }).commit(),
   );
-  await assertFails(
+
+  if (await storedSale("checkout-other-day")) {
+    throw new Error("A sale filed under another day's shift was created.");
+  }
+});
+
+test("a sale from another of the cashier's phones joins their shift", async () => {
+  // A shift belongs to its cashier, not to the phone that opened it: a second
+  // phone they sign into, or the same phone reinstalled, sells into it. The
+  // sale still names the phone that rang it up, whose counter issued the
+  // receipt.
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+
+  await assertSucceeds(
     checkoutBatch(firestore, {
-      checkoutId: "checkout-other-device",
+      checkoutId: "checkout-joined-a",
       shiftId: "shift-other-device",
+      deviceId: DEVICE_A,
+    }).commit(),
+  );
+  await assertSucceeds(
+    checkoutBatch(firestore, {
+      checkoutId: "checkout-joined-b",
+      shiftId: "shift-a",
+      deviceId: DEVICE_B,
     }).commit(),
   );
 
-  if (
-    (await storedSale("checkout-other-day")) ||
-    (await storedSale("checkout-other-device"))
-  ) {
-    throw new Error("A sale disagreeing with its shift was created.");
+  const joined = await storedSale("checkout-joined-b");
+  if (joined?.shiftId !== "shift-a" || joined?.deviceId !== DEVICE_B) {
+    throw new Error("A second phone's sale did not keep its own device.");
   }
+});
+
+test("a sale's device must be a well-formed device id", async () => {
+  // The shift comparison used to prove the device; with it gone the sale's
+  // own device is shaped directly.
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+  const receipt = receiptNumber(DEVICE_A, BUSINESS_DATE, 1);
+  const denied = [
+    ["missing", { deviceId: null, receiptNumber: receipt }],
+    ["numeric", { deviceId: 7, receiptNumber: receipt }],
+    ["unprefixed", { deviceId: "0123456789abcdef0123456789abcdef", receiptNumber: receipt }],
+    ["uppercase", { deviceId: DEVICE_A.toUpperCase(), receiptNumber: receipt }],
+    ["short", { deviceId: "dev-0123", receiptNumber: receipt }],
+  ];
+
+  for (const [name, sale] of denied) {
+    await assertFails(
+      checkoutBatch(firestore, { checkoutId: `checkout-device-${name}`, sale }).commit(),
+    );
+    if (await storedSale(`checkout-device-${name}`)) {
+      throw new Error(`A sale with a ${name} device was created.`);
+    }
+  }
+});
+
+test("a cashier can total their own shift's sales on the server", async () => {
+  // The close counts every phone's sales with one aggregate query, filtered
+  // to the cashier as their list rule requires.
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+  await checkoutBatch(firestore, { checkoutId: "checkout-one" }).commit();
+  await checkoutBatch(firestore, {
+    checkoutId: "checkout-two",
+    deviceId: DEVICE_B,
+  }).commit();
+
+  const totals = await assertSucceeds(
+    getAggregateFromServer(
+      query(
+        collection(firestore, "tenants/tenant-a/sales"),
+        where("shiftId", "==", "shift-a"),
+        where("soldById", "==", "cashier-a"),
+      ),
+      { transactions: count(), totalMinor: sum("totalMinor") },
+    ),
+  );
+  if (totals.data().transactions !== 2 || totals.data().totalMinor !== 50000) {
+    throw new Error("The shift's server totals did not include both phones.");
+  }
+
+  // Without the cashier filter the result set is not provably their own.
+  await assertFails(
+    getAggregateFromServer(
+      query(
+        collection(firestore, "tenants/tenant-a/sales"),
+        where("shiftId", "==", "shift-a"),
+      ),
+      { transactions: count() },
+    ),
+  );
 });
 
 test("a closed shift still accepts a late offline sale", async () => {

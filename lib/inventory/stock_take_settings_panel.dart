@@ -37,11 +37,11 @@ import 'package:flutter/material.dart';
 
 import '../checkout/checkout_configuration_writer.dart';
 import '../tenancy/tenant_catalog.dart';
-import '../tenancy/tenant_membership_labels.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_staff_directory.dart';
+import '../tenancy/tenant_staff_roster.dart';
 import '../tenancy/tenant_types.dart';
 import '../ui/buttons.dart';
 import '../ui/choice.dart';
@@ -154,7 +154,12 @@ class _TenantStockTakeSettingsPanelState
   /// A slash can never be in a document ID, so this can never be a category.
   static const String _notCounting = '/';
 
-  bool _loaded = false;
+  /// What the form was last filled from. See [_seed].
+  TenantPublishedStockTakeSchedule? _seededFrom;
+
+  /// Whether the owner has changed anything on this page, after which what
+  /// they are editing is never replaced under them.
+  bool _edited = false;
   bool _saving = false;
 
   /// What this screen last published, so the unchanged check and the duplicate
@@ -219,10 +224,21 @@ class _TenantStockTakeSettingsPanelState
     );
   }
 
-  /// Seeds the form from what is published, once per load.
+  /// Fills the form from what is published, and again when a newer answer
+  /// arrives - until the owner changes something.
+  ///
+  /// **Refilled rather than seeded once, since 2026-09-29.** The guard draws
+  /// this device's copy first and the server's second, and a form filled once
+  /// kept whichever came first: on a device test this page went on saying *Ask
+  /// at the register* half a minute after the server said *Nothing*, and Save
+  /// from there would have written the old answer back over the new one. Once
+  /// the owner has changed anything, the form is theirs and is not replaced;
+  /// the notice `_build` raises tells them the setting moved underneath them.
   void _seed(TenantStockTakeSettingsData data) {
-    if (_loaded) return;
-    _loaded = true;
+    if (_edited) return;
+    final seeded = _seededFrom;
+    if (seeded != null && _samePublished(seeded, data.published)) return;
+    _seededFrom = data.published;
     final schedule = data.published.schedule;
     _enforcement = schedule.enforcement;
     _selectedWeekdays = <int>{...schedule.weekdays};
@@ -231,6 +247,11 @@ class _TenantStockTakeSettingsPanelState
       _assigned[assignment.uid] = assignment.categoryId ?? _everything;
     }
   }
+
+  static bool _samePublished(
+    TenantPublishedStockTakeSchedule a,
+    TenantPublishedStockTakeSchedule b,
+  ) => a.state == b.state && a.published == b.published;
 
   /// The form's rota, in the shape the publisher and the coverage line read.
   List<TenantStockTakeAssignment> get _formAssignments =>
@@ -256,12 +277,24 @@ class _TenantStockTakeSettingsPanelState
     // Only this screen writes the document, and it writes at most one row per
     // person - so more than one can only come from a hand-edited document.
     final duplicated = _duplicateAssignmentUids(published);
+    final seeded = _seededFrom;
+    final changedElsewhere =
+        _edited && seeded != null && !_samePublished(seeded, published);
     final wide = tokens.layout.isAtLeast(
       MediaQuery.sizeOf(context).width,
       AppBreakpoint.medium,
     );
 
     final notices = <Widget>[
+      if (changedElsewhere)
+        const Callout(
+          key: ValueKey('stock-take-settings-changed-elsewhere'),
+          status: AppStatus.attention,
+          title: 'Changed on another device',
+          message:
+              'Somebody saved this setting after this page opened. Saving here '
+              'replaces what they saved with what is on this page.',
+        ),
       if (published.state == TenantStockTakeScheduleState.malformed)
         const Callout(
           key: ValueKey('stock-take-settings-malformed'),
@@ -342,7 +375,10 @@ class _TenantStockTakeSettingsPanelState
         selected: enforcement,
         onSelected: readOnly
             ? null
-            : (value) => setState(() => _enforcement = value),
+            : (value) => setState(() {
+                _edited = true;
+                _enforcement = value;
+              }),
         options: const <ChoiceCardOption<TenantStockTakeEnforcement>>[
           ChoiceCardOption<TenantStockTakeEnforcement>(
             key: ValueKey('stock-take-enforcement-off'),
@@ -445,6 +481,7 @@ class _TenantStockTakeSettingsPanelState
                   semanticLabel: day.name,
                   selected: _selectedWeekdays.contains(day.weekday),
                   onChanged: (_) => setState(() {
+                    _edited = true;
                     if (!_selectedWeekdays.remove(day.weekday)) {
                       _selectedWeekdays.add(day.weekday);
                     }
@@ -543,8 +580,9 @@ class _TenantStockTakeSettingsPanelState
               for (final (index, member) in data.staff.indexed) ...<Widget>[
                 if (index > 0)
                   Divider(height: 1, color: colors.surface.borderSubtle),
-                _RotaRow(
+                TenantStaffRosterRow(
                   key: ValueKey('stock-take-row-${member.uid}'),
+                  keyPrefix: 'stock-take',
                   member: member,
                   wide: wide,
                   note: _noteFor(member, names, listings),
@@ -624,9 +662,10 @@ class _TenantStockTakeSettingsPanelState
       ],
       onChanged: (choice) {
         if (choice == null) return;
-        setState(
-          () => _assigned[member.uid] = choice == _notCounting ? null : choice,
-        );
+        setState(() {
+          _edited = true;
+          _assigned[member.uid] = choice == _notCounting ? null : choice;
+        });
       },
     );
   }
@@ -667,7 +706,7 @@ class _TenantStockTakeSettingsPanelState
   }
 
   /// What a row says under the name when the role line is not the point.
-  _RotaNote? _noteFor(
+  TenantStaffRosterNote? _noteFor(
     TenantStaffSummary member,
     Map<String, String> names,
     Map<String, List<String?>> listings,
@@ -676,7 +715,7 @@ class _TenantStockTakeSettingsPanelState
     final counting = current != null;
     // A deactivated person still on the rota is the one fault a row carries.
     if (member.status == MembershipStatus.inactive && counting) {
-      return const _RotaNote(
+      return const TenantStaffRosterNote(
         status: AppStatus.attention,
         icon: Icons.warning_amber_rounded,
         text: 'Never asked - cannot sign in',
@@ -692,7 +731,7 @@ class _TenantStockTakeSettingsPanelState
             _scopeLabel(listing ?? _everything, names) ?? '',
       ];
       if (dropped.isNotEmpty) {
-        return _RotaNote(
+        return TenantStaffRosterNote(
           status: AppStatus.attention,
           icon: Icons.warning_amber_rounded,
           text:
@@ -703,7 +742,7 @@ class _TenantStockTakeSettingsPanelState
       }
     }
     if (member.status == MembershipStatus.pending && counting) {
-      return const _RotaNote(
+      return const TenantStaffRosterNote(
         status: AppStatus.info,
         icon: Icons.info_outline,
         text: 'Asked once they accept the invitation',
@@ -712,7 +751,7 @@ class _TenantStockTakeSettingsPanelState
     if (current != null &&
         current != _everything &&
         !names.containsKey(current)) {
-      return const _RotaNote(
+      return const TenantStaffRosterNote(
         status: AppStatus.info,
         icon: Icons.info_outline,
         text: 'Kept as it is when you save',
@@ -869,11 +908,12 @@ class _TenantStockTakeSettingsPanelState
         // copy still holding the pre-save value won the race and the form blanked
         // itself. A save that looks discarded is worse than a stale one, and the
         // form already holds exactly what the server now has.
-        setState(
-          () => _saved = TenantPublishedStockTakeSchedule.published(
-            intent.schedule,
-          ),
-        );
+        setState(() {
+          _saved = TenantPublishedStockTakeSchedule.published(intent.schedule);
+          // What the form now holds is what the server has, so nothing has
+          // moved underneath it.
+          _seededFrom = _saved;
+        });
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -924,211 +964,4 @@ String _joined(List<String> items, String conjunction) {
   if (items.length <= 1) return items.join();
   return '${items.take(items.length - 1).join(', ')} $conjunction '
       '${items.last}';
-}
-
-/// A line under a person's name that is about their place on the rota.
-@immutable
-final class _RotaNote {
-  const _RotaNote({
-    required this.status,
-    required this.icon,
-    required this.text,
-  });
-
-  final AppStatus status;
-  final IconData icon;
-  final String text;
-}
-
-/// One person on the rota: who they are, whether they can be asked, and what
-/// they count.
-///
-/// **Wide, the control ends the row; compact, it goes under the name.** Seven
-/// people down a phone with a select squeezed beside each name would cut the
-/// names or the categories, and both are the answer. Under the name, aligned
-/// with it, the select has the row's whole width.
-final class _RotaRow extends StatelessWidget {
-  const _RotaRow({
-    super.key,
-    required this.member,
-    required this.wide,
-    required this.control,
-    this.note,
-  });
-
-  final TenantStaffSummary member;
-  final bool wide;
-  final Widget control;
-  final _RotaNote? note;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    final colors = tokens.colors;
-    final deactivated = member.status == MembershipStatus.inactive;
-    final standing = switch (member.status) {
-      MembershipStatus.pending => (label: 'Invited', icon: Icons.mail_outline),
-      MembershipStatus.inactive => (label: 'Deactivated', icon: Icons.block),
-      MembershipStatus.active => null,
-    };
-    final caption = tokens.typography.caption;
-    final line = note;
-
-    final identity = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Flexible(
-              child: Text(
-                member.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: tokens.typography.bodyLarge.copyWith(
-                  // Stepped back, not hidden: who is listed does not change.
-                  color: deactivated
-                      ? colors.text.secondary
-                      : colors.text.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            if (standing != null) ...<Widget>[
-              SizedBox(width: tokens.spacing.s8),
-              // Neutral: whether an invitation is in trouble is the Staff
-              // screen's question. Here it only matters that it is one.
-              StatusBadge(
-                key: ValueKey('stock-take-standing-${member.uid}'),
-                status: AppStatus.neutral,
-                icon: standing.icon,
-                label: standing.label,
-              ),
-            ],
-          ],
-        ),
-        SizedBox(height: tokens.spacing.s4),
-        if (line != null)
-          Row(
-            key: ValueKey('stock-take-note-${member.uid}'),
-            children: <Widget>[
-              Icon(
-                line.icon,
-                size: StatusBadge.iconSize,
-                color: line.status.role(tokens).fg,
-              ),
-              SizedBox(width: tokens.spacing.s4),
-              Flexible(
-                child: Text(
-                  line.text,
-                  style: caption.copyWith(color: line.status.role(tokens).fg),
-                ),
-              ),
-            ],
-          )
-        else
-          Text(
-            tenantRoleLabel(member.role),
-            style: caption.copyWith(color: colors.text.tertiary),
-          ),
-      ],
-    );
-
-    final who = Row(
-      children: <Widget>[
-        _RotaAvatar(member: member),
-        SizedBox(width: tokens.spacing.s12),
-        Expanded(child: identity),
-      ],
-    );
-
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: tokens.spacing.s16,
-        vertical: tokens.spacing.s12,
-      ),
-      child: wide
-          ? Row(
-              children: <Widget>[
-                // Three to two: the name and its line get the larger share,
-                // and the select gets what a category name needs.
-                Expanded(flex: 3, child: who),
-                SizedBox(width: tokens.spacing.s12),
-                Expanded(flex: 2, child: control),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                who,
-                SizedBox(height: tokens.spacing.s8),
-                Padding(
-                  padding: EdgeInsets.only(
-                    left: _RotaAvatar.size + tokens.spacing.s12,
-                  ),
-                  child: control,
-                ),
-              ],
-            ),
-    );
-  }
-}
-
-/// A member's initials inside their identity ring.
-///
-/// **The Staff list's own treatment and figures**, redrawn rather than shared
-/// because that avatar is private to `tenant_staff_directory.dart`: initials in
-/// primary ink on `surface.field`, with `accent.identity` as a two-pixel ring,
-/// which is what passes §9 where a filled block did not. A deactivated member's
-/// ring steps down to `border.strong`, the one change a row makes to say they
-/// have left.
-final class _RotaAvatar extends StatelessWidget {
-  const _RotaAvatar({required this.member});
-
-  final TenantStaffSummary member;
-
-  /// The Staff list's row size.
-  static const double size = 40;
-
-  /// The Staff list's ring.
-  static const double ringWidth = 2;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    final ring = member.status == MembershipStatus.inactive
-        ? tokens.colors.surface.borderStrong
-        : tokens.colors.accent.identityFor(member.uid);
-    return ExcludeSemantics(
-      child: Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: tokens.colors.surface.field,
-          borderRadius: BorderRadius.circular(tokens.radius.lg),
-          border: Border.all(color: ring, width: ringWidth),
-        ),
-        child: Text(
-          _initials(member.displayName),
-          style: tokens.typography.labelLarge.copyWith(
-            color: tokens.colors.text.primary,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ),
-    );
-  }
-
-  static String _initials(String name) {
-    final words = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((word) => word.isNotEmpty)
-        .toList();
-    if (words.isEmpty) return '?';
-    final first = words.first.characters.first;
-    final last = words.length > 1 ? words.last.characters.first : '';
-    return '$first$last'.toUpperCase();
-  }
 }

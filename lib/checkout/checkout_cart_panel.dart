@@ -44,7 +44,9 @@ import '../ui/money_text.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../inventory/catalog_management.dart';
 import '../inventory/product_visual.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -65,6 +67,7 @@ import '../ui/tokens.dart';
 import 'checkout_cart_activity.dart';
 import 'checkout_catalog_cache.dart';
 import 'checkout_draft.dart';
+import 'checkout_price_agreement.dart';
 import 'checkout_print_configuration.dart';
 import 'checkout_print_failures.dart';
 import 'checkout_print_transport_base.dart';
@@ -131,6 +134,17 @@ const double _wideProductTileHeight = 128;
 /// which is the shape a product photograph is taken in.
 const double _compactProductTileHeight = 246;
 
+/// How tall a phone tile is now that it carries the product's code.
+///
+/// **[_compactProductTileHeight] plus one [AppTypeRoles.monoCaption] line**,
+/// asked for on 2026-09-29: the code under the name, as the wide tile has
+/// always had. The floor above was measured with a two-line name, so the tile
+/// grows by exactly the line it gained and a two-line name still fits.
+double _compactTileHeight(AppTokens tokens) {
+  final code = tokens.typography.monoCaption;
+  return _compactProductTileHeight + code.fontSize! * (code.height ?? 1);
+}
+
 /// The height of the picture band across the top of a compact tile.
 ///
 /// Named for the same reason as the three figures above. It was the browse
@@ -187,6 +201,7 @@ final class TenantCheckoutScreen extends StatelessWidget {
     this.printerSetupReminder,
     this.onSetUpPrinter,
     this.cartActivity,
+    this.loadPriceAgreement,
   });
 
   final CheckoutCatalogSource cache;
@@ -194,6 +209,9 @@ final class TenantCheckoutScreen extends StatelessWidget {
   /// Absent until the composition root supplies it; the cart then prices a
   /// sale but cannot save one, exactly as the returns route behaves.
   final CheckoutDraftSink? drafts;
+
+  /// See [TenantCheckoutPanel.loadPriceAgreement].
+  final CheckoutPriceAgreementLoader? loadPriceAgreement;
 
   /// See [TenantCheckoutPanel.cartActivity].
   final CheckoutCartActivity? cartActivity;
@@ -214,6 +232,7 @@ final class TenantCheckoutScreen extends StatelessWidget {
       printerSetupReminder: printerSetupReminder,
       onSetUpPrinter: onSetUpPrinter,
       cartActivity: cartActivity,
+      loadPriceAgreement: loadPriceAgreement,
     ),
   );
 }
@@ -228,12 +247,14 @@ final class TenantCheckoutScreen extends StatelessWidget {
 /// Four scope decisions are recorded here because each is easy to reverse by
 /// accident:
 ///
-/// - **The discount is pinned to zero and has no control.**
-///   `CheckoutDraftRequest.discountMinor` exists and is validated, so leaving a
-///   field wired to it would hand every cashier an unaudited way to reduce a
-///   sale. No role check authorizes a till discount today, so the cart does not
-///   offer one. Adding it later is additive; adding it now would be a cash
-///   shrinkage path nothing reviews.
+/// - **Money comes off a sale only as a price agreed with the customer.**
+///   `CheckoutDraftRequest.discountMinor` still has no control, because a field
+///   wired to it would hand every cashier an unaudited way to reduce a sale.
+///   Since 2026-09-29 the one way is *Agree a price*, offered only to the
+///   people a business names under *Agreed prices*: the cashier types the total
+///   the customer agreed to and says why, and the sale keeps the listed prices
+///   beside both. Changing the items drops it, because a price is agreed for a
+///   basket.
 /// - **There is no default tender.** A pre-selected payment method would be
 ///   indistinguishable from an observed one, and the whole point of the field
 ///   is that a person looked at how the customer paid.
@@ -271,10 +292,16 @@ final class TenantCheckoutPanel extends StatefulWidget {
     this.printerSetupReminder,
     this.onSetUpPrinter,
     this.cartActivity,
+    this.loadPriceAgreement,
   });
 
   final CheckoutCatalogSource cache;
   final CheckoutDraftSink? drafts;
+
+  /// Reads who may agree a price. Absent, or answering that this person may
+  /// not, and the till offers no *Agree a price* - which is also what every
+  /// failed read comes to.
+  final CheckoutPriceAgreementLoader? loadPriceAgreement;
 
   /// Told whether the cart holds a sale not yet saved, so a Play update can
   /// wait for it. Absent, nothing is told.
@@ -345,6 +372,14 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
   static String _sessionKey(TenantSession session) =>
       '${session.uid}:${session.tenantId}:${session.epoch}';
 
+  /// Whether this session's person may agree a price, from one read.
+  _PriceAgreementRead? _mayAgreePriceFor(TenantSession session) {
+    final load = widget.loadPriceAgreement;
+    if (load == null) return null;
+    return ({required bool cached}) async =>
+        (await load(session, cached: cached)).policy.allows(session.uid);
+  }
+
   TenantGuardedLoader<CheckoutCatalogSnapshot> _loaderFor(
     TenantSession session,
   ) {
@@ -394,6 +429,7 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
           tenantId: session.tenantId,
           printerSetupReminder: widget.printerSetupReminder,
           cartActivity: widget.cartActivity,
+          mayAgreePrice: _mayAgreePriceFor(session),
           onSetUpPrinter:
               session.canAccess(
                 allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
@@ -492,7 +528,7 @@ final class _CheckoutSkeleton extends StatelessWidget {
               maxCrossAxisExtent: _productTileExtent,
               mainAxisExtent: dense
                   ? _wideProductTileHeight
-                  : _compactProductTileHeight,
+                  : _compactTileHeight(tokens),
               crossAxisSpacing: tokens.spacing.s8,
               mainAxisSpacing: tokens.spacing.s8,
             ),
@@ -597,7 +633,7 @@ final class _ProductTileSkeleton extends StatelessWidget {
 
     return _card(
       tokens,
-      height: _compactProductTileHeight,
+      height: _compactTileHeight(tokens),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -616,6 +652,11 @@ final class _ProductTileSkeleton extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   name,
+                  SkeletonLine(
+                    widthFactor: 0.4,
+                    style: tokens.typography.monoCaption,
+                    tone: tone,
+                  ),
                   const Spacer(),
                   SizedBox(height: tokens.spacing.s4),
                   Row(
@@ -692,10 +733,15 @@ final class _CartEditor extends StatefulWidget {
     this.onSetUpPrinter,
     this.onSaved,
     this.cartActivity,
+    this.mayAgreePrice,
   });
 
   /// Told once a sale is durable, so the till can read the stock again.
   final VoidCallback? onSaved;
+
+  /// Answers whether this person may agree a price, from this device's cache
+  /// or from the server. Absent, they may not.
+  final _PriceAgreementRead? mayAgreePrice;
 
   final CheckoutCatalogSnapshot snapshot;
   final CheckoutDraftSink? drafts;
@@ -741,6 +787,23 @@ final class _CartEditorState extends State<_CartEditor> {
   bool _saving = false;
   CheckoutRefusal? _refusal;
 
+  /// Whether this person may agree a price, as far as this till knows.
+  ///
+  /// **False until a read says otherwise**, so a till whose read has not
+  /// answered - or never will, offline on a phone that has never fetched the
+  /// setting - sells at the listed price, which is what it did before.
+  bool _mayAgreePrice = false;
+
+  /// The price agreed for the items on screen, or null.
+  _AgreedPrice? _agreed;
+
+  /// Why an agreed price was taken off, while that is still worth saying.
+  ///
+  /// Kept until the next agreement, the save, or an empty cart, rather than
+  /// cleared by the next edit: a cashier typing a quantity would otherwise
+  /// lose the sentence on the second keystroke.
+  _AgreementDropped? _dropped;
+
   /// The last durable save. It deliberately survives every later cart edit and
   /// is cleared only by the next save attempt or by the cashier closing it: a
   /// receipt number describes a finished sale, not the cart on screen, and a
@@ -777,6 +840,41 @@ final class _CartEditorState extends State<_CartEditor> {
       this,
       holdsSale: _quantities.isNotEmpty || _saving,
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_readPriceAgreement());
+  }
+
+  /// Reads the policy from this device, then from the server.
+  ///
+  /// **Neither read holds the till.** The first is what lets the button appear
+  /// with no signal; the second is what brings the setting to a cashier's phone
+  /// at all, and what takes the button away once a business has withdrawn it.
+  /// A read that fails leaves the answer the till already had - which is *no*
+  /// until one has said otherwise - and a cache with no copy fails on every
+  /// phone that has never fetched one, so it is not reported as an error.
+  Future<void> _readPriceAgreement() async {
+    final read = widget.mayAgreePrice;
+    if (read == null) return;
+    for (final cached in const <bool>[true, false]) {
+      final bool allowed;
+      try {
+        allowed = await read(cached: cached);
+      } catch (_) {
+        continue;
+      }
+      if (!mounted) return;
+      setState(() {
+        _mayAgreePrice = allowed;
+        if (!allowed && _agreed != null) {
+          _agreed = null;
+          _dropped = _AgreementDropped.notAllowed;
+        }
+      });
+    }
   }
 
   @override
@@ -836,10 +934,12 @@ final class _CartEditorState extends State<_CartEditor> {
       return;
     }
     setState(() {
-      final next = (_quantities[product.id] ?? 0) + 1;
+      final current = _quantities[product.id] ?? 0;
+      final next = current + 1;
       _quantities[product.id] = next > maximumCheckoutLineQuantity
           ? maximumCheckoutLineQuantity
           : next;
+      if (_quantities[product.id] != current) _dropAgreement();
       _unusableQuantities.remove(product.id);
       _clearRefusal();
     });
@@ -853,6 +953,7 @@ final class _CartEditorState extends State<_CartEditor> {
       } else {
         _quantities[productId] = next;
       }
+      _dropAgreement();
       _unusableQuantities.remove(productId);
       _clearRefusal();
     });
@@ -861,6 +962,7 @@ final class _CartEditorState extends State<_CartEditor> {
   void _remove(String productId) {
     setState(() {
       _quantities.remove(productId);
+      _dropAgreement();
       _unusableQuantities.remove(productId);
       _clearRefusal();
     });
@@ -879,6 +981,7 @@ final class _CartEditorState extends State<_CartEditor> {
         return;
       }
       _unusableQuantities.remove(productId);
+      if (_quantities[productId] != parsed) _dropAgreement();
       _quantities[productId] = parsed;
     });
   }
@@ -896,6 +999,65 @@ final class _CartEditorState extends State<_CartEditor> {
   /// finished.
   void _clearRefusal() {
     _refusal = null;
+  }
+
+  /// Takes off a price agreed for items that have since changed.
+  ///
+  /// **A price is agreed for a basket, not taken off whatever is on screen.**
+  /// The developer ruled on 2026-09-29 that changing the items drops it, and
+  /// the foot says so, so a cashier who adds one more thing is never charging
+  /// the old agreed total for a bigger sale. Called inside the `setState` of
+  /// every edit that changes what is being sold.
+  void _dropAgreement() {
+    // An emptied cart is the end of that customer, so there is nothing left
+    // to explain to the next one.
+    if (_quantities.isEmpty) {
+      _agreed = null;
+      _dropped = null;
+      return;
+    }
+    if (_agreed == null) return;
+    _agreed = null;
+    _dropped = _AgreementDropped.itemsChanged;
+  }
+
+  /// What the customer pays: the agreed total, or the listed one.
+  int? _payable(int? listTotal) =>
+      listTotal == null ? null : (_agreed?.totalMinor ?? listTotal);
+
+  /// Asks for the agreed total and the reason, and holds the answer.
+  ///
+  /// **The dialog is modal**, so the items cannot change under it; the check
+  /// after it is for a catalog re-read landing while it was up, which would
+  /// leave the answer agreed against a total that is no longer on screen.
+  Future<void> _agreePrice(BuildContext context, String currency) async {
+    final listTotal = _totalMinor;
+    if (listTotal == null) return;
+    final agreed = await showAppDialog<_AgreedPrice>(
+      context,
+      barrierDismissible: true,
+      builder: (_) => _AgreePriceDialog(
+        currency: currency,
+        listTotalMinor: listTotal,
+        initial: _agreed,
+      ),
+    );
+    if (!mounted || agreed == null || _totalMinor != agreed.listTotalMinor) {
+      return;
+    }
+    setState(() {
+      _agreed = agreed;
+      _dropped = null;
+      _clearRefusal();
+    });
+  }
+
+  void _removeAgreement() {
+    setState(() {
+      _agreed = null;
+      _dropped = null;
+      _clearRefusal();
+    });
   }
 
   // --- Pricing ----------------------------------------------------------
@@ -965,6 +1127,7 @@ final class _CartEditorState extends State<_CartEditor> {
     // cashier did not say how, and the sale records exactly that. The method
     // is set afterwards from the sale's card.
     final tender = _tender;
+    final agreed = _agreed;
     if (drafts == null || _saving) return;
 
     setState(() {
@@ -978,6 +1141,12 @@ final class _CartEditorState extends State<_CartEditor> {
       saved = await drafts.saveDraft(
         CheckoutDraftRequest(
           tender: tender,
+          agreedPrice: agreed == null
+              ? null
+              : CheckoutAgreedPrice(
+                  totalMinor: agreed.totalMinor,
+                  reason: agreed.reason,
+                ),
           lines: <CheckoutDraftLineRequest>[
             for (final entry in _quantities.entries)
               CheckoutDraftLineRequest(
@@ -1003,6 +1172,8 @@ final class _CartEditorState extends State<_CartEditor> {
         _quantities.clear();
         _unusableQuantities.clear();
         _tender = null;
+        _agreed = null;
+        _dropped = null;
         // The till returns to its neutral state for the next customer rather
         // than leaving them a catalog narrowed by somebody else's search.
         _search.clear();
@@ -1104,7 +1275,7 @@ final class _CartEditorState extends State<_CartEditor> {
           Expanded(child: _productsPane(context, currency, dense: false)),
           _CartBar(
             currency: currency,
-            total: total,
+            total: _payable(total),
             itemCount: _itemCount,
             onOpen: () => _openCartSheet(context, currency),
           ),
@@ -1303,7 +1474,12 @@ final class _CartEditorState extends State<_CartEditor> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _totalLine(tokens, currency, total),
+          if (_agreed case final agreed?) ...<Widget>[
+            _agreedLines(tokens, currency, agreed),
+            SizedBox(height: tokens.spacing.s8),
+          ],
+          _totalLine(tokens, currency, _payable(total)),
+          ..._agreeSection(context, tokens, currency, total),
           SizedBox(height: tokens.spacing.s12),
           ..._tenderSection(context, tokens),
           ..._saveSection(context, tokens, total),
@@ -1378,6 +1554,124 @@ final class _CartEditorState extends State<_CartEditor> {
         ),
       ],
     );
+  }
+
+  /// What the listed prices came to, what came off, and why.
+  ///
+  /// **The receipt's own order** - subtotal, discount, total - so what the
+  /// cashier reads out and what the customer is handed agree line for line.
+  /// The figures are secondary and the agreed total below them is the hero,
+  /// because that is the figure the customer is waiting to hear.
+  Widget _agreedLines(AppTokens tokens, String currency, _AgreedPrice agreed) {
+    final colors = tokens.colors;
+    final word = tokens.typography.caption.copyWith(
+      color: colors.text.secondary,
+    );
+    final figure = tokens.typography.numericBody.copyWith(
+      color: colors.text.secondary,
+    );
+    Widget line(String label, String value, Key key) => Row(
+      children: <Widget>[
+        Expanded(child: Text(label, style: word)),
+        SizedBox(width: tokens.spacing.s12),
+        Text(value, key: key, style: figure),
+      ],
+    );
+    return Column(
+      key: const ValueKey('checkout-agreed'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        line(
+          'Listed price',
+          '$currency ${_money(agreed.listTotalMinor)}',
+          const ValueKey('checkout-agreed-list'),
+        ),
+        SizedBox(height: tokens.spacing.s4),
+        line(
+          'Agreed discount',
+          '$currency ${_money(agreed.discountMinor)}',
+          const ValueKey('checkout-agreed-discount'),
+        ),
+        SizedBox(height: tokens.spacing.s4),
+        Text(
+          'Reason: ${agreed.reason}',
+          key: const ValueKey('checkout-agreed-reason'),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: tokens.typography.caption.copyWith(
+            color: colors.text.tertiary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// *Agree a price*, or changing and removing one, for the people allowed.
+  ///
+  /// **Nothing at all for everybody else**, rather than a disabled button: a
+  /// control a cashier may never use is a question they will keep asking.
+  /// For the people allowed it is `secondary`, beneath the total it changes
+  /// and above the save it must never be mistaken for.
+  List<Widget> _agreeSection(
+    BuildContext context,
+    AppTokens tokens,
+    String currency,
+    int? total,
+  ) {
+    final dropped = _dropped;
+    final offered =
+        _mayAgreePrice && widget.drafts != null && _quantities.isNotEmpty;
+    return <Widget>[
+      if (offered) ...<Widget>[
+        SizedBox(height: tokens.spacing.s12),
+        if (_agreed == null)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: AppButton(
+              key: const ValueKey('checkout-agree-price'),
+              label: 'Agree a price',
+              tier: AppButtonTier.secondary,
+              icon: Icons.handshake_outlined,
+              // Only against a total the till could record: agreeing a price
+              // for a cart that cannot be saved is a figure for nothing.
+              onPressed: _blocker(total) == null && !_saving
+                  ? () => _agreePrice(context, currency)
+                  : null,
+            ),
+          )
+        else
+          // **No glyph on this one, which the phone measured.** With it, the
+          // pair wrapped onto two rows at 411 and the foot - which does not
+          // scroll - took another row from the lines above it. The words say
+          // what the glyph did, and the pair still wraps at a larger text size.
+          Wrap(
+            spacing: tokens.spacing.s8,
+            runSpacing: tokens.spacing.s8,
+            children: <Widget>[
+              AppButton(
+                key: const ValueKey('checkout-change-agreed-price'),
+                label: 'Change agreed price',
+                tier: AppButtonTier.secondary,
+                onPressed: _saving ? null : () => _agreePrice(context, currency),
+              ),
+              AppButton(
+                key: const ValueKey('checkout-remove-agreed-price'),
+                label: 'Use listed price',
+                tier: AppButtonTier.tertiary,
+                onPressed: _saving ? null : _removeAgreement,
+              ),
+            ],
+          ),
+      ],
+      if (dropped != null && _agreed == null && _quantities.isNotEmpty) ...[
+        SizedBox(height: tokens.spacing.s12),
+        Callout(
+          key: const ValueKey('checkout-agreement-dropped'),
+          status: AppStatus.attention,
+          message: dropped.message,
+        ),
+      ],
+    ];
   }
 
   /// Reports one durable save, and leaves the till's shape alone doing it.
@@ -1702,7 +1996,7 @@ final class _CartEditorState extends State<_CartEditor> {
               maxCrossAxisExtent: _productTileExtent,
               mainAxisExtent: dense
                   ? _wideProductTileHeight
-                  : _compactProductTileHeight,
+                  : _compactTileHeight(tokens),
               crossAxisSpacing: tokens.spacing.s8,
               mainAxisSpacing: tokens.spacing.s8,
             ),
@@ -1843,6 +2137,216 @@ final class _CartEditorState extends State<_CartEditor> {
         ],
       ],
     ];
+  }
+}
+
+/// Reads whether this session's person may agree a price.
+typedef _PriceAgreementRead = Future<bool> Function({required bool cached});
+
+/// One price agreed at the till, against the listed total it was agreed from.
+@immutable
+final class _AgreedPrice {
+  const _AgreedPrice({
+    required this.totalMinor,
+    required this.listTotalMinor,
+    required this.reason,
+  });
+
+  final int totalMinor;
+  final int listTotalMinor;
+  final String reason;
+
+  int get discountMinor => listTotalMinor - totalMinor;
+}
+
+/// Why an agreed price is no longer on the sale.
+enum _AgreementDropped {
+  itemsChanged(
+    'The agreed price was taken off because the items changed. Agree it '
+    'again if it still stands.',
+  ),
+  notAllowed(
+    'The agreed price was taken off because this business no longer lets you '
+    'agree prices. The sale is at the listed price.',
+  );
+
+  const _AgreementDropped(this.message);
+
+  final String message;
+}
+
+/// *Agree a price*: the total the customer agreed to, and why.
+///
+/// **The total, not the discount**, because that is what was said across the
+/// counter - *I'll give you a thousand for the three*. The till works out what
+/// came off it, and shows it as the cashier types.
+final class _AgreePriceDialog extends StatefulWidget {
+  const _AgreePriceDialog({
+    required this.currency,
+    required this.listTotalMinor,
+    this.initial,
+  });
+
+  final String currency;
+  final int listTotalMinor;
+
+  /// The price already agreed, when this is changing one.
+  final _AgreedPrice? initial;
+
+  @override
+  State<_AgreePriceDialog> createState() => _AgreePriceDialogState();
+}
+
+class _AgreePriceDialogState extends State<_AgreePriceDialog> {
+  late final TextEditingController _total = TextEditingController(
+    text: switch (widget.initial) {
+      final initial? => _typedAmount(initial.totalMinor),
+      null => '',
+    },
+  );
+  late final TextEditingController _reason = TextEditingController(
+    text: widget.initial?.reason ?? '',
+  );
+
+  String? _totalError;
+  String? _reasonError;
+
+  @override
+  void dispose() {
+    _total.dispose();
+    _reason.dispose();
+    super.dispose();
+  }
+
+  /// The typed total in minor units, or null where it does not read as money.
+  int? get _typedTotal {
+    try {
+      return tenantCatalogPriceMinorUnits(_total.text);
+    } on TenantCatalogManagementException {
+      return null;
+    }
+  }
+
+  /// Why the typed total cannot be agreed, or null where it can.
+  String? _totalProblem() {
+    if (_total.text.trim().isEmpty) {
+      return 'Enter the total the customer agreed to.';
+    }
+    final total = _typedTotal;
+    if (total == null) return 'Enter an amount, like 1000 or 950.50.';
+    if (total <= 0) return 'The agreed total must be more than nothing.';
+    if (total >= widget.listTotalMinor) {
+      return 'The agreed total must be less than the listed '
+          '${widget.currency} ${_money(widget.listTotalMinor)}.';
+    }
+    return null;
+  }
+
+  void _confirm() {
+    final totalProblem = _totalProblem();
+    final reason = checkoutDiscountReason(_reason.text);
+    if (totalProblem != null || reason == null) {
+      setState(() {
+        _totalError = totalProblem;
+        _reasonError = reason == null
+            ? 'Say why, in at least $minimumCheckoutDiscountReasonLength '
+                  'characters.'
+            : null;
+      });
+      return;
+    }
+    Navigator.of(context).pop(
+      _AgreedPrice(
+        totalMinor: _typedTotal!,
+        listTotalMinor: widget.listTotalMinor,
+        reason: reason,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final typed = _typedTotal;
+    // What comes off, while the cashier types - only once it is a figure the
+    // till would accept, so it never states a discount it would then refuse.
+    final difference =
+        _totalProblem() == null && typed != null
+        ? '${widget.currency} ${_money(widget.listTotalMinor - typed)} off '
+              'the listed price'
+        : null;
+    return AppDialog(
+      title: 'Agree a price',
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            'Listed total: ${widget.currency} '
+            '${_money(widget.listTotalMinor)}',
+            key: const ValueKey('agree-price-list-total'),
+            style: tokens.density
+                .body(tokens.typography)
+                .copyWith(color: tokens.colors.text.secondary),
+          ),
+          SizedBox(height: tokens.spacing.s16),
+          AppTextField(
+            key: const ValueKey('agree-price-total'),
+            controller: _total,
+            label: 'Agreed total',
+            leading: Icons.payments_outlined,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            autofocus: true,
+            textInputAction: TextInputAction.next,
+            helper: difference,
+            error: _totalError,
+            onChanged: (_) => setState(() => _totalError = null),
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          AppTextField(
+            key: const ValueKey('agree-price-reason'),
+            controller: _reason,
+            label: 'Reason',
+            leading: Icons.edit_note_outlined,
+            placeholder: 'Bought three, regular customer',
+            maxLength: maximumCheckoutDiscountReasonLength,
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.done,
+            error: _reasonError,
+            onChanged: (_) {
+              if (_reasonError != null) setState(() => _reasonError = null);
+            },
+            onSubmitted: (_) => _confirm(),
+          ),
+        ],
+      ),
+      actions: <Widget>[
+        AppButton(
+          key: const ValueKey('agree-price-cancel'),
+          label: 'Cancel',
+          tier: AppButtonTier.secondary,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        AppButton(
+          key: const ValueKey('agree-price-confirm'),
+          label: 'Agree price',
+          tier: AppButtonTier.primary,
+          onPressed: _confirm,
+        ),
+      ],
+    );
+  }
+
+  /// Minor units as a person would type them: `950.50`, `1000`, no grouping.
+  static String _typedAmount(int minorUnits) {
+    final major = minorUnits ~/ 100;
+    final minor = minorUnits % 100;
+    return minor == 0
+        ? '$major'
+        : '$major.${minor.toString().padLeft(2, '0')}';
   }
 }
 
@@ -2053,6 +2557,21 @@ final class _ProductTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _name(tokens),
+              // **The code, on the phone too, since 2026-09-29.** The wide
+              // tile has always carried it; the phone's did not, and it is
+              // what a cashier checks against the label in their hand.
+              // `monoCaption` rather than the wide tile's `mono`, because
+              // here it sits under a name over a picture and is read second.
+              if (product.sku.isNotEmpty)
+                Text(
+                  key: ValueKey('checkout-product-code-${product.id}'),
+                  product.sku,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: tokens.typography.monoCaption.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                ),
               const Spacer(),
               SizedBox(height: tokens.spacing.s4),
               Row(
@@ -2366,13 +2885,31 @@ final class _CartLine extends StatelessWidget {
                     SizedBox(width: tokens.spacing.s8),
                   ],
                   Expanded(
-                    child: Text(
-                      resolved?.name ?? 'Unavailable product',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: tokens.typography.titleMedium.copyWith(
-                        color: tokens.colors.text.primary,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          resolved?.name ?? 'Unavailable product',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: tokens.typography.titleMedium.copyWith(
+                            color: tokens.colors.text.primary,
+                          ),
+                        ),
+                        // The code the sale will record against this line,
+                        // under its name as on the tile it was picked from.
+                        if (resolved != null && resolved.sku.isNotEmpty)
+                          Text(
+                            key: ValueKey('checkout-line-code-$productId'),
+                            resolved.sku,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: tokens.typography.monoCaption.copyWith(
+                              color: tokens.colors.text.tertiary,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   SizedBox(width: tokens.spacing.s8),

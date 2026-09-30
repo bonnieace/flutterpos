@@ -19,6 +19,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../checkout/checkout_receipt.dart' show checkoutDeviceHardwareDigest;
 import '../checkout/checkout_tender.dart';
 import '../inventory/catalog_management.dart';
 import '../reporting/reporting_currency.dart';
@@ -345,65 +346,37 @@ final class _ShiftCloseSheetState extends State<_ShiftCloseSheet> {
     return (closed: closed, failed: failed, errorCode: errorCode);
   }
 
-  /// Closes a shift left open by an installation this device no longer is.
-  ///
-  /// The same three boxes, because the declaration needs no sale evidence -
-  /// see [TenantShiftController.closeShiftWithoutEvidence]. The outcome is
-  /// reported exactly as an ordinary close is.
-  /// Closes a shift this device holds no sales for, without counting it.
-  ///
-  /// **A separate control rather than a blank form.** Reconciliation reads an
-  /// absent declaration as nothing to compare; it reads a declaration of zero
-  /// as a drawer somebody looked into and found empty. Those are different
-  /// statements and only the person closing the shift knows which one is true,
-  /// so they are asked rather than inferred from an untouched box.
-  Future<void> _closeOrphanUncounted(String shiftId) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    final state = await widget.shifts.closeShiftWithoutEvidence(
-      shiftId: shiftId,
-      declaration: null,
-    );
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _counted = null;
-      _outcome = state;
-    });
-  }
+  // **No recovery close on this sheet since 2026-09-29.** It closed a shift an
+  // earlier install of this phone had left open, with or without a count,
+  // because this phone could not adopt it. Discovery joins that shift now, so
+  // it is closed by the ordinary count above like any other.
 
-  Future<void> _closeOrphan(String shiftId) async {
-    if (_busy) return;
-    final declaration = _readDeclaration();
-    if (declaration == null) return;
-    // **An untouched form is not a count of nothing.** Everywhere else on this
-    // sheet an empty box is a legitimate zero, because the cashier is holding
-    // the drawer and a till that took no card should not need a typed `0`. A
-    // recovery close is the one place that reasoning fails: the person may not
-    // have the drawer at all, and recording their silence as *empty* would
-    // report the float and every taking as missing.
-    if (declaration.isZero && _declared.values.every((c) => c.text.isEmpty)) {
-      setState(() {
-        _fieldErrors
-          ..clear()
-          ..addAll(<CheckoutTender, String>{
-            for (final tender in CheckoutTender.values)
-              tender: 'Enter what you counted, or close without counting.',
-          });
-      });
-      return;
+  /// What the banner says about a shift this phone joined rather than opened,
+  /// or null where it opened it (or the canonical shift is not in hand yet,
+  /// which is the same point the float reminder waits for).
+  ///
+  /// **Two sentences, because there are two ways to have joined.** The shift
+  /// document keeps the opener's device id, and the durable half of it - see
+  /// `checkoutDeviceHardwareDigest` - survives a reinstall. Where that half
+  /// matches this phone's, the opener was this same phone before the app was
+  /// reinstalled, and "another phone" would send the cashier looking for one.
+  String? get _joinedNotice {
+    final shift = widget.shifts.state.shift;
+    final here = widget.shifts.deviceId;
+    if (shift == null || shift.deviceId == here) return null;
+    bool samePhone;
+    try {
+      samePhone =
+          checkoutDeviceHardwareDigest(shift.deviceId) ==
+          checkoutDeviceHardwareDigest(here);
+    } on ArgumentError {
+      samePhone = false;
     }
-    setState(() => _busy = true);
-    final state = await widget.shifts.closeShiftWithoutEvidence(
-      shiftId: shiftId,
-      declaration: declaration,
-    );
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _counted = declaration;
-      _outcome = state;
-    });
+    return samePhone
+        ? 'This shift was opened on this phone before the app was '
+              'reinstalled, and it carries on here.'
+        : 'This shift was opened on another phone. Sales from every phone '
+              'you use count towards it.';
   }
 
   Future<void> _cancel() async {
@@ -436,11 +409,8 @@ final class _ShiftCloseSheetState extends State<_ShiftCloseSheet> {
               declared: _declared,
               fieldErrors: _fieldErrors,
               onClose: _close,
-              onCloseOrphan: _closeOrphan,
-              onCloseOrphanUncounted: _closeOrphanUncounted,
+              joinedNotice: _joinedNotice,
               onCancelCashCount: _cancel,
-              onRefresh: () =>
-                  _dispatch((shifts) => shifts.restore(widget.session)),
             ),
         ],
       );
@@ -473,30 +443,9 @@ String shiftErrorMessage(String? code) => switch (code) {
         'here and will be sent.',
   'other_tenant_shift_open' =>
     'Close the open shift in the other business first.',
-  // **No longer a refusal, and no longer offers to close it from here.**
-  // Opening is not blocked by a shift on another phone, and that phone may
-  // simply be offline rather than gone - closing it from here to unblock a
-  // till took a live register's counted drawer away on 2026-09-17. Nothing is
-  // stranded by saying so plainly: the count that closes the shift opened here
-  // closes that one too, which is what the sentence now promises.
-  'shift_open_on_other_device' =>
-    'You also have a shift open on another register. Close it there if you '
-        'can; otherwise it will be closed when you count off here.',
-  // **"An earlier installation", not "an update".** An update keeps the app's
-  // data and its device identity, so a shift survives one and this refusal is
-  // never seen after one. What produces it is an uninstall, a cleared storage,
-  // or an install Android treated as fresh - and a sentence blaming an update
-  // would send a cashier looking for a problem with a release.
-  //
-  // **The pronoun used to be the whole trouble.** It read *the sales it holds
-  // are no longer on it*, where the first "it" was the shift and the second the
-  // device - so the natural reading was that a day's sales had been lost. They
-  // are on the server, and the sentence now says which thing lost what.
-  'shift_open_on_earlier_install' =>
-    'This shift was opened by an earlier installation of the app, so this '
-        'device no longer holds the sales rung up against it. Count the drawer '
-        'and close it here - its takings are worked out from the sales the '
-        'server already has.',
+  // `shift_open_on_other_device` and `shift_open_on_earlier_install` are gone
+  // since 2026-09-29: a shift open on another phone, or left by an earlier
+  // install of this one, is joined rather than refused.
   'orphan_shift_not_found' =>
     'That shift is no longer open, so there is nothing to close. Refresh to '
         'see where the register stands.',
@@ -570,10 +519,8 @@ final class _ShiftCount extends StatelessWidget {
     required this.declared,
     required this.fieldErrors,
     required this.onClose,
-    required this.onCloseOrphan,
-    required this.onCloseOrphanUncounted,
     required this.onCancelCashCount,
-    required this.onRefresh,
+    this.joinedNotice,
   });
 
   final TenantShiftState state;
@@ -585,12 +532,15 @@ final class _ShiftCount extends StatelessWidget {
   final Map<CheckoutTender, TextEditingController> declared;
   final Map<CheckoutTender, String> fieldErrors;
   final VoidCallback onClose;
-  final void Function(String shiftId) onCloseOrphan;
 
-  /// Closes a shift whose drawer the person at this device does not hold.
-  final void Function(String shiftId) onCloseOrphanUncounted;
+  /// What to say about a shift this phone joined rather than opened, or null.
+  ///
+  /// **Said with the count, because that is where it matters.** The sheet
+  /// starts a count as it opens, so this is the one surface a cashier reads
+  /// about their shift - and it is where a float they did not type here, and
+  /// a prompt asking about every phone, both need the reason.
+  final String? joinedNotice;
   final VoidCallback onCancelCashCount;
-  final VoidCallback onRefresh;
 
   /// Which of design.md 2.1's five this shift's standing is.
   ///
@@ -637,16 +587,19 @@ final class _ShiftCount extends StatelessWidget {
     if (state.otherTenantShiftOpen) {
       return 'Another business still has an open shift on this device.';
     }
-    if (state.otherDeviceShiftOpen) {
-      return 'Your shift in this business is also open on another register. It '
-          'will be closed when you count off here.';
-    }
+    if (state.otherDeviceShiftOpen) return _otherShiftNotice;
     final sales = state.sales;
     if (sales != null && !sales.isComplete) {
       return _unsynchronizedSalesLabel(sales);
     }
     return null;
   }
+
+  /// A second shift of this cashier's, opened by a phone that could not see
+  /// the one joined here - usually one that was offline.
+  static const String _otherShiftNotice =
+      'You have a second shift open in this business, on another phone. It '
+      'will be closed when you count off here.';
 
   /// What the banner says.
   ///
@@ -662,25 +615,21 @@ final class _ShiftCount extends StatelessWidget {
     if (state.otherTenantShiftOpen) {
       return 'Another business still has an open shift on this device.';
     }
-    if (state.otherDeviceShiftOpen) {
-      return 'Your shift in this business is also open on another register. It '
-          'will be closed when you count off here.';
-    }
+    if (state.otherDeviceShiftOpen) return _otherShiftNotice;
     return _shiftStatusLabel(state.phase);
   }
-
-  /// The shift this device may close without holding its sales, or null.
-  String? get orphanShiftId =>
-      state.otherDeviceShiftOpen ? state.otherDeviceShiftId : null;
 
   /// What the three boxes are asking for.
   ///
   /// **It says what to enter and never what is expected.** A cashier who is
   /// shown the figure to match writes the figure to match; the whole value of
   /// this surface is that it is answered from the drawer.
-  static const String _declarationPrompt =
-      'Enter what the register holds or can account for, by payment method. '
-      'Leave a box empty for none.';
+  ///
+  /// **Worded by the product owner on 2026-09-29.** A shift belongs to its
+  /// cashier and may span phones, and the declaration is their own account of
+  /// all of it; the boxes name the methods and an empty one is read as none,
+  /// so the prompt needs to say nothing else.
+  static const String _declarationPrompt = 'Enter what you took today.';
 
   /// The reminder a floated till needs, because the count is marked against it.
   ///
@@ -694,32 +643,12 @@ final class _ShiftCount extends StatelessWidget {
   /// nobody is shown the figure they are meant to match; this is not that
   /// figure. It is a fact about the drawer they were handed, which they can see
   /// by looking in it, and it says nothing about what the shift sold.
-  static String _floatNotice(String amount) =>
-      'This register started with $amount in change. Count it in — it is taken '
-      'back out when your takings are worked out.';
-
-  /// The extra sentence a recovery close needs, because it records differently.
   ///
-  /// **It used to say the count would come to nothing, and that was true.**
-  /// `compareShiftTenders` refused to mark any evidence-free close, so a
-  /// cashier who counted carefully and a cashier who typed anything at all were
-  /// recorded identically - and a till that was genuinely short raised nothing.
-  /// The count is marked now, so the sentence says so: what cannot be checked
-  /// is the shift's own *sales* figure, which this device never held.
-  static const String _orphanDeclarationNotice =
-      'This device holds none of that shift’s sales, so its sales figure '
-      'cannot be checked and an owner will see a record of that. What you '
-      'count is still checked against the sales the server holds.';
-
-  /// Whichever close this sheet is currently offering.
-  void _submit() {
-    final orphan = orphanShiftId;
-    if (orphan != null) {
-      onCloseOrphan(orphan);
-    } else {
-      onClose();
-    }
-  }
+  /// "This shift", not "this register": the float was typed when the shift was
+  /// opened, which may have been on another phone.
+  static String _floatNotice(String amount) =>
+      'This shift started with $amount in change. Count it in — it is taken '
+      'back out when your takings are worked out.';
 
   @override
   Widget build(BuildContext context) {
@@ -764,22 +693,26 @@ final class _ShiftCount extends StatelessWidget {
                 .copyWith(color: tokens.colors.status.attention.fg),
           ),
         ],
-        if (counting || orphanShiftId != null) ...[
+        if (counting) ...[
           SizedBox(height: tokens.spacing.s16),
           Text(
             key: const ValueKey('declared-tender-prompt'),
-            orphanShiftId == null
-                ? _declarationPrompt
-                : '$_declarationPrompt $_orphanDeclarationNotice',
+            _declarationPrompt,
             style: tokens.density
                 .body(tokens.typography)
                 .copyWith(color: tokens.colors.text.secondary),
           ),
-          // **Only for the shift being counted, never for an orphan.** A
-          // recovery close is made by a device holding none of that shift's
-          // sales, and this device's own float says nothing about the drawer
-          // somebody else was handed.
-          if (orphanShiftId == null && openingFloatMinor > 0) ...[
+          if (joinedNotice case final notice?) ...[
+            SizedBox(height: tokens.spacing.s8),
+            Text(
+              key: const ValueKey('shift-joined-notice'),
+              notice,
+              style: tokens.density
+                  .body(tokens.typography)
+                  .copyWith(color: tokens.colors.text.secondary),
+            ),
+          ],
+          if (openingFloatMinor > 0) ...[
             SizedBox(height: tokens.spacing.s8),
             Text(
               key: const ValueKey('shift-opening-float-notice'),
@@ -815,55 +748,17 @@ final class _ShiftCount extends StatelessWidget {
                   : TextInputAction.next,
               onSubmitted: busy || tender != CheckoutTender.values.last
                   ? null
-                  : (_) => _submit(),
+                  : (_) => onClose(),
             ),
           ],
-          SizedBox(height: tokens.spacing.s8),
-          // 3: a surface naming a payment method carries what the method is
-          // worth as evidence.
-          Text(
-            key: const ValueKey('shift-tender-disclaimer'),
-            checkoutTenderDisclaimer,
-            style: tokens.density
-                .body(tokens.typography)
-                .copyWith(color: tokens.colors.text.secondary),
-          ),
-        ],
-        SizedBox(height: tokens.spacing.s16),
-        Wrap(
-          spacing: tokens.spacing.s8,
-          runSpacing: tokens.spacing.s8,
-          children: [
-            if (orphanShiftId case final orphan?)
-              // **The way out of a shift this device cannot adopt.** Without
-              // it the refusal above is terminal: the open control repeats it
-              // and names a device the cashier is already holding.
-              AppButton(
-                key: const ValueKey('close-orphan-shift'),
-                label: 'Close with this count',
-                tier: AppButtonTier.primary,
-                loading: busy,
-                onPressed: busy ? null : () => onCloseOrphan(orphan),
-              ),
-            // **Because an empty box used to mean two different things.** A
-            // person closing a drawer they are not holding left the boxes
-            // blank, which was recorded as *counted, and it held nothing* -
-            // identical to a cashier who really did count an empty till. Since
-            // the count is now marked against the sales the server holds, that
-            // silence would accuse somebody of losing whatever the drawer
-            // should have had in it, the opening float included.
-            //
-            // So the two answers are two controls. This one writes no
-            // declaration at all, which reconciliation already reads as
-            // *nothing to compare* rather than as a drawer counted empty.
-            if (orphanShiftId case final orphan?)
-              AppButton(
-                key: const ValueKey('close-orphan-uncounted'),
-                label: 'I do not have this drawer',
-                tier: AppButtonTier.secondary,
-                onPressed: busy ? null : () => onCloseOrphanUncounted(orphan),
-              ),
-            if (counting) ...[
+          // **No tender disclaimer and no `Refresh shift` since 2026-09-29**,
+          // both removed by the product owner: the sheet asks for the count and
+          // offers the two ways out of it, and nothing else.
+          SizedBox(height: tokens.spacing.s16),
+          Wrap(
+            spacing: tokens.spacing.s8,
+            runSpacing: tokens.spacing.s8,
+            children: [
               // 8 rule 4: the verb persists from the control that opened this.
               AppButton(
                 key: const ValueKey('close-shift-confirm'),
@@ -883,13 +778,8 @@ final class _ShiftCount extends StatelessWidget {
                 onPressed: busy ? null : onCancelCashCount,
               ),
             ],
-            AppButton(
-              key: const ValueKey('refresh-shift'),
-              label: 'Refresh shift',
-              onPressed: busy ? null : onRefresh,
-            ),
-          ],
-        ),
+          ),
+        ],
       ],
     );
   }
@@ -967,15 +857,6 @@ final class _ShiftClosed extends StatelessWidget {
                     .body(tokens.typography)
                     .copyWith(color: tokens.colors.text.secondary),
               ),
-            SizedBox(height: tokens.spacing.s8),
-            Text(
-              key: const ValueKey('shift-close-tender-disclaimer'),
-              checkoutTenderDisclaimer,
-              textAlign: TextAlign.center,
-              style: tokens.density
-                  .body(tokens.typography)
-                  .copyWith(color: tokens.colors.text.secondary),
-            ),
           ],
         ] else
           Callout(

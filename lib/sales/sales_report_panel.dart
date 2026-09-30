@@ -393,7 +393,8 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
       setState(() {
         _submittedEnding = null;
         _receiptRejection =
-            'Enter the receipt ending as 1 to 6 digits, such as 0042.';
+            'Enter the receipt as printed, such as JOHN-CT-7F2-001, or its '
+            'last 1 to 6 digits, such as 0042.';
       });
     }
   }
@@ -1286,13 +1287,21 @@ final class _SalesReportContents extends StatelessWidget {
       key: const ValueKey('sales-receipt-search'),
       controller: receipt,
       label: '',
-      placeholder: 'Receipt ending, e.g. 0042',
+      // **The printed number as well as its last digits, since 2026-09-29.**
+      // A receipt prints `JOHN-CT-7F2-001` with the date on its own line, and
+      // this search already has the date - so the number as printed is the
+      // natural thing to type, and it narrows the day's matches to one till.
+      placeholder: 'Receipt, e.g. JOHN-CT-7F2-001 or 0042',
       leading: Icons.receipt_long_outlined,
-      maxLength: 6,
-      keyboardType: TextInputType.number,
+      // Ten letters of name, `-CT-`, the till, `-`, and six digits.
+      maxLength: 24,
+      keyboardType: TextInputType.text,
+      textCapitalization: TextCapitalization.characters,
       textInputAction: TextInputAction.search,
       inputFormatters: <TextInputFormatter>[
-        FilteringTextInputFormatter.digitsOnly,
+        FilteringTextInputFormatter.allow(
+          RegExp(r'[\p{L}\p{N}-]', unicode: true),
+        ),
       ],
       autocorrect: false,
       enableSuggestions: false,
@@ -2196,7 +2205,7 @@ final class _ReceiptSearchResult extends StatelessWidget {
       return const EmptyState(
         key: ValueKey('sales-receipt-missing'),
         title: 'Receipt not found',
-        hint: 'Check the selected date and receipt ending, then try again.',
+        hint: 'Check the selected date and receipt number, then try again.',
         illustration: 'file-search.svg',
       );
     }
@@ -2468,6 +2477,19 @@ final class _SaleCard extends StatelessWidget {
               ),
             _SaleItemRow(sale: sale, line: line, index: index),
           ],
+          // **What came off, as a row of its own under the lines it came off.**
+          // The lines are the listed prices and the header is what was paid,
+          // so without this a sale with an agreed price reads as a card whose
+          // figures do not add up.
+          if (sale.discountMinor > 0) ...<Widget>[
+            Divider(
+              height: _hairline,
+              indent: tokens.spacing.s16,
+              endIndent: tokens.spacing.s16,
+              color: tokens.colors.surface.borderSubtle,
+            ),
+            _SaleDiscountRow(sale: sale),
+          ],
           Container(
             padding: _SaleCardFrame.footPadding(tokens),
             color: tokens.colors.surface.overlay,
@@ -2611,6 +2633,82 @@ final class _SaleItemRow extends StatelessWidget {
           SizedBox(width: tokens.spacing.s12),
           Text(
             '${sale.currency} ${_money(line.lineTotalMinor)}',
+            style: tokens.typography.numericBody.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The money that came off a sale, and why, in a line row's own geometry.
+///
+/// **The reason is the business's, not the customer's**, which is why it is
+/// here and not on the receipt. A discounted sale that carries no reason was
+/// written before the till recorded one, and says *Discount* rather than
+/// claiming an agreement nobody wrote down.
+final class _SaleDiscountRow extends StatelessWidget {
+  const _SaleDiscountRow({required this.sale});
+
+  final TenantSale sale;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final reason = sale.discountReason;
+    return Padding(
+      key: ValueKey('sales-agreed-price-${sale.id}'),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.s16,
+        vertical: tokens.spacing.s12,
+      ),
+      child: Row(
+        children: <Widget>[
+          SizedBox.square(
+            dimension: tokens.spacing.s40,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: tokens.colors.surface.overlay,
+                borderRadius: BorderRadius.circular(tokens.radius.md),
+              ),
+              child: Icon(
+                Icons.handshake_outlined,
+                size: tokens.spacing.s20,
+                color: tokens.colors.text.tertiary,
+              ),
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  reason == null ? 'Discount' : 'Agreed price',
+                  style: tokens.typography.labelMedium.copyWith(
+                    color: tokens.colors.text.primary,
+                  ),
+                ),
+                if (reason != null)
+                  Text(
+                    reason,
+                    key: ValueKey('sales-agreed-price-reason-${sale.id}'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: tokens.typography.caption.copyWith(
+                      color: tokens.colors.text.tertiary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Text(
+            '\u2212${sale.currency} ${_money(sale.discountMinor)}',
+            key: ValueKey('sales-agreed-price-amount-${sale.id}'),
             style: tokens.typography.numericBody.copyWith(
               color: tokens.colors.text.primary,
             ),

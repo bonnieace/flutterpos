@@ -410,12 +410,26 @@ _DifferenceReading _stockMismatch(TenantReconciliationAnomaly anomaly) {
 _DifferenceReading _shiftVariance(TenantReconciliationAnomaly anomaly) {
   final sales = anomaly.salesVariance!;
   final transactions = anomaly.transactionVariance!;
+  // **Short on both counts is sales the count did not include, since
+  // 2026-09-29.** A shift belongs to its cashier on any phone, and a close
+  // states what the server held when it was made. So the server holding more
+  // now means sales that arrived afterwards - from a phone that was offline,
+  // or one still selling - or, from an older build, sales on another phone the
+  // closing one never counted. Nothing is missing; the record only has to say
+  // which. Over on either count is still the bookkeeping fault it always was.
+  final uncounted = sales < 0 && transactions < 0;
+  final count = transactions.abs();
   return _DifferenceReading(
-    sentence:
-        'Its sales total ${_signed(sales)} and its transaction count '
-        '${_signed(transactions)} against the sales recorded during it.',
-    explanation:
-        'Its closing totals disagree with the sales recorded during it.',
+    sentence: uncounted
+        ? '$count ${count == 1 ? 'sale' : 'sales'} worth '
+              '${_money((sales.abs() * 100).round())} '
+              '${count == 1 ? 'was' : 'were'} not in this shift’s count.'
+        : 'Its sales total ${_signed(sales)} and its transaction count '
+              '${_signed(transactions)} against the sales recorded during it.',
+    explanation: uncounted
+        ? '${count == 1 ? 'It was' : 'They were'} rung up on another phone or '
+              'reached the server after the drawer was counted.'
+        : 'Its closing totals disagree with the sales recorded during it.',
     // **Neither figure carries a currency code, and §8 rule 8 says money always
     // does.** The code lives in `configuration/checkout`, which this screen does
     // not read and cannot be made to read inside a visual chunk; the sentence

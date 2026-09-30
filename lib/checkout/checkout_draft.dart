@@ -88,6 +88,24 @@ final class CheckoutDraftLineRequest {
   final int quantity;
 }
 
+/// The total a customer and the till agreed on, and why.
+///
+/// **The total, not the discount, is what the cashier agreed**, so it is what
+/// the request carries. The draft builder re-prices every line from the cache
+/// and takes the difference from that, so a listed price that moved between
+/// the cart and the save still leaves the sale recording exactly what the
+/// customer was told they would pay.
+final class CheckoutAgreedPrice {
+  const CheckoutAgreedPrice({required this.totalMinor, required this.reason});
+
+  /// What the customer pays, in minor units.
+  final int totalMinor;
+
+  /// Why, as typed. The draft builder trims it and holds it to
+  /// [checkoutDiscountReason].
+  final String reason;
+}
+
 /// The bounded input accepted by [CheckoutDraftService.createDraft].
 ///
 /// The device identity is deliberately not a caller input: it is resolved once
@@ -108,6 +126,7 @@ final class CheckoutDraftRequest {
     required List<CheckoutDraftLineRequest> lines,
     this.tender,
     this.discountMinor = 0,
+    this.agreedPrice,
   }) : lines = List<CheckoutDraftLineRequest>.unmodifiable(lines);
 
   final List<CheckoutDraftLineRequest> lines;
@@ -117,6 +136,13 @@ final class CheckoutDraftRequest {
   final CheckoutTender? tender;
 
   final int discountMinor;
+
+  /// The price agreed at the till, or null for a sale at the listed prices.
+  ///
+  /// **The one way the till takes money off a sale**, and exclusive of
+  /// [discountMinor]: a request naming both is refused, since two ways of
+  /// taking money off one sale could only disagree.
+  final CheckoutAgreedPrice? agreedPrice;
 }
 
 /// Builds one frozen `CheckoutSalePayload` v2 draft from the offline cache.
@@ -269,6 +295,9 @@ final class CheckoutDraftService implements CheckoutDraftSink {
               )
               .toList(),
           'discount_minor': request.discountMinor,
+          // The figure, never the reason: a reason is free text a cashier
+          // typed and has no place in a diagnostic.
+          'agreed_total_minor': request.agreedPrice?.totalMinor,
         },
       );
       rethrow;
@@ -422,16 +451,40 @@ final class CheckoutDraftService implements CheckoutDraftSink {
       if (product.cost != null && unitCostMinor == null) {
         throw const CheckoutDraftException('cost_not_representable');
       }
+      // The code is frozen onto the line with the name, so a receipt can
+      // print it and a reprint prints the one the item sold under.
+      final sku = product.sku.trim();
       items.add(<String, Object?>{
         'productId': product.id,
         'name': product.name,
+        if (sku.isNotEmpty) 'sku': sku,
         'categoryId': product.categoryId,
         'quantity': line.quantity,
         'unitPriceMinor': unitPriceMinor,
         if (unitCostMinor != null) 'unitCostMinor': unitCostMinor,
       });
     }
-    if (request.discountMinor < 0 || request.discountMinor > subtotalMinor) {
+    var discountMinor = request.discountMinor;
+    String? discountReason;
+    final agreed = request.agreedPrice;
+    if (agreed != null) {
+      if (request.discountMinor != 0) {
+        throw const CheckoutDraftException('invalid_discount');
+      }
+      // **Above nothing and below the listed total.** At the listed total
+      // nothing was agreed, and above it is not a discount at all. Nothing is
+      // the other edge: goods handed over for no money are not a haggle, and
+      // recording them as one would put them in the discount figures.
+      if (agreed.totalMinor <= 0 || agreed.totalMinor >= subtotalMinor) {
+        throw const CheckoutDraftException('agreed_price_out_of_range');
+      }
+      discountReason = checkoutDiscountReason(agreed.reason);
+      if (discountReason == null) {
+        throw const CheckoutDraftException('agreed_price_reason_required');
+      }
+      discountMinor = subtotalMinor - agreed.totalMinor;
+    }
+    if (discountMinor < 0 || discountMinor > subtotalMinor) {
       throw const CheckoutDraftException('invalid_discount');
     }
 
@@ -491,8 +544,9 @@ final class CheckoutDraftService implements CheckoutDraftSink {
       if (request.tender != null) 'tender': request.tender!.wireValue,
       'items': items,
       'subtotalMinor': subtotalMinor,
-      'discountMinor': request.discountMinor,
-      'totalMinor': subtotalMinor - request.discountMinor,
+      'discountMinor': discountMinor,
+      if (discountReason != null) 'discountReason': discountReason,
+      'totalMinor': subtotalMinor - discountMinor,
     };
 
     // Prove the frozen submission contract before the draft becomes evidence.

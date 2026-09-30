@@ -68,6 +68,27 @@ void main() {
       }
     });
 
+    test('reads the number as printed, which names its till', () {
+      // Printed since 2026-09-29 with the date on its own line - which is the
+      // half this query already carries.
+      for (final ending in <String>[
+        'JOHN-CT-7F2-042',
+        'CT-7F2-42',
+        '7f2-0042',
+      ]) {
+        final query = TenantReceiptEndingQuery.parse(
+          businessDate: _businessDate,
+          ending: ending,
+          maximumBusinessDate: _businessDate,
+        );
+
+        expect(query.businessDate, _businessDate, reason: ending);
+        expect(query.sequence, 42, reason: ending);
+        expect(query.deviceCode, '7F2', reason: ending);
+        expect(query.displayEnding, 'CT-7F2-042', reason: ending);
+      }
+    });
+
     test('refuses invalid endings before a read can be built', () {
       for (final ending in <String>[
         '',
@@ -243,6 +264,37 @@ void main() {
         'businessDate': _businessDate,
         'receiptSequence': 42,
       });
+    });
+
+    test('the number as printed finds its own till among them', () async {
+      // The same day and number on two tills; the printed number's till code
+      // is what tells the customer's receipt apart. The other till's sale is
+      // simply not the one asked for, rather than a contradiction.
+      const otherDevice = 'dev-11111111111111111111111111111111';
+      final reader = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/sales/co-1': _sale(sequence: 42),
+        'tenants/tenant-a/sales/co-2': _sale(
+          saleId: 'co-2',
+          sequence: 42,
+          deviceId: otherDevice,
+        ),
+      });
+      final printed = printedCheckoutReceiptNumber(
+        formatCheckoutReceiptNumber(
+          deviceId: otherDevice,
+          businessDate: _businessDate,
+          sequence: 42,
+        ),
+        servedBy: 'Amina',
+      );
+
+      final result = await _repository(
+        reader,
+        role: TenantRole.manager,
+      ).findByEnding(businessDate: _businessDate, ending: printed);
+
+      expect(result.isFound, isTrue);
+      expect(result.sale.id, 'co-2');
     });
 
     test(

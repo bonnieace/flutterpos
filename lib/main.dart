@@ -925,8 +925,13 @@ class SpiritPOSApp extends StatelessWidget {
         isOnline: isOnline,
       ),
       // The outbox is the only local record of what this device sold, so it is
-      // also the only evidence a closing summary may be built from.
+      // what proves this phone's share of a close and what gates it.
       salesLedger: CheckoutOutboxShiftSalesLedger(checkoutOutbox),
+      // A shift may span the cashier's phones, so the close counts every
+      // phone's sales on the server where it can.
+      serverTotals: FirebaseShiftServerSalesTotals(
+        firestore: FirebaseFirestore.instance,
+      ),
       deviceId: deviceId,
       isOnline: isOnline,
     );
@@ -1064,10 +1069,34 @@ class SpiritPOSApp extends StatelessWidget {
             ),
           ),
         ),
+        // **Who may sell for a price agreed with the customer**, set per
+        // person the way the counting rota is, and written the same way for
+        // the same reason: it is an owner deciding something with the
+        // business, and a till that never receives it sells at the listed
+        // price, which is where every business starts.
+        TenantSettingsDestination(
+          settingKey: 'agreed-prices',
+          kind: TenantSettingKind.agreedPrices,
+          icon: Icons.handshake_outlined,
+          allowedRoles: TenantPriceAgreementPublisher.allowedRoles,
+          builder: (_) => TenantPriceAgreementSettingsPanel(
+            reader: reader,
+            writer: QueuedTenantConfigurationWriter(
+              store: tenantMutationStore,
+              cacheReader: reader.cached ?? reader,
+              currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+              remote: FirebaseTenantConfigurationDocumentWriter(
+                firestore: FirebaseFirestore.instance,
+                isOnline: isOnline,
+              ),
+            ),
+          ),
+        ),
       ];
       final currency = destinations[0];
       final printer = destinations[1];
       final stockCounts = destinations[2];
+      final agreedPrices = destinations[3];
       return switch (initialSettingKey) {
         'business-details' => TenantConfigurationPage(
           title: 'Business details',
@@ -1103,6 +1132,7 @@ class SpiritPOSApp extends StatelessWidget {
         _ => TenantConfigurationsScreen(
           currencyBuilder: currency.builder,
           stockCountsBuilder: stockCounts.builder,
+          agreedPricesBuilder: agreedPrices.builder,
         ),
       };
     }
@@ -1516,6 +1546,15 @@ class SpiritPOSApp extends StatelessWidget {
                   ),
             ),
             auditLogRoles: TenantAuditLogRepository.allowedRoles,
+            // **A cashier's open shift, on the home, since 2026-09-30.** Opened
+            // at the till as before; closed there or from here, through the
+            // same sheet and the same controller the till's gate holds.
+            shiftPanel: (currency, memberName) => TenantHomeShiftCard(
+              controllerFactory: shiftControllerFactory,
+              currency: currency,
+              memberName: memberName,
+              returnActions: returnActions,
+            ),
             // The till, reachable for the first time. Everything below it already
             // existed: the draft service refuses a checkout with no proven open
             // shift, the submission worker and recovery coordinator above pick a
@@ -1551,6 +1590,16 @@ class SpiritPOSApp extends StatelessWidget {
                   // means no count is due - the failure is open, by design.
                   reader: tenantDataReader.cacheOnly,
                 ).load(),
+                // **And then the server, which nothing else on a cashier's
+                // path reads.** Without it the schedule reached a phone only
+                // where an owner had opened *Stock counts* on it, and stayed
+                // as it was that day - found on two emulators on 2026-09-29.
+                // The gate applies this answer after the cached one and never
+                // waits on it.
+                refreshSchedule: (session) => TenantStockTakeScheduleRepository(
+                  session: session,
+                  reader: tenantDataReader,
+                ).load(),
                 obligations: stockTakeDrafts,
                 countRoute: (routeContext, scope) => TenantStockTakeScreen(
                   catalog: checkoutCatalogCache,
@@ -1566,6 +1615,19 @@ class SpiritPOSApp extends StatelessWidget {
                 child: TenantCheckoutScreen(
                   cache: checkoutCatalogCache,
                   cartActivity: cartActivity,
+                  // **Cache first, then the server, and neither holds the
+                  // till.** The cached answer is what lets *Agree a price*
+                  // appear with no signal; the server read is what brings the
+                  // policy to this phone at all, since nothing else on a
+                  // cashier's path reads it. Either failing leaves the button
+                  // off and the till selling at the listed price.
+                  loadPriceAgreement: (session, {required cached}) =>
+                      TenantPriceAgreementRepository(
+                        session: session,
+                        reader: cached
+                            ? tenantDataReader.cacheOnly
+                            : tenantDataReader,
+                      ).load(),
                   // The decorator is what makes a saved sale reach the server while the
                   // till stays open. It is wrapped here rather than inside the screen so
                   // the screen still knows only how to save.

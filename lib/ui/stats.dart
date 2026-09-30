@@ -85,6 +85,8 @@ final class StatTile extends StatelessWidget {
     this.valueKey,
     this.money = false,
     this.rolling = false,
+    this.accent,
+    this.nested = false,
   }) : assert(
          (status == null) == (statusLabel == null),
          'A status is a container, an icon and a word (design.md §2.1). Give '
@@ -149,6 +151,37 @@ final class StatTile extends StatelessWidget {
   /// under a person's hands is the till's total, which is the row §6.2 names.
   final bool rolling;
 
+  /// The glyph's colour, drawn in a tinted well rather than in the caption's
+  /// grey.
+  ///
+  /// **Opt-in, and the home's grid is what opts in.** The well is the shape the
+  /// home's module grid gives a destination, at the size of this row, so a
+  /// figure and the place it comes from read as one family. Every other surface
+  /// keeps the plain glyph. The colour is decorative - the caption beside it
+  /// always says what the figure is.
+  final Color? accent;
+
+  /// Whether this tile sits inside a panel that is already `surface.raised`.
+  ///
+  /// One surface step up, then - `surface.overlay` with the `cardEdge` hairline
+  /// at `radius.lg` - so each figure is its own card inside the panel rather
+  /// than a region of it.
+  final bool nested;
+
+  /// The side of the well an [accent] draws the glyph in.
+  static const double glyphWell = 32;
+
+  /// The tile's inset from its own edge: `space.16`, and `space.20` for a
+  /// [nested] tile, whose hairline is the edge a person measures by.
+  ///
+  /// Exposed so [StatRow] reserves the width a tile actually pads by.
+  static double paddingOf(AppTokens tokens, {required bool nested}) =>
+      nested ? tokens.spacing.s20 : tokens.spacing.s16;
+
+  /// How much of [accent] fills the well: the strength the home's module grid
+  /// fills its own wells at.
+  static const double glyphWellTint = 0.14;
+
   /// The glyph size, borrowed rather than invented.
   ///
   /// The same gap `Callout.glyphSize` and `Disclosure.glyphSize` record: §5.2
@@ -178,16 +211,24 @@ final class StatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final figure = figureStyle(tokens, MediaQuery.sizeOf(context).width);
+    final surface = tokens.colors.surface;
+    final caption = tokens.typography.labelEyebrow.copyWith(
+      color: tokens.colors.text.secondary,
+    );
     return Semantics(
       container: true,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: tokens.colors.surface.raised,
-          border: Border.all(color: tokens.colors.surface.borderSubtle),
-          borderRadius: BorderRadius.circular(tokens.radius.md),
+          color: nested ? surface.overlay : surface.raised,
+          border: Border.all(
+            color: nested ? surface.cardEdge : surface.borderSubtle,
+          ),
+          borderRadius: BorderRadius.circular(
+            nested ? tokens.radius.lg : tokens.radius.md,
+          ),
         ),
         child: Padding(
-          padding: EdgeInsets.all(tokens.spacing.s16),
+          padding: EdgeInsets.all(paddingOf(tokens, nested: nested)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -203,26 +244,56 @@ final class StatTile extends StatelessWidget {
               Row(
                 children: <Widget>[
                   if (icon case final glyph?) ...<Widget>[
-                    Icon(
-                      glyph,
-                      size: glyphSize,
-                      color: tokens.colors.text.secondary,
-                    ),
+                    if (accent case final tint?)
+                      Container(
+                        width: glyphWell,
+                        height: glyphWell,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: tint.withValues(alpha: glyphWellTint),
+                          borderRadius: BorderRadius.circular(
+                            tokens.radius.md,
+                          ),
+                        ),
+                        child: Icon(glyph, size: glyphSize, color: tint),
+                      )
+                    else
+                      Icon(
+                        glyph,
+                        size: glyphSize,
+                        color: tokens.colors.text.secondary,
+                      ),
                     SizedBox(width: tokens.spacing.s8),
                   ],
                   Expanded(
-                    child: Text(
-                      label.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: tokens.typography.labelEyebrow.copyWith(
-                        color: tokens.colors.text.secondary,
-                      ),
-                    ),
+                    // **Scaled rather than cut where a well stands beside it.**
+                    // The well takes 40 of a half-width tile, and on a 360
+                    // handset *TRANSACTIONS* then has no room at 12 - where
+                    // an ellipsis would leave "TRANSACT…" naming nothing.
+                    child: accent == null
+                        ? Text(
+                            label.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: caption,
+                          )
+                        : FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: AlignmentDirectional.centerStart,
+                            child: Text(
+                              label.toUpperCase(),
+                              maxLines: 1,
+                              style: caption,
+                            ),
+                          ),
                   ),
                 ],
               ),
-              SizedBox(height: tokens.spacing.s8),
+              // A well is taller than the caption beside it, so the figure
+              // under one stands a step further off to read as apart from it.
+              SizedBox(
+                height: accent == null ? tokens.spacing.s8 : tokens.spacing.s12,
+              ),
               if (rolling)
                 RollingNumber(
                   value: value,
@@ -266,14 +337,20 @@ final class StatTile extends StatelessWidget {
                 ),
               ],
               if (detail case final line?) ...<Widget>[
-                SizedBox(height: tokens.spacing.s4),
+                SizedBox(
+                  height: nested ? tokens.spacing.s8 : tokens.spacing.s4,
+                ),
                 Text(
                   line,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: tokens.typography.caption.copyWith(
-                    color: tokens.colors.text.tertiary,
-                  ),
+                  // A nested tile is a card on its own, and its line is read
+                  // at body size rather than as a caption to a larger surface.
+                  style:
+                      (nested
+                              ? tokens.typography.bodyMedium
+                              : tokens.typography.caption)
+                          .copyWith(color: tokens.colors.text.tertiary),
                 ),
               ],
             ],
@@ -304,9 +381,14 @@ final class StatTile extends StatelessWidget {
 ///
 /// The gap between tiles is `space.12` from §2.3, in both directions.
 final class StatRow extends StatelessWidget {
-  const StatRow({super.key, required this.tiles});
+  const StatRow({super.key, required this.tiles, this.gap});
 
   final List<StatTile> tiles;
+
+  /// Between tiles, in both directions. Defaults to `space.12`; the home's
+  /// panel takes `space.8`, the same as its own inset, so the tiles sit in it
+  /// with one even margin all round.
+  final double? gap;
 
   /// How wide a tile must be for [figures] not to be truncated in one.
   ///
@@ -317,6 +399,7 @@ final class StatRow extends StatelessWidget {
     required AppTokens tokens,
     required double textScaleFactor,
     double? screenWidth,
+    bool nested = false,
   }) {
     // The size the tile will actually paint at this width, not the largest
     // size it could paint anywhere - reserving room for a 30 where a 22 is
@@ -334,10 +417,9 @@ final class StatRow extends StatelessWidget {
       if (painter.width > widest) widest = painter.width;
       painter.dispose();
     }
-    // The tile's own horizontal padding, on both sides. Composed from the token
-    // [StatTile] pads with rather than restated as one number, so the two cannot
-    // drift.
-    return widest + tokens.spacing.s16 * 2;
+    // The tile's own horizontal padding, on both sides. Asked of [StatTile]
+    // rather than restated as one number, so the two cannot drift.
+    return widest + StatTile.paddingOf(tokens, nested: nested) * 2;
   }
 
   /// How many tiles fit across [available], given the widest figure.
@@ -360,10 +442,11 @@ final class StatRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (tiles.isEmpty) return const SizedBox.shrink();
     final tokens = AppTokens.componentOf(context);
-    final gap = tokens.spacing.s12;
+    final gap = this.gap ?? tokens.spacing.s12;
     final minimum = minimumTileWidth(
       figures: tiles.map((tile) => tile.value),
       tokens: tokens,
+      nested: tiles.any((tile) => tile.nested),
       // A figure at 200% text scale needs 200% of the room, and §9 requires it
       // to stay legible there.
       textScaleFactor: MediaQuery.textScalerOf(context).scale(1),

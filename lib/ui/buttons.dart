@@ -428,7 +428,14 @@ final class AppIconButton extends StatelessWidget {
     this.bordered = true,
     this.loading = false,
     this.iconSize = AppButton.iconSize,
+    this.glyphColor,
   });
+
+  /// The glyph's colour in place of the tier's label, from a token role.
+  ///
+  /// Only the glyph and its spinner: the edge, the overlays and the disabled
+  /// treatment stay the tier's, so a disabled square still reads as one.
+  final Color? glyphColor;
 
   /// How big the glyph is drawn inside the unchanging 48 square.
   ///
@@ -501,13 +508,17 @@ final class AppIconButton extends StatelessWidget {
                       dimension: actions.loadingIndicatorSize,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(role.label),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          glyphColor ?? role.label,
+                        ),
                       ),
                     )
                   : Icon(
                       icon,
                       size: iconSize,
-                      color: disabled ? actions.disabledLabel : role.label,
+                      color: disabled
+                          ? actions.disabledLabel
+                          : glyphColor ?? role.label,
                     ),
             ),
           ),

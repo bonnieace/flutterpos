@@ -29,6 +29,7 @@ final class TenantSaleLine implements CheckoutReceiptLine {
   const TenantSaleLine._({
     required this.productId,
     required this.name,
+    required this.sku,
     required this.categoryId,
     required this.quantity,
     required this.unitPriceMinor,
@@ -40,6 +41,10 @@ final class TenantSaleLine implements CheckoutReceiptLine {
   final String productId;
   @override
   final String name;
+
+  /// The code the line sold under, or null where none was recorded.
+  @override
+  final String? sku;
   final String? categoryId;
   @override
   final int quantity;
@@ -117,6 +122,7 @@ final class TenantSale implements CheckoutReceiptSale {
     _requireMajorMirror(data, 'subtotal', subtotalMinor);
     _requireMajorMirror(data, 'discount', discountMinor);
     _requireMajorMirror(data, 'total', totalMinor);
+    final discountReason = _discountReason(data, discountMinor);
 
     return TenantSale._(
       id: saleId,
@@ -141,6 +147,7 @@ final class TenantSale implements CheckoutReceiptSale {
       lines: lines,
       subtotalMinor: subtotalMinor,
       discountMinor: discountMinor,
+      discountReason: discountReason,
       totalMinor: totalMinor,
     );
   }
@@ -163,6 +170,7 @@ final class TenantSale implements CheckoutReceiptSale {
     required List<TenantSaleLine> lines,
     required this.subtotalMinor,
     required this.discountMinor,
+    required this.discountReason,
     required this.totalMinor,
   }) : lines = List<TenantSaleLine>.unmodifiable(lines);
 
@@ -223,6 +231,12 @@ final class TenantSale implements CheckoutReceiptSale {
   final int subtotalMinor;
   @override
   final int discountMinor;
+
+  /// Why the price was agreed at the till, or null.
+  ///
+  /// Null on every sale with nothing off it, and on a discounted sale written
+  /// before the till recorded a reason.
+  final String? discountReason;
   @override
   final int totalMinor;
 }
@@ -316,10 +330,15 @@ final class TenantSaleHistoryRepository extends TenantReadRepository {
 
   /// Pages the sales recorded during one canonical shift.
   ///
-  /// Every returned sale must name that shift and agree with its cashier,
-  /// device, and business day. A sale that disagrees fails the page closed: on
-  /// a screen used to inspect a shift, contradicting evidence must be reported,
-  /// never quietly listed as if it belonged.
+  /// Every returned sale must name that shift and agree with its cashier and
+  /// business day. A sale that disagrees fails the page closed: on a screen
+  /// used to inspect a shift, contradicting evidence must be reported, never
+  /// quietly listed as if it belonged.
+  ///
+  /// **Not its device, since 2026-09-29.** A shift belongs to its cashier on
+  /// any phone, so a sale rung up on a second phone - or on this one after a
+  /// reinstall - carries a different device from the one that opened the shift
+  /// and belongs to it all the same.
   Future<TenantSalePage> loadShiftSales({
     required TenantSaleShiftScope shift,
     int pageSize = 20,
@@ -337,7 +356,6 @@ final class TenantSaleHistoryRepository extends TenantReadRepository {
     verify: (sale) {
       if (sale.shiftId != shift.shiftId ||
           sale.soldById != shift.staffId ||
-          sale.deviceId != shift.deviceId ||
           sale.businessDate != shift.businessDate) {
         throw const TenantSaleException('sale_shift_mismatch');
       }
@@ -552,6 +570,7 @@ List<TenantSaleLine> _parseLines(Object? raw) {
       TenantSaleLine._(
         productId: productId,
         name: _requiredString(line, 'name'),
+        sku: line.containsKey('sku') ? _requiredString(line, 'sku') : null,
         categoryId: categoryId,
         quantity: quantity,
         unitPriceMinor: unitPriceMinor,
@@ -573,6 +592,21 @@ String _requiredString(Map<String, Object?> data, String field) {
     if (codeUnit < 0x20 || codeUnit == 0x7f) {
       throw const TenantSaleException('invalid_sale_document');
     }
+  }
+  return value;
+}
+
+/// Why the price was agreed, held to the till's own contract for it.
+///
+/// A reason on a sale with nothing off it, or one the till would never have
+/// written, disagrees with itself and is refused like any other such field.
+String? _discountReason(Map<String, Object?> data, int discountMinor) {
+  if (!data.containsKey('discountReason')) return null;
+  final value = data['discountReason'];
+  if (discountMinor == 0 ||
+      value is! String ||
+      checkoutDiscountReason(value) != value) {
+    throw const TenantSaleException('invalid_sale_document');
   }
   return value;
 }

@@ -10,13 +10,13 @@
 /// `sheet.dart` names its drag handle.
 library;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../tenancy/tenant_route_guard.dart';
-import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
-import '../ui/routes.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
 import '../ui/press.dart';
@@ -306,7 +306,6 @@ final class WeeklyReportContents extends StatelessWidget {
                     reading: reading,
                     currency: currency,
                     week: week,
-                    destinations: destinations,
                   ),
                 ),
                 SizedBox(width: tokens.spacing.s24),
@@ -333,7 +332,6 @@ final class WeeklyReportContents extends StatelessWidget {
             reading: reading,
             currency: currency,
             week: week,
-            destinations: destinations,
           ),
         SizedBox(height: tokens.spacing.s16),
         _MetricGrid(
@@ -352,11 +350,10 @@ final class WeeklyReportContents extends StatelessWidget {
           currency: currency,
           onRefresh: onRetry,
         ),
-        SizedBox(height: tokens.spacing.s32),
-        // **The other reports, last and under their own heading.** They were
-        // cards in the figure grid, so a door and a number weighed the same
-        // and a paragraph of prose interrupted a row of amounts.
-        _ReportLinks(destinations: destinations, wide: wide, medium: medium),
+        // **No "More reports" tiles under it since 2026-09-29**, removed by
+        // the product owner along with the tap on *Total sales*. The page is
+        // the week and nothing else; the destinations are still wired in
+        // `main.dart`, so another surface can open them.
       ],
     );
   }
@@ -696,43 +693,18 @@ bool _weeklyCountedHere(BuildContext context, TenantWeeklyReport? data) =>
 
 const String _countedLabel = 'On this device';
 
-/// The tap for a destination this session may open, or null.
-///
-/// **`of` rather than a read, for the reason the hub gave**: the scope is an
-/// `InheritedNotifier`, so depending on it is what redraws these cards when the
-/// business changes. A card that survived a switch would be a door into figures
-/// the new session may not read. And the push re-establishes the scope around
-/// the child, because a route is a new subtree under the navigator rather than
-/// under the widget that built it.
-VoidCallback? _weeklyOpen(BuildContext context, WeeklyReportDestination? to) {
-  if (to == null) return null;
-  final controller = TenantSessionScope.of(context);
-  final session = controller.session;
-  if (session == null || !session.canAccess(allowedRoles: to.roles)) {
-    return null;
-  }
-  return () => Navigator.of(context).push(
-    AppPageRoute<void>(
-      builder: (_) =>
-          TenantSessionScope(controller: controller, child: to.build()),
-    ),
-  );
-}
-
 final class _TakingsHero extends StatelessWidget {
   const _TakingsHero({
     required this.report,
     required this.reading,
     required this.currency,
     required this.week,
-    required this.destinations,
   });
 
   final TenantWeeklyReport? report;
   final bool reading;
   final TenantReportingCurrency? currency;
   final TenantReportWeek week;
-  final WeeklyReportDestinations destinations;
 
   /// The week's shape, in major units, seven entries.
   List<double> get _bars =>
@@ -764,8 +736,6 @@ final class _TakingsHero extends StatelessWidget {
       data?.previousTotals?.netOrGrossSales,
     );
     final caveat = _weeklyCountedHere(context, data) ? _countedLabel : null;
-    final open = _weeklyOpen(context, destinations.salesTotals);
-    final role = tokens.colors.action.secondary;
     // **`hasTakings`, not `data != null`, and zero is why.** A week whose
     // server totals never landed and whose own sales could not be counted has
     // takings of *unknown*; printing `KES 0.00` over a week of trade would be
@@ -776,17 +746,19 @@ final class _TakingsHero extends StatelessWidget {
         // `KES` twice a line apart is the page talking over itself.
         : weeklyReportHeroMoney(null, data.sales);
     final split = _splitDecimals(figure);
+    // **Not a door since 2026-09-29.** It opened the sales totals page, and the
+    // product owner took that away so a tap on the card's bars can show a
+    // day's figure instead of leaving the page. A `PressSurface` with a null
+    // `onPressed` is inert - the figure cards below are drawn the same way -
+    // and it keeps the card filling its row beside the wide chart.
+    final role = tokens.colors.action.secondary;
     return PressSurface(
       borderRadius: BorderRadius.circular(tokens.radius.xl),
-      onPressed: open,
+      onPressed: null,
       hoverOverlay: role.hoverWash(),
       pressedOverlay: role.pressedWash(),
       minimumTapTarget: tokens.density.minimumTapTarget,
       fillWidth: true,
-      // **The painted surface fills the row, not just its hit area.** These sit
-      // two across under an `IntrinsicHeight`, and without this the card with
-      // the shorter caption drew a shorter box inside a cell of the right
-      // height - so a grid of four read as four unrelated sizes.
       fillHeight: true,
       child: WeeklyReportCard(
         key: const ValueKey('weekly-report-sales'),
@@ -873,7 +845,7 @@ final class _TakingsHero extends StatelessWidget {
                 ),
               ),
             ],
-            SizedBox(height: tokens.spacing.s16),
+            SizedBox(height: tokens.spacing.s8),
             // **The week's shape inside the card that states its total.** It
             // was a separate card with an axis, five screens further down; a
             // reader asking "how did the week go" wants the total and the
@@ -882,6 +854,7 @@ final class _TakingsHero extends StatelessWidget {
               week: week,
               values: _bars,
               reading: reading,
+              currency: currency,
               comparison: _weeklyComparisonLabel(week),
             ),
           ],
@@ -898,24 +871,76 @@ final class _TakingsHero extends StatelessWidget {
 /// figure it belongs to is printed directly above it, which is where a person
 /// looks for the amount. `WeeklyRevenueChart` is still the measured reading,
 /// and still what a screen with room for it draws.
-final class _WeekStrip extends StatelessWidget {
+///
+/// **A tapped day says what it took, since 2026-09-29.** The product owner took
+/// the card's tap to the sales totals page away and asked for this instead: a
+/// tap on a bar reads that day's figure out above the strip, and a second tap
+/// on the same bar puts it away. The whole strip is the target and the day is
+/// the one under the finger - seven bars across a phone are narrower than a
+/// tap target each, and a strip-wide one is not.
+final class _WeekStrip extends StatefulWidget {
   const _WeekStrip({
     required this.week,
     required this.values,
     required this.reading,
+    required this.currency,
     required this.comparison,
   });
 
   final TenantReportWeek week;
   final List<double> values;
   final bool reading;
+  final TenantReportingCurrency? currency;
   final String comparison;
 
+  @override
+  State<_WeekStrip> createState() => _WeekStripState();
+}
+
+final class _WeekStripState extends State<_WeekStrip> {
   static const List<String> _days = <String>['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  /// The day whose figure is read out, or null where none has been tapped.
+  int? _chosen;
+
+  @override
+  void didUpdateWidget(_WeekStrip old) {
+    super.didUpdateWidget(old);
+    // Another week, or the same week filtered differently: the figure read
+    // out belonged to the bars that were there before.
+    if (old.week.monday != widget.week.monday ||
+        !listEquals(old.values, widget.values)) {
+      _chosen = null;
+    }
+  }
+
+  /// The day under [dx], measured against the strip's own width at the moment
+  /// of the tap.
+  ///
+  /// **Not a `LayoutBuilder`**: on a wide screen this card sits beside the
+  /// chart under an `IntrinsicHeight`, and a `LayoutBuilder` cannot answer the
+  /// intrinsic measurement that asks for - it throws. The strip is as wide as
+  /// its bars, so its own box is the measure.
+  void _choose(double dx) {
+    final width = (context.findRenderObject() as RenderBox?)?.size.width ?? 0;
+    if (widget.reading || width <= 0) return;
+    final index = (dx / (width / _days.length)).floor().clamp(
+      0,
+      _days.length - 1,
+    );
+    setState(() => _chosen = _chosen == index ? null : index);
+  }
+
+  /// `Wed 30 Sep · KES 4500.00`: the day, and what it took.
+  String _readout(int index) =>
+      '${DateFormat('EEE d MMM').format(widget.week.monday.add(Duration(days: index)))}'
+      ' · ${weeklyReportMoney(widget.currency, widget.values[index])}';
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final values = widget.values;
+    final reading = widget.reading;
     final peak = values.fold<double>(0, (high, v) => v > high ? v : high);
     final dim = Color.lerp(
       tokens.colors.status.ok.fg,
@@ -924,57 +949,94 @@ final class _WeekStrip extends StatelessWidget {
     )!;
     // The last elapsed day of the week in progress, so the bar a person is
     // adding to is the one picked out. A finished week picks out its best day.
-    final elapsed = week.isCurrent
-        ? values.lastIndexWhere((value) => value > 0)
-        : values.indexWhere((value) => value == peak && value > 0);
+    // A day somebody tapped outranks either.
+    final chosen = reading ? null : _chosen;
+    final picked =
+        chosen ??
+        (widget.week.isCurrent
+            ? values.lastIndexWhere((value) => value > 0)
+            : values.indexWhere((value) => value == peak && value > 0));
     return Semantics(
-      label: 'The week by day, $comparison.',
+      // Every day's figure, because a screen reader cannot point at a bar.
+      label:
+          'The week by day, ${widget.comparison}. '
+          '${<String>[for (var index = 0; index < _days.length; index++) _readout(index)].join(', ')}.',
       excludeSemantics: true,
-      child: SizedBox(
-        height: WeeklyReportMetrics.stripHeight,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: <Widget>[
-            for (var index = 0; index < _days.length; index++) ...<Widget>[
-              if (index > 0) SizedBox(width: tokens.spacing.s8),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: <Widget>[
-                    SizedBox(
-                      height: reading
-                          ? WeeklyReportMetrics.stripBarHeight *
-                                WeeklyReportMetrics.readingBarHeights[index]
-                          : _height(values[index], peak),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: reading
-                              ? tokens.colors.surface.field
-                              : values[index] <= 0
-                              ? tokens.colors.surface.field
-                              : index == elapsed
-                              ? tokens.colors.status.ok.fg
-                              : dim,
-                          borderRadius: BorderRadius.circular(tokens.radius.sm),
-                        ),
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                    SizedBox(height: tokens.spacing.s8),
-                    Text(
-                      _days[index],
-                      style: tokens.typography.caption.copyWith(
-                        color: index == elapsed && !reading
-                            ? tokens.colors.status.ok.fg
-                            : tokens.colors.text.tertiary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // **Always laid out, empty or not**, so choosing a day never moves
+          // the card under the finger that chose it.
+          Text(
+            chosen == null ? '' : _readout(chosen),
+            key: const ValueKey('weekly-report-day-value'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.typography.caption.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s8),
+          GestureDetector(
+            key: const ValueKey('weekly-report-day-bars'),
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (details) => _choose(details.localPosition.dx),
+            child: SizedBox(
+              height: WeeklyReportMetrics.stripHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  for (
+                    var index = 0;
+                    index < _days.length;
+                    index++
+                  ) ...<Widget>[
+                    if (index > 0) SizedBox(width: tokens.spacing.s8),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: <Widget>[
+                          SizedBox(
+                            height: reading
+                                ? WeeklyReportMetrics.stripBarHeight *
+                                      WeeklyReportMetrics
+                                          .readingBarHeights[index]
+                                : _height(values[index], peak),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: reading
+                                    ? tokens.colors.surface.field
+                                    : values[index] <= 0
+                                    ? tokens.colors.surface.field
+                                    : index == picked
+                                    ? tokens.colors.status.ok.fg
+                                    : dim,
+                                borderRadius: BorderRadius.circular(
+                                  tokens.radius.sm,
+                                ),
+                              ),
+                              child: const SizedBox.expand(),
+                            ),
+                          ),
+                          SizedBox(height: tokens.spacing.s8),
+                          Text(
+                            _days[index],
+                            style: tokens.typography.caption.copyWith(
+                              color: index == picked && !reading
+                                  ? tokens.colors.status.ok.fg
+                                  : tokens.colors.text.tertiary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
-            ],
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1000,204 +1062,6 @@ final class _WeekStrip extends StatelessWidget {
   final at = figure.lastIndexOf('.');
   if (at < 0 || at == figure.length - 1) return (figure, null);
   return (figure.substring(0, at), figure.substring(at));
-}
-
-/// The other reports, as tiles under their own heading.
-///
-/// **They were cards in the figure grid, with a paragraph each.** A door and a
-/// number weighed the same, and three lines of prose sat in a row of amounts.
-/// A destination needs to say where it goes and what is waiting there; the
-/// sentence explaining what the page is for belongs on the page.
-final class _ReportLinks extends StatelessWidget {
-  const _ReportLinks({
-    required this.destinations,
-    required this.wide,
-    required this.medium,
-  });
-
-  final WeeklyReportDestinations destinations;
-  final bool wide;
-  final bool medium;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    final open = destinations.openDifferenceCount?.call(
-      TenantSessionScope.of(context),
-    );
-    final cards = <Widget>[
-      if (_weeklyOpen(context, destinations.dailySummary) case final go?)
-        _ReportTile(
-          cardKey: const ValueKey('weekly-report-daily-summary'),
-          title: 'Daily summary',
-          note: 'What reconciliation settled, day by day',
-          onTap: go,
-        ),
-      if (_weeklyOpen(context, destinations.monthlyReport) case final go?)
-        _ReportTile(
-          cardKey: const ValueKey('weekly-report-monthly'),
-          title: 'Monthly report',
-          note: 'A whole calendar month, once it has ended',
-          onTap: go,
-        ),
-      if (_weeklyOpen(context, destinations.differences) case final go?)
-        _ReportTile(
-          cardKey: const ValueKey('weekly-report-differences'),
-          title: 'Differences',
-          // **DESIGN RULES 4: the word carries the standing, not the colour.**
-          // `15` in amber would be a status told in a tint; `15 open` is a
-          // status told in a word that happens to be tinted. The count is not
-          // a bare figure beside a label either way - it is the subject and
-          // the verb of a short sentence.
-          note: switch (open) {
-            null => 'What reconciliation could not resolve',
-            0 => 'Nothing open',
-            1 => '1 open',
-            final count => '$count open',
-          },
-          attention: open != null && open > 0,
-          onTap: go,
-        ),
-      if (_weeklyOpen(context, destinations.stockMovements) case final go?)
-        _ReportTile(
-          cardKey: const ValueKey('weekly-report-stock-movements'),
-          title: 'Stock movements',
-          note: 'Sales, returns and corrections, newest first',
-          onTap: go,
-        ),
-    ];
-    // A session with no reconciliation rights reaches none of them, and a
-    // heading over nothing is worse than no heading.
-    if (cards.isEmpty) return const SizedBox.shrink();
-
-    // **The heading sits on the tiles' own left edge, not the list's.**
-    // `PressSurface` reserves a gutter around every card it paints so the focus
-    // ring has somewhere to go, so a card is inset by that much and a bare
-    // `Text` beside it is not - which put this label a few pixels left of
-    // everything it introduces, hard against the edge of the screen. Read from
-    // the ring rather than guessed, so it follows if the ring ever changes.
-    final ring = tokens.colors.action.focusRing;
-    final gutter = ring.width + ring.offset;
-    final rows = <Widget>[
-      Padding(
-        padding: EdgeInsets.only(
-          left: gutter,
-          right: gutter,
-          bottom: tokens.spacing.s12,
-        ),
-        child: Text(
-          'MORE REPORTS',
-          key: const ValueKey('weekly-report-links-heading'),
-          style: tokens.typography.labelEyebrow.copyWith(
-            color: tokens.colors.text.tertiary,
-          ),
-        ),
-      ),
-    ];
-    final perRow = wide ? 4 : 2;
-    for (var start = 0; start < cards.length; start += perRow) {
-      final row = cards.sublist(start, (start + perRow).clamp(0, cards.length));
-      rows.add(
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              for (var index = 0; index < perRow; index++) ...<Widget>[
-                if (index > 0) SizedBox(width: tokens.spacing.s12),
-                Expanded(
-                  child: index < row.length ? row[index] : const SizedBox(),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-      if (start + perRow < cards.length) {
-        rows.add(SizedBox(height: tokens.spacing.s12));
-      }
-    }
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
-  }
-}
-
-/// One destination: where it goes, and what is waiting there.
-final class _ReportTile extends StatelessWidget {
-  const _ReportTile({
-    required this.cardKey,
-    required this.title,
-    required this.note,
-    required this.onTap,
-    this.attention = false,
-  });
-
-  final Key cardKey;
-  final String title;
-  final String note;
-
-  /// Whether what is waiting there wants somebody. Drawn in the attention
-  /// colour *and* said in the word, never in the colour alone.
-  final bool attention;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    final role = tokens.colors.action.secondary;
-    return PressSurface(
-      borderRadius: BorderRadius.circular(tokens.radius.xl),
-      onPressed: onTap,
-      hoverOverlay: role.hoverWash(),
-      pressedOverlay: role.pressedWash(),
-      minimumTapTarget: tokens.density.minimumTapTarget,
-      fillWidth: true,
-      // **The painted surface fills the row, not just its hit area.** These sit
-      // two across under an `IntrinsicHeight`, and without this the card with
-      // the shorter caption drew a shorter box inside a cell of the right
-      // height - so a grid of four read as four unrelated sizes.
-      fillHeight: true,
-      child: WeeklyReportCard(
-        key: cardKey,
-        padding: tokens.spacing.s16,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    title,
-                    style: tokens.density
-                        .body(tokens.typography)
-                        .copyWith(
-                          color: tokens.colors.text.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                ),
-                SizedBox(width: tokens.spacing.s8),
-                Icon(
-                  Icons.chevron_right,
-                  size: WeeklyReportMetrics.tileGlyph,
-                  color: tokens.colors.text.tertiary,
-                ),
-              ],
-            ),
-            SizedBox(height: tokens.spacing.s8),
-            Text(
-              note,
-              style: tokens.typography.caption.copyWith(
-                color: attention
-                    ? tokens.colors.status.attention.fg
-                    : tokens.colors.text.secondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 final class _MetricCard extends StatelessWidget {

@@ -171,6 +171,39 @@ abstract interface class ShiftSalesLedger {
   });
 }
 
+/// What the server holds for one shift, counted there rather than here.
+final class ShiftServerTotals {
+  const ShiftServerTotals({
+    required this.transactionCount,
+    required this.totalMinor,
+  });
+
+  final int transactionCount;
+  final int totalMinor;
+}
+
+/// Counts one shift's sales on the server, whichever phone rang them up.
+///
+/// **Why a close needs this at all, since 2026-09-29.** A shift belongs to its
+/// cashier on any phone, so the outbox of the phone doing the count holds only
+/// that phone's share. A closing summary built from it alone would be short by
+/// every sale the cashier's other phones had already sent, and reconciliation
+/// would report that as a difference on every shift that used two phones. The
+/// server holds every sale that has arrived, so the close states those - and
+/// what reconciliation can still find missing is only what arrived after it.
+abstract interface class ShiftServerSalesTotals {
+  /// The shift's server-held totals, or null when they could not be read.
+  ///
+  /// **Null is never zero.** Offline, a timeout, a refusal or a value that is
+  /// not a whole non-negative figure all answer null, and the caller falls back
+  /// to what this phone can prove rather than closing on a guess.
+  Future<ShiftServerTotals?> read({
+    required String tenantId,
+    required String uid,
+    required String shiftId,
+  });
+}
+
 /// Summarizes one shift from the encrypted local checkout outbox.
 ///
 /// The outbox is the only local record of what this device sold, and a

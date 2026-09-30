@@ -1723,7 +1723,326 @@ void main() {
       expect(find.byType(SkeletonBlock), findsNothing);
     });
   });
+
+  testWidgets('the code is on the phone tile and on the cart line', (
+    tester,
+  ) async {
+    await _pumpAt(tester, sessions, catalog, drafts, const Size(411, 1400));
+
+    // The phone tile, which until 2026-09-29 dropped the code the wide tile
+    // has always carried.
+    expect(_text(tester, 'checkout-product-code-product-a'), 'sku-product-a');
+    expect(tester.takeException(), isNull);
+
+    await _tap(tester, 'checkout-product-product-a');
+    await _tap(tester, 'checkout-open-cart');
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(_text(tester, 'checkout-line-code-product-a'), 'sku-product-a');
+  });
+
+  group('agreeing a price', () {
+    testWidgets('is offered only to a person the business names', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        loadPriceAgreement: _agreementPolicy(onDevice: <String>{'user-b'}),
+      );
+      await _tap(tester, 'checkout-product-product-b');
+
+      expect(find.byKey(const ValueKey('checkout-agree-price')), findsNothing);
+    });
+
+    testWidgets('a till with no setting wired offers nothing', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+      await _tap(tester, 'checkout-product-product-b');
+
+      expect(find.byKey(const ValueKey('checkout-agree-price')), findsNothing);
+    });
+
+    testWidgets('is not offered on an empty cart', (tester) async {
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        loadPriceAgreement: _agreementPolicy(onDevice: <String>{'user-a'}),
+      );
+
+      expect(find.byKey(const ValueKey('checkout-agree-price')), findsNothing);
+    });
+
+    testWidgets('records the agreed total and the reason with the sale', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        loadPriceAgreement: _agreementPolicy(onDevice: <String>{'user-a'}),
+      );
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-product-product-b');
+      expect(_text(tester, 'checkout-total'), 'KES 248');
+
+      await _agree(tester, total: '230', reason: 'Bought three');
+
+      // The receipt's order: what was listed, what came off, what is paid.
+      expect(_text(tester, 'checkout-agreed-list'), 'KES 248');
+      expect(_text(tester, 'checkout-agreed-discount'), 'KES 18');
+      expect(_text(tester, 'checkout-agreed-reason'), 'Reason: Bought three');
+      expect(_text(tester, 'checkout-total'), 'KES 230');
+
+      await _tap(tester, 'checkout-save');
+
+      final request = drafts.requests.single;
+      expect(request.agreedPrice?.totalMinor, 23000);
+      expect(request.agreedPrice?.reason, 'Bought three');
+      expect(
+        request.discountMinor,
+        0,
+        reason: 'the agreed total is the one way money comes off',
+      );
+      // The next customer does not inherit it.
+      expect(find.byKey(const ValueKey('checkout-agreed')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('checkout-agreement-dropped')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a total not below the listed one, or no reason, is refused', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        loadPriceAgreement: _agreementPolicy(onDevice: <String>{'user-a'}),
+      );
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-agree-price');
+      await _settleDialog(tester);
+
+      await _enter(tester, 'agree-price-total', '7');
+      await _tap(tester, 'agree-price-confirm');
+
+      expect(
+        _fieldError(tester, 'agree-price-total'),
+        'The agreed total must be less than the listed KES 7.',
+      );
+      expect(
+        _fieldError(tester, 'agree-price-reason'),
+        'Say why, in at least 3 characters.',
+      );
+      expect(
+        find.byKey(const ValueKey('agree-price-confirm')),
+        findsOneWidget,
+        reason: 'the dialog stays up until it can be answered',
+      );
+
+      await _enter(tester, 'agree-price-total', '0');
+      await _tap(tester, 'agree-price-confirm');
+      expect(
+        _fieldError(tester, 'agree-price-total'),
+        'The agreed total must be more than nothing.',
+      );
+
+      await _enter(tester, 'agree-price-total', '6.5');
+      expect(
+        _fieldHelper(tester, 'agree-price-total'),
+        'KES 0.50 off the listed price',
+      );
+
+      await _tap(tester, 'agree-price-cancel');
+      await _settleDialog(tester);
+      expect(find.byKey(const ValueKey('checkout-agreed')), findsNothing);
+      expect(_text(tester, 'checkout-total'), 'KES 7');
+    });
+
+    testWidgets('changing the items takes the agreed price off, and says so', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        loadPriceAgreement: _agreementPolicy(onDevice: <String>{'user-a'}),
+      );
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-product-product-b');
+      await _agree(tester, total: '12', reason: 'Bought two');
+      expect(_text(tester, 'checkout-total'), 'KES 12');
+
+      await _tap(tester, 'checkout-product-product-b');
+
+      expect(find.byKey(const ValueKey('checkout-agreed')), findsNothing);
+      expect(_text(tester, 'checkout-total'), 'KES 21');
+      expect(
+        _notice(tester, 'checkout-agreement-dropped'),
+        contains('because the items changed'),
+      );
+      expect(
+        _status(tester, 'checkout-agreement-dropped'),
+        AppStatus.attention,
+      );
+      // It stays while the cashier keeps editing, rather than vanishing on
+      // the next keystroke.
+      await _decrement(tester, 'product-b');
+      expect(
+        find.byKey(const ValueKey('checkout-agreement-dropped')),
+        findsOneWidget,
+      );
+
+      await _tap(tester, 'checkout-save');
+      expect(drafts.requests.single.agreedPrice, isNull);
+    });
+
+    testWidgets('the listed price can be put back', (tester) async {
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        loadPriceAgreement: _agreementPolicy(onDevice: <String>{'user-a'}),
+      );
+      await _tap(tester, 'checkout-product-product-b');
+      await _agree(tester, total: '6', reason: 'Regular customer');
+
+      await _tap(tester, 'checkout-remove-agreed-price');
+
+      expect(find.byKey(const ValueKey('checkout-agreed')), findsNothing);
+      expect(_text(tester, 'checkout-total'), 'KES 7');
+      expect(
+        find.byKey(const ValueKey('checkout-agreement-dropped')),
+        findsNothing,
+        reason: 'the cashier took it off, so there is nothing to explain',
+      );
+      expect(find.byKey(const ValueKey('checkout-agree-price')), findsOne);
+    });
+
+    testWidgets('the server answer wins over what this device held', (
+      tester,
+    ) async {
+      // A phone that has never fetched the setting holds nothing, and the
+      // server read is what brings it.
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        loadPriceAgreement: _agreementPolicy(onServer: <String>{'user-a'}),
+      );
+      await _tap(tester, 'checkout-product-product-b');
+
+      expect(find.byKey(const ValueKey('checkout-agree-price')), findsOne);
+    });
+
+    testWidgets('a withdrawal that lands mid-sale takes the price off', (
+      tester,
+    ) async {
+      final server = Completer<void>();
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        loadPriceAgreement: _agreementPolicy(
+          onDevice: <String>{'user-a'},
+          onServer: <String>{},
+          serverAnswers: server.future,
+        ),
+      );
+      await _tap(tester, 'checkout-product-product-b');
+      await _agree(tester, total: '6', reason: 'Regular customer');
+
+      server.complete();
+      await _settle(tester);
+
+      expect(find.byKey(const ValueKey('checkout-agreed')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-agree-price')), findsNothing);
+      expect(
+        _notice(tester, 'checkout-agreement-dropped'),
+        contains('no longer lets you agree prices'),
+      );
+    });
+
+    testWidgets('on a phone, the bar states the agreed total', (tester) async {
+      await _pumpAt(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        const Size(411, 900),
+        loadPriceAgreement: _agreementPolicy(onDevice: <String>{'user-a'}),
+      );
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-open-cart');
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await _tapScrolled(tester, 'checkout-agree-price');
+      await _settleDialog(tester);
+      await _enter(tester, 'agree-price-total', '6');
+      await _enter(tester, 'agree-price-reason', 'Regular customer');
+      await _tap(tester, 'agree-price-confirm');
+      await _settleDialog(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(_text(tester, 'checkout-cart-bar-total'), 'KES 6');
+    });
+  });
 }
+
+/// A policy this device holds and, where it differs, the one the server
+/// answers with. Null is a document that is not there.
+CheckoutPriceAgreementLoader _agreementPolicy({
+  Set<String>? onDevice,
+  Set<String>? onServer,
+  Future<void>? serverAnswers,
+}) => (session, {required cached}) async {
+  if (!cached && serverAnswers != null) await serverAnswers;
+  final allowed = cached ? onDevice : (onServer ?? onDevice);
+  return allowed == null
+      ? const TenantPublishedPriceAgreement.absent()
+      : TenantPublishedPriceAgreement.published(
+          TenantPriceAgreementPolicy(allowed: allowed),
+        );
+};
+
+/// Opens *Agree a price*, answers it, and closes it.
+Future<void> _agree(
+  WidgetTester tester, {
+  required String total,
+  required String reason,
+}) async {
+  await _tap(tester, 'checkout-agree-price');
+  await _settleDialog(tester);
+  await _enter(tester, 'agree-price-total', total);
+  await _enter(tester, 'agree-price-reason', reason);
+  await _tap(tester, 'agree-price-confirm');
+  await _settleDialog(tester);
+}
+
+/// A dialog's route transition, which `_settle`'s few frames do not cover.
+Future<void> _settleDialog(WidgetTester tester) async {
+  for (var frame = 0; frame < 5; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
+String? _fieldError(WidgetTester tester, String key) =>
+    tester.widget<AppTextField>(find.byKey(ValueKey(key))).error;
+
+String? _fieldHelper(WidgetTester tester, String key) =>
+    tester.widget<AppTextField>(find.byKey(ValueKey(key))).helper;
 
 /// The till on its first frame, before the catalog read has answered.
 Future<void> _pumpUnsettledTill(
@@ -1753,6 +2072,7 @@ Future<void> _pump(
   CheckoutPrinterSetupReminder? printerSetupReminder,
   void Function(BuildContext context)? onSetUpPrinter,
   CheckoutCartActivity? cartActivity,
+  CheckoutPriceAgreementLoader? loadPriceAgreement,
 }) => _pumpAt(
   tester,
   controller,
@@ -1765,6 +2085,7 @@ Future<void> _pump(
   printerSetupReminder: printerSetupReminder,
   onSetUpPrinter: onSetUpPrinter,
   cartActivity: cartActivity,
+  loadPriceAgreement: loadPriceAgreement,
 );
 
 /// Pumps the till into a surface of an exact size.
@@ -1780,6 +2101,7 @@ Future<void> _pumpAt(
   CheckoutPrinterSetupReminder? printerSetupReminder,
   void Function(BuildContext context)? onSetUpPrinter,
   CheckoutCartActivity? cartActivity,
+  CheckoutPriceAgreementLoader? loadPriceAgreement,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -1795,6 +2117,7 @@ Future<void> _pumpAt(
           printerSetupReminder: printerSetupReminder,
           onSetUpPrinter: onSetUpPrinter,
           cartActivity: cartActivity,
+          loadPriceAgreement: loadPriceAgreement,
         ),
       ),
     ),

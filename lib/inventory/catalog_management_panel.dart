@@ -807,6 +807,14 @@ final class _TenantCatalogManagementPanelState
     final writer = widget.writer;
     if (writer == null || _busy) return;
     final capturedKey = _sessionKey(session);
+    // One list for both builds below: the inline upload builds the intent a
+    // second time, and a category added from this form has to be in that one
+    // too or the product is refused as `unknown_category` after its photograph
+    // has already gone up.
+    final categories = <TenantCategory>[
+      ...view.categories.items,
+      ...addedCategories,
+    ];
 
     TenantProductCreateIntent intent;
     try {
@@ -817,10 +825,7 @@ final class _TenantCatalogManagementPanelState
         cost: _productCost.text,
         openingQuantity: _productQuantity.text,
         categoryId: _selectedCategoryId ?? '',
-        categories: <TenantCategory>[
-          ...view.categories.items,
-          ...addedCategories,
-        ],
+        categories: categories,
         requestId: _productRequestId ??= _newRequestId(),
         costType: _productCostType,
       );
@@ -874,7 +879,7 @@ final class _TenantCatalogManagementPanelState
           cost: _productCost.text,
           openingQuantity: _productQuantity.text,
           categoryId: _selectedCategoryId ?? '',
-          categories: view.categories.items,
+          categories: categories,
           requestId: _productRequestId!,
           imageUrl: upload.url,
           costType: _productCostType,
@@ -4739,6 +4744,16 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
                 onPressed: _busy ? null : _choose,
               ),
             ),
+            // Framing needs no service and no particular role, so it is
+            // always drawn, and disabled until there is a photograph to frame.
+            SizedBox(width: tokens.spacing.s8),
+            AppIconButton(
+              key: const ValueKey('inventory-frame-image'),
+              icon: Icons.edit_outlined,
+              semanticLabel: 'Position and zoom',
+              loading: _fetching,
+              onPressed: _busy || _fetching || !_canFrame ? null : _frame,
+            ),
             if (_offersRemoval) ...<Widget>[
               SizedBox(width: tokens.spacing.s8),
               AppIconButton(
@@ -4746,6 +4761,9 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
                 icon: Icons.auto_fix_high,
                 semanticLabel: 'Remove image background',
                 tier: AppButtonTier.primary,
+                glyphColor: tokens.colors.accent.identityAt(
+                  AppIdentityAccent.blue,
+                ),
                 loading: _busy,
                 // Only a photograph chosen in this form can be cut out: the
                 // bytes are what goes to the service, and a saved photograph
@@ -4762,26 +4780,6 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
               onPressed: _busy ? null : widget.onRemoveImage,
             ),
           ],
-        ),
-        SizedBox(height: tokens.spacing.s8),
-        // **Its own row rather than a fourth control beside the others.** The
-        // action row above is already a label and two 48-pixel squares, and a
-        // phone at 411 leaves *Replace image* about 200 for its own label;
-        // taking another 56 out of that is what makes a button read
-        // "Replace i…". This also gives the action a name, which a crop glyph
-        // on its own does not have - §9 again.
-        //
-        // Drawn always and disabled without a chosen photograph, which is the
-        // distinction `_offersRemoval` draws: framing needs no service and no
-        // particular role, so it is always available and sometimes not right
-        // now, and that is what a disabled control says.
-        AppButton(
-          key: const ValueKey('inventory-frame-image'),
-          label: 'Position and zoom',
-          icon: Icons.crop,
-          expand: true,
-          loading: _fetching,
-          onPressed: _busy || _fetching || !_canFrame ? null : _frame,
         ),
         if (_fetchFailure case final failure?) ...<Widget>[
           SizedBox(height: tokens.spacing.s12),
@@ -4809,16 +4807,6 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
             ),
           ),
         ],
-        SizedBox(height: tokens.spacing.s8),
-        Text(
-          _offersRemoval && widget.image == null
-              ? 'JPEG, PNG, or WebP up to 5 MiB. Choose a photograph to cut '
-                    'its background out.'
-              : 'JPEG, PNG, or WebP up to 5 MiB.',
-          style: tokens.typography.caption.copyWith(
-            color: tokens.colors.text.tertiary,
-          ),
-        ),
       ],
     );
   }

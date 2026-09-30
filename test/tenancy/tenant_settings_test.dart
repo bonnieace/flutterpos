@@ -29,6 +29,30 @@ void main() {
       expect(counts.detail, 'Nobody is interrupted.');
     });
 
+    test('agreed prices read as who can, and nobody is a working state', () {
+      // **Absent is `set`, as the counting rota's is**: every till sells at
+      // the listed price, which is where every business starts.
+      final none = TenantSettingsStandingsRepository.standingFor(
+        TenantSettingKind.agreedPrices,
+        null,
+      );
+      expect(none.state, TenantSettingState.set);
+      expect(none.detail, 'Nobody can agree a price.');
+      expect(none.blocksTrading, isFalse);
+
+      final two = TenantSettingsStandingsRepository.standingFor(
+        TenantSettingKind.agreedPrices,
+        <String, Object?>{
+          'allowed': <Map<String, Object?>>[
+            <String, Object?>{'uid': 'user-a'},
+            <String, Object?>{'uid': 'user-b'},
+          ],
+        },
+      );
+      expect(two.state, TenantSettingState.set);
+      expect(two.detail, '2 people can agree a price');
+    });
+
     test('only an unpublished or unreadable currency blocks trading', () {
       expect(
         TenantSettingsStandingsRepository.standingFor(

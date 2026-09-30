@@ -72,6 +72,16 @@ void main() {
     expect(find.byKey(const ValueKey('shift-gate-blocked')), findsOneWidget);
     expect(find.byKey(const ValueKey('shift-gate-open')), findsOneWidget);
     expect(find.byKey(_till), findsNothing);
+    // Worded by the product owner on 2026-09-29: no sentence explaining
+    // shifts, and the float's hint without what happens to it at close.
+    expect(find.textContaining('Every sale is recorded'), findsNothing);
+    expect(
+      find.text(
+        'The change in the drawer before any sale. Leave it empty if there '
+        'is none.',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('opening a shift from the modal reveals the till', (
@@ -190,6 +200,13 @@ void main() {
       // No till: an expired shift may be closed and nothing else.
       expect(find.byKey(const ValueKey('shift-gate-expired')), findsOneWidget);
       expect(find.byKey(_till), findsNothing);
+      // Worded by the product owner on 2026-09-29: what happened, and what to
+      // do about it, and nothing else.
+      expect(
+        find.text('This shift has been open for more than 24 hours.'),
+        findsOneWidget,
+      );
+      expect(find.text('Close it and open a new one.'), findsOneWidget);
 
       // The expired screen opens the sheet directly, with the count already
       // running - there is nothing else to do with an expired shift.
@@ -218,15 +235,14 @@ void main() {
     },
   );
 
-  testWidgets('an orphaned shift can be closed from the modal that refuses it', (
+  // **A shift belongs to its cashier on any phone, since 2026-09-29.** The
+  // two cases below used to meet a refusal in the modal - "opened by an
+  // earlier installation", "open on another register" - with, for the first,
+  // a way to close the shift and nothing else. The till simply opens now.
+  testWidgets('a shift left by an earlier install of this phone carries on', (
     tester,
   ) async {
-    // **The dead end this removes.** A shift opened by an installation this
-    // device no longer is cannot be adopted - the closing summary comes from
-    // local sale evidence, which that install took with it - and until now the
-    // refusal was all there was: `Open shift` repeated it, and the only remedy
-    // was an edit to the database. The control that resolves it lives in the
-    // close sheet, and this modal is the one surface that could open it.
+    // The screenshots this was built from: an app reinstalled mid-shift.
     server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
       overrides: <String, Object?>{
         'shiftId': 'shift-elsewhere',
@@ -237,86 +253,59 @@ void main() {
     await _pumpHome(tester, state, server);
     await _enterTill(tester);
 
+    expect(find.byKey(const ValueKey('shift-gate-open')), findsNothing);
+    expect(find.byKey(_till), findsOneWidget);
+    expect(server.created, isEmpty);
+
+    // Counting it off says why the shift was already open, in words that do
+    // not send the cashier looking for another phone.
+    await _openCloseSheet(tester);
     expect(
-      find.text(shiftErrorMessage('shift_open_on_earlier_install')),
+      find.text(
+        'This shift was opened on this phone before the app was '
+        'reinstalled, and it carries on here.',
+      ),
       findsOneWidget,
     );
-    await _tap(tester, const ValueKey('shift-gate-close-orphan'));
+  });
 
-    // The same three boxes an ordinary close asks for: a declaration needs no
-    // sale evidence, and the server derives the other side of the comparison
-    // itself - so a recovery close records more than the refusal it replaces.
+  testWidgets("another phone's shift is joined rather than stood beside", (
+    tester,
+  ) async {
+    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
+      overrides: <String, Object?>{
+        'shiftId': 'shift-elsewhere',
+        'deviceId': _deviceOtherPhone,
+      },
+    );
+
+    await _pumpHome(tester, state, server);
+    await _enterTill(tester);
+
+    expect(find.byKey(_till), findsOneWidget);
+    expect(server.created, isEmpty);
+
+    await _openCloseSheet(tester);
+    expect(
+      find.text(
+        'This shift was opened on another phone. Sales from every phone you '
+        'use count towards it.',
+      ),
+      findsOneWidget,
+    );
     await tester.enterText(
       find.byKey(const ValueKey('declared-cash')),
       '250.00',
     );
     await _settle(tester);
-    await _tap(tester, const ValueKey('close-orphan-shift'));
+    await _tap(tester, const ValueKey('close-shift-confirm'));
 
-    // Zero totals under the marker, so reconciliation refuses the figures
-    // rather than reading them as a shift that took nothing.
-    final written = server.updated.single.$2;
-    expect(server.updated.single.$1, 'tenants/tenant-a/shifts/shift-elsewhere');
-    expect(written['closedWithoutEvidence'], isTrue);
-    expect(written['totalSalesMinor'], 0);
-    expect(written['transactionCount'], 0);
-    expect(written['declaredCashMinor'], 25000);
-  });
-
-  testWidgets('a drawer the closer does not hold is closed without a count', (
-    tester,
-  ) async {
-    // **The other half of the recovery close, and the one that was implicit.**
-    // Leaving the boxes blank used to record *counted, and it held nothing* -
-    // indistinguishable from a cashier who really had counted an empty till.
-    // Now that the count is marked against the sales the server holds, that
-    // silence would report the drawer's whole contents as missing, the opening
-    // float included. The two answers are two controls.
-    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
-      overrides: <String, Object?>{
-        'shiftId': 'shift-elsewhere',
-        'deviceId': _deviceEarlierInstall,
-      },
-    );
-    await _pumpHome(tester, state, server);
-    await _enterTill(tester);
-    await _tap(tester, const ValueKey('shift-gate-close-orphan'));
-    await _settle(tester);
-    await _tap(tester, const ValueKey('close-orphan-uncounted'));
-
-    final written = server.updated.single.$2;
-    expect(written['closedWithoutEvidence'], isTrue);
-    // No declared keys at all: reconciliation reads their absence as nothing
-    // to compare, which is exactly what this person is saying.
-    expect(written.containsKey('declaredCashMinor'), isFalse);
-    expect(written.containsKey('declaredMpesaMinor'), isFalse);
-    expect(written.containsKey('declaredCardMinor'), isFalse);
-    expect(written['closingCashMinor'], 0);
-  });
-
-  testWidgets('an untouched recovery form is refused rather than read as zero', (
-    tester,
-  ) async {
-    // Everywhere else on this sheet an empty box is a legitimate zero, because
-    // the cashier is holding the drawer. Here it is the one thing it must not
-    // mean, so pressing the count control with nothing typed says so.
-    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
-      overrides: <String, Object?>{
-        'shiftId': 'shift-elsewhere',
-        'deviceId': _deviceEarlierInstall,
-      },
-    );
-    await _pumpHome(tester, state, server);
-    await _enterTill(tester);
-    await _tap(tester, const ValueKey('shift-gate-close-orphan'));
-    await _settle(tester);
-    await _tap(tester, const ValueKey('close-orphan-shift'));
-
-    expect(server.updated, isEmpty);
-    expect(
-      find.text('Enter what you counted, or close without counting.'),
-      findsWidgets,
-    );
+    // An ordinary close of the joined shift, figures and all - not the
+    // evidence-free close this phone used to be limited to.
+    final written = server.updated.single;
+    expect(written.$1, 'tenants/tenant-a/shifts/shift-elsewhere');
+    expect(written.$2['declaredCashMinor'], 25000);
+    expect(written.$2.containsKey('closedWithoutEvidence'), isFalse);
   });
 
   testWidgets('one count closes both shifts when a second is open', (
@@ -397,61 +386,6 @@ void main() {
       findsNothing,
       reason: 'There was no second shift, so there is nothing to report.',
     );
-  });
-
-  testWidgets('the modal stops refusing once the orphan is gone', (
-    tester,
-  ) async {
-    // The dialog used to read the controller once and keep whatever it drew, so
-    // a refusal outlived the thing it refused: the shift was closed and the
-    // modal still said it was open somewhere else.
-    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
-      overrides: <String, Object?>{
-        'shiftId': 'shift-elsewhere',
-        'deviceId': _deviceEarlierInstall,
-      },
-    );
-
-    await _pumpHome(tester, state, server);
-    await _enterTill(tester);
-    expect(
-      find.byKey(const ValueKey('shift-gate-close-orphan')),
-      findsOneWidget,
-    );
-
-    await _tap(tester, const ValueKey('shift-gate-close-orphan'));
-    await tester.enterText(find.byKey(const ValueKey('declared-cash')), '0');
-    await _settle(tester);
-    await _tap(tester, const ValueKey('close-orphan-shift'));
-    await _tap(tester, const ValueKey('shift-close-done'));
-
-    // The refusal and the control that answered it both go, and `Open shift`
-    // is what is left - which is the whole point of the journey.
-    expect(find.byKey(const ValueKey('shift-gate-close-orphan')), findsNothing);
-    expect(find.byKey(const ValueKey('shift-gate-error')), findsNothing);
-    expect(find.byKey(const ValueKey('shift-gate-open')), findsOneWidget);
-  });
-
-  testWidgets("another phone's shift is never offered for closing", (
-    tester,
-  ) async {
-    // **The incident this exists for.** On 2026-09-17 this control closed a
-    // shift on a phone that was not gone at all - it was offline, mid-count,
-    // with one unsent sale left to send - and the count it had taken was
-    // discarded with it. `otherDeviceShiftId` now names a shift only where the
-    // durable half of the device id matches, so a shift like this one names
-    // nothing and the button never appears.
-    server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = shiftDocument(
-      overrides: <String, Object?>{
-        'shiftId': 'shift-elsewhere',
-        'deviceId': _deviceOtherPhone,
-      },
-    );
-
-    await _pumpHome(tester, state, server);
-    await _enterTill(tester);
-
-    expect(find.byKey(const ValueKey('shift-gate-close-orphan')), findsNothing);
   });
 
   testWidgets('a refused open keeps the modal up and states the reason', (

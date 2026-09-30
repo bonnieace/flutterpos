@@ -186,6 +186,13 @@ void main() {
         stockMovementFeedRoles: TenantStockMovementFeedRepository.allowedRoles,
         auditLogRoute: (reader) => TenantAuditLogScreen(reader: reader),
         auditLogRoles: TenantAuditLogRepository.allowedRoles,
+        memberName: 'Amina Wanjiru',
+        shiftPanel: (currency, memberName) => TenantHomeShiftCard(
+          controllerFactory: shiftControllerFactory,
+          currency: currency,
+          memberName: memberName,
+          returnActions: returnActions,
+        ),
       ),
     );
   }
@@ -195,6 +202,25 @@ void main() {
   screenshotCase(
     '11-business-home-cashier',
     build: () => landing(role: TenantRole.cashier, uid: cashierUid),
+  );
+
+  // **A cashier's open shift, on the home, since 2026-09-30.** The card at the
+  // foot of the page, two hours and a quarter in.
+  screenshotCase(
+    '11b-business-home-cashier-shift-open',
+    build: () => landing(role: TenantRole.cashier, uid: cashierUid),
+    beforePump: () async {
+      const age = Duration(hours: 2, minutes: 14);
+      await shiftState.save(_openShiftRecord(uid: cashierUid, age: age));
+      shiftServer.shifts['tenants/$seedTenantId/shifts/shift-open'] =
+          _openShiftDocument(uid: cashierUid, age: age);
+    },
+    afterPump: (tester) async {
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('home-shift-card')),
+      );
+      await tester.pumpAndSettle();
+    },
   );
 
   // The destinations, which left the body on 2026-08-23. Below `expanded` they
@@ -557,10 +583,13 @@ Future<void> _enterTill(WidgetTester tester) async {
 }
 
 /// A shift this device already has open, so the till draws rather than gating.
-TenantShiftLocalRecord _openShiftRecord() {
-  final openedAt = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+TenantShiftLocalRecord _openShiftRecord({
+  String uid = ownerUid,
+  Duration age = const Duration(hours: 3),
+}) {
+  final openedAt = DateTime.now().toUtc().subtract(age);
   return TenantShiftLocalRecord(
-    uid: ownerUid,
+    uid: uid,
     tenantId: seedTenantId,
     shiftId: 'shift-open',
     businessDate: checkoutBusinessDate(openedAt),
@@ -575,12 +604,15 @@ TenantShiftLocalRecord _openShiftRecord() {
 /// The canonical shift behind it. `_settle` clears a confirmed record the
 /// server has no shift for, which would leave these captures on *Start your
 /// shift*.
-Map<String, Object?> _openShiftDocument() {
-  final openedAt = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+Map<String, Object?> _openShiftDocument({
+  String uid = ownerUid,
+  Duration age = const Duration(hours: 3),
+}) {
+  final openedAt = DateTime.now().toUtc().subtract(age);
   return <String, Object?>{
     'shiftId': 'shift-open',
     'tenantId': seedTenantId,
-    'staffId': ownerUid,
+    'staffId': uid,
     'deviceId': seedDeviceId,
     'businessDate': checkoutBusinessDate(openedAt),
     'status': 'open',

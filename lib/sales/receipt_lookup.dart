@@ -91,6 +91,20 @@ final class TenantReceiptEndingQuery {
     }
 
     final normalized = ending.trim();
+    // **The number printed on the receipt, since 2026-09-29** -
+    // `JOHN-CT-7F2-001`. It carries the till's code and sequence but no date,
+    // which is exactly what this query adds, so it is read here rather than
+    // refused. The till's code then narrows the day's matches to one till.
+    if (parsePrintedCheckoutReceipt(normalized) case final printed?) {
+      return TenantReceiptEndingQuery._(
+        businessDate: date,
+        sequence: printed.sequence,
+        deviceCode: printed.deviceCode,
+        displayEnding:
+            '$checkoutReceiptPrefix-${printed.deviceCode}-'
+            '${printed.sequence.toString().padLeft(printedReceiptSequenceDigits, '0')}',
+      );
+    }
     if (!RegExp(r'^\d{1,6}$').hasMatch(normalized)) {
       throw const TenantReceiptLookupException('invalid_receipt_ending');
     }
@@ -112,11 +126,26 @@ final class TenantReceiptEndingQuery {
     required this.businessDate,
     required this.sequence,
     required this.displayEnding,
+    this.deviceCode,
   });
 
   final String businessDate;
   final int sequence;
   final String displayEnding;
+
+  /// The till a printed number named, or null for bare digits, which may
+  /// match every till's receipt of that number that day.
+  final String? deviceCode;
+
+  /// Whether [sale] was issued by the till this query names, which is every
+  /// sale where it names none.
+  ///
+  /// A filter rather than a proof: the day's query rightly returns every
+  /// till's receipt of this number, and the ones from other tills are simply
+  /// not the one being looked for.
+  bool isFromNamedTill(TenantSale sale) =>
+      deviceCode == null ||
+      sale.receiptNumber.startsWith('$checkoutReceiptPrefix-$deviceCode-');
 }
 
 /// What one receipt lookup found.
@@ -229,7 +258,10 @@ final class TenantReceiptLookupRepository extends TenantReadRepository {
           sale.businessDate == query.businessDate &&
           sale.receiptSequence == query.sequence,
     );
-    return TenantReceiptEndingLookupResult._(query: query, matches: matches);
+    return TenantReceiptEndingLookupResult._(
+      query: query,
+      matches: matches.where(query.isFromNamedTill).toList(growable: false),
+    );
   }
 
   String? _effectiveSoldById(String? requested) {

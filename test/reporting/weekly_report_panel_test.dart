@@ -81,9 +81,10 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('a figure that is elaborated somewhere opens it', (tester) async {
-    // The old app's grid: *Total sales* opened the sales report rather than a
-    // menu whose first row opened it.
+  testWidgets('total sales stays on the page', (tester) async {
+    // **Not a door since 2026-09-29.** It opened the sales totals page until
+    // the product owner took the tap away; a tap on its bars reads a day's
+    // figure out instead. Wired or not, nothing is pushed.
     var opened = 0;
     await _pumpReports(
       tester,
@@ -100,10 +101,13 @@ void main() {
     );
 
     await tester.tap(find.byKey(const ValueKey('weekly-report-sales')));
-    await tester.pumpAndSettle();
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
 
-    expect(opened, 1);
-    expect(find.byKey(const ValueKey('totals-stub')), findsOneWidget);
+    expect(opened, 0);
+    expect(find.byKey(const ValueKey('totals-stub')), findsNothing);
+    expect(find.byKey(const ValueKey('weekly-report-body')), findsOneWidget);
   });
 
   testWidgets('a figure nothing elaborates is inert, not broken', (
@@ -126,12 +130,19 @@ void main() {
     expect(find.byKey(const ValueKey('weekly-report-body')), findsOneWidget);
   });
 
-  testWidgets('the other reports are cards on this grid', (tester) async {
+  testWidgets('the page draws no tiles for the other reports', (tester) async {
+    // **Removed by the product owner on 2026-09-29.** Daily summary, Monthly
+    // report, Differences and Stock movements sat under a *More reports*
+    // heading at the foot of this page; wired or not, none is drawn now.
     await _pumpReports(
       tester,
       callable: _held(),
       destinations: WeeklyReportDestinations(
         dailySummary: WeeklyReportDestination(
+          build: () => const Scaffold(),
+          roles: const <TenantRole>[TenantRole.owner],
+        ),
+        monthlyReport: WeeklyReportDestination(
           build: () => const Scaffold(),
           roles: const <TenantRole>[TenantRole.owner],
         ),
@@ -147,44 +158,16 @@ void main() {
       ),
     );
 
-    expect(
-      find.byKey(const ValueKey('weekly-report-daily-summary')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('weekly-report-stock-movements')),
-      findsOneWidget,
-    );
-    // **DESIGN RULES 4, at the tile's length rather than the card's.** These
-    // were paragraph cards in the figure grid until 2026-09-20; as tiles they
-    // say where they go and what is waiting, and the sentence about what the
-    // page is for belongs on the page. What has not changed is that the
-    // standing is in a word: `2` in amber would be a status told in a tint,
-    // and `2 open` is a status told in language that happens to be tinted.
-    expect(find.text('2 open'), findsOneWidget);
-  });
-
-  testWidgets('a role that may not read a report is not shown its card', (
-    tester,
-  ) async {
-    // The hub filtered every card by `session.canAccess` before drawing it.
-    // Folding the reports into this grid may not widen that.
-    await _pumpReports(
-      tester,
-      callable: _held(),
-      role: TenantRole.cashier,
-      destinations: WeeklyReportDestinations(
-        differences: WeeklyReportDestination(
-          build: () => const Scaffold(),
-          roles: const <TenantRole>[TenantRole.owner],
-        ),
-      ),
-    );
-
-    expect(
-      find.byKey(const ValueKey('weekly-report-differences')),
-      findsNothing,
-    );
+    for (final key in <String>[
+      'weekly-report-links-heading',
+      'weekly-report-daily-summary',
+      'weekly-report-monthly',
+      'weekly-report-differences',
+      'weekly-report-stock-movements',
+    ]) {
+      expect(find.byKey(ValueKey(key)), findsNothing, reason: key);
+    }
+    expect(find.text('MORE REPORTS'), findsNothing);
   });
 }
 

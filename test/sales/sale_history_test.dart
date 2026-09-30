@@ -195,6 +195,87 @@ void main() {
       }
     });
 
+    test('reads each line\'s code, where the till recorded one', () {
+      expect(
+        TenantSale.fromDocument(
+          path: 'tenants/tenant-a/sales/co-1',
+          data: _sale(),
+        ).lines.single.sku,
+        isNull,
+        reason: 'a line sold before the code was recorded still reads',
+      );
+      expect(
+        TenantSale.fromDocument(
+          path: 'tenants/tenant-a/sales/co-1',
+          data: _sale(
+            overrides: <String, Object?>{
+              'items': <Object?>[
+                <String, Object?>{..._line(), 'sku': '6161100000019'},
+              ],
+            },
+          ),
+        ).lines.single.sku,
+        '6161100000019',
+      );
+      expect(
+        () => TenantSale.fromDocument(
+          path: 'tenants/tenant-a/sales/co-1',
+          data: _sale(
+            overrides: <String, Object?>{
+              'items': <Object?>[
+                <String, Object?>{..._line(), 'sku': ''},
+              ],
+            },
+          ),
+        ),
+        throwsA(isA<TenantSaleException>()),
+      );
+    });
+
+    test('reads why a price was agreed, where the till recorded one', () {
+      expect(
+        TenantSale.fromDocument(
+          path: 'tenants/tenant-a/sales/co-1',
+          data: _sale(),
+        ).discountReason,
+        isNull,
+        reason: 'a discount written before the reason existed still reads',
+      );
+      expect(
+        TenantSale.fromDocument(
+          path: 'tenants/tenant-a/sales/co-1',
+          data: _sale(overrides: <String, Object?>{'discountReason': 'Two'}),
+        ).discountReason,
+        'Two',
+      );
+    });
+
+    test('refuses a reason that disagrees with its own sale', () {
+      final refused = <String, Map<String, Object?>>{
+        'nothing-off': <String, Object?>{
+          'discountMinor': 0,
+          'discount': 0.0,
+          'totalMinor': 1000,
+          'total': 10.0,
+          'discountReason': 'Bought two',
+        },
+        'padded': <String, Object?>{'discountReason': ' Bought two'},
+        'too-short': <String, Object?>{'discountReason': 'ok'},
+        'numeric': <String, Object?>{'discountReason': 7},
+      };
+
+      for (final entry in refused.entries) {
+        expect(
+          () => TenantSale.fromDocument(
+            path: 'tenants/tenant-a/sales/co-1',
+            data: _sale(overrides: entry.value),
+          ),
+          throwsA(isA<TenantSaleException>()),
+          reason: entry.key,
+        );
+      }
+    });
+
     test('refuses a receipt that does not describe its own sale', () {
       expect(
         () => TenantSale.fromDocument(
@@ -293,12 +374,30 @@ void main() {
       expect(query.limit, 21);
     });
 
+    test(
+      'a sale from another of the cashier\'s phones belongs to the shift',
+      () async {
+        // **Not a contradiction since 2026-09-29.** A shift belongs to its
+        // cashier on any phone, so a sale rung up on a second phone - or on this
+        // one after a reinstall - carries another device and is listed.
+        final reader = _Reader(<String, Map<String, Object?>>{
+          'tenants/tenant-a/sales/co-1': _sale(
+            deviceId: 'dev-ffffffffffffffffffffffffffffffff',
+          ),
+        }, ignoreFilters: true);
+
+        final page = await _repository(reader).loadShiftSales(shift: _scope());
+
+        expect(
+          page.items.single.deviceId,
+          'dev-ffffffffffffffffffffffffffffffff',
+        );
+      },
+    );
+
     test('a sale that contradicts its shift fails the page closed', () async {
       final mismatches = <String, Map<String, Object?>>{
         'other-cashier': <String, Object?>{'soldById': 'user-b'},
-        'other-device': <String, Object?>{
-          'deviceId': 'dev-ffffffffffffffffffffffffffffffff',
-        },
         'other-business-day': <String, Object?>{'businessDate': '2026-07-30'},
       };
 

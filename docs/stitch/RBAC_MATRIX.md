@@ -64,6 +64,7 @@ shift/session scope; **No** = no route/action.
 | Read a stock count's lines | Full | Full | Full | No | A line carries `expected`, the figure the count was taken blind to. A counter reads *that* they counted - `firestore.rules` lets them read their own take document - and never what the books said. |
 | Accept a stock count | Full | Full | Full | No | Writing the variances to the ledger is the same act as `Create stock correction` and takes the same roles. |
 | Set the counting schedule | Full | Full | No | No | Which days, who counts what, and whether the till is held. `configuration/{documentId}` already admits exactly owner and admin for writing; every active member reads it, because the till checks it on the way in. |
+| Set who can agree a price | Full | Full | No | No | Added 2026-09-29. Who may sell for a total agreed with the customer; the same `configuration/{documentId}` rule, and every active member reads it because the till does. *Agreeing* a price is then a grant to named people, not to a role: nobody may, the owner included, until listed here. |
 | Daily summary | Full | Full | Full | No | `TenantDailyMetricsRepository.allowedRoles`. |
 | Sales totals | Full | Full | Full | No | Management reporting. |
 | Reconciliation status/anomalies | Full | Full | Full | No | Read scope. |

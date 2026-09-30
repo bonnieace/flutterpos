@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show CheckedState, Tristate;
 
 import 'package:flutter/material.dart';
@@ -331,13 +332,75 @@ void main() {
     );
     expect(hold.right, lessThanOrEqualTo(411));
   });
+
+  // **Found on two emulators on 2026-09-29**: the form was filled once, from
+  // whichever answer came first, and this device's copy comes first. It went
+  // on saying *Ask at the register* after the server said *Nothing*.
+  group('this device\'s copy and the server\'s', () {
+    testWidgets('the server answer replaces an older copy on the form', (
+      tester,
+    ) async {
+      final server = Completer<void>();
+      await _pump(
+        tester,
+        _CachingReader(
+          server: _Reader(
+            schedule: <String, Object?>{..._heroSchedule, 'enforcement': 'block'},
+            gate: server.future,
+          ),
+          cache: _Reader(schedule: _heroSchedule),
+        ),
+        writer: _Writer(),
+      );
+      expect(_checked(tester, 'stock-take-enforcement-prompt'), isTrue);
+
+      server.complete();
+      await tester.pump();
+      await tester.pump();
+
+      expect(_checked(tester, 'stock-take-enforcement-block'), isTrue);
+      expect(
+        find.byKey(const ValueKey('stock-take-settings-changed-elsewhere')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('what the owner has changed is kept, and they are told', (
+      tester,
+    ) async {
+      final server = Completer<void>();
+      await _pump(
+        tester,
+        _CachingReader(
+          server: _Reader(
+            schedule: <String, Object?>{..._heroSchedule, 'enforcement': 'block'},
+            gate: server.future,
+          ),
+          cache: _Reader(schedule: _heroSchedule),
+        ),
+        writer: _Writer(),
+      );
+      await tester.tap(find.byKey(const ValueKey('stock-take-enforcement-off')));
+      await tester.pump();
+
+      server.complete();
+      await tester.pump();
+      await tester.pump();
+
+      expect(_checked(tester, 'stock-take-enforcement-off'), isTrue);
+      expect(
+        noticeAt(tester, 'stock-take-settings-changed-elsewhere').status,
+        AppStatus.attention,
+      );
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
 
 Future<void> _pump(
   WidgetTester tester,
-  _Reader reader, {
+  TenantDataReader reader, {
   TenantConfigurationDocumentWriter? writer,
   Size size = const Size(1280, 2600),
 }) async {
@@ -477,15 +540,39 @@ final class _Writer implements TenantConfigurationDocumentWriter {
   }
 }
 
+/// A reader with a copy on this device, as the Firestore-backed one has.
+final class _CachingReader implements TenantCacheReadable {
+  _CachingReader({required this.server, required this.cache});
+
+  final _Reader server;
+  final _Reader cache;
+
+  @override
+  TenantDataReader get cacheOnly => cache;
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) =>
+      server.getDocument(path);
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) => server.getCollectionPage(query);
+}
+
 final class _Reader implements TenantDataReader {
-  _Reader({this.schedule, Map<String, Map<String, Object?>>? staff})
+  _Reader({this.schedule, Map<String, Map<String, Object?>>? staff, this.gate})
     : staff = staff ?? _staff;
 
   final Map<String, Object?>? schedule;
   final Map<String, Map<String, Object?>> staff;
 
+  /// Holds the schedule's answer back until it completes.
+  final Future<void>? gate;
+
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    if (path == _schedulePath) await gate;
     final Map<String, Object?>? data = switch (path) {
       _root => <String, Object?>{
         'tenantId': _tenant,

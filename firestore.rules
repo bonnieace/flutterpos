@@ -92,11 +92,18 @@ service cloud.firestore {
     // request. The three-character device code is a SHA-256 digest that Rules
     // cannot recompute, and Rules cannot query other sales, so cross-sale
     // uniqueness stays a device-local and reconciliation concern.
-    // `businessDate` and `deviceId` are not type-checked here: a non-string
-    // date cannot be split into the pattern, and the shift comparison below
-    // proves the device against the shift's own validated string.
+    // `businessDate` is not type-checked here: a non-string date cannot be
+    // split into the pattern.
+    //
+    // **`deviceId` is shaped here since 2026-09-29.** It used to be proved by
+    // the shift comparison below, which required it to equal the device that
+    // opened the shift. A shift now belongs to its cashier on any phone, so
+    // that comparison is gone and the sale's own device - the one whose
+    // counter issued this receipt - has to be a well-formed ID on its own.
     function validSaleReceipt(sale) {
-      return sale.receiptSequence is int
+      return sale.deviceId is string
+        && sale.deviceId.matches('^dev-[0-9a-f]{32}$')
+        && sale.receiptSequence is int
         && sale.receiptSequence > 0
         && sale.receiptNumber is string
         // "CT-" + 3 + "-" + 8 + "-" is 16 characters, so the frozen
@@ -145,10 +152,17 @@ service cloud.firestore {
     }
 
     // Every sale belongs to exactly one canonical shift held by the same
-    // cashier, on the same device, in the same business day. Nightly
-    // reconciliation aggregates sales per shift and business date and compares
-    // the result against that shift's own closing summary, so an unattributed
-    // or foreign-shift sale could never be reconciled.
+    // cashier in the same business day. Nightly reconciliation aggregates
+    // sales per shift and business date and compares the result against that
+    // shift's own closing summary, so an unattributed or foreign-shift sale
+    // could never be reconciled.
+    //
+    // **Any of the cashier's phones, since 2026-09-29.** A shift belongs to
+    // the person: a second phone they sign into joins it, and so does a phone
+    // reinstalled mid-shift. The sale still names the phone that rang it up -
+    // its receipt counter lives there - but no longer has to be the phone that
+    // opened the shift. This only widens what is accepted, so every sale an
+    // earlier build sends still commits.
     //
     // A closed shift is deliberately still accepted: an offline sale may reach
     // the server after its shift closed, and refusing it would strand evidence
@@ -162,7 +176,6 @@ service cloud.firestore {
       let shift = get(shiftPath(tenantId, sale.shiftId));
       return shift != null
         && shift.data.staffId == request.auth.uid
-        && shift.data.deviceId == sale.deviceId
         && shift.data.businessDate == sale.businessDate;
     }
 
@@ -398,7 +411,9 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
-      // A shift is opened and closed by its own cashier on one device. The
+      // A shift is opened and closed by its own cashier. `deviceId` names the
+      // phone that opened it and never changes; any phone the cashier signs
+      // into may sell into it and close it. The
       // document repeats its identity so a client cannot file a shift under
       // another business, and both lifecycle instants are server-owned so a
       // device clock can never decide when a shift began or ended.

@@ -788,6 +788,8 @@ void main() {
       '60',
     );
     await tester.pump();
+    // "Category added" sits over the form's actions until it goes.
+    await _waitOutSnackBar(tester);
     await tester.tap(
       find.byKey(const ValueKey('catalog-management-add-product')),
     );
@@ -798,6 +800,71 @@ void main() {
     final product = writer.products.single;
     expect(product.categoryId, category.categoryId);
     expect(product.categoryName, 'Cold drinks');
+  });
+
+  testWidgets('an inline photograph keeps a category added from the form', (
+    tester,
+  ) async {
+    // The inline upload builds the product a second time, with its URL. Until
+    // 2026-09-30 that second build knew only the categories the catalog was
+    // read with, so the new one was refused as `unknown_category` after the
+    // photograph had already gone up, and the product was never written.
+    FilePicker.platform = _FilePicker(_onePixelPng);
+    final imageStore = _ImageStore();
+    final writer = _Writer();
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: writer,
+      imageStore: imageStore,
+    );
+    await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-product-category')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add new category').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-category-name')),
+      'Cold drinks',
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-add-category')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-product-name')),
+      'Soda',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-product-sku')),
+      'S-1',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-product-price')),
+      '60',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('inventory-choose-product-image')),
+    );
+    await tester.pumpAndSettle();
+    await _waitOutSnackBar(tester);
+    await _confirmProduct(tester);
+
+    final category = writer.categories.single;
+    final product = writer.products.single;
+    expect(product.categoryId, category.categoryId);
+    expect(imageStore.uploads, hasLength(1));
+    expect(product.imageUrl, imageStore.uploads.single.url);
+    expect(imageStore.removed, isEmpty);
   });
 
   testWidgets('cancelling the category sheet leaves the choice as it was', (

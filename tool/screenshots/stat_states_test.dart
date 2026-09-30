@@ -17,6 +17,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/ui/card.dart';
 import 'package:uzapay_pos/ui/stats.dart';
 import 'package:uzapay_pos/ui/status.dart';
 import 'package:uzapay_pos/ui/tokens.dart';
@@ -42,6 +43,74 @@ class _StatMatrix extends StatelessWidget {
       body: SingleChildScrollView(
         padding: EdgeInsets.all(tokens.spacing.s20),
         child: StatRow(tiles: tiles),
+      ),
+    );
+  }
+}
+
+/// The home's grid: nested tiles with their glyphs in wells, in the panel the
+/// home draws round them.
+///
+/// **Every reading a home tile can give, in one panel**: money, a count, the em
+/// dash of a day nothing was counted for, a badge on unsent sales, a detail
+/// line, and a loss.
+class _HomeGridMatrix extends StatelessWidget {
+  const _HomeGridMatrix();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final accent = tokens.colors.accent;
+    final green = accent.identityAt(AppIdentityAccent.green);
+    return Scaffold(
+      appBar: AppBar(title: const Text('StatTile - nested, on the home')),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(tokens.spacing.s20),
+        child: AppCard(
+          padding: EdgeInsets.all(tokens.spacing.s8),
+          radius: tokens.radius.xl,
+          child: StatRow(
+            gap: tokens.spacing.s8,
+            tiles: <StatTile>[
+              StatTile(
+                label: "Today's sales",
+                value: 'KES 910.00',
+                money: true,
+                icon: Icons.payments_outlined,
+                accent: tokens.colors.text.money,
+                nested: true,
+                status: AppStatus.attention,
+                statusLabel: '2 not sent',
+              ),
+              StatTile(
+                label: 'Transactions',
+                value: '23',
+                icon: Icons.receipt_long_outlined,
+                accent: accent.identityAt(AppIdentityAccent.blue),
+                nested: true,
+              ),
+              StatTile(
+                label: 'Shifts',
+                value: '—',
+                icon: Icons.schedule_outlined,
+                accent: tokens.colors.text.secondary,
+                nested: true,
+                detail: 'Opened today',
+              ),
+              StatTile(
+                label: 'Net profit',
+                value: 'KES -241.50',
+                money: true,
+                icon: Icons.savings_outlined,
+                accent: green,
+                nested: true,
+                status: AppStatus.problem,
+                statusLabel: 'Loss',
+                detail: 'After cost of goods and expenses',
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -201,6 +270,12 @@ void main() {
         ),
       ],
     ),
+  );
+
+  screenshotCase(
+    '97-stat-home-grid',
+    viewports: responsiveViewports,
+    build: () => const _HomeGridMatrix(),
   );
 
   screenshotCase(

@@ -23,6 +23,104 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
+  group('the number as printed', () {
+    // Chosen by the product owner on 2026-09-29: the cashier's first name, the
+    // till and the day's sequence. The stored number is untouched.
+    const stored = 'CT-7F2-20260929-0001';
+
+    test('leads with the first name and drops the date', () {
+      expect(
+        printedCheckoutReceiptNumber(stored, servedBy: 'John Kamau'),
+        'JOHN-CT-7F2-001',
+      );
+    });
+
+    test('prints the till and sequence alone where there is no name', () {
+      for (final servedBy in <String?>[null, '', '   ', '--']) {
+        expect(
+          printedCheckoutReceiptNumber(stored, servedBy: servedBy),
+          'CT-7F2-001',
+          reason: '$servedBy',
+        );
+      }
+    });
+
+    test('keeps a long name to ten letters and drops punctuation', () {
+      expect(
+        printedCheckoutReceiptNumber(stored, servedBy: 'Wanjiru-Nyambura'),
+        'WANJIRUNYA-CT-7F2-001',
+      );
+      expect(
+        printedCheckoutReceiptNumber(stored, servedBy: "O'Brien"),
+        'OBRIEN-CT-7F2-001',
+      );
+    });
+
+    test('keeps a letter the printer will substitute rather than losing it', () {
+      // `ReceiptText.forPrinter` maps it on the way to paper; dropping it here
+      // would shorten a name without trace.
+      expect(
+        printedCheckoutReceiptNumber(stored, servedBy: 'Gĩkũyũ'),
+        'GĨKŨYŨ-CT-7F2-001',
+      );
+    });
+
+    test('pads to three digits and widens rather than wrapping', () {
+      for (final (sequence, printed) in <(String, String)>[
+        ('0001', '001'),
+        ('0999', '999'),
+        ('1000', '1000'),
+        ('123456', '123456'),
+      ]) {
+        expect(
+          printedCheckoutReceiptNumber(
+            'CT-7F2-20260929-$sequence',
+            servedBy: 'John',
+          ),
+          'JOHN-CT-7F2-$printed',
+        );
+      }
+    });
+
+    test('returns a number it cannot read exactly as it is', () {
+      // A customer must never be handed a receipt with no number on it.
+      expect(
+        printedCheckoutReceiptNumber('not-a-receipt', servedBy: 'John'),
+        'not-a-receipt',
+      );
+    });
+
+    test('reads back as the till and sequence, with or without the rest', () {
+      for (final typed in <String>[
+        'JOHN-CT-7F2-001',
+        'john-ct-7f2-001',
+        ' CT-7F2-001 ',
+        '7F2-001',
+        'JOHN-7F2-1',
+        'GĨKŨYŨ-CT-7F2-001',
+      ]) {
+        final reference = parsePrintedCheckoutReceipt(typed);
+        expect(reference, isNotNull, reason: typed);
+        expect(reference!.deviceCode, '7F2', reason: typed);
+        expect(reference.sequence, 1, reason: typed);
+      }
+    });
+
+    test('reads nothing that is not a printed number', () {
+      for (final typed in <String>[
+        '',
+        '0042',
+        stored,
+        'JOHN-CT-7G2-001',
+        'JOHN-CT-7F2-000',
+        'JOHN-CT-7F2-1000000',
+        'JOHN CT-7F2-001',
+      ]) {
+        expect(parsePrintedCheckoutReceipt(typed), isNull, reason: typed);
+      }
+    });
+  });
+
   group('frozen receipt shape', () {
     test('emits the CT-A7F-20260729-0042 shape', () {
       final receipt = formatCheckoutReceiptNumber(

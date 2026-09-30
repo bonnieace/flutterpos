@@ -200,6 +200,44 @@ void main() {
       );
     });
 
+    test('a count short on both figures names sales it did not include', () {
+      // Since 2026-09-29 a shift spans the cashier's phones and its close
+      // states what the server held then. Short on both counts is sales that
+      // arrived afterwards, or that an older build's close never counted -
+      // nothing missing, and the record says which.
+      final shift = _anomaly(<String, Object?>{
+        'shiftId': 'shift-a',
+        'anomalyType': 'shift_variance',
+        'salesVariance': -12.5,
+        'transactionVariance': -2,
+      });
+
+      expect(
+        reconciliationDifferenceFigures(shift),
+        '2 sales worth 12.50 were not in this shift’s count.',
+      );
+      expect(
+        reconciliationDifferenceExplanation(shift),
+        'They were rung up on another phone or reached the server after the '
+        'drawer was counted.',
+      );
+
+      final one = _anomaly(<String, Object?>{
+        'shiftId': 'shift-a',
+        'anomalyType': 'shift_variance',
+        'salesVariance': -4,
+        'transactionVariance': -1,
+      });
+      expect(
+        reconciliationDifferenceFigures(one),
+        '1 sale worth 4 was not in this shift’s count.',
+      );
+      expect(
+        reconciliationDifferenceExplanation(one),
+        startsWith('It was rung up'),
+      );
+    });
+
     test('an unmodelled kind is named, and says it cannot be explained', () {
       // Both halves matter: hiding a real difference would be far worse than
       // naming it, and the list used to state the kind and then say nothing at

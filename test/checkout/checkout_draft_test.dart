@@ -259,6 +259,174 @@ void main() {
     expect(outboxBox.keys, isEmpty);
   });
 
+  test('freezes each product\'s code onto its line', () async {
+    final record = await _service(sessions, cache, outbox, receipts, clock)
+        .createDraft(
+          CheckoutDraftRequest(
+            tender: CheckoutTender.cash,
+            lines: const [
+              CheckoutDraftLineRequest(productId: 'product-a', quantity: 1),
+            ],
+          ),
+        );
+
+    final items = record.payload['items']! as List<Object?>;
+    expect((items.single! as Map<String, Object?>)['sku'], 'sku-product-a');
+    final payload = CheckoutSalePayload.fromOutboxRecord(
+      record,
+      session: sessions.requireSession(),
+    );
+    expect(payload.lines.single.sku, 'sku-product-a');
+    final written =
+        payload.toSubmission().saleFields['items']! as List<Object?>;
+    expect(
+      (written.single! as Map<String, Object?>)['sku'],
+      'sku-product-a',
+    );
+  });
+
+  group('a price agreed at the till', () {
+    test('records the listed lines, what came off, and why', () async {
+      final record = await _service(sessions, cache, outbox, receipts, clock)
+          .createDraft(
+            CheckoutDraftRequest(
+              tender: CheckoutTender.cash,
+              lines: const [
+                CheckoutDraftLineRequest(productId: 'product-a', quantity: 2),
+                CheckoutDraftLineRequest(productId: 'product-b', quantity: 3),
+              ],
+              agreedPrice: const CheckoutAgreedPrice(
+                totalMinor: 25000,
+                reason: '  Bought five  ',
+              ),
+            ),
+          );
+
+      // The lines keep the listed prices; the agreement is the difference.
+      expect(record.payload['subtotalMinor'], 26200);
+      expect(record.payload['discountMinor'], 1200);
+      expect(record.payload['totalMinor'], 25000);
+      expect(record.payload['discountReason'], 'Bought five');
+
+      final payload = CheckoutSalePayload.fromOutboxRecord(
+        record,
+        session: sessions.requireSession(),
+      );
+      expect(payload.lines.first.unitPriceMinor, 12050);
+      expect(payload.discountReason, 'Bought five');
+      expect(payload.toSubmission().saleFields['discountReason'], 'Bought five');
+    });
+
+    test('a sale at the listed prices records no reason at all', () async {
+      final record = await _service(sessions, cache, outbox, receipts, clock)
+          .createDraft(
+            CheckoutDraftRequest(
+              tender: CheckoutTender.cash,
+              lines: const [
+                CheckoutDraftLineRequest(productId: 'product-b', quantity: 1),
+              ],
+            ),
+          );
+
+      expect(record.payload['discountMinor'], 0);
+      expect(record.payload.containsKey('discountReason'), isFalse);
+    });
+
+    test('is refused outside the listed total, or without a reason', () async {
+      final service = _service(sessions, cache, outbox, receipts, clock);
+      Future<void> expectCode(CheckoutAgreedPrice agreed, String code, {
+        int discountMinor = 0,
+      }) => expectLater(
+        service.createDraft(
+          CheckoutDraftRequest(
+            tender: CheckoutTender.cash,
+            // Three at 7.00: a listed total of 21.00.
+            lines: const [
+              CheckoutDraftLineRequest(productId: 'product-b', quantity: 3),
+            ],
+            discountMinor: discountMinor,
+            agreedPrice: agreed,
+          ),
+        ),
+        throwsA(
+          isA<CheckoutDraftException>().having(
+            (error) => error.code,
+            'code',
+            code,
+          ),
+        ),
+        reason: '${agreed.totalMinor} "${agreed.reason}"',
+      );
+
+      const reason = 'Bought three';
+      await expectCode(
+        const CheckoutAgreedPrice(totalMinor: 2100, reason: reason),
+        'agreed_price_out_of_range',
+      );
+      await expectCode(
+        const CheckoutAgreedPrice(totalMinor: 2200, reason: reason),
+        'agreed_price_out_of_range',
+      );
+      await expectCode(
+        const CheckoutAgreedPrice(totalMinor: 0, reason: reason),
+        'agreed_price_out_of_range',
+      );
+      await expectCode(
+        const CheckoutAgreedPrice(totalMinor: 2000, reason: '   '),
+        'agreed_price_reason_required',
+      );
+      await expectCode(
+        const CheckoutAgreedPrice(totalMinor: 2000, reason: 'ok'),
+        'agreed_price_reason_required',
+      );
+      await expectCode(
+        CheckoutAgreedPrice(
+          totalMinor: 2000,
+          reason: 'x' * (maximumCheckoutDiscountReasonLength + 1),
+        ),
+        'agreed_price_reason_required',
+      );
+      // Two ways of taking money off one sale could only disagree.
+      await expectCode(
+        const CheckoutAgreedPrice(totalMinor: 2000, reason: reason),
+        'invalid_discount',
+        discountMinor: 50,
+      );
+      expect(outboxBox.keys, isEmpty);
+    });
+
+    test('is taken off the total the cache prices, not the cart', () async {
+      // The cart agreed 20.00 against three at 7.00; the price moved to 8.00
+      // before the save. The customer still pays what they were told.
+      await cache.write(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        configuration: TenantCheckoutConfiguration(currency: 'KES'),
+        categories: [_category('tenant-a', 'drinks')],
+        products: [_product('tenant-a', 'product-b', price: 8)],
+        complete: true,
+      );
+
+      final record = await _service(sessions, cache, outbox, receipts, clock)
+          .createDraft(
+            CheckoutDraftRequest(
+              tender: CheckoutTender.cash,
+              lines: const [
+                CheckoutDraftLineRequest(productId: 'product-b', quantity: 3),
+              ],
+              agreedPrice: const CheckoutAgreedPrice(
+                totalMinor: 2000,
+                reason: 'Bought three',
+              ),
+            ),
+          );
+
+      expect(record.payload['subtotalMinor'], 2400);
+      expect(record.payload['discountMinor'], 400);
+      expect(record.payload['totalMinor'], 2000);
+    });
+  });
+
   test('refuses a draft without a cached catalog for this session', () async {
     sessions.open(uid: 'user-a', membership: _membership('tenant-b'));
 

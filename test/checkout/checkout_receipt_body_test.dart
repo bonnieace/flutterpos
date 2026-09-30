@@ -86,7 +86,11 @@ void main() {
       final bytes = body().build(_sale(), servedBy: 'Amina');
       final text = latin1.decode(bytes, allowInvalid: true);
 
-      expect(text, contains(_sale().receiptNumber));
+      // **The number as printed, since 2026-09-29**: the cashier's first name,
+      // the till and the day's sequence. The stored `CT-8F8-20260729-0042` is
+      // unchanged; the date it carried is the line under it.
+      expect(text, contains('AMINA-CT-8F8-042'));
+      expect(text, isNot(contains(_sale().receiptNumber)));
       expect(text, contains('2026-07-29'));
       expect(text, contains('Maize flour 2kg'));
       expect(text, contains('Sugar 1kg'));
@@ -118,6 +122,42 @@ void main() {
       expect(text, isNot(contains('KES')));
     });
 
+    test('prints each line\'s code after its name, wrapping with it', () {
+      // 58mm: `2 x Maize flour 2kg 6161100000019` is past the 21-character
+      // name column, so the code wraps - whole - onto the row the amount is
+      // on, directly under the name it follows.
+      final narrow = latin1
+          .decode(
+            body().build(_sale(sku: '6161100000019')),
+            allowInvalid: true,
+          )
+          .split('\n');
+      final name = narrow.indexWhere((row) => row.contains('Maize flour 2kg'));
+      final code = narrow.indexWhere((row) => row.contains('6161100000019'));
+      expect(code, name + 1);
+      expect(narrow[code], contains('KES 271.00'));
+
+      // 80mm: the whole line fits its 37-character column, amount and all.
+      final wide = latin1
+          .decode(
+            body(
+              width: PrinterPaperWidth.columns48,
+            ).build(_sale(sku: '6161100000019')),
+            allowInvalid: true,
+          )
+          .split('\n');
+      final row = wide.singleWhere(
+        (row) => row.contains('2 x Maize flour 2kg 6161100000019'),
+      );
+      expect(row, contains('KES 271.00'));
+
+      // *Sugar 1kg* was sold with no code recorded, and prints none.
+      expect(
+        wide.singleWhere((row) => row.contains('Sugar 1kg')),
+        contains('1 x Sugar 1kg '),
+      );
+    });
+
     test('omits the discount line when there was no discount', () {
       // A permanent `Discount KES 0.00` teaches a customer to ignore the line,
       // which is the one place it matters.
@@ -142,18 +182,25 @@ void main() {
       expect(text, contains(CheckoutTender.mpesa.label));
     });
 
-    test('says a tender was not recorded rather than leaving a blank', () {
-      // **Asserted on the mapping rather than through a payload, because a
-      // payload cannot reach it**: `CheckoutSalePayload` refuses a sale with no
-      // tender outright - `tender must name one of the recorded payment
-      // methods`. So this branch is defensive, and it stays because the
-      // formatter takes a nullable tender from an enum that models one. A
-      // blank beside "Paid by" reads as a printer fault rather than as missing
-      // data.
-      expect(ReceiptWords.tender(null), 'Not recorded');
+    test('prints no payment line for a sale that names no method', () {
+      // **No "Not recorded" since 2026-09-29**, at the product owner's
+      // direction. A blank beside "Paid by" would read as a printer fault, so
+      // the label goes with the value: the line is simply not there. A v2 sale
+      // may legitimately carry no tender - the method is set afterwards from
+      // the sale's own card - so this is a receipt a till really prints.
+      expect(ReceiptWords.tender(null), isNull);
 
-      final text = latin1.decode(body().build(_sale()), allowInvalid: true);
-      expect(text, contains(ReceiptWords.paidByLabel));
+      final unpaid = latin1.decode(
+        body().build(_sale(tender: null)),
+        allowInvalid: true,
+      );
+      expect(unpaid, isNot(contains(ReceiptWords.paidByLabel)));
+      expect(unpaid, isNot(contains('Not recorded')));
+      // The rest of the footer is still there.
+      expect(unpaid, contains(ReceiptWords.footer));
+
+      final paid = latin1.decode(body().build(_sale()), allowInvalid: true);
+      expect(paid, contains(ReceiptWords.paidByLabel));
     });
 
     test('heads an unnamed business rather than printing its ID', () {
@@ -290,10 +337,9 @@ void main() {
         // the price column belongs and the receipt stopped reading as a table.
         final long = 'Sunflower cooking oil 5 litre refined and bottled';
         final lines = printedLines(
-          body(width: width).build(
-            _sale(name: long, onlyOneLine: true),
-            servedBy: 'Wanjiku',
-          ),
+          body(
+            width: width,
+          ).build(_sale(name: long, onlyOneLine: true), servedBy: 'Wanjiku'),
         );
 
         final amount = lines.singleWhere(
@@ -357,10 +403,9 @@ void main() {
         // every character is on the paper, on the next row.
         final long = 'A' * (width.columns * 2 + 5);
         final lines = printedLines(
-          body(width: width).build(
-            _sale(name: long, onlyOneLine: true),
-            servedBy: 'Wanjiku',
-          ),
+          body(
+            width: width,
+          ).build(_sale(name: long, onlyOneLine: true), servedBy: 'Wanjiku'),
         );
         // Only the rows between the provenance rule and the totals rule, so a
         // stray capital in the heading or the receipt number cannot be counted.
@@ -374,7 +419,6 @@ void main() {
             .join();
         expect(letters.length, long.length);
       });
-
     }
   });
 
@@ -383,10 +427,7 @@ void main() {
       // A cut command to a printer without one is ignored by some models and
       // prints a control character on others.
       expect(_indexOf(body().build(_sale()), _gsV), isNonNegative);
-      expect(
-        _indexOf(body(hasCutter: false).build(_sale()), _gsV),
-        -1,
-      );
+      expect(_indexOf(body(hasCutter: false).build(_sale()), _gsV), -1);
     });
 
     test('maps the two stored roll widths to the generator paper sizes', () {
@@ -397,10 +438,7 @@ void main() {
     test('both rolls produce the same lines, in different widths', () {
       // The shape does not change with the roll: a receipt with two layouts is
       // two things to reason about and nobody compares them side by side.
-      final narrow = latin1.decode(
-        body().build(_sale()),
-        allowInvalid: true,
-      );
+      final narrow = latin1.decode(body().build(_sale()), allowInvalid: true);
       final wide = latin1.decode(
         body(width: PrinterPaperWidth.columns48).build(_sale()),
         allowInvalid: true,
@@ -476,6 +514,7 @@ CheckoutSalePayload _sale({
   int discountMinor = 0,
   Object? tender = 'cash',
   String name = 'Maize flour 2kg',
+  String? sku,
   bool onlyOneLine = false,
 }) {
   const deviceId = 'dev-0123456789abcdef0123456789abcdef';
@@ -483,6 +522,7 @@ CheckoutSalePayload _sale({
     <String, Object?>{
       'productId': 'product-a',
       'name': name,
+      if (sku != null) 'sku': sku,
       'quantity': 2,
       'unitPriceMinor': 13550,
     },

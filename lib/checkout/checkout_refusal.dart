@@ -1,4 +1,5 @@
 import 'checkout_draft.dart';
+import 'checkout_sale.dart';
 
 /// What the till tells a cashier when a checkout draft is refused.
 ///
@@ -142,6 +143,22 @@ final class CheckoutRefusal {
     'invalid_discount' => const CheckoutRefusal._(
       'invalid_discount',
       'The discount cannot be negative or larger than the sale.',
+      cashierCanFix: true,
+    ),
+    // The draft builder re-prices every line from the cache, so a listed
+    // price that changed since the cart was drawn can put the agreed total at
+    // or above the new listed one. The cashier agrees it again.
+    'agreed_price_out_of_range' => const CheckoutRefusal._(
+      'agreed_price_out_of_range',
+      'The agreed price must be more than nothing and less than the listed '
+          'total. The listed prices may have just changed on this device: '
+          'agree the price again.',
+      cashierCanFix: true,
+    ),
+    'agreed_price_reason_required' => const CheckoutRefusal._(
+      'agreed_price_reason_required',
+      'Say why the price was agreed, in at least '
+          '$minimumCheckoutDiscountReasonLength characters, before saving.',
       cashierCanFix: true,
     ),
     'invalid_product_id' => const CheckoutRefusal._(

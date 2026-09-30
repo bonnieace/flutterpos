@@ -57,6 +57,7 @@ final class _DialogFrame extends StatelessWidget {
     this.title,
     this.maximumWidth,
     this.scrollable = true,
+    this.centerTitle = false,
   });
 
   final String? title;
@@ -68,6 +69,9 @@ final class _DialogFrame extends StatelessWidget {
   final double? maximumWidth;
 
   final bool scrollable;
+
+  /// See [AppDialog.centerTitle].
+  final bool centerTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +109,7 @@ final class _DialogFrame extends StatelessWidget {
           ? null
           : Text(
               title!,
+              textAlign: centerTitle ? TextAlign.center : TextAlign.start,
               style: tokens.typography.titleMedium.copyWith(
                 color: tokens.colors.text.primary,
               ),
@@ -155,7 +160,16 @@ final class AppDialog extends StatelessWidget {
     this.title,
     this.actions = const <Widget>[],
     this.scrollable = true,
+    this.centerTitle = false,
   });
+
+  /// Whether [title] sits centred over its content rather than at the start.
+  ///
+  /// **Off by default, so every existing dialog is unchanged.** Added on
+  /// 2026-09-29 for *Start your shift*, whose content is a centred picture and
+  /// a single field: a heading at the start edge over a centred picture reads
+  /// as two things rather than one.
+  final bool centerTitle;
 
   /// The verb, matching the control that opened it. §8 rule 4.
   ///
@@ -197,6 +211,7 @@ final class AppDialog extends StatelessWidget {
     actions: actions,
     maximumWidth: maximumWidth,
     scrollable: scrollable,
+    centerTitle: centerTitle,
   );
 }
 

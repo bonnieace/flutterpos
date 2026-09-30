@@ -149,6 +149,145 @@ void main() {
     });
   });
 
+  group("the home's tile: a card in a panel, with its glyph in a well", () {
+    final blue = _tokens.colors.accent.identityAt(AppIdentityAccent.blue);
+
+    testWidgets('an accent draws the glyph in a tinted well', (tester) async {
+      await _pump(
+        tester,
+        StatTile(
+          label: 'Transactions',
+          value: '23',
+          icon: Icons.receipt_long_outlined,
+          accent: blue,
+          nested: true,
+        ),
+      );
+
+      final well = find.ancestor(
+        of: find.byIcon(Icons.receipt_long_outlined),
+        matching: find.byType(Container),
+      );
+      expect(tester.getSize(well.first), const Size.square(StatTile.glyphWell));
+      final decoration =
+          tester.widget<Container>(well.first).decoration! as BoxDecoration;
+      expect(
+        decoration.color,
+        blue.withValues(alpha: StatTile.glyphWellTint),
+      );
+      expect(
+        tester.widget<Icon>(find.byIcon(Icons.receipt_long_outlined)).color,
+        blue,
+      );
+    });
+
+    testWidgets('a glyph with no accent is the caption grey, with no well', (
+      tester,
+    ) async {
+      await _pump(tester, _tile('Ledger entries', '12'));
+
+      expect(
+        tester.widget<Icon>(find.byIcon(Icons.payments_outlined)).color,
+        _tokens.colors.text.secondary,
+      );
+      expect(
+        find.ancestor(
+          of: find.byIcon(Icons.payments_outlined),
+          matching: find.byType(Container),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a nested tile is one surface step up, at `radius.lg`', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const StatTile(label: 'Shifts', value: '2', nested: true),
+      );
+
+      final box = tester.widget<DecoratedBox>(
+        find
+            .descendant(
+              of: find.byType(StatTile),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      final decoration = box.decoration as BoxDecoration;
+      expect(decoration.color, _tokens.colors.surface.overlay);
+      expect(
+        (decoration.border! as Border).top.color,
+        _tokens.colors.surface.cardEdge,
+      );
+      expect(
+        decoration.borderRadius,
+        BorderRadius.circular(_tokens.radius.lg),
+      );
+    });
+
+    testWidgets('a caption beside a well scales rather than being cut', (
+      tester,
+    ) async {
+      // A half-width tile on a narrow handset, where TRANSACTIONS at 12 does
+      // not fit beside a 32 well: the whole word is drawn, smaller.
+      await _pump(
+        tester,
+        SizedBox(
+          width: 140,
+          child: StatTile(
+            label: 'Transactions',
+            value: '23',
+            icon: Icons.receipt_long_outlined,
+            accent: blue,
+            nested: true,
+          ),
+        ),
+      );
+
+      final caption = tester.widget<Text>(find.text('TRANSACTIONS'));
+      expect(caption.overflow, isNot(TextOverflow.ellipsis));
+      expect(
+        find.ancestor(
+          of: find.text('TRANSACTIONS'),
+          matching: find.byType(FittedBox),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a nested detail line reads at body size', (tester) async {
+      await _pump(
+        tester,
+        const StatTile(
+          label: 'Shifts',
+          value: '2',
+          nested: true,
+          detail: 'Opened today',
+        ),
+      );
+
+      final detail = _styleOf(tester, 'Opened today');
+      expect(detail.fontSize, _tokens.typography.bodyMedium.fontSize);
+      expect(detail.color, _tokens.colors.text.tertiary);
+    });
+
+    testWidgets('a row takes the gap it is given', (tester) async {
+      await _pump(
+        tester,
+        StatRow(
+          gap: _tokens.spacing.s8,
+          tiles: <StatTile>[_tile('Sales', '1'), _tile('Transactions', '2')],
+        ),
+      );
+
+      final left = tester.getRect(find.byKey(const ValueKey('Sales')));
+      final right = tester.getRect(find.byKey(const ValueKey('Transactions')));
+      expect(right.left - left.right, _tokens.spacing.s8);
+    });
+  });
+
   group('a row measures what it holds', () {
     test('the minimum tile width is the widest figure plus the padding', () {
       final narrow = StatRow.minimumTileWidth(

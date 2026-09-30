@@ -592,6 +592,72 @@ void main() {
       },
     );
 
+    test("states every phone's sales where the server can count them", () async {
+      // This phone rang one sale; the cashier's other phone rang two more into
+      // the same shift. The close states all three, so reconciliation has only
+      // what arrives afterwards left to report.
+      final ledger = _Ledger()
+        ..summary = const ShiftSalesSummary(
+          transactionCount: 1,
+          totalMinor: 1000,
+          unsettledCount: 0,
+        );
+      final totals = _Totals(
+        const ShiftServerTotals(transactionCount: 3, totalMinor: 4500),
+      );
+      final controller = _controller(
+        sessions,
+        state,
+        server,
+        salesLedger: ledger,
+        serverTotals: totals,
+      );
+      await controller.openShift();
+      await controller.startCashCount();
+
+      await controller.closeShift(declaration: _declared(4500));
+
+      expect(totals.requested, <String>['shift-1']);
+      final update = server.updated.single.$2;
+      expect(update['transactionCount'], 3);
+      expect(update['totalSalesMinor'], 4500);
+    });
+
+    for (final (name, counted) in <(String, ShiftServerTotals?)>[
+      ('cannot be read', null),
+      (
+        'is below what this phone proves',
+        const ShiftServerTotals(transactionCount: 0, totalMinor: 0),
+      ),
+    ]) {
+      test(
+        "states this phone's own sales where the server count $name",
+        () async {
+          final ledger = _Ledger()
+            ..summary = const ShiftSalesSummary(
+              transactionCount: 2,
+              totalMinor: 3000,
+              unsettledCount: 0,
+            );
+          final controller = _controller(
+            sessions,
+            state,
+            server,
+            salesLedger: ledger,
+            serverTotals: _Totals(counted),
+          );
+          await controller.openShift();
+          await controller.startCashCount();
+
+          await controller.closeShift(declaration: _declared(3000));
+
+          final update = server.updated.single.$2;
+          expect(update['transactionCount'], 2);
+          expect(update['totalSalesMinor'], 3000);
+        },
+      );
+    }
+
     test('refuses to close while a sale is still unsynchronized', () async {
       final ledger = _Ledger()
         ..summary = const ShiftSalesSummary(
@@ -703,115 +769,164 @@ void main() {
       expect(server.created, isEmpty);
     });
 
-    test('never adopts a shift opened on another device', () async {
+    // **A shift belongs to its cashier on any phone, since 2026-09-29.** Every
+    // case below used to be a refusal - "open on another register", "opened by
+    // an earlier installation" - with at most a way to close the shift. They
+    // are joins now.
+    test('joins a shift opened on another phone', () async {
       server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = _document(
         overrides: <String, Object?>{
           'shiftId': 'shift-elsewhere',
           'deviceId': 'dev-fedcba9876543210fedcba9876543210',
+          'openingFloatMinor': 2000,
         },
       );
       final controller = _controller(sessions, state, server);
 
-      final result = await controller.openShift();
+      final result = await controller.restore(sessions.requireSession());
 
-      // **Opened alongside rather than refused, as of 2026-09-17.** The closing
-      // summary is still built from local sale evidence, so this device still
-      // cannot adopt that shift - but refusing bought no invariant, because the
-      // same two shifts appear whenever a till opens offline, and the refusal
-      // carried a force-close that took a live register's counted drawer away.
       expect(result.phase, TenantShiftPhase.open);
       expect(result.errorCode, isNull);
-      expect(server.created.single.$1, 'tenants/tenant-a/shifts/shift-1');
-      expect(server.created.single.$2['deviceId'], _deviceA);
-      final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
-      expect(record!.shiftId, 'shift-1');
-    });
-
-    test('never offers to close a shift on another phone', () async {
-      server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = _document(
-        overrides: <String, Object?>{
-          'shiftId': 'shift-elsewhere',
-          'deviceId': 'dev-fedcba9876543210fedcba9876543210',
-        },
-      );
-      final controller = _controller(sessions, state, server);
-
-      final result = await controller.restore(sessions.requireSession());
-
-      // It is said out loud - it is a fact about this cashier's day - but it is
-      // never named as closeable. That phone may simply be offline, which is
-      // what a till mid-count looks like from here.
-      expect(result.otherDeviceShiftOpen, isTrue);
-      expect(result.errorCode, 'shift_open_on_other_device');
-      expect(result.otherDeviceShiftId, isNull);
-    });
-
-    test('names an earlier installation of this same device', () async {
-      server.shifts['tenants/tenant-a/shifts/shift-before'] = _document(
-        overrides: <String, Object?>{
-          'shiftId': 'shift-before',
-          // The durable half of `_deviceA`, under a different installation
-          // half: this device, before the app was reinstalled on it.
-          'deviceId': 'dev-0123456789abcdef01234567deadbeef',
-        },
-      );
-      final controller = _controller(sessions, state, server);
-
-      final result = await controller.restore(sessions.requireSession());
-
-      // Still named - the closing summary comes from local sale evidence, which
-      // that installation took with it, so it is this phone's own orphan to
-      // settle - but it is `restore` that reports it now, because opening no
-      // longer waits on it.
-      expect(result.phase, TenantShiftPhase.none);
-      expect(result.errorCode, 'shift_open_on_earlier_install');
-      expect(result.otherDeviceShiftOpen, isTrue);
-      expect(result.otherDeviceShiftId, 'shift-before');
+      expect(result.otherDeviceShiftOpen, isFalse);
+      expect(result.shift!.id, 'shift-elsewhere');
       expect(server.created, isEmpty);
+      final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+      expect(record!.shiftId, 'shift-elsewhere');
+      // **This phone's id, not the opener's**: every sale bound to the record
+      // is stamped with it, and the checkout refuses a record naming another.
+      expect(record.deviceId, _deviceA);
+      expect(record.serverConfirmedOpen, isTrue);
+      expect(record.openingFloatMinor, 2000);
+      // Exactly as old here as on the phone that opened it.
+      expect(record.openedAt, DateTime.utc(2026, 7, 31, 6));
     });
 
-    test('prefers a shift this till itself opened', () async {
-      // A cashier who works two tills can have an open shift on each. The one
-      // *this* phone left behind is the one it can speak for, and a bare count
-      // of what was found would have offered neither.
-      server.shifts['tenants/tenant-a/shifts/shift-before'] = _document(
-        overrides: <String, Object?>{
-          'shiftId': 'shift-before',
-          'deviceId': 'dev-0123456789abcdef01234567deadbeef',
-        },
-      );
-      server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = _document(
-        overrides: <String, Object?>{
-          'shiftId': 'shift-elsewhere',
-          'deviceId': 'dev-ffffffffffffffffffffffffffffffff',
-        },
-      );
-      final controller = _controller(sessions, state, server);
-
-      final result = await controller.restore(sessions.requireSession());
-
-      expect(result.errorCode, 'shift_open_on_earlier_install');
-      expect(result.otherDeviceShiftId, 'shift-before');
-    });
-
-    test('offers nothing where two tills of this phone are open', () async {
-      // Two installs of this same phone, both with a shift open. Neither can be
-      // singled out, and closing the wrong one is worse than closing none.
-      for (final install in <String>['deadbeef', 'feedface']) {
-        server.shifts['tenants/tenant-a/shifts/shift-$install'] = _document(
+    test(
+      'opening joins a shift open elsewhere instead of standing beside it',
+      () async {
+        server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = _document(
           overrides: <String, Object?>{
-            'shiftId': 'shift-$install',
-            'deviceId': 'dev-0123456789abcdef01234567$install',
+            'shiftId': 'shift-elsewhere',
+            'deviceId': 'dev-fedcba9876543210fedcba9876543210',
           },
         );
-      }
+        final controller = _controller(sessions, state, server);
+
+        final result = await controller.openShift();
+
+        // Joining is simply the till opening, so it reports no refusal - unlike
+        // adopting this installation's own, which answers "already open".
+        expect(result.phase, TenantShiftPhase.open);
+        expect(result.errorCode, isNull);
+        expect(result.shift!.id, 'shift-elsewhere');
+        expect(server.created, isEmpty);
+      },
+    );
+
+    test(
+      'joins the shift an earlier install of this phone left open',
+      () async {
+        server.shifts['tenants/tenant-a/shifts/shift-before'] = _document(
+          overrides: <String, Object?>{
+            'shiftId': 'shift-before',
+            // The durable half of `_deviceA`, under a different installation
+            // half: this device, before the app was reinstalled on it.
+            'deviceId': 'dev-0123456789abcdef01234567deadbeef',
+          },
+        );
+        final controller = _controller(sessions, state, server);
+
+        final result = await controller.restore(sessions.requireSession());
+
+        // The case that started this: it used to be refused, and could only be
+        // closed from here.
+        expect(result.phase, TenantShiftPhase.open);
+        expect(result.errorCode, isNull);
+        expect(result.shift!.id, 'shift-before');
+        expect(server.created, isEmpty);
+      },
+    );
+
+    test(
+      "prefers this installation's own shift, and says there is another",
+      () async {
+        // Its outbox may still hold unsent sales stamped with it.
+        server.shifts['tenants/tenant-a/shifts/shift-mine'] = _document(
+          overrides: <String, Object?>{'shiftId': 'shift-mine'},
+        );
+        server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = _document(
+          overrides: <String, Object?>{
+            'shiftId': 'shift-elsewhere',
+            'deviceId': 'dev-fedcba9876543210fedcba9876543210',
+            'startTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 8)),
+          },
+        );
+        final controller = _controller(sessions, state, server);
+
+        final result = await controller.restore(sessions.requireSession());
+
+        expect(result.shift!.id, 'shift-mine');
+        expect(result.otherDeviceShiftOpen, isTrue);
+      },
+    );
+
+    test('joins the newest shift that can still take sales', () async {
+      // Yesterday's, left open past the cap, and two from today. The cashier is
+      // trading in the newest of today's; the others are for the count to sweep.
+      server.shifts['tenants/tenant-a/shifts/shift-yesterday'] = _document(
+        overrides: <String, Object?>{
+          'shiftId': 'shift-yesterday',
+          'deviceId': 'dev-fedcba9876543210fedcba9876543210',
+          'businessDate': '2026-07-30',
+          'startTime': Timestamp.fromDate(DateTime.utc(2026, 7, 30, 8)),
+        },
+      );
+      server.shifts['tenants/tenant-a/shifts/shift-early'] = _document(
+        overrides: <String, Object?>{
+          'shiftId': 'shift-early',
+          'deviceId': 'dev-ffffffffffffffffffffffffffffffff',
+          'startTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 5)),
+        },
+      );
+      server.shifts['tenants/tenant-a/shifts/shift-late'] = _document(
+        overrides: <String, Object?>{
+          'shiftId': 'shift-late',
+          'deviceId': 'dev-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          'startTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 7)),
+        },
+      );
       final controller = _controller(sessions, state, server);
 
       final result = await controller.restore(sessions.requireSession());
 
-      expect(result.errorCode, 'shift_open_on_earlier_install');
-      expect(result.otherDeviceShiftId, isNull);
+      expect(result.phase, TenantShiftPhase.open);
+      expect(result.shift!.id, 'shift-late');
+      expect(result.otherDeviceShiftOpen, isTrue);
     });
+
+    test(
+      'joins an expired shift as expired where nothing else is open',
+      () async {
+        // Exactly what the phone that opened it would show: count it off before
+        // another opens.
+        server.shifts['tenants/tenant-a/shifts/shift-yesterday'] = _document(
+          overrides: <String, Object?>{
+            'shiftId': 'shift-yesterday',
+            'deviceId': 'dev-fedcba9876543210fedcba9876543210',
+            'businessDate': '2026-07-30',
+            'startTime': Timestamp.fromDate(DateTime.utc(2026, 7, 30, 8)),
+          },
+        );
+        final controller = _controller(sessions, state, server);
+
+        final result = await controller.restore(sessions.requireSession());
+
+        expect(result.phase, TenantShiftPhase.expired);
+        expect(result.shiftExpired, isTrue);
+        expect(result.shift!.id, 'shift-yesterday');
+        expect(server.created, isEmpty);
+      },
+    );
 
     test('fails closed on two open shifts for one device', () async {
       for (final id in <String>['shift-one', 'shift-two']) {
@@ -884,11 +999,10 @@ void main() {
       );
     });
 
-    test('names more than one, where the old surface named none', () async {
-      // `otherDeviceShiftId` answers null for two candidates on purpose -
-      // closing the wrong one is worse than closing none - so a cashier holding
-      // three shifts had two of them silently left open. Closing all of them
-      // has no wrong one to pick.
+    test('never names the shift this phone joined', () async {
+      // Joined shifts carry another device's id, so excluding by device alone
+      // would offer the very shift this phone sells into as one to close
+      // without evidence. Same opening instant, so the tie goes by id.
       for (final install in <String>['deadbeef', 'feedface']) {
         server.shifts['tenants/tenant-a/shifts/shift-$install'] = _document(
           overrides: <String, Object?>{
@@ -902,11 +1016,8 @@ void main() {
       final restored = await controller.restore(sessions.requireSession());
       final ids = await controller.otherOpenShiftIds();
 
-      expect(restored.otherDeviceShiftId, isNull);
-      expect(
-        ids,
-        unorderedEquals(<String>['shift-deadbeef', 'shift-feedface']),
-      );
+      expect(restored.shift!.id, 'shift-feedface');
+      expect(ids, <String>['shift-deadbeef']);
     });
 
     test('names nothing rather than guessing when offline', () async {
@@ -1134,6 +1245,39 @@ void main() {
       expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
     });
 
+    test("the replay counts the server's sales as the close lands", () async {
+      // The cashier's other phone sent its sales while this one was offline;
+      // the replay is the first moment this phone can see them.
+      await state.save(
+        _record(closeInProgress: true, declaration: _declared(900)),
+      );
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      final offline = _controller(
+        sessions,
+        state,
+        server,
+        online: false,
+        serverTotals: _Totals(
+          const ShiftServerTotals(transactionCount: 9, totalMinor: 9999),
+        ),
+      );
+      await offline.closeShift(declaration: _declared(900));
+
+      await _controller(
+        sessions,
+        state,
+        server,
+        serverTotals: _Totals(
+          const ShiftServerTotals(transactionCount: 4, totalMinor: 5200),
+        ),
+      ).restore(sessions.requireSession());
+
+      final update = server.updated.single.$2;
+      expect(update['transactionCount'], 4);
+      expect(update['totalSalesMinor'], 5200);
+      expect(update['closingCashMinor'], 900);
+    });
+
     test('a close that still cannot be sent stays closed here', () async {
       await state.save(
         _record(closeInProgress: true, declaration: _declared(900)),
@@ -1215,6 +1359,7 @@ TenantShiftController _controller(
   VoidCallback? beforeCreate,
   VoidCallback? beforeRead,
   ShiftSalesLedger? salesLedger,
+  ShiftServerSalesTotals? serverTotals,
   TenantDataReader? reader,
 }) {
   var nextShift = 0;
@@ -1222,6 +1367,7 @@ TenantShiftController _controller(
     sessionController: sessions,
     localState: state,
     salesLedger: salesLedger ?? _Ledger(),
+    serverTotals: serverTotals,
     reader: reader ?? _Reader(server, beforeRead: beforeRead),
     writer: FirebaseTenantShiftWriter.forTesting(
       isOnline: () async => online,
@@ -1428,6 +1574,25 @@ final class _Ledger implements ShiftSalesLedger {
     final error = failure;
     if (error != null) throw error;
     return summary;
+  }
+}
+
+/// What the server would count for a shift, whichever phones sold into it.
+final class _Totals implements ShiftServerSalesTotals {
+  _Totals(this.totals);
+
+  /// Null answers as a failed or impossible count does.
+  ShiftServerTotals? totals;
+  final List<String> requested = <String>[];
+
+  @override
+  Future<ShiftServerTotals?> read({
+    required String tenantId,
+    required String uid,
+    required String shiftId,
+  }) async {
+    requested.add(shiftId);
+    return totals;
   }
 }
 

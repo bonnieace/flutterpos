@@ -4,6 +4,7 @@ export 'shift_declaration.dart';
 export 'shift_gate.dart';
 export 'shift_history.dart';
 export 'shift_history_panel.dart';
+export 'shift_home_card.dart';
 export 'shift_local_state.dart';
 export 'shift_panel.dart';
 export 'shift_sales_ledger.dart';

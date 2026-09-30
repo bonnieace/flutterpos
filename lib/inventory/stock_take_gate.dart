@@ -15,6 +15,16 @@
 ///
 /// **The obligation clears on handing in, not on approval or on drain.** See
 /// `TenantStockTakeObligationSource`.
+///
+/// **This device's copy first, then the server's, since 2026-09-29.** The gate
+/// used to read the schedule from this device alone, and nothing on a
+/// cashier's path ever fetched it, so the schedule reached a phone only if an
+/// owner or administrator had opened *Stock counts* on that same phone - and
+/// then only as it stood that day. Two emulators signed in as one owner showed
+/// it: the phone that saved the schedule was asked to count, the other was
+/// not; and once the schedule was set back to *Nothing*, the other went on
+/// asking. The copy still answers first, so the till opens with no signal; the
+/// server's answer follows and corrects it without holding anything up.
 library;
 
 import 'dart:async';
@@ -48,10 +58,16 @@ final class TenantStockTakeGate extends StatefulWidget {
     required this.obligations,
     required this.countRoute,
     required this.child,
+    this.refreshSchedule,
     this.businessDate,
   });
 
+  /// The schedule as this device holds it. Answers first, with no signal.
   final TenantStockTakeScheduleLoader loadSchedule;
+
+  /// The schedule as the server holds it, read after [loadSchedule] has
+  /// answered and never waited on. Absent, the device's copy is all there is.
+  final TenantStockTakeScheduleLoader? refreshSchedule;
   final TenantStockTakeObligationSource obligations;
   final TenantStockTakeRouteBuilder countRoute;
   final String Function()? businessDate;
@@ -78,6 +94,18 @@ class _TenantStockTakeGateState extends State<TenantStockTakeGate> {
   /// be dismissed for good would be a setting, and the setting is `off`.
   bool _declined = false;
 
+  /// The dialog's own context while it is up, so a newer schedule can take
+  /// back a question the older one asked.
+  BuildContext? _dialogContext;
+
+  /// Set when the dialog is closed because the schedule changed under it,
+  /// which is neither *Not now* nor a decision to leave.
+  bool _withdrawn = false;
+
+  /// Whether the counting screen is open over the till. The server's answer
+  /// can land while it is, and must not raise a question over it.
+  bool _counting = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -92,6 +120,9 @@ class _TenantStockTakeGateState extends State<TenantStockTakeGate> {
       checkoutBusinessDate(DateTime.now().toUtc());
 
   /// Reads the schedule and works out what is still owed.
+  ///
+  /// This device's copy answers first; the server's answer, when there is one,
+  /// is applied after it. See this file's header for why both.
   Future<void> _refresh() async {
     final session = _sessions?.session;
     if (session == null) return;
@@ -107,9 +138,36 @@ class _TenantStockTakeGateState extends State<TenantStockTakeGate> {
       // Fail open. See this file's header: the till must always open.
       published = const TenantPublishedStockTakeSchedule.absent();
     }
-    if (!mounted) return;
+    if (!mounted || !_isCurrent(session)) return;
+    _apply(session, published.schedule);
+
+    final refresh = widget.refreshSchedule;
+    if (refresh == null) return;
+    final TenantPublishedStockTakeSchedule fresh;
+    try {
+      fresh = await refresh(session);
+    } catch (_) {
+      // **Not reported.** With no signal this read fails every time, and that
+      // is the ordinary state of a till rather than a fault: the answer this
+      // device already had stands.
+      return;
+    }
+    if (!mounted || !_isCurrent(session)) return;
+    _apply(session, fresh.schedule);
+  }
+
+  /// Whether [session] is still the one this gate is guarding.
+  bool _isCurrent(TenantSession session) {
+    final current = _sessions?.session;
+    return current != null &&
+        current.uid == session.uid &&
+        current.tenantId == session.tenantId &&
+        current.epoch == session.epoch;
+  }
+
+  /// Works out what [schedule] still asks of this person, and acts on it.
+  void _apply(TenantSession session, TenantStockTakeSchedule schedule) {
     final businessDate = _businessDate;
-    final schedule = published.schedule;
     final satisfied = widget.obligations.satisfiedScopes(
       uid: session.uid,
       tenantId: session.tenantId,
@@ -122,11 +180,43 @@ class _TenantStockTakeGateState extends State<TenantStockTakeGate> {
       ))
         if (!satisfied.contains(scope.scopeKey)) scope,
     ];
+    final changed =
+        schedule.enforcement != _enforcement ||
+        !_sameScopes(outstanding, _outstanding);
     setState(() {
       _outstanding = outstanding;
       _enforcement = schedule.enforcement;
     });
+    // **A question about a schedule that has since changed is taken back**
+    // rather than left standing. The server can answer after this device's
+    // copy has already asked - a count switched off, or turned from a prompt
+    // into a hold - and a dialog that went on saying the old thing would be
+    // the stale answer this read exists to correct. Its handler raises
+    // whatever the new schedule asks for.
+    if (changed && _gateUp) {
+      _withdrawGate();
+      return;
+    }
+    if (_counting) return;
     WidgetsBinding.instance.addPostFrameCallback((_) => _raiseIfNeeded());
+  }
+
+  static bool _sameScopes(
+    List<TenantStockTakeScope> a,
+    List<TenantStockTakeScope> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].scopeKey != b[i].scopeKey) return false;
+    }
+    return true;
+  }
+
+  void _withdrawGate() {
+    final dialog = _dialogContext;
+    if (dialog == null || !dialog.mounted) return;
+    _withdrawn = true;
+    Navigator.of(dialog).pop();
   }
 
   bool get _blocking =>
@@ -147,19 +237,30 @@ class _TenantStockTakeGateState extends State<TenantStockTakeGate> {
     final blocking = _blocking;
     final answer = await showAppDialog<bool>(
       context,
-      builder: (dialogContext) => _StockTakeGateDialog(
-        scope: _outstanding.first,
-        remaining: _outstanding.length,
-        blocking: blocking,
-        onCount: () => Navigator.of(dialogContext).pop(true),
-        onLater: blocking ? null : () => Navigator.of(dialogContext).pop(false),
-      ),
+      builder: (dialogContext) {
+        _dialogContext = dialogContext;
+        return _StockTakeGateDialog(
+          scope: _outstanding.first,
+          remaining: _outstanding.length,
+          blocking: blocking,
+          onCount: () => Navigator.of(dialogContext).pop(true),
+          onLater: blocking
+              ? null
+              : () => Navigator.of(dialogContext).pop(false),
+        );
+      },
     );
+    _dialogContext = null;
     if (!mounted) {
       _gateUp = false;
       return;
     }
     _gateUp = false;
+    if (_withdrawn) {
+      _withdrawn = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _raiseIfNeeded());
+      return;
+    }
     if (answer == true) {
       await _count(_outstanding.first);
     } else if (!blocking) {
@@ -174,14 +275,19 @@ class _TenantStockTakeGateState extends State<TenantStockTakeGate> {
   Future<void> _count(TenantStockTakeScope scope) async {
     final sessions = _sessions;
     if (sessions == null || !mounted) return;
-    await Navigator.of(context).push(
-      AppPageRoute<void>(
-        builder: (routeContext) => TenantSessionScope(
-          controller: sessions,
-          child: widget.countRoute(routeContext, scope),
+    _counting = true;
+    try {
+      await Navigator.of(context).push(
+        AppPageRoute<void>(
+          builder: (routeContext) => TenantSessionScope(
+            controller: sessions,
+            child: widget.countRoute(routeContext, scope),
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _counting = false;
+    }
     if (!mounted) return;
     // Back from the counting screen: whether they finished decides whether the
     // question comes again, and the obligation record is what says so.

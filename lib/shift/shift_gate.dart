@@ -246,16 +246,7 @@ class _TenantShiftGateState extends State<TenantShiftGate>
     _gateUp = true;
     await showAppDialog<void>(
       context,
-      builder: (dialogContext) => _ShiftGateDialog(
-        shifts: shifts,
-        // **The way out of a shift this device cannot adopt.** Without it the
-        // refusal in this dialog is terminal: `Open shift` repeats it and names
-        // a device the cashier may well be holding, and the only remedy left is
-        // an edit to the database. The sheet already draws the declaration and
-        // the recovery close - see `_ShiftCount` - so this is the door to it
-        // rather than a second copy of it.
-        onCloseOrphanShift: _closeShift,
-      ),
+      builder: (dialogContext) => _ShiftGateDialog(shifts: shifts),
     );
     if (!mounted) return;
     _gateUp = false;
@@ -411,21 +402,13 @@ class _TenantShiftGateState extends State<TenantShiftGate>
           ErrorState(
             status: AppStatus.attention,
             badgeLabel: 'Shift over',
-            // **Two things reach this state and the copy must be true of
-            // both.** One shift has been open past its day; the other is filed
-            // under a day that has not arrived, because the device's clock was
-            // wrong when it opened and has since been corrected. Naming the
-            // duration was false for the second, and the second is the one
-            // where a wrong figure had already been written - so this says the
-            // part that always holds, and the count below is the way out of
-            // either.
-            statement: 'This shift can no longer take sales.',
-            detail:
-                'Count it off to finish it. That works with no connection: '
-                'the count is saved here and reaches the server on its own.',
-            stillTrue:
-                'Every sale you have already recorded is saved and will be '
-                'sent.',
+            // **Worded by the product owner on 2026-09-29**, replacing three
+            // sentences about offline counting and saved sales. It names the
+            // duration, which is the common case; the other way here - a shift
+            // filed under a day that has not arrived, after the clock was
+            // corrected - is rare, and closing is the way out of both.
+            statement: 'This shift has been open for more than 24 hours.',
+            detail: 'Close it and open a new one.',
             actions: <Widget>[
               AppButton(
                 key: const ValueKey('shift-gate-close'),
@@ -483,15 +466,9 @@ class _TenantShiftGateState extends State<TenantShiftGate>
 
 /// The blocking *Start your shift* modal.
 final class _ShiftGateDialog extends StatefulWidget {
-  const _ShiftGateDialog({
-    required this.shifts,
-    required this.onCloseOrphanShift,
-  });
+  const _ShiftGateDialog({required this.shifts});
 
   final TenantShiftController shifts;
-
-  /// Opens the close sheet against a shift this install cannot adopt.
-  final Future<void> Function() onCloseOrphanShift;
 
   @override
   State<_ShiftGateDialog> createState() => _ShiftGateDialogState();
@@ -577,28 +554,24 @@ class _ShiftGateDialogState extends State<_ShiftGateDialog> {
       canPop: false,
       child: AppDialog(
         title: 'Start your shift',
+        // Centred over the centred picture, at the product owner's direction
+        // on 2026-09-29.
+        centerTitle: true,
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             // The same drawing the gate's own *No shift is open* state uses,
-            // at the mark's size rather than the scene's: a dialog is a
-            // question, and a 168-tall picture above it pushes the answer off
-            // a short phone.
+            // **at the scene's size since 2026-09-29.** It was held to the
+            // mark's so the sentence under it - *every sale is recorded against
+            // a shift* - still left the field above the fold. The product owner
+            // removed that sentence and gave its room to the picture, which
+            // costs the field about as much height as the sentence did.
             const Center(
               child: AppIllustration(
                 asset: 'schedule.svg',
-                size: EmptyState.markSize,
+                size: EmptyState.illustrationSize,
                 semanticLabel: 'A shift waiting to be opened',
-              ),
-            ),
-            SizedBox(height: tokens.spacing.s16),
-            Text(
-              'Every sale is recorded against a shift, so this register opens one '
-              'before it can sell.',
-              textAlign: TextAlign.center,
-              style: tokens.typography.bodyLarge.copyWith(
-                color: tokens.colors.text.secondary,
               ),
             ),
             SizedBox(height: tokens.spacing.s16),
@@ -625,12 +598,11 @@ class _ShiftGateDialogState extends State<_ShiftGateDialog> {
             ),
             SizedBox(height: tokens.spacing.s8),
             Text(
-              // Says what the figure is *for*, because that is what makes a
-              // cashier bother with it: it is the reason their drawer balances
-              // at the end of the day instead of reading over by the float.
+              // What the figure is and when to leave it empty. What becomes of
+              // it at close was cut by the product owner on 2026-09-29; the
+              // close sheet says it where it matters, beside the count.
               'The change in the drawer before any sale. Leave it empty if '
-              'there is none — it is counted back at close, not taken as '
-              'takings.',
+              'there is none.',
               style: tokens.typography.caption.copyWith(
                 color: tokens.colors.text.secondary,
               ),
@@ -652,35 +624,20 @@ class _ShiftGateDialogState extends State<_ShiftGateDialog> {
             tier: AppButtonTier.secondary,
             onPressed: _busy ? null : () => Navigator.of(context).pop(),
           ),
-          // **Offered only for this phone's own earlier install.**
-          // `otherDeviceShiftId` names one only where the durable half of the
-          // device id matches, so a shift on another phone - which may simply
-          // be offline - can no longer appear behind this button. Where two
-          // installs of this phone both left one open it still says nothing,
-          // because closing the wrong one is worse than closing none.
-          //
-          // It is no longer the way out of a terminal refusal: `Open shift`
-          // beside it now succeeds, and counting off closes every other shift
-          // this cashier holds. It remains the way to settle this phone's own
-          // orphan *with* a count, which the sweep does not do.
-          if (widget.shifts.state.otherDeviceShiftId != null)
-            AppButton(
-              key: const ValueKey('shift-gate-close-orphan'),
-              label: 'Close that shift',
-              tier: AppButtonTier.secondary,
-              onPressed: _busy ? null : widget.onCloseOrphanShift,
-            ),
+          // **No "Close that shift" beside it since 2026-09-29.** It was the
+          // way to settle a shift an earlier install of this phone left open,
+          // which this phone could not adopt. A shift belongs to its cashier on
+          // any phone now, so discovery joins that shift and this dialog never
+          // comes up for it.
           AppButton(
             key: const ValueKey('shift-gate-open'),
             label: 'Open shift',
             tier: AppButtonTier.primary,
             loading: _busy,
-            // **Left enabled even while the refusal is up, deliberately.** It
-            // re-runs the discovery query, so it is also the only way to
-            // re-check a shift that has since been closed somewhere else -
-            // disabling it would trap a cashier whose colleague had already
-            // dealt with it. What was missing was never a way to ask again; it
-            // was a way to act on the answer, which is the control beside it.
+            // **Left enabled even while a refusal is up, deliberately.** It
+            // re-runs the discovery query, so it is also the way to pick up a
+            // shift opened on another phone since this dialog was drawn - on
+            // a connection that has just come back, say.
             onPressed: _open,
           ),
         ],

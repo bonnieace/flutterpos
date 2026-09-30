@@ -95,6 +95,29 @@ void main() {
       expect(find.byType(Text), findsOne);
     });
 
+    testWidgets('keeps its title at the start unless asked to centre it', (
+      tester,
+    ) async {
+      await _pumpAppDialog(tester, title: 'Edit', content: const Text('Form.'));
+      expect(tester.widget<Text>(find.text('Edit')).textAlign, TextAlign.start);
+
+      await _pumpAppDialog(
+        tester,
+        title: 'Start your shift',
+        content: const Text('Form.'),
+        centerTitle: true,
+      );
+      expect(
+        tester.widget<Text>(find.text('Start your shift')).textAlign,
+        TextAlign.center,
+      );
+      // Centred across the dialog, not merely aligned inside its own width.
+      expect(
+        tester.getCenter(find.text('Start your shift')).dx,
+        closeTo(tester.getCenter(find.text('Form.')).dx, 1),
+      );
+    });
+
     testWidgets('draws no actions row when the child owns its controls', (
       tester,
     ) async {
@@ -543,12 +566,18 @@ Future<void> _pumpAppDialog(
   required Widget content,
   String? title,
   List<Widget> actions = const <Widget>[],
+  bool centerTitle = false,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: spiritTheme,
       home: Scaffold(
-        body: AppDialog(title: title, actions: actions, content: content),
+        body: AppDialog(
+          title: title,
+          actions: actions,
+          content: content,
+          centerTitle: centerTitle,
+        ),
       ),
     ),
   );

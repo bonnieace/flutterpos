@@ -22,6 +22,7 @@ final class AppCard extends StatelessWidget {
     required this.child,
     this.padding,
     this.bordered = true,
+    this.radius,
   });
 
   final Widget child;
@@ -33,13 +34,18 @@ final class AppCard extends StatelessWidget {
   /// bordered surface, where a second edge reads as a seam.
   final bool bordered;
 
+  /// Defaults to `radius.md`. The home's figures and its shift card are drawn
+  /// at `radius.xl`, a step rounder than the tiles and buttons inside them, so
+  /// the corner still reads as the outermost one.
+  final double? radius;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: tokens.colors.surface.raised,
-        borderRadius: BorderRadius.circular(tokens.radius.md),
+        borderRadius: BorderRadius.circular(radius ?? tokens.radius.md),
         border: bordered
             ? Border.all(color: tokens.colors.surface.cardEdge)
             : null,

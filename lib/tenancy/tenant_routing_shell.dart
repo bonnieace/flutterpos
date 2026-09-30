@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../observability/app_telemetry.dart';
@@ -15,7 +16,9 @@ import '../reporting/profit_report.dart';
 import '../reporting/profit_statement.dart';
 import '../reporting/sales_totals.dart';
 import '../reports/report_saver.dart';
+import '../shift/shift_history.dart';
 import '../ui/buttons.dart';
+import '../ui/card.dart';
 import '../ui/dialogs.dart';
 import '../ui/home_navigation.dart';
 import '../ui/measure.dart';
@@ -398,8 +401,15 @@ final class TenantRoutingShell extends StatefulWidget {
   /// Optional shift lifecycle surface rendered on the safe landing route. It is
   /// injected for the same reason: tenancy code owns routing, not operations.
   /// Built with the business's currency, because the shift's own figures are
-  /// money and this is the only layer that knows what the money is called.
-  final Widget Function(TenantReportingCurrency currency)? shiftPanel;
+  /// money and this is the only layer that knows what the money is called, and
+  /// with the signed-in member's name, which a shift document does not carry.
+  ///
+  /// **Drawn for every role, and it decides for itself whether to show.** What
+  /// it shows depends on a shift's state the home does not hold, so the gap
+  /// above it is the panel's own as well - a panel with nothing to say leaves
+  /// no space behind.
+  final Widget Function(TenantReportingCurrency currency, String? memberName)?
+  shiftPanel;
 
   /// Optional read-only reporting route, injected for the same reason.
   final Widget Function(TenantDataReader reader)? dailySummaryRoute;
@@ -2146,6 +2156,7 @@ final class _HomeOverview {
     this.currency,
     this.expenses,
     this.deviceToday,
+    this.shiftsOpened,
     this.showProfit = false,
   });
 
@@ -2202,6 +2213,11 @@ final class _HomeOverview {
   /// the day's total, and `_figures` is where that is decided.
   final TenantDeviceSalesTotals? deviceToday;
 
+  /// How many shifts were opened today across the business, still running or
+  /// closed, up to [_shiftsOpenedPageSize]. Null where this member may not
+  /// read every cashier's shifts or the read failed.
+  final int? shiftsOpened;
+
   /// Whether this member may be shown the margin at all.
   ///
   /// **The home was the one surface that never asked.** `daily_metrics` is
@@ -2213,6 +2229,10 @@ final class _HomeOverview {
   /// both gate on `canSeeInSession`; this now does too.
   final bool showProfit;
 }
+
+/// The most shifts the home counts in one read, which is the most one page of
+/// a tenant collection may hold. A day that fills it is drawn as a floor.
+const int _shiftsOpenedPageSize = 50;
 
 /// The old hub's greeting: the time of day, who is signed in, and what the
 /// screen is for.
@@ -2875,9 +2895,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// The roles that route is offered to, decided by the inventory domain.
   final List<TenantRole> catalogManagementRoles;
 
-  /// Built with the business's currency, because the shift's own figures are
-  /// money and this is the only layer that knows what the money is called.
-  final Widget Function(TenantReportingCurrency currency)? shiftPanel;
+  /// See [TenantRoutingShell.shiftPanel].
+  final Widget Function(TenantReportingCurrency currency, String? memberName)?
+  shiftPanel;
 
   /// Builds the read-only reporting route. Supplied by the composition root so
   /// tenancy code keeps owning routing rather than the reporting domain; the
@@ -3039,7 +3059,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               gateway.createQuery(period: TenantSalesPeriod.today),
             );
             final before = await gateway.load(gateway.createPreviousDayQuery());
-            return (today: today.sales, previous: before.sales);
+            // Net of returns where the answer carried them, on the same basis
+            // as the figures under the grid.
+            return (
+              today: today.netOrGrossSales,
+              previous: before.netOrGrossSales,
+            );
           })
         : Future<({double today, double previous})?>.value();
     final currency = mayReadRevenue
@@ -3063,6 +3088,25 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             ).readDay(today);
           })
         : Future<TenantExpensePeriod?>.value();
+    // Every cashier's shifts opened today, running or closed. Management
+    // only, which is the same set of roles the takings above are read for.
+    final shiftsOpened =
+        TenantShiftHistoryRepository.canReadEveryCashier(session)
+        ? _quiet(() async {
+            final shifts =
+                await TenantShiftHistoryRepository(
+                  session: session,
+                  reader: reader,
+                ).loadDayShifts(
+                  businessDate: checkoutBusinessDate(
+                    (clock ?? DateTime.now)().toUtc(),
+                  ),
+                  scope: TenantShiftHistoryScope.everyCashier,
+                  pageSize: _shiftsOpenedPageSize,
+                );
+            return shifts.length;
+          })
+        : Future<int?>.value();
     final days = await recentDays ?? const <TenantDailyMetricsDay>[];
     final today = days.isEmpty ? null : days.first;
     // **Read only for a day reconciliation has not published.** A reconciled
@@ -3109,6 +3153,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       currency: await currency,
       expenses: await expenses,
       deviceToday: deviceToday,
+      shiftsOpened: await shiftsOpened,
       showProfit: TenantProfitReport.canSeeInSession(session),
     );
   }
@@ -3228,12 +3273,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 SizedBox(height: tokens.spacing.s32),
                 grid,
               ],
-              if (shiftPanel != null) ...[
-                SizedBox(height: tokens.spacing.s24),
+              // No gap here: the panel draws its own, only when it shows.
+              if (shiftPanel != null)
                 shiftPanel!(
                   overview.currency ?? TenantReportingCurrency.unknown,
+                  memberName,
                 ),
-              ],
             ],
           ),
         ),
@@ -3307,14 +3352,21 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // the sales in `U`. The number is the best available; it is the silence
     // about `U` that misleads, and [unsentTransactions] is what the tiles say
     // instead of nothing.
+    //
+    // **Gross against gross, because the question is about sales.** A return
+    // does not unsell anything, and until 2026-09-29 this compared the
+    // device's net count with the published gross one: a day with a sale
+    // returned in full came out one short on this side, and the published
+    // figure won even where this device held a sale the server had not seen.
+    final deviceReceipts = counted?.transactions;
+    final deviceKnowsMore =
+        deviceReceipts != null &&
+        (metrics == null || deviceReceipts > metrics.transactions);
     final deviceCount = countedNet?.transactions ?? counted?.transactions;
     final deviceSales = countedNet?.sales ?? counted?.sales;
-    final deviceKnowsMore =
-        deviceCount != null &&
-        (metrics == null || deviceCount > metrics.transactions);
     // Sales this device is still carrying, said out loud on a published figure
     // that cannot include them. Zero whenever the device figure won, because
-    // that one already counts them and says so in its own words.
+    // that one already counts them.
     final unsentTransactions = deviceKnowsMore
         ? 0
         : device?.unsentTransactions ?? 0;
@@ -3322,9 +3374,15 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         ? '1 not sent'
         : '$unsentTransactions not sent';
     final deviceReport = countedNet?.profitReport ?? counted?.profitReport;
+    // **The published day net of returns, as every other surface reads it.**
+    // `daily_metrics` has carried both since 2026-09-18 - gross in `sales`,
+    // `transactions` and `profit`, returns taken back out in the `net` block -
+    // and the daily summary, the Sales route and the weekly report all show
+    // the net one. This grid read the gross one, so a day with a return
+    // showed more here than on every page it links to.
     final report = deviceKnowsMore
         ? deviceReport
-        : metrics?.profitReport ?? deviceReport;
+        : metrics?.netProfitReport ?? deviceReport;
     final currency = overview.currency ?? TenantReportingCurrency.unknown;
     // **Only a day with spending in it has an expenses tile or a net one**, at
     // the developer's direction on 2026-09-23. With nothing spent, net profit
@@ -3349,37 +3407,30 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         StatTile(
           key: const ValueKey('home-today-sales'),
           label: "Today's sales",
-          // **An em dash, not a zero.** An unreconciled day is not a day with
-          // no takings in it - today is normally unreconciled, and printing
-          // `KES 0.00` over a morning's trade would be the worst kind of
-          // wrong figure: a plausible one.
+          // **An em dash, not a zero.** A day nothing has been counted for is
+          // not a day with no takings in it, and printing `KES 0.00` over a
+          // morning's trade would be the worst kind of wrong figure: a
+          // plausible one.
           //
-          // **But a figure this device can already prove is not a guess.**
-          // Where the day is unreconciled and the cache holds its sales, that
-          // total is shown and marked as what it is. Reconciliation then
-          // certifies the value rather than releasing it.
+          // **No word about reconciliation, at the developer's direction on
+          // 2026-09-29.** The tiles said *Reconciled*, *Not reconciled* and
+          // *On this device*, but the number under each was the same sales
+          // either way - reconciliation certifies a figure, it does not change
+          // it - so the words told a shopkeeper nothing they could act on.
           value: deviceKnowsMore && deviceSales != null
               ? currency.format(deviceSales)
               : metrics != null
-              ? currency.format(metrics.sales)
+              ? currency.format(metrics.netSales)
               : '—',
           money: deviceKnowsMore || metrics != null,
           icon: Icons.payments_outlined,
-          // Never colour alone: the badge carries its own words, and the
-          // detail underneath names the basis in full.
-          status: deviceKnowsMore || unsentTransactions > 0
-              ? AppStatus.attention
-              : null,
-          statusLabel: deviceKnowsMore
-              ? 'Not reconciled'
-              : unsentTransactions > 0
-              ? unsentLabel
-              : null,
-          detail: deviceKnowsMore
-              ? 'On this device'
-              : metrics != null
-              ? 'Reconciled ${day.businessDate}'
-              : 'Not reconciled yet',
+          accent: tokens.colors.text.money,
+          nested: true,
+          // **Unsent sales are the exception, because they do change it.** The
+          // published figure cannot hold them, so it will rise once they are
+          // sent - and that is worth a badge, in words rather than colour.
+          status: unsentTransactions > 0 ? AppStatus.attention : null,
+          statusLabel: unsentTransactions > 0 ? unsentLabel : null,
         ),
         StatTile(
           key: const ValueKey('home-today-transactions'),
@@ -3387,37 +3438,35 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           value: deviceKnowsMore
               ? '$deviceCount'
               : metrics != null
-              ? '${metrics.transactions}'
+              ? '${metrics.netTransactions}'
               : '—',
           icon: Icons.receipt_long_outlined,
-          status: deviceKnowsMore || unsentTransactions > 0
-              ? AppStatus.attention
-              : null,
-          statusLabel: deviceKnowsMore
-              ? 'Not reconciled'
-              : unsentTransactions > 0
-              ? unsentLabel
-              : null,
-          detail: deviceKnowsMore
-              ? 'On this device'
-              : metrics != null
-              ? 'Counted today'
-              : 'Not reconciled yet',
+          accent: tokens.colors.accent.identityAt(AppIdentityAccent.blue),
+          nested: true,
+          status: unsentTransactions > 0 ? AppStatus.attention : null,
+          statusLabel: unsentTransactions > 0 ? unsentLabel : null,
         ),
         StatTile(
           key: const ValueKey('home-today-shifts'),
           label: 'Shifts',
-          value: metrics == null ? '—' : '${metrics.shiftCount}',
+          // **Shifts opened today, open or closed, since 2026-09-29** - the
+          // old hub's *Total shifts*, and the developer's call. It read
+          // `daily_metrics.shiftCount`, which is the shifts that took a sale,
+          // under a caption saying *Closed today*: neither half matched, and it
+          // waited on reconciliation to say anything at all. A full page is a
+          // floor, and says so.
+          value: switch (overview.shiftsOpened) {
+            null => '—',
+            final count when count >= _shiftsOpenedPageSize =>
+              '$_shiftsOpenedPageSize+',
+            final count => '$count',
+          },
           icon: Icons.schedule_outlined,
-          // **The one figure this device cannot stand in for.** The cache
-          // holds this device's own sales, which is enough to total a day's
-          // takings; it does not hold the business's shifts, and counting the
-          // ones this register happens to know about would understate the
-          // number on exactly the days more than one till traded. So this tile
-          // still waits, and names which figure is waiting.
-          detail: metrics == null
-              ? 'Counted at reconciliation'
-              : 'Closed today',
+          // A count of shifts, not money and not a module of its own, so the
+          // well is the caption's own neutral.
+          accent: tokens.colors.text.secondary,
+          nested: true,
+          detail: 'Opened today',
         ),
         // **Profit, which is the fourth figure this app actually holds.** The
         // export's fourth tile is *Low stock — 5 items* and there is no
@@ -3451,22 +3500,18 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 : currency.format(report.profit),
             money: report != null && report.isDrawable,
             icon: Icons.trending_up,
+            accent: tokens.colors.accent.identityAt(AppIdentityAccent.green),
+            nested: true,
             status: report != null && !report.isShowable
-                ? AppStatus.attention
-                : deviceKnowsMore
                 ? AppStatus.attention
                 : null,
             statusLabel: report != null && !report.isShowable
                 ? 'At most'
-                : deviceKnowsMore
-                ? 'Not reconciled'
                 : null,
             detail: report == null
-                ? 'Not reconciled yet'
+                ? null
                 : !report.isShowable
                 ? tenantProfitCeilingNote(report)
-                : deviceKnowsMore
-                ? 'On this device'
                 : 'After cost of goods',
           ),
         // **A second tile rather than one relabelled figure.** A tile whose
@@ -3483,6 +3528,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             // The glyph the *Expenses* destination wears, so the figure and
             // the place it comes from are recognisably one thing.
             icon: Icons.account_balance_wallet_outlined,
+            // And its colour, for the same reason.
+            accent: tokens.colors.accent.identityAt(AppIdentityAccent.green),
+            nested: true,
             // A read that stopped at its bound is a floor, not a total, and
             // says so in words rather than in colour.
             status: spent.truncated ? AppStatus.attention : null,
@@ -3498,6 +3546,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             value: net.isDrawable ? currency.format(net.netProfit) : '—',
             money: net.isDrawable,
             icon: Icons.savings_outlined,
+            accent: tokens.colors.accent.identityAt(AppIdentityAccent.green),
+            nested: true,
             // A loss is the one reading this whole feature exists to make
             // possible, so it is marked rather than left to the minus sign.
             status: net.isLoss ? AppStatus.problem : null,
@@ -3510,8 +3560,6 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 ? 'At most: some spending is not counted'
                 : net.basis == TenantNetProfitBasis.grossWithheld
                 ? tenantProfitCeilingNote(net.gross)
-                : deviceKnowsMore
-                ? 'On this device'
                 : 'After cost of goods and expenses',
           ),
       ],
@@ -3531,9 +3579,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // **No drop shadow.** The old panel had a 30-blur black one;
     // `AppSurfaceRoles` is explicit that depth here is a surface step, and on
     // a near-black ground the shadow costs raster time to be invisible.
+    //
+    // **A card of cards since 2026-09-30**, at the developer's direction: each
+    // figure is a tile one surface step up inside this panel, with its glyph in
+    // a tinted well - see `StatTile.nested` and `StatTile.accent`.
     return Padding(
       padding: EdgeInsets.only(top: tokens.spacing.s8),
-      child: Container(
+      child: AppCard(
         // **`space.8`, not `space.16`, and the difference is a defect rather
         // than taste.** A `StatTile` already carries its own `space.16`
         // horizontal inset - `StatRow.minimumTileWidth` composes its
@@ -3542,12 +3594,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         // the labels were measured against. On a 360 handset that truncated
         // them to "TODAY'S S…" and "TRANSACTI…".
         padding: EdgeInsets.all(tokens.spacing.s8),
-        decoration: BoxDecoration(
-          color: tokens.colors.surface.raised,
-          borderRadius: BorderRadius.circular(tokens.radius.lg),
-          border: Border.all(color: tokens.colors.surface.borderSubtle),
-        ),
-        child: StatRow(tiles: tiles),
+        radius: tokens.radius.xl,
+        child: StatRow(tiles: tiles, gap: tokens.spacing.s8),
       ),
     );
   }
@@ -3612,7 +3660,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         // one screen every shopkeeper opens first is how a person goes looking
         // for a feature that was never built.
         description: 'Ring up a sale, take the payment, and print the receipt.',
-        icon: Icons.point_of_sale,
+        icon: Symbols.point_of_sale_rounded,
         isPrimary: true,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
@@ -3635,7 +3683,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         description:
             'View sales reports, payment breakdowns, and transaction history.',
         group: 'Sales',
-        icon: Icons.bar_chart_outlined,
+        icon: Symbols.bar_chart_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3655,7 +3703,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         label: 'Returns',
         description: 'Review pending and verified returns across every sale.',
         group: 'Sales',
-        icon: Icons.assignment_return_outlined,
+        icon: Symbols.assignment_return_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3683,7 +3731,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         label: 'Inventory',
         description: 'View all products, manage SKUs, pricing, and categories.',
         group: 'Inventory',
-        icon: Icons.inventory_2_outlined,
+        icon: Symbols.inventory_2_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3707,7 +3755,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         label: 'Stock counts',
         description: 'Review what was counted and correct the stock from it.',
         group: 'Inventory',
-        icon: Icons.rule_outlined,
+        icon: Symbols.rule_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3744,7 +3792,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         label: 'Count stock',
         description: 'Count what is on the shelf and hand the figures in.',
         group: 'Inventory',
-        icon: Icons.fact_check_outlined,
+        icon: Symbols.fact_check_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3770,7 +3818,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         description:
             'Who you buy stock from, and what each delivery brought in.',
         group: 'Inventory',
-        icon: Icons.local_shipping_outlined,
+        icon: Symbols.local_shipping_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3795,7 +3843,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         label: 'Production',
         description: 'Record what was made and what it cost to make.',
         group: 'Inventory',
-        icon: Icons.factory_outlined,
+        icon: Symbols.factory_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3821,7 +3869,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             'Record rent, wages and running costs, and see what profit is '
             'left after them.',
         group: 'Reports',
-        icon: Icons.account_balance_wallet_outlined,
+        icon: Symbols.account_balance_wallet_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3849,7 +3897,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             'Weekly sales, profit and best sellers, and every other report '
             'from the figures themselves.',
         group: 'Reports',
-        icon: Icons.insights_outlined,
+        icon: Symbols.insights_rounded,
         // **No count on the tile**, at the developer's direction on
         // 2026-09-23. Open reconciliation differences are still said in a
         // sentence where the destination has room for one, and in full on the
@@ -3878,7 +3926,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         label: 'Business details',
         description: 'Manage your business name, slogan and logo on receipts.',
         group: 'Business',
-        icon: Icons.storefront_outlined,
+        icon: Symbols.storefront_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3898,7 +3946,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         label: 'Printer',
         description: 'Connect a receipt printer and print a test page.',
         group: 'Business',
-        icon: Icons.print_outlined,
+        icon: Symbols.print_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3918,7 +3966,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         label: 'Configs',
         description: 'Choose currency and schedule stock counts.',
         group: 'Business',
-        icon: Icons.tune_outlined,
+        icon: Symbols.tune_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3938,7 +3986,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         label: 'Staff',
         description: 'Manage your team, their roles and access.',
         group: 'Business',
-        icon: Icons.people_outline,
+        icon: Symbols.group_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3971,7 +4019,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         description:
             'What each drawer was counted at, against the sales it took.',
         group: 'Reports',
-        icon: Icons.inventory_outlined,
+        icon: Symbols.work_history_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3990,7 +4038,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         accent: AppIdentityAccent.green,
         label: 'Logs',
         group: 'Business',
-        icon: Icons.fact_check_outlined,
+        icon: Symbols.history_edu_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(

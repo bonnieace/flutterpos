@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../ui/measure.dart';
 import '../ui/scaffold.dart';
+import '../ui/tabs.dart';
 import '../ui/tokens.dart';
 
 /// Hosts one existing configuration panel without changing its permissions or writes.
@@ -33,10 +35,45 @@ final class TenantConfigurationsScreen extends StatelessWidget {
     super.key,
     required this.currencyBuilder,
     required this.stockCountsBuilder,
+    required this.agreedPricesBuilder,
   });
 
   final WidgetBuilder currencyBuilder;
   final WidgetBuilder stockCountsBuilder;
+
+  /// Who may sell for a price agreed with the customer. Added on 2026-09-29
+  /// beside *Stock counts*, because it is set up the same way: per person.
+  final WidgetBuilder agreedPricesBuilder;
+
+  static const List<String> _tabs = <String>[
+    'Currency',
+    'Stock counts',
+    'Agreed prices',
+  ];
+
+  /// Whether every label fits in an equal share of [width].
+  ///
+  /// **Measured, because the third tab broke the fixed strip on a small
+  /// phone.** At 320 wide the three shares cut *Stock counts* and *Agreed
+  /// prices* off mid-word, seen on an emulator on 2026-09-29. Where the
+  /// labels fit, the strip keeps its equal shares; where they do not, it
+  /// scrolls rather than cutting a word.
+  static bool _labelsFit(BuildContext context, double width) {
+    final tokens = AppTokens.componentOf(context);
+    final share = width / _tabs.length;
+    final scaler = MediaQuery.textScalerOf(context);
+    for (final label in _tabs) {
+      final needed =
+          measureTextWidth(
+            label,
+            tokens.typography.labelLarge,
+            textScaler: scaler,
+          ) +
+          kTabLabelPadding.horizontal;
+      if (needed > share) return false;
+    }
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,23 +81,27 @@ final class TenantConfigurationsScreen extends StatelessWidget {
       AppTokens.componentOf(context).spacing,
     );
     return DefaultTabController(
-      length: 2,
+      length: _tabs.length,
       child: AppScaffold(
         title: 'Configs',
         contentWidth: AppContentWidth.reading,
         body: Column(
           children: <Widget>[
-            const TabBar(
-              tabs: <Tab>[
-                Tab(text: 'Currency'),
-                Tab(text: 'Stock counts'),
-              ],
+            // `AppTabs` rather than a bare `TabBar`: the system's type and
+            // colours, and §9's 48 where Material's tab is 46.
+            LayoutBuilder(
+              builder: (context, constraints) => AppTabs(
+                key: const ValueKey('configurations-tabs'),
+                tabs: _tabs,
+                isScrollable: !_labelsFit(context, constraints.maxWidth),
+              ),
             ),
             Expanded(
               child: TabBarView(
                 children: <Widget>[
                   _ConfigurationTab(builder: currencyBuilder, inset: inset),
                   _ConfigurationTab(builder: stockCountsBuilder, inset: inset),
+                  _ConfigurationTab(builder: agreedPricesBuilder, inset: inset),
                 ],
               ),
             ),

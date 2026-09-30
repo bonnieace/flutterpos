@@ -643,9 +643,7 @@ void main() {
     // until the nightly run published - and today is normally unreconciled,
     // so the home routinely hid a morning's trade it could already state.
 
-    testWidgets('the takings are drawn from the cache and marked as such', (
-      tester,
-    ) async {
+    testWidgets('the takings are drawn from the cache', (tester) async {
       await _pumpLanding(
         tester,
         panelHeight: 120,
@@ -661,23 +659,50 @@ void main() {
       );
       // 30.00 and 15.00, the two the cache holds.
       expect(sales.value, contains('45'));
-      // **Never presented as reconciled.** The basis is stated under the
-      // figure and the standing is a badge of its own, in words rather than
-      // in colour.
-      expect(sales.detail, 'On this device');
-      expect(sales.status, AppStatus.attention);
-      expect(sales.statusLabel, 'Not reconciled');
+      // **Nothing said about reconciliation**, at the developer's direction
+      // on 2026-09-29: it certifies this figure, it does not change it.
+      expect(sales.detail, isNull);
+      expect(sales.status, isNull);
 
       final transactions = tester.widget<StatTile>(
         find.byKey(const ValueKey('home-today-transactions')),
       );
       expect(transactions.value, '2');
-      expect(transactions.detail, 'On this device');
+      expect(transactions.detail, isNull);
+      expect(find.textContaining('econciled'), findsNothing);
+      expect(find.text('On this device'), findsNothing);
     });
 
-    testWidgets('the shift count still waits, and says which figure does', (
-      tester,
-    ) async {
+    testWidgets('the shift count is every shift opened today', (tester) async {
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        reader: _CachedSalesReader(
+          <TenantQueryDocumentSnapshot>[
+            _cachedSale(
+              checkoutId: 'checkout-a',
+              sequence: 1,
+              totalMinor: 3000,
+            ),
+          ],
+          // One closed, one still running, on two tills: all three count.
+          shifts: <Map<String, Object?>>[
+            _todayShift(id: 'shift-100', staffId: 'user-a', closed: true),
+            _todayShift(id: 'shift-200', staffId: 'user-a'),
+            _todayShift(id: 'shift-300', staffId: 'user-b'),
+          ],
+        ),
+      );
+
+      final shifts = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-shifts')),
+      );
+      expect(shifts.value, '3');
+      expect(shifts.detail, 'Opened today');
+    });
+
+    testWidgets('a day with no shift opened says zero', (tester) async {
       await _pumpLanding(
         tester,
         panelHeight: 120,
@@ -687,14 +712,36 @@ void main() {
         ]),
       );
 
-      // The cache holds this device's sales, not the business's shifts, so
-      // standing in for this one would understate it on exactly the days more
-      // than one till traded.
       final shifts = tester.widget<StatTile>(
         find.byKey(const ValueKey('home-today-shifts')),
       );
-      expect(shifts.value, '—');
-      expect(shifts.detail, 'Counted at reconciliation');
+      expect(shifts.value, '0');
+    });
+
+    testWidgets('a full page of shifts is drawn as a floor', (tester) async {
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        reader: _CachedSalesReader(
+          <TenantQueryDocumentSnapshot>[
+            _cachedSale(
+              checkoutId: 'checkout-a',
+              sequence: 1,
+              totalMinor: 3000,
+            ),
+          ],
+          shifts: <Map<String, Object?>>[
+            for (var index = 100; index < 160; index++)
+              _todayShift(id: 'shift-$index', staffId: 'user-a', closed: true),
+          ],
+        ),
+      );
+
+      final shifts = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-shifts')),
+      );
+      expect(shifts.value, '50+');
     });
 
     testWidgets('a day this device counted nothing for stays an em dash', (
@@ -713,7 +760,7 @@ void main() {
         find.byKey(const ValueKey('home-today-sales')),
       );
       expect(sales.value, '—');
-      expect(sales.detail, 'Not reconciled yet');
+      expect(sales.detail, isNull);
       expect(sales.status, isNull);
     });
 
@@ -748,15 +795,13 @@ void main() {
         find.byKey(const ValueKey('home-today-transactions')),
       );
       expect(transactions.value, '2');
-      expect(transactions.detail, 'On this device');
-      expect(transactions.statusLabel, 'Not reconciled');
+      expect(transactions.statusLabel, isNull);
 
       final sales = tester.widget<StatTile>(
         find.byKey(const ValueKey('home-today-sales')),
       );
       // 30.00 counted by the server plus 60.00 this device is still holding.
       expect(sales.value, contains('90'));
-      expect(sales.detail, 'On this device');
     });
 
     testWidgets(
@@ -791,7 +836,6 @@ void main() {
           find.byKey(const ValueKey('home-today-transactions')),
         );
         expect(transactions.value, '9');
-        expect(transactions.detail, 'Counted today');
         // Never colour alone: the badge carries the words.
         expect(transactions.status, AppStatus.attention);
         expect(transactions.statusLabel, '1 not sent');
@@ -852,8 +896,7 @@ void main() {
           find.byKey(const ValueKey('home-today-transactions')),
         );
         expect(transactions.value, '3');
-        expect(transactions.detail, 'On this device');
-        expect(transactions.statusLabel, 'Not reconciled');
+        expect(transactions.statusLabel, isNull);
 
         final sales = tester.widget<StatTile>(
           find.byKey(const ValueKey('home-today-sales')),
@@ -885,7 +928,6 @@ void main() {
         find.byKey(const ValueKey('home-today-transactions')),
       );
       expect(transactions.value, '9');
-      expect(transactions.detail, 'Counted today');
       expect(transactions.statusLabel, isNull);
     });
 
@@ -906,8 +948,99 @@ void main() {
         find.byKey(const ValueKey('home-today-sales')),
       );
       expect(sales.value, '—');
-      expect(sales.detail, 'Not reconciled yet');
+      expect(sales.detail, isNull);
       expect(sales.status, isNull);
+    });
+  });
+
+  group('a published day with a return in it is shown net of it', () {
+    // **Seen on SIT on 2026-09-29.** Four sales, the second returned in full,
+    // and reconciliation published the day with the return taken out. The
+    // daily summary, the Sales route and the weekly report all said 3000 over
+    // three transactions; this grid said 4000 over four, because it read the
+    // gross fields of the same document.
+
+    testWidgets('the takings, the count and the profit leave the return out', (
+      tester,
+    ) async {
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        reader: _BehindReader(
+          publishedTransactions: 4,
+          publishedReturns: 1,
+          sales: <TenantQueryDocumentSnapshot>[
+            _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
+            _cachedSale(checkoutId: 'b', sequence: 2, totalMinor: 3000),
+            _cachedSale(checkoutId: 'c', sequence: 3, totalMinor: 3000),
+            _cachedSale(checkoutId: 'd', sequence: 4, totalMinor: 3000),
+          ],
+          returns: <Map<String, Object?>>[_cachedFullReturn(saleId: 'b')],
+        ),
+      );
+
+      final sales = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-sales')),
+      );
+      // 120.00 sold, 30.00 of it came back.
+      expect(sales.value, contains('90'));
+      expect(sales.value, isNot(contains('120')));
+      expect(sales.status, isNull);
+
+      final transactions = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-transactions')),
+      );
+      expect(transactions.value, '3');
+
+      final profit = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-profit')),
+      );
+      expect(profit.value, contains('30'));
+      expect(profit.value, isNot(contains('40')));
+    });
+
+    testWidgets('a return does not hide a sale the server has not counted', (
+      tester,
+    ) async {
+      // The other half of the same defect. Whether this device holds a sale
+      // the server has not seen was decided by comparing its *net* count with
+      // the published *gross* one, so the returned sale made this side one
+      // short: four cached, one returned, one unsent is five sales, and it
+      // tied with the published four and lost.
+      final outbox = await _offlineOutbox('landing-outbox-d', count: 1);
+      addTearDown(outbox.close);
+
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        role: TenantRole.owner,
+        checkoutOutbox: outbox,
+        reader: _BehindReader(
+          publishedTransactions: 4,
+          publishedReturns: 1,
+          sales: <TenantQueryDocumentSnapshot>[
+            _cachedSale(checkoutId: 'a', sequence: 1, totalMinor: 3000),
+            _cachedSale(checkoutId: 'b', sequence: 2, totalMinor: 3000),
+            _cachedSale(checkoutId: 'c', sequence: 3, totalMinor: 3000),
+            _cachedSale(checkoutId: 'd', sequence: 4, totalMinor: 3000),
+          ],
+          returns: <Map<String, Object?>>[_cachedFullReturn(saleId: 'b')],
+        ),
+      );
+
+      final transactions = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-transactions')),
+      );
+      // Five sales, one of them returned in full.
+      expect(transactions.value, '4');
+      expect(transactions.statusLabel, isNull);
+
+      final sales = tester.widget<StatTile>(
+        find.byKey(const ValueKey('home-today-sales')),
+      );
+      // Three cached sales kept at 30.00 and the unsent one at 60.00.
+      expect(sales.value, contains('150'));
     });
   });
 }
@@ -975,7 +1108,7 @@ Future<void> _pumpLanding(
           // The slot the shift panel occupies on a real device. What the fold
           // depends on is the height of what is in it.
           salesTotalsCallable: salesTotalsCallable,
-          shiftPanel: (_) => SizedBox(
+          shiftPanel: (_, _) => SizedBox(
             key: const ValueKey('landing-test-panel'),
             height: panelHeight,
             child: const Card(child: Center(child: Text('Shift'))),
@@ -1052,12 +1185,25 @@ final class _BehindReader
         TenantDataReader,
         TenantSalesHistoryQueryReader,
         TenantCacheReadable {
-  _BehindReader({required this.sales, required this.publishedTransactions});
+  _BehindReader({
+    required this.sales,
+    required this.publishedTransactions,
+    this.publishedReturns = 0,
+    this.returns = const <Map<String, Object?>>[],
+  });
 
   final List<TenantQueryDocumentSnapshot> sales;
 
   /// What the server has counted, deliberately fewer than [sales] holds.
   final int publishedTransactions;
+
+  /// How many of the published sales came back in full. They stay in the
+  /// gross figures and leave the `net` block, which is how reconciliation
+  /// writes a day with returns in it.
+  final int publishedReturns;
+
+  /// Return documents this device has in its cache.
+  final List<Map<String, Object?>> returns;
 
   @override
   TenantDataReader get cacheOnly => this;
@@ -1068,23 +1214,24 @@ final class _BehindReader
     // Whatever day the repository asked for, so the fixture cannot drift from
     // the clock the page is reading.
     final businessDate = path.split('/').last;
+    final kept = publishedTransactions - publishedReturns;
     return TenantDocumentSnapshot(
       path: path,
       data: <String, Object?>{
         'tenantId': 'tenant-a',
         'businessDate': businessDate,
         'sales': 30.0 * publishedTransactions,
-        'profit': 0.0,
+        'profit': 10.0 * publishedTransactions,
         'transactions': publishedTransactions,
         'transactionCount': publishedTransactions,
         'shiftCount': 1,
         'incompleteCostLineCount': 0,
-        'netSales': 30.0 * publishedTransactions,
-        'netProfit': 0.0,
-        'netTransactions': publishedTransactions,
+        'netSales': 30.0 * kept,
+        'netProfit': 10.0 * kept,
+        'netTransactions': kept,
         'netIncompleteCostLineCount': 0,
-        'returnedSales': 0,
-        'returnCount': 0,
+        'returnedSales': 30.0 * publishedReturns,
+        'returnCount': publishedReturns,
         'netMetricsVersion': 1,
         'metricGeneration': 'gen-1',
         'sourceDirtyRevision': 1,
@@ -1093,10 +1240,25 @@ final class _BehindReader
     );
   }
 
+  /// The cached returns, a day at a time, which is how the device aggregator
+  /// asks for them. Nothing else this page pages through is held.
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
-  ) async => const <TenantQueryDocumentSnapshot>[];
+  ) async {
+    if (!query.collectionPath.endsWith('/returns')) {
+      return const <TenantQueryDocumentSnapshot>[];
+    }
+    final day = query.equalityFilters['businessDate'];
+    return <TenantQueryDocumentSnapshot>[
+      for (final record in returns)
+        if (day == null || record['businessDate'] == day)
+          TenantQueryDocumentSnapshot(
+            path: '${query.collectionPath}/${record['returnId']}',
+            data: record,
+          ),
+    ];
+  }
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
@@ -1142,12 +1304,16 @@ final class _CachedSalesReader
   _CachedSalesReader(
     this.sales, {
     this.expenses = const <TenantQueryDocumentSnapshot>[],
+    this.shifts = const <Map<String, Object?>>[],
   });
 
   final List<TenantQueryDocumentSnapshot> sales;
 
   /// Today's spending, answered to the expenses walk and to nothing else.
   final List<TenantQueryDocumentSnapshot> expenses;
+
+  /// Shift documents, answered to a day's shift query.
+  final List<Map<String, Object?>> shifts;
 
   @override
   TenantDataReader get cacheOnly => this;
@@ -1164,6 +1330,23 @@ final class _CachedSalesReader
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
   ) async {
+    if (query.collectionPath.endsWith('/shifts')) {
+      // Ascending document order within the page's limit, which is what the
+      // repository proves of every page it reads.
+      final day = query.equalityFilters['businessDate'];
+      final ordered =
+          shifts.where((shift) => shift['businessDate'] == day).toList()..sort(
+            (a, b) =>
+                (a['shiftId']! as String).compareTo(b['shiftId']! as String),
+          );
+      return <TenantQueryDocumentSnapshot>[
+        for (final shift in ordered.take(query.limit))
+          TenantQueryDocumentSnapshot(
+            path: '${query.collectionPath}/${shift['shiftId']}',
+            data: shift,
+          ),
+      ];
+    }
     if (!query.collectionPath.endsWith('/expenses')) {
       return const <TenantQueryDocumentSnapshot>[];
     }
@@ -1333,6 +1516,48 @@ TenantQueryDocumentSnapshot _cachedSale({
       'createdAt': _nineInTheMorning().toUtc(),
     },
   );
+}
+
+/// One shift opened on the day [_nineInTheMorning] falls in, still running or
+/// closed.
+Map<String, Object?> _todayShift({
+  required String id,
+  required String staffId,
+  bool closed = false,
+}) => <String, Object?>{
+  'shiftId': id,
+  'tenantId': 'tenant-a',
+  'staffId': staffId,
+  'deviceId': 'dev-0123456789abcdef0123456789abcdef',
+  'businessDate': checkoutBusinessDate(_nineInTheMorning().toUtc()),
+  'status': closed ? 'closed' : 'open',
+  'startTime': _nineInTheMorning().toUtc(),
+  if (closed) ...<String, Object?>{
+    'closingCashMinor': 3000,
+    'totalSalesMinor': 3000,
+    'totalSales': 30.0,
+    'transactionCount': 1,
+  },
+};
+
+/// A return of the whole of one [_cachedSale], as this device's cache holds it.
+Map<String, Object?> _cachedFullReturn({required String saleId}) {
+  final businessDate = checkoutBusinessDate(_nineInTheMorning().toUtc());
+  return <String, Object?>{
+    'returnId': 'return-$saleId',
+    'tenantId': 'tenant-a',
+    'saleId': saleId,
+    'businessDate': businessDate,
+    'recordedOn': businessDate,
+    'createdBy': 'user-a',
+    // Pending, because a filed return counts before a manager gets to it.
+    'status': 'pending',
+    'reason': 'Spoiled or expired',
+    'itemsReturned': <Object?>[
+      <String, Object?>{'productId': 'product-$saleId', 'quantity': 1},
+    ],
+    'createdAt': _nineInTheMorning().toUtc(),
+  };
 }
 
 /// One expense recorded today, voided where [voided] says so.

@@ -136,6 +136,94 @@ String formatCheckoutReceiptNumber({
       '-$compactDate-$padded';
 }
 
+/// Minimum zero-padded width of the sequence as it is *printed*.
+const int printedReceiptSequenceDigits = 3;
+
+/// The most characters of the cashier's name a printed number carries.
+const int printedReceiptNameLength = 10;
+
+final RegExp _storedReceiptParts = RegExp(
+  r'^CT-([0-9A-F]{3})-\d{8}-(\d{4,6})$',
+);
+
+/// The receipt number as it is printed for a customer: `JOHN-CT-7F2-001`.
+///
+/// **Printing only, chosen by the product owner on 2026-09-29.** The stored
+/// number - `CT-7F2-20260929-0001` - is what the Rules, the reprint audit, the
+/// receipt lookup and reconciliation all check, and it does not change. This is
+/// the same number made easier to read out: the cashier's first name, then the
+/// till's code and that day's sequence.
+///
+/// **The date is left out because the receipt prints it on its own line**, and
+/// that line is what makes this unique: the sequence restarts every day, and
+/// it counts *the till's* sales rather than the cashier's, so two cashiers on
+/// one tablet share it.
+///
+/// [servedBy] is the name the receipt's "Served by" line already carries. Its
+/// first word is kept - upper-cased, letters and digits only, at most
+/// [printedReceiptNameLength] characters - and a name with nothing printable
+/// in it is left off rather than printed as a stray hyphen. A stored number
+/// this cannot read is returned exactly as it is: a customer must never be
+/// handed a receipt with no number on it.
+String printedCheckoutReceiptNumber(String receiptNumber, {String? servedBy}) {
+  final parts = _storedReceiptParts.firstMatch(receiptNumber);
+  if (parts == null) return receiptNumber;
+  final sequence = int.parse(
+    parts.group(2)!,
+  ).toString().padLeft(printedReceiptSequenceDigits, '0');
+  final core = '$checkoutReceiptPrefix-${parts.group(1)}-$sequence';
+  final name = _printedReceiptName(servedBy);
+  return name == null ? core : '$name-$core';
+}
+
+String? _printedReceiptName(String? servedBy) {
+  final words = servedBy?.trim().split(RegExp(r'\s+'));
+  if (words == null || words.first.isEmpty) return null;
+  final letters = words.first.toUpperCase().replaceAll(
+    RegExp(r'[^\p{L}\p{N}]', unicode: true),
+    '',
+  );
+  if (letters.isEmpty) return null;
+  final runes = letters.runes.take(printedReceiptNameLength);
+  return String.fromCharCodes(runes);
+}
+
+/// The till code and sequence a printed receipt number names.
+final class PrintedReceiptReference {
+  const PrintedReceiptReference({
+    required this.deviceCode,
+    required this.sequence,
+  });
+
+  /// The three-character code of the till that issued it.
+  final String deviceCode;
+
+  /// That till's sequence for the day.
+  final int sequence;
+}
+
+final RegExp _printedReceiptParts = RegExp(
+  r'^(?:[^\s-]+-)?(?:CT-)?([0-9A-F]{3})-(\d{1,6})$',
+);
+
+/// Reads a number typed from a printed receipt, or null where it is not one.
+///
+/// The name is optional and ignored, so a cashier renamed since the receipt
+/// was printed still finds it; so is `CT`, which every receipt shares and
+/// people will drop. `JOHN-CT-7F2-001`, `CT-7F2-001` and `7F2-001` all read
+/// as till `7F2`, number 1. It names no date - the receipt prints that
+/// separately - so whoever searches with this must supply one.
+PrintedReceiptReference? parsePrintedCheckoutReceipt(String value) {
+  final parts = _printedReceiptParts.firstMatch(value.trim().toUpperCase());
+  if (parts == null) return null;
+  final sequence = int.parse(parts.group(2)!);
+  if (sequence < 1 || sequence > maximumCheckoutReceiptSequence) return null;
+  return PrintedReceiptReference(
+    deviceCode: parts.group(1)!,
+    sequence: sequence,
+  );
+}
+
 /// The frozen device counter key.
 ///
 /// It is deliberately not scoped by cashier UID: two cashiers sharing one

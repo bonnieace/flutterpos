@@ -20,6 +20,7 @@ import 'package:uzapay_pos/returns/returns.dart';
 import 'package:uzapay_pos/sales/sales.dart';
 import 'package:uzapay_pos/shift/shift.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/tenancy/tenant_configuration_screens.dart';
 import 'package:uzapay_pos/ui/scaffold.dart';
 import 'package:uzapay_pos/ui/snackbar.dart';
 import 'package:uzapay_pos/ui/tokens.dart';
@@ -305,6 +306,45 @@ void main() {
     },
   );
 
+  // **A price agreed with the customer**, which since 2026-09-29 is the one way
+  // the till takes money off a sale. Three items listed at 135.00, agreed at
+  // 120.00: the listed total, what came off and why, then the agreed total as
+  // the figure the customer is waiting for. The cashier is named under *Agreed
+  // prices*, which is the only reason the button is there at all.
+  screenshotCase(
+    '15d-new-sale-agreed-price',
+    build: () => inSession(
+      TenantCheckoutScreen(
+        cache: FakeCatalogSource(),
+        drafts: FakeDraftSink(),
+        loadPriceAgreement: _agreeingCashier,
+      ),
+      controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
+    ),
+    afterPump: (tester) async {
+      await _agreePriceOnTheTill(tester, confirm: true);
+    },
+    viewports: responsiveViewports,
+  );
+
+  // The question itself, answered and not yet confirmed: the listed total it
+  // is agreed against, the figure, what comes off as it is typed, and why.
+  screenshotCase(
+    '15e-agree-a-price',
+    build: () => inSession(
+      TenantCheckoutScreen(
+        cache: FakeCatalogSource(),
+        drafts: FakeDraftSink(),
+        loadPriceAgreement: _agreeingCashier,
+      ),
+      controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
+    ),
+    afterPump: (tester) async {
+      await _agreePriceOnTheTill(tester, confirm: false);
+    },
+    viewports: responsiveViewports,
+  );
+
   screenshotCase(
     '16-checkout-settings',
     build: () => inSession(
@@ -410,6 +450,47 @@ void main() {
     build: () => inSession(
       _stockCountsPage(
         _stockCountsReader(schedule: _stockCountsSchedule),
+        writer: FakeConfigurationDocumentWriter(),
+      ),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  // **Configs, the three tabs**, at the phone width and at 320. The strip was
+  // three fixed shares until 2026-09-29, when the third tab cut *Stock counts*
+  // and *Agreed prices* off mid-word on a 320 emulator; it now keeps the
+  // shares where the labels fit and scrolls where they do not. This is the
+  // capture that shows which, in the shipped face.
+  screenshotCase(
+    '16k-configs',
+    build: () {
+      final destinations = _settingsDestinations(FakeTenantReader.business());
+      return inSession(
+        TenantConfigurationsScreen(
+          currencyBuilder: destinations[0].builder,
+          stockCountsBuilder: destinations[2].builder,
+          agreedPricesBuilder: destinations[3].builder,
+        ),
+      );
+    },
+    viewports: const <ScreenshotViewport>[
+      mobileViewport,
+      ScreenshotViewport(
+        name: 'small-phone',
+        size: Size(320, 640),
+        devicePixelRatio: 2,
+      ),
+    ],
+  );
+
+  // **Agreed prices**, the stock count rota's rows with one toggle each, over
+  // the same shop: three people allowed, one of them invited and one of them
+  // deactivated, so both notes are in the picture.
+  screenshotCase(
+    '16j-agreed-prices',
+    build: () => inSession(
+      _agreedPricesPage(
+        _stockCountsReader(priceAgreement: _agreedPricesPolicy),
         writer: FakeConfigurationDocumentWriter(),
       ),
     ),
@@ -1778,7 +1859,10 @@ const Map<String, Object?> _stockCountsSchedule = <String, Object?>{
 /// deactivated one still down for a category, a category nobody counts - and
 /// the seeded corner shop has none of them. The IDs sort in the design's own
 /// order, which is the order a page of them is read in.
-FakeTenantReader _stockCountsReader({Map<String, Object?>? schedule}) {
+FakeTenantReader _stockCountsReader({
+  Map<String, Object?>? schedule,
+  Map<String, Object?>? priceAgreement,
+}) {
   const root = 'tenants/$seedTenantId';
   Map<String, Object?> member(
     String uid,
@@ -1815,6 +1899,8 @@ FakeTenantReader _stockCountsReader({Map<String, Object?>? schedule}) {
       for (final entry in staff.entries)
         '$root/staff/${entry.key}': entry.value,
       if (schedule != null) '$root/configuration/stock_take': schedule,
+      if (priceAgreement != null)
+        '$root/configuration/price_agreement': priceAgreement,
     },
     collections: <String, Map<String, Map<String, Object?>>>{
       '$root/staff': staff,
@@ -1845,6 +1931,80 @@ Widget _stockCountsPage(
   ),
 );
 
+/// Who may agree a price in the stock count captures' shop.
+const Map<String, Object?> _agreedPricesPolicy = <String, Object?>{
+  'allowed': <Map<String, Object?>>[
+    <String, Object?>{'uid': 'st-david'},
+    <String, Object?>{'uid': 'st-lydia'},
+    <String, Object?>{'uid': 'st-peter'},
+  ],
+  'updatedBy': ownerUid,
+};
+
+/// The Agreed prices page as the settings index opens it.
+Widget _agreedPricesPage(
+  FakeTenantReader reader, {
+  TenantConfigurationDocumentWriter? writer,
+}) => TenantSettingPage(
+  destination: TenantSettingsDestination(
+    settingKey: 'agreed-prices',
+    kind: TenantSettingKind.agreedPrices,
+    icon: Icons.handshake_outlined,
+    allowedRoles: TenantPriceAgreementPublisher.allowedRoles,
+    builder: (_) =>
+        TenantPriceAgreementSettingsPanel(reader: reader, writer: writer),
+  ),
+);
+
+/// The seeded cashier, named under *Agreed prices* on the device and the server.
+Future<TenantPublishedPriceAgreement> _agreeingCashier(
+  TenantSession session, {
+  required bool cached,
+}) async => TenantPublishedPriceAgreement.published(
+  TenantPriceAgreementPolicy(allowed: const <String>{cashierUid}),
+);
+
+/// Rings up three items, opens *Agree a price*, answers it, and confirms it
+/// when [confirm] is true.
+Future<void> _agreePriceOnTheTill(
+  WidgetTester tester, {
+  required bool confirm,
+}) async {
+  for (final id in const <String>[
+    'pd-bread-white',
+    'pd-mandazi',
+    'pd-soda-300',
+  ]) {
+    final tile = find.byKey(ValueKey('checkout-product-$id'));
+    await tester.ensureVisible(tile);
+    await tester.pumpAndSettle();
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+  }
+  final openCart = find.byKey(const ValueKey('checkout-open-cart'));
+  if (openCart.evaluate().isNotEmpty) {
+    await tester.tap(openCart);
+    await tester.pumpAndSettle();
+  }
+  final agree = find.byKey(const ValueKey('checkout-agree-price'));
+  await tester.ensureVisible(agree);
+  await tester.pumpAndSettle();
+  await tester.tap(agree);
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    find.byKey(const ValueKey('agree-price-total')),
+    '120',
+  );
+  await tester.enterText(
+    find.byKey(const ValueKey('agree-price-reason')),
+    'Bought three, regular customer',
+  );
+  await tester.pumpAndSettle();
+  if (!confirm) return;
+  await tester.tap(find.byKey(const ValueKey('agree-price-confirm')));
+  await tester.pumpAndSettle();
+}
+
 /// Shift history over the seeded business, with its cards opening the Sales
 /// report the way `lib/main.dart` wires them: on the shift's day, narrowed to
 /// whoever ran it, against the same reader.
@@ -1865,7 +2025,7 @@ Widget _shiftHistory() {
   );
 }
 
-/// The three settings the composition root offers, for the index captures.
+/// The settings the composition root offers, for the index captures.
 ///
 /// Each destination hosts the same panel `lib/main.dart` hosts, so a picture of
 /// the index is a picture of the real list rather than three invented rows.
@@ -1902,6 +2062,13 @@ List<TenantSettingsDestination> _settingsDestinations(
     icon: Icons.fact_check_outlined,
     allowedRoles: TenantStockTakeSchedulePublisher.allowedRoles,
     builder: (_) => TenantStockTakeSettingsPanel(reader: reader),
+  ),
+  TenantSettingsDestination(
+    settingKey: 'agreed-prices',
+    kind: TenantSettingKind.agreedPrices,
+    icon: Icons.handshake_outlined,
+    allowedRoles: TenantPriceAgreementPublisher.allowedRoles,
+    builder: (_) => TenantPriceAgreementSettingsPanel(reader: reader),
   ),
 ];
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:uzapay_pos/inventory/inventory.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
@@ -146,7 +148,119 @@ void main() {
 
     expect(find.textContaining('2 counts to take'), findsOneWidget);
   });
+
+  // **Found on two emulators on 2026-09-29**: the gate read this device's copy
+  // alone, so a phone that had never opened *Stock counts* was never asked,
+  // and one that had went on asking after the count was switched off.
+  group('the server answer', () {
+    testWidgets('reaches a phone that has never read the schedule', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        refreshSchedule: _answering(_prompting()),
+      );
+
+      expect(find.byKey(const ValueKey('stock-take-gate-start')), findsOneWidget);
+    });
+
+    testWidgets('takes back a question the count was switched off under', (
+      tester,
+    ) async {
+      final server = Completer<TenantPublishedStockTakeSchedule>();
+      await _pump(
+        tester,
+        schedule: _prompting(),
+        refreshSchedule: (_) => server.future,
+      );
+      expect(find.byKey(const ValueKey('stock-take-gate-start')), findsOneWidget);
+
+      server.complete(
+        TenantPublishedStockTakeSchedule.published(TenantStockTakeSchedule.none),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('stock-take-gate-start')), findsNothing);
+      expect(find.byKey(till), findsOneWidget);
+    });
+
+    testWidgets('opens a till held by a hold that has since been lifted', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        schedule: _blocking(),
+        refreshSchedule: _answering(TenantStockTakeSchedule.none),
+      );
+
+      expect(find.byKey(till), findsOneWidget);
+      expect(find.byKey(const ValueKey('stock-take-gate-held')), findsNothing);
+      expect(find.byKey(const ValueKey('stock-take-gate-start')), findsNothing);
+    });
+
+    testWidgets('asks again as a hold when a prompt became one', (
+      tester,
+    ) async {
+      final server = Completer<TenantPublishedStockTakeSchedule>();
+      await _pump(
+        tester,
+        schedule: _prompting(),
+        refreshSchedule: (_) => server.future,
+      );
+      expect(find.byKey(const ValueKey('stock-take-gate-later')), findsOneWidget);
+
+      server.complete(TenantPublishedStockTakeSchedule.published(_blocking()));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('stock-take-gate-held')), findsOneWidget);
+      expect(find.byKey(const ValueKey('stock-take-gate-start')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('stock-take-gate-later')),
+        findsNothing,
+        reason: 'the question on screen is the hold, not the old prompt',
+      );
+    });
+
+    testWidgets('leaves this device\'s answer standing when it cannot answer', (
+      tester,
+    ) async {
+      // With no signal this read fails every time; that is a till's ordinary
+      // day, and the copy it already holds is the answer.
+      await _pump(
+        tester,
+        schedule: _blocking(),
+        refreshSchedule: (_) async => throw StateError('offline'),
+      );
+
+      expect(find.byKey(const ValueKey('stock-take-gate-held')), findsOneWidget);
+    });
+
+    testWidgets('the same answer twice asks once', (tester) async {
+      final server = Completer<TenantPublishedStockTakeSchedule>();
+      await _pump(
+        tester,
+        schedule: _prompting(),
+        refreshSchedule: (_) => server.future,
+      );
+      await tester.tap(find.byKey(const ValueKey('stock-take-gate-later')));
+      await tester.pumpAndSettle();
+
+      server.complete(TenantPublishedStockTakeSchedule.published(_prompting()));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('stock-take-gate-start')),
+        findsNothing,
+        reason: '*Not now* holds for the visit when nothing changed',
+      );
+      expect(find.byKey(till), findsOneWidget);
+    });
+  });
 }
+
+/// A server that answers at once with [schedule].
+TenantStockTakeScheduleLoader _answering(TenantStockTakeSchedule schedule) =>
+    (_) async => TenantPublishedStockTakeSchedule.published(schedule);
 
 TenantStockTakeSchedule _blocking({String? categoryId}) =>
     TenantStockTakeSchedule(
@@ -173,6 +287,7 @@ Future<void> _pump(
   String businessDate = '2026-09-14',
   bool throwsOnLoad = false,
   void Function(TenantStockTakeScope scope)? onCountRoute,
+  TenantStockTakeScheduleLoader? refreshSchedule,
 }) async {
   tester.view.physicalSize = const Size(1400, 2400);
   tester.view.devicePixelRatio = 1;
@@ -191,6 +306,7 @@ Future<void> _pump(
                 ? const TenantPublishedStockTakeSchedule.absent()
                 : TenantPublishedStockTakeSchedule.published(schedule);
           },
+          refreshSchedule: refreshSchedule,
           obligations: obligations ?? _Obligations(),
           countRoute: (context, scope) {
             onCountRoute?.call(scope);

@@ -7,6 +7,7 @@ import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
+import '../checkout/checkout_receipt.dart' show parsePrintedCheckoutReceipt;
 import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
 import '../returns/return_history_panel.dart';
@@ -86,9 +87,15 @@ final class _TenantReceiptLookupPanelState
       });
     } on TenantReceiptLookupException {
       setState(() {
-        _rejection =
-            'That is not a receipt number. A receipt reads like '
-            'CT-A7F-20260731-0042.';
+        // **The printed number is named, not just refused, since
+        // 2026-09-29.** A receipt prints `JOHN-CT-7F2-001` with the date on its
+        // own line, and this screen searches by the full stored number, which
+        // carries the date. The day's sales search has the date to go with it.
+        _rejection = parsePrintedCheckoutReceipt(value) != null
+            ? 'That is the number as printed, which has no date in it. Search '
+                  'for it in the day’s sales, with the date on the receipt.'
+            : 'That is not a receipt number. Enter it as printed with the '
+                  'day’s sales, or in full here, like CT-A7F-20260731-0042.';
         _submitted = null;
       });
     }
