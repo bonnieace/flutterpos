@@ -147,6 +147,26 @@ service cloud.firestore {
         );
     }
 
+    // **Who the sale was for is deliberately not checked here.** A sale may
+    // carry `customerId`, `customerName` and `customerKraPin`, frozen onto it
+    // as a line's name is, and this rule does not shape them - for two reasons
+    // found the hard way on 2026-10-01:
+    //
+    // - **There is no room.** A sixteen-line sale and its sixteen stock writes
+    //   sit just under the 1000-expression budget, and a dozen terms checking
+    //   three optional strings took the largest legal sale over it. A rule that
+    //   refuses a full basket to validate a name is worse than no rule.
+    // - **It would prove nothing.** The key set is not frozen, and a cashier
+    //   who may choose any customer at the till gains nothing by writing one.
+    //   Where a shape matters it is enforced where it is used:
+    //   `processCustomerSale` acts only on an ID shaped `cu_` and forty hex
+    //   digits and ignores anything else, and `TenantSale` reads the three
+    //   fields permissively, as a walk-in when they are malformed.
+    //
+    // The customer document is not required to exist either: a customer added
+    // at the till with no signal reaches the server through the callable queue
+    // and the sale through the outbox, in whichever order the network allows.
+
     function shiftPath(tenantId, shiftId) {
       return /databases/$(database)/documents/tenants/$(tenantId)/shifts/$(shiftId);
     }
@@ -846,6 +866,40 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Who a business sells to. **Every active member reads them**, unlike a
+      // supplier, because the till is where a customer is chosen and a cashier
+      // is who chooses one - offline, from what this device has read.
+      //
+      // Writing is server-only for the reason suppliers are: one phone number
+      // may be on one customer, and proving that means reading every other
+      // customer inside the transaction that writes. `createCustomer` and
+      // `updateCustomer` do that, and a device queues them offline. The
+      // figures on a customer - points, sale count, last sale - are written by
+      // `processCustomerSale` alone, so nothing a device sends can award points.
+      //
+      // `activity` is the points ledger: one entry per sale that earned and per
+      // verified return that took back. It is management information in the
+      // way `stock_movements` is, so it is read by the same three roles.
+      match /customers/{customerId} {
+        allow read: if activeStaff(tenantId);
+        allow write: if false;
+
+        match /activity/{activityId} {
+          allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+          allow write: if false;
+        }
+      }
+
+      // Every receipt the server tried to send on WhatsApp, and what became of
+      // it. Read by management, who are the people who can do something about
+      // a failure; the number is stored masked, so the record identifies a
+      // receipt and never hands a phone number to whoever can list it. Written
+      // by the delivery worker and the webhook only.
+      match /receipt_deliveries/{deliveryId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
       match /production_batches/{batchId} {
         allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
         allow write: if false;
@@ -1024,6 +1078,21 @@ service cloud.firestore {
     }
 
     match /email_suppressions/{documentId} {
+      allow read, write: if false;
+    }
+
+    // The WhatsApp counterparts: which business a sent message belongs to, so
+    // the webhook can find its delivery, and which numbers replied STOP. Both
+    // are server-only, as their email equivalents are.
+    match /whatsapp_messages/{documentId} {
+      allow read, write: if false;
+    }
+
+    match /whatsapp_suppressions/{documentId} {
+      allow read, write: if false;
+    }
+
+    match /whatsapp_auto_replies/{documentId} {
       allow read, write: if false;
     }
 

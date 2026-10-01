@@ -338,6 +338,51 @@ test("a schema v2 sale cannot record an unmodelled tender", async () => {
   }
 });
 
+const CUSTOMER_ID = `cu_${"0123456789abcdef".repeat(2)}01234567`;
+
+// **A walk-in names nobody, and every earlier build sells as a walk-in.** The
+// three customer fields are additive, so the absence of all three is the shape
+// every sale written before customers existed already has.
+test("a sale may name the customer it was for, with or without a KRA PIN", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+
+  await assertSucceeds(
+    checkoutBatch(firestore, {
+      checkoutId: "checkout-customer",
+      decrements: [["tenants/tenant-a/products/product-a", -1]],
+      sale: { customerId: CUSTOMER_ID, customerName: "Jane Wanjiku" },
+    }).commit(),
+  );
+  await assertSucceeds(
+    checkoutBatch(firestore, {
+      checkoutId: "checkout-customer-pin",
+      decrements: [["tenants/tenant-a/products/product-a", -1]],
+      sale: {
+        customerId: CUSTOMER_ID,
+        customerName: "Jane Wanjiku",
+        customerKraPin: "A012345678Z",
+      },
+    }).commit(),
+  );
+});
+
+// **The customer document is not read.** A customer added at the till with no
+// signal reaches the server through the callable queue, and the sale through the
+// outbox, in whichever order the network allows; nothing seeded here names this
+// customer, and the sale still commits.
+test("a sale naming a customer the server has not received yet still commits", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+
+  await assertSucceeds(
+    checkoutBatch(firestore, {
+      checkoutId: "checkout-customer-unseen",
+      sale: { customerId: CUSTOMER_ID, customerName: "Not Yet Synced" },
+    }).commit(),
+  );
+});
+
 // #105: v1 stayed accepted so a device holding an unsubmitted v1 draft across
 // the upgrade could still commit it - its payload hash covers the whole
 // payload, so migrating the draft would break the hash the server sale is
@@ -411,6 +456,12 @@ test("the largest allowed schema v2 sale still evaluates within the Rules budget
     doc(firestore, "tenants/tenant-a/sales/checkout-full"),
     saleFields("checkout-full", {
       tender: "card",
+      // A full basket for a named customer is the largest sale a till now
+      // writes. The rule does not shape these fields precisely because shaping
+      // them took this sale over the budget - see `firestore.rules`.
+      customerId: CUSTOMER_ID,
+      customerName: "Jane Wanjiku",
+      customerKraPin: "A012345678Z",
       items: Array.from({ length: 16 }, (_, index) =>
         saleLine(`product-${index}`, index + 1, 100),
       ),

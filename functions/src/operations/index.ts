@@ -1,6 +1,7 @@
 export {adjustStock} from "./stock";
 export {createCategory, renameCategory} from "./categories";
 export {createSupplier, updateSupplier} from "./suppliers";
+export {createCustomer, updateCustomer} from "./customers";
 export {receiveSupplierDelivery} from "./supplierDeliveries";
 export {completeProduction} from "./production";
 export {createProduct} from "./productCreate";
