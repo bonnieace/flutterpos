@@ -1,5 +1,6 @@
 import {createHash} from "node:crypto";
 import {HttpsError} from "firebase-functions/v2/https";
+import {isMoneyTender, readSaleCredit} from "../customers/credit";
 import {
   PeriodMetrics,
   PeriodReturns,
@@ -320,6 +321,32 @@ export function isoWeekKey(dateValue: string): string {
 }
 
 /**
+ * Adds what one sale put in the drawer to the bucket its tender names.
+ *
+ * **A credit sale puts in only what was paid.** The owed part left with the
+ * customer and is not in any drawer, so it is in no bucket - otherwise every
+ * shift that sold on credit would count short by exactly what it lent. The
+ * paid part goes to the method it was paid by.
+ */
+function addShiftSale(tenders: ShiftTenderAggregate, sale: SaleLike, totalMinor: number): void {
+  const credit = readSaleCredit(sale as Record<string, unknown>);
+  if (credit === null) {
+    addShiftTender(tenders, sale.tender, totalMinor);
+    return;
+  }
+  if (credit.paidTender !== null) {
+    addShiftTender(tenders, credit.paidTender, Math.max(0, totalMinor - credit.owedMinor));
+  }
+}
+
+/** A customer paying back what they owed, as the shift that took it sees it. */
+export interface CustomerPaymentLike {
+  shiftId?: unknown;
+  amountMinor?: unknown;
+  tender?: unknown;
+}
+
+/**
  * Adds one sale's takings to the bucket its tender names.
  *
  * The bucket is chosen by `saleTenderBucket`, which is the same function the
@@ -356,7 +383,8 @@ export function aggregateDailySales(
   sales: readonly SaleLike[],
   maximumShifts = 200,
   returns?: PeriodReturns,
-  returnCount = 0
+  returnCount = 0,
+  payments: readonly CustomerPaymentLike[] = []
 ): DailyAggregateResult {
   requireIsoDate(businessDate, "businessDate");
   const shifts = new Map<string, ShiftAggregate>();
@@ -385,7 +413,35 @@ export function aggregateDailySales(
     // separate pass would produce buckets that merely agree with the total;
     // adding the same validated figure in the same iteration makes them sum to
     // it, which is what lets a declaration be compared method by method.
-    addShiftTender(current.tenders, sale.tender, totalMinor);
+    addShiftSale(current.tenders, sale, totalMinor);
+    shifts.set(shiftId, current);
+    if (shifts.size > maximumShifts) {
+      throw new HttpsError(
+        "resource-exhausted",
+        `Business date ${businessDate} exceeds the bounded shift aggregation limit.`
+      );
+    }
+  }
+  // **Repayments are drawer money, not sales.** They go into the bucket of the
+  // method they were paid by, on the shift that took them, and leave `sales`
+  // and `transactions` alone - those are checked against the shift's own
+  // sale totals, which a repayment is not part of. A shift that only took a
+  // repayment still gets an expectation, or its drawer would be compared
+  // with nothing.
+  for (const payment of payments) {
+    const shiftId = typeof payment.shiftId === "string" ? payment.shiftId : undefined;
+    if (!shiftId || !DOCUMENT_SEGMENT.test(shiftId)) continue;
+    const amountMinor = payment.amountMinor;
+    if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) continue;
+    if (!isMoneyTender(payment.tender)) continue;
+    const current = shifts.get(shiftId) ?? {
+      shiftId,
+      businessDate,
+      sales: 0,
+      transactions: 0,
+      tenders: {cashMinor: 0, mpesaMinor: 0, cardMinor: 0, unattributedMinor: 0},
+    };
+    addShiftTender(current.tenders, payment.tender, amountMinor as number);
     shifts.set(shiftId, current);
     if (shifts.size > maximumShifts) {
       throw new HttpsError(

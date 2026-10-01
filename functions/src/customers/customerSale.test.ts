@@ -61,7 +61,7 @@ test("a sale earns its customer points at the business's rate, once", async () =
   const first = await count(db);
   const second = await count(db);
 
-  assert.deepEqual(first, {outcome: "counted", customerId: JANE, points: 4});
+  assert.deepEqual(first, {outcome: "counted", customerId: JANE, points: 4, owedMinor: 0});
   assert.deepEqual(second, {outcome: "already_counted", customerId: JANE});
   const customer = db.read(`${ROOT}/customers/${JANE}`);
   assert.equal(customer?.points, 4);
@@ -81,7 +81,7 @@ test("with loyalty off a sale still counts, and earns nothing", async () => {
 
   const outcome = await count(db);
 
-  assert.deepEqual(outcome, {outcome: "counted", customerId: JANE, points: 0});
+  assert.deepEqual(outcome, {outcome: "counted", customerId: JANE, points: 0, owedMinor: 0});
   const customer = db.read(`${ROOT}/customers/${JANE}`);
   assert.equal(customer?.saleCount, 1);
   assert.equal("points" in (customer ?? {}), false);

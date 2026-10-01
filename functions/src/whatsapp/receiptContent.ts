@@ -1,4 +1,6 @@
 import type {Firestore} from "firebase-admin/firestore";
+import {readSaleCredit} from "../customers/credit";
+import {CUSTOMER_ID_SHAPE} from "../customers/customerId";
 
 /**
  * What a WhatsApp receipt says, read from the sale the server holds.
@@ -25,6 +27,9 @@ export const RECEIPT_WORDS = {
   discountLabel: "Discount",
   totalLabel: "TOTAL",
   paidByLabel: "Paid by",
+  paidNowLabel: "Paid now",
+  owedLabel: "On credit",
+  balanceLabel: "Balance owed",
   footer: "Keep this receipt for returns",
   unnamedBusiness: "Sales receipt",
 } as const;
@@ -60,6 +65,10 @@ export interface ReceiptContent {
   totalMinor: number;
   /** How the cashier said the customer paid, or absent where nobody said. */
   paidBy?: string;
+  /** On a credit sale: what was paid at the counter, what was left owing, and the balance after. */
+  paidNowMinor?: number;
+  owedMinor?: number;
+  balanceOwedMinor?: number;
 }
 
 const STORED_RECEIPT_PARTS = /^CT-([0-9A-F]{3})-\d{8}-(\d{4,6})$/;
@@ -158,7 +167,23 @@ export async function readReceiptContent(
       Promise.resolve(null),
   ]);
   const servedBy = text(staff?.get("name"));
-  const tender = text(sale.tender);
+  const credit = readSaleCredit(sale);
+  const tender = credit === null ? text(sale.tender) : credit.paidTender ?? undefined;
+  // **The balance the server moved, where it has**: the till's own figure is
+  // an estimate made with whatever balance it last saw, and the PDF is sent
+  // after the sale was counted against the customer.
+  let balanceOwedMinor: number | undefined;
+  if (credit !== null) {
+    const customerId = typeof sale.customerId === "string" &&
+      CUSTOMER_ID_SHAPE.test(sale.customerId) ? sale.customerId : null;
+    const counted = customerId === null ? null : await tenantRef
+      .collection("customers").doc(customerId)
+      .collection("activity").doc(saleId).get();
+    const server = counted?.get("balanceAfterMinor");
+    const device = sale.creditBalanceAfterMinor;
+    balanceOwedMinor = Number.isSafeInteger(server) ? server as number :
+      Number.isSafeInteger(device) ? device as number : undefined;
+  }
   const logoUrl = text(branding.get("logoUrl"));
   return {
     businessName: text(branding.get("companyName")) ??
@@ -177,5 +202,10 @@ export async function readReceiptContent(
     discountMinor: wholeMinor(sale.discountMinor),
     totalMinor: wholeMinor(sale.totalMinor),
     paidBy: tender ? TENDER_LABELS[tender] : undefined,
+    ...(credit === null ? {} : {
+      paidNowMinor: credit.paidMinor,
+      owedMinor: credit.owedMinor,
+      balanceOwedMinor,
+    }),
   };
 }

@@ -25,6 +25,7 @@ import {
   processTenantDiscoveryPage,
   recordReconciliationFailure,
   registerReturnReceipt,
+  registerCustomerPaymentReceipt,
   registerSaleReceipt,
 } from "./jobs";
 import {
@@ -319,6 +320,39 @@ export const mergeReturnReconciliationJob = onDocumentCreated(
     const registration = await registerReturnReceipt(getFirestore(), {
       tenantId: event.params.tenantId,
       returnId: event.params.returnId,
+      businessDate,
+      receivedAt: Timestamp.fromDate(received),
+    });
+    if (registration.task) await enqueueReconciliationTask(registration.task);
+  }
+);
+
+/**
+ * A customer paid back what they owed, so the shift that took the money
+ * should hold more. See [registerCustomerPaymentReceipt].
+ *
+ * The payment's `businessDate` is its shift's, written by
+ * `recordCustomerPayment` from the shift document rather than from the device.
+ */
+export const mergeCustomerPaymentReconciliationJob = onDocumentCreated(
+  {
+    document: "tenants/{tenantId}/customer_payments/{paymentId}",
+    retry: true,
+  },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+    const received = new Date(event.time);
+    let businessDate = nairobiDate(received);
+    try {
+      businessDate = requireIsoDate(snapshot.get("businessDate"), "businessDate");
+    } catch {
+      // Written by the callable from the shift; a malformed one cannot occur,
+      // and would be reconciled in its receipt date like a sale's.
+    }
+    const registration = await registerCustomerPaymentReceipt(getFirestore(), {
+      tenantId: event.params.tenantId,
+      paymentId: event.params.paymentId,
       businessDate,
       receivedAt: Timestamp.fromDate(received),
     });

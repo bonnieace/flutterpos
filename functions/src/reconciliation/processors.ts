@@ -34,6 +34,9 @@ const DAILY_SALES_LIMIT = 5_000;
  * understate what came back, which is the direction that flatters.
  */
 const DAILY_RETURNS_LIMIT = 1_000;
+
+/** As many repayments as a day may hold before its metrics refuse to guess. */
+const DAILY_PAYMENTS_LIMIT = 5000;
 /**
  * How many shift expectations one business date may already hold.
  *
@@ -194,6 +197,19 @@ async function regenerateDailyMetric(
     businessDate,
     DAILY_RETURNS_LIMIT
   );
+  // **The day's repayments, read the same way.** A customer paying back what
+  // they owed puts money in the drawer of the shift that took it, so each
+  // shift's expectation includes them; see `aggregateDailySales`.
+  const paymentsSnapshot = await tenantRef.collection("customer_payments")
+    .where("businessDate", "==", businessDate)
+    .limit(DAILY_PAYMENTS_LIMIT + 1)
+    .get();
+  if (paymentsSnapshot.size > DAILY_PAYMENTS_LIMIT) {
+    throw new HttpsError(
+      "resource-exhausted",
+      `Business date ${businessDate} exceeds the bounded daily repayment limit.`
+    );
+  }
   const result = aggregateDailySales(
     businessDate,
     // The document id is carried through because it is what a return names.
@@ -202,7 +218,8 @@ async function regenerateDailyMetric(
     ),
     undefined,
     returns,
-    returnCount
+    returnCount,
+    paymentsSnapshot.docs.map((document) => document.data())
   );
   const previousExpectationSnapshot = await tenantRef.collection("shift_expectations")
     .where("businessDate", "==", businessDate)

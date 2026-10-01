@@ -1,6 +1,7 @@
 import {createHash} from "node:crypto";
 import {HttpsError} from "firebase-functions/v2/https";
 import {requireDocumentId, requireString} from "../core/validation";
+import {readSaleCredit} from "../customers/credit";
 
 export const STOCK_ADJUSTMENT_TYPES = [
   "restock",
@@ -52,6 +53,8 @@ export interface SaleLike {
   shiftId?: unknown;
   tender?: unknown;
   items?: unknown;
+  creditOwedMinor?: unknown;
+  creditPaidTender?: unknown;
 }
 
 /** Units returned against one sale, by product id. */
@@ -664,6 +667,30 @@ export function aggregateSalesByTender(
   for (const sale of sales) {
     const contribution = saleContribution(sale, categoryId, saleReturns(sale, returns));
     if (!contribution.counted) continue;
+    const credit = readSaleCredit(sale as Record<string, unknown>);
+    if (credit !== null) {
+      // **A credit sale is split, not moved.** What was paid at the counter is
+      // paid-by money like any other sale's; what was left owing is in
+      // `other`, the bucket for takings no payment method accounts for, which
+      // keeps the bucket set every installed build decodes. The split follows
+      // the sale's own owed share, so a partly returned sale splits what is
+      // left of it the same way.
+      const revenueMinor = moneyToMinorUnits(contribution.revenue);
+      const owedShare = Math.round(
+        revenueMinor * credit.owedMinor / (credit.owedMinor + credit.paidMinor)
+      );
+      const owedTotals = breakdown.other;
+      owedTotals.sales = addMonetaryValue(owedTotals.sales, minorUnitsToMoney(owedShare));
+      owedTotals.transactions += 1;
+      if (credit.paidTender !== null) {
+        const paidTotals = breakdown[credit.paidTender];
+        paidTotals.sales = addMonetaryValue(
+          paidTotals.sales,
+          minorUnitsToMoney(revenueMinor - owedShare)
+        );
+      }
+      continue;
+    }
     const totals = breakdown[saleTenderBucket(sale.tender)];
     totals.sales = addMonetaryValue(totals.sales, contribution.revenue);
     totals.transactions += 1;

@@ -89,6 +89,7 @@ export {
 export {
   acknowledgeReconciliationAnomaly,
   amendShiftSummary,
+  mergeCustomerPaymentReconciliationJob,
   mergeReturnReconciliationJob,
   mergeSaleReconciliationJob,
   requestTenantReconciliation,
@@ -105,6 +106,9 @@ export {closeAbandonedShift} from "./shifts/abandonedShift";
 // What a sale to a named customer does to them: points, sale count, last
 // purchase - counted once, by the server, when the sale arrives.
 export {onCustomerSale, processCustomerSale} from "./customers/customerSale";
+
+// A customer paying back what they bought on credit, into the shift that took it.
+export {recordCustomerPayment} from "./customers/payments";
 
 // Receipts on WhatsApp, from the one number every business shares: the send
 // itself, a cashier's request for one, whether the channel is set up, and

@@ -1,3 +1,4 @@
+import {CREDIT_TENDER, readSaleCredit} from "../customers/credit";
 import {FieldValue, getFirestore, Timestamp} from "firebase-admin/firestore";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {requireAuthenticatedUser} from "../core/authorization";
@@ -129,7 +130,11 @@ export function validateStrandedSale(options: {
   }
   if (
     hasTender &&
-    !(SALE_TENDERS as readonly unknown[]).includes(sale.tender)
+    !(SALE_TENDERS as readonly unknown[]).includes(sale.tender) &&
+    // A credit sale is the one tender outside the money methods, and only
+    // with a customer and an owed part that adds up - as Rules require.
+    !(sale.tender === CREDIT_TENDER && readSaleCredit(sale) !== null &&
+      typeof sale.customerId === "string")
   ) {
     throw new HttpsError(
       "invalid-argument",

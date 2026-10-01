@@ -32,6 +32,13 @@ import {MAXIMUM_PRODUCT_NAME_LENGTH} from "./productUpdate";
  * follows, for the same reason: a tick recorded against one number is not
  * permission to message another.
  *
+ * **Credit is a limit a manager sets, and a balance only the server moves.**
+ * `creditLimitMinor` is the most this customer may owe; absent means they buy
+ * for money only. A cashier may add a customer at the till but may not give
+ * them credit - that is the same decision as lending the shop's money, and it
+ * is a manager's. `balanceMinor` and `owingSince` are written by
+ * `processCustomerSale` and `recordCustomerPayment`, never here.
+ *
  * **A customer is never deleted, only marked inactive.** Sales name them, and a
  * history whose rows point at nothing is a history nobody can read.
  *
@@ -63,6 +70,12 @@ export const CUSTOMER_CREATE_ROLES = ["owner", "admin", "manager", "cashier"] as
 
 /** Who may correct one, mark one inactive, or record consent afterwards. */
 export const CUSTOMER_UPDATE_ROLES = ["owner", "admin", "manager"] as const;
+
+/**
+ * The largest credit limit a customer may be given: ten billion of the major
+ * unit, far past any shop's book and well inside a safe integer.
+ */
+export const MAXIMUM_CREDIT_LIMIT_MINOR = 1_000_000_000_000;
 
 export const MAXIMUM_CUSTOMER_EMAIL_LENGTH = 254;
 export const MAXIMUM_CUSTOMER_NOTES_LENGTH = 1000;
@@ -104,6 +117,7 @@ const ACCEPTED_CUSTOMER_DOCUMENT_KEYS = new Set<string>([
   ...OPTIONAL_CUSTOMER_FIELDS,
   "whatsappOptIn",
   "active",
+  "creditLimitMinor",
   "createdBy",
   "updatedBy",
   "searchName",
@@ -124,6 +138,30 @@ export interface CustomerFields {
   whatsappOptIn?: boolean;
 
   active?: boolean;
+
+  /** A limit to set, or null to stop giving credit. Absent leaves it alone. */
+  creditLimitMinor?: number | null;
+}
+
+/**
+ * A credit limit in minor units, or null for "no credit".
+ *
+ * **Zero is no credit, stored as nothing**, so the device has one way to read
+ * "this customer may not buy on credit" rather than two.
+ */
+export function readCreditLimit(value: unknown): number | null {
+  if (value === null) return null;
+  if (
+    !Number.isSafeInteger(value) ||
+    (value as number) < 0 ||
+    (value as number) > MAXIMUM_CREDIT_LIMIT_MINOR
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "creditLimitMinor must be a whole number of minor units, 0 or more."
+    );
+  }
+  return value === 0 ? null : value as number;
 }
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -311,6 +349,10 @@ export function readCustomerDocument(
     }
     if (mode === "update") fields.active = document.active;
   }
+  if (document.creditLimitMinor !== undefined) {
+    const limit = readCreditLimit(document.creditLimitMinor);
+    if (mode === "update" || limit !== null) fields.creditLimitMinor = limit;
+  }
   if (mode === "update" && Object.keys(fields).length === 0) {
     throw new HttpsError(
       "invalid-argument",
@@ -410,6 +452,9 @@ export function customerCreateData(
   const search = customerSearchFields(fields.name as string, fields.phone);
   data.searchName = search.searchName;
   data.searchPrefixes = search.searchPrefixes;
+  if (typeof fields.creditLimitMinor === "number") {
+    data.creditLimitMinor = fields.creditLimitMinor;
+  }
   data.active = true;
   data.createdBy = actorUid;
   return data;
@@ -531,6 +576,10 @@ export async function applyCustomerUpdate(
     update.searchPrefixes = search.searchPrefixes;
   }
   if (fields.active !== undefined) update.active = fields.active;
+  if (fields.creditLimitMinor !== undefined) {
+    if (fields.creditLimitMinor === null) cleared.push("creditLimitMinor");
+    else update.creditLimitMinor = fields.creditLimitMinor;
+  }
   transaction.update(customerRef, {
     ...update,
     // Cleared fields are deleted inside the write that performs it, so the
@@ -587,6 +636,7 @@ export const createCustomer = onCall<
       CUSTOMER_CREATE_ROLES,
       transaction
     );
+    requireCreditGranter(currentActor.staff.role, fields);
     return applyCustomerCreate(db, transaction, {
       tenantId,
       customerId,
@@ -595,6 +645,21 @@ export const createCustomer = onCall<
     });
   });
 });
+
+/**
+ * Refuses a customer added with credit by someone who may not give it.
+ *
+ * Checked inside the transaction, with the role the transaction read: a
+ * cashier promoted between queueing and draining is a manager by then.
+ */
+export function requireCreditGranter(role: string, fields: CustomerFields): void {
+  if (fields.creditLimitMinor === undefined || fields.creditLimitMinor === null) return;
+  if ((CUSTOMER_UPDATE_ROLES as readonly string[]).includes(role)) return;
+  throw new HttpsError(
+    "permission-denied",
+    "Only an owner, administrator or manager can give a customer credit."
+  );
+}
 
 /** Corrects one customer. See [applyCustomerUpdate]. */
 export const updateCustomer = onCall<

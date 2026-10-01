@@ -207,7 +207,23 @@ export async function renderReceiptPdf(
     pair(RECEIPT_WORDS.discountLabel, money(-content.discountMinor));
   }
   pair(RECEIPT_WORDS.totalLabel, money(content.totalMinor), "bold", TOTAL_SIZE);
-  if (content.paidBy) pair(RECEIPT_WORDS.paidByLabel, content.paidBy);
+  if (content.owedMinor !== undefined) {
+    // A credit sale: what was paid and how, then what is owed - on this sale
+    // and in all - in the order the printed receipt gives them.
+    if (content.paidNowMinor) {
+      pair(
+        content.paidBy ? `${RECEIPT_WORDS.paidNowLabel} (${content.paidBy})` :
+          RECEIPT_WORDS.paidNowLabel,
+        money(content.paidNowMinor)
+      );
+    }
+    pair(RECEIPT_WORDS.owedLabel, money(content.owedMinor), "bold");
+    if (content.balanceOwedMinor !== undefined) {
+      pair(RECEIPT_WORDS.balanceLabel, money(content.balanceOwedMinor));
+    }
+  } else if (content.paidBy) {
+    pair(RECEIPT_WORDS.paidByLabel, content.paidBy);
+  }
   rows.push({kind: "rule"});
   centred(RECEIPT_WORDS.footer, "regular", SMALL_SIZE, true);
 

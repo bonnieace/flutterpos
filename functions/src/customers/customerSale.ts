@@ -11,6 +11,12 @@ import {onDocumentCreated} from "firebase-functions/v2/firestore";
 import {onTaskDispatched} from "firebase-functions/v2/tasks";
 import {queueAutomaticReceipt} from "../whatsapp/deliveries";
 import {CUSTOMER_ID_SHAPE} from "./customerId";
+import {
+  balanceFields,
+  readSaleCredit,
+  storedBalance,
+  storedCreditLimit,
+} from "./credit";
 
 /**
  * What a sale to a named customer does to that customer, once it arrives.
@@ -98,7 +104,7 @@ export type CustomerSaleOutcome =
   | {outcome: "no_sale"}
   | {outcome: "walk_in"}
   | {outcome: "already_counted"; customerId: string}
-  | {outcome: "counted"; customerId: string; points: number};
+  | {outcome: "counted"; customerId: string; points: number; owedMinor: number};
 
 function wholeMinor(value: unknown): number {
   return Number.isSafeInteger(value) && (value as number) > 0 ? value as number : 0;
@@ -143,6 +149,13 @@ export async function applyCustomerSale(
     const isLatest = soldAt !== null && (
       !(lastSaleAt instanceof Timestamp) || soldAt.toMillis() > lastSaleAt.toMillis()
     );
+    // **On the same ledger entry, so it is counted exactly as often as the
+    // points are**: once. A credit sale adds what it left owing to the
+    // balance; see `credit.ts` for why over the limit is recorded, not refused.
+    const credit = readSaleCredit(sale);
+    const before = storedBalance(customer);
+    const limit = storedCreditLimit(customer);
+    const after = before + (credit?.owedMinor ?? 0);
 
     transaction.create(activityRef, {
       kind: "sale",
@@ -155,14 +168,30 @@ export async function applyCustomerSale(
       pointsReturned: 0,
       minorUnitsPerPoint: policy.enabled ? policy.minorUnitsPerPoint : null,
       saleCreatedAt: soldAt,
+      ...(credit === null ? {} : {
+        credit: true,
+        creditOwedMinor: credit.owedMinor,
+        creditPaidMinor: credit.paidMinor,
+        creditPaidTender: credit.paidTender,
+        creditReturnedMinor: 0,
+        balanceChangeMinor: credit.owedMinor,
+        balanceAfterMinor: after,
+        creditLimitMinor: limit,
+        overLimit: limit === null || after > limit,
+      }),
       createdAt: FieldValue.serverTimestamp(),
     });
     transaction.update(customerRef, {
       saleCount: FieldValue.increment(1),
       ...(points > 0 ? {points: FieldValue.increment(points)} : {}),
       ...(isLatest ? {lastSaleAt: soldAt} : {}),
+      ...(credit === null ? {} : balanceFields(
+        before,
+        credit.owedMinor,
+        soldAt ?? FieldValue.serverTimestamp()
+      )),
     });
-    return {outcome: "counted", customerId, points};
+    return {outcome: "counted", customerId, points, owedMinor: credit?.owedMinor ?? 0};
   });
 }
 
@@ -173,21 +202,28 @@ export interface ReturnedLine {
 }
 
 /**
- * Plans taking back the points a sale earned, in proportion to what was
- * returned, inside the transaction that verifies the return.
+ * Plans what a return takes back from the customer the sale was for, inside
+ * the transaction that verifies the return: the points the sale earned, and,
+ * for a credit sale, what is still owed on it.
  *
  * **Reads only; the caller applies the answer after its own reads are done**,
  * because a Firestore transaction may not read after its first write and the
  * return's verification writes several documents of its own.
  *
- * **In proportion to the listed value returned, never more than the sale
- * earned and has not already given back.** A customer who returns half of
+ * **Points in proportion to the listed value returned, never more than the
+ * sale earned and has not already given back.** A customer who returns half of
  * what they bought gives back half the points it earned; two partial returns
  * can between them give back the whole and no more. A sale counted before
  * loyalty was on earned nothing, so there is nothing to take.
  *
+ * **A credit sale's return cancels debt first.** Goods that come back on a
+ * sale the customer has not paid for are paid for by coming back: the value
+ * returned, at the price actually charged, comes off what that sale still owes
+ * and never more. Anything left over is money the shop hands back, which no
+ * return records today and this does not either.
+ *
  * Null where there is nothing to do: a walk-in, a sale not counted yet, a sale
- * that earned no points.
+ * that earned no points and owes nothing.
  */
 export async function planReturnedPoints(
   transaction: Transaction,
@@ -205,10 +241,6 @@ export async function planReturnedPoints(
   const saleActivityRef = customerRef.collection("activity").doc(options.saleId);
   const [customer, saleActivity] = await transaction.getAll(customerRef, saleActivityRef);
   if (!customer.exists || !saleActivity.exists) return null;
-  const earned = wholeMinor(saleActivity.get("points"));
-  const alreadyReturned = wholeMinor(saleActivity.get("pointsReturned"));
-  const outstanding = earned - alreadyReturned;
-  if (outstanding <= 0) return null;
 
   const subtotal = wholeMinor(options.sale.subtotalMinor);
   if (subtotal === 0) return null;
@@ -221,18 +253,36 @@ export async function planReturnedPoints(
       priceOf.set(record.productId, wholeMinor(record.unitPriceMinor));
     }
   }
-  const returnedListed = options.lines.reduce(
-    (sum, line) => sum + line.quantity * (priceOf.get(line.productId) ?? 0),
-    0
+  const returnedListed = Math.min(
+    subtotal,
+    options.lines.reduce(
+      (sum, line) => sum + line.quantity * (priceOf.get(line.productId) ?? 0),
+      0
+    )
   );
-  const take = Math.min(
-    outstanding,
-    Math.floor(earned * Math.min(returnedListed, subtotal) / subtotal)
-  );
-  if (take <= 0) return null;
 
+  const earned = wholeMinor(saleActivity.get("points"));
+  const outstandingPoints = earned - wholeMinor(saleActivity.get("pointsReturned"));
+  const take = outstandingPoints <= 0 ? 0 : Math.min(
+    outstandingPoints,
+    Math.floor(earned * returnedListed / subtotal)
+  );
+
+  const owed = wholeMinor(saleActivity.get("creditOwedMinor"));
+  const outstandingOwed = saleActivity.get("credit") === true ?
+    owed - wholeMinor(saleActivity.get("creditReturnedMinor")) : 0;
+  const returnedCharged = Math.floor(
+    wholeMinor(options.sale.totalMinor) * returnedListed / subtotal
+  );
+  const cancel = outstandingOwed <= 0 ? 0 : Math.min(outstandingOwed, returnedCharged);
+  if (take <= 0 && cancel <= 0) return null;
+
+  const before = storedBalance(customer);
   return (write: Transaction) => {
-    write.update(saleActivityRef, {pointsReturned: FieldValue.increment(take)});
+    write.update(saleActivityRef, {
+      ...(take > 0 ? {pointsReturned: FieldValue.increment(take)} : {}),
+      ...(cancel > 0 ? {creditReturnedMinor: FieldValue.increment(cancel)} : {}),
+    });
     write.create(customerRef.collection("activity").doc(`return-${options.returnId}`), {
       kind: "return",
       tenantId: tenantRef.id,
@@ -240,9 +290,19 @@ export async function planReturnedPoints(
       saleId: options.saleId,
       returnId: options.returnId,
       points: -take,
+      ...(cancel > 0 ? {
+        credit: true,
+        balanceChangeMinor: -cancel,
+        balanceAfterMinor: before - cancel,
+        receiptNumber: typeof options.sale.receiptNumber === "string" ?
+          options.sale.receiptNumber : null,
+      } : {}),
       createdAt: FieldValue.serverTimestamp(),
     });
-    write.update(customerRef, {points: FieldValue.increment(-take)});
+    write.update(customerRef, {
+      ...(take > 0 ? {points: FieldValue.increment(-take)} : {}),
+      ...(cancel > 0 ? balanceFields(before, -cancel, FieldValue.serverTimestamp()) : {}),
+    });
   };
 }
 

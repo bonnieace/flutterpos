@@ -26,6 +26,12 @@ import {
  */
 const REVIEWED_PAYLOAD_BUILDERS: readonly {key: string; because: string}[] = [
   {
+    key: "customers/credit.ts#balanceFields",
+    because: "Moves an existing customer's balance, so every caller spreads it " +
+      "into `transaction.update` on a customer the transaction just read. A " +
+      "credit sale, a return and a repayment all need the customer to exist.",
+  },
+  {
     key: "reconciliation/jobs.ts#saleTriggerJobFields",
     because: "Returns the create and update payloads separately, and only the " +
       "update half carries the cursor-clearing sentinels. Pinned by jobs.test.ts.",

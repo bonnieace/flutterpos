@@ -95,6 +95,17 @@ export function planSaleTenderRecord(options: {
       "Only the cashier who recorded this sale can say how it was paid for."
     );
   }
+  // **A credit sale's payment was decided with the sale.** What was paid and
+  // what was left owing moved the customer's balance when it arrived;
+  // relabelling it cash afterwards would put the debt in the drawer and leave
+  // it on the customer too. Money paid later is a repayment, not a new tender.
+  if (sale.tender === "credit") {
+    throw new HttpsError(
+      "failed-precondition",
+      "This sale was on credit. Record what the customer pays back as a payment " +
+      "on their account instead."
+    );
+  }
   // **A stored null is the same silence a missing key is** -
   // `saleTenderBucket` reads both as `unrecorded` - so both are a blank to be
   // filled rather than an answer to be changed.

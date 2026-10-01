@@ -400,12 +400,66 @@ export async function registerReturnReceipt(
     receivedAt: Timestamp;
   }
 ): Promise<{task?: ReconciliationTaskPayload}> {
+  return registerDayReceipt(db, {
+    tenantId: input.tenantId,
+    documentId: input.returnId,
+    businessDate: input.businessDate,
+    receivedAt: input.receivedAt,
+    receipts: "reconciliation_return_receipts",
+    idField: "returnId",
+    dirtyReason: "return_filed",
+    lastField: "lastReturnId",
+  });
+}
+
+/**
+ * A customer paid back money they owed, so the day of the shift that took it
+ * is no longer settled: that shift's drawer should now hold more.
+ *
+ * The same row, bucket and once-per-document receipt a return uses - see
+ * [registerReturnReceipt] - under its own receipt collection, so a payment and
+ * a return that happened to share an ID could never mask one another.
+ */
+export async function registerCustomerPaymentReceipt(
+  db: Firestore,
+  input: {
+    tenantId: string;
+    paymentId: string;
+    businessDate: string;
+    receivedAt: Timestamp;
+  }
+): Promise<{task?: ReconciliationTaskPayload}> {
+  return registerDayReceipt(db, {
+    tenantId: input.tenantId,
+    documentId: input.paymentId,
+    businessDate: input.businessDate,
+    receivedAt: input.receivedAt,
+    receipts: "reconciliation_payment_receipts",
+    idField: "paymentId",
+    dirtyReason: "customer_payment",
+    lastField: "lastPaymentId",
+  });
+}
+
+async function registerDayReceipt(
+  db: Firestore,
+  input: {
+    tenantId: string;
+    documentId: string;
+    businessDate: string;
+    receivedAt: Timestamp;
+    receipts: string;
+    idField: string;
+    dirtyReason: string;
+    lastField: string;
+  }
+): Promise<{task?: ReconciliationTaskPayload}> {
   const bucket = fiveMinuteBucket(input.receivedAt.toDate());
   const jobId = `dirty_${bucket}`;
   const ref = jobRef(db, input.tenantId, jobId);
   const tenantRef = db.collection("tenants").doc(input.tenantId);
   const dirtyRef = tenantRef.collection("reconciliation_dirty_days").doc(input.businessDate);
-  const receiptRef = tenantRef.collection("reconciliation_return_receipts").doc(input.returnId);
+  const receiptRef = tenantRef.collection(input.receipts).doc(input.documentId);
 
   return db.runTransaction(async (transaction) => {
     const [jobSnapshot, dirtySnapshot, receiptSnapshot] = await transaction.getAll(
@@ -439,8 +493,8 @@ export async function registerReturnReceipt(
       businessDate: input.businessDate,
       status: "dirty",
       revision: nonNegativeInteger(dirtySnapshot.get("revision")) + 1,
-      dirtyReason: "return_filed",
-      lastReturnId: input.returnId,
+      dirtyReason: input.dirtyReason,
+      [input.lastField]: input.documentId,
       updatedAt: FieldValue.serverTimestamp(),
     };
     if (!dirtySnapshot.exists) dirtyData.createdAt = FieldValue.serverTimestamp();
@@ -460,7 +514,7 @@ export async function registerReturnReceipt(
 
     transaction.create(receiptRef, {
       tenantId: input.tenantId,
-      returnId: input.returnId,
+      [input.idField]: input.documentId,
       businessDate: input.businessDate,
       jobId,
       generation: decision.generation,

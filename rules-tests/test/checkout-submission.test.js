@@ -340,6 +340,64 @@ test("a schema v2 sale cannot record an unmodelled tender", async () => {
 
 const CUSTOMER_ID = `cu_${"0123456789abcdef".repeat(2)}01234567`;
 
+// **Credit is the one tender that is not a way of paying.** It names a customer
+// who left owing part or all of the sale; the part paid, if any, names how.
+// The balance itself is the server's to move, so all this checks is that the
+// sale is the shape `processCustomerSale` will read as a debt.
+test("a sale may be on credit to a named customer, in part or in full", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+  const total = saleFields().totalMinor;
+
+  await assertSucceeds(
+    checkoutBatch(firestore, {
+      checkoutId: "checkout-credit-part",
+      sale: {
+        tender: "credit",
+        customerId: CUSTOMER_ID,
+        customerName: "Jane",
+        creditOwedMinor: total - 1,
+        creditPaidTender: "mpesa",
+      },
+    }).commit(),
+  );
+  await assertSucceeds(
+    checkoutBatch(firestore, {
+      checkoutId: "checkout-credit-full",
+      sale: {
+        tender: "credit",
+        customerId: CUSTOMER_ID,
+        customerName: "Jane",
+        creditOwedMinor: total,
+      },
+    }).commit(),
+  );
+});
+
+test("a credit sale must name who owes, and owe a sensible amount", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+  const total = saleFields().totalMinor;
+  const credit = { tender: "credit", customerId: CUSTOMER_ID, creditOwedMinor: 1 };
+  const refused = [
+    ["nobody", { ...credit, customerId: undefined }],
+    ["nothing owed", { ...credit, creditOwedMinor: 0 }],
+    ["more than it cost", { ...credit, creditOwedMinor: total + 1 }],
+    ["a fraction", { ...credit, creditOwedMinor: 1.5 }],
+    ["no amount", { ...credit, creditOwedMinor: undefined }],
+    ["an unmodelled paid tender", { ...credit, creditPaidTender: "cheque" }],
+  ];
+
+  for (const [name, sale] of refused) {
+    await assertFails(
+      checkoutBatch(firestore, {
+        checkoutId: `checkout-credit-${name.replaceAll(" ", "-")}`,
+        sale,
+      }).commit(),
+    );
+  }
+});
+
 // **A walk-in names nobody, and every earlier build sells as a walk-in.** The
 // three customer fields are additive, so the absence of all three is the shape
 // every sale written before customers existed already has.

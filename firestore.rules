@@ -139,11 +139,30 @@ service cloud.firestore {
     // unanswered; `setSaleTender` fills it in later, once, from the sale's own
     // card. A tender that is *present* and names something unmodelled is still
     // denied - that is a corrupt record rather than an unanswered question.
+    //
+    // **`credit` is the one tender that is not a payment method.** It says the
+    // sale was for a named customer who left owing `creditOwedMinor` - more
+    // than nothing, at most the total - having paid the rest, if anything, by
+    // `creditPaidTender`. It is checked last, so a cash sale evaluates exactly
+    // the terms it always did and the Rules budget the largest basket sits
+    // under is untouched. The customer's balance is the server's to move, in
+    // `processCustomerSale`; nothing here can charge anyone anything.
     function validSaleTender(sale) {
       return sale.payloadSchemaVersion == 2
         && (
           !('tender' in sale)
           || sale.tender in ['cash', 'mpesa', 'card']
+          || (
+            sale.tender == 'credit'
+            && sale.customerId is string
+            && sale.creditOwedMinor is int
+            && sale.creditOwedMinor > 0
+            && sale.creditOwedMinor <= sale.totalMinor
+            && (
+              !('creditPaidTender' in sale)
+              || sale.creditPaidTender in ['cash', 'mpesa', 'card']
+            )
+          )
         );
     }
 
@@ -603,12 +622,37 @@ service cloud.firestore {
               )
             )
           )
+          // **What the drawer should hold besides the sales.** `creditOwedMinor`
+          // is the part of the shift's sales customers took on credit, which
+          // is in `totalSalesMinor` and not in the drawer; `repaidMinor` is
+          // what customers paid back into it, which is in the drawer and not
+          // a sale. Both are what the closing phone could see, for the
+          // shift's own history row - reconciliation counts both again from
+          // the sales and the payments themselves. Optional, because a shift
+          // that lent nothing and took nothing back has neither.
+          && (
+            !('creditOwedMinor' in request.resource.data)
+            || (
+              request.resource.data.creditOwedMinor is int
+              && request.resource.data.creditOwedMinor >= 0
+              && request.resource.data.creditOwedMinor
+                <= request.resource.data.totalSalesMinor
+            )
+          )
+          && (
+            !('repaidMinor' in request.resource.data)
+            || (
+              request.resource.data.repaidMinor is int
+              && request.resource.data.repaidMinor >= 0
+            )
+          )
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly([
               'status', 'endTime', 'closedAt', 'closingCashMinor', 'closingCash',
               'totalSales', 'totalSalesMinor', 'transactionCount',
               'declaredCashMinor', 'declaredMpesaMinor', 'declaredCardMinor',
-              'closedWithoutEvidence', 'settlementId'
+              'closedWithoutEvidence', 'settlementId',
+              'creditOwedMinor', 'repaidMinor'
             ]);
         allow delete: if false;
       }
@@ -877,8 +921,9 @@ service cloud.firestore {
       // figures on a customer - points, sale count, last sale - are written by
       // `processCustomerSale` alone, so nothing a device sends can award points.
       //
-      // `activity` is the points ledger: one entry per sale that earned and per
-      // verified return that took back. It is management information in the
+      // `activity` is the customer's ledger: one entry per sale counted and per
+      // verified return that took back - points, and for credit the balance
+      // each entry moved - and one per repayment. It is management information in the
       // way `stock_movements` is, so it is read by the same three roles.
       match /customers/{customerId} {
         allow read: if activeStaff(tenantId);
@@ -897,6 +942,16 @@ service cloud.firestore {
       // by the delivery worker and the webhook only.
       match /receipt_deliveries/{deliveryId} {
         allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
+      // What customers paid back on credit. Management reads them all; a
+      // cashier reads the ones they took, which is what their own shift's
+      // drawer has to account for. Written only by `recordCustomerPayment`,
+      // which moves the customer's balance in the same transaction.
+      match /customer_payments/{paymentId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager'])
+          || (activeStaff(tenantId) && resource.data.recordedBy == request.auth.uid);
         allow write: if false;
       }
 

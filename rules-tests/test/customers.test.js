@@ -129,3 +129,34 @@ test("the WhatsApp bookkeeping is server-only", async () => {
     await assertFails(setDoc(doc(owner, path), { forged: true }));
   }
 });
+
+test("a cashier reads the repayments they took, and management reads all", async () => {
+  await seedDocuments(testEnvironment, {
+    [`${ROOT}/customer_payments/cp_mine`]: {
+      customerId: "cu_jane",
+      amountMinor: 50000,
+      tender: "cash",
+      recordedBy: "cashier-a",
+    },
+    [`${ROOT}/customer_payments/cp_theirs`]: {
+      customerId: "cu_jane",
+      amountMinor: 50000,
+      tender: "cash",
+      recordedBy: "cashier-b",
+    },
+  });
+  const cashier = await asRole("cashier");
+  await assertSucceeds(getDoc(doc(cashier, `${ROOT}/customer_payments/cp_mine`)));
+  await assertFails(getDoc(doc(cashier, `${ROOT}/customer_payments/cp_theirs`)));
+  await assertFails(setDoc(doc(cashier, `${ROOT}/customer_payments/cp_new`), {
+    customerId: "cu_jane",
+    amountMinor: 1,
+    tender: "cash",
+    recordedBy: "cashier-a",
+  }));
+  const manager = await asRole("manager");
+  await assertSucceeds(getDoc(doc(manager, `${ROOT}/customer_payments/cp_theirs`)));
+  await assertFails(updateDoc(doc(manager, `${ROOT}/customer_payments/cp_theirs`), {
+    amountMinor: 1,
+  }));
+});
