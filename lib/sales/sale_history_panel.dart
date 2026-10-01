@@ -444,6 +444,15 @@ final class _SaleHistoryContents extends StatelessWidget {
         value: sale.tender?.label ?? 'Not recorded',
         valueKey: ValueKey('sale-history-tender-${sale.id}'),
       ),
+      // **Only when the till named somebody.** A walk-in is the ordinary sale,
+      // and a row reading *Customer: Walk-in* on most of a day's sales is a
+      // label with nothing in it.
+      if (sale.customer case final customer?)
+        RecordAttribute(
+          label: 'Customer',
+          value: customer.name,
+          valueKey: ValueKey('sale-history-customer-${sale.id}'),
+        ),
     ],
     provenance: _recordedAtLabel(
       sale,

@@ -2507,6 +2507,13 @@ final class _SaleCard extends StatelessWidget {
                 // strip that exists to be read second.
                 _SaleMeta(label: staffLabel),
                 _SaleMeta(label: _tender(sale)),
+                // Who it was for, only when the till named somebody; a walk-in
+                // adds nothing to a strip that is read second.
+                if (sale.customer case final customer?)
+                  _SaleMeta(
+                    key: ValueKey('sales-customer-${sale.id}'),
+                    label: customer.name,
+                  ),
                 // **The till, named here because the header has no room.**
                 // The header's `#0001` is the same on every register's first
                 // sale of a day - see `_receiptEnding` for the measurement -
