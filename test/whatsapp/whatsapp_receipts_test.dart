@@ -29,6 +29,26 @@ void main() {
       expect(odd.format, EReceiptFormat.pdf);
     });
 
+    test('a refusal names whose problem it was', () {
+      String? reasonFor(String reason) => TenantReceiptDelivery.fromSnapshot(
+        TenantQueryDocumentSnapshot(
+          path: 'tenants/t/receipt_deliveries/rd_1',
+          data: <String, Object?>{'status': 'failed', 'reason': reason},
+        ),
+      ).reasonText;
+
+      // Only Meta's "undeliverable" is about the customer's number.
+      expect(reasonFor('refused_131026'), contains('number'));
+      // A template that is unknown or still in review is UzaPay's, and the
+      // shop must not be sent to check a number that is fine.
+      for (final code in <String>['refused_132001', 'refused_132015']) {
+        expect(reasonFor(code), contains('approved'));
+        expect(reasonFor(code), isNot(contains('number')));
+      }
+      expect(reasonFor('refused_131000'), 'WhatsApp refused it.');
+      expect(reasonFor('refused'), 'WhatsApp refused it.');
+    });
+
     test('automatic sending still lets a cashier send one by hand', () {
       const settings = TenantEReceiptSettings(
         whatsappEnabled: true,

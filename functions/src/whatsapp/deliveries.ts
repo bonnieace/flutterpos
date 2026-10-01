@@ -321,11 +321,15 @@ export interface DeliveryDependencies {
 async function finish(
   ref: DocumentReference,
   status: "skipped" | "failed",
-  reason: string
+  reason: string,
+  receiptNumber: string | null
 ): Promise<"skipped" | "failed"> {
   await ref.update({
     status,
     reason,
+    // **Which sale, on every row.** Only a sent receipt used to record its
+    // number, so a refused one on the WhatsApp tile said who and not what.
+    ...(receiptNumber === null ? {} : {receiptNumber}),
     leaseUntil: FieldValue.delete(),
     updatedAt: FieldValue.serverTimestamp(),
     ...(status === "failed" ? {failedAt: FieldValue.serverTimestamp()} : {}),
@@ -374,13 +378,32 @@ export async function executeReceiptDelivery(
 
   const tenantRef = db.collection("tenants").doc(task.tenantId);
   const attempts = (Number.isSafeInteger(claimed.attempts) ? claimed.attempts as number : 0) + 1;
+  // An outcome reached before the sale is read looks its number up here, so
+  // a skipped row says which sale too. Only the rare unsent paths pay for it,
+  // and a number that cannot be read never stops the outcome being written.
+  const end = async (
+    status: "skipped" | "failed",
+    reason: string
+  ): Promise<"skipped" | "failed"> => {
+    let receiptNumber: string | null = null;
+    try {
+      receiptNumber = (await readReceiptContent(
+        db,
+        task.tenantId,
+        String(claimed.saleId)
+      ))?.receiptNumber ?? null;
+    } catch {
+      receiptNumber = null;
+    }
+    return finish(ref, status, reason, receiptNumber);
+  };
   const config = dependencies.config;
-  if (config === null) return finish(ref, "skipped", "not_configured");
+  if (config === null) return end("skipped", "not_configured");
 
   const settings = readEReceiptSettings(
     (await tenantRef.collection("configuration").doc("e_receipts").get()).data()
   );
-  if (!settings.whatsappEnabled) return finish(ref, "skipped", "turned_off");
+  if (!settings.whatsappEnabled) return end("skipped", "turned_off");
 
   // The number: carried by a manual send, looked up for an automatic one so
   // consent withdrawn since the sale still wins.
@@ -396,11 +419,11 @@ export async function executeReceiptDelivery(
       customer.get("whatsappOptIn") === true &&
       typeof stored === "string" &&
       E164.test(stored) ? stored : null;
-    if (phone === null) return finish(ref, "skipped", "no_consent");
+    if (phone === null) return end("skipped", "no_consent");
   }
-  if (phone === null) return finish(ref, "failed", "no_number");
+  if (phone === null) return end("failed", "no_number");
   const suppressed = await db.collection("whatsapp_suppressions").doc(phoneHash(phone)).get();
-  if (suppressed.exists) return finish(ref, "skipped", "opted_out");
+  if (suppressed.exists) return end("skipped", "opted_out");
 
   const content = await readReceiptContent(db, task.tenantId, String(claimed.saleId));
   if (content === null) {
@@ -471,19 +494,21 @@ export async function executeReceiptDelivery(
         await ref.update({
           status: "queued",
           reason: "retrying",
+          receiptNumber: content.receiptNumber,
           leaseUntil: FieldValue.delete(),
           updatedAt: FieldValue.serverTimestamp(),
         });
         throw error;
       }
       return finish(ref, "failed", error.code === undefined ?
-        "refused" : `refused_${error.code}`);
+        "refused" : `refused_${error.code}`, content.receiptNumber);
     }
     // Anything else - a PDF that could not be drawn, the database - is ours,
     // and is tried again by the queue's own backoff.
     await ref.update({
       status: "queued",
       reason: "retrying",
+      receiptNumber: content.receiptNumber,
       leaseUntil: FieldValue.delete(),
       updatedAt: FieldValue.serverTimestamp(),
     });

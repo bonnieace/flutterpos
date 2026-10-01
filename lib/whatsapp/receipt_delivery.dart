@@ -70,8 +70,16 @@ final class TenantReceiptDelivery {
     'waiting_for_sale' => 'Waiting for the sale to reach the server.',
     'retrying' => 'WhatsApp did not answer; trying again.',
     'no_number' => 'No number was given.',
-    final code when code.startsWith('refused') =>
-      'WhatsApp refused it - the number may not be on WhatsApp.',
+    // Meta's own code says whose problem it was. Only 131026 is about the
+    // number; the 132xxx family is about UzaPay's receipt template - unknown,
+    // still in review, paused - and blaming the number for that sends a shop
+    // to check the wrong thing.
+    'refused_131026' =>
+      'WhatsApp could not deliver it - the number may not be on WhatsApp.',
+    final code when code.startsWith('refused_132') =>
+      "WhatsApp would not use UzaPay's receipt message - it may not be "
+          'approved yet.',
+    final code when code.startsWith('refused') => 'WhatsApp refused it.',
     _ => 'Not delivered.',
   };
 

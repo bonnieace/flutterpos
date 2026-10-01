@@ -351,10 +351,35 @@ test("Meta's trouble is retried; a refused number is recorded as failed", async 
     }
   );
   assert.equal(outcome, "failed");
-  assert.equal(
-    db.read(`${ROOT}/receipt_deliveries/${deliveryId}`)?.reason,
-    "refused_131026"
+  const refused = db.read(`${ROOT}/receipt_deliveries/${deliveryId}`);
+  assert.equal(refused?.reason, "refused_131026");
+  // A refused row still says which sale it was for.
+  assert.equal(refused?.receiptNumber, "JOHN-CT-7F2-001");
+});
+
+test("a receipt skipped before its sale is read still names the sale", async () => {
+  const db = business();
+  const deliveryId = (await queueAutomaticReceipt(
+    db.asFirestore(),
+    {tenantId: TENANT, saleId: "sale-1"},
+    enqueue
+  ))!;
+  db.seed(`${ROOT}/configuration/e_receipts`, {
+    whatsappEnabled: false,
+    mode: "automatic",
+    format: "pdf",
+  });
+
+  const outcome = await executeReceiptDelivery(
+    db.asFirestore(),
+    {tenantId: TENANT, deliveryId},
+    {config: CONFIG, fetchImpl: meta([SENT]).fetch, now: () => NOW}
   );
+
+  assert.equal(outcome, "skipped");
+  const skipped = db.read(`${ROOT}/receipt_deliveries/${deliveryId}`);
+  assert.equal(skipped?.reason, "turned_off");
+  assert.equal(skipped?.receiptNumber, "JOHN-CT-7F2-001");
 });
 
 test("a delivery being sent elsewhere is left alone", async () => {
