@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../observability/app_telemetry.dart';
+import 'tenant_paths.dart';
 import 'tenant_pending_mutation.dart';
 
 /// When the change one queued record carries was made on this device, as the
@@ -139,6 +140,16 @@ final class FirebaseTenantMutationGateway
 
   @override
   Future<Map<String, Object?>?> read(String targetPath) async {
+    // **A WhatsApp receipt request is never confirmed by reading.** Its target
+    // is a delivery record a cashier may not read, so the read could only
+    // fail - and a failing read is retried for ever rather than ever sending
+    // again. Answering "nothing there" lets the worker do what settles it:
+    // send again, which the server answers from its idempotency record.
+    final segments = targetPath.split('/');
+    if (segments.length == 4 &&
+        segments[2] == TenantCollection.receiptDeliveries.segment) {
+      return null;
+    }
     final snapshot = await _firestore
         .doc(targetPath)
         .get(const GetOptions(source: Source.server))
@@ -272,6 +283,10 @@ final class FirebaseTenantMutationGateway
           await _call('createCustomer', tenantCustomerCallablePayload(record));
         case TenantPendingMutationKind.customerUpdate:
           await _call('updateCustomer', tenantCustomerCallablePayload(record));
+        // The payload is the whole request. The server keys its idempotency
+        // record on the request ID inside it, so a replay sends one receipt.
+        case TenantPendingMutationKind.whatsappReceiptRequest:
+          await _call('sendWhatsappReceipt', record.payload);
       }
       return const TenantMutationSubmissionResult(
         TenantMutationSubmissionOutcome.committed,

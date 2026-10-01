@@ -801,6 +801,15 @@ String _mutationRejectionReason(TenantPendingMutationRecord record) {
     return 'Another customer already has that phone number. One number '
         'reaches one person, so it can be on one customer.';
   }
+  if (record.kind == TenantPendingMutationKind.whatsappReceiptRequest) {
+    switch (code) {
+      case 'resource-exhausted':
+        return 'This receipt has already been sent three times, which is as '
+            'many as one sale may be.';
+      case 'failed-precondition':
+        return 'This business does not send receipts on WhatsApp.';
+    }
+  }
   return code.replaceAll('_', ' ');
 }
 
@@ -828,4 +837,5 @@ String _mutationKindLabel(TenantPendingMutationKind kind) => switch (kind) {
   TenantPendingMutationKind.productionComplete => 'Production batch',
   TenantPendingMutationKind.customerCreate => 'New customer',
   TenantPendingMutationKind.customerUpdate => 'Customer correction',
+  TenantPendingMutationKind.whatsappReceiptRequest => 'WhatsApp receipt',
 };

@@ -10,6 +10,11 @@ import '../checkout/checkout_outbox.dart';
 import '../checkout/checkout_print_transport_base.dart';
 import '../checkout/checkout_receipt.dart';
 import '../checkout/checkout_tender.dart';
+import '../customers/customer.dart';
+import '../customers/customer_form.dart';
+import '../whatsapp/e_receipt_settings.dart';
+import '../whatsapp/receipt_delivery.dart';
+import '../whatsapp/send_receipt_sheet.dart';
 import '../reporting/reporting_currency.dart';
 import '../reporting/device_sales_totals.dart';
 import '../reporting/sales_totals.dart';
@@ -124,7 +129,12 @@ final class TenantSalesReportScreen extends StatelessWidget {
     this.initialStaffId,
     this.reportSaver,
     this.imageCache,
+    this.receiptWriter,
   });
+
+  /// Where *Send on WhatsApp* queues a receipt. Absent, the sale menu offers
+  /// none.
+  final TenantWhatsappReceiptWriter? receiptWriter;
 
   /// Where a generated report goes. Null renders no report control at all.
   final TenantReportSaver? reportSaver;
@@ -187,6 +197,7 @@ final class TenantSalesReportScreen extends StatelessWidget {
       clock: clock,
       initialBusinessDate: initialBusinessDate,
       initialStaffId: initialStaffId,
+      receiptWriter: receiptWriter,
     ),
   );
 }
@@ -208,7 +219,12 @@ final class TenantSalesReportPanel extends StatefulWidget {
     this.staffPageSize = 50,
     this.initialBusinessDate,
     this.initialStaffId,
+    this.receiptWriter,
   });
+
+  /// Where *Send on WhatsApp* queues a receipt. Absent, the sale menu offers
+  /// none.
+  final TenantWhatsappReceiptWriter? receiptWriter;
 
   /// The business date the report opens on. Null is today, which is how the
   /// home opens it.
@@ -826,6 +842,76 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
     return (sale) => unawaited(_reprint(session, sale));
   }
 
+  /// Whether this business sends receipts on WhatsApp, once a read has said.
+  ///
+  /// **Null until then, and the menu offers nothing until then.** Read from
+  /// this device first and the server second, once per session, as the till
+  /// reads it.
+  bool? _sendsWhatsapp;
+  String? _whatsappReadFor;
+
+  void _readWhatsappSetting(TenantSession session) {
+    final key = '${session.uid}:${session.tenantId}:${session.epoch}';
+    if (_whatsappReadFor == key) return;
+    _whatsappReadFor = key;
+    _sendsWhatsapp = null;
+    unawaited(() async {
+      for (final reader in <TenantDataReader>[
+        widget.reader.cached ?? widget.reader,
+        widget.reader,
+      ]) {
+        try {
+          final settings = (await TenantEReceiptRepository(
+            session: session,
+            reader: reader,
+          ).load()).settings;
+          if (!mounted || _whatsappReadFor != key) return;
+          setState(() => _sendsWhatsapp = settings.whatsappEnabled);
+        } catch (_) {
+          // A setting this device cannot read offers nothing, as on the till.
+        }
+      }
+    }());
+  }
+
+  /// *Send on WhatsApp* for [session], or null where it cannot be offered.
+  ValueChanged<TenantSale>? _sendWhatsappAction(TenantSession session) {
+    if (widget.receiptWriter == null) return null;
+    _readWhatsappSetting(session);
+    if (_sendsWhatsapp != true) return null;
+    return (sale) => unawaited(_sendWhatsapp(session, sale));
+  }
+
+  Future<void> _sendWhatsapp(TenantSession session, TenantSale sale) async {
+    final writer = widget.receiptWriter;
+    if (writer == null) return;
+    String? phone;
+    final customerId = sale.customer?.id;
+    if (customerId != null) {
+      try {
+        phone = (await TenantCustomerRepository(
+          session: session,
+          reader: widget.reader.cached ?? widget.reader,
+        ).loadCustomer(customerId))?.phone;
+      } catch (_) {
+        // The sheet opens on an empty number; the cashier types it.
+      }
+    }
+    if (!mounted) return;
+    final notice = await showSendWhatsappReceiptSheet(
+      context,
+      session: session,
+      writer: writer,
+      saleId: sale.id,
+      receiptLabel: _receiptLabel(sale),
+      dialCode: dialCodeForCurrency(sale.currency),
+      customerName: sale.customer?.name,
+      customerPhone: phone,
+    );
+    if (!mounted || notice == null) return;
+    showAppSnackBar(context, notice);
+  }
+
   /// Puts a second copy of one receipt on paper, and says what happened.
   ///
   /// **Nothing on this page changes**, which is what separates a reprint from
@@ -914,6 +1000,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           onNext: null,
           onOpenReturns: (sale) => _openReturns(context, sale),
           onReprint: _reprintAction(session),
+          onSendWhatsapp: _sendWhatsappAction(session),
           onSetTender: _setTenderAction(context, session),
         ),
         // No session in scope at all is the guard's own `denied` case arriving
@@ -951,6 +1038,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           onNext: null,
           onOpenReturns: (sale) => _openReturns(context, sale),
           onReprint: _reprintAction(session),
+          onSendWhatsapp: _sendWhatsappAction(session),
           onSetTender: _setTenderAction(context, session),
         ),
         null => const SizedBox.shrink(),
@@ -993,6 +1081,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
                   selfUid: session.uid,
                   onOpenReturns: (sale) => _openReturns(context, sale),
                   onReprint: _reprintAction(session),
+                  onSendWhatsapp: _sendWhatsappAction(session),
                   onSetTender: _setTenderAction(context, session),
                 ),
               );
@@ -1015,6 +1104,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
           onPickDate: _pickBusinessDate,
           onStaffChanged: _setStaff,
           onReprint: _reprintAction(session),
+          onSendWhatsapp: _sendWhatsappAction(session),
           onPrevious: _pageIndex == 0 ? null : _previous,
           onNext: view.page.hasMore ? () => _next(view.page.nextCursor) : null,
           onOpenReturns: (sale) => _openReturns(context, sale),
@@ -1117,6 +1207,7 @@ final class _SalesReportContents extends StatelessWidget {
     required this.onNext,
     required this.onOpenReturns,
     required this.onReprint,
+    required this.onSendWhatsapp,
     required this.onSetTender,
   });
 
@@ -1166,6 +1257,10 @@ final class _SalesReportContents extends StatelessWidget {
 
   /// Null where this member may not reprint, or this build has no printer.
   final ValueChanged<TenantSale>? onReprint;
+
+  /// Null where this business sends no receipts on WhatsApp, or this build
+  /// cannot queue one.
+  final ValueChanged<TenantSale>? onSendWhatsapp;
 
   /// Answers *how was this paid for?* on a sale that did not say.
   final ValueChanged<TenantSale>? onSetTender;
@@ -1233,6 +1328,7 @@ final class _SalesReportContents extends StatelessWidget {
               filtered: loaded.appliedStaffId != null,
               onOpenReturns: onOpenReturns,
               onReprint: onReprint,
+              onSendWhatsapp: onSendWhatsapp,
               onSetTender: onSetTender,
             )
           else
@@ -2184,6 +2280,7 @@ final class _ReceiptSearchResult extends StatelessWidget {
     required this.selfUid,
     required this.onOpenReturns,
     required this.onReprint,
+    required this.onSendWhatsapp,
     required this.onSetTender,
   });
 
@@ -2196,6 +2293,10 @@ final class _ReceiptSearchResult extends StatelessWidget {
   final String selfUid;
   final ValueChanged<TenantSale> onOpenReturns;
   final ValueChanged<TenantSale>? onReprint;
+
+  /// Null where this business sends no receipts on WhatsApp, or this build
+  /// cannot queue one.
+  final ValueChanged<TenantSale>? onSendWhatsapp;
   final ValueChanged<TenantSale>? onSetTender;
 
   @override
@@ -2238,6 +2339,7 @@ final class _ReceiptSearchResult extends StatelessWidget {
           filtered: true,
           onOpenReturns: onOpenReturns,
           onReprint: onReprint,
+          onSendWhatsapp: onSendWhatsapp,
           onSetTender: onSetTender,
         ),
       ],
@@ -2255,6 +2357,7 @@ final class _SalesPresentation extends StatelessWidget {
     required this.filtered,
     required this.onOpenReturns,
     required this.onReprint,
+    required this.onSendWhatsapp,
     required this.onSetTender,
   });
 
@@ -2275,6 +2378,10 @@ final class _SalesPresentation extends StatelessWidget {
 
   /// Null where this member may not reprint, or this build has no printer.
   final ValueChanged<TenantSale>? onReprint;
+
+  /// Null where this business sends no receipts on WhatsApp, or this build
+  /// cannot queue one.
+  final ValueChanged<TenantSale>? onSendWhatsapp;
 
   /// Answers *how was this paid for?* on a sale that did not say. Null where
   /// this build cannot reach the callable.
@@ -2334,6 +2441,9 @@ final class _SalesPresentation extends StatelessWidget {
               staffLabel: _staffLabel(sale),
               onOpenReturns: () => onOpenReturns(sale),
               onReprint: onReprint == null ? null : () => onReprint!(sale),
+              onSendWhatsapp: onSendWhatsapp == null
+                  ? null
+                  : () => onSendWhatsapp!(sale),
               // **Only the cashier who rang it up.** They are the one person
               // who was at the counter; anybody else would be guessing, and the
               // server refuses them regardless. Whether the method may still be
@@ -2360,6 +2470,7 @@ final class _SaleCard extends StatelessWidget {
     required this.staffLabel,
     required this.onOpenReturns,
     required this.onReprint,
+    required this.onSendWhatsapp,
     required this.onSetTender,
   });
 
@@ -2377,6 +2488,9 @@ final class _SaleCard extends StatelessWidget {
 
   /// Null where this member may not reprint, or this build has no printer.
   final VoidCallback? onReprint;
+
+  /// Null where this business sends no receipts on WhatsApp.
+  final VoidCallback? onSendWhatsapp;
 
   /// Null unless this sale names no payment method and this viewer is the
   /// cashier who rang it up. See [_SalesPresentation].
@@ -2461,6 +2575,7 @@ final class _SaleCard extends StatelessWidget {
                   sale: sale,
                   onOpenReturns: onOpenReturns,
                   onReprint: onReprint,
+                  onSendWhatsapp: onSendWhatsapp,
                   onSetTender: onSetTender,
                 ),
               ],
@@ -2762,19 +2877,23 @@ final class _SaleMeta extends StatelessWidget {
 /// that separates them: it is lighter than the `cardEdge` every card already
 /// wears, so the menu reads as the layer in front rather than as another card.
 /// What a sale card's menu offers.
-enum _SaleAction { returns, reprint, setTender }
+enum _SaleAction { returns, reprint, sendWhatsapp, setTender }
 
 final class _SaleMenu extends StatelessWidget {
   const _SaleMenu({
     required this.sale,
     required this.onOpenReturns,
     required this.onReprint,
+    required this.onSendWhatsapp,
     required this.onSetTender,
   });
 
   final TenantSale sale;
   final VoidCallback onOpenReturns;
   final VoidCallback? onReprint;
+
+  /// Null where this business sends no receipts on WhatsApp.
+  final VoidCallback? onSendWhatsapp;
 
   /// Null unless this sale names no payment method and this viewer rang it up.
   final VoidCallback? onSetTender;
@@ -2803,6 +2922,7 @@ final class _SaleMenu extends StatelessWidget {
       onSelected: (action) => switch (action) {
         _SaleAction.returns => onOpenReturns(),
         _SaleAction.reprint => onReprint?.call(),
+        _SaleAction.sendWhatsapp => onSendWhatsapp?.call(),
         _SaleAction.setTender => onSetTender?.call(),
       },
       itemBuilder: (context) => <PopupMenuEntry<_SaleAction>>[
@@ -2826,6 +2946,19 @@ final class _SaleMenu extends StatelessWidget {
             child: const _SaleMenuLabel(
               icon: Icons.print_outlined,
               label: 'Reprint receipt',
+            ),
+          ),
+        // **The receipt again, to a phone rather than paper**, for a customer
+        // who asks for it after the sale - absent where the business sends no
+        // receipts on WhatsApp.
+        if (onSendWhatsapp != null)
+          PopupMenuItem<_SaleAction>(
+            key: ValueKey('sales-send-whatsapp-${sale.id}'),
+            value: _SaleAction.sendWhatsapp,
+            height: tokens.density.minimumTapTarget.height,
+            child: const _SaleMenuLabel(
+              icon: Icons.send_outlined,
+              label: 'Send on WhatsApp',
             ),
           ),
         // Absent for the same reason the reprint is: a colleague answering for

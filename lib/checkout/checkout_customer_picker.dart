@@ -34,13 +34,18 @@ import '../ui/fields.dart';
 import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../whatsapp/receipt_delivery.dart';
 import 'checkout_configuration.dart';
 import 'checkout_sale.dart';
 
 /// What the till needs to offer customers: where to search them, and where an
 /// added one is queued.
 final class CheckoutCustomerServices {
-  const CheckoutCustomerServices({required this.reader, this.writer});
+  const CheckoutCustomerServices({
+    required this.reader,
+    this.writer,
+    this.receiptWriter,
+  });
 
   /// The overlay reader the routes hold, so a customer queued on this device
   /// is found before the server has them.
@@ -49,6 +54,10 @@ final class CheckoutCustomerServices {
   /// Where a customer added at the till is queued. Null offers no *Add new
   /// customer*.
   final TenantCustomerWriter? writer;
+
+  /// Where a cashier's *Send on WhatsApp* is queued. Null offers no such
+  /// button, whatever the business's WhatsApp setting says.
+  final TenantWhatsappReceiptWriter? receiptWriter;
 }
 
 /// What the cashier chose.

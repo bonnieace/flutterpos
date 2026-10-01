@@ -30,6 +30,7 @@ import '../production/production_batch.dart';
 import '../returns/return_request.dart';
 import '../suppliers/supplier.dart';
 import '../suppliers/supplier_delivery.dart';
+import '../whatsapp/receipt_delivery.dart';
 import 'tenant_pending_mutation.dart';
 import 'tenant_repository.dart';
 import '../observability/app_telemetry.dart';
@@ -343,6 +344,43 @@ final class QueuedTenantCustomerWriter implements TenantCustomerWriter {
     );
     _onQueued?.call();
     return TenantCustomerWriteResult.queued(operationId);
+  }
+}
+
+/// Durable-first WhatsApp receipt requests.
+///
+/// **The till promises the receipt the moment the cashier asks**, offline or
+/// not: the request is written here first and carried to `sendWhatsappReceipt`
+/// by the worker, which waits for the sale on the server's side.
+final class QueuedTenantWhatsappReceiptWriter
+    implements TenantWhatsappReceiptWriter {
+  const QueuedTenantWhatsappReceiptWriter({
+    required TenantPendingMutationStore store,
+    required TenantPendingMutationUidProvider currentUid,
+    TenantQueuedMutationSignal? onQueued,
+  }) : _store = store,
+       _currentUid = currentUid,
+       _onQueued = onQueued;
+
+  final TenantPendingMutationStore _store;
+  final TenantPendingMutationUidProvider _currentUid;
+  final TenantQueuedMutationSignal? _onQueued;
+
+  @override
+  Future<void> send(TenantWhatsappReceiptIntent intent) async {
+    final uid = _currentUid();
+    if (uid == null) {
+      throw const TenantWhatsappReceiptException('receipt_no_session');
+    }
+    await _store.enqueue(
+      uid: uid,
+      tenantId: intent.tenantId,
+      operationId: 'whatsapp-receipt-${intent.deliveryId}',
+      kind: TenantPendingMutationKind.whatsappReceiptRequest,
+      targetPath: intent.path,
+      payload: intent.callablePayload(),
+    );
+    _onQueued?.call();
   }
 }
 

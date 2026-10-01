@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:uzapay_pos/customers/customer.dart';
+import 'package:uzapay_pos/whatsapp/receipt_delivery.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/ui/buttons.dart';
 import 'package:uzapay_pos/ui/dialogs.dart';
@@ -180,6 +181,128 @@ void main() {
       await _tap(tester, 'checkout-product-product-b');
       await _tap(tester, 'checkout-save');
       expect(drafts.requests.single.customer, isNull);
+    });
+  });
+
+  group('a receipt on WhatsApp', () {
+    const manual = <String, Object?>{
+      'whatsappEnabled': true,
+      'mode': 'manual',
+      'format': 'pdf',
+    };
+    const automatic = <String, Object?>{
+      'whatsappEnabled': true,
+      'mode': 'automatic',
+      'format': 'summary',
+    };
+
+    testWidgets('a business sending by hand is offered Send on WhatsApp', (
+      tester,
+    ) async {
+      final receipts = _ReceiptWriter();
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        customers: CheckoutCustomerServices(
+          reader: _Customers(eReceipts: manual),
+          receiptWriter: receipts,
+        ),
+      );
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-save');
+      // The snack bar slides in before its button can be pressed.
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.byKey(const ValueKey('checkout-send-whatsapp')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('phone-local-number')),
+        '0722 111 222',
+      );
+      await tester.tap(find.byKey(const ValueKey('send-receipt-submit')));
+      await tester.pumpAndSettle();
+
+      final intent = receipts.sent.single;
+      expect(intent.saleId, 'co-1');
+      // A shop selling in shillings starts the number at +254.
+      expect(intent.phone, '+254722111222');
+      expect(snackNotice(tester).message, contains('on its way'));
+    });
+
+    testWidgets(
+      'an automatic business tells the cashier the customer gets it, and '
+      'offers no button',
+      (tester) async {
+        await _pump(
+          tester,
+          sessions,
+          catalog,
+          drafts,
+          customers: CheckoutCustomerServices(
+            reader: _Customers(eReceipts: automatic),
+            receiptWriter: _ReceiptWriter(),
+          ),
+        );
+
+        await tester.tap(find.byKey(const ValueKey('screen-title-action')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('checkout-customer-$_janeId')));
+        await tester.pumpAndSettle();
+        await _tap(tester, 'checkout-product-product-b');
+        await _tap(tester, 'checkout-save');
+
+        expect(
+          snackNotice(tester).message,
+          contains('Jane Wanjiku gets the receipt on WhatsApp'),
+        );
+        expect(find.byKey(const ValueKey('checkout-send-whatsapp')), findsNothing);
+      },
+    );
+
+    testWidgets('a business that sends on WhatsApp is not told it has no printer', (
+      tester,
+    ) async {
+      drafts.printFailure = PrinterTransportCode.notConfigured;
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        printerSetupReminder: _Reminder(),
+        customers: CheckoutCustomerServices(
+          reader: _Customers(eReceipts: manual),
+          receiptWriter: _ReceiptWriter(),
+        ),
+      );
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-save');
+
+      expect(find.byType(NoticeDialog), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-send-whatsapp')), findsOneWidget);
+    });
+
+    testWidgets('a business with receipts off reports a sale as before', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        customers: CheckoutCustomerServices(
+          reader: _Customers(),
+          receiptWriter: _ReceiptWriter(),
+        ),
+      );
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-save');
+
+      expect(find.byKey(const ValueKey('checkout-send-whatsapp')), findsNothing);
+      expect(snackNotice(tester).message, contains('It syncs on its own'));
     });
   });
 
@@ -2515,6 +2638,11 @@ const String _janeId = 'cu_0123456789abcdef0123456789abcdef01234567';
 
 /// A server holding one customer, answering searches the indexed way.
 final class _Customers implements TenantDataReader, TenantCustomerSearchReader {
+  _Customers({this.eReceipts});
+
+  /// The business's `configuration/e_receipts`, or null for none.
+  final Map<String, Object?>? eReceipts;
+
   Map<String, Object?> get _jane {
     final search = tenantCustomerSearchFields(
       name: 'Jane Wanjiku',
@@ -2532,7 +2660,14 @@ final class _Customers implements TenantDataReader, TenantCustomerSearchReader {
   }
 
   @override
-  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    final settings = eReceipts;
+    if (settings != null &&
+        path == 'tenants/tenant-a/configuration/e_receipts') {
+      return TenantDocumentSnapshot(path: path, data: settings);
+    }
+    return null;
+  }
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
@@ -2574,4 +2709,11 @@ final class _CustomerWriter implements TenantCustomerWriter {
   Future<TenantCustomerWriteResult> updateCustomer(
     TenantCustomerUpdateIntent intent,
   ) async => TenantCustomerWriteResult.queued(intent.operationId);
+}
+
+final class _ReceiptWriter implements TenantWhatsappReceiptWriter {
+  final List<TenantWhatsappReceiptIntent> sent = <TenantWhatsappReceiptIntent>[];
+
+  @override
+  Future<void> send(TenantWhatsappReceiptIntent intent) async => sent.add(intent);
 }

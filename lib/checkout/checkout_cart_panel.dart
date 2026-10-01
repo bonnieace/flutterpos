@@ -47,12 +47,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../customers/customer.dart';
+import '../customers/customer_form.dart';
 import '../inventory/catalog_management.dart';
 import '../inventory/product_visual.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session_controller.dart';
+import '../whatsapp/e_receipt_settings.dart';
+import '../whatsapp/receipt_delivery.dart';
+import '../whatsapp/send_receipt_sheet.dart';
 import '../ui/buttons.dart';
 import '../ui/chips.dart';
 import '../ui/dialogs.dart';
@@ -298,6 +303,7 @@ final class _TenantCheckoutScreenState extends State<TenantCheckoutScreen> {
         loadPriceAgreement: widget.loadPriceAgreement,
         customer: customer,
         onCustomerUsed: _customerUsed,
+        customers: widget.customers,
       ),
     );
   }
@@ -361,10 +367,15 @@ final class TenantCheckoutPanel extends StatefulWidget {
     this.loadPriceAgreement,
     this.customer,
     this.onCustomerUsed,
+    this.customers,
   });
 
   final CheckoutCatalogSource cache;
   final CheckoutDraftSink? drafts;
+
+  /// What the till reads WhatsApp receipts through and sends them with.
+  /// Absent, a saved sale is reported as it always was.
+  final CheckoutCustomerServices? customers;
 
   /// Who the next sale is for, chosen from the till's title, or null for a
   /// walk-in.
@@ -448,6 +459,21 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
   static String _sessionKey(TenantSession session) =>
       '${session.uid}:${session.tenantId}:${session.epoch}';
 
+  /// What the business has chosen for WhatsApp receipts, from one read.
+  ///
+  /// Null where the till cannot send one at all - no customer services, or
+  /// none that can queue a receipt - which reports a sale exactly as before.
+  _EReceiptRead? _eReceiptsFor(TenantSession session) {
+    final services = widget.customers;
+    if (services == null || services.receiptWriter == null) return null;
+    return ({required bool cached}) async => (await TenantEReceiptRepository(
+      session: session,
+      reader: cached
+          ? (services.reader.cached ?? services.reader)
+          : services.reader,
+    ).load()).settings;
+  }
+
   /// Whether this session's person may agree a price, from one read.
   _PriceAgreementRead? _mayAgreePriceFor(TenantSession session) {
     final load = widget.loadPriceAgreement;
@@ -508,6 +534,8 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
           mayAgreePrice: _mayAgreePriceFor(session),
           customer: widget.customer,
           onCustomerUsed: widget.onCustomerUsed,
+          readEReceipts: _eReceiptsFor(session),
+          receiptWriter: widget.customers?.receiptWriter,
           onSetUpPrinter:
               session.canAccess(
                 allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
@@ -814,7 +842,16 @@ final class _CartEditor extends StatefulWidget {
     this.mayAgreePrice,
     this.customer,
     this.onCustomerUsed,
+    this.readEReceipts,
+    this.receiptWriter,
   });
+
+  /// Reads the business's WhatsApp receipt setting, from this device or the
+  /// server. Absent, no sale offers a receipt on WhatsApp.
+  final _EReceiptRead? readEReceipts;
+
+  /// Where *Send on WhatsApp* queues a receipt.
+  final TenantWhatsappReceiptWriter? receiptWriter;
 
   /// Told once a sale is durable, so the till can read the stock again.
   final VoidCallback? onSaved;
@@ -929,10 +966,32 @@ final class _CartEditorState extends State<_CartEditor> {
     );
   }
 
+  /// What the business has chosen for WhatsApp receipts, as far as this till
+  /// knows. Off until a read says otherwise, so a till that has never fetched
+  /// the setting reports a sale as it always did.
+  TenantEReceiptSettings _eReceipts = TenantEReceiptSettings.off;
+
   @override
   void initState() {
     super.initState();
     unawaited(_readPriceAgreement());
+    unawaited(_readEReceipts());
+  }
+
+  /// This device's copy first, then the server's - neither holds the till.
+  Future<void> _readEReceipts() async {
+    final read = widget.readEReceipts;
+    if (read == null) return;
+    for (final cached in const <bool>[true, false]) {
+      final TenantEReceiptSettings settings;
+      try {
+        settings = await read(cached: cached);
+      } catch (_) {
+        continue;
+      }
+      if (!mounted) return;
+      setState(() => _eReceipts = settings);
+    }
   }
 
   /// Reads the policy from this device, then from the server.
@@ -1284,7 +1343,7 @@ final class _CartEditorState extends State<_CartEditor> {
     final navigator = _cartSheetNavigator;
     if (navigator != null && navigator.canPop()) navigator.pop();
     if (!mounted) return;
-    _reportSave(context, saved);
+    _reportSave(context, saved, customer: customer);
     // **After the outcome is reported, not before.** Re-reading the catalog
     // rebuilds this editor, and a rebuild mid-report would pull the sheet and
     // the snack bar out from under the sentence they are carrying.
@@ -1788,7 +1847,11 @@ final class _CartEditorState extends State<_CartEditor> {
   ///
   /// Both modals are shown from here rather than rendered, so the till's own
   /// layout is unchanged by any of them.
-  void _reportSave(BuildContext context, CheckoutSavedDraft saved) {
+  void _reportSave(
+    BuildContext context,
+    CheckoutSavedDraft saved, {
+    TenantCustomer? customer,
+  }) {
     final receipt = saved.receiptNumber;
     final printFailure = saved.receiptPrintFailure;
     // Every printing sentence comes from `checkout_print_failures.dart`, which
@@ -1825,8 +1888,13 @@ final class _CartEditorState extends State<_CartEditor> {
       // the setup page, to the roles that can use it, and can be silenced.
       final noPrinter = printFailure == PrinterTransportCode.notConfigured;
       final reminder = noPrinter ? widget.printerSetupReminder : null;
-      if (reminder != null && reminder.isSilenced(widget.tenantId)) {
-        _reportSaved(context, receipt);
+      // **A business that sends receipts on WhatsApp is not told it has no
+      // printer.** The plan for WhatsApp receipts is precisely a shop without
+      // one, and asking after every sale for a printer it chose not to have
+      // would be the nag the reminder's own opt-out exists to stop.
+      if ((reminder != null && reminder.isSilenced(widget.tenantId)) ||
+          (noPrinter && _offersWhatsapp)) {
+        _reportSaved(context, receipt, saved.checkoutId, customer);
         return;
       }
       unawaited(
@@ -1843,13 +1911,80 @@ final class _CartEditorState extends State<_CartEditor> {
       return;
     }
 
-    _reportSaved(context, receipt);
+    _reportSaved(context, receipt, saved.checkoutId, customer);
   }
 
-  void _reportSaved(BuildContext context, String receipt) => showAppSnackBar(
-    context,
-    AppNotice.confirmed('Saved as $receipt. It syncs on its own.'),
-  );
+  /// Whether this till offers WhatsApp receipts at all.
+  bool get _offersWhatsapp =>
+      widget.receiptWriter != null && _eReceipts.whatsappEnabled;
+
+  /// The sentence a saved sale is reported in, and - where the business sends
+  /// receipts on WhatsApp - what happens to its receipt.
+  ///
+  /// **Automatic, for a customer who agreed**: the sentence says the receipt is
+  /// coming and needs no button. **Anyone else**: the sentence is the usual one
+  /// and carries *Send on WhatsApp*, opened on the customer's number when the
+  /// sale named one. Either way the sale is already written; nothing here
+  /// stands between the cashier and the next customer.
+  void _reportSaved(
+    BuildContext context,
+    String receipt, [
+    String? checkoutId,
+    TenantCustomer? customer,
+  ]) {
+    if (!_offersWhatsapp || checkoutId == null) {
+      showAppSnackBar(
+        context,
+        AppNotice.confirmed('Saved as $receipt. It syncs on its own.'),
+      );
+      return;
+    }
+    if (_eReceipts.sendsAutomatically && (customer?.receivesWhatsapp ?? false)) {
+      showAppSnackBar(
+        context,
+        AppNotice.confirmed(
+          'Saved as $receipt. ${customer!.name} gets the receipt on WhatsApp '
+          'once it syncs.',
+        ),
+      );
+      return;
+    }
+    showAppSnackBar(
+      context,
+      AppNotice.confirmed('Saved as $receipt. It syncs on its own.'),
+      action: AppButton(
+        key: const ValueKey('checkout-send-whatsapp'),
+        label: 'Send on WhatsApp',
+        icon: Icons.send_outlined,
+        tier: AppButtonTier.tertiary,
+        onPressed: () => _sendOnWhatsapp(context, receipt, checkoutId, customer),
+      ),
+    );
+  }
+
+  Future<void> _sendOnWhatsapp(
+    BuildContext context,
+    String receipt,
+    String checkoutId,
+    TenantCustomer? customer,
+  ) async {
+    final writer = widget.receiptWriter;
+    final session = TenantSessionScope.of(context).session;
+    if (writer == null || session == null) return;
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    final notice = await showSendWhatsappReceiptSheet(
+      context,
+      session: session,
+      writer: writer,
+      saleId: checkoutId,
+      receiptLabel: receipt,
+      dialCode: dialCodeForCurrency(_snapshot.configuration.currency),
+      customerName: customer?.name,
+      customerPhone: customer?.phone,
+    );
+    if (!context.mounted || notice == null) return;
+    showAppSnackBar(context, notice);
+  }
 
   /// The modal for a sale that saved and a receipt that did not print, and
   /// whatever the person chose on it.
@@ -2236,6 +2371,11 @@ final class _CartEditorState extends State<_CartEditor> {
 
 /// Reads whether this session's person may agree a price.
 typedef _PriceAgreementRead = Future<bool> Function({required bool cached});
+
+/// Reads the business's WhatsApp receipt setting, from this device or the
+/// server - the same two reads, for the same reason, as the price agreement.
+typedef _EReceiptRead =
+    Future<TenantEReceiptSettings> Function({required bool cached});
 
 /// One price agreed at the till, against the listed total it was agreed from.
 @immutable

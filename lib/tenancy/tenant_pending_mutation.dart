@@ -104,6 +104,16 @@ enum TenantPendingMutationKind {
   /// whether they are still offered. Replay-safe by construction, as a supplier
   /// correction is.
   customerUpdate,
+
+  /// Asking for one sale's receipt to be sent to one number on WhatsApp.
+  ///
+  /// **The payload is the callable's whole request**, as a stock count page's
+  /// is, and it is addressed to the delivery record the server will write -
+  /// whose ID the device derives exactly as the server does. The server keys
+  /// its idempotency record on the request ID, so sending it again is free,
+  /// and sending it again is how an unanswered send is settled: a cashier may
+  /// not read `receipt_deliveries`, so reading back could never confirm it.
+  whatsappReceiptRequest,
 }
 
 /// Whether the queue reaches this kind through the Admin SDK rather than
@@ -135,6 +145,9 @@ bool tenantMutationIsCallable(TenantPendingMutationKind kind) => switch (kind) {
   // server's to write.
   TenantPendingMutationKind.customerCreate ||
   TenantPendingMutationKind.customerUpdate ||
+  // A delivery record is the server's to write, and sending is the server's
+  // to do.
+  TenantPendingMutationKind.whatsappReceiptRequest ||
   // **Neither of these writes a quantity.** They are here for the other half of
   // the rule - a document only the Admin SDK may write - and the reason is
   // uniqueness: two categories folding to one name make every spreadsheet that
@@ -163,8 +176,14 @@ bool tenantMutationIsCallable(TenantPendingMutationKind kind) => switch (kind) {
 ///
 /// The other callables go through the same server helper and may read back no
 /// better. They are left as they were until one is seen doing it.
+///
+/// **And a WhatsApp receipt request, since 2026-10-01, by design rather than
+/// by sighting.** Its target is a delivery record a cashier cannot read, so a
+/// read-back could only fail; the server answers a repeated request ID with
+/// what it already did.
 bool tenantMutationResendConfirms(TenantPendingMutationKind kind) =>
-    kind == TenantPendingMutationKind.stockAdjust;
+    kind == TenantPendingMutationKind.stockAdjust ||
+    kind == TenantPendingMutationKind.whatsappReceiptRequest;
 
 /// Whether the documents a record of [kind] touched are read from the server
 /// once it lands.
@@ -1527,6 +1546,23 @@ final class TenantPendingMutationOverlayReader
         return path == record.targetPath
             ? _producedBatch(record, canonical)
             : _producedProduct(record, canonical);
+      // **Drawn as the record the server will write, without the number.**
+      // The payload carries it so the server can send to it; the overlay has
+      // no reason to put it anywhere a list draws from.
+      case TenantPendingMutationKind.whatsappReceiptRequest:
+        final phone = record.payload['phone'];
+        return <String, Object?>{
+          if (canonical != null) ...canonical,
+          'saleId': record.payload['saleId'],
+          'trigger': 'manual',
+          'status': canonical?['status'] ?? 'queued',
+          if (phone is String && phone.length >= 8)
+            'phoneMasked':
+                '${phone.substring(0, 4)}•••${phone.substring(phone.length - 3)}',
+          if (record.payload['customerName'] case final String name)
+            'customerName': name,
+          'createdAt': canonical?['createdAt'] ?? record.createdAt,
+        };
     }
   }
 
@@ -1923,6 +1959,7 @@ void _requireTarget(
     TenantPendingMutationKind.productionComplete => 'production_batches',
     TenantPendingMutationKind.customerCreate ||
     TenantPendingMutationKind.customerUpdate => 'customers',
+    TenantPendingMutationKind.whatsappReceiptRequest => 'receipt_deliveries',
   };
   if (collection != expected) {
     throw const TenantPendingMutationException('invalid_target');
