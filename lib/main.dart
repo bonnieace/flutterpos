@@ -1141,6 +1141,21 @@ class SpiritPOSApp extends StatelessWidget {
           currencyBuilder: currency.builder,
           stockCountsBuilder: stockCounts.builder,
           agreedPricesBuilder: agreedPrices.builder,
+          // **Straight at the server, as the agreed prices are**: an owner
+          // deciding how customers earn is not an act taken on a shop floor
+          // with no signal, and a till never reads this to sell.
+          loyaltyBuilder: (_) => TenantLoyaltySettingsPanel(
+            reader: reader,
+            writer: QueuedTenantConfigurationWriter(
+              store: tenantMutationStore,
+              cacheReader: reader.cached ?? reader,
+              currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+              remote: FirebaseTenantConfigurationDocumentWriter(
+                firestore: FirebaseFirestore.instance,
+                isOnline: isOnline,
+              ),
+            ),
+          ),
         ),
       };
     }

@@ -1,6 +1,7 @@
 import {FieldValue, getFirestore} from "firebase-admin/firestore";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {requireTenantMember} from "../core/authorization";
+import {planReturnedPoints} from "../customers/customerSale";
 import {
   buildIdempotencyIdentity,
   runIdempotentFirestoreTransaction,
@@ -152,6 +153,15 @@ export const verifyReturnAndRestoreStock = onCall<
     assertReturnWithinSale(soldLines, lines, normalizedPrevious);
     const productRefs = lines.map((line) => tenantRef.collection("products").doc(line.productId));
     const productSnapshots = await transaction.getAll(...productRefs);
+    // **Read now, written last.** A sale to a named customer earned points, and
+    // a verified return gives back its share of them - planned inside this
+    // read phase because no transaction may read after its first write.
+    const givePointsBack = await planReturnedPoints(transaction, tenantRef, {
+      saleId,
+      sale: saleSnapshot.data() ?? {},
+      returnId,
+      lines,
+    });
     const restoredProducts: RestoredProduct[] = [];
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
@@ -232,6 +242,7 @@ export const verifyReturnAndRestoreStock = onCall<
       requestId,
       createdAt: FieldValue.serverTimestamp(),
     });
+    givePointsBack?.(transaction);
     // **Deliberately does not dirty the day, and that is not an omission.**
     // Returns count against takings from the moment they are filed, and the
     // netting arithmetic is status-agnostic - so `pending` to `verified`

@@ -1,0 +1,317 @@
+import {createHash} from "node:crypto";
+import {
+  FieldValue,
+  getFirestore,
+  Timestamp,
+  Transaction,
+} from "firebase-admin/firestore";
+import type {DocumentReference, Firestore} from "firebase-admin/firestore";
+import {getFunctions} from "firebase-admin/functions";
+import {onDocumentCreated} from "firebase-functions/v2/firestore";
+import {onTaskDispatched} from "firebase-functions/v2/tasks";
+
+/**
+ * What a sale to a named customer does to that customer, once it arrives.
+ *
+ * **Counted here and nowhere else.** A sale reaches the server through the
+ * checkout outbox, written by a till that may have been offline for hours, so
+ * the till cannot be trusted to say how many points it earned or when the
+ * customer last bought. This task reads the sale, awards its points at the
+ * rate `configuration/loyalty` holds now, and moves the customer's sale count
+ * and last purchase - in one transaction, once.
+ *
+ * **Once, whatever retries.** The sale's own entry in the customer's points
+ * ledger (`customers/{id}/activity/{saleId}`) is created in the same
+ * transaction that counts it, and a sale whose entry exists is already
+ * counted. A task that runs twice, or a trigger that fires twice, counts
+ * nothing the second time.
+ *
+ * **It waits for the customer.** A cashier can add a customer with no signal
+ * and sell to them in the same breath; the customer travels the callable queue
+ * and the sale the outbox, in whichever order the network allows. A sale whose
+ * customer is not there yet throws, and Cloud Tasks retries it with backoff for
+ * about a day - long enough for any till that comes back online at all.
+ */
+
+export const CUSTOMER_SALE_TASK_FUNCTION = "processCustomerSale";
+
+/** `cu_` and forty hex digits: the only customer IDs a device mints. */
+export const CUSTOMER_ID_SHAPE = /^cu_[0-9a-f]{40}$/;
+
+export interface CustomerSaleTask {
+  tenantId: string;
+  saleId: string;
+}
+
+export interface LoyaltyPolicy {
+  enabled: boolean;
+  minorUnitsPerPoint: number;
+}
+
+export const LOYALTY_OFF: LoyaltyPolicy = {enabled: false, minorUnitsPerPoint: 10000};
+
+/** The largest spend one point may be set to: a million of the major unit. */
+const MAXIMUM_MINOR_UNITS_PER_POINT = 100_000_000;
+
+/**
+ * Reads `configuration/loyalty`, or no points where it is absent or cannot be
+ * read - which is what the device's own read model answers too.
+ */
+export function readLoyaltyPolicy(data: unknown): LoyaltyPolicy {
+  if (!data || typeof data !== "object") return LOYALTY_OFF;
+  const record = data as Record<string, unknown>;
+  const rate = record.minorUnitsPerPoint;
+  if (
+    typeof record.enabled !== "boolean" ||
+    !Number.isSafeInteger(rate) ||
+    (rate as number) < 1 ||
+    (rate as number) > MAXIMUM_MINOR_UNITS_PER_POINT
+  ) {
+    return LOYALTY_OFF;
+  }
+  return {enabled: record.enabled, minorUnitsPerPoint: rate as number};
+}
+
+/** Whole points only, rounded down: a customer is never told of a fraction. */
+export function pointsFor(policy: LoyaltyPolicy, totalMinor: number): number {
+  if (!policy.enabled || !Number.isSafeInteger(totalMinor) || totalMinor <= 0) {
+    return 0;
+  }
+  return Math.floor(totalMinor / policy.minorUnitsPerPoint);
+}
+
+/** The customer a stored sale names, or null for a walk-in or anything else. */
+export function saleCustomerId(data: Record<string, unknown> | undefined): string | null {
+  const id = data?.customerId;
+  return typeof id === "string" && CUSTOMER_ID_SHAPE.test(id) ? id : null;
+}
+
+/** Thrown when a sale names a customer the server does not hold yet. */
+export class CustomerNotYetArrived extends Error {
+  constructor(readonly customerId: string) {
+    super(`Customer ${customerId} has not reached the server yet.`);
+  }
+}
+
+export type CustomerSaleOutcome =
+  | {outcome: "no_sale"}
+  | {outcome: "walk_in"}
+  | {outcome: "already_counted"; customerId: string}
+  | {outcome: "counted"; customerId: string; points: number};
+
+function wholeMinor(value: unknown): number {
+  return Number.isSafeInteger(value) && (value as number) > 0 ? value as number : 0;
+}
+
+/**
+ * Counts one sale against the customer it names, once.
+ *
+ * **Never throws for a sale that cannot be counted**, only for one that cannot
+ * be counted *yet*: a sale that is missing, or that names nobody, answers so
+ * and the task ends. A customer who has not arrived throws
+ * [CustomerNotYetArrived], which is the retry.
+ */
+export async function applyCustomerSale(
+  db: Firestore,
+  task: CustomerSaleTask
+): Promise<CustomerSaleOutcome> {
+  const tenantRef = db.collection("tenants").doc(task.tenantId);
+  const saleRef = tenantRef.collection("sales").doc(task.saleId);
+  return db.runTransaction(async (transaction): Promise<CustomerSaleOutcome> => {
+    const saleSnapshot = await transaction.get(saleRef);
+    if (!saleSnapshot.exists) return {outcome: "no_sale"};
+    const sale = saleSnapshot.data() ?? {};
+    const customerId = saleCustomerId(sale);
+    if (customerId === null) return {outcome: "walk_in"};
+    const customerRef = tenantRef.collection("customers").doc(customerId);
+    const activityRef = customerRef.collection("activity").doc(task.saleId);
+    const loyaltyRef = tenantRef.collection("configuration").doc("loyalty");
+    const [customer, activity, loyalty] = await transaction.getAll(
+      customerRef,
+      activityRef,
+      loyaltyRef
+    );
+    if (activity.exists) return {outcome: "already_counted", customerId};
+    if (!customer.exists) throw new CustomerNotYetArrived(customerId);
+
+    const totalMinor = wholeMinor(sale.totalMinor);
+    const policy = readLoyaltyPolicy(loyalty.data());
+    const points = pointsFor(policy, totalMinor);
+    const soldAt = sale.createdAt instanceof Timestamp ? sale.createdAt : null;
+    const lastSaleAt = customer.get("lastSaleAt");
+    const isLatest = soldAt !== null && (
+      !(lastSaleAt instanceof Timestamp) || soldAt.toMillis() > lastSaleAt.toMillis()
+    );
+
+    transaction.create(activityRef, {
+      kind: "sale",
+      tenantId: task.tenantId,
+      customerId,
+      saleId: task.saleId,
+      receiptNumber: typeof sale.receiptNumber === "string" ? sale.receiptNumber : null,
+      totalMinor,
+      points,
+      pointsReturned: 0,
+      minorUnitsPerPoint: policy.enabled ? policy.minorUnitsPerPoint : null,
+      saleCreatedAt: soldAt,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    transaction.update(customerRef, {
+      saleCount: FieldValue.increment(1),
+      ...(points > 0 ? {points: FieldValue.increment(points)} : {}),
+      ...(isLatest ? {lastSaleAt: soldAt} : {}),
+    });
+    return {outcome: "counted", customerId, points};
+  });
+}
+
+/** One returned line: what came back and how many. */
+export interface ReturnedLine {
+  productId: string;
+  quantity: number;
+}
+
+/**
+ * Plans taking back the points a sale earned, in proportion to what was
+ * returned, inside the transaction that verifies the return.
+ *
+ * **Reads only; the caller applies the answer after its own reads are done**,
+ * because a Firestore transaction may not read after its first write and the
+ * return's verification writes several documents of its own.
+ *
+ * **In proportion to the listed value returned, never more than the sale
+ * earned and has not already given back.** A customer who returns half of
+ * what they bought gives back half the points it earned; two partial returns
+ * can between them give back the whole and no more. A sale counted before
+ * loyalty was on earned nothing, so there is nothing to take.
+ *
+ * Null where there is nothing to do: a walk-in, a sale not counted yet, a sale
+ * that earned no points.
+ */
+export async function planReturnedPoints(
+  transaction: Transaction,
+  tenantRef: DocumentReference,
+  options: {
+    saleId: string;
+    sale: Record<string, unknown>;
+    returnId: string;
+    lines: readonly ReturnedLine[];
+  }
+): Promise<((transaction: Transaction) => void) | null> {
+  const customerId = saleCustomerId(options.sale);
+  if (customerId === null) return null;
+  const customerRef = tenantRef.collection("customers").doc(customerId);
+  const saleActivityRef = customerRef.collection("activity").doc(options.saleId);
+  const [customer, saleActivity] = await transaction.getAll(customerRef, saleActivityRef);
+  if (!customer.exists || !saleActivity.exists) return null;
+  const earned = wholeMinor(saleActivity.get("points"));
+  const alreadyReturned = wholeMinor(saleActivity.get("pointsReturned"));
+  const outstanding = earned - alreadyReturned;
+  if (outstanding <= 0) return null;
+
+  const subtotal = wholeMinor(options.sale.subtotalMinor);
+  if (subtotal === 0) return null;
+  const priceOf = new Map<string, number>();
+  const items = Array.isArray(options.sale.items) ? options.sale.items : [];
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    if (typeof record.productId === "string") {
+      priceOf.set(record.productId, wholeMinor(record.unitPriceMinor));
+    }
+  }
+  const returnedListed = options.lines.reduce(
+    (sum, line) => sum + line.quantity * (priceOf.get(line.productId) ?? 0),
+    0
+  );
+  const take = Math.min(
+    outstanding,
+    Math.floor(earned * Math.min(returnedListed, subtotal) / subtotal)
+  );
+  if (take <= 0) return null;
+
+  return (write: Transaction) => {
+    write.update(saleActivityRef, {pointsReturned: FieldValue.increment(take)});
+    write.create(customerRef.collection("activity").doc(`return-${options.returnId}`), {
+      kind: "return",
+      tenantId: tenantRef.id,
+      customerId,
+      saleId: options.saleId,
+      returnId: options.returnId,
+      points: -take,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    write.update(customerRef, {points: FieldValue.increment(-take)});
+  };
+}
+
+function taskAlreadyExists(error: unknown): boolean {
+  const code = error && typeof error === "object" && "code" in error ?
+    String((error as {code?: unknown}).code) : undefined;
+  return code === "functions/task-already-exists" ||
+    code === "already-exists" || code === "6";
+}
+
+/** A task ID Cloud Tasks accepts, the same for the same sale every time. */
+export function customerSaleTaskId(task: CustomerSaleTask): string {
+  const digest = createHash("sha256")
+    .update(`customer-sale ${task.tenantId} ${task.saleId}`)
+    .digest("hex");
+  return `customer-sale-${digest.slice(0, 48)}`;
+}
+
+/** Queues the count for one sale; a second queue for the same sale is a no-op. */
+export async function enqueueCustomerSale(task: CustomerSaleTask): Promise<void> {
+  try {
+    await getFunctions().taskQueue<CustomerSaleTask>(
+      CUSTOMER_SALE_TASK_FUNCTION
+    ).enqueue(task, {id: customerSaleTaskId(task), dispatchDeadlineSeconds: 120});
+  } catch (error) {
+    if (!taskAlreadyExists(error)) throw error;
+  }
+}
+
+/**
+ * A sale arrived. If it names a customer, queue its count.
+ *
+ * **Separate from `mergeSaleReconciliationJob`**, which also fires on every
+ * sale: reconciliation is the money's ledger and must not wait on, or fail
+ * for, a customer's points.
+ */
+export const onCustomerSale = onDocumentCreated(
+  {document: "tenants/{tenantId}/sales/{saleId}", retry: true},
+  async (event) => {
+    const data = event.data?.data();
+    if (saleCustomerId(data) === null) return;
+    await enqueueCustomerSale({
+      tenantId: event.params.tenantId,
+      saleId: event.params.saleId,
+    });
+  }
+);
+
+export const processCustomerSale = onTaskDispatched<CustomerSaleTask>(
+  {
+    invoker: "private",
+    retryConfig: {
+      // About a day of backoff, for a customer still on an offline till.
+      maxAttempts: 30,
+      minBackoffSeconds: 60,
+      maxBackoffSeconds: 3600,
+      maxDoublings: 6,
+    },
+    rateLimits: {maxConcurrentDispatches: 10, maxDispatchesPerSecond: 20},
+    timeoutSeconds: 120,
+  },
+  async (request) => {
+    const data = request.data;
+    if (
+      !data ||
+      typeof data.tenantId !== "string" ||
+      typeof data.saleId !== "string"
+    ) {
+      return;
+    }
+    await applyCustomerSale(getFirestore(), data);
+  }
+);

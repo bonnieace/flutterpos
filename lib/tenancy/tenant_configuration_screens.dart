@@ -36,6 +36,7 @@ final class TenantConfigurationsScreen extends StatelessWidget {
     required this.currencyBuilder,
     required this.stockCountsBuilder,
     required this.agreedPricesBuilder,
+    this.loyaltyBuilder,
   });
 
   final WidgetBuilder currencyBuilder;
@@ -45,10 +46,15 @@ final class TenantConfigurationsScreen extends StatelessWidget {
   /// beside *Stock counts*, because it is set up the same way: per person.
   final WidgetBuilder agreedPricesBuilder;
 
-  static const List<String> _tabs = <String>[
+  /// Whether customers earn points, and for how much. Added on 2026-10-01 with
+  /// customers. Absent in a build that wires none, which draws three tabs.
+  final WidgetBuilder? loyaltyBuilder;
+
+  List<String> get _tabs => <String>[
     'Currency',
     'Stock counts',
     'Agreed prices',
+    if (loyaltyBuilder != null) 'Loyalty',
   ];
 
   /// Whether every label fits in an equal share of [width].
@@ -58,7 +64,7 @@ final class TenantConfigurationsScreen extends StatelessWidget {
   /// prices* off mid-word, seen on an emulator on 2026-09-29. Where the
   /// labels fit, the strip keeps its equal shares; where they do not, it
   /// scrolls rather than cutting a word.
-  static bool _labelsFit(BuildContext context, double width) {
+  bool _labelsFit(BuildContext context, double width) {
     final tokens = AppTokens.componentOf(context);
     final share = width / _tabs.length;
     final scaler = MediaQuery.textScalerOf(context);
@@ -102,6 +108,8 @@ final class TenantConfigurationsScreen extends StatelessWidget {
                   _ConfigurationTab(builder: currencyBuilder, inset: inset),
                   _ConfigurationTab(builder: stockCountsBuilder, inset: inset),
                   _ConfigurationTab(builder: agreedPricesBuilder, inset: inset),
+                  if (loyaltyBuilder case final loyalty?)
+                    _ConfigurationTab(builder: loyalty, inset: inset),
                 ],
               ),
             ),

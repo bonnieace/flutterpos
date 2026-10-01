@@ -101,3 +101,7 @@ export {
 } from "./reconciliation";
 
 export {closeAbandonedShift} from "./shifts/abandonedShift";
+
+// What a sale to a named customer does to them: points, sale count, last
+// purchase - counted once, by the server, when the sale arrives.
+export {onCustomerSale, processCustomerSale} from "./customers/customerSale";
