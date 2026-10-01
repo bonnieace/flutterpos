@@ -189,7 +189,9 @@ List<HomeDestination> _modules() {
       'Register',
       Symbols.point_of_sale_rounded,
       AppIdentityAccent.blue,
-      description: 'Ring up a sale, take the payment, and print the receipt.',
+      description:
+          'Ring up a sale for a walk-in or a customer, take the payment, and '
+          'hand over the receipt.',
       isPrimary: true,
     ),
     tile(
@@ -206,6 +208,13 @@ List<HomeDestination> _modules() {
       AppIdentityAccent.orange,
       group: 'Sales',
       description: 'Review pending and verified returns across every sale.',
+    ),
+    tile(
+      'Customers',
+      Symbols.group_rounded,
+      AppIdentityAccent.pink,
+      group: 'Sales',
+      description: 'Who buys from you, what they bought, and their points.',
     ),
     tile(
       'Inventory',
@@ -281,6 +290,13 @@ List<HomeDestination> _modules() {
       AppIdentityAccent.teal,
       group: 'Business',
       description: 'Connect a receipt printer and print a test page.',
+    ),
+    tile(
+      'WhatsApp',
+      Symbols.chat_rounded,
+      AppIdentityAccent.green,
+      group: 'Business',
+      description: 'Send receipts to customers on WhatsApp instead of paper.',
     ),
     tile(
       'Configs',
