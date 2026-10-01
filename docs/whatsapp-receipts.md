@@ -61,7 +61,8 @@ firebase functions:secrets:set WHATSAPP_APP_SECRET            # the Meta app's A
 firebase functions:secrets:set WHATSAPP_WEBHOOK_VERIFY_TOKEN  # a new random value, UzaPay's own
 ```
 
-and in `functions/.env.multitenant-pos-b8326` (parameters, not secrets):
+and in `functions/.env.multitenant-pos-b8326` (parameters, not secrets; it is committed with
+`unset`, so change that line):
 
 ```
 WHATSAPP_PHONE_NUMBER_ID=<the shared number's ID>
@@ -72,13 +73,18 @@ WHATSAPP_TEMPLATE_LANGUAGE=en
 **Check `WHATSAPP_GRAPH_VERSION` before deploying.** Meta retires a Graph version about two years
 after release; carerota uses `v21.0`, which dates from late 2024.
 
-With `WHATSAPP_PHONE_NUMBER_ID` empty the channel does nothing: every delivery is recorded as
-*Not sent - WhatsApp receipts are not available yet*, and the WhatsApp tile says so.
+With `WHATSAPP_PHONE_NUMBER_ID` left at `unset`, the channel does nothing: every delivery is
+recorded as *Not sent - WhatsApp receipts are not available yet*, and the WhatsApp tile says so.
+
+**All three parameters have to be written out in the env file, even though the code gives them
+defaults.** Firebase CLI 15.25.0 still prompts for a `defineString` it finds in no env file, which
+stops a non-interactive deploy or emulator run. That is why the emulator's `.env.local` lists them
+too.
 
 **The three secrets must exist before the first deploy, even unused.** The functions that send
 declare them, and a deploy refuses to go ahead while a declared secret is missing from Secret
 Manager - which would hold up the customers callables too. To deploy before Meta is ready, set each
-secret to a placeholder and leave `WHATSAPP_PHONE_NUMBER_ID` empty: nothing is sent.
+secret to a placeholder and leave `WHATSAPP_PHONE_NUMBER_ID` unset: nothing is sent.
 
 ### 3. Deploy
 

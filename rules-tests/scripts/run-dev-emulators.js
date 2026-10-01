@@ -66,7 +66,7 @@ writeFileSync(
     "BREVO_API_KEY=local-emulator-unused-brevo-key",
     "BREVO_WEBHOOK_SECRET=local-emulator-unused-brevo-webhook-secret",
     // WhatsApp receipts: resolvable, never usable. With no phone number ID
-    // (a parameter that defaults to empty) the channel is off, so every
+    // (a parameter that defaults to "unset") the channel is off, so every
     // receipt is recorded as not sent and nothing reaches Meta from a laptop.
     "WHATSAPP_ACCESS_TOKEN=local-emulator-unused-whatsapp-token",
     "WHATSAPP_APP_SECRET=local-emulator-unused-whatsapp-app-secret",
@@ -89,6 +89,10 @@ writeFileSync(
     "STAFF_INVITATION_ACTION_BASE_URL=http://127.0.0.1:4000/invitation",
     "STAFF_INVITATION_SENDER_EMAIL=no-reply@local.emulator.invalid",
     "STAFF_INVITATION_SENDER_NAME=Local emulator",
+    // Defaults exist for these, but the CLI still prompts for them.
+    "WHATSAPP_PHONE_NUMBER_ID=unset",
+    "WHATSAPP_GRAPH_VERSION=v23.0",
+    "WHATSAPP_TEMPLATE_LANGUAGE=en",
     "",
   ].join("\n"),
   { encoding: "utf8", flag: "wx" },

@@ -10,8 +10,8 @@ import {defineSecret, defineString} from "firebase-functions/params";
  * by hand (`functions/src/cli/whatsappWebhookOverride.ts`). Carerota itself is
  * not changed.
  *
- * **Inert until configured.** With no phone number ID every delivery is
- * written as `skipped: not_configured` and nothing is sent, so a deploy with
+ * **Inert until configured.** With the phone number ID `unset` every delivery
+ * is written as `skipped: not_configured` and nothing is sent, so a deploy with
  * these unset changes nothing a business can see beyond that word.
  */
 
@@ -26,9 +26,21 @@ export const WHATSAPP_WEBHOOK_VERIFY_TOKEN = defineSecret(
   "WHATSAPP_WEBHOOK_VERIFY_TOKEN"
 );
 
-/** The shared number's phone number ID. Empty leaves the channel off. */
+/** The value [WHATSAPP_PHONE_NUMBER_ID] takes until somebody sets it. */
+export const WHATSAPP_PHONE_NUMBER_UNSET = "unset";
+
+/**
+ * The shared number's phone number ID, or `unset`, which leaves the channel
+ * off.
+ *
+ * **The default does not stop the CLI asking.** Firebase CLI 15.25.0 prompted
+ * for this - with `""` and with `unset` as the default alike - which hangs a
+ * non-interactive emulator run or deploy, on 2026-10-01. So every WhatsApp
+ * parameter is written out in `.env.multitenant-pos-b8326` and the emulator's
+ * `.env.local`; the default is only the code's own fallback.
+ */
 export const WHATSAPP_PHONE_NUMBER_ID = defineString("WHATSAPP_PHONE_NUMBER_ID", {
-  default: "",
+  default: WHATSAPP_PHONE_NUMBER_UNSET,
 });
 
 /**
@@ -67,7 +79,9 @@ export interface WhatsappSendConfig {
  */
 export function whatsappSendConfig(): WhatsappSendConfig | null {
   const phoneNumberId = WHATSAPP_PHONE_NUMBER_ID.value().trim();
-  if (phoneNumberId.length === 0) return null;
+  if (phoneNumberId.length === 0 || phoneNumberId === WHATSAPP_PHONE_NUMBER_UNSET) {
+    return null;
+  }
   let accessToken = "";
   try {
     accessToken = WHATSAPP_ACCESS_TOKEN.value().trim();
