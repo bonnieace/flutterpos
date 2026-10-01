@@ -9,6 +9,8 @@ import type {DocumentReference, Firestore} from "firebase-admin/firestore";
 import {getFunctions} from "firebase-admin/functions";
 import {onDocumentCreated} from "firebase-functions/v2/firestore";
 import {onTaskDispatched} from "firebase-functions/v2/tasks";
+import {queueAutomaticReceipt} from "../whatsapp/deliveries";
+import {CUSTOMER_ID_SHAPE} from "./customerId";
 
 /**
  * What a sale to a named customer does to that customer, once it arrives.
@@ -35,8 +37,7 @@ import {onTaskDispatched} from "firebase-functions/v2/tasks";
 
 export const CUSTOMER_SALE_TASK_FUNCTION = "processCustomerSale";
 
-/** `cu_` and forty hex digits: the only customer IDs a device mints. */
-export const CUSTOMER_ID_SHAPE = /^cu_[0-9a-f]{40}$/;
+export {CUSTOMER_ID_SHAPE};
 
 export interface CustomerSaleTask {
   tenantId: string;
@@ -312,6 +313,14 @@ export const processCustomerSale = onTaskDispatched<CustomerSaleTask>(
     ) {
       return;
     }
-    await applyCustomerSale(getFirestore(), data);
+    const db = getFirestore();
+    const outcome = await applyCustomerSale(db, data);
+    // **After the count, and on a recount too.** A task that counted the sale
+    // and then failed before queueing the receipt is retried, finds the sale
+    // already counted, and must still queue it - the delivery's ID is the sale
+    // and the number, so queueing it twice sends it once.
+    if (outcome.outcome === "counted" || outcome.outcome === "already_counted") {
+      await queueAutomaticReceipt(db, data);
+    }
   }
 );

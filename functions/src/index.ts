@@ -105,3 +105,13 @@ export {closeAbandonedShift} from "./shifts/abandonedShift";
 // What a sale to a named customer does to them: points, sale count, last
 // purchase - counted once, by the server, when the sale arrives.
 export {onCustomerSale, processCustomerSale} from "./customers/customerSale";
+
+// Receipts on WhatsApp, from the one number every business shares: the send
+// itself, a cashier's request for one, whether the channel is set up, and
+// Meta's webhook for what became of each message.
+export {
+  deliverWhatsappReceipt,
+  getWhatsappReceiptStatus,
+  receiveWhatsappWebhook,
+  sendWhatsappReceipt,
+} from "./whatsapp/functions";
