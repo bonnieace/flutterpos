@@ -203,6 +203,31 @@ void main() {
       expect(paid, contains(ReceiptWords.paidByLabel));
     });
 
+    test('names the customer and their KRA PIN, and a walk-in not at all', () {
+      final named = latin1.decode(
+        body().build(
+          _sale(
+            customer: const CheckoutSaleCustomer(
+              id: 'cu_0123456789abcdef0123456789abcdef01234567',
+              name: 'Jane Wanjiku',
+              kraPin: 'A012345678Z',
+            ),
+          ),
+        ),
+        allowInvalid: true,
+      );
+      expect(named, contains(ReceiptWords.customerLabel));
+      expect(named, contains('Jane Wanjiku'));
+      expect(named, contains(ReceiptWords.kraPinLabel));
+      expect(named, contains('A012345678Z'));
+
+      // "Walk-in" is the absence of a fact, so nothing is printed for it.
+      final walkIn = latin1.decode(body().build(_sale()), allowInvalid: true);
+      expect(walkIn, isNot(contains(ReceiptWords.customerLabel)));
+      expect(walkIn, isNot(contains(ReceiptWords.kraPinLabel)));
+      expect(walkIn, isNot(contains('Walk-in')));
+    });
+
     test('heads an unnamed business rather than printing its ID', () {
       // §8 rule 1: a document ID printed at a customer is that rule's own
       // worked example of what not to do.
@@ -516,6 +541,7 @@ CheckoutSalePayload _sale({
   String name = 'Maize flour 2kg',
   String? sku,
   bool onlyOneLine = false,
+  CheckoutSaleCustomer? customer,
 }) {
   const deviceId = 'dev-0123456789abcdef0123456789abcdef';
   final lines = <Object?>[
@@ -559,6 +585,7 @@ CheckoutSalePayload _sale({
     'subtotalMinor': subtotalMinor,
     'discountMinor': discountMinor,
     'totalMinor': subtotalMinor - discountMinor,
+    ...?customer?.toFields(),
   };
   return CheckoutSalePayload.fromLocalPayload(
     session: TenantSession.active(

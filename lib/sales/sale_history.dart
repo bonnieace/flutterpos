@@ -149,6 +149,7 @@ final class TenantSale implements CheckoutReceiptSale {
       discountMinor: discountMinor,
       discountReason: discountReason,
       totalMinor: totalMinor,
+      customer: CheckoutSaleCustomer.fromFields(data),
     );
   }
 
@@ -172,6 +173,7 @@ final class TenantSale implements CheckoutReceiptSale {
     required this.discountMinor,
     required this.discountReason,
     required this.totalMinor,
+    required this.customer,
   }) : lines = List<TenantSaleLine>.unmodifiable(lines);
 
   final String id;
@@ -239,6 +241,11 @@ final class TenantSale implements CheckoutReceiptSale {
   final String? discountReason;
   @override
   final int totalMinor;
+
+  /// Who the sale was for, or null for a walk-in - and for every sale written
+  /// before customers existed, which is the same thing.
+  @override
+  final CheckoutSaleCustomer? customer;
 }
 
 /// The exact shift a sale page is claimed to belong to.
@@ -376,6 +383,34 @@ final class TenantSaleHistoryRepository extends TenantReadRepository {
       }
     },
   );
+
+  /// Pages one customer's purchases, newest first.
+  ///
+  /// **Management only**, because only management may list sales across the
+  /// business: a cashier's list must prove every result is their own, and a
+  /// customer's history is everybody's sales to them.
+  Future<TenantSalePage> loadCustomerSales({
+    required String customerId,
+    int pageSize = 20,
+    String? cursor,
+  }) {
+    if (!session.canAccess(allowedRoles: managementReportRoles)) {
+      throw const TenantSaleException('sale_report_forbidden');
+    }
+    if (!checkoutCustomerIdPattern.hasMatch(customerId)) {
+      throw const TenantSaleException('invalid_customer_id');
+    }
+    return _load(
+      pageSize: pageSize,
+      cursor: cursor,
+      filters: <String, Object?>{'customerId': customerId},
+      verify: (sale) {
+        if (sale.customer?.id != customerId) {
+          throw const TenantSaleException('sale_customer_mismatch');
+        }
+      },
+    );
+  }
 
   /// Pages the familiar period report without ever downloading a wider scope.
   ///

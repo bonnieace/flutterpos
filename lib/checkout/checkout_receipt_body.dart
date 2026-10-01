@@ -121,6 +121,8 @@ abstract final class ReceiptWords {
   static const String receiptLabel = 'Receipt';
   static const String dateLabel = 'Date';
   static const String servedByLabel = 'Served by';
+  static const String customerLabel = 'Customer';
+  static const String kraPinLabel = 'KRA PIN';
   static const String subtotalLabel = 'Subtotal';
   static const String discountLabel = 'Discount';
   static const String totalLabel = 'TOTAL';
@@ -162,6 +164,8 @@ abstract final class ReceiptWords {
     receiptLabel,
     dateLabel,
     servedByLabel,
+    customerLabel,
+    kraPinLabel,
     subtotalLabel,
     discountLabel,
     totalLabel,
@@ -544,6 +548,20 @@ final class CheckoutReceiptBody {
           ReceiptText.forPrinter(servedBy.trim()),
         ),
       ),
+    // **Who it was for, only when the till named somebody.** A walk-in prints
+    // nothing here rather than the word, because a receipt is a record of what
+    // is true and "walk-in" is the absence of a fact, not one.
+    if (sale.customer case final customer?) ...<int>[
+      ...generator.text(
+        _pair(
+          ReceiptWords.customerLabel,
+          ReceiptText.forPrinter(customer.name),
+        ),
+      ),
+      // A business buyer's PIN is why many of them ask for a receipt at all.
+      if (customer.kraPin case final pin?)
+        ...generator.text(_pair(ReceiptWords.kraPinLabel, pin)),
+    ],
     ..._rule(generator),
   ];
 

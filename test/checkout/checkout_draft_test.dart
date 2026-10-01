@@ -285,6 +285,43 @@ void main() {
     );
   });
 
+  test('records the customer the till chose, and a walk-in as nobody', () async {
+    const jane = CheckoutSaleCustomer(
+      id: 'cu_0123456789abcdef0123456789abcdef01234567',
+      name: 'Jane Wanjiku',
+      kraPin: 'A012345678Z',
+    );
+    final service = _service(sessions, cache, outbox, receipts, clock);
+
+    final named = await service.createDraft(
+      CheckoutDraftRequest(
+        tender: CheckoutTender.cash,
+        lines: const [
+          CheckoutDraftLineRequest(productId: 'product-a', quantity: 1),
+        ],
+        customer: jane,
+      ),
+    );
+    expect(named.payload['customerId'], jane.id);
+    expect(
+      CheckoutSalePayload.fromOutboxRecord(
+        named,
+        session: sessions.requireSession(),
+      ).customer,
+      jane,
+    );
+
+    final walkIn = await service.createDraft(
+      CheckoutDraftRequest(
+        tender: CheckoutTender.cash,
+        lines: const [
+          CheckoutDraftLineRequest(productId: 'product-a', quantity: 1),
+        ],
+      ),
+    );
+    expect(walkIn.payload.containsKey('customerId'), isFalse);
+  });
+
   group('a price agreed at the till', () {
     test('records the listed lines, what came off, and why', () async {
       final record = await _service(sessions, cache, outbox, receipts, clock)

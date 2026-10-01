@@ -82,7 +82,85 @@ const Set<String> _allowedPayloadKeys = <String>{
   'discountMinor',
   'discountReason',
   'totalMinor',
+  'customerId',
+  'customerName',
+  'customerKraPin',
 };
+
+/// Who a sale was for, frozen onto it as a line's name is.
+///
+/// **Additive, and absent on a walk-in.** Every sale an earlier build wrote
+/// carries none of the three fields, so a walk-in and a sale from before
+/// customers existed read the same - which is the truth about both.
+///
+/// The name and KRA PIN are copied rather than looked up, so a receipt
+/// reprinted after the customer is renamed prints what was true when they
+/// paid, exactly as a renamed product keeps its old name on old receipts.
+final class CheckoutSaleCustomer {
+  const CheckoutSaleCustomer({
+    required this.id,
+    required this.name,
+    this.kraPin,
+  });
+
+  /// `cu_` and forty hex digits: the only shape the server acts on.
+  final String id;
+  final String name;
+
+  /// In capitals, as the customer record stores it, or null for none.
+  final String? kraPin;
+
+  /// The three fields as a sale document and a local payload carry them.
+  Map<String, Object?> toFields() => <String, Object?>{
+    'customerId': id,
+    'customerName': name,
+    if (kraPin != null) 'customerKraPin': kraPin,
+  };
+
+  /// The customer [data] names, or null for a walk-in.
+  ///
+  /// **Permissive, on purpose.** `firestore.rules` does not shape these fields
+  /// - checking them took the largest legal sale over the expression budget -
+  /// so a stored sale may carry anything here, and a sale that names nobody
+  /// recognisable is read as the walk-in it effectively is rather than refused.
+  /// A malformed PIN beside a good customer is dropped and the customer kept.
+  static CheckoutSaleCustomer? fromFields(Map<String, Object?> data) {
+    final id = data['customerId'];
+    final name = data['customerName'];
+    if (id is! String || !checkoutCustomerIdPattern.hasMatch(id)) return null;
+    if (name is! String ||
+        name.isEmpty ||
+        name != name.trim() ||
+        name.length > maximumCheckoutCustomerNameLength) {
+      return null;
+    }
+    final pin = data['customerKraPin'];
+    return CheckoutSaleCustomer(
+      id: id,
+      name: name,
+      kraPin: pin is String && checkoutKraPinPattern.hasMatch(pin) ? pin : null,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is CheckoutSaleCustomer &&
+      other.id == id &&
+      other.name == name &&
+      other.kraPin == kraPin;
+
+  @override
+  int get hashCode => Object.hash(id, name, kraPin);
+}
+
+/// The shape of a customer ID this device mints, and the server acts on.
+final RegExp checkoutCustomerIdPattern = RegExp(r'^cu_[0-9a-f]{40}$');
+
+/// A KRA PIN, in capitals: one letter, nine digits, one letter.
+final RegExp checkoutKraPinPattern = RegExp(r'^[A-Z][0-9]{9}[A-Z]$');
+
+/// The server's customer name bound, which a product name shares.
+const int maximumCheckoutCustomerNameLength = 120;
 
 const Set<String> _allowedLineKeys = <String>{
   'productId',
@@ -140,6 +218,10 @@ abstract interface class CheckoutReceiptSale {
   int get subtotalMinor;
   int get discountMinor;
   int get totalMinor;
+
+  /// Who the sale was for, or null for a walk-in. Printed with their KRA PIN,
+  /// which is what a business buyer asks for a receipt to carry.
+  CheckoutSaleCustomer? get customer;
 }
 
 /// One immutable sale line captured when the checkout was saved offline.
@@ -265,6 +347,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
     required this.discountMinor,
     required this.discountReason,
     required this.totalMinor,
+    required this.customer,
   }) : lines = List<CheckoutSaleLine>.unmodifiable(lines),
        _paths = TenantPaths(tenantId);
 
@@ -429,6 +512,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
       );
     }
     final discountReason = _discountReason(payload, discountMinor);
+    final customer = _declaredCustomer(payload);
 
     return CheckoutSalePayload._(
       uid: session.uid,
@@ -449,6 +533,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
       discountMinor: discountMinor,
       discountReason: discountReason,
       totalMinor: totalMinor,
+      customer: customer,
     );
   }
 
@@ -504,6 +589,11 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
   final String? discountReason;
   @override
   final int totalMinor;
+
+  /// Who the sale was for, chosen at the till, or null for a walk-in.
+  @override
+  final CheckoutSaleCustomer? customer;
+
   final TenantPaths _paths;
 
   /// The deterministic canonical sale document path for this checkout.
@@ -553,7 +643,32 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
     if (discountReason != null) 'discountReason': discountReason,
     'totalMinor': totalMinor,
     'total': _majorUnits(totalMinor),
+    // **Only where there is one**, for the reason `discountReason` is: a
+    // walk-in writes exactly what every earlier build writes.
+    ...?customer?.toFields(),
   };
+}
+
+/// Reads the customer a local payload names, which this device wrote itself.
+///
+/// **Strict, unlike [CheckoutSaleCustomer.fromFields].** A stored sale is read
+/// as a walk-in when its customer is malformed, but this is the device's own
+/// evidence about to be written: a customer it cannot reproduce exactly is a
+/// defect to refuse before it becomes a sale, not a guess to make afterwards.
+CheckoutSaleCustomer? _declaredCustomer(Map<String, Object?> payload) {
+  final declared =
+      payload.containsKey('customerId') ||
+      payload.containsKey('customerName') ||
+      payload.containsKey('customerKraPin');
+  if (!declared) return null;
+  final customer = CheckoutSaleCustomer.fromFields(payload);
+  if (customer == null ||
+      (payload.containsKey('customerKraPin') && customer.kraPin == null)) {
+    throw const CheckoutSaleFormatException(
+      'The payload names a customer this device could not have chosen.',
+    );
+  }
+  return customer;
 }
 
 /// Reads why the price was agreed, which only a discounted sale may carry.

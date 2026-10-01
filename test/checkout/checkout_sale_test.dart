@@ -331,6 +331,87 @@ void main() {
     }
   });
 
+  group('the customer a sale was for', () {
+    const customerId = 'cu_0123456789abcdef0123456789abcdef01234567';
+
+    test('is frozen onto the sale, KRA PIN and all', () async {
+      final record = await _save(
+        outbox,
+        _payload(
+          overrides: {
+            'customerId': customerId,
+            'customerName': 'Jane Wanjiku',
+            'customerKraPin': 'A012345678Z',
+          },
+        ),
+      );
+
+      final payload = CheckoutSalePayload.fromOutboxRecord(
+        record,
+        session: session,
+      );
+      final fields = payload.toSubmission().saleFields;
+
+      expect(
+        payload.customer,
+        const CheckoutSaleCustomer(
+          id: customerId,
+          name: 'Jane Wanjiku',
+          kraPin: 'A012345678Z',
+        ),
+      );
+      expect(fields['customerId'], customerId);
+      expect(fields['customerName'], 'Jane Wanjiku');
+      expect(fields['customerKraPin'], 'A012345678Z');
+    });
+
+    // **What every earlier build writes.** A walk-in names nobody, so the sale
+    // a 1.0.9 till sends and the walk-in sale this one sends are the same shape.
+    test('is absent on a walk-in, which writes what older tills write', () async {
+      final record = await _save(outbox, _payload());
+
+      final payload = CheckoutSalePayload.fromOutboxRecord(
+        record,
+        session: session,
+      );
+      final fields = payload.toSubmission().saleFields;
+
+      expect(payload.customer, isNull);
+      for (final key in <String>['customerId', 'customerName', 'customerKraPin']) {
+        expect(fields.containsKey(key), isFalse, reason: key);
+      }
+    });
+
+    test('is refused when the till could not have chosen it', () async {
+      final cases = <String, Map<String, Object?>>{
+        'name-only': _payload(overrides: {'customerName': 'Jane'}),
+        'id-only': _payload(overrides: {'customerId': customerId}),
+        'foreign-id': _payload(
+          overrides: {'customerId': 'sp_abc', 'customerName': 'Jane'},
+        ),
+        'bad-pin': _payload(
+          overrides: {
+            'customerId': customerId,
+            'customerName': 'Jane',
+            'customerKraPin': 'a0123',
+          },
+        ),
+      };
+      for (final entry in cases.entries) {
+        final record = await _save(
+          outbox,
+          entry.value,
+          checkoutId: 'checkout-customer-${entry.key}',
+        );
+        expect(
+          () => CheckoutSalePayload.fromOutboxRecord(record, session: session),
+          _throwsSaleFormat,
+          reason: entry.key,
+        );
+      }
+    });
+  });
+
   test('rejects malformed envelope metadata', () async {
     final cases = <String, Map<String, Object?>>{
       'currency': _payload(overrides: {'currency': 'kes'}),

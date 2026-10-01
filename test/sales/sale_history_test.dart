@@ -33,6 +33,63 @@ void main() {
       expect(sale.rungAt, DateTime.utc(2026, 7, 31, 8));
     });
 
+    test('reads who the sale was for, and a walk-in as nobody', () {
+      const customerId = 'cu_0123456789abcdef0123456789abcdef01234567';
+      final named = TenantSale.fromDocument(
+        path: 'tenants/tenant-a/sales/co-1',
+        data: _sale(
+          overrides: <String, Object?>{
+            'customerId': customerId,
+            'customerName': 'Jane Wanjiku',
+            'customerKraPin': 'A012345678Z',
+          },
+        ),
+      );
+      expect(named.customer?.id, customerId);
+      expect(named.customer?.name, 'Jane Wanjiku');
+      expect(named.customer?.kraPin, 'A012345678Z');
+
+      final walkIn = TenantSale.fromDocument(
+        path: 'tenants/tenant-a/sales/co-1',
+        data: _sale(),
+      );
+      expect(walkIn.customer, isNull);
+    });
+
+    // **The rule does not shape these fields** (it cost the largest sale its
+    // expression budget), so a stored sale may carry anything in them - and one
+    // naming nobody recognisable is shown as the walk-in it effectively is,
+    // never refused: refusing would hide a real sale over a label.
+    test('a malformed customer reads as a walk-in, never as a refusal', () {
+      const customerId = 'cu_0123456789abcdef0123456789abcdef01234567';
+      for (final overrides in <Map<String, Object?>>[
+        <String, Object?>{'customerId': 'sp_abc', 'customerName': 'Jane'},
+        <String, Object?>{'customerId': customerId},
+        <String, Object?>{'customerId': customerId, 'customerName': 7},
+        <String, Object?>{'customerName': 'Jane'},
+      ]) {
+        final sale = TenantSale.fromDocument(
+          path: 'tenants/tenant-a/sales/co-1',
+          data: _sale(overrides: overrides),
+        );
+        expect(sale.customer, isNull, reason: '$overrides');
+        expect(sale.totalMinor, 900);
+      }
+
+      final badPin = TenantSale.fromDocument(
+        path: 'tenants/tenant-a/sales/co-1',
+        data: _sale(
+          overrides: <String, Object?>{
+            'customerId': customerId,
+            'customerName': 'Jane',
+            'customerKraPin': 'not a pin',
+          },
+        ),
+      );
+      expect(badPin.customer?.name, 'Jane');
+      expect(badPin.customer?.kraPin, isNull);
+    });
+
     test('a till clock running ahead cannot put a sale after it arrived', () {
       final sale = TenantSale.fromDocument(
         path: 'tenants/tenant-a/sales/co-1',

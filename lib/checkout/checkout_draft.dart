@@ -127,6 +127,7 @@ final class CheckoutDraftRequest {
     this.tender,
     this.discountMinor = 0,
     this.agreedPrice,
+    this.customer,
   }) : lines = List<CheckoutDraftLineRequest>.unmodifiable(lines);
 
   final List<CheckoutDraftLineRequest> lines;
@@ -143,6 +144,13 @@ final class CheckoutDraftRequest {
   /// [discountMinor]: a request naming both is refused, since two ways of
   /// taking money off one sale could only disagree.
   final CheckoutAgreedPrice? agreedPrice;
+
+  /// Who the sale is for, chosen at the till, or null for a walk-in.
+  ///
+  /// **Chosen before the sale, never asked for during it.** The selector sits
+  /// above the cart and defaults to walk-in, so nothing stands between the
+  /// cashier pressing save and the sale being written.
+  final CheckoutSaleCustomer? customer;
 }
 
 /// Builds one frozen `CheckoutSalePayload` v2 draft from the offline cache.
@@ -547,6 +555,7 @@ final class CheckoutDraftService implements CheckoutDraftSink {
       'discountMinor': discountMinor,
       if (discountReason != null) 'discountReason': discountReason,
       'totalMinor': subtotalMinor - discountMinor,
+      ...?request.customer?.toFields(),
     };
 
     // Prove the frozen submission contract before the draft becomes evidence.
