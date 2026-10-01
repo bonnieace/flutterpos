@@ -928,6 +928,12 @@ final class _CartEditorState extends State<_CartEditor> {
   /// lose the sentence on the second keystroke.
   _AgreementDropped? _dropped;
 
+  /// What the customer pays now on a sale put on their account, or null for a
+  /// sale paid in full. **Only for a chosen customer a manager gave credit**,
+  /// and dropped when the items, the price or the customer change - what is
+  /// owed is the total less what is paid, so a new total is a new question.
+  _CreditChoice? _credit;
+
   /// The last durable save. It deliberately survives every later cart edit and
   /// is cleared only by the next save attempt or by the cashier closing it: a
   /// receipt number describes a finished sale, not the cart on screen, and a
@@ -976,6 +982,63 @@ final class _CartEditorState extends State<_CartEditor> {
     super.initState();
     unawaited(_readPriceAgreement());
     unawaited(_readEReceipts());
+  }
+
+  @override
+  void didUpdateWidget(covariant _CartEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A different customer, or one no longer given credit, owes nothing on
+    // this sale: the credit was chosen for somebody else's account.
+    final customer = widget.customer;
+    if (_credit != null &&
+        (customer == null ||
+            customer.id != oldWidget.customer?.id ||
+            !customer.allowsCredit)) {
+      _credit = null;
+    }
+  }
+
+  /// Whether this sale may be put on the chosen customer's account.
+  bool get _creditOffered =>
+      widget.drafts != null &&
+      _quantities.isNotEmpty &&
+      (widget.customer?.allowsCredit ?? false);
+
+  /// Asks what is paid now, and holds the answer.
+  Future<void> _chooseCredit(BuildContext context, String currency) async {
+    final customer = widget.customer;
+    final total = _payable(_totalMinor);
+    if (customer == null || total == null || total <= 0) return;
+    final choice = await showAppDialog<_CreditChoice>(
+      context,
+      barrierDismissible: true,
+      builder: (_) => _CreditDialog(
+        currency: currency,
+        customer: customer,
+        totalMinor: total,
+        initial: _credit,
+      ),
+    );
+    if (!mounted || choice == null) return;
+    // Checked again for the reason an agreed price is: a catalog re-read
+    // landing while the dialog was up would leave the answer for a total that
+    // is no longer on screen.
+    if (_payable(_totalMinor) != choice.totalMinor ||
+        widget.customer?.id != customer.id) {
+      return;
+    }
+    setState(() {
+      _credit = choice;
+      _tender = null;
+      _clearRefusal();
+    });
+  }
+
+  void _removeCredit() {
+    setState(() {
+      _credit = null;
+      _clearRefusal();
+    });
   }
 
   /// This device's copy first, then the server's - neither holds the till.
@@ -1155,6 +1218,9 @@ final class _CartEditorState extends State<_CartEditor> {
   /// the old agreed total for a bigger sale. Called inside the `setState` of
   /// every edit that changes what is being sold.
   void _dropAgreement() {
+    // What is owed is the total less what is paid, so new items are a new
+    // question - asked again, never carried over to a different total.
+    _credit = null;
     // An emptied cart is the end of that customer, so there is nothing left
     // to explain to the next one.
     if (_quantities.isEmpty) {
@@ -1194,6 +1260,7 @@ final class _CartEditorState extends State<_CartEditor> {
     setState(() {
       _agreed = agreed;
       _dropped = null;
+      _credit = null;
       _clearRefusal();
     });
   }
@@ -1202,6 +1269,7 @@ final class _CartEditorState extends State<_CartEditor> {
     setState(() {
       _agreed = null;
       _dropped = null;
+      _credit = null;
       _clearRefusal();
     });
   }
@@ -1274,6 +1342,7 @@ final class _CartEditorState extends State<_CartEditor> {
     // is set afterwards from the sale's card.
     final tender = _tender;
     final agreed = _agreed;
+    final credit = _credit;
     // Read now, so the sale names whoever was chosen when it was saved even if
     // the title changes while the draft is being written.
     final customer = widget.customer;
@@ -1289,8 +1358,17 @@ final class _CartEditorState extends State<_CartEditor> {
     try {
       saved = await drafts.saveDraft(
         CheckoutDraftRequest(
-          tender: tender,
+          tender: credit == null ? tender : null,
           customer: customer == null ? null : checkoutSaleCustomerOf(customer),
+          // What was paid now; the draft works out what is owed from the
+          // total it prices itself, so the two can never disagree.
+          credit: credit == null
+              ? null
+              : CheckoutCreditRequest(
+                  paidMinor: credit.paidMinor,
+                  paidTender: credit.paidTender,
+                  balanceBeforeMinor: customer?.balanceMinor,
+                ),
           agreedPrice: agreed == null
               ? null
               : CheckoutAgreedPrice(
@@ -1324,6 +1402,7 @@ final class _CartEditorState extends State<_CartEditor> {
         _tender = null;
         _agreed = null;
         _dropped = null;
+        _credit = null;
         // The till returns to its neutral state for the next customer rather
         // than leaving them a catalog narrowed by somebody else's search.
         _search.clear();
@@ -1634,7 +1713,7 @@ final class _CartEditorState extends State<_CartEditor> {
           _totalLine(tokens, currency, _payable(total)),
           ..._agreeSection(context, tokens, currency, total),
           SizedBox(height: tokens.spacing.s12),
-          ..._tenderSection(context, tokens),
+          ..._tenderSection(context, tokens, currency),
           ..._saveSection(context, tokens, total),
         ],
       ),
@@ -2262,7 +2341,87 @@ final class _CartEditorState extends State<_CartEditor> {
   ///
   /// `ConfirmDialog` is §5.1's own row for this and does not exist yet.
   ///
-  List<Widget> _tenderSection(BuildContext context, AppTokens tokens) =>
+  List<Widget> _tenderSection(
+    BuildContext context,
+    AppTokens tokens,
+    String currency,
+  ) => <Widget>[
+    if (_credit case final credit?)
+      ..._creditSummary(context, tokens, currency, credit)
+    else ...<Widget>[
+      ..._paidInFullSection(context, tokens),
+      if (_creditOffered) ...<Widget>[
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: AppButton(
+            key: const ValueKey('checkout-put-on-credit'),
+            label: 'Put on credit',
+            tier: AppButtonTier.secondary,
+            icon: Icons.account_balance_wallet_outlined,
+            onPressed: _saving || _blocker(_totalMinor) != null
+                ? null
+                : () => _chooseCredit(context, currency),
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s20),
+      ],
+    ],
+  ];
+
+  /// What this sale leaves the customer owing, in place of the tender chips.
+  List<Widget> _creditSummary(
+    BuildContext context,
+    AppTokens tokens,
+    String currency,
+    _CreditChoice credit,
+  ) {
+    final customer = widget.customer!;
+    final owed = credit.owedMinor;
+    final paid = credit.paidMinor;
+    final after = customer.balanceMinor + owed;
+    final style = tokens.density.body(tokens.typography);
+    return <Widget>[
+      Text(
+        key: const ValueKey('checkout-credit-summary'),
+        '${customer.name} owes $currency ${_money(owed)} on this sale',
+        style: style.copyWith(fontWeight: FontWeight.w600),
+      ),
+      SizedBox(height: tokens.spacing.s4),
+      Text(
+        <String>[
+          if (paid > 0)
+            'Paid now: $currency ${_money(paid)} by ${credit.paidTender!.label}',
+          'Balance after: $currency ${_money(after)} of '
+              '$currency ${_money(customer.creditLimitMinor ?? 0)}',
+        ].join('\n'),
+        style: tokens.typography.caption.copyWith(
+          color: tokens.colors.text.secondary,
+        ),
+      ),
+      SizedBox(height: tokens.spacing.s8),
+      Wrap(
+        spacing: tokens.spacing.s8,
+        runSpacing: tokens.spacing.s8,
+        children: <Widget>[
+          AppButton(
+            key: const ValueKey('checkout-change-credit'),
+            label: 'Change',
+            tier: AppButtonTier.secondary,
+            onPressed: _saving ? null : () => _chooseCredit(context, currency),
+          ),
+          AppButton(
+            key: const ValueKey('checkout-remove-credit'),
+            label: 'Paid in full',
+            tier: AppButtonTier.tertiary,
+            onPressed: _saving ? null : _removeCredit,
+          ),
+        ],
+      ),
+      SizedBox(height: tokens.spacing.s20),
+    ];
+  }
+
+  List<Widget> _paidInFullSection(BuildContext context, AppTokens tokens) =>
       <Widget>[
         // **Nothing is preselected, and saving without a choice is allowed.**
         // Cash was the default between 2026-08-23 and this change, which meant
@@ -2581,6 +2740,192 @@ class _AgreePriceDialogState extends State<_AgreePriceDialog> {
     return minor == 0
         ? '$major'
         : '$major.${minor.toString().padLeft(2, '0')}';
+  }
+}
+
+/// A sale put on a customer's account: what was paid now, and how.
+final class _CreditChoice {
+  const _CreditChoice({
+    required this.totalMinor,
+    required this.paidMinor,
+    this.paidTender,
+  });
+
+  /// The total this was chosen against, so a total that moved drops it.
+  final int totalMinor;
+  final int paidMinor;
+  final CheckoutTender? paidTender;
+
+  int get owedMinor => totalMinor - paidMinor;
+}
+
+/// *Put on credit*: what the customer pays now, if anything, and how.
+///
+/// **What is paid, not what is owed**, because that is what is in the
+/// cashier's hand. The rest is owed, and the dialog shows where that leaves
+/// the customer against their limit as the cashier types - and refuses a sale
+/// that would take them over it, which is the limit a manager set.
+final class _CreditDialog extends StatefulWidget {
+  const _CreditDialog({
+    required this.currency,
+    required this.customer,
+    required this.totalMinor,
+    this.initial,
+  });
+
+  final String currency;
+  final TenantCustomer customer;
+  final int totalMinor;
+  final _CreditChoice? initial;
+
+  @override
+  State<_CreditDialog> createState() => _CreditDialogState();
+}
+
+class _CreditDialogState extends State<_CreditDialog> {
+  late final TextEditingController _paid = TextEditingController(
+    text: switch (widget.initial) {
+      final initial? when initial.paidMinor > 0 =>
+        _AgreePriceDialogState._typedAmount(initial.paidMinor),
+      _ => '',
+    },
+  );
+  late CheckoutTender? _paidTender = widget.initial?.paidTender;
+  String? _error;
+
+  @override
+  void dispose() {
+    _paid.dispose();
+    super.dispose();
+  }
+
+  /// The typed amount in minor units: nothing typed is nothing paid, and
+  /// null is something that does not read as money.
+  int? get _typedPaid {
+    if (_paid.text.trim().isEmpty) return 0;
+    try {
+      return tenantCatalogPriceMinorUnits(_paid.text);
+    } on TenantCatalogManagementException {
+      return null;
+    }
+  }
+
+  String? _problem() {
+    final paid = _typedPaid;
+    if (paid == null) return 'Enter an amount, like 300 or 250.50.';
+    if (paid >= widget.totalMinor) {
+      return 'That pays for all of it. Choose how they paid instead of credit.';
+    }
+    if (paid > 0 && _paidTender == null) {
+      return 'Say how the part paid now was paid.';
+    }
+    final limit = widget.customer.creditLimitMinor ?? 0;
+    final after = widget.customer.balanceMinor + widget.totalMinor - paid;
+    if (after > limit) {
+      return 'That takes ${widget.customer.name} to ${widget.currency} '
+          '${_money(after)}, over their limit of ${widget.currency} '
+          '${_money(limit)}. Take more now, or sell less on credit.';
+    }
+    return null;
+  }
+
+  void _confirm() {
+    final problem = _problem();
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
+    final paid = _typedPaid!;
+    Navigator.of(context).pop(
+      _CreditChoice(
+        totalMinor: widget.totalMinor,
+        paidMinor: paid,
+        paidTender: paid > 0 ? _paidTender : null,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final currency = widget.currency;
+    final customer = widget.customer;
+    final paid = _typedPaid;
+    final owed = paid == null ? null : widget.totalMinor - paid;
+    final secondary = tokens.density
+        .body(tokens.typography)
+        .copyWith(color: tokens.colors.text.secondary);
+    return AppDialog(
+      title: 'Put on credit',
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            key: const ValueKey('credit-standing'),
+            '${customer.name} owes $currency ${_money(customer.owedMinor)} '
+            'of a $currency ${_money(customer.creditLimitMinor ?? 0)} limit.',
+            style: secondary,
+          ),
+          SizedBox(height: tokens.spacing.s4),
+          Text(
+            'This sale: $currency ${_money(widget.totalMinor)}',
+            style: secondary,
+          ),
+          SizedBox(height: tokens.spacing.s16),
+          AppTextField(
+            key: const ValueKey('credit-paid-now'),
+            controller: _paid,
+            label: 'Paid now (optional)',
+            leading: Icons.payments_outlined,
+            placeholder: '0',
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            textInputAction: TextInputAction.done,
+            helper: owed != null && owed > 0 && owed <= widget.totalMinor
+                ? 'Owed on this sale: $currency ${_money(owed)}'
+                : null,
+            error: _error,
+            onChanged: (_) => setState(() => _error = null),
+          ),
+          if ((paid ?? 0) > 0) ...<Widget>[
+            SizedBox(height: tokens.spacing.s12),
+            FilterChipBar<CheckoutTender>(
+              semanticLabel: 'How the part paid now was paid',
+              selected: _paidTender,
+              onSelected: (value) => setState(() {
+                _paidTender = value;
+                _error = null;
+              }),
+              options: <FilterChipOption<CheckoutTender>>[
+                for (final option in CheckoutTender.values)
+                  FilterChipOption<CheckoutTender>(
+                    key: ValueKey('credit-paid-${option.wireValue}'),
+                    value: option,
+                    label: option.label,
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+      actions: <Widget>[
+        AppButton(
+          key: const ValueKey('credit-cancel'),
+          label: 'Cancel',
+          tier: AppButtonTier.secondary,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        AppButton(
+          key: const ValueKey('credit-confirm'),
+          label: 'Put on credit',
+          tier: AppButtonTier.primary,
+          onPressed: _confirm,
+        ),
+      ],
+    );
   }
 }
 

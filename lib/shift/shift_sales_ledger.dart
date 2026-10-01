@@ -1,4 +1,5 @@
 import '../checkout/checkout_outbox.dart';
+import '../checkout/checkout_sale.dart';
 import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_id.dart';
 
@@ -126,6 +127,8 @@ final class ShiftSalesSummary {
     required this.totalMinor,
     required this.unsettledCount,
     this.tenders = ShiftTenderSplit.empty,
+    this.creditOwedMinor = 0,
+    this.repaidMinor = 0,
   });
 
   static const ShiftSalesSummary empty = ShiftSalesSummary(
@@ -137,6 +140,18 @@ final class ShiftSalesSummary {
   final int transactionCount;
   final int totalMinor;
   final int unsettledCount;
+
+  /// The part of [totalMinor] customers took on credit, which is in the sales
+  /// and not in the drawer.
+  final int creditOwedMinor;
+
+  /// What customers paid back into this shift, which is in the drawer and is
+  /// not a sale.
+  final int repaidMinor;
+
+  /// What the drawer should hold from trading, before any float: the sales
+  /// less what was lent, plus what was paid back.
+  int get drawerMinor => totalMinor - creditOwedMinor + repaidMinor;
 
   /// How the confirmed takings above split across how they were paid for.
   ///
@@ -176,10 +191,19 @@ final class ShiftServerTotals {
   const ShiftServerTotals({
     required this.transactionCount,
     required this.totalMinor,
+    this.creditOwedMinor = 0,
+    this.repaidMinor,
   });
 
   final int transactionCount;
   final int totalMinor;
+
+  /// The part of [totalMinor] left owing on credit sales.
+  final int creditOwedMinor;
+
+  /// What customers paid back into the shift, or null where that could not
+  /// be read - which is never zero.
+  final int? repaidMinor;
 }
 
 /// Counts one shift's sales on the server, whichever phone rang them up.
@@ -230,6 +254,7 @@ final class CheckoutOutboxShiftSalesLedger implements ShiftSalesLedger {
     var transactionCount = 0;
     var totalMinor = 0;
     var unsettledCount = 0;
+    var creditOwedMinor = 0;
     final split = _ShiftTenderSplitBuilder();
     for (final record in records) {
       final recordShiftId = record.payload['shiftId'];
@@ -255,7 +280,15 @@ final class CheckoutOutboxShiftSalesLedger implements ShiftSalesLedger {
       // the total is right; refusing here would strand a cashier at the end of
       // a shift over a value they never chose. It is bucketed and stated
       // instead - the same decision the period report already makes.
-      split.add(record.payload['tender'], total);
+      final owed = record.payload['tender'] == checkoutCreditTenderWireValue
+          ? record.payload['creditOwedMinor']
+          : null;
+      if (owed is int && owed > 0 && owed <= total) {
+        creditOwedMinor += owed;
+        split.addCredit(record.payload['creditPaidTender'], total, owed);
+      } else {
+        split.add(record.payload['tender'], total);
+      }
       if (totalMinor > maximumShiftSalesMinor) {
         throw const ShiftSalesLedgerException('shift_total_out_of_range');
       }
@@ -265,6 +298,7 @@ final class CheckoutOutboxShiftSalesLedger implements ShiftSalesLedger {
       totalMinor: totalMinor,
       unsettledCount: unsettledCount,
       tenders: split.build(),
+      creditOwedMinor: creditOwedMinor,
     );
   }
 }
@@ -301,6 +335,22 @@ final class _ShiftTenderSplitBuilder {
     }
     _recordedMinor[tender] = _recordedMinor[tender]! + totalMinor;
     _recordedCount[tender] = _recordedCount[tender]! + 1;
+  }
+
+  /// Buckets one credit sale: the paid part by how it was paid, the owed
+  /// part as money no method accounts for, and the sale counted once - in the
+  /// bucket of what was paid, or with the owed part when nothing was.
+  void addCredit(Object? paidTender, int totalMinor, int owedMinor) {
+    final paid = totalMinor - owedMinor;
+    final tender = CheckoutTender.tryParse(paidTender);
+    _unrecognisedMinor += owedMinor;
+    if (paid > 0 && tender != null) {
+      _recordedMinor[tender] = _recordedMinor[tender]! + paid;
+      _recordedCount[tender] = _recordedCount[tender]! + 1;
+    } else {
+      _unrecognisedMinor += paid;
+      _unrecognisedCount += 1;
+    }
   }
 
   ShiftTenderSplit build() => ShiftTenderSplit(

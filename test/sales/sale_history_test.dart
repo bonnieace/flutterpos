@@ -56,6 +56,71 @@ void main() {
       expect(walkIn.customer, isNull);
     });
 
+    test('reads a credit sale as owed, paid in part by a money method', () {
+      const customerId = 'cu_0123456789abcdef0123456789abcdef01234567';
+      final sale = TenantSale.fromDocument(
+        path: 'tenants/tenant-a/sales/co-1',
+        data: _sale(
+          overrides: <String, Object?>{
+            'customerId': customerId,
+            'customerName': 'Jane Wanjiku',
+            'tender': 'credit',
+            'creditOwedMinor': 600,
+            'creditPaidTender': 'cash',
+          },
+        ),
+      );
+      expect(sale.credit?.owedMinor, 600);
+      expect(sale.credit?.paidMinor(sale.totalMinor), 300);
+      expect(sale.tender, CheckoutTender.cash);
+      // Answered at the counter, so never offered for completing.
+      expect(sale.tenderUnanswered, isFalse);
+      expect(tenantSalePaymentLabel(sale), 'On credit · 3 Cash now');
+
+      final owedInFull = TenantSale.fromDocument(
+        path: 'tenants/tenant-a/sales/co-1',
+        data: _sale(
+          overrides: <String, Object?>{
+            'customerId': customerId,
+            'customerName': 'Jane Wanjiku',
+            'tender': 'credit',
+            'creditOwedMinor': 900,
+          },
+        ),
+      );
+      expect(owedInFull.tender, isNull);
+      expect(owedInFull.tenderUnanswered, isFalse);
+      expect(tenantSalePaymentLabel(owedInFull), 'On credit');
+    });
+
+    test('a credit sale nobody owes, or that does not add up, is refused', () {
+      const customerId = 'cu_0123456789abcdef0123456789abcdef01234567';
+      for (final overrides in <Map<String, Object?>>[
+        <String, Object?>{'tender': 'credit', 'creditOwedMinor': 900},
+        <String, Object?>{
+          'customerId': customerId,
+          'customerName': 'Jane',
+          'tender': 'credit',
+          'creditOwedMinor': 901,
+        },
+        <String, Object?>{
+          'customerId': customerId,
+          'customerName': 'Jane',
+          'tender': 'credit',
+          'creditOwedMinor': 600,
+        },
+      ]) {
+        expect(
+          () => TenantSale.fromDocument(
+            path: 'tenants/tenant-a/sales/co-1',
+            data: _sale(overrides: overrides),
+          ),
+          throwsA(isA<TenantSaleException>()),
+          reason: '$overrides',
+        );
+      }
+    });
+
     // **The rule does not shape these fields** (it cost the largest sale its
     // expression budget), so a stored sale may carry anything in them - and one
     // naming nobody recognisable is shown as the walk-in it effectively is,

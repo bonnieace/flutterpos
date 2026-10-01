@@ -161,6 +161,27 @@ final class CheckoutRefusal {
           '$minimumCheckoutDiscountReasonLength characters, before saving.',
       cashierCanFix: true,
     ),
+    'credit_requires_customer' => const CheckoutRefusal._(
+      'credit_requires_customer',
+      'Choose who the sale is for before putting it on credit.',
+      cashierCanFix: true,
+    ),
+    'credit_with_tender' => const CheckoutRefusal._(
+      'credit_with_tender',
+      'Choose either a payment method or credit, not both.',
+      cashierCanFix: true,
+    ),
+    'credit_paid_out_of_range' => const CheckoutRefusal._(
+      'credit_paid_out_of_range',
+      'What is paid now must be less than the total. If they are paying it '
+          'all, choose how they paid instead of credit.',
+      cashierCanFix: true,
+    ),
+    'credit_paid_tender_required' => const CheckoutRefusal._(
+      'credit_paid_tender_required',
+      'Say how the part paid now was paid.',
+      cashierCanFix: true,
+    ),
     'invalid_product_id' => const CheckoutRefusal._(
       'invalid_product_id',
       'One of these items has an unusable product reference and cannot be '

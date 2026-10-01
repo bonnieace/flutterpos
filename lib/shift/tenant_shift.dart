@@ -224,11 +224,20 @@ final class TenantShiftCloseIntent {
     this.declaration,
     this.closedWithoutEvidence = false,
     this.settlementId,
+    this.creditOwedMinor = 0,
+    this.repaidMinor = 0,
   });
 
   final String path;
   final String tenantId;
   final String shiftId;
+
+  /// The part of [totalSalesMinor] customers took on credit, and what they
+  /// paid back into this drawer - so the shift's own history row can tell a
+  /// drawer that is short from one whose customers owe. Written only when
+  /// there is one; reconciliation counts both again itself.
+  final int creditOwedMinor;
+  final int repaidMinor;
 
   /// When the drawer was counted, by this device's clock - written beside the
   /// server's `endTime` as `closedAt`. See [TenantShift.endedAt].
@@ -293,6 +302,8 @@ final class TenantShiftCloseIntent {
     // costs no field and reconciliation's grouping never has to tell a null
     // apart from an absence.
     if (settlementId case final settlement?) 'settlementId': settlement,
+    if (creditOwedMinor > 0) 'creditOwedMinor': creditOwedMinor,
+    if (repaidMinor > 0) 'repaidMinor': repaidMinor,
   };
 }
 
@@ -398,6 +409,11 @@ final class TenantShiftRepository extends TenantReadRepository {
       closedAt: closedAt.toUtc(),
       declaration: declaration,
       settlementId: settlementId,
+      creditOwedMinor:
+          sales.creditOwedMinor > 0 && sales.creditOwedMinor <= sales.totalMinor
+          ? sales.creditOwedMinor
+          : 0,
+      repaidMinor: sales.repaidMinor > 0 ? sales.repaidMinor : 0,
     );
   }
 
@@ -713,26 +729,66 @@ final class FirebaseShiftServerSalesTotals implements ShiftServerSalesTotals {
           .collection(TenantPaths(tenantId).sales)
           .where('shiftId', isEqualTo: shiftId)
           .where('soldById', isEqualTo: uid)
-          .aggregate(count(), sum('totalMinor'))
+          .aggregate(count(), sum('totalMinor'), sum('creditOwedMinor'))
           .get(source: AggregateSource.server)
           .timeout(_timeout);
       final transactionCount = snapshot.count;
       final total = snapshot.getSum('totalMinor');
+      // A sale paid in full has no `creditOwedMinor`, which a sum skips.
+      final owed = snapshot.getSum('creditOwedMinor') ?? 0;
       if (transactionCount == null || transactionCount < 0 || total == null) {
         return null;
       }
       // Stored as whole minor units, so a sum that is not one is a record
       // this cannot vouch for.
       if (total < 0 || total != total.roundToDouble()) return null;
+      if (owed < 0 || owed > total || owed != owed.roundToDouble()) {
+        return null;
+      }
       return ShiftServerTotals(
         transactionCount: transactionCount,
         totalMinor: total.toInt(),
+        creditOwedMinor: owed.toInt(),
+        repaidMinor: await _repaid(tenantId: tenantId, uid: uid, shiftId: shiftId),
       );
     } catch (error, stackTrace) {
       AppTelemetry.captureHandled(
         error,
         stackTrace,
         boundary: 'shift.server_totals_read',
+      );
+      return null;
+    }
+  }
+}
+
+extension on FirebaseShiftServerSalesTotals {
+  /// What customers paid back into the shift, counted on the server, or null
+  /// where that could not be read. Rules let a cashier read the payments they
+  /// took, which is exactly what this filters to.
+  Future<int?> _repaid({
+    required String tenantId,
+    required String uid,
+    required String shiftId,
+  }) async {
+    try {
+      final snapshot = await _firestore
+          .collection(TenantPaths(tenantId).collectionPath(
+            TenantCollection.customerPayments,
+          ))
+          .where('shiftId', isEqualTo: shiftId)
+          .where('recordedBy', isEqualTo: uid)
+          .aggregate(sum('amountMinor'))
+          .get(source: AggregateSource.server)
+          .timeout(_timeout);
+      final repaid = snapshot.getSum('amountMinor') ?? 0;
+      if (repaid < 0 || repaid != repaid.roundToDouble()) return null;
+      return repaid.toInt();
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.server_repaid_read',
       );
       return null;
     }

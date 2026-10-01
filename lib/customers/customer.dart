@@ -65,7 +65,11 @@ final class TenantCustomer {
        active = data['active'] != false,
        points = _count(data['points']),
        saleCount = _count(data['saleCount']),
-       lastSaleAt = tenantStoredInstant(data['lastSaleAt']);
+       lastSaleAt = tenantStoredInstant(data['lastSaleAt']),
+       creditLimitMinor = _limit(data['creditLimitMinor']),
+       balanceMinor = _balance(data['balanceMinor']),
+       owingSince = tenantStoredInstant(data['owingSince']),
+       lastPaymentAt = tenantStoredInstant(data['lastPaymentAt']);
 
   factory TenantCustomer.fromSnapshot(TenantQueryDocumentSnapshot snapshot) =>
       TenantCustomer.fromDocument(path: snapshot.path, data: snapshot.data);
@@ -91,6 +95,40 @@ final class TenantCustomer {
   final int points;
   final int saleCount;
   final DateTime? lastSaleAt;
+
+  /// The most this customer may owe, or null where they buy for money only.
+  /// Set by a manager; never zero, which the server stores as nothing.
+  final int? creditLimitMinor;
+
+  /// What they owe, as the server last moved it. Below zero when they have
+  /// paid ahead, and the shop owes them.
+  final int balanceMinor;
+
+  /// When they started owing, or null while they owe nothing.
+  final DateTime? owingSince;
+
+  final DateTime? lastPaymentAt;
+
+  /// Whether a cashier may put a sale on this customer's account.
+  bool get allowsCredit => active && creditLimitMinor != null;
+
+  /// What they owe, never below zero - the figure a "who owes" list sorts by.
+  int get owedMinor => balanceMinor > 0 ? balanceMinor : 0;
+
+  /// How much more they may take on credit before reaching their limit.
+  int get creditAvailableMinor {
+    final limit = creditLimitMinor;
+    if (limit == null) return 0;
+    final available = limit - balanceMinor;
+    return available > 0 ? available : 0;
+  }
+
+  /// Whether they owe more than they are allowed to - which only a sale made
+  /// where the till could not see their balance can cause.
+  bool get overLimit {
+    final limit = creditLimitMinor;
+    return balanceMinor > 0 && (limit == null || balanceMinor > limit);
+  }
 
   /// Whether a receipt may go to this customer on WhatsApp.
   bool get receivesWhatsapp => active && phone != null && whatsappOptIn;
@@ -133,7 +171,14 @@ final class TenantCustomer {
       value is String && value.trim().isNotEmpty ? value : null;
 
   static int _count(Object? value) => value is int && value > 0 ? value : 0;
+
+  static int? _limit(Object? value) => value is int && value > 0 ? value : null;
+
+  static int _balance(Object? value) => value is int ? value : 0;
 }
+
+/// The largest credit limit the server accepts: ten billion of the major unit.
+const int maximumCustomerCreditLimitMinor = 1000000000000;
 
 /// `+254 ••• 678`, or null where there is no number.
 String? maskCustomerPhone(String? phone) {
@@ -167,6 +212,7 @@ final class TenantCustomerDraft {
     this.kraPin = '',
     this.notes = '',
     this.whatsappOptIn = false,
+    this.creditLimitMinor,
   });
 
   factory TenantCustomerDraft.of(TenantCustomer customer) =>
@@ -177,6 +223,7 @@ final class TenantCustomerDraft {
         kraPin: customer.kraPin ?? '',
         notes: customer.notes ?? '',
         whatsappOptIn: customer.whatsappOptIn,
+        creditLimitMinor: customer.creditLimitMinor,
       );
 
   final String name;
@@ -185,6 +232,19 @@ final class TenantCustomerDraft {
   final String kraPin;
   final String notes;
   final bool whatsappOptIn;
+
+  /// The credit limit to give, or null for none. Zero means none too.
+  final int? creditLimitMinor;
+
+  /// [creditLimitMinor] as the server will store it, or a refusal.
+  int? normalizedCreditLimit() {
+    final limit = creditLimitMinor;
+    if (limit == null || limit == 0) return null;
+    if (limit < 0 || limit > maximumCustomerCreditLimitMinor) {
+      throw const TenantCustomerException('invalid_customer_credit_limit');
+    }
+    return limit;
+  }
 
   String raw(TenantCustomerField field) => switch (field) {
     TenantCustomerField.name => name,
@@ -320,6 +380,7 @@ final class TenantCustomerCreateIntent {
     required this.fields,
     required this.whatsappOptIn,
     required this.createdBy,
+    this.creditLimitMinor,
   });
 
   final String path;
@@ -328,6 +389,9 @@ final class TenantCustomerCreateIntent {
   final Map<TenantCustomerField, String?> fields;
   final bool whatsappOptIn;
   final String createdBy;
+
+  /// The credit limit given with the customer, or null for none.
+  final int? creditLimitMinor;
 
   String get name => fields[TenantCustomerField.name]!;
   String? get phone => fields[TenantCustomerField.phone];
@@ -342,6 +406,7 @@ final class TenantCustomerCreateIntent {
       for (final entry in fields.entries)
         if (entry.value != null) entry.key.wireKey: entry.value,
       if (whatsappOptIn) 'whatsappOptIn': true,
+      if (creditLimitMinor != null) 'creditLimitMinor': creditLimitMinor,
       'active': true,
       'searchName': search.searchName,
       'searchPrefixes': search.searchPrefixes,
@@ -364,6 +429,7 @@ final class TenantCustomerUpdateIntent {
     required this.whatsappOptIn,
     required this.active,
     required this.search,
+    this.creditLimit,
   });
 
   final String path;
@@ -381,10 +447,15 @@ final class TenantCustomerUpdateIntent {
 
   final ({String searchName, List<String> searchPrefixes})? search;
 
+  /// The new credit limit - a null value stops credit - or null when the
+  /// limit is not changing.
+  final ({int? value})? creditLimit;
+
   Map<String, Object?> documentData() => <String, Object?>{
     for (final entry in changes.entries) entry.key.wireKey: entry.value,
     if (whatsappOptIn != null) 'whatsappOptIn': whatsappOptIn,
     if (active != null) 'active': active,
+    if (creditLimit case final limit?) 'creditLimitMinor': limit.value,
     if (search case final search?) ...<String, Object?>{
       'searchName': search.searchName,
       'searchPrefixes': search.searchPrefixes,
@@ -402,7 +473,11 @@ final class TenantCustomerUpdateIntent {
 enum TenantCustomerStanding {
   active('active', 'Active'),
   inactive('inactive', 'Inactive'),
-  all('all', 'All customers');
+  all('all', 'All customers'),
+
+  /// Everyone who owes money, biggest debt first - read through
+  /// [TenantCustomerCreditRepository.loadOwing], not this search.
+  owing('owing', 'Who owes');
 
   const TenantCustomerStanding(this.wireValue, this.label);
 
@@ -413,7 +488,7 @@ enum TenantCustomerStanding {
   bool? get activeFilter => switch (this) {
     TenantCustomerStanding.active => true,
     TenantCustomerStanding.inactive => false,
-    TenantCustomerStanding.all => null,
+    TenantCustomerStanding.all || TenantCustomerStanding.owing => null,
   };
 }
 
@@ -593,6 +668,12 @@ final class TenantCustomerRepository extends TenantReadRepository {
     if (optedIn && fields[TenantCustomerField.phone] == null) {
       throw const TenantCustomerException('consent_needs_phone');
     }
+    // Credit is lending the shop's money, which is a manager's decision even
+    // where a cashier may add the customer.
+    final creditLimit = draft.normalizedCreditLimit();
+    if (creditLimit != null && !canManageInSession(session)) {
+      throw const TenantCustomerException('customer_forbidden');
+    }
     final customerId = _deterministicCustomerId(
       tenantId: session.tenantId,
       createdBy: session.uid,
@@ -605,6 +686,7 @@ final class TenantCustomerRepository extends TenantReadRepository {
       fields: Map<TenantCustomerField, String?>.unmodifiable(fields),
       whatsappOptIn: optedIn,
       createdBy: session.uid,
+      creditLimitMinor: creditLimit,
     );
   }
 
@@ -638,7 +720,9 @@ final class TenantCustomerRepository extends TenantReadRepository {
     } else if (!draft.whatsappOptIn && customer.whatsappOptIn) {
       optIn = false;
     }
-    if (changes.isEmpty && optIn == null) {
+    final creditLimit = draft.normalizedCreditLimit();
+    final limitChanges = creditLimit != customer.creditLimitMinor;
+    if (changes.isEmpty && optIn == null && !limitChanges) {
       throw const TenantCustomerException('customer_unchanged');
     }
     final renamed =
@@ -650,6 +734,7 @@ final class TenantCustomerRepository extends TenantReadRepository {
       changes: Map<TenantCustomerField, String?>.unmodifiable(changes),
       whatsappOptIn: optIn,
       active: null,
+      creditLimit: limitChanges ? (value: creditLimit) : null,
       search: renamed
           ? tenantCustomerSearchFields(
               name: changes[TenantCustomerField.name] ?? customer.name,

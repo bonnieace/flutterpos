@@ -801,6 +801,15 @@ String _mutationRejectionReason(TenantPendingMutationRecord record) {
     return 'Another customer already has that phone number. One number '
         'reaches one person, so it can be on one customer.';
   }
+  if (record.kind == TenantPendingMutationKind.customerPayment) {
+    switch (code) {
+      case 'failed-precondition':
+        return 'A payment is taken into your own shift. Open a shift and take '
+            'it again.';
+      case 'not-found':
+        return 'That customer is not in this business any more.';
+    }
+  }
   if (record.kind == TenantPendingMutationKind.whatsappReceiptRequest) {
     switch (code) {
       case 'resource-exhausted':
@@ -838,4 +847,5 @@ String _mutationKindLabel(TenantPendingMutationKind kind) => switch (kind) {
   TenantPendingMutationKind.customerCreate => 'New customer',
   TenantPendingMutationKind.customerUpdate => 'Customer correction',
   TenantPendingMutationKind.whatsappReceiptRequest => 'WhatsApp receipt',
+  TenantPendingMutationKind.customerPayment => 'Customer payment',
 };

@@ -17,12 +17,15 @@ import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
+import '../ui/money_text.dart';
 import '../ui/tokens.dart';
 import '../observability/app_telemetry.dart';
 import 'customer.dart';
 import 'customer_card.dart';
+import 'customer_credit.dart';
 import 'customer_directory_panel.dart';
 import 'customer_form.dart';
+import 'customer_payment_sheet.dart';
 
 /// One customer's record, as a route.
 final class TenantCustomerRecordScreen extends StatefulWidget {
@@ -33,12 +36,16 @@ final class TenantCustomerRecordScreen extends StatefulWidget {
     this.writer,
     this.salesReader,
     this.currency,
+    this.payments,
   });
 
   final TenantDataReader reader;
   final String customerId;
   final TenantCustomerWriter? writer;
   final TenantSalesHistoryQueryReader? salesReader;
+
+  /// Where *Record a payment* queues one. Absent, the record offers none.
+  final CustomerPaymentServices? payments;
 
   /// The business's currency, for the dialling code a correction starts from.
   final String? currency;
@@ -106,6 +113,24 @@ final class _TenantCustomerRecordScreenState
     _reload();
   }
 
+  Future<void> _recordPayment(
+    TenantSession session,
+    TenantCustomer customer,
+  ) async {
+    final payments = widget.payments;
+    if (payments == null) return;
+    final notice = await showCustomerPaymentDialog(
+      context,
+      session: session,
+      customer: customer,
+      services: payments,
+      currency: widget.currency ?? '',
+    );
+    if (!mounted || notice == null) return;
+    showAppSnackBar(context, notice);
+    _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     _composeLoaders();
@@ -144,6 +169,24 @@ final class _TenantCustomerRecordScreenState
           title: customer.name,
           child: _RecordContents(
             customer: customer,
+            currency: widget.currency,
+            onRecordPayment:
+                widget.payments != null &&
+                    TenantCustomerCreditRepository.canTakePaymentInSession(
+                      session,
+                    )
+                ? () => _recordPayment(session, customer)
+                : null,
+            // Only for a customer who has ever had an account to show.
+            statement:
+                customer.creditLimitMinor != null || customer.balanceMinor != 0
+                ? TenantCustomerStatement(
+                    key: ValueKey('customer-statement-$_generation'),
+                    reader: widget.reader,
+                    session: session,
+                    customer: customer,
+                  )
+                : null,
             // Keyed by the generation, so a correction reads the history back.
             purchases: TenantCustomerPurchases(
               key: ValueKey('customer-purchases-$_generation'),
@@ -186,10 +229,16 @@ final class _RecordContents extends StatelessWidget {
     required this.purchases,
     required this.onEdit,
     required this.onSetActive,
+    this.currency,
+    this.onRecordPayment,
+    this.statement,
   });
 
   final TenantCustomer customer;
   final Widget purchases;
+  final String? currency;
+  final VoidCallback? onRecordPayment;
+  final Widget? statement;
   final VoidCallback? onEdit;
   final ValueChanged<bool>? onSetActive;
 
@@ -320,9 +369,345 @@ final class _RecordContents extends StatelessWidget {
             ],
           ),
         ),
+        if (customer.creditLimitMinor != null ||
+            customer.balanceMinor != 0) ...<Widget>[
+          SizedBox(height: tokens.spacing.s16),
+          _AccountCard(
+            customer: customer,
+            currency: currency,
+            onRecordPayment: onRecordPayment,
+          ),
+        ],
+        if (statement case final statement?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s24),
+          statement,
+        ],
         SizedBox(height: tokens.spacing.s24),
         purchases,
       ],
+    );
+  }
+}
+
+/// What the customer owes, against what they may owe, and the way to take a
+/// payment.
+final class _AccountCard extends StatelessWidget {
+  const _AccountCard({
+    required this.customer,
+    required this.currency,
+    required this.onRecordPayment,
+  });
+
+  final TenantCustomer customer;
+  final String? currency;
+  final VoidCallback? onRecordPayment;
+
+  String _amount(int minor) {
+    final text = moneyTextOfMinor(minor);
+    final code = currency;
+    return code == null || code.isEmpty ? text : '$code $text';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final balance = customer.balanceMinor;
+    final limit = customer.creditLimitMinor;
+    final since = customer.owingSince;
+    return AppCard(
+      key: const ValueKey('customer-record-account'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _Headline(
+                  caption: balance < 0 ? 'Paid ahead' : 'Owes',
+                  value: _amount(balance.abs()),
+                  valueKey: const ValueKey('customer-record-balance'),
+                  figure: true,
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(
+                child: _Headline(
+                  caption: 'Credit limit',
+                  value: limit == null ? 'No credit' : _amount(limit),
+                  valueKey: const ValueKey('customer-record-credit-limit'),
+                  figure: limit != null,
+                  end: true,
+                ),
+              ),
+            ],
+          ),
+          if (since != null && balance > 0) ...<Widget>[
+            SizedBox(height: tokens.spacing.s8),
+            Text(
+              key: const ValueKey('customer-record-owing-since'),
+              'Owing since ${reportShortDate(_isoDate(since))}',
+              style: tokens.typography.caption.copyWith(
+                color: tokens.colors.text.secondary,
+              ),
+            ),
+          ],
+          if (customer.overLimit) ...<Widget>[
+            SizedBox(height: tokens.spacing.s12),
+            Callout(
+              key: const ValueKey('customer-record-over-limit'),
+              status: AppStatus.attention,
+              title: 'Over their limit',
+              message: limit == null
+                  ? 'They owe money but have no credit limit any more. The '
+                        'till will not sell to them on credit.'
+                  : 'They owe ${_amount(balance - limit)} more than their '
+                        'limit. A sale made where the till could not see '
+                        'their balance can do this; the till will not sell '
+                        'them more on credit until they pay some back.',
+            ),
+          ],
+          if (onRecordPayment case final record?) ...<Widget>[
+            SizedBox(height: tokens.spacing.s16),
+            AppButton(
+              key: const ValueKey('customer-record-take-payment'),
+              label: 'Record a payment',
+              icon: Icons.payments_outlined,
+              tier: AppButtonTier.secondary,
+              expand: true,
+              onPressed: record,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String _isoDate(DateTime at) {
+  final local = at.toLocal();
+  return '${local.year.toString().padLeft(4, '0')}-'
+      '${local.month.toString().padLeft(2, '0')}-'
+      '${local.day.toString().padLeft(2, '0')}';
+}
+
+/// A customer's statement: every sale on credit, repayment and return that
+/// moved what they owe, newest first, each with the balance it left.
+final class TenantCustomerStatement extends StatefulWidget {
+  const TenantCustomerStatement({
+    super.key,
+    required this.reader,
+    required this.session,
+    required this.customer,
+  });
+
+  final TenantDataReader reader;
+  final TenantSession session;
+  final TenantCustomer customer;
+
+  static const int pageSize = 20;
+
+  @override
+  State<TenantCustomerStatement> createState() =>
+      _TenantCustomerStatementState();
+}
+
+final class _TenantCustomerStatementState
+    extends State<TenantCustomerStatement> {
+  final List<TenantCustomerLedgerEntry> _entries =
+      <TenantCustomerLedgerEntry>[];
+  TenantReportingCurrency _currency = TenantReportingCurrency.unknown;
+  String? _cursor;
+  bool _hasMore = false;
+  bool _loading = true;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load(first: true);
+  }
+
+  Future<void> _load({bool first = false}) async {
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    try {
+      if (first) {
+        _currency = await TenantReportingCurrency.read(
+          session: widget.session,
+          reader: widget.reader,
+        );
+      }
+      final page = await TenantCustomerCreditRepository(
+        session: widget.session,
+        reader: widget.reader,
+      ).loadStatement(
+        widget.customer.id,
+        pageSize: TenantCustomerStatement.pageSize,
+        cursor: first ? null : _cursor,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (first) _entries.clear();
+        _entries.addAll(page.entries);
+        _cursor = page.nextCursor;
+        _hasMore = page.hasMore;
+        _loading = false;
+      });
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'customers.statement_read',
+      );
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _failed = true;
+      });
+    }
+  }
+
+  String _money(int minor) => _currency.format(minor / 100);
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      key: const ValueKey('customer-statement'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const SectionHeading('Statement'),
+        SizedBox(height: tokens.spacing.s8),
+        if (_failed)
+          ErrorState(
+            key: const ValueKey('customer-statement-failure'),
+            badgeLabel: 'Not read',
+            statement: "This customer's account could not be read.",
+            stillTrue: 'Nothing has been recorded or changed.',
+            actions: <Widget>[
+              AppButton(
+                key: const ValueKey('customer-statement-retry'),
+                label: 'Try again',
+                onPressed: () => _load(first: _entries.isEmpty),
+              ),
+            ],
+          )
+        else if (_loading && _entries.isEmpty)
+          const LoadingState(message: 'Reading their account')
+        else ...<Widget>[
+          if (_entries.isEmpty)
+            const EmptyState(
+              key: ValueKey('customer-statement-empty'),
+              title: 'Nothing on their account yet',
+              hint:
+                  'Each sale on credit and each payment back is listed here '
+                  'once it reaches the server.',
+              illustration: 'file-search.svg',
+            )
+          else
+            for (final (index, entry) in _entries.indexed) ...<Widget>[
+              if (index > 0) SizedBox(height: tokens.spacing.s12),
+              _StatementRow(
+                key: ValueKey('customer-statement-${entry.id}'),
+                entry: entry,
+                money: _money,
+              ),
+            ],
+          if (_hasMore) ...<Widget>[
+            SizedBox(height: tokens.spacing.s12),
+            AppButton(
+              key: const ValueKey('customer-statement-more'),
+              label: 'Show older entries',
+              loading: _loading,
+              expand: true,
+              onPressed: _loading ? null : () => _load(),
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+}
+
+/// One statement line: what happened, what it did to the balance - in words
+/// and with a sign, never by colour alone - and what they owed after.
+final class _StatementRow extends StatelessWidget {
+  const _StatementRow({super.key, required this.entry, required this.money});
+
+  final TenantCustomerLedgerEntry entry;
+  final String Function(int minor) money;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final change = entry.changeMinor;
+    final detail = <String>[
+      if (entry.at case final at?) reportShortDate(_isoDate(at)),
+      if (entry.receiptNumber case final receipt?) 'Receipt $receipt',
+      if (entry.tender case final tender?) tender.label,
+    ].join(' · ');
+    final after = entry.balanceAfterMinor;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: tokens.colors.surface.raised,
+        border: Border.all(color: tokens.colors.surface.cardEdge),
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(tokens.spacing.s16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    entry.kind.label,
+                    style: tokens.typography.titleMedium.copyWith(
+                      color: tokens.colors.text.primary,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${change > 0 ? '+' : '-'} ${money(change.abs())}',
+                  key: ValueKey('customer-statement-change-${entry.id}'),
+                  style: tokens.typography.numericBody.copyWith(
+                    color: tokens.colors.text.money,
+                  ),
+                ),
+              ],
+            ),
+            if (detail.isNotEmpty) ...<Widget>[
+              SizedBox(height: tokens.spacing.s4),
+              Text(
+                detail,
+                style: tokens.typography.caption.copyWith(
+                  color: tokens.colors.text.tertiary,
+                ),
+              ),
+            ],
+            SizedBox(height: tokens.spacing.s4),
+            Text(
+              after < 0
+                  ? 'Then ${money(-after)} paid ahead'
+                  : 'Then owed ${money(after)}',
+              style: tokens.typography.bodyMedium.copyWith(
+                color: tokens.colors.text.secondary,
+              ),
+            ),
+            if (entry.overLimit) ...<Widget>[
+              SizedBox(height: tokens.spacing.s8),
+              const StatusBadge(
+                status: AppStatus.attention,
+                label: 'Went over their limit',
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -630,6 +1015,16 @@ final class _PurchaseCard extends StatelessWidget {
                 color: tokens.colors.text.secondary,
               ),
             ),
+            if (sale.credit case final credit?) ...<Widget>[
+              SizedBox(height: tokens.spacing.s4),
+              Text(
+                key: ValueKey('customer-purchase-credit-${sale.id}'),
+                'On credit: ${money(credit.owedMinor)}',
+                style: tokens.typography.bodyMedium.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+            ],
             SizedBox(height: tokens.spacing.s4),
             Text(
               'Receipt ${sale.receiptNumber}',

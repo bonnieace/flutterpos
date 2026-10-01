@@ -38,6 +38,7 @@ import 'package:uzapay_pos/audit/audit_log.dart';
 import 'package:uzapay_pos/checkout/checkout_configuration.dart';
 import 'package:uzapay_pos/checkout/checkout_price_agreement.dart';
 import 'package:uzapay_pos/checkout/checkout_print_configuration.dart';
+import 'package:uzapay_pos/customers/customers.dart';
 import 'package:uzapay_pos/expenses/expense_repository.dart';
 import 'package:uzapay_pos/inventory/bulk_catalog.dart';
 import 'package:uzapay_pos/inventory/catalog_management.dart';
@@ -58,6 +59,7 @@ import 'package:uzapay_pos/reporting/sales_totals.dart';
 import 'package:uzapay_pos/reporting/shift_amendment.dart';
 import 'package:uzapay_pos/reporting/shift_amendment_feed.dart';
 import 'package:uzapay_pos/returns/return_request.dart';
+import 'package:uzapay_pos/whatsapp/whatsapp.dart';
 import 'package:uzapay_pos/returns/return_verification.dart';
 import 'package:uzapay_pos/returns/return_history.dart';
 import 'package:uzapay_pos/sales/receipt_lookup.dart';
@@ -371,6 +373,58 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
     expected: TenantReturnHistoryRepository.allowedRoles,
     row: 'Return history: every active member, as recording one is.',
   ),
+  // **The eight registered on 2026-10-01, with customers, WhatsApp receipts
+  // and credit.** Seven came with plan 1 and were missed here, which is the
+  // failure this file's source scan exists to catch; the eighth is the
+  // statement. Server-side, the same roles are `CUSTOMER_CREATE_ROLES`,
+  // `CUSTOMER_UPDATE_ROLES` and the `activity`, `configuration` and
+  // `receipt_deliveries` rules.
+  //
+  // | Add a customer (at the till) | Full | Full | Full | Full |
+  'TenantCustomerRepository.createRoles': (
+    expected: TenantCustomerRepository.createRoles,
+    row:
+        'Add a customer: everyone who sells, because the till is where a '
+        'customer is met.',
+  ),
+  // | Customers screen, corrections, credit limits | Full | Full | Full | No |
+  'TenantCustomerRepository.manageRoles': (
+    expected: TenantCustomerRepository.manageRoles,
+    row:
+        'Customers screen: the management three, who correct a customer and '
+        'give them credit.',
+  ),
+  // | Customer statement and who owes | Full | Full | Full | No |
+  'TenantCustomerCreditRepository.statementRoles': (
+    expected: TenantCustomerCreditRepository.statementRoles,
+    row:
+        'Customer statement and who owes: the management three, as the '
+        'ledger rule reads.',
+  ),
+  // | Loyalty and WhatsApp settings | Full | Full | No | No |
+  'TenantLoyaltyRepository.writeRoles': (
+    expected: TenantLoyaltyRepository.writeRoles,
+    row: 'Loyalty settings: owner/administrator, like every configuration.',
+  ),
+  'TenantLoyaltyPublisher.allowedRoles': (
+    expected: TenantLoyaltyPublisher.allowedRoles,
+    row: 'Publish loyalty settings: owner/administrator.',
+  ),
+  'TenantEReceiptRepository.writeRoles': (
+    expected: TenantEReceiptRepository.writeRoles,
+    row: 'WhatsApp receipt settings: owner/administrator.',
+  ),
+  'TenantEReceiptPublisher.allowedRoles': (
+    expected: TenantEReceiptPublisher.allowedRoles,
+    row: 'Publish WhatsApp receipt settings: owner/administrator.',
+  ),
+  // | Receipt deliveries | Full | Full | Full | No |
+  'TenantReceiptDeliveryRepository.readRoles': (
+    expected: TenantReceiptDeliveryRepository.readRoles,
+    row:
+        'Receipt deliveries: the management three, who can act on a failed '
+        'one.',
+  ),
 };
 
 /// What each guard should hold, written out rather than read off the guard.
@@ -438,6 +492,15 @@ const Map<String, List<TenantRole>> _fromTheMatrix = <String, List<TenantRole>>{
   // Registered 2026-09-24 with suppliers and production.
   'TenantSupplierRepository.allowedRoles': _management,
   'TenantProductionRepository.allowedRoles': _management,
+  // Registered 2026-10-01 with customers, WhatsApp receipts and credit.
+  'TenantCustomerRepository.createRoles': <TenantRole>[_o, _a, _m, _c],
+  'TenantCustomerRepository.manageRoles': _management,
+  'TenantCustomerCreditRepository.statementRoles': _management,
+  'TenantLoyaltyRepository.writeRoles': <TenantRole>[_o, _a],
+  'TenantLoyaltyPublisher.allowedRoles': <TenantRole>[_o, _a],
+  'TenantEReceiptRepository.writeRoles': <TenantRole>[_o, _a],
+  'TenantEReceiptPublisher.allowedRoles': <TenantRole>[_o, _a],
+  'TenantReceiptDeliveryRepository.readRoles': _management,
 };
 
 /// Why this file does not assert which routes a role is offered.

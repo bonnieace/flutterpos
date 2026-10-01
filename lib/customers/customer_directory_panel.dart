@@ -21,6 +21,7 @@ import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/money_text.dart';
 import '../ui/pagination.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -31,14 +32,24 @@ import '../ui/tokens.dart';
 import '../observability/app_telemetry.dart';
 import 'customer.dart';
 import 'customer_card.dart';
+import 'customer_credit.dart';
 import 'customer_form.dart';
+import 'customer_payment_sheet.dart';
 import 'customer_record_panel.dart';
 
 /// What one read of the directory answers with.
 final class TenantCustomersView {
-  const TenantCustomersView({required this.page, required this.currency});
+  const TenantCustomersView({
+    required this.page,
+    required this.currency,
+    this.owedTotalMinor,
+  });
 
   final TenantCustomerPage page;
+
+  /// What everyone listed owes in all, on the *Who owes* view; null on every
+  /// other.
+  final int? owedTotalMinor;
 
   /// The business's currency, which decides the dialling code a new customer's
   /// number starts from. Null where it could not be read.
@@ -52,12 +63,16 @@ final class TenantCustomersScreen extends StatefulWidget {
     required this.reader,
     this.writer,
     this.salesReader,
+    this.payments,
   });
 
   final TenantDataReader reader;
 
   /// Where a customer write is queued. Null renders a read-only directory.
   final TenantCustomerWriter? writer;
+
+  /// Where a record's *Record a payment* queues one. Null offers none.
+  final CustomerPaymentServices? payments;
 
   /// What a customer's purchase history is read through. Null reads it through
   /// [reader].
@@ -104,15 +119,32 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
       TenantDataReader reader, {
       required bool cachedPass,
     }) => (session) async {
-      final page = await TenantCustomerRepository(
-        session: session,
-        reader: reader,
-      ).search(
-        search: query,
-        standing: standing,
-        pageSize: TenantCustomersScreen.pageSize,
-        cursor: cursor,
-      );
+      int? owedTotal;
+      final TenantCustomerPage page;
+      if (standing == TenantCustomerStanding.owing) {
+        // **Every debtor, sorted here**, so it is one list rather than pages:
+        // see `loadOwing`. A search narrows it by name as the cashier types.
+        final term = tenantCustomerSearchTerm(query);
+        final owing = (await TenantCustomerCreditRepository(
+          session: session,
+          reader: reader,
+        ).loadOwing()).where(
+          (customer) => term.isEmpty ||
+              customer.name.toLowerCase().contains(term),
+        ).toList();
+        owedTotal = owing.fold<int>(0, (sum, c) => sum + c.owedMinor);
+        page = TenantCustomerPage(customers: owing, nextCursor: null);
+      } else {
+        page = await TenantCustomerRepository(
+          session: session,
+          reader: reader,
+        ).search(
+          search: query,
+          standing: standing,
+          pageSize: TenantCustomersScreen.pageSize,
+          cursor: cursor,
+        );
+      }
       // **An empty copy is not an answer.** A device that has never read the
       // directory holds nothing, and drawing "No customers yet" while the
       // server is still answering would be a false empty page. The guard drops
@@ -133,7 +165,11 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
           boundary: 'customers.currency_read',
         );
       }
-      return TenantCustomersView(page: page, currency: currency);
+      return TenantCustomersView(
+        page: page,
+        currency: currency,
+        owedTotalMinor: owedTotal,
+      );
     };
     _loader = readWith(widget.reader, cachedPass: false);
     final cached = widget.reader.cached;
@@ -228,6 +264,7 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
             salesReader: widget.salesReader,
             customerId: customer.id,
             currency: currency,
+            payments: widget.payments,
           ),
         ),
       ),
@@ -509,7 +546,28 @@ final class _CustomersContents extends StatelessWidget {
           ],
         ),
         SizedBox(height: tokens.spacing.s16),
-        if (shown.isEmpty)
+        if (view.owedTotalMinor case final owed? when shown.isNotEmpty)
+          ...<Widget>[
+            Callout(
+              key: const ValueKey('customers-owed-total'),
+              status: AppStatus.info,
+              message:
+                  '${shown.length == 1 ? '1 customer owes' : '${shown.length} customers owe'} '
+                  '${view.currency == null ? '' : '${view.currency} '}'
+                  '${moneyTextOfMinor(owed)} in all. Biggest first.',
+            ),
+            SizedBox(height: tokens.spacing.s16),
+          ],
+        if (shown.isEmpty && standing == TenantCustomerStanding.owing)
+          const EmptyState(
+            key: ValueKey('customers-nobody-owes'),
+            title: 'Nobody owes you anything',
+            hint:
+                'Customers who buy on credit are listed here, biggest debt '
+                'first, until they have paid it back.',
+            illustration: 'file-search.svg',
+          )
+        else if (shown.isEmpty)
           EmptyState(
             key: ValueKey(hasQuery ? 'customers-no-matches' : 'customers-empty'),
             title: hasQuery ? 'No matching customers' : 'No customers yet',

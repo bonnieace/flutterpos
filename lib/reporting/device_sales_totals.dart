@@ -437,6 +437,25 @@ final class TenantDeviceSalesAggregator {
         costMinor += contribution.costMinor;
         incompleteCosts += contribution.incompleteCostLines;
         transactions += 1;
+        // **A credit sale is split as the server splits it**: the part paid
+        // at the counter by how it was paid, the part left owing in the
+        // bucket no payment method accounts for, counted as the one sale.
+        if (sale.credit case final credit?) {
+          final owedShare = sale.totalMinor == 0
+              ? 0
+              : (contribution.revenueMinor * credit.owedMinor / sale.totalMinor)
+                    .round();
+          const owedBucket = TenantSalesTenderBreakdown.unrecognisedBucket;
+          tenderSales[owedBucket] = tenderSales[owedBucket]! + owedShare;
+          tenderTransactions[owedBucket] = tenderTransactions[owedBucket]! + 1;
+          if (credit.paidTender case final paid?) {
+            tenderSales[paid.wireValue] =
+                tenderSales[paid.wireValue]! +
+                contribution.revenueMinor -
+                owedShare;
+          }
+          continue;
+        }
         final bucket =
             sale.tender?.wireValue ??
             TenantSalesTenderBreakdown.unrecordedBucket;
@@ -519,6 +538,7 @@ final class _DeviceSale {
     required this.tender,
     required this.totalMinor,
     required this.lines,
+    this.credit,
   });
 
   factory _DeviceSale.fromCanonical(TenantSale sale) => _DeviceSale(
@@ -527,6 +547,7 @@ final class _DeviceSale {
     businessDate: sale.businessDate,
     payloadHash: sale.payloadHash,
     tender: sale.tender,
+    credit: sale.credit,
     totalMinor: sale.totalMinor,
     lines: <_DeviceSaleLine>[
       for (final line in sale.lines)
@@ -544,6 +565,7 @@ final class _DeviceSale {
     businessDate: sale.businessDate,
     payloadHash: sale.payloadHash,
     tender: sale.tender,
+    credit: sale.credit,
     totalMinor: sale.totalMinor,
     lines: <_DeviceSaleLine>[
       for (final line in sale.lines)
@@ -562,6 +584,9 @@ final class _DeviceSale {
   final CheckoutTender? tender;
   final int totalMinor;
   final List<_DeviceSaleLine> lines;
+
+  /// What the sale left owing, or null for a sale paid in full.
+  final CheckoutSaleCredit? credit;
 
   bool matches(TenantSalesTotalsQuery query) =>
       businessDate.compareTo(query.startDate) >= 0 &&

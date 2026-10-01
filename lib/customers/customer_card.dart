@@ -13,6 +13,7 @@ import '../checkout/checkout_draft.dart';
 import '../reports/analysis/report_prose.dart';
 import '../suppliers/supplier_card.dart';
 import '../ui/buttons.dart';
+import '../ui/money_text.dart';
 import '../ui/press.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -31,6 +32,14 @@ String customerContactLine(TenantCustomer customer) {
   final masked = customer.maskedPhone;
   if (masked == null) return customer.email ?? 'No number recorded';
   return customer.whatsappOptIn ? '$masked · WhatsApp receipts' : masked;
+}
+
+/// `Owes 1,200 · since 22 Sep`: what a customer owes and how long for.
+String customerOwingLabel(TenantCustomer customer) {
+  final since = customer.owingSince;
+  final owes = 'Owes ${moneyTextOfMinor(customer.owedMinor)}';
+  if (since == null) return owes;
+  return '$owes · since ${reportShortDate(checkoutBusinessDate(since.toUtc()))}';
 }
 
 /// `1 point`, `40 points`.
@@ -139,6 +148,31 @@ final class TenantCustomerCard extends StatelessWidget {
                   ),
                   SizedBox(height: tokens.spacing.s12),
                   CustomerFactsWell(customer: customer),
+                  if (customer.owedMinor > 0) ...<Widget>[
+                    SizedBox(height: tokens.spacing.s8),
+                    Wrap(
+                      spacing: tokens.spacing.s8,
+                      runSpacing: tokens.spacing.s4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: <Widget>[
+                        Text(
+                          customerOwingLabel(customer),
+                          key: ValueKey('customer-owes-${customer.id}'),
+                          style: tokens.typography.bodyMedium.copyWith(
+                            color: tokens.colors.text.primary,
+                          ),
+                        ),
+                        if (customer.overLimit)
+                          StatusBadge(
+                            key: ValueKey(
+                              'customer-over-limit-${customer.id}',
+                            ),
+                            status: AppStatus.attention,
+                            label: 'Over limit',
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

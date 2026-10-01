@@ -1969,13 +1969,15 @@ final class _ManagementSalesSummary extends StatelessWidget {
                 icon: Icons.history_outlined,
                 totals: row(null, breakdown.unrecorded),
               ),
-            // Nothing is ever netted off this one: a sale carrying a tender
-            // this app does not model is a sale `TenantSale` refuses to decode,
-            // so no return can be attributed to it.
+            // **What customers took on credit.** The server puts the owed
+            // part of a credit sale in this bucket, the one for takings no
+            // payment method accounts for, which keeps the bucket set an
+            // older build decodes; Rules refuse any other unmodelled tender,
+            // so on a current business this row is credit and nothing else.
             if (!breakdown.unrecognised.isEmpty)
               _PaymentSummaryEntry(
-                label: 'Unrecognised',
-                icon: Icons.help_outline,
+                label: 'Owed on credit',
+                icon: Icons.account_balance_wallet_outlined,
                 totals: breakdown.unrecognised,
               ),
           ];
@@ -2450,7 +2452,13 @@ final class _SalesPresentation extends StatelessWidget {
               // *changed* depends on the shift, which this surface cannot see
               // without a read of its own - so that one is left to the server,
               // which says so in words.
-              onSetTender: onSetTender == null || sale.soldById != selfUid
+              // **Never on a credit sale**, whose payment was decided with
+              // it and moved the customer's balance: what they pay later is
+              // a repayment on their account, and the server says so too.
+              onSetTender:
+                  onSetTender == null ||
+                      sale.soldById != selfUid ||
+                      sale.credit != null
                   ? null
                   : () => onSetTender!(sale),
             ),
@@ -3097,7 +3105,7 @@ String _receiptEnding(TenantSale sale) =>
 /// **The blank names what is blank.** The foot's facts stand as words alone
 /// since 2026-09-22, so a bare *Not recorded* no longer had a payments glyph in
 /// front of it to say what was not.
-String _tender(TenantSale sale) => sale.tender?.label ?? 'Not recorded';
+String _tender(TenantSale sale) => tenantSalePaymentLabel(sale);
 
 String _saleMoney(TenantSale sale, int minorUnits) =>
     '${sale.currency} ${_money(minorUnits)}';

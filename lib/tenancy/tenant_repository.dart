@@ -1514,6 +1514,26 @@ abstract base class TenantReadRepository {
     equalityFilters: equalityFilters,
   );
 
+  /// Pages one customer's ledger, proved to be children of that customer.
+  Future<TenantDocumentPage> readCustomerSubcollectionPage(
+    TenantCustomerSubcollection subcollection, {
+    required String customerId,
+    required TenantCollectionReader collectionReader,
+    int pageSize = 20,
+    String? cursor,
+    bool descending = false,
+    TenantCollectionOrder order = TenantCollectionOrder.documentId,
+    Map<String, Object?> equalityFilters = const <String, Object?>{},
+  }) async => _readPage(
+    paths.customerSubcollectionPath(customerId, subcollection),
+    collectionReader: collectionReader,
+    pageSize: pageSize,
+    cursor: cursor,
+    descending: descending,
+    order: order,
+    equalityFilters: equalityFilters,
+  );
+
   Future<TenantDocumentPage> readProductSubcollectionPage(
     TenantProductSubcollection subcollection, {
     required String productId,

@@ -85,7 +85,87 @@ const Set<String> _allowedPayloadKeys = <String>{
   'customerId',
   'customerName',
   'customerKraPin',
+  'creditOwedMinor',
+  'creditPaidTender',
+  'creditBalanceAfterMinor',
 };
+
+/// The stored `tender` of a sale left partly or wholly owing.
+///
+/// **Not a [CheckoutTender].** Those are the ways money reaches a drawer, and
+/// every surface that lists them - the close's declared boxes, the anomaly
+/// split, the paid-by rows - is right to list exactly three. Credit is the
+/// absence of money, so it travels beside the tender as [CheckoutSaleCredit]
+/// and only the stored document spells it as a tender.
+const String checkoutCreditTenderWireValue = 'credit';
+
+/// What a sale on credit left owing, and how the rest was paid.
+///
+/// **Additive, like the customer**: a sale paid in full carries none of it,
+/// and every earlier build's sales read as paid in full. The balance the
+/// customer owes is the server's to move; [balanceAfterMinor] is only what
+/// this till could see when it sold - the last balance it read plus this sale
+/// - and is printed as that, so a customer leaves knowing roughly where they
+/// stand even when the till had no signal.
+final class CheckoutSaleCredit {
+  const CheckoutSaleCredit({
+    required this.owedMinor,
+    this.paidTender,
+    this.balanceAfterMinor,
+  });
+
+  /// What the customer took without paying: above zero, at most the total.
+  final int owedMinor;
+
+  /// How the part paid at the counter was paid, or null when nothing was.
+  final CheckoutTender? paidTender;
+
+  /// The till's estimate of what the customer owes in all after this sale.
+  final int? balanceAfterMinor;
+
+  /// What was paid at the counter for a sale of [totalMinor].
+  int paidMinor(int totalMinor) => totalMinor - owedMinor;
+
+  Map<String, Object?> toFields() => <String, Object?>{
+    'tender': checkoutCreditTenderWireValue,
+    'creditOwedMinor': owedMinor,
+    if (paidTender != null) 'creditPaidTender': paidTender!.wireValue,
+    if (balanceAfterMinor != null) 'creditBalanceAfterMinor': balanceAfterMinor,
+  };
+
+  /// The credit a stored sale of [totalMinor] records, or null when it was
+  /// paid in full or does not add up - the reading `readSaleCredit` gives on
+  /// the server, so the device never shows a debt the server would not charge.
+  static CheckoutSaleCredit? fromFields(
+    Map<String, Object?> data,
+    int totalMinor,
+  ) {
+    if (data['tender'] != checkoutCreditTenderWireValue) return null;
+    final owed = data['creditOwedMinor'];
+    if (owed is! int || owed <= 0 || owed > totalMinor) return null;
+    final paid = totalMinor - owed;
+    final rawPaidTender = data['creditPaidTender'];
+    final paidTender = CheckoutTender.tryParse(rawPaidTender);
+    if (paid > 0 && paidTender == null) return null;
+    if (paid == 0 && rawPaidTender != null) return null;
+    final balance = data['creditBalanceAfterMinor'];
+    return CheckoutSaleCredit(
+      owedMinor: owed,
+      paidTender: paidTender,
+      balanceAfterMinor: balance is int ? balance : null,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is CheckoutSaleCredit &&
+      other.owedMinor == owedMinor &&
+      other.paidTender == paidTender &&
+      other.balanceAfterMinor == balanceAfterMinor;
+
+  @override
+  int get hashCode => Object.hash(owedMinor, paidTender, balanceAfterMinor);
+}
 
 /// Who a sale was for, frozen onto it as a line's name is.
 ///
@@ -222,6 +302,10 @@ abstract interface class CheckoutReceiptSale {
   /// Who the sale was for, or null for a walk-in. Printed with their KRA PIN,
   /// which is what a business buyer asks for a receipt to carry.
   CheckoutSaleCustomer? get customer;
+
+  /// What the sale left owing, or null for one paid in full. On a credit sale
+  /// [tender] is how the paid part was paid.
+  CheckoutSaleCredit? get credit;
 }
 
 /// One immutable sale line captured when the checkout was saved offline.
@@ -348,6 +432,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
     required this.discountReason,
     required this.totalMinor,
     required this.customer,
+    required this.credit,
   }) : lines = List<CheckoutSaleLine>.unmodifiable(lines),
        _paths = TenantPaths(tenantId);
 
@@ -513,6 +598,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
     }
     final discountReason = _discountReason(payload, discountMinor);
     final customer = _declaredCustomer(payload);
+    final credit = _declaredCredit(payload, totalMinor, customer);
 
     return CheckoutSalePayload._(
       uid: session.uid,
@@ -520,7 +606,8 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
       checkoutId: safeCheckoutId,
       payloadHash: payloadHash,
       schemaVersion: schemaVersion,
-      tender: tender,
+      // On a credit sale the tender is how the paid part was paid.
+      tender: credit == null ? tender : credit.paidTender,
       currency: currency,
       businessDate: businessDate,
       clientCreatedAtMs: clientCreatedAtMs,
@@ -534,6 +621,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
       discountReason: discountReason,
       totalMinor: totalMinor,
       customer: customer,
+      credit: credit,
     );
   }
 
@@ -594,6 +682,10 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
   @override
   final CheckoutSaleCustomer? customer;
 
+  /// What the sale left owing, or null for one paid in full.
+  @override
+  final CheckoutSaleCredit? credit;
+
   final TenantPaths _paths;
 
   /// The deterministic canonical sale document path for this checkout.
@@ -623,7 +715,7 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
     'soldById': uid,
     'payloadHash': payloadHash,
     'payloadSchemaVersion': schemaVersion,
-    if (tender != null) 'tender': tender!.wireValue,
+    if (credit == null && tender != null) 'tender': tender!.wireValue,
     'currency': currency,
     'businessDate': businessDate,
     'clientCreatedAtMs': clientCreatedAtMs,
@@ -646,7 +738,38 @@ final class CheckoutSalePayload implements CheckoutReceiptSale {
     // **Only where there is one**, for the reason `discountReason` is: a
     // walk-in writes exactly what every earlier build writes.
     ...?customer?.toFields(),
+    // Only on a credit sale, where it is also what `tender` says.
+    ...?credit?.toFields(),
   };
+}
+
+/// Reads what a local payload says was left owing, strictly.
+///
+/// **A credit sale needs a customer.** A debt owed by nobody is money the shop
+/// handed over and cannot ask for back, so a payload that says credit without
+/// naming who owes it is refused here, before it becomes evidence - as Rules
+/// would refuse it on the way in.
+CheckoutSaleCredit? _declaredCredit(
+  Map<String, Object?> payload,
+  int totalMinor,
+  CheckoutSaleCustomer? customer,
+) {
+  final declared =
+      payload['tender'] == checkoutCreditTenderWireValue ||
+      payload.containsKey('creditOwedMinor') ||
+      payload.containsKey('creditPaidTender') ||
+      payload.containsKey('creditBalanceAfterMinor');
+  if (!declared) return null;
+  final credit = CheckoutSaleCredit.fromFields(payload, totalMinor);
+  final balance = payload['creditBalanceAfterMinor'];
+  if (credit == null ||
+      customer == null ||
+      (payload.containsKey('creditBalanceAfterMinor') && balance is! int)) {
+    throw const CheckoutSaleFormatException(
+      'The payload records a credit sale that does not add up.',
+    );
+  }
+  return credit;
 }
 
 /// Reads the customer a local payload names, which this device wrote itself.
@@ -707,6 +830,8 @@ String? _discountReason(Map<String, Object?> payload, int discountMinor) {
 /// an unanswered question.
 CheckoutTender? _declaredTender(Map<String, Object?> payload) {
   if (!payload.containsKey('tender')) return null;
+  // Read by `_declaredCredit`, which knows what a credit sale must carry.
+  if (payload['tender'] == checkoutCreditTenderWireValue) return null;
   final tender = CheckoutTender.tryParse(payload['tender']);
   if (tender == null) {
     throw const CheckoutSaleFormatException(

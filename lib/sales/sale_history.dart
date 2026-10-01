@@ -9,6 +9,7 @@ import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_types.dart';
+import '../ui/money_text.dart';
 
 /// Raised when a canonical sale document cannot be trusted for display.
 final class TenantSaleException implements Exception {
@@ -123,6 +124,15 @@ final class TenantSale implements CheckoutReceiptSale {
     _requireMajorMirror(data, 'discount', discountMinor);
     _requireMajorMirror(data, 'total', totalMinor);
     final discountReason = _discountReason(data, discountMinor);
+    // **Strict, as the tender is.** Rules refuse a credit sale that does not
+    // add up, so one that is stored anyway - an import, a rollback - is a
+    // corrupt record, and showing a debt nobody can vouch for is worse than
+    // refusing the row.
+    final credit = CheckoutSaleCredit.fromFields(data, totalMinor);
+    if (data['tender'] == checkoutCreditTenderWireValue &&
+        (credit == null || CheckoutSaleCustomer.fromFields(data) == null)) {
+      throw const TenantSaleException('invalid_sale_tender');
+    }
 
     return TenantSale._(
       id: saleId,
@@ -141,7 +151,7 @@ final class TenantSale implements CheckoutReceiptSale {
       receiptSequence: receiptSequence,
       payloadHash: _requiredPayloadHash(data),
       schemaVersion: schemaVersion,
-      tender: tender,
+      tender: credit == null ? tender : credit.paidTender,
       recordedAt: _optionalInstant(data, 'createdAt'),
       rungAt: _rungAt(data),
       lines: lines,
@@ -150,6 +160,7 @@ final class TenantSale implements CheckoutReceiptSale {
       discountReason: discountReason,
       totalMinor: totalMinor,
       customer: CheckoutSaleCustomer.fromFields(data),
+      credit: credit,
     );
   }
 
@@ -174,6 +185,7 @@ final class TenantSale implements CheckoutReceiptSale {
     required this.discountReason,
     required this.totalMinor,
     required this.customer,
+    required this.credit,
   }) : lines = List<TenantSaleLine>.unmodifiable(lines);
 
   final String id;
@@ -197,9 +209,21 @@ final class TenantSale implements CheckoutReceiptSale {
   /// How the cashier said the customer paid, absent on a schema v1 sale.
   ///
   /// It is the cashier's assertion and never a verified payment; surfaces that
-  /// show it must carry [checkoutTenderDisclaimer].
+  /// show it must carry [checkoutTenderDisclaimer]. On a credit sale it is how
+  /// the part paid at the counter was paid, and null when nothing was - which
+  /// is not "not recorded": see [credit].
   @override
   final CheckoutTender? tender;
+
+  /// What the sale left owing, or null for a sale paid in full.
+  @override
+  final CheckoutSaleCredit? credit;
+
+  /// Whether the payment method is a question still open on this sale.
+  ///
+  /// A credit sale's was answered at the counter, even when the answer was
+  /// "nothing paid", so it is never offered for completing afterwards.
+  bool get tenderUnanswered => tender == null && credit == null;
 
   /// The server instant, absent only while a local write is still pending.
   ///
@@ -687,6 +711,22 @@ String _requiredBusinessDate(Map<String, Object?> data) {
   }
 }
 
+/// How a sale was paid, in the words a list shows.
+///
+/// **A credit sale says so first**, and what was paid at the counter after -
+/// `On credit · 300 Cash now` - so a row never reads as a cash sale for the
+/// part of it that is still owed. A sale nobody said the method of is *Not
+/// recorded*, the totals page's own word.
+String tenantSalePaymentLabel(TenantSale sale) {
+  final credit = sale.credit;
+  if (credit == null) return sale.tender?.label ?? 'Not recorded';
+  final paid = credit.paidMinor(sale.totalMinor);
+  final tender = credit.paidTender;
+  return paid > 0 && tender != null
+      ? 'On credit · ${moneyTextOfMinor(paid)} ${tender.label} now'
+      : 'On credit';
+}
+
 /// Reads the tender exactly as the sale's own payload version allows it.
 ///
 /// The rule matches the one Firestore Rules apply on create, so a document that
@@ -707,6 +747,8 @@ CheckoutTender? _tender(Map<String, Object?> data, int schemaVersion) {
     return null;
   }
   if (!data.containsKey('tender')) return null;
+  // Read beside the tender, as [TenantSale.credit].
+  if (data['tender'] == checkoutCreditTenderWireValue) return null;
   final tender = CheckoutTender.tryParse(data['tender']);
   if (tender == null) throw const TenantSaleException('invalid_sale_tender');
   return tender;

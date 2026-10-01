@@ -88,7 +88,12 @@ enum TenantCollection {
 
   /// Every receipt the server tried to send on WhatsApp and what became of it.
   /// Written by the delivery worker and the webhook alone; read by management.
-  receiptDeliveries('receipt_deliveries');
+  receiptDeliveries('receipt_deliveries'),
+
+  /// What customers paid back on credit. Written only by
+  /// `recordCustomerPayment`, which moves the balance in the same
+  /// transaction; read by management, and by the cashier who took each one.
+  customerPayments('customer_payments');
 
   const TenantCollection(this.segment);
 
@@ -103,6 +108,17 @@ enum TenantStockTakeSubcollection {
   lines('lines');
 
   const TenantStockTakeSubcollection(this.segment);
+
+  final String segment;
+}
+
+/// The subcollections a customer owns.
+enum TenantCustomerSubcollection {
+  /// The customer's ledger: one entry per sale counted, per return that gave
+  /// something back, and per repayment. Server-written; read by management.
+  activity('activity');
+
+  const TenantCustomerSubcollection(this.segment);
 
   final String segment;
 }
@@ -151,6 +167,7 @@ final class TenantPaths {
     TenantCollection.productionBatches,
     TenantCollection.customers,
     TenantCollection.receiptDeliveries,
+    TenantCollection.customerPayments,
   ];
 
   final String tenantId;
@@ -214,6 +231,8 @@ final class TenantPaths {
       documentPath(TenantCollection.customers, customerId);
   String receiptDelivery(String deliveryId) =>
       documentPath(TenantCollection.receiptDeliveries, deliveryId);
+  String customerPayment(String paymentId) =>
+      documentPath(TenantCollection.customerPayments, paymentId);
   String staffMember(String uid) => documentPath(TenantCollection.staff, uid);
   String configurationDocument(String documentId) =>
       documentPath(TenantCollection.configuration, documentId);
@@ -245,6 +264,12 @@ final class TenantPaths {
     String productId,
     TenantProductSubcollection subcollection,
   ) => '${product(productId)}/${subcollection.segment}';
+
+  /// The path of one allowed subcollection below one customer.
+  String customerSubcollectionPath(
+    String customerId,
+    TenantCustomerSubcollection subcollection,
+  ) => '${customer(customerId)}/${subcollection.segment}';
 
   String stockTakeSubcollectionPath(
     String takeId,

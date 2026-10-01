@@ -114,6 +114,10 @@ void main() {
         TenantCollection.customers: 'tenants/tenant-a/customers',
         TenantCollection.receiptDeliveries:
             'tenants/tenant-a/receipt_deliveries',
+        // What customers paid back on credit, written only by
+        // `recordCustomerPayment`. Added deliberately on 2026-10-01.
+        TenantCollection.customerPayments:
+            'tenants/tenant-a/customer_payments',
       };
 
       expect(TenantPaths.businessCollections.toSet(), expected.keys.toSet());

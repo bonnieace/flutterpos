@@ -412,6 +412,117 @@ void main() {
     });
   });
 
+  group('a sale on credit', () {
+    const customerId = 'cu_0123456789abcdef0123456789abcdef01234567';
+    Map<String, Object?> credit(Map<String, Object?> fields) => _payload(
+      tender: null,
+      overrides: <String, Object?>{
+        'customerId': customerId,
+        'customerName': 'Jane',
+        ...fields,
+      },
+    );
+
+    test('stores credit as the tender, and how the rest was paid', () async {
+      final record = await _save(
+        outbox,
+        credit(<String, Object?>{
+          'tender': 'credit',
+          'creditOwedMinor': 45000,
+          'creditPaidTender': 'mpesa',
+          'creditBalanceAfterMinor': 70000,
+        }),
+      );
+
+      final payload = CheckoutSalePayload.fromOutboxRecord(
+        record,
+        session: session,
+      );
+      final fields = payload.toSubmission().saleFields;
+
+      expect(
+        payload.credit,
+        const CheckoutSaleCredit(
+          owedMinor: 45000,
+          paidTender: CheckoutTender.mpesa,
+          balanceAfterMinor: 70000,
+        ),
+      );
+      expect(payload.credit!.paidMinor(payload.totalMinor), 20000);
+      // The money method is the part paid; the stored tender says credit.
+      expect(payload.tender, CheckoutTender.mpesa);
+      expect(fields['tender'], 'credit');
+      expect(fields['creditOwedMinor'], 45000);
+      expect(fields['creditPaidTender'], 'mpesa');
+      expect(fields['creditBalanceAfterMinor'], 70000);
+    });
+
+    test('owed in full names no paid tender', () async {
+      final record = await _save(
+        outbox,
+        credit(<String, Object?>{'tender': 'credit', 'creditOwedMinor': 65000}),
+      );
+
+      final payload = CheckoutSalePayload.fromOutboxRecord(
+        record,
+        session: session,
+      );
+
+      expect(payload.tender, isNull);
+      expect(payload.credit!.paidTender, isNull);
+      expect(
+        payload.toSubmission().saleFields.containsKey('creditPaidTender'),
+        isFalse,
+      );
+    });
+
+    test('is refused when it does not add up, or names nobody', () async {
+      final cases = <String, Map<String, Object?>>{
+        'nobody': _payload(
+          tender: null,
+          overrides: <String, Object?>{
+            'tender': 'credit',
+            'creditOwedMinor': 1000,
+            'creditPaidTender': 'cash',
+          },
+        ),
+        'nothing-owed': credit(<String, Object?>{
+          'tender': 'credit',
+          'creditOwedMinor': 0,
+        }),
+        'more-than-the-sale': credit(<String, Object?>{
+          'tender': 'credit',
+          'creditOwedMinor': 65001,
+        }),
+        'paid-part-unnamed': credit(<String, Object?>{
+          'tender': 'credit',
+          'creditOwedMinor': 1000,
+        }),
+        'owed-without-credit': credit(<String, Object?>{
+          'tender': 'cash',
+          'creditOwedMinor': 1000,
+        }),
+        'balance-not-a-number': credit(<String, Object?>{
+          'tender': 'credit',
+          'creditOwedMinor': 65000,
+          'creditBalanceAfterMinor': '1000',
+        }),
+      };
+      for (final entry in cases.entries) {
+        final record = await _save(
+          outbox,
+          entry.value,
+          checkoutId: 'checkout-credit-${entry.key}',
+        );
+        expect(
+          () => CheckoutSalePayload.fromOutboxRecord(record, session: session),
+          _throwsSaleFormat,
+          reason: entry.key,
+        );
+      }
+    });
+  });
+
   test('rejects malformed envelope metadata', () async {
     final cases = <String, Map<String, Object?>>{
       'currency': _payload(overrides: {'currency': 'kes'}),

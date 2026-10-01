@@ -114,6 +114,14 @@ enum TenantPendingMutationKind {
   /// and sending it again is how an unanswered send is settled: a cashier may
   /// not read `receipt_deliveries`, so reading back could never confirm it.
   whatsappReceiptRequest,
+
+  /// A customer paying back what they owe, into the cashier's own shift.
+  ///
+  /// **Confirmed by reading it back**, which a cashier may: the payment
+  /// record names who took it, and Rules let them read their own. It touches
+  /// the customer too, whose balance it lowers, so that is read as it lands -
+  /// the till then shows what they owe now.
+  customerPayment,
 }
 
 /// Whether the queue reaches this kind through the Admin SDK rather than
@@ -148,6 +156,8 @@ bool tenantMutationIsCallable(TenantPendingMutationKind kind) => switch (kind) {
   // A delivery record is the server's to write, and sending is the server's
   // to do.
   TenantPendingMutationKind.whatsappReceiptRequest ||
+  // A balance is the server's to move, with the ledger entry that explains it.
+  TenantPendingMutationKind.customerPayment ||
   // **Neither of these writes a quantity.** They are here for the other half of
   // the rule - a document only the Admin SDK may write - and the reason is
   // uniqueness: two categories folding to one name make every spreadsheet that
@@ -202,6 +212,7 @@ bool tenantMutationResendConfirms(TenantPendingMutationKind kind) =>
 bool tenantMutationReadsBackOnLanding(TenantPendingMutationKind kind) =>
     kind == TenantPendingMutationKind.supplierCreate ||
     kind == TenantPendingMutationKind.customerCreate ||
+    kind == TenantPendingMutationKind.customerPayment ||
     kind == TenantPendingMutationKind.stockAdjust;
 
 enum TenantPendingMutationState {
@@ -1563,6 +1574,16 @@ final class TenantPendingMutationOverlayReader
             'customerName': name,
           'createdAt': canonical?['createdAt'] ?? record.createdAt,
         };
+      // The payment as the server will write it. The customer it touches is
+      // drawn as the server last said: lowering a balance here and again when
+      // the server's own figure arrives would show it paid twice.
+      case TenantPendingMutationKind.customerPayment:
+        if (path != record.targetPath) return canonical;
+        return <String, Object?>{
+          if (canonical != null) ...canonical,
+          ...record.payload,
+          'createdAt': canonical?['createdAt'] ?? record.createdAt,
+        };
     }
   }
 
@@ -1840,6 +1861,11 @@ List<String> tenantMutationTouchedPaths(TenantPendingMutationRecord record) {
       if (_documentIdOrNull(record.payload['productId']) case final productId?)
         paths.product(productId),
     ],
+    TenantPendingMutationKind.customerPayment => <String>[
+      record.targetPath,
+      if (_documentIdOrNull(record.payload['customerId']) case final id?)
+        paths.customer(id),
+    ],
     _ => <String>[record.targetPath],
   };
 }
@@ -1864,6 +1890,10 @@ List<String> tenantMutationDependencies(TenantPendingMutationRecord record) {
       ..._deliveredProductPaths(record),
     ],
     TenantPendingMutationKind.productionComplete => tenantMutationTouchedPaths(
+      record,
+    ).skip(1).toList(),
+    // A customer added at the till a moment before they paid something back.
+    TenantPendingMutationKind.customerPayment => tenantMutationTouchedPaths(
       record,
     ).skip(1).toList(),
     _ => const <String>[],
@@ -1960,6 +1990,7 @@ void _requireTarget(
     TenantPendingMutationKind.customerCreate ||
     TenantPendingMutationKind.customerUpdate => 'customers',
     TenantPendingMutationKind.whatsappReceiptRequest => 'receipt_deliveries',
+    TenantPendingMutationKind.customerPayment => 'customer_payments',
   };
   if (collection != expected) {
     throw const TenantPendingMutationException('invalid_target');

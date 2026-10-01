@@ -18,10 +18,20 @@ final class ShiftClosingSummary {
   const ShiftClosingSummary._({
     required this.totalSalesMinor,
     required this.transactionCount,
+    this.creditOwedMinor = 0,
+    this.repaidMinor = 0,
   });
 
   final int totalSalesMinor;
   final int transactionCount;
+
+  /// What the closing phone saw customers take on credit, which is in
+  /// [totalSalesMinor] and not in the drawer. Zero on every shift closed
+  /// before credit existed, which lent nothing.
+  final int creditOwedMinor;
+
+  /// What it saw customers pay back into the drawer, which is not a sale.
+  final int repaidMinor;
 
   /// The major-unit mirror stored beside the authoritative minor units.
   double get totalSales => totalSalesMinor / 100;
@@ -94,7 +104,13 @@ int? _cashVarianceMinor(TenantShift shift, ShiftClosingSummary? summary) {
   if (summary == null || declared == null) return null;
   final declaredTotalMinor =
       declared.cashMinor + declared.mpesaMinor + declared.cardMinor;
-  return declaredTotalMinor - shift.openingFloatMinor - summary.totalSalesMinor;
+  // What was lent left in the customer's pocket, and what was paid back went
+  // into the drawer: neither is a difference in the count.
+  return declaredTotalMinor -
+      shift.openingFloatMinor -
+      (summary.totalSalesMinor -
+          summary.creditOwedMinor +
+          summary.repaidMinor);
 }
 
 final class TenantShiftDaySlice {
@@ -284,9 +300,17 @@ final class TenantShiftHistoryEntry {
     if (totalSalesMinor > 0 && transactionCount == 0) {
       throw const TenantShiftException('invalid_shift_summary');
     }
+    // Optional and read permissively: a figure for the history row only, and
+    // reconciliation counts both again from the sales and the payments.
+    final owed = data['creditOwedMinor'];
+    final repaid = data['repaidMinor'];
     return ShiftClosingSummary._(
       totalSalesMinor: totalSalesMinor,
       transactionCount: transactionCount,
+      creditOwedMinor: owed is int && owed > 0 && owed <= totalSalesMinor
+          ? owed
+          : 0,
+      repaidMinor: repaid is int && repaid > 0 ? repaid : 0,
     );
   }
 

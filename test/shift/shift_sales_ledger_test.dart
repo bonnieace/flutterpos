@@ -369,6 +369,36 @@ void main() {
     expect(summary.tendersDescribeTakings, isFalse);
   });
 
+  test('a credit sale puts only what was paid in the drawer', () async {
+    await _confirm(outbox, 'checkout-cash', totalMinor: 10000, tender: 'cash');
+    await _confirm(
+      outbox,
+      'checkout-credit',
+      totalMinor: 25000,
+      tender: 'credit',
+      extra: const <String, Object?>{
+        'customerId': 'cu_0123456789abcdef0123456789abcdef01234567',
+        'customerName': 'Jane',
+        'creditOwedMinor': 15000,
+        'creditPaidTender': 'mpesa',
+      },
+    );
+
+    final summary = await ledger.summarize(
+      uid: 'user-a',
+      tenantId: 'tenant-a',
+      shiftId: 'shift-a',
+    );
+
+    expect(summary.totalMinor, 35000);
+    expect(summary.creditOwedMinor, 15000);
+    expect(summary.drawerMinor, 20000);
+    expect(summary.tenders.recorded[CheckoutTender.mpesa]!.totalMinor, 10000);
+    expect(summary.tenders.unrecognised.totalMinor, 15000);
+    // The split still describes exactly the takings the shift reports.
+    expect(summary.tendersDescribeTakings, isTrue);
+  });
+
   test('survives reopening the encrypted box', () async {
     await _confirm(outbox, 'checkout-a', totalMinor: 25000);
     await Hive.close();
@@ -408,18 +438,22 @@ Future<CheckoutOutboxRecord> _save(
   String tenantId = 'tenant-a',
   String shiftId = 'shift-a',
   Object? tender = _absentTender,
+  Map<String, Object?> extra = const <String, Object?>{},
 }) => outbox.saveOffline(
   uid: uid,
   tenantId: tenantId,
   checkoutId: checkoutId,
-  payload: _payload(
-    checkoutId,
-    totalMinor: totalMinor,
-    uid: uid,
-    tenantId: tenantId,
-    shiftId: shiftId,
-    tender: tender,
-  ),
+  payload: <String, Object?>{
+    ..._payload(
+      checkoutId,
+      totalMinor: totalMinor,
+      uid: uid,
+      tenantId: tenantId,
+      shiftId: shiftId,
+      tender: tender,
+    ),
+    ...extra,
+  },
 );
 
 /// Walks one checkout through the frozen state machine to `confirmed`.
@@ -431,6 +465,7 @@ Future<void> _confirm(
   String tenantId = 'tenant-a',
   String shiftId = 'shift-a',
   Object? tender = _absentTender,
+  Map<String, Object?> extra = const <String, Object?>{},
 }) async {
   final record = await _save(
     outbox,
@@ -440,6 +475,7 @@ Future<void> _confirm(
     tenantId: tenantId,
     shiftId: shiftId,
     tender: tender,
+    extra: extra,
   );
   await outbox.beginSubmission(
     uid: uid,

@@ -24,13 +24,16 @@ import 'package:flutter/material.dart';
 
 import '../customers/customer.dart';
 import '../customers/customer_card.dart';
+import '../customers/customer_credit.dart';
 import '../customers/customer_form.dart';
+import '../customers/customer_payment_sheet.dart';
 import '../observability/app_telemetry.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/money_text.dart';
 import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -45,7 +48,11 @@ final class CheckoutCustomerServices {
     required this.reader,
     this.writer,
     this.receiptWriter,
+    this.payments,
   });
+
+  /// Where *Take a payment* queues a repayment. Null offers none.
+  final CustomerPaymentServices? payments;
 
   /// The overlay reader the routes hold, so a customer queued on this device
   /// is found before the server has them.
@@ -221,6 +228,58 @@ final class _CustomerPickerState extends State<_CustomerPicker> {
       widget.services.writer != null &&
       TenantCustomerRepository.canCreateInSession(widget.session);
 
+  /// The chosen customer, when they owe something a cashier may take back.
+  TenantCustomer? get _payable {
+    final customer = widget.selected;
+    if (customer == null ||
+        customer.owedMinor <= 0 ||
+        widget.services.payments == null ||
+        !TenantCustomerCreditRepository.canTakePaymentInSession(
+          widget.session,
+        )) {
+      return null;
+    }
+    return customer;
+  }
+
+  bool _paying = false;
+
+  /// Takes a repayment from the chosen customer, then closes the picker on
+  /// them - they are still who the sale is for - with what was recorded.
+  Future<void> _takePayment(TenantCustomer customer) async {
+    final payments = widget.services.payments;
+    if (payments == null || _paying) return;
+    setState(() => _paying = true);
+    String currency = '';
+    try {
+      final reader = widget.services.reader;
+      currency =
+          (await TenantCheckoutConfigurationRepository(
+            session: widget.session,
+            reader: reader.cached ?? reader,
+          ).load())?.currency ??
+          '';
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'checkout.customer_currency',
+      );
+    }
+    if (!mounted) return;
+    final notice = await showCustomerPaymentDialog(
+      context,
+      session: widget.session,
+      customer: customer,
+      services: payments,
+      currency: currency,
+    );
+    if (!mounted) return;
+    setState(() => _paying = false);
+    if (notice == null) return;
+    widget.onPicked(CheckoutChosenCustomerPick(customer, notice: notice));
+  }
+
   Future<void> _add() async {
     final writer = widget.services.writer;
     if (writer == null || _adding) return;
@@ -300,6 +359,8 @@ final class _CustomerPickerState extends State<_CustomerPicker> {
               title: customer.name,
               subtitle: <String>[
                 customerContactLine(customer),
+                if (customer.owedMinor > 0)
+                  'Owes ${moneyTextOfMinor(customer.owedMinor)}',
                 if (customer.points > 0) customerPointsLabel(customer.points),
               ].join(' · '),
               selected: customer.id == selectedId,
@@ -329,6 +390,17 @@ final class _CustomerPickerState extends State<_CustomerPicker> {
               message:
                   'Showing the customers this device holds. Others appear once '
                   'it is back online.',
+            ),
+          ],
+          if (_payable case final customer?) ...<Widget>[
+            SizedBox(height: tokens.spacing.s8),
+            AppButton(
+              key: const ValueKey('checkout-customer-take-payment'),
+              label: 'Take a payment from ${customer.name}',
+              icon: Icons.payments_outlined,
+              tier: AppButtonTier.secondary,
+              expand: true,
+              onPressed: _paying ? null : () => _takePayment(customer),
             ),
           ],
           if (_canAdd) ...<Widget>[

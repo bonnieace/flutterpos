@@ -128,6 +128,7 @@ final class CheckoutDraftRequest {
     this.discountMinor = 0,
     this.agreedPrice,
     this.customer,
+    this.credit,
   }) : lines = List<CheckoutDraftLineRequest>.unmodifiable(lines);
 
   final List<CheckoutDraftLineRequest> lines;
@@ -151,6 +152,33 @@ final class CheckoutDraftRequest {
   /// above the cart and defaults to walk-in, so nothing stands between the
   /// cashier pressing save and the sale being written.
   final CheckoutSaleCustomer? customer;
+
+  /// What the customer pays now on a sale left partly owing, or null for a
+  /// sale paid in full. Exclusive of [tender], which names a whole payment.
+  final CheckoutCreditRequest? credit;
+}
+
+/// A sale on credit as the cashier keys it: what is paid now, and how.
+///
+/// **What is owed is derived, never typed.** The till knows the total, and a
+/// cashier who typed both figures could type two that do not add up; typing
+/// the cash in hand and leaving the rest owing is also how a counter thinks.
+final class CheckoutCreditRequest {
+  const CheckoutCreditRequest({
+    this.paidMinor = 0,
+    this.paidTender,
+    this.balanceBeforeMinor,
+  });
+
+  /// Paid at the counter now: zero or more, less than the sale's total.
+  final int paidMinor;
+
+  /// How [paidMinor] was paid; required when it is above zero.
+  final CheckoutTender? paidTender;
+
+  /// The customer's balance as this till last read it, for the receipt's
+  /// estimate of what they owe after this sale. Null when it is not known.
+  final int? balanceBeforeMinor;
 }
 
 /// Builds one frozen `CheckoutSalePayload` v2 draft from the offline cache.
@@ -495,6 +523,7 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     if (discountMinor < 0 || discountMinor > subtotalMinor) {
       throw const CheckoutDraftException('invalid_discount');
     }
+    final credit = _credit(request, subtotalMinor - discountMinor);
 
     final checkoutId = _validatedCheckoutId();
     // **The shift names the business day; the clock does not.** A night's
@@ -549,13 +578,15 @@ final class CheckoutDraftService implements CheckoutDraftSink {
       // Omitted rather than written empty, which is how a sale that names no
       // method has always been stored - see `_saleFields` and the `unrecorded`
       // bucket that reads it.
-      if (request.tender != null) 'tender': request.tender!.wireValue,
+      if (credit == null && request.tender != null)
+        'tender': request.tender!.wireValue,
       'items': items,
       'subtotalMinor': subtotalMinor,
       'discountMinor': discountMinor,
       if (discountReason != null) 'discountReason': discountReason,
       'totalMinor': subtotalMinor - discountMinor,
       ...?request.customer?.toFields(),
+      ...?credit?.toFields(),
     };
 
     // Prove the frozen submission contract before the draft becomes evidence.
@@ -749,3 +780,32 @@ String _generateCheckoutId() {
 }
 
 DateTime _utcNow() => DateTime.now().toUtc();
+
+/// The credit [request] asks for on a sale of [totalMinor], or a refusal.
+///
+/// Refused before anything is allocated, as every other check is: a credit
+/// sale with nobody to owe it, a "paid now" that is the whole sale or more,
+/// or money paid with no method named.
+CheckoutSaleCredit? _credit(CheckoutDraftRequest request, int totalMinor) {
+  final credit = request.credit;
+  if (credit == null) return null;
+  if (request.customer == null) {
+    throw const CheckoutDraftException('credit_requires_customer');
+  }
+  if (request.tender != null) {
+    throw const CheckoutDraftException('credit_with_tender');
+  }
+  if (credit.paidMinor < 0 || credit.paidMinor >= totalMinor) {
+    throw const CheckoutDraftException('credit_paid_out_of_range');
+  }
+  if (credit.paidMinor > 0 && credit.paidTender == null) {
+    throw const CheckoutDraftException('credit_paid_tender_required');
+  }
+  final owedMinor = totalMinor - credit.paidMinor;
+  final before = credit.balanceBeforeMinor;
+  return CheckoutSaleCredit(
+    owedMinor: owedMinor,
+    paidTender: credit.paidMinor > 0 ? credit.paidTender : null,
+    balanceAfterMinor: before == null ? null : before + owedMinor,
+  );
+}

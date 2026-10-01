@@ -23,6 +23,7 @@ library;
 
 import '../checkout/checkout_configuration_writer.dart';
 import '../customers/customer.dart';
+import '../customers/customer_credit.dart';
 import '../expenses/expense_request.dart';
 import '../inventory/catalog_management.dart';
 import '../inventory/stock_take.dart';
@@ -379,6 +380,43 @@ final class QueuedTenantWhatsappReceiptWriter
       kind: TenantPendingMutationKind.whatsappReceiptRequest,
       targetPath: intent.path,
       payload: intent.callablePayload(),
+    );
+    _onQueued?.call();
+  }
+}
+
+/// Durable-first repayments.
+///
+/// **Taken at the counter whether or not there is signal**, as a sale is: the
+/// money is in the drawer the moment the cashier says so, and the request is
+/// written here first and carried to `recordCustomerPayment` by the worker.
+final class QueuedTenantCustomerPaymentWriter
+    implements TenantCustomerPaymentWriter {
+  const QueuedTenantCustomerPaymentWriter({
+    required TenantPendingMutationStore store,
+    required TenantPendingMutationUidProvider currentUid,
+    TenantQueuedMutationSignal? onQueued,
+  }) : _store = store,
+       _currentUid = currentUid,
+       _onQueued = onQueued;
+
+  final TenantPendingMutationStore _store;
+  final TenantPendingMutationUidProvider _currentUid;
+  final TenantQueuedMutationSignal? _onQueued;
+
+  @override
+  Future<void> recordPayment(TenantCustomerPaymentIntent intent) async {
+    final uid = _currentUid();
+    if (uid == null || uid != intent.recordedBy) {
+      throw const TenantCustomerPaymentException('payment_no_session');
+    }
+    await _store.enqueue(
+      uid: uid,
+      tenantId: intent.tenantId,
+      operationId: 'customer-payment-${intent.paymentId}',
+      kind: TenantPendingMutationKind.customerPayment,
+      targetPath: intent.path,
+      payload: intent.queuedData(),
     );
     _onQueued?.call();
   }

@@ -322,6 +322,91 @@ void main() {
     expect(walkIn.payload.containsKey('customerId'), isFalse);
   });
 
+  test('a sale on credit owes the total less what is paid now', () async {
+    const jane = CheckoutSaleCustomer(
+      id: 'cu_0123456789abcdef0123456789abcdef01234567',
+      name: 'Jane Wanjiku',
+    );
+    final service = _service(sessions, cache, outbox, receipts, clock);
+    const lines = [
+      CheckoutDraftLineRequest(productId: 'product-a', quantity: 1),
+    ];
+
+    final draft = await service.createDraft(
+      CheckoutDraftRequest(
+        lines: lines,
+        customer: jane,
+        credit: const CheckoutCreditRequest(
+          paidMinor: 100,
+          paidTender: CheckoutTender.cash,
+          balanceBeforeMinor: 5000,
+        ),
+      ),
+    );
+    final payload = CheckoutSalePayload.fromOutboxRecord(
+      draft,
+      session: sessions.requireSession(),
+    );
+    final owed = payload.totalMinor - 100;
+    expect(draft.payload['tender'], 'credit');
+    expect(payload.credit?.owedMinor, owed);
+    expect(payload.credit?.paidTender, CheckoutTender.cash);
+    expect(payload.credit?.balanceAfterMinor, 5000 + owed);
+
+    Future<String> refusal(CheckoutDraftRequest request) async {
+      try {
+        await service.createDraft(request);
+      } on CheckoutDraftException catch (error) {
+        return error.code;
+      }
+      return 'accepted';
+    }
+
+    expect(
+      await refusal(
+        CheckoutDraftRequest(
+          lines: lines,
+          credit: const CheckoutCreditRequest(),
+        ),
+      ),
+      'credit_requires_customer',
+    );
+    expect(
+      await refusal(
+        CheckoutDraftRequest(
+          lines: lines,
+          customer: jane,
+          credit: CheckoutCreditRequest(
+            paidMinor: payload.totalMinor,
+            paidTender: CheckoutTender.cash,
+          ),
+        ),
+      ),
+      'credit_paid_out_of_range',
+    );
+    expect(
+      await refusal(
+        CheckoutDraftRequest(
+          lines: lines,
+          customer: jane,
+          credit: const CheckoutCreditRequest(paidMinor: 100),
+        ),
+      ),
+      'credit_paid_tender_required',
+    );
+    expect(
+      await refusal(
+        CheckoutDraftRequest(
+          lines: lines,
+          customer: jane,
+          tender: CheckoutTender.cash,
+          credit: const CheckoutCreditRequest(),
+        ),
+      ),
+      'credit_with_tender',
+    );
+  });
+
   group('a price agreed at the till', () {
     test('records the listed lines, what came off, and why', () async {
       final record = await _service(sessions, cache, outbox, receipts, clock)

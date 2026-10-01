@@ -287,6 +287,20 @@ final class FirebaseTenantMutationGateway
         // record on the request ID inside it, so a replay sends one receipt.
         case TenantPendingMutationKind.whatsappReceiptRequest:
           await _call('sendWhatsappReceipt', record.payload);
+        // The request without what the queue keeps to confirm it by: the
+        // server reads the day from the shift and the cashier from the call.
+        case TenantPendingMutationKind.customerPayment:
+          await _call('recordCustomerPayment', <String, Object?>{
+            for (final key in const <String>[
+              'tenantId',
+              'paymentId',
+              'customerId',
+              'amountMinor',
+              'tender',
+              'shiftId',
+            ])
+              key: record.payload[key],
+          });
       }
       return const TenantMutationSubmissionResult(
         TenantMutationSubmissionOutcome.committed,

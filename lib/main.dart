@@ -809,6 +809,16 @@ class SpiritPOSApp extends StatelessWidget {
       currentUid: () => FirebaseAuth.instance.currentUser?.uid,
       onQueued: checkoutSyncSignals.requestSyncAfterSave,
     );
+    // **One way a repayment is taken**, from a customer's record or from the
+    // till's picker: into the cashier's own shift, bound exactly as a sale is.
+    final customerPayments = CustomerPaymentServices(
+      writer: QueuedTenantCustomerPaymentWriter(
+        store: tenantMutationStore,
+        currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+        onQueued: checkoutSyncSignals.requestSyncAfterSave,
+      ),
+      shifts: TenantShiftCheckoutBinder(tenantShiftState),
+    );
     // **One queue for every *Send on WhatsApp***, from the till and from the
     // Sales report alike, so a receipt promised offline goes when either does.
     final whatsappReceiptWriter = QueuedTenantWhatsappReceiptWriter(
@@ -1515,6 +1525,7 @@ class SpiritPOSApp extends StatelessWidget {
               reader: reader,
               writer: customerWriter,
               salesReader: tenantDataReader,
+              payments: customerPayments,
             ),
             customersRoles: TenantCustomerRepository.manageRoles,
             // **Straight at the server, as every owner's setting is**, and the
@@ -1676,6 +1687,7 @@ class SpiritPOSApp extends StatelessWidget {
                     reader: tenantDataReader,
                     writer: customerWriter,
                     receiptWriter: whatsappReceiptWriter,
+                    payments: customerPayments,
                   ),
                   // **Cache first, then the server, and neither holds the
                   // till.** The cached answer is what lets *Agree a price*

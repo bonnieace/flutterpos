@@ -312,6 +312,9 @@ final class _ReceiptLookupResult extends StatelessWidget {
 /// operationally useful here - and precisely for that reason it must not read
 /// as a settled transaction. Nothing has confirmed the money arrived.
 String _tenderLabel(TenantSale sale) {
+  if (sale.credit != null) {
+    return '${tenantSalePaymentLabel(sale)}. $checkoutTenderDisclaimer';
+  }
   final tender = sale.tender;
   return tender == null
       ? checkoutTenderUnrecordedMessage

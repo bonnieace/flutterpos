@@ -373,7 +373,7 @@ final class _SaleHistoryContents extends StatelessWidget {
         // for the reason the totals page gives: that one says "This sale", which
         // is a claim about one record and is wrong above a list of them. The fact
         // is the same and is stated again rather than reused wrongly.
-        if (page?.items.any((sale) => sale.tender == null) ?? false) ...[
+        if (page?.items.any((sale) => sale.tenderUnanswered) ?? false) ...[
           SizedBox(height: tokens.spacing.s8),
           const Text(
             key: ValueKey('sale-history-tender-unrecorded-note'),
@@ -441,7 +441,7 @@ final class _SaleHistoryContents extends StatelessWidget {
       // the list now; see the note there for why.
       RecordAttribute(
         label: 'Payment',
-        value: sale.tender?.label ?? 'Not recorded',
+        value: tenantSalePaymentLabel(sale),
         valueKey: ValueKey('sale-history-tender-${sale.id}'),
       ),
       // **Only when the till named somebody.** A walk-in is the ordinary sale,

@@ -128,6 +128,13 @@ abstract final class ReceiptWords {
   static const String totalLabel = 'TOTAL';
   static const String paidByLabel = 'Paid by';
 
+  /// A credit sale's three lines: what was paid at the counter, what this
+  /// sale left owing, and what the customer owes in all - the figure this
+  /// till could see when it sold, which is what a customer leaves knowing.
+  static const String paidNowLabel = 'Paid now';
+  static const String owedLabel = 'On credit';
+  static const String balanceLabel = 'Balance owed';
+
   /// §8 rule 2, state what is true: this is a record of a sale, and saying so
   /// is more use to a customer returning something than a pleasantry is.
   ///
@@ -170,6 +177,9 @@ abstract final class ReceiptWords {
     discountLabel,
     totalLabel,
     paidByLabel,
+    paidNowLabel,
+    owedLabel,
+    balanceLabel,
     footer,
     unnamedBusiness,
   ];
@@ -700,7 +710,27 @@ final class CheckoutReceiptBody {
   ];
 
   List<int> _footer(Generator generator, CheckoutReceiptSale sale) => <int>[
-    if (ReceiptWords.tender(sale.tender) case final paid?)
+    if (sale.credit case final credit?) ...<int>[
+      if (credit.paidMinor(sale.totalMinor) > 0)
+        ..._amount(
+          generator,
+          switch (ReceiptWords.tender(credit.paidTender)) {
+            final paid? => '${ReceiptWords.paidNowLabel} ($paid)',
+            null => ReceiptWords.paidNowLabel,
+          },
+          sale,
+          credit.paidMinor(sale.totalMinor),
+        ),
+      ..._amount(
+        generator,
+        ReceiptWords.owedLabel,
+        sale,
+        credit.owedMinor,
+        styles: const PosStyles(bold: true),
+      ),
+      if (credit.balanceAfterMinor case final balance?)
+        ..._amount(generator, ReceiptWords.balanceLabel, sale, balance),
+    ] else if (ReceiptWords.tender(sale.tender) case final paid?)
       ...generator.text(_pair(ReceiptWords.paidByLabel, paid)),
     ...generator.emptyLines(1),
     ...generator.text(_centred(ReceiptText.forPrinter(ReceiptWords.footer))),
