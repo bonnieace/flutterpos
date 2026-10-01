@@ -65,6 +65,12 @@ writeFileSync(
       }),
     "BREVO_API_KEY=local-emulator-unused-brevo-key",
     "BREVO_WEBHOOK_SECRET=local-emulator-unused-brevo-webhook-secret",
+    // WhatsApp receipts: resolvable, never usable. With no phone number ID
+    // (a parameter that defaults to empty) the channel is off, so every
+    // receipt is recorded as not sent and nothing reaches Meta from a laptop.
+    "WHATSAPP_ACCESS_TOKEN=local-emulator-unused-whatsapp-token",
+    "WHATSAPP_APP_SECRET=local-emulator-unused-whatsapp-app-secret",
+    "WHATSAPP_WEBHOOK_VERIFY_TOKEN=local-emulator-unused-whatsapp-verify-token",
     "",
   ].join("\n"),
   { encoding: "utf8", flag: "wx" },
