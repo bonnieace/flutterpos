@@ -91,6 +91,19 @@ enum TenantPendingMutationKind {
   /// page is: a batch that is refused must not hold every later adjustment to
   /// the product behind it.
   productionComplete,
+
+  /// Adding a customer, usually at the till. **A callable for the supplier
+  /// reason, turned round**: two customers may share a name but not a phone
+  /// number, and only the server can read every other number inside the
+  /// transaction that writes. The payload is the document a device composed,
+  /// search prefixes included, so the picker finds them before the server has
+  /// them.
+  customerCreate,
+
+  /// Correcting one customer - their details, their WhatsApp consent, or
+  /// whether they are still offered. Replay-safe by construction, as a supplier
+  /// correction is.
+  customerUpdate,
 }
 
 /// Whether the queue reaches this kind through the Admin SDK rather than
@@ -118,6 +131,10 @@ bool tenantMutationIsCallable(TenantPendingMutationKind kind) => switch (kind) {
   TenantPendingMutationKind.supplierUpdate ||
   TenantPendingMutationKind.supplierDeliveryPage ||
   TenantPendingMutationKind.productionComplete ||
+  // A customer's number must be unique, and the figures on a customer are the
+  // server's to write.
+  TenantPendingMutationKind.customerCreate ||
+  TenantPendingMutationKind.customerUpdate ||
   // **Neither of these writes a quantity.** They are here for the other half of
   // the rule - a document only the Admin SDK may write - and the reason is
   // uniqueness: two categories folding to one name make every spreadsheet that
@@ -159,8 +176,13 @@ bool tenantMutationResendConfirms(TenantPendingMutationKind kind) =>
 /// list was opened online again, and an adjustment from 68 to 67 that landed in
 /// five seconds went on reading 68 offline. Reading back what it touched as it
 /// lands is that read, made on purpose.
+///
+/// **A new customer too, since 2026-10-01, for the supplier reason.** The till
+/// picker searches this device's copy first, and a customer added online who
+/// was never read back would vanish from it the moment the overlay let go.
 bool tenantMutationReadsBackOnLanding(TenantPendingMutationKind kind) =>
     kind == TenantPendingMutationKind.supplierCreate ||
+    kind == TenantPendingMutationKind.customerCreate ||
     kind == TenantPendingMutationKind.stockAdjust;
 
 enum TenantPendingMutationState {
@@ -820,7 +842,8 @@ final class TenantPendingMutationWorker {
     for (final record in records)
       if ((record.kind == TenantPendingMutationKind.categoryCreate ||
               record.kind == TenantPendingMutationKind.productCreate ||
-              record.kind == TenantPendingMutationKind.supplierCreate) &&
+              record.kind == TenantPendingMutationKind.supplierCreate ||
+              record.kind == TenantPendingMutationKind.customerCreate) &&
           record.isUnresolved)
         record.targetPath,
   };
@@ -1031,6 +1054,7 @@ final class TenantPendingMutationOverlayReader
         TenantSalesHistoryQueryReader,
         TenantStaffDirectoryQueryReader,
         TenantProductSearchReader,
+        TenantCustomerSearchReader,
         TenantCollectionGroupReader,
         TenantReportRangeReader {
   const TenantPendingMutationOverlayReader({
@@ -1321,6 +1345,75 @@ final class TenantPendingMutationOverlayReader
     return items.take(query.limit).toList(growable: false);
   }
 
+  /// **The customer picker reads through here, for the product reason.** A
+  /// cashier who adds a customer at the till with no signal picks them in the
+  /// same breath, and a search that only forwarded would not find them until
+  /// the server had them.
+  ///
+  /// The queued document carries its own `searchPrefixes`, composed on the
+  /// device by the rule the server applies, so it matches the same searches a
+  /// stored customer does.
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantCustomers(
+    TenantCustomerSearchQuery query,
+  ) async {
+    final Object base = _base;
+    if (base is! TenantCustomerSearchReader) {
+      throw StateError('Customer search is unavailable.');
+    }
+    final canonical = await base.searchTenantCustomers(query);
+    final identity = _tenantFromPath(query.collectionPath);
+    final uid = _currentUid();
+    if (identity == null || uid == null) return canonical;
+    final records = <TenantPendingMutationRecord>[
+      for (final record in await _active(uid, identity))
+        if (_pathsUnder(record, query.collectionPath).isNotEmpty) record,
+    ];
+    if (records.isEmpty) return canonical;
+
+    final byPath = <String, Map<String, Object?>?>{
+      for (final item in canonical) item.path: <String, Object?>{...item.data},
+    };
+    for (final record in records) {
+      for (final path in _pathsUnder(record, query.collectionPath)) {
+        final present = byPath.containsKey(path);
+        final projected = _projected(record, path, byPath[path]);
+        if (projected == null && !present) continue;
+        byPath[path] = projected;
+      }
+    }
+
+    final items = <TenantQueryDocumentSnapshot>[];
+    for (final entry in byPath.entries) {
+      final data = entry.value;
+      if (data == null) continue;
+      if (query.searchPrefix case final prefix?) {
+        final prefixes = data['searchPrefixes'];
+        if (prefixes is! List || !prefixes.contains(prefix)) continue;
+      }
+      if (query.active case final active?) {
+        if ((data['active'] != false) != active) continue;
+      }
+      items.add(TenantQueryDocumentSnapshot(path: entry.key, data: data));
+    }
+    items.sort((left, right) {
+      final name = _compareValues(
+        left.data['searchName'],
+        right.data['searchName'],
+      );
+      if (name != 0) return name;
+      return left.path.split('/').last.compareTo(right.path.split('/').last);
+    });
+
+    if (query.startAfter case final cursor?) {
+      final at = items.indexWhere(
+        (item) => item.path.split('/').last == cursor.documentId,
+      );
+      if (at >= 0) items.removeRange(0, at + 1);
+    }
+    return items.take(query.limit).toList(growable: false);
+  }
+
   /// What one queued record does to the document it names.
   ///
   /// A null return is a tombstone — the document is gone as far as this device
@@ -1408,6 +1501,7 @@ final class TenantPendingMutationOverlayReader
       case TenantPendingMutationKind.productCreate:
       case TenantPendingMutationKind.categoryCreate:
       case TenantPendingMutationKind.supplierCreate:
+      case TenantPendingMutationKind.customerCreate:
         return <String, Object?>{
           if (canonical != null) ...canonical,
           ...record.payload,
@@ -1415,6 +1509,7 @@ final class TenantPendingMutationOverlayReader
         };
       case TenantPendingMutationKind.categoryRename:
       case TenantPendingMutationKind.supplierUpdate:
+      case TenantPendingMutationKind.customerUpdate:
       case TenantPendingMutationKind.brandingMerge:
       case TenantPendingMutationKind.printerConfigurationMerge:
         return <String, Object?>{
@@ -1826,6 +1921,8 @@ void _requireTarget(
     // kinds' own notes and [tenantMutationTouchedPaths].
     TenantPendingMutationKind.supplierDeliveryPage => 'supplier_deliveries',
     TenantPendingMutationKind.productionComplete => 'production_batches',
+    TenantPendingMutationKind.customerCreate ||
+    TenantPendingMutationKind.customerUpdate => 'customers',
   };
   if (collection != expected) {
     throw const TenantPendingMutationException('invalid_target');

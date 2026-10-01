@@ -22,6 +22,7 @@
 library;
 
 import '../checkout/checkout_configuration_writer.dart';
+import '../customers/customer.dart';
 import '../expenses/expense_request.dart';
 import '../inventory/catalog_management.dart';
 import '../inventory/stock_take.dart';
@@ -277,6 +278,71 @@ final class QueuedTenantSupplierWriter implements TenantSupplierWriter {
     );
     _onQueued?.call();
     return TenantSupplierWriteResult.queued(operationId);
+  }
+}
+
+/// Durable-first customer writing.
+///
+/// Both are callables, queued the way suppliers are: a customer's number is
+/// unique across the business, which only the server can check. The uid comes
+/// from [currentUid], so a customer added at the till is drawn - and found by
+/// the picker - for the session that added them.
+final class QueuedTenantCustomerWriter implements TenantCustomerWriter {
+  const QueuedTenantCustomerWriter({
+    required TenantPendingMutationStore store,
+    required TenantPendingMutationUidProvider currentUid,
+    TenantQueuedMutationSignal? onQueued,
+  }) : _store = store,
+       _currentUid = currentUid,
+       _onQueued = onQueued;
+
+  final TenantPendingMutationStore _store;
+  final TenantPendingMutationUidProvider _currentUid;
+  final TenantQueuedMutationSignal? _onQueued;
+
+  @override
+  Future<TenantCustomerWriteResult> createCustomer(
+    TenantCustomerCreateIntent intent,
+  ) => _queue(
+    tenantId: intent.tenantId,
+    operationId: 'customer-create-${intent.customerId}',
+    kind: TenantPendingMutationKind.customerCreate,
+    targetPath: intent.path,
+    payload: intent.documentData(),
+  );
+
+  @override
+  Future<TenantCustomerWriteResult> updateCustomer(
+    TenantCustomerUpdateIntent intent,
+  ) => _queue(
+    tenantId: intent.tenantId,
+    operationId: intent.operationId,
+    kind: TenantPendingMutationKind.customerUpdate,
+    targetPath: intent.path,
+    payload: intent.documentData(),
+  );
+
+  Future<TenantCustomerWriteResult> _queue({
+    required String tenantId,
+    required String operationId,
+    required TenantPendingMutationKind kind,
+    required String targetPath,
+    required Map<String, Object?> payload,
+  }) async {
+    final uid = _currentUid();
+    if (uid == null) {
+      throw const TenantCustomerException('customer_no_session');
+    }
+    await _store.enqueue(
+      uid: uid,
+      tenantId: tenantId,
+      operationId: operationId,
+      kind: kind,
+      targetPath: targetPath,
+      payload: payload,
+    );
+    _onQueued?.call();
+    return TenantCustomerWriteResult.queued(operationId);
   }
 }
 

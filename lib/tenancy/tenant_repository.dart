@@ -422,6 +422,94 @@ abstract interface class TenantProductSearchReader {
   );
 }
 
+/// The ordered values required to resume one customer search page.
+@immutable
+final class TenantCustomerSearchPosition {
+  const TenantCustomerSearchPosition({
+    required this.searchName,
+    required this.documentId,
+  });
+
+  final String searchName;
+  final String documentId;
+}
+
+/// A tenant customer query that cannot be expressed through the generic reader.
+///
+/// **The product search's shape, narrowed to what a customer has**: an array
+/// membership predicate on the name and number prefixes, an optional standing,
+/// and a cursor ordered by name. Kept out of [TenantCollectionQuery] for the
+/// reason [TenantProductSearchQuery] is.
+final class TenantCustomerSearchQuery {
+  const TenantCustomerSearchQuery._({
+    required this.collectionPath,
+    required this.limit,
+    this.searchPrefix,
+    this.active,
+    this.startAfter,
+  });
+
+  factory TenantCustomerSearchQuery.forTesting({
+    required String collectionPath,
+    required int limit,
+    String? searchPrefix,
+    bool? active,
+    TenantCustomerSearchPosition? startAfter,
+  }) => TenantCustomerSearchQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    searchPrefix: searchPrefix,
+    active: active,
+    startAfter: startAfter,
+  );
+
+  /// Constructs the query selected by a tenant-scoped customer repository.
+  factory TenantCustomerSearchQuery.scoped({
+    required String collectionPath,
+    required int limit,
+    String? searchPrefix,
+    bool? active,
+    TenantCustomerSearchPosition? startAfter,
+  }) => TenantCustomerSearchQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    searchPrefix: searchPrefix,
+    active: active,
+    startAfter: startAfter,
+  );
+
+  final String collectionPath;
+  final int limit;
+  final String? searchPrefix;
+
+  /// Only customers of this standing, or both when null.
+  final bool? active;
+  final TenantCustomerSearchPosition? startAfter;
+}
+
+/// Dedicated transport for stable, backend-backed customer search pages.
+abstract interface class TenantCustomerSearchReader {
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantCustomers(
+    TenantCustomerSearchQuery query,
+  );
+}
+
+/// Asking a customer-search reader for the copy this device holds.
+///
+/// **The till's picker draws from this first**, so a cashier with no signal
+/// still finds every customer this device has seen, and the server corrects
+/// the list when it answers.
+extension TenantCachedCustomerSearchRead on TenantCustomerSearchReader {
+  /// A customer-search reader over local storage only, or null where there is
+  /// no local copy - or where the copy cannot answer this particular boundary.
+  TenantCustomerSearchReader? get cachedCustomerSearch {
+    final Object self = this;
+    if (self is! TenantCacheReadable) return null;
+    final Object cached = self.cacheOnly;
+    return cached is TenantCustomerSearchReader ? cached : null;
+  }
+}
+
 /// The ordered values required to resume one canonical staff-directory page.
 @immutable
 final class TenantStaffDirectoryPosition {
@@ -910,6 +998,7 @@ final class FirebaseTenantDocumentReader
         TenantServerReadable,
         TenantCollectionGroupReader,
         TenantProductSearchReader,
+        TenantCustomerSearchReader,
         TenantStaffDirectoryQueryReader,
         TenantSalesHistoryQueryReader,
         TenantReportRangeReader {
@@ -1108,6 +1197,32 @@ final class FirebaseTenantDocumentReader
           cursor.documentId,
         ]);
       }
+    }
+    return _pageOf(request);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantCustomers(
+    TenantCustomerSearchQuery query,
+  ) async {
+    Query<Map<String, dynamic>> request = _firestore.collection(
+      query.collectionPath,
+    );
+    if (query.active case final active?) {
+      request = request.where('active', isEqualTo: active);
+    }
+    if (query.searchPrefix case final prefix?) {
+      request = request.where('searchPrefixes', arrayContains: prefix);
+    }
+    request = request
+        .orderBy('searchName')
+        .orderBy(FieldPath.documentId)
+        .limit(query.limit);
+    if (query.startAfter case final cursor?) {
+      request = request.startAfter(<Object>[
+        cursor.searchName,
+        cursor.documentId,
+      ]);
     }
     return _pageOf(request);
   }

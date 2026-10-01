@@ -106,6 +106,14 @@ void main() {
             'tenants/tenant-a/supplier_deliveries',
         TenantCollection.productionBatches:
             'tenants/tenant-a/production_batches',
+        // Who the business sells to, and what became of every WhatsApp
+        // receipt. Added deliberately on 2026-10-01: customers are
+        // server-written (one phone number each) and read by every member,
+        // because the till chooses them; receipt deliveries are written by the
+        // delivery worker and the webhook alone and read by management.
+        TenantCollection.customers: 'tenants/tenant-a/customers',
+        TenantCollection.receiptDeliveries:
+            'tenants/tenant-a/receipt_deliveries',
       };
 
       expect(TenantPaths.businessCollections.toSet(), expected.keys.toSet());

@@ -793,6 +793,14 @@ String _mutationRejectionReason(TenantPendingMutationRecord record) {
         "suppliers with one name would split one supplier's deliveries in "
         'two.';
   }
+  final duplicateCustomer =
+      code == 'already-exists' &&
+      (record.kind == TenantPendingMutationKind.customerCreate ||
+          record.kind == TenantPendingMutationKind.customerUpdate);
+  if (duplicateCustomer) {
+    return 'Another customer already has that phone number. One number '
+        'reaches one person, so it can be on one customer.';
+  }
   return code.replaceAll('_', ' ');
 }
 
@@ -818,4 +826,6 @@ String _mutationKindLabel(TenantPendingMutationKind kind) => switch (kind) {
   // pages it took to send.
   TenantPendingMutationKind.supplierDeliveryPage => 'Supplier delivery',
   TenantPendingMutationKind.productionComplete => 'Production batch',
+  TenantPendingMutationKind.customerCreate => 'New customer',
+  TenantPendingMutationKind.customerUpdate => 'Customer correction',
 };

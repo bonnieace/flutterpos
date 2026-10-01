@@ -78,7 +78,17 @@ enum TenantCollection {
   /// What each production batch made and cost to make. Written only by
   /// `completeProduction`, in the same transaction that adds the stock and sets
   /// the product's cost. A completed batch is never edited.
-  productionBatches('production_batches');
+  productionBatches('production_batches'),
+
+  /// Who the business sells to. Server-written by `createCustomer` and
+  /// `updateCustomer`, which keep one phone number per customer; read by every
+  /// member, because the till is where a customer is chosen. Never deleted,
+  /// only marked inactive, because sales name them.
+  customers('customers'),
+
+  /// Every receipt the server tried to send on WhatsApp and what became of it.
+  /// Written by the delivery worker and the webhook alone; read by management.
+  receiptDeliveries('receipt_deliveries');
 
   const TenantCollection(this.segment);
 
@@ -139,6 +149,8 @@ final class TenantPaths {
     TenantCollection.suppliers,
     TenantCollection.supplierDeliveries,
     TenantCollection.productionBatches,
+    TenantCollection.customers,
+    TenantCollection.receiptDeliveries,
   ];
 
   final String tenantId;
@@ -177,6 +189,9 @@ final class TenantPaths {
       collectionPath(TenantCollection.supplierDeliveries);
   String get productionBatches =>
       collectionPath(TenantCollection.productionBatches);
+  String get customers => collectionPath(TenantCollection.customers);
+  String get receiptDeliveries =>
+      collectionPath(TenantCollection.receiptDeliveries);
 
   String product(String productId) =>
       documentPath(TenantCollection.products, productId);
@@ -195,6 +210,10 @@ final class TenantPaths {
       documentPath(TenantCollection.supplierDeliveries, deliveryId);
   String productionBatch(String batchId) =>
       documentPath(TenantCollection.productionBatches, batchId);
+  String customer(String customerId) =>
+      documentPath(TenantCollection.customers, customerId);
+  String receiptDelivery(String deliveryId) =>
+      documentPath(TenantCollection.receiptDeliveries, deliveryId);
   String staffMember(String uid) => documentPath(TenantCollection.staff, uid);
   String configurationDocument(String documentId) =>
       documentPath(TenantCollection.configuration, documentId);

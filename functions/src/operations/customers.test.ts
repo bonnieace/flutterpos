@@ -166,7 +166,7 @@ test("changing the number clears consent given for the old one", async () => {
 
   const stored = db.read(customerPath("cu_one")) ?? {};
   assert.equal(stored.phone, "+254733333333");
-  assert.equal("whatsappOptIn" in stored, false);
+  assert.equal(stored.whatsappOptIn, false);
   assert.equal("whatsappOptInBy" in stored, false);
 });
 
@@ -191,7 +191,7 @@ test("clearing the number clears consent", async () => {
 
   const stored = db.read(customerPath("cu_one")) ?? {};
   assert.equal("phone" in stored, false);
-  assert.equal("whatsappOptIn" in stored, false);
+  assert.equal(stored.whatsappOptIn, false);
 });
 
 test("consent is withdrawn on its own and the number stays", async () => {
@@ -203,7 +203,8 @@ test("consent is withdrawn on its own and the number stays", async () => {
 
   const stored = db.read(customerPath("cu_one")) ?? {};
   assert.equal(stored.phone, "+254712345678");
-  assert.equal("whatsappOptIn" in stored, false);
+  // An explicit false, so a queued withdrawal reads back what it sent.
+  assert.equal(stored.whatsappOptIn, false);
 });
 
 test("a customer is marked inactive and back, and keeps their points", async () => {

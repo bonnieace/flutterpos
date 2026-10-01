@@ -81,6 +81,19 @@ Map<String, Object?> tenantSupplierCallablePayload(
   'document': record.payload,
 };
 
+/// The `createCustomer` or `updateCustomer` request one queued write describes.
+///
+/// Derived from the record for the supplier reason. For a create the customer
+/// ID is also the idempotency key, so a till that sends one twice is not told
+/// the customer is a duplicate of themselves.
+Map<String, Object?> tenantCustomerCallablePayload(
+  TenantPendingMutationRecord record,
+) => <String, Object?>{
+  'tenantId': record.tenantId,
+  'customerId': record.targetPath.split('/').last,
+  'document': record.payload,
+};
+
 /// Carries one queued mutation to the server, by whichever route its kind uses.
 ///
 /// **Two transports, one queue.** Most kinds are document writes the rules
@@ -253,6 +266,12 @@ final class FirebaseTenantMutationGateway
           );
         case TenantPendingMutationKind.productionComplete:
           await _call('completeProduction', tenantTimedCallablePayload(record));
+        // **Callables because one number is one customer**, which only the
+        // server can check across the business.
+        case TenantPendingMutationKind.customerCreate:
+          await _call('createCustomer', tenantCustomerCallablePayload(record));
+        case TenantPendingMutationKind.customerUpdate:
+          await _call('updateCustomer', tenantCustomerCallablePayload(record));
       }
       return const TenantMutationSubmissionResult(
         TenantMutationSubmissionOutcome.committed,

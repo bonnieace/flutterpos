@@ -451,7 +451,8 @@ export async function applyCustomerCreate(
   };
 }
 
-const OPT_IN_FIELDS = ["whatsappOptIn", "whatsappOptInAt", "whatsappOptInBy"] as const;
+/** Who recorded consent and when, which go when consent does. */
+const OPT_IN_STAMP_FIELDS = ["whatsappOptInAt", "whatsappOptInBy"] as const;
 
 /**
  * Corrects one customer: their name, contact details, consent or standing.
@@ -514,8 +515,11 @@ export async function applyCustomerUpdate(
     fields.whatsappOptIn === false ||
     (phoneChanges && snapshot.get("whatsappOptIn") === true)
   ) {
-    // Withdrawn, or given for a number this customer no longer has.
-    cleared.push(...OPT_IN_FIELDS);
+    // Withdrawn, or given for a number this customer no longer has. Stored as
+    // an explicit `false` rather than deleted, because a queued withdrawal is
+    // confirmed by reading back the `false` it sent.
+    update.whatsappOptIn = false;
+    cleared.push(...OPT_IN_STAMP_FIELDS);
   }
   if (fields.name !== undefined || fields.phone !== undefined) {
     const storedName = snapshot.get("name");
