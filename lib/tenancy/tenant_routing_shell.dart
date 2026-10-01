@@ -149,6 +149,10 @@ final class TenantRoutingShell extends StatefulWidget {
     this.expensesRoles = const <TenantRole>[],
     this.suppliersRoute,
     this.suppliersRoles = const <TenantRole>[],
+    this.customersRoute,
+    this.customersRoles = const <TenantRole>[],
+    this.whatsappReceiptsRoute,
+    this.whatsappReceiptsRoles = const <TenantRole>[],
     this.productionRoute,
     this.productionRoles = const <TenantRole>[],
     this.receiptLookupRoute,
@@ -429,6 +433,20 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles the suppliers route is offered to.
   final List<TenantRole> suppliersRoles;
+
+  /// Optional customers route: who the business sells to, their purchases and
+  /// their points.
+  final Widget Function(TenantDataReader reader)? customersRoute;
+
+  /// The roles the customers route is offered to.
+  final List<TenantRole> customersRoles;
+
+  /// Optional WhatsApp receipts route: whether receipts go to customers on
+  /// WhatsApp, in what form, and what became of each one.
+  final Widget Function(TenantDataReader reader)? whatsappReceiptsRoute;
+
+  /// The roles the WhatsApp receipts route is offered to.
+  final List<TenantRole> whatsappReceiptsRoles;
 
   /// Optional production route: what was made, and what it cost to make.
   final Widget Function(TenantDataReader reader)? productionRoute;
@@ -1455,6 +1473,10 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       expensesRoles: widget.expensesRoles,
       suppliersRoute: widget.suppliersRoute,
       suppliersRoles: widget.suppliersRoles,
+      customersRoute: widget.customersRoute,
+      customersRoles: widget.customersRoles,
+      whatsappReceiptsRoute: widget.whatsappReceiptsRoute,
+      whatsappReceiptsRoles: widget.whatsappReceiptsRoles,
       productionRoute: widget.productionRoute,
       productionRoles: widget.productionRoles,
       receiptLookupRoute: widget.receiptLookupRoute,
@@ -2798,6 +2820,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.expensesRoles = const <TenantRole>[],
     this.suppliersRoute,
     this.suppliersRoles = const <TenantRole>[],
+    this.customersRoute,
+    this.customersRoles = const <TenantRole>[],
+    this.whatsappReceiptsRoute,
+    this.whatsappReceiptsRoles = const <TenantRole>[],
     this.productionRoute,
     this.productionRoles = const <TenantRole>[],
     this.receiptLookupRoute,
@@ -2919,6 +2945,18 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to, decided by the suppliers domain.
   final List<TenantRole> suppliersRoles;
+
+  /// Builds the customers route; unreachable while it is absent.
+  final Widget Function(TenantDataReader reader)? customersRoute;
+
+  /// The roles that route is offered to, decided by the customers domain.
+  final List<TenantRole> customersRoles;
+
+  /// Builds the WhatsApp receipts route; unreachable while it is absent.
+  final Widget Function(TenantDataReader reader)? whatsappReceiptsRoute;
+
+  /// The roles that route is offered to: those who may publish its settings.
+  final List<TenantRole> whatsappReceiptsRoles;
 
   /// Builds the production route; unreachable while it is absent.
   final Widget Function(TenantDataReader reader)? productionRoute;
@@ -3652,14 +3690,15 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         destinationKey: const ValueKey('start-checkout'),
         accent: AppIdentityAccent.blue,
         label: 'Register',
-        // **It promised two things this product does not have.** The line read
+        // **It promised two things this product did not have.** The line read
         // *Process sales, manage orders, and handle customer transactions*, and
-        // there is no order anywhere in the live app and no customer record of
-        // any kind - `lib/model/customer.dart` is one of the unreachable files
-        // `test/dev/reachable_lib_test.dart` pins. Naming a capability on the
-        // one screen every shopkeeper opens first is how a person goes looking
-        // for a feature that was never built.
-        description: 'Ring up a sale, take the payment, and print the receipt.',
+        // there is no order anywhere in the live app. Customers exist since
+        // 2026-10-01 - chosen at the till, with receipts that can go to them
+        // on WhatsApp - so the line now says what the till does with one, and
+        // still names no order.
+        description:
+            'Ring up a sale for a walk-in or a customer, take the payment, and '
+            'hand over the receipt.',
         icon: Symbols.point_of_sale_rounded,
         isPrimary: true,
         onPressed: () {
@@ -3711,6 +3750,31 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               builder: (_) => TenantSessionScope(
                 controller: controller,
                 child: returnFeedRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    // **Who the business sells to, beside its sales.** Added on 2026-10-01 at
+    // the developer's direction. A cashier chooses and adds customers at the
+    // till itself, so this tile is the directory behind that - corrections,
+    // purchase history, points - and is offered to the roles that may make
+    // them, as Suppliers is.
+    if (customersRoute != null && membership.role.canAccess(customersRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('customers'),
+        accent: AppIdentityAccent.pink,
+        label: 'Customers',
+        description: 'Who buys from you, what they bought, and their points.',
+        group: 'Sales',
+        icon: Symbols.group_rounded,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: customersRoute!(reader),
               ),
             ),
           );
@@ -3954,6 +4018,31 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               builder: (_) => TenantSessionScope(
                 controller: controller,
                 child: settingsRoute!(reader, 'printer'),
+              ),
+            ),
+          );
+        },
+      ),
+    // **Beside the printer, because it is the other way a receipt leaves the
+    // shop.** Added on 2026-10-01 for businesses that have no printer: the
+    // receipt goes to the customer's WhatsApp instead. Offered to the roles
+    // that may publish a business's configuration.
+    if (whatsappReceiptsRoute != null &&
+        membership.role.canAccess(whatsappReceiptsRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('whatsapp-receipts'),
+        accent: AppIdentityAccent.green,
+        label: 'WhatsApp',
+        description: 'Send receipts to customers on WhatsApp instead of paper.',
+        group: 'Business',
+        icon: Symbols.chat_rounded,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: whatsappReceiptsRoute!(reader),
               ),
             ),
           );

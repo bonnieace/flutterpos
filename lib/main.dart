@@ -38,6 +38,7 @@ import 'sales/sales.dart';
 import 'production/production.dart';
 import 'shift/shift.dart';
 import 'suppliers/suppliers.dart';
+import 'customers/customers.dart';
 import 'ui/routes.dart';
 
 Future<void> main() async {
@@ -800,6 +801,13 @@ class SpiritPOSApp extends StatelessWidget {
       currentUid: () => FirebaseAuth.instance.currentUser?.uid,
       onQueued: checkoutSyncSignals.requestSyncAfterSave,
     );
+    // **One writer for the till and the Customers screen**, so a customer added
+    // at the counter and one added from the directory travel the same queue.
+    final customerWriter = QueuedTenantCustomerWriter(
+      store: tenantMutationStore,
+      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+      onQueued: checkoutSyncSignals.requestSyncAfterSave,
+    );
     // **One counting screen, two doors onto it.** A cashier opens it from the
     // home menu; anybody who can read *Stock counts* opens it from the button on
     // that screen. Built once rather than at each call site, so the draft box,
@@ -1479,6 +1487,12 @@ class SpiritPOSApp extends StatelessWidget {
             productionRoles: TenantProductionRepository.allowedRoles,
             receiptLookupRoute: (reader) => salesReport(reader),
             receiptLookupRoles: TenantSaleHistoryRepository.reportRoles,
+            customersRoute: (reader) => TenantCustomersScreen(
+              reader: reader,
+              writer: customerWriter,
+              salesReader: tenantDataReader,
+            ),
+            customersRoles: TenantCustomerRepository.manageRoles,
             returnFeedRoute: (reader) => TenantReturnFeedScreen(
               reader: reader,
               actions: returnActions,
