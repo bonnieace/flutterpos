@@ -84,7 +84,8 @@ export function storedCreditLimit(customer: DocumentSnapshot): number | null {
  * **Written as the absolute balance the transaction computed**, not as an
  * increment, because `owingSince` depends on where the balance was and where
  * it lands: set when a customer who owed nothing starts to owe, cleared when
- * they owe nothing again. [at] is when the debt began - the sale's own time,
+ * they owe nothing again - and `owing`, which a list can filter on. [at] is
+ * when the debt began - the sale's own time,
  * so an offline sale that arrives a day late still says how long it has been
  * owed.
  */
@@ -96,6 +97,9 @@ export function balanceFields(
   const after = before + changeMinor;
   return {
     balanceMinor: after,
+    // An equality the "who owes" list filters on, since a device query cannot
+    // ask for a balance above zero and sort by it in the same breath.
+    owing: after > 0,
     ...(before <= 0 && after > 0 ? {owingSince: at} : {}),
     ...(after <= 0 && before > 0 ? {owingSince: FieldValue.delete()} : {}),
   };

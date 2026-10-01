@@ -72,6 +72,7 @@ test("a credit sale adds what it left owing to the balance, once", async () => {
 
   assert.deepEqual(first, {outcome: "counted", customerId: JANE, points: 0, owedMinor: 70000});
   assert.equal(customer(db)?.balanceMinor, 70000);
+  assert.equal(customer(db)?.owing, true);
   assert.equal((customer(db)?.owingSince as Timestamp).toMillis(), 1790000000000);
   const entry = db.read(`${ROOT}/customers/${JANE}/activity/sale-1`);
   assert.equal(entry?.credit, true);
@@ -220,6 +221,7 @@ test("a repayment lowers the balance into the shift that took it", async () => {
   // Paying more than is owed leaves them ahead, and owing nothing.
   await pay(db, paymentRequest({paymentId: `cp_${"cd".repeat(20)}`, amountMinor: 30000}));
   assert.equal(customer(db)?.balanceMinor, -10000);
+  assert.equal(customer(db)?.owing, false);
   assert.equal("owingSince" in (customer(db) ?? {}), false);
 });
 
