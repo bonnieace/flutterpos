@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/customers/customer.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/ui/buttons.dart';
 import 'package:uzapay_pos/ui/dialogs.dart';
@@ -51,6 +52,135 @@ void main() {
       '2 x KES 120.50 = KES 241',
     );
     expect(_text(tester, 'checkout-total'), 'KES 248');
+  });
+
+  group('who the sale is for', () {
+    testWidgets('a till that offers no customers still says Register', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      expect(find.text('Register'), findsOneWidget);
+      expect(find.byKey(const ValueKey('screen-title-action')), findsNothing);
+    });
+
+    testWidgets('every sale starts as a walk-in, and says so', (tester) async {
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        customers: CheckoutCustomerServices(reader: _Customers()),
+      );
+
+      expect(find.text('Walk-in'), findsOneWidget);
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-save');
+
+      expect(drafts.requests.single.customer, isNull);
+    });
+
+    testWidgets(
+      'a customer chosen from the title goes on the sale, and the next sale '
+      'starts as a walk-in again',
+      (tester) async {
+        await _pump(
+          tester,
+          sessions,
+          catalog,
+          drafts,
+          customers: CheckoutCustomerServices(reader: _Customers()),
+        );
+
+        await tester.tap(find.byKey(const ValueKey('screen-title-action')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('checkout-customer-$_janeId')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Jane Wanjiku'), findsOneWidget);
+
+        await _tap(tester, 'checkout-product-product-b');
+        await _tap(tester, 'checkout-save');
+
+        final customer = drafts.requests.single.customer!;
+        expect(customer.id, _janeId);
+        expect(customer.name, 'Jane Wanjiku');
+        expect(customer.kraPin, 'A012345678Z');
+        expect(find.text('Walk-in'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a customer added at the till is chosen straight away', (
+      tester,
+    ) async {
+      final writer = _CustomerWriter();
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        customers: CheckoutCustomerServices(
+          reader: _Customers(),
+          writer: writer,
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('screen-title-action')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('checkout-customer-add')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('customer-form-name')),
+        'Amina Hassan',
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('customer-form-submit')),
+      );
+      await tester.tap(find.byKey(const ValueKey('customer-form-submit')));
+      await tester.pumpAndSettle();
+
+      expect(writer.created, hasLength(1));
+      expect(find.text('Amina Hassan'), findsOneWidget);
+      expect(snackNotice(tester).message, contains('chosen for this sale'));
+      await _waitOutSnackBar(tester);
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-save');
+
+      expect(
+        drafts.requests.single.customer?.id,
+        writer.created.single.customerId,
+      );
+    });
+
+    testWidgets('choosing walk-in again takes the customer off the sale', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        customers: CheckoutCustomerServices(reader: _Customers()),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('screen-title-action')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('checkout-customer-$_janeId')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('screen-title-action')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('checkout-customer-walk-in')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Walk-in'), findsOneWidget);
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-save');
+      expect(drafts.requests.single.customer, isNull);
+    });
   });
 
   testWidgets('preselects no tender and records the silence', (tester) async {
@@ -2073,6 +2203,7 @@ Future<void> _pump(
   void Function(BuildContext context)? onSetUpPrinter,
   CheckoutCartActivity? cartActivity,
   CheckoutPriceAgreementLoader? loadPriceAgreement,
+  CheckoutCustomerServices? customers,
 }) => _pumpAt(
   tester,
   controller,
@@ -2086,6 +2217,7 @@ Future<void> _pump(
   onSetUpPrinter: onSetUpPrinter,
   cartActivity: cartActivity,
   loadPriceAgreement: loadPriceAgreement,
+  customers: customers,
 );
 
 /// Pumps the till into a surface of an exact size.
@@ -2102,6 +2234,7 @@ Future<void> _pumpAt(
   void Function(BuildContext context)? onSetUpPrinter,
   CheckoutCartActivity? cartActivity,
   CheckoutPriceAgreementLoader? loadPriceAgreement,
+  CheckoutCustomerServices? customers,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -2118,6 +2251,7 @@ Future<void> _pumpAt(
           onSetUpPrinter: onSetUpPrinter,
           cartActivity: cartActivity,
           loadPriceAgreement: loadPriceAgreement,
+          customers: customers,
         ),
       ),
     ),
@@ -2375,3 +2509,69 @@ String? _quantityError(WidgetTester tester, String productId) => tester
       find.byKey(ValueKey('checkout-line-quantity-$productId')),
     )
     .error;
+
+/// A customer ID shaped as the device mints them.
+const String _janeId = 'cu_0123456789abcdef0123456789abcdef01234567';
+
+/// A server holding one customer, answering searches the indexed way.
+final class _Customers implements TenantDataReader, TenantCustomerSearchReader {
+  Map<String, Object?> get _jane {
+    final search = tenantCustomerSearchFields(
+      name: 'Jane Wanjiku',
+      phone: '+254712345678',
+    );
+    return <String, Object?>{
+      'name': 'Jane Wanjiku',
+      'phone': '+254712345678',
+      'kraPin': 'A012345678Z',
+      'whatsappOptIn': true,
+      'active': true,
+      'searchName': search.searchName,
+      'searchPrefixes': search.searchPrefixes,
+    };
+  }
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async => const <TenantQueryDocumentSnapshot>[];
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantCustomers(
+    TenantCustomerSearchQuery query,
+  ) async {
+    final prefix = query.searchPrefix;
+    final jane = _jane;
+    if (prefix != null &&
+        !(jane['searchPrefixes']! as List<String>).contains(prefix)) {
+      return const <TenantQueryDocumentSnapshot>[];
+    }
+    return <TenantQueryDocumentSnapshot>[
+      TenantQueryDocumentSnapshot(
+        path: '${query.collectionPath}/$_janeId',
+        data: jane,
+      ),
+    ];
+  }
+}
+
+final class _CustomerWriter implements TenantCustomerWriter {
+  final List<TenantCustomerCreateIntent> created =
+      <TenantCustomerCreateIntent>[];
+
+  @override
+  Future<TenantCustomerWriteResult> createCustomer(
+    TenantCustomerCreateIntent intent,
+  ) async {
+    created.add(intent);
+    return TenantCustomerWriteResult.queued('customer-create');
+  }
+
+  @override
+  Future<TenantCustomerWriteResult> updateCustomer(
+    TenantCustomerUpdateIntent intent,
+  ) async => TenantCustomerWriteResult.queued(intent.operationId);
+}

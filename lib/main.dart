@@ -1629,6 +1629,12 @@ class SpiritPOSApp extends StatelessWidget {
                 child: TenantCheckoutScreen(
                   cache: checkoutCatalogCache,
                   cartActivity: cartActivity,
+                  // The overlay reader, so a customer added at this till is
+                  // found by its own picker before the server has them.
+                  customers: CheckoutCustomerServices(
+                    reader: tenantDataReader,
+                    writer: customerWriter,
+                  ),
                   // **Cache first, then the server, and neither holds the
                   // till.** The cached answer is what lets *Agree a price*
                   // appear with no signal; the server read is what brings the

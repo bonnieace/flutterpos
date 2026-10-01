@@ -46,11 +46,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../customers/customer.dart';
 import '../inventory/catalog_management.dart';
 import '../inventory/product_visual.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
 import '../ui/chips.dart';
 import '../ui/dialogs.dart';
@@ -66,6 +68,7 @@ import '../ui/stepper.dart';
 import '../ui/tokens.dart';
 import 'checkout_cart_activity.dart';
 import 'checkout_catalog_cache.dart';
+import 'checkout_customer_picker.dart';
 import 'checkout_draft.dart';
 import 'checkout_price_agreement.dart';
 import 'checkout_print_configuration.dart';
@@ -193,7 +196,7 @@ const AppNotice _unavailable = AppNotice.offline(
 /// app that is not centred inside a maximum: §4.2's third row is *"products
 /// flex, cart pane fixed 420"*, and a till that gave back the edges of a wide
 /// screen would be spending the space a cashier is aiming at.
-final class TenantCheckoutScreen extends StatelessWidget {
+final class TenantCheckoutScreen extends StatefulWidget {
   const TenantCheckoutScreen({
     super.key,
     required this.cache,
@@ -202,9 +205,14 @@ final class TenantCheckoutScreen extends StatelessWidget {
     this.onSetUpPrinter,
     this.cartActivity,
     this.loadPriceAgreement,
+    this.customers,
   });
 
   final CheckoutCatalogSource cache;
+
+  /// Where the till finds and adds customers. Absent, the title stays
+  /// *Register* and every sale is a walk-in, as before customers existed.
+  final CheckoutCustomerServices? customers;
 
   /// Absent until the composition root supplies it; the cart then prices a
   /// sale but cannot save one, exactly as the returns route behaves.
@@ -223,18 +231,76 @@ final class TenantCheckoutScreen extends StatelessWidget {
   final void Function(BuildContext context)? onSetUpPrinter;
 
   @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: 'Register',
-    contentWidth: AppContentWidth.full,
-    body: TenantCheckoutPanel(
-      cache: cache,
-      drafts: drafts,
-      printerSetupReminder: printerSetupReminder,
-      onSetUpPrinter: onSetUpPrinter,
-      cartActivity: cartActivity,
-      loadPriceAgreement: loadPriceAgreement,
-    ),
-  );
+  State<TenantCheckoutScreen> createState() => _TenantCheckoutScreenState();
+}
+
+final class _TenantCheckoutScreenState extends State<TenantCheckoutScreen> {
+  /// Who the next sale is for, or null for a walk-in.
+  TenantCustomer? _customer;
+  bool _picking = false;
+
+  /// The chosen customer, only while the business they belong to is open.
+  ///
+  /// **A business switch must not carry a customer into another business**, and
+  /// reading it through the live session here means it cannot, whatever order
+  /// the switch and this rebuild happen in.
+  TenantCustomer? _customerFor(TenantSession? session) {
+    final customer = _customer;
+    if (customer == null || session == null) return null;
+    return customer.tenantId == session.tenantId ? customer : null;
+  }
+
+  Future<void> _pick(TenantSession session) async {
+    final services = widget.customers;
+    if (services == null || _picking) return;
+    _picking = true;
+    final pick = await showCheckoutCustomerPicker(
+      context,
+      session: session,
+      services: services,
+      selected: _customerFor(session),
+    );
+    _picking = false;
+    if (!mounted || pick == null) return;
+    setState(() {
+      _customer = switch (pick) {
+        CheckoutWalkInPick() => null,
+        CheckoutChosenCustomerPick(:final customer) => customer,
+      };
+    });
+    reportCheckoutCustomerPick(context, pick);
+  }
+
+  /// The sale was durable; the next one starts as a walk-in.
+  void _customerUsed() {
+    if (mounted && _customer != null) setState(() => _customer = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = TenantSessionScope.of(context).session;
+    final customer = _customerFor(session);
+    final offersCustomers = widget.customers != null && session != null;
+    return AppScaffold(
+      // **The customer's name where *Register* was**, with the switcher's
+      // chevron, at the developer's direction on 2026-10-01 - and *Register*
+      // still on a build that offers no customers.
+      title: !offersCustomers ? 'Register' : customer?.name ?? 'Walk-in',
+      onTitlePressed: offersCustomers ? () => _pick(session) : null,
+      titleActionLabel: 'Change customer',
+      contentWidth: AppContentWidth.full,
+      body: TenantCheckoutPanel(
+        cache: widget.cache,
+        drafts: widget.drafts,
+        printerSetupReminder: widget.printerSetupReminder,
+        onSetUpPrinter: widget.onSetUpPrinter,
+        cartActivity: widget.cartActivity,
+        loadPriceAgreement: widget.loadPriceAgreement,
+        customer: customer,
+        onCustomerUsed: _customerUsed,
+      ),
+    );
+  }
 }
 
 /// Builds one offline sale from the cached catalog and saves it to the outbox.
@@ -293,10 +359,20 @@ final class TenantCheckoutPanel extends StatefulWidget {
     this.onSetUpPrinter,
     this.cartActivity,
     this.loadPriceAgreement,
+    this.customer,
+    this.onCustomerUsed,
   });
 
   final CheckoutCatalogSource cache;
   final CheckoutDraftSink? drafts;
+
+  /// Who the next sale is for, chosen from the till's title, or null for a
+  /// walk-in.
+  final TenantCustomer? customer;
+
+  /// Told once a sale naming [customer] is durable, so the till returns to
+  /// walk-in for the next one.
+  final VoidCallback? onCustomerUsed;
 
   /// Reads who may agree a price. Absent, or answering that this person may
   /// not, and the till offers no *Agree a price* - which is also what every
@@ -430,6 +506,8 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
           printerSetupReminder: widget.printerSetupReminder,
           cartActivity: widget.cartActivity,
           mayAgreePrice: _mayAgreePriceFor(session),
+          customer: widget.customer,
+          onCustomerUsed: widget.onCustomerUsed,
           onSetUpPrinter:
               session.canAccess(
                 allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
@@ -734,10 +812,19 @@ final class _CartEditor extends StatefulWidget {
     this.onSaved,
     this.cartActivity,
     this.mayAgreePrice,
+    this.customer,
+    this.onCustomerUsed,
   });
 
   /// Told once a sale is durable, so the till can read the stock again.
   final VoidCallback? onSaved;
+
+  /// Who the sale is for, or null for a walk-in. Read when the sale is saved,
+  /// never asked for then.
+  final TenantCustomer? customer;
+
+  /// Told once a sale naming [customer] is durable.
+  final VoidCallback? onCustomerUsed;
 
   /// Answers whether this person may agree a price, from this device's cache
   /// or from the server. Absent, they may not.
@@ -1128,6 +1215,9 @@ final class _CartEditorState extends State<_CartEditor> {
     // is set afterwards from the sale's card.
     final tender = _tender;
     final agreed = _agreed;
+    // Read now, so the sale names whoever was chosen when it was saved even if
+    // the title changes while the draft is being written.
+    final customer = widget.customer;
     if (drafts == null || _saving) return;
 
     setState(() {
@@ -1141,6 +1231,7 @@ final class _CartEditorState extends State<_CartEditor> {
       saved = await drafts.saveDraft(
         CheckoutDraftRequest(
           tender: tender,
+          customer: customer == null ? null : checkoutSaleCustomerOf(customer),
           agreedPrice: agreed == null
               ? null
               : CheckoutAgreedPrice(
@@ -1182,6 +1273,9 @@ final class _CartEditorState extends State<_CartEditor> {
       }
     });
     if (saved == null) return;
+    // **The next sale starts as a walk-in.** Only once this one is durable: a
+    // refused sale keeps its lines, and keeps the customer they were for.
+    if (customer != null) widget.onCustomerUsed?.call();
     // **The sheet closes first, then the outcome is reported.** On a phone the
     // cart is a sheet over the till, and a snack bar or a modal raised while it
     // is still up would be dismissed along with it - or worse, would be

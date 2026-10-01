@@ -2,6 +2,7 @@ export 'checkout_branding_proof_page.dart';
 export 'checkout_cart_activity.dart';
 export 'checkout_cart_panel.dart';
 export 'checkout_catalog_cache.dart';
+export 'checkout_customer_picker.dart';
 export 'checkout_catalog_local_sales.dart';
 export 'checkout_configuration.dart';
 export 'checkout_configuration_panel.dart';
