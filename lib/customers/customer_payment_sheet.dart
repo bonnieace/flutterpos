@@ -256,7 +256,9 @@ class _CustomerPaymentDialogState extends State<_CustomerPaymentDialog> {
         ),
         AppButton(
           key: const ValueKey('customer-payment-confirm'),
-          label: 'Record payment',
+          // One word, so it fits beside *Cancel* on a phone; the title says
+          // what is being recorded.
+          label: 'Record',
           tier: AppButtonTier.primary,
           loading: _busy,
           onPressed: _busy ? null : _confirm,

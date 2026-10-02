@@ -369,6 +369,32 @@ final class ShiftHistoryCard extends StatelessWidget {
       );
     }
 
+    // **What explains a drawer that holds less than the sales, and more.** A
+    // shift that sold on credit counted less cash than it recorded in sales,
+    // and one that took repayments counted more; both are subtracted or added
+    // in the difference below, so both are shown beside it - and only where
+    // there was one, as the float is.
+    if (summary != null && summary.creditOwedMinor > 0) {
+      gap();
+      rows.add(
+        _FigureLine(
+          label: 'Sold on credit',
+          value: shiftMoney(currency, summary.creditOwedMinor),
+          valueKey: ValueKey<String>('shift-history-credit-${entry.id}'),
+        ),
+      );
+    }
+    if (summary != null && summary.repaidMinor > 0) {
+      gap();
+      rows.add(
+        _FigureLine(
+          label: 'Paid back by customers',
+          value: shiftMoney(currency, summary.repaidMinor),
+          valueKey: ValueKey<String>('shift-history-repaid-${entry.id}'),
+        ),
+      );
+    }
+
     // Silent where the two figures agree: the badge has already said so, and a
     // difference of nothing is not a difference.
     if (variance != null && variance != 0) {
