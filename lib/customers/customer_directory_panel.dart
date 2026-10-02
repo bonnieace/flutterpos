@@ -252,6 +252,25 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
     _reload();
   }
 
+  Future<void> _recordPayment(
+    TenantSession session,
+    TenantCustomer customer,
+    String? currency,
+  ) async {
+    final payments = widget.payments;
+    if (payments == null) return;
+    final notice = await showCustomerPaymentDialog(
+      context,
+      session: session,
+      customer: customer,
+      services: payments,
+      currency: currency ?? '',
+    );
+    if (!mounted || notice == null) return;
+    showAppSnackBar(context, notice);
+    _reload();
+  }
+
   Future<void> _openRecord(TenantCustomer customer, String? currency) async {
     final controller = TenantSessionScope.of(context);
     await Navigator.of(context).push(
@@ -312,6 +331,13 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
               ? null
               : (customer, active) =>
                     _setActive(session, customer, active: active),
+          onRecordPayment:
+              widget.payments != null &&
+                  TenantCustomerCreditRepository.canTakePaymentInSession(
+                    session,
+                  )
+              ? (customer) => _recordPayment(session, customer, view.currency)
+              : null,
           onPrevious: _pageIndex == 0
               ? null
               : () => setState(() => _pageIndex--),
@@ -411,6 +437,7 @@ final class _CustomersContents extends StatelessWidget {
     required this.onSetActive,
     required this.onPrevious,
     required this.onNext,
+    this.onRecordPayment,
   });
 
   final TenantCustomersView view;
@@ -428,6 +455,9 @@ final class _CustomersContents extends StatelessWidget {
   final VoidCallback? onPrevious;
   final VoidCallback onNext;
 
+  /// Takes a repayment from one customer, into the caller's own shift.
+  final ValueChanged<TenantCustomer>? onRecordPayment;
+
   List<SupplierMenuAction> _actions(TenantCustomer customer) =>
       <SupplierMenuAction>[
         SupplierMenuAction(
@@ -442,6 +472,15 @@ final class _CustomersContents extends StatelessWidget {
             icon: Icons.edit_outlined,
             itemKey: ValueKey('customer-edit-${customer.id}'),
             onSelected: () => edit(customer),
+          ),
+        // Beside the record's own button, for the person standing at the
+        // list with the money in their hand.
+        if (onRecordPayment case final record?)
+          SupplierMenuAction(
+            label: 'Record a payment',
+            icon: Icons.payments_outlined,
+            itemKey: ValueKey('customer-record-payment-${customer.id}'),
+            onSelected: () => record(customer),
           ),
         if (onSetActive case final setActive?)
           customer.active

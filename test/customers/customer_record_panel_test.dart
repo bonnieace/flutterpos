@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:uzapay_pos/customers/customers.dart';
+import 'package:uzapay_pos/sales/sales.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 
 /// One customer's record: who they are, how their receipts reach them, and what
@@ -22,6 +24,9 @@ void main() {
       find.byKey(const ValueKey('customer-record-points')),
     );
     expect(points.data, '12');
+    // The statement is the first tab; purchases are the second.
+    expect(find.byKey(const ValueKey('customer-statement')), findsOneWidget);
+    await _openPurchases(tester);
     // Nobody has bought anything yet, which is a state and not a failure.
     expect(
       find.byKey(const ValueKey('customer-purchases-empty')),
@@ -29,10 +34,21 @@ void main() {
     );
   });
 
+  testWidgets('a purchase is drawn with the Sales report card', (tester) async {
+    await _pump(tester, const _Reader(withSale: true));
+    await _openPurchases(tester);
+
+    expect(find.byType(TenantSaleCard), findsOneWidget);
+    expect(find.byKey(const ValueKey('customer-purchase-co-1')), findsOneWidget);
+    // A card with no actions draws no menu.
+    expect(find.byKey(const ValueKey('sales-actions-co-1')), findsNothing);
+  });
+
   testWidgets('a history that cannot be read costs that section only', (
     tester,
   ) async {
     await _pump(tester, const _Reader(failSales: true));
+    await _openPurchases(tester);
 
     expect(
       find.byKey(const ValueKey('customer-purchases-failure')),
@@ -54,6 +70,11 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+Future<void> _openPurchases(WidgetTester tester) async {
+  await tester.tap(find.text('Purchases'));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _pump(
@@ -100,9 +121,10 @@ Future<void> _pump(
 }
 
 final class _Reader implements TenantDataReader {
-  const _Reader({this.failSales = false});
+  const _Reader({this.failSales = false, this.withSale = false});
 
   final bool failSales;
+  final bool withSale;
 
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
@@ -129,9 +151,58 @@ final class _Reader implements TenantDataReader {
     if (failSales && query.collectionPath.endsWith('/sales')) {
       throw StateError('index still building');
     }
+    if (withSale && query.collectionPath.endsWith('/sales')) {
+      return <TenantQueryDocumentSnapshot>[
+        TenantQueryDocumentSnapshot(
+          path: '${query.collectionPath}/co-1',
+          data: _sale,
+        ),
+      ];
+    }
     return const <TenantQueryDocumentSnapshot>[];
   }
 }
 
 /// Shaped as a minted customer ID, which a purchase history requires.
 const String _jane = 'cu_0123456789abcdef0123456789abcdef01234567';
+
+const String _device = 'dev-0123456789abcdef0123456789abcdef';
+
+final Map<String, Object?> _sale = <String, Object?>{
+  'checkoutId': 'co-1',
+  'tenantId': 'tenant-a',
+  'soldById': 'user-a',
+  'payloadHash': 'a' * 64,
+  'payloadSchemaVersion': 2,
+  'currency': 'KES',
+  'businessDate': '2026-10-01',
+  'clientCreatedAtMs': 1790000000000,
+  'shiftId': 'shift-a',
+  'deviceId': _device,
+  'receiptNumber': formatCheckoutReceiptNumber(
+    deviceId: _device,
+    businessDate: '2026-10-01',
+    sequence: 1,
+  ),
+  'receiptSequence': 1,
+  'items': <Object?>[
+    <String, Object?>{
+      'productId': 'product-1',
+      'name': 'Tusker',
+      'quantity': 2,
+      'unitPriceMinor': 500,
+      'unitPrice': 5.0,
+      'lineTotalMinor': 1000,
+      'lineTotal': 10.0,
+    },
+  ],
+  'subtotalMinor': 1000,
+  'subtotal': 10.0,
+  'discountMinor': 0,
+  'discount': 0.0,
+  'totalMinor': 1000,
+  'total': 10.0,
+  'tender': 'cash',
+  'customerId': _jane,
+  'customerName': 'Jane Wanjiku',
+};

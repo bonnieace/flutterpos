@@ -7,16 +7,19 @@ import 'package:flutter/material.dart';
 import '../reporting/reporting_currency.dart';
 import '../reports/analysis/report_prose.dart';
 import '../sales/sale_history.dart';
+import '../sales/sales_report_panel.dart';
 import '../suppliers/supplier_card.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
 import '../ui/card.dart';
 import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
+import '../ui/tabs.dart';
 import '../ui/money_text.dart';
 import '../ui/tokens.dart';
 import '../observability/app_telemetry.dart';
@@ -374,13 +377,60 @@ final class _RecordContents extends StatelessWidget {
             onRecordPayment: onRecordPayment,
           ),
         ],
-        if (statement case final statement?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s24),
-          statement,
-        ],
         SizedBox(height: tokens.spacing.s24),
-        purchases,
+        _RecordTabs(statement: statement, purchases: purchases),
       ],
+    );
+  }
+}
+
+/// *Statement* and *Purchases*, as two tabs of one record.
+///
+/// **Tabs rather than two sections, at the developer's direction on
+/// 2026-10-02.** They answer different questions - how the account got to its
+/// balance, and what the customer bought - and stacked, the second was below a
+/// fold on every phone. Both stay alive, so moving between them never reads
+/// either again; only the chosen one is laid out.
+final class _RecordTabs extends StatelessWidget {
+  const _RecordTabs({required this.statement, required this.purchases});
+
+  final Widget? statement;
+  final Widget purchases;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return DefaultTabController(
+      length: 2,
+      child: Builder(
+        builder: (context) {
+          final tabs = DefaultTabController.of(context);
+          return AnimatedBuilder(
+            animation: tabs,
+            builder: (context, _) => Column(
+              key: const ValueKey('customer-record-tabs'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                const AppTabs(
+                  tabs: <String>['Statement', 'Purchases'],
+                  isScrollable: false,
+                ),
+                SizedBox(height: tokens.spacing.s16),
+                Visibility(
+                  visible: tabs.index == 0,
+                  maintainState: true,
+                  child: statement ?? const SizedBox.shrink(),
+                ),
+                Visibility(
+                  visible: tabs.index == 1,
+                  maintainState: true,
+                  child: purchases,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -575,8 +625,6 @@ final class _TenantCustomerStatementState
       key: const ValueKey('customer-statement'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const SectionHeading('Statement'),
-        SizedBox(height: tokens.spacing.s8),
         if (_failed)
           ErrorState(
             key: const ValueKey('customer-statement-failure'),
@@ -845,7 +893,10 @@ final class TenantCustomerPurchases extends StatefulWidget {
 final class _TenantCustomerPurchasesState
     extends State<TenantCustomerPurchases> {
   final List<TenantSale> _sales = <TenantSale>[];
-  TenantReportingCurrency _currency = TenantReportingCurrency.unknown;
+
+  /// Who rang each sale up, by UID, for the card's footer. A name that cannot
+  /// be read leaves the UID, as every other sales list does.
+  final Map<String, String> _names = <String, String>{};
   String? _cursor;
   bool _hasMore = false;
   bool _loading = true;
@@ -863,12 +914,6 @@ final class _TenantCustomerPurchasesState
       _failed = false;
     });
     try {
-      if (first) {
-        _currency = await TenantReportingCurrency.read(
-          session: widget.session,
-          reader: widget.reader,
-        );
-      }
       final page = await TenantSaleHistoryRepository(
         session: widget.session,
         reader: widget.reader,
@@ -878,9 +923,14 @@ final class _TenantCustomerPurchasesState
         pageSize: TenantCustomerPurchases.pageSize,
         cursor: first ? null : _cursor,
       );
+      final names = await TenantStaffNameResolver(
+        session: widget.session,
+        reader: widget.reader,
+      ).resolve(page.items.map((sale) => sale.soldById));
       if (!mounted) return;
       setState(() {
         if (first) _sales.clear();
+        _names.addAll(names);
         _sales.addAll(page.items);
         _cursor = page.nextCursor;
         _hasMore = page.hasMore;
@@ -907,8 +957,6 @@ final class _TenantCustomerPurchasesState
       key: const ValueKey('customer-purchases'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const SectionHeading('Purchases'),
-        SizedBox(height: tokens.spacing.s8),
         if (_failed)
           ErrorState(
             key: const ValueKey('customer-purchases-failure'),
@@ -938,10 +986,15 @@ final class _TenantCustomerPurchasesState
           else
             for (final (index, sale) in _sales.indexed) ...<Widget>[
               if (index > 0) SizedBox(height: tokens.spacing.s12),
-              _PurchaseCard(
+              // The Sales report's own card, so a sale looks the same here.
+              TenantSaleCard(
                 key: ValueKey('customer-purchase-${sale.id}'),
                 sale: sale,
-                money: (minor) => _currency.format(minor / 100),
+                staffLabel: tenantStaffLabel(
+                  sale.soldById,
+                  names: _names,
+                  selfUid: widget.session.uid,
+                ),
               ),
             ],
           if (_hasMore) ...<Widget>[
@@ -960,77 +1013,3 @@ final class _TenantCustomerPurchasesState
   }
 }
 
-/// One purchase: when, what it came to, and what was in it.
-final class _PurchaseCard extends StatelessWidget {
-  const _PurchaseCard({super.key, required this.sale, required this.money});
-
-  final TenantSale sale;
-  final String Function(int minor) money;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: tokens.colors.surface.raised,
-        border: Border.all(color: tokens.colors.surface.cardEdge),
-        borderRadius: BorderRadius.circular(tokens.radius.md),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(tokens.spacing.s16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    reportShortDate(sale.businessDate),
-                    style: tokens.typography.titleMedium.copyWith(
-                      color: tokens.colors.text.primary,
-                    ),
-                  ),
-                ),
-                Text(
-                  money(sale.totalMinor),
-                  key: ValueKey('customer-purchase-total-${sale.id}'),
-                  style: tokens.typography.numericBody.copyWith(
-                    color: tokens.colors.text.money,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: tokens.spacing.s4),
-            Text(
-              sale.lines
-                  .map((line) => '${line.quantity} x ${line.name}')
-                  .join(', '),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: tokens.typography.bodyMedium.copyWith(
-                color: tokens.colors.text.secondary,
-              ),
-            ),
-            if (sale.credit case final credit?) ...<Widget>[
-              SizedBox(height: tokens.spacing.s4),
-              Text(
-                key: ValueKey('customer-purchase-credit-${sale.id}'),
-                'On credit: ${money(credit.owedMinor)}',
-                style: tokens.typography.bodyMedium.copyWith(
-                  color: tokens.colors.text.primary,
-                ),
-              ),
-            ],
-            SizedBox(height: tokens.spacing.s4),
-            Text(
-              'Receipt ${sale.receiptNumber}',
-              style: tokens.typography.caption.copyWith(
-                color: tokens.colors.text.tertiary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

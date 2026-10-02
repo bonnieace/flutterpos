@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:uzapay_pos/customers/customers.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/ui/status.dart';
@@ -147,6 +148,45 @@ void main() {
     expect(snackNotice(tester).message, contains('is inactive'));
   });
 
+  testWidgets('a card offers Record a payment, which opens the payment', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _Reader.seeded(),
+      payments: CustomerPaymentServices(
+        writer: _PaymentWriter(),
+        shifts: const _NoShift(),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('customer-actions-cu_john')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('customer-record-payment-cu_john')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Record a payment'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('customer-payment-amount')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('no payment is offered where this build cannot take one', (
+    tester,
+  ) async {
+    await _pump(tester, _Reader.seeded());
+
+    await tester.tap(find.byKey(const ValueKey('customer-actions-cu_john')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('customer-record-payment-cu_john')),
+      findsNothing,
+    );
+  });
+
   testWidgets('a cashier is not offered the directory', (tester) async {
     await _pump(tester, _Reader.seeded(), role: TenantRole.cashier);
 
@@ -178,6 +218,7 @@ Future<void> _pump(
   _Reader reader, {
   TenantCustomerWriter? writer,
   TenantRole role = TenantRole.manager,
+  CustomerPaymentServices? payments,
 }) async {
   tester.view.physicalSize = const Size(1200, 2400);
   tester.view.devicePixelRatio = 1;
@@ -193,11 +234,25 @@ Future<void> _pump(
         child: TenantCustomersScreen(
           reader: reader,
           writer: writer ?? _Writer(),
+          payments: payments,
         ),
       ),
     ),
   );
   await tester.pumpAndSettle();
+}
+
+final class _PaymentWriter implements TenantCustomerPaymentWriter {
+  @override
+  Future<void> recordPayment(TenantCustomerPaymentIntent intent) async {}
+}
+
+final class _NoShift implements CheckoutShiftBinder {
+  const _NoShift();
+
+  @override
+  Future<CheckoutShiftBinding> bindCheckoutShift(TenantSession session) async =>
+      const CheckoutShiftBinding.refused('no_open_shift');
 }
 
 TenantMembership _membership(TenantRole role) => TenantMembership(

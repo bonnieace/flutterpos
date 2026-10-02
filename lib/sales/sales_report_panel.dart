@@ -2471,6 +2471,42 @@ final class _SalesPresentation extends StatelessWidget {
       tenantStaffLabel(sale.soldById, names: names, selfUid: selfUid);
 }
 
+/// One sale, drawn exactly as the Sales report draws it, for any other screen
+/// that lists sales - a customer's purchases, say.
+///
+/// **The report's own card rather than a second one**, at the developer's
+/// direction on 2026-10-02: a sale should look the same wherever it is shown.
+/// Every action is optional, and the card offers only the ones it is given.
+final class TenantSaleCard extends StatelessWidget {
+  const TenantSaleCard({
+    super.key,
+    required this.sale,
+    required this.staffLabel,
+    this.onOpenReturns,
+    this.onReprint,
+    this.onSendWhatsapp,
+  });
+
+  final TenantSale sale;
+
+  /// Who rang it up, as [tenantStaffLabel] words it.
+  final String staffLabel;
+  final VoidCallback? onOpenReturns;
+  final VoidCallback? onReprint;
+  final VoidCallback? onSendWhatsapp;
+
+  @override
+  Widget build(BuildContext context) => _SaleCard(
+    sale: sale,
+    offset: null,
+    staffLabel: staffLabel,
+    onOpenReturns: onOpenReturns,
+    onReprint: onReprint,
+    onSendWhatsapp: onSendWhatsapp,
+    onSetTender: null,
+  );
+}
+
 final class _SaleCard extends StatelessWidget {
   const _SaleCard({
     required this.sale,
@@ -2492,7 +2528,9 @@ final class _SaleCard extends StatelessWidget {
   final TenantSaleReturnOffset? offset;
 
   final String staffLabel;
-  final VoidCallback onOpenReturns;
+
+  /// Null where this screen offers no return from the card.
+  final VoidCallback? onOpenReturns;
 
   /// Null where this member may not reprint, or this build has no printer.
   final VoidCallback? onReprint;
@@ -2579,13 +2617,24 @@ final class _SaleCard extends StatelessWidget {
                     fontSize: tokens.typography.bodyLarge.fontSize,
                   ),
                 ),
-                _SaleMenu(
-                  sale: sale,
-                  onOpenReturns: onOpenReturns,
-                  onReprint: onReprint,
-                  onSendWhatsapp: onSendWhatsapp,
-                  onSetTender: onSetTender,
-                ),
+                // A menu with nothing in it is no menu: the gap it leaves is
+                // the one the design draws at the card's edge.
+                if (onOpenReturns != null ||
+                    onReprint != null ||
+                    onSendWhatsapp != null ||
+                    onSetTender != null)
+                  _SaleMenu(
+                    sale: sale,
+                    onOpenReturns: onOpenReturns,
+                    onReprint: onReprint,
+                    onSendWhatsapp: onSendWhatsapp,
+                    onSetTender: onSetTender,
+                  )
+                else
+                  SizedBox(
+                    width: tokens.spacing.s12,
+                    height: tokens.density.minimumTapTarget.height,
+                  ),
               ],
             ),
           ),
@@ -2897,7 +2946,7 @@ final class _SaleMenu extends StatelessWidget {
   });
 
   final TenantSale sale;
-  final VoidCallback onOpenReturns;
+  final VoidCallback? onOpenReturns;
   final VoidCallback? onReprint;
 
   /// Null where this business sends no receipts on WhatsApp.
@@ -2928,21 +2977,22 @@ final class _SaleMenu extends StatelessWidget {
         minHeight: tokens.density.minimumTapTarget.height,
       ),
       onSelected: (action) => switch (action) {
-        _SaleAction.returns => onOpenReturns(),
+        _SaleAction.returns => onOpenReturns?.call(),
         _SaleAction.reprint => onReprint?.call(),
         _SaleAction.sendWhatsapp => onSendWhatsapp?.call(),
         _SaleAction.setTender => onSetTender?.call(),
       },
       itemBuilder: (context) => <PopupMenuEntry<_SaleAction>>[
-        PopupMenuItem<_SaleAction>(
-          key: ValueKey('sales-returns-${sale.id}'),
-          value: _SaleAction.returns,
-          height: tokens.density.minimumTapTarget.height,
-          child: const _SaleMenuLabel(
-            icon: Icons.assignment_return_outlined,
-            label: 'Return',
+        if (onOpenReturns != null)
+          PopupMenuItem<_SaleAction>(
+            key: ValueKey('sales-returns-${sale.id}'),
+            value: _SaleAction.returns,
+            height: tokens.density.minimumTapTarget.height,
+            child: const _SaleMenuLabel(
+              icon: Icons.assignment_return_outlined,
+              label: 'Return',
+            ),
           ),
-        ),
         // Absent rather than disabled where this member may not reprint: a
         // greyed control invites the question "why not", and the answer is a
         // role this screen has no room to explain.
