@@ -1252,6 +1252,7 @@ final class _CartEditorState extends State<_CartEditor> {
         currency: currency,
         listTotalMinor: listTotal,
         initial: _agreed,
+        onUseListedPrice: _removeAgreement,
       ),
     );
     if (!mounted || agreed == null || _totalMinor != agreed.listTotalMinor) {
@@ -1859,8 +1860,10 @@ final class _CartEditorState extends State<_CartEditor> {
     // **One row, halves of it, when both are offered** - the developer's
     // ruling of 2026-10-02 - and no glyphs then, which the phone measured: a
     // 360 wide phone has 328 between the insets, and either button with its
-    // glyph is wider than half of that, so a `Wrap` put them in a column.
-    final paired = offered && _agreed == null && creditOffered;
+    // glyph is wider than half of that, so a `Wrap` put them in a column. With
+    // a price agreed, the first half changes it; going back to the listed
+    // price is inside that dialog, so the row never grows a third button.
+    final paired = offered && creditOffered;
     return <Widget>[
       if (paired) ...<Widget>[
         SizedBox(height: tokens.spacing.s12),
@@ -1868,15 +1871,25 @@ final class _CartEditorState extends State<_CartEditor> {
           key: const ValueKey('checkout-adjust-row'),
           children: <Widget>[
             Expanded(
-              child: AppButton(
-                key: const ValueKey('checkout-agree-price'),
-                label: 'Agree a price',
-                tier: AppButtonTier.secondary,
-                expand: true,
-                onPressed: _blocker(total) == null && !_saving
-                    ? () => _agreePrice(context, currency)
-                    : null,
-              ),
+              child: _agreed == null
+                  ? AppButton(
+                      key: const ValueKey('checkout-agree-price'),
+                      label: 'Agree a price',
+                      tier: AppButtonTier.secondary,
+                      expand: true,
+                      onPressed: _blocker(total) == null && !_saving
+                          ? () => _agreePrice(context, currency)
+                          : null,
+                    )
+                  : AppButton(
+                      key: const ValueKey('checkout-change-agreed-price'),
+                      label: 'Change price',
+                      tier: AppButtonTier.secondary,
+                      expand: true,
+                      onPressed: _saving
+                          ? null
+                          : () => _agreePrice(context, currency),
+                    ),
             ),
             SizedBox(width: tokens.spacing.s8),
             Expanded(
@@ -1911,23 +1924,14 @@ final class _CartEditorState extends State<_CartEditor> {
                     ? () => _agreePrice(context, currency)
                     : null,
               ),
-            // **No glyph on these, which the phone measured.** With one, the
-            // pair wrapped onto two rows at 411 and the foot - which does not
-            // scroll - took another row from the lines above it.
-            if (offered && _agreed != null) ...<Widget>[
+            // Going back to the listed price is inside the dialog this opens.
+            if (offered && _agreed != null)
               AppButton(
                 key: const ValueKey('checkout-change-agreed-price'),
                 label: 'Change agreed price',
                 tier: AppButtonTier.secondary,
                 onPressed: _saving ? null : () => _agreePrice(context, currency),
               ),
-              AppButton(
-                key: const ValueKey('checkout-remove-agreed-price'),
-                label: 'Use listed price',
-                tier: AppButtonTier.tertiary,
-                onPressed: _saving ? null : _removeAgreement,
-              ),
-            ],
             if (creditOffered)
               AppButton(
                 key: const ValueKey('checkout-put-on-credit'),
@@ -2607,6 +2611,7 @@ final class _AgreePriceDialog extends StatefulWidget {
     required this.currency,
     required this.listTotalMinor,
     this.initial,
+    this.onUseListedPrice,
   });
 
   final String currency;
@@ -2614,6 +2619,9 @@ final class _AgreePriceDialog extends StatefulWidget {
 
   /// The price already agreed, when this is changing one.
   final _AgreedPrice? initial;
+
+  /// Takes the agreed price off, offered only when there is one to take off.
+  final VoidCallback? onUseListedPrice;
 
   @override
   State<_AgreePriceDialog> createState() => _AgreePriceDialogState();
@@ -2743,6 +2751,24 @@ class _AgreePriceDialogState extends State<_AgreePriceDialog> {
             },
             onSubmitted: (_) => _confirm(),
           ),
+          // In the dialog rather than on the till, so the row there holds two
+          // buttons on a phone whatever has been agreed.
+          if (widget.initial != null && widget.onUseListedPrice != null)
+            ...<Widget>[
+              SizedBox(height: tokens.spacing.s8),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: AppButton(
+                  key: const ValueKey('checkout-remove-agreed-price'),
+                  label: 'Use listed price',
+                  tier: AppButtonTier.tertiary,
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    widget.onUseListedPrice!();
+                  },
+                ),
+              ),
+            ],
         ],
       ),
       actions: <Widget>[

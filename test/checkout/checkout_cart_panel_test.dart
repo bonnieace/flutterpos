@@ -2029,6 +2029,21 @@ void main() {
       expect(credit.right, lessThanOrEqualTo(360));
       expect(agree.height, greaterThanOrEqualTo(48));
       expect(tester.takeException(), isNull);
+
+      // With a price agreed, still two on one row - and no third button.
+      await _agree(tester, total: '6', reason: 'Regular customer');
+      final change = tester.getRect(
+        find.byKey(const ValueKey('checkout-change-agreed-price')),
+      );
+      expect(
+        change.top,
+        tester.getRect(find.byKey(const ValueKey('checkout-put-on-credit'))).top,
+      );
+      expect(
+        find.byKey(const ValueKey('checkout-remove-agreed-price')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('is offered only to a person the business names', (
@@ -2206,7 +2221,11 @@ void main() {
       await _tap(tester, 'checkout-product-product-b');
       await _agree(tester, total: '6', reason: 'Regular customer');
 
+      // Inside the change dialog, so the till's row holds two buttons.
+      await _tap(tester, 'checkout-change-agreed-price');
+      await _settleDialog(tester);
       await _tap(tester, 'checkout-remove-agreed-price');
+      await _settleDialog(tester);
 
       expect(find.byKey(const ValueKey('checkout-agreed')), findsNothing);
       expect(_text(tester, 'checkout-total'), 'KES 7');
