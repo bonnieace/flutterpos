@@ -809,8 +809,9 @@ class SpiritPOSApp extends StatelessWidget {
       currentUid: () => FirebaseAuth.instance.currentUser?.uid,
       onQueued: checkoutSyncSignals.requestSyncAfterSave,
     );
-    // **One way a repayment is taken**, from a customer's record or from the
-    // till's picker: into the cashier's own shift, bound exactly as a sale is.
+    // **One way a repayment is taken**, from Customers - a record or its card
+    // in the list - into the cashier's own shift, bound exactly as a sale is.
+    // Not from the till, at the developer's direction on 2026-10-02.
     final customerPayments = CustomerPaymentServices(
       writer: QueuedTenantCustomerPaymentWriter(
         store: tenantMutationStore,
@@ -1687,7 +1688,6 @@ class SpiritPOSApp extends StatelessWidget {
                     reader: tenantDataReader,
                     writer: customerWriter,
                     receiptWriter: whatsappReceiptWriter,
-                    payments: customerPayments,
                   ),
                   // **Cache first, then the server, and neither holds the
                   // till.** The cached answer is what lets *Agree a price*

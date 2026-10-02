@@ -1,7 +1,8 @@
 /// *Record a payment*: a customer paying back what they owe, at the counter.
 ///
-/// **Offered from the customer's record and from the till**, and the same form
-/// in both: how much, and how it was paid. The money goes into the cashier's
+/// **Offered from Customers** - the customer's record and their card in the
+/// list - and the same form in both: how much, and how it was paid. Not from
+/// the till, at the developer's direction on 2026-10-02. The money goes into the cashier's
 /// own open shift - the one a sale would be in - so with no shift open it says
 /// so, in the words the till uses, rather than taking money into no drawer.
 library;
