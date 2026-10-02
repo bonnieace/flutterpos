@@ -20,7 +20,6 @@ import '../tenancy/tenancy.dart';
 import '../ui/buttons.dart';
 import '../ui/card.dart';
 import '../ui/choice.dart';
-import '../ui/fields.dart';
 import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
 import '../ui/states.dart';
@@ -237,41 +236,36 @@ class _TenantWhatsappReceiptsScreenState
         ],
         const SectionHeading('Send receipts on WhatsApp'),
         SizedBox(height: tokens.spacing.s8),
-        Text(
-          "Receipts come from UzaPay's WhatsApp number, and every message "
-          'names your business. A customer can reply STOP at any time and gets '
-          'no more.',
+        // **Folded away, not deleted**: the writing stays one tap off, and the
+        // switch it explains is what the screen leads with.
+        Disclosure(
           key: const ValueKey('e-receipts-explanation'),
-          style: tokens.density
-              .body(tokens.typography)
-              .copyWith(color: tokens.colors.text.secondary),
+          summary: 'Where receipts come from',
+          child: Text(
+            "Receipts come from UzaPay's WhatsApp number, and every message "
+            'names your business. A customer can reply STOP at any time and '
+            'gets no more.',
+            style: tokens.density
+                .body(tokens.typography)
+                .copyWith(color: tokens.colors.text.secondary),
+          ),
         ),
-        SizedBox(height: tokens.spacing.s16),
-        AppSelect<bool>(
+        SizedBox(height: tokens.spacing.s8),
+        // **A switch, not a list of two**, at the developer's direction on
+        // 2026-10-02: the answer is on or off, and a toggle says so in one tap.
+        AppSwitchRow(
           key: const ValueKey('e-receipts-enabled'),
           label: 'WhatsApp receipts',
-          leading: Icons.chat_outlined,
+          icon: Icons.chat_outlined,
           value: _enabled,
-          enabled: !readOnly && !_saving,
-          items: const <AppSelectItem<bool>>[
-            AppSelectItem<bool>(
-              key: ValueKey('e-receipts-enabled-no'),
-              value: false,
-              label: 'Off - no receipts on WhatsApp',
-            ),
-            AppSelectItem<bool>(
-              key: ValueKey('e-receipts-enabled-yes'),
-              value: true,
-              label: 'On - send receipts on WhatsApp',
-            ),
-          ],
-          onChanged: (value) {
-            if (value == null) return;
-            setState(() {
-              _edited = true;
-              _enabled = value;
-            });
-          },
+          onText: 'On - receipts are sent on WhatsApp',
+          offText: 'Off - no receipts on WhatsApp',
+          onChanged: readOnly || _saving
+              ? null
+              : (value) => setState(() {
+                  _edited = true;
+                  _enabled = value;
+                }),
         ),
         if (_enabled) ...<Widget>[
           SizedBox(height: tokens.density.sectionGap),

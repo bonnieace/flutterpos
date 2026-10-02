@@ -382,11 +382,14 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
           },
         ),
         SizedBox(height: tokens.spacing.s12),
-        const Text(
+        const Disclosure(
           key: ValueKey('checkout-configuration-scope'),
-          'The code is recorded on every sale priced with it and labels every '
-          'reported figure. It converts nothing: this app runs no exchange '
-          'rate, and no recorded sale is ever re-priced.',
+          summary: 'What the currency code does',
+          child: Text(
+            'The code is recorded on every sale priced with it and labels '
+            'every reported figure. It converts nothing: this app runs no '
+            'exchange rate, and no recorded sale is ever re-priced.',
+          ),
         ),
         if (!widget.canPublish) ...[
           SizedBox(height: tokens.spacing.s12),

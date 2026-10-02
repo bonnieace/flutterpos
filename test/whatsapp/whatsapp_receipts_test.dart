@@ -157,9 +157,8 @@ void main() {
       await _pump(tester, const _Reader(), writer: writer, available: true);
 
       expect(find.text('Off - no receipts on WhatsApp'), findsOneWidget);
+      // A switch: one tap turns it on.
       await tester.tap(find.byKey(const ValueKey('e-receipts-enabled')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('e-receipts-enabled-yes')).last);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('e-receipts-format-summary')));
       await tester.pumpAndSettle();

@@ -263,15 +263,18 @@ class _TenantPriceAgreementSettingsPanelState
     );
     // What the person chosen here meets at the till, in the till's own words,
     // and what everybody else does - which is the half that makes it safe.
-    final explanation = Text(
-      'At the register, everyone can press Agree a price, type the total the '
-      'customer agreed to and say why - unless it is switched off for them '
-      'here, when they sell at the listed price. The sale keeps the listed '
-      'prices, the agreed total and the reason.',
+    final explanation = Disclosure(
       key: const ValueKey('price-agreement-explanation'),
-      style: tokens.density
-          .body(tokens.typography)
-          .copyWith(color: colors.text.secondary),
+      summary: 'How agreeing a price works',
+      child: Text(
+        'At the register, everyone can press Agree a price, type the total '
+        'the customer agreed to and say why - unless it is switched off for '
+        'them here, when they sell at the listed price. The sale keeps the '
+        'listed prices, the agreed total and the reason.',
+        style: tokens.density
+            .body(tokens.typography)
+            .copyWith(color: colors.text.secondary),
+      ),
     );
     if (data.staff.isEmpty) {
       return <Widget>[

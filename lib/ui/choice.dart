@@ -664,3 +664,84 @@ final class AppToggleButton extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// AppSwitchRow
+// ---------------------------------------------------------------------------
+
+/// One setting that is either on or off, said as a row: what it is, what it
+/// is set to in words, and a switch.
+///
+/// **Words beside the switch, never the switch alone**, because a thumb's side
+/// and a track's fill are position and hue, and hard rule 4 says status is
+/// never conveyed by colour alone: [onText] or [offText] is the line under the
+/// label. The row is one tap target of at least `density.minimumTapTarget`, so
+/// the whole row toggles, not only the switch.
+///
+/// **States:** on, off, hover, pressed and focus-visible from Material's own
+/// switch and list tile, and disabled in both positions when [onChanged] is
+/// null.
+final class AppSwitchRow extends StatelessWidget {
+  const AppSwitchRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    required this.onText,
+    required this.offText,
+    this.icon,
+  });
+
+  final String label;
+  final bool value;
+
+  /// Called with the new value. Null disables the row.
+  final ValueChanged<bool>? onChanged;
+
+  /// What the setting means when on, and when off, in a short sentence.
+  final String onText;
+  final String offText;
+
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final actions = tokens.colors.action;
+    final disabled = onChanged == null;
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      contentPadding: EdgeInsets.zero,
+      minTileHeight: tokens.density.minimumTapTarget.height,
+      secondary: icon == null
+          ? null
+          : Icon(
+              icon,
+              size: AppButton.iconSize,
+              color: disabled
+                  ? actions.disabledLabel
+                  : tokens.colors.text.secondary,
+            ),
+      title: Text(
+        label,
+        style: tokens.typography.titleMedium.copyWith(
+          color: disabled ? actions.disabledLabel : tokens.colors.text.primary,
+        ),
+      ),
+      subtitle: Text(
+        value ? onText : offText,
+        style: tokens.density
+            .body(tokens.typography)
+            .copyWith(color: tokens.colors.text.secondary),
+      ),
+      activeThumbColor: actions.primary.label,
+      activeTrackColor: actions.primary.container,
+      inactiveThumbColor: tokens.colors.text.secondary,
+      inactiveTrackColor: tokens.colors.surface.raised,
+      trackOutlineColor: WidgetStatePropertyAll<Color>(
+        tokens.colors.surface.borderStrong,
+      ),
+    );
+  }
+}

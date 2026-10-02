@@ -181,14 +181,17 @@ class _TenantLoyaltySettingsPanelState
         aligned(const SectionHeading('Loyalty points')),
         SizedBox(height: tokens.spacing.s8),
         aligned(
-          Text(
-            'A customer chosen at the till earns points on what they spend, '
-            'counted when the sale reaches the server. A verified return takes '
-            'back what that sale earned. Points cannot be spent yet.',
+          Disclosure(
             key: const ValueKey('loyalty-explanation'),
-            style: tokens.density
-                .body(tokens.typography)
-                .copyWith(color: tokens.colors.text.secondary),
+            summary: 'How customers earn points',
+            child: Text(
+              'A customer chosen at the till earns points on what they spend, '
+              'counted when the sale reaches the server. A verified return '
+              'takes back what that sale earned. Points cannot be spent yet.',
+              style: tokens.density
+                  .body(tokens.typography)
+                  .copyWith(color: tokens.colors.text.secondary),
+            ),
           ),
         ),
         SizedBox(height: tokens.spacing.s16),

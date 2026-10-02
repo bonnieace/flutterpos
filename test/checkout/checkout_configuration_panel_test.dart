@@ -53,6 +53,10 @@ void main() {
       'checkout-configuration-current',
       'This business trades in KES.',
     );
+    // Folded away until asked for, so the setting leads.
+    expect(find.textContaining('It converts nothing'), findsNothing);
+    await tester.tap(find.text('What the currency code does'));
+    await tester.pumpAndSettle();
     expect(
       find.textContaining('It converts nothing'),
       findsOne,
