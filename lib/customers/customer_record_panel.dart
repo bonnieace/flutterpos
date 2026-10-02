@@ -458,7 +458,6 @@ final class _AccountCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final balance = customer.balanceMinor;
-    final limit = customer.creditLimitMinor;
     final since = customer.owingSince;
     return AppCard(
       key: const ValueKey('customer-record-account'),
@@ -477,16 +476,14 @@ final class _AccountCard extends StatelessWidget {
                 ),
               ),
               SizedBox(width: tokens.spacing.s12),
+              // **Whether they may, never how much**: limits were withdrawn
+              // on 2026-10-02, and one saved before then is not shown.
               Expanded(
                 child: _Headline(
-                  caption: limit == null ? 'Credit' : 'Credit limit',
-                  value: customer.creditBlocked
-                      ? 'Blocked'
-                      : limit == null
-                      ? 'Allowed'
-                      : _amount(limit),
-                  valueKey: const ValueKey('customer-record-credit-limit'),
-                  figure: limit != null && !customer.creditBlocked,
+                  caption: 'Credit',
+                  value: customer.creditBlocked ? 'Blocked' : 'Allowed',
+                  valueKey: const ValueKey('customer-record-credit'),
+                  figure: false,
                   end: true,
                 ),
               ),
@@ -500,17 +497,6 @@ final class _AccountCard extends StatelessWidget {
               style: tokens.typography.caption.copyWith(
                 color: tokens.colors.text.secondary,
               ),
-            ),
-          ],
-          if (customer.overLimit) ...<Widget>[
-            SizedBox(height: tokens.spacing.s12),
-            Callout(
-              key: const ValueKey('customer-record-over-limit'),
-              status: AppStatus.attention,
-              title: 'Over their limit',
-              message:
-                  'They owe ${_amount(balance - (limit ?? 0))} more than the '
-                  'limit they were given before limits were withdrawn.',
             ),
           ],
           if (onRecordPayment case final record?) ...<Widget>[
@@ -742,13 +728,6 @@ final class _StatementRow extends StatelessWidget {
                 color: tokens.colors.text.secondary,
               ),
             ),
-            if (entry.overLimit) ...<Widget>[
-              SizedBox(height: tokens.spacing.s8),
-              const StatusBadge(
-                status: AppStatus.attention,
-                label: 'Went over their limit',
-              ),
-            ],
           ],
         ),
       ),

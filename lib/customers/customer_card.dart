@@ -171,14 +171,6 @@ final class TenantCustomerCard extends StatelessWidget {
                             status: AppStatus.neutral,
                             label: 'No credit',
                           ),
-                        if (customer.overLimit)
-                          StatusBadge(
-                            key: ValueKey(
-                              'customer-over-limit-${customer.id}',
-                            ),
-                            status: AppStatus.attention,
-                            label: 'Over limit',
-                          ),
                       ],
                     ),
                   ],

@@ -97,8 +97,8 @@ final class TenantCustomer {
   final int saleCount;
   final DateTime? lastSaleAt;
 
-  /// A limit set before limits were withdrawn on 2026-10-02, or null. Kept
-  /// and shown where one exists; nothing new sets one.
+  /// A limit set before limits were withdrawn on 2026-10-02, or null. Read
+  /// so a correction carries it unchanged; nothing shows it or sets one.
   final int? creditLimitMinor;
 
   /// Whether a manager has stopped this customer buying on credit. Any named
@@ -120,20 +120,6 @@ final class TenantCustomer {
   /// What they owe, never below zero - the figure a "who owes" list sorts by.
   int get owedMinor => balanceMinor > 0 ? balanceMinor : 0;
 
-  /// How much more they may take on credit before reaching their limit.
-  int get creditAvailableMinor {
-    final limit = creditLimitMinor;
-    if (limit == null) return 0;
-    final available = limit - balanceMinor;
-    return available > 0 ? available : 0;
-  }
-
-  /// Whether they owe more than a limit set before limits were withdrawn.
-  /// Without one, nobody is over anything.
-  bool get overLimit {
-    final limit = creditLimitMinor;
-    return limit != null && balanceMinor > limit;
-  }
 
   /// Whether a receipt may go to this customer on WhatsApp.
   bool get receivesWhatsapp => active && phone != null && whatsappOptIn;

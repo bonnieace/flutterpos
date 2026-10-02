@@ -179,7 +179,6 @@ final class TenantCustomerLedgerEntry {
     required this.balanceAfterMinor,
     required this.receiptNumber,
     required this.tender,
-    required this.overLimit,
     required this.at,
   });
 
@@ -206,7 +205,6 @@ final class TenantCustomerLedgerEntry {
             ? data['creditPaidTender']
             : data['tender'],
       ),
-      overLimit: data['overLimit'] == true,
       at: tenantStoredInstant(data['saleCreatedAt']) ??
           tenantStoredInstant(data['createdAt']),
     );
@@ -225,8 +223,6 @@ final class TenantCustomerLedgerEntry {
   /// How a repayment was paid, or how a credit sale's paid part was.
   final CheckoutTender? tender;
 
-  /// Whether this sale took the customer past their limit.
-  final bool overLimit;
   final DateTime? at;
 }
 

@@ -19,8 +19,6 @@ void main() {
       });
       expect(jane.allowsCredit, isTrue);
       expect(jane.owedMinor, 120000);
-      expect(jane.creditAvailableMinor, 380000);
-      expect(jane.overLimit, isFalse);
       expect(jane.owingSince, DateTime.utc(2026, 9, 20));
 
       // Paid ahead: owes nothing, and the shop owes them.
@@ -31,7 +29,6 @@ void main() {
       // owing without one is not being over anything.
       final plain = _customer(<String, Object?>{'balanceMinor': 100});
       expect(plain.allowsCredit, isTrue);
-      expect(plain.overLimit, isFalse);
       // Blocked by a manager, or inactive: offered no credit at the till.
       expect(
         _customer(<String, Object?>{'creditBlocked': true}).allowsCredit,
@@ -243,7 +240,6 @@ void main() {
         TenantCustomerLedgerKind.sale,
       ]);
       expect(page.entries.first.tender, CheckoutTender.mpesa);
-      expect(page.entries.last.overLimit, isTrue);
       expect(page.entries.last.receiptNumber, 'CT-A7F-20261001-0002');
       final query = reader.queries.single;
       expect(query.collectionPath, 'tenants/tenant-a/customers/$_jane/activity');
@@ -285,7 +281,7 @@ void main() {
   });
 
   group('the record', () {
-    testWidgets('states what they owe, against their limit, in words', (
+    testWidgets('states what they owe, and whether they may, never a limit', (
       tester,
     ) async {
       await _pumpRecord(
@@ -304,10 +300,15 @@ void main() {
             .data,
         'KES 1200',
       );
+      // A limit saved before limits were withdrawn is never shown: the
+      // record says whether they may buy on credit, not how much.
       expect(
-        find.byKey(const ValueKey('customer-record-over-limit')),
-        findsOneWidget,
+        tester
+            .widget<Text>(find.byKey(const ValueKey('customer-record-credit')))
+            .data,
+        'Allowed',
       );
+      expect(find.textContaining('limit'), findsNothing);
       expect(find.byKey(const ValueKey('customer-statement')), findsOneWidget);
     });
 
