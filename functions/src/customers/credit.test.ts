@@ -104,6 +104,47 @@ test("a sale past the limit still counts, and says it went over", async () => {
   assert.equal(db.read(`${ROOT}/customers/${JANE}/activity/sale-1`)?.overLimit, true);
 });
 
+test("any customer may owe with no limit; a blocked one is recorded as such", async () => {
+  const db = seeded({
+    [`${ROOT}/sales/sale-1`]: creditSale(),
+    [`${ROOT}/sales/sale-2`]: creditSale({receiptNumber: "CT-A7F-20261001-0003"}),
+    [`${ROOT}/customers/${JANE}`]: {name: "Jane", active: true},
+  });
+
+  await applyCustomerSale(db.asFirestore(), {tenantId: TENANT, saleId: "sale-1"});
+  const first = db.read(`${ROOT}/customers/${JANE}/activity/sale-1`);
+  // No limit is not over one.
+  assert.equal(first?.overLimit, false);
+  assert.equal(first?.whileBlocked, false);
+  assert.equal(customer(db)?.balanceMinor, 70000);
+
+  // A till that had not heard of the block sold anyway: counted, and marked.
+  db.seed(`${ROOT}/customers/${JANE}`, {...customer(db), creditBlocked: true});
+  await applyCustomerSale(db.asFirestore(), {tenantId: TENANT, saleId: "sale-2"});
+  assert.equal(db.read(`${ROOT}/customers/${JANE}/activity/sale-2`)?.whileBlocked, true);
+  assert.equal(customer(db)?.balanceMinor, 140000);
+});
+
+test("blocking credit is a manager's switch, and allowing it is the default", () => {
+  assert.deepEqual(
+    readCustomerDocument({name: "Jane", creditBlocked: false}, "create"),
+    {name: "Jane"}
+  );
+  assert.deepEqual(
+    readCustomerDocument({name: "Jane", creditBlocked: true}, "create"),
+    {name: "Jane", creditBlocked: true}
+  );
+  assert.deepEqual(readCustomerDocument({creditBlocked: false}, "update"), {
+    creditBlocked: false,
+  });
+  assert.throws(() => readCustomerDocument({creditBlocked: "no"}, "update"), HttpsError);
+  assert.throws(
+    () => requireCreditGranter("cashier", {name: "Jane", creditBlocked: true}),
+    HttpsError
+  );
+  requireCreditGranter("manager", {name: "Jane", creditBlocked: true});
+});
+
 test("a sale paid in full is not a debt, whatever its tender says", () => {
   assert.equal(readSaleCredit({tender: "cash", totalMinor: 100}), null);
   for (const forged of [

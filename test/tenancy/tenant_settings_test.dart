@@ -29,16 +29,27 @@ void main() {
       expect(counts.detail, 'Nobody is interrupted.');
     });
 
-    test('agreed prices read as who can, and nobody is a working state', () {
-      // **Absent is `set`, as the counting rota's is**: every till sells at
-      // the listed price, which is where every business starts.
+    test('agreed prices read as who can, and everyone is where it starts', () {
+      // **Absent is `set`, as the counting rota's is**: since 2026-10-02
+      // every till may agree a price, which is where every business starts.
       final none = TenantSettingsStandingsRepository.standingFor(
         TenantSettingKind.agreedPrices,
         null,
       );
       expect(none.state, TenantSettingState.set);
-      expect(none.detail, 'Nobody can agree a price.');
+      expect(none.detail, 'Everyone can agree a price.');
       expect(none.blocksTrading, isFalse);
+
+      final allButOne = TenantSettingsStandingsRepository.standingFor(
+        TenantSettingKind.agreedPrices,
+        <String, Object?>{
+          'everyone': true,
+          'blocked': <Map<String, Object?>>[
+            <String, Object?>{'uid': 'user-a'},
+          ],
+        },
+      );
+      expect(allButOne.detail, 'Everyone can agree a price but 1 person.');
 
       final two = TenantSettingsStandingsRepository.standingFor(
         TenantSettingKind.agreedPrices,

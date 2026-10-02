@@ -177,16 +177,13 @@ final class _TenantCustomerRecordScreenState
                     )
                 ? () => _recordPayment(session, customer)
                 : null,
-            // Only for a customer who has ever had an account to show.
-            statement:
-                customer.creditLimitMinor != null || customer.balanceMinor != 0
-                ? TenantCustomerStatement(
-                    key: ValueKey('customer-statement-$_generation'),
-                    reader: widget.reader,
-                    session: session,
-                    customer: customer,
-                  )
-                : null,
+            // Every customer may buy on credit, so every one has an account.
+            statement: TenantCustomerStatement(
+              key: ValueKey('customer-statement-$_generation'),
+              reader: widget.reader,
+              session: session,
+              customer: customer,
+            ),
             // Keyed by the generation, so a correction reads the history back.
             purchases: TenantCustomerPurchases(
               key: ValueKey('customer-purchases-$_generation'),
@@ -369,8 +366,7 @@ final class _RecordContents extends StatelessWidget {
             ],
           ),
         ),
-        if (customer.creditLimitMinor != null ||
-            customer.balanceMinor != 0) ...<Widget>[
+        ...<Widget>[
           SizedBox(height: tokens.spacing.s16),
           _AccountCard(
             customer: customer,
@@ -433,10 +429,14 @@ final class _AccountCard extends StatelessWidget {
               SizedBox(width: tokens.spacing.s12),
               Expanded(
                 child: _Headline(
-                  caption: 'Credit limit',
-                  value: limit == null ? 'No credit' : _amount(limit),
+                  caption: limit == null ? 'Credit' : 'Credit limit',
+                  value: customer.creditBlocked
+                      ? 'Blocked'
+                      : limit == null
+                      ? 'Allowed'
+                      : _amount(limit),
                   valueKey: const ValueKey('customer-record-credit-limit'),
-                  figure: limit != null,
+                  figure: limit != null && !customer.creditBlocked,
                   end: true,
                 ),
               ),
@@ -458,13 +458,9 @@ final class _AccountCard extends StatelessWidget {
               key: const ValueKey('customer-record-over-limit'),
               status: AppStatus.attention,
               title: 'Over their limit',
-              message: limit == null
-                  ? 'They owe money but have no credit limit any more. The '
-                        'till will not sell to them on credit.'
-                  : 'They owe ${_amount(balance - limit)} more than their '
-                        'limit. A sale made where the till could not see '
-                        'their balance can do this; the till will not sell '
-                        'them more on credit until they pay some back.',
+              message:
+                  'They owe ${_amount(balance - (limit ?? 0))} more than the '
+                  'limit they were given before limits were withdrawn.',
             ),
           ],
           if (onRecordPayment case final record?) ...<Widget>[

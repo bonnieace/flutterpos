@@ -67,6 +67,7 @@ final class TenantCustomer {
        saleCount = _count(data['saleCount']),
        lastSaleAt = tenantStoredInstant(data['lastSaleAt']),
        creditLimitMinor = _limit(data['creditLimitMinor']),
+       creditBlocked = data['creditBlocked'] == true,
        balanceMinor = _balance(data['balanceMinor']),
        owingSince = tenantStoredInstant(data['owingSince']),
        lastPaymentAt = tenantStoredInstant(data['lastPaymentAt']);
@@ -96,9 +97,13 @@ final class TenantCustomer {
   final int saleCount;
   final DateTime? lastSaleAt;
 
-  /// The most this customer may owe, or null where they buy for money only.
-  /// Set by a manager; never zero, which the server stores as nothing.
+  /// A limit set before limits were withdrawn on 2026-10-02, or null. Kept
+  /// and shown where one exists; nothing new sets one.
   final int? creditLimitMinor;
+
+  /// Whether a manager has stopped this customer buying on credit. Any named
+  /// customer may, unless this says otherwise.
+  final bool creditBlocked;
 
   /// What they owe, as the server last moved it. Below zero when they have
   /// paid ahead, and the shop owes them.
@@ -110,7 +115,7 @@ final class TenantCustomer {
   final DateTime? lastPaymentAt;
 
   /// Whether a cashier may put a sale on this customer's account.
-  bool get allowsCredit => active && creditLimitMinor != null;
+  bool get allowsCredit => active && !creditBlocked;
 
   /// What they owe, never below zero - the figure a "who owes" list sorts by.
   int get owedMinor => balanceMinor > 0 ? balanceMinor : 0;
@@ -123,11 +128,11 @@ final class TenantCustomer {
     return available > 0 ? available : 0;
   }
 
-  /// Whether they owe more than they are allowed to - which only a sale made
-  /// where the till could not see their balance can cause.
+  /// Whether they owe more than a limit set before limits were withdrawn.
+  /// Without one, nobody is over anything.
   bool get overLimit {
     final limit = creditLimitMinor;
-    return balanceMinor > 0 && (limit == null || balanceMinor > limit);
+    return limit != null && balanceMinor > limit;
   }
 
   /// Whether a receipt may go to this customer on WhatsApp.
@@ -213,6 +218,7 @@ final class TenantCustomerDraft {
     this.notes = '',
     this.whatsappOptIn = false,
     this.creditLimitMinor,
+    this.creditAllowed = true,
   });
 
   factory TenantCustomerDraft.of(TenantCustomer customer) =>
@@ -224,6 +230,7 @@ final class TenantCustomerDraft {
         notes: customer.notes ?? '',
         whatsappOptIn: customer.whatsappOptIn,
         creditLimitMinor: customer.creditLimitMinor,
+        creditAllowed: !customer.creditBlocked,
       );
 
   final String name;
@@ -235,6 +242,9 @@ final class TenantCustomerDraft {
 
   /// The credit limit to give, or null for none. Zero means none too.
   final int? creditLimitMinor;
+
+  /// Whether this customer may buy on credit - yes, unless a manager says no.
+  final bool creditAllowed;
 
   /// [creditLimitMinor] as the server will store it, or a refusal.
   int? normalizedCreditLimit() {
@@ -381,6 +391,7 @@ final class TenantCustomerCreateIntent {
     required this.whatsappOptIn,
     required this.createdBy,
     this.creditLimitMinor,
+    this.creditBlocked = false,
   });
 
   final String path;
@@ -392,6 +403,9 @@ final class TenantCustomerCreateIntent {
 
   /// The credit limit given with the customer, or null for none.
   final int? creditLimitMinor;
+
+  /// Whether the customer is added blocked from buying on credit.
+  final bool creditBlocked;
 
   String get name => fields[TenantCustomerField.name]!;
   String? get phone => fields[TenantCustomerField.phone];
@@ -407,6 +421,7 @@ final class TenantCustomerCreateIntent {
         if (entry.value != null) entry.key.wireKey: entry.value,
       if (whatsappOptIn) 'whatsappOptIn': true,
       if (creditLimitMinor != null) 'creditLimitMinor': creditLimitMinor,
+      if (creditBlocked) 'creditBlocked': true,
       'active': true,
       'searchName': search.searchName,
       'searchPrefixes': search.searchPrefixes,
@@ -430,6 +445,7 @@ final class TenantCustomerUpdateIntent {
     required this.active,
     required this.search,
     this.creditLimit,
+    this.creditBlocked,
   });
 
   final String path;
@@ -451,11 +467,15 @@ final class TenantCustomerUpdateIntent {
   /// limit is not changing.
   final ({int? value})? creditLimit;
 
+  /// Credit blocked (true) or allowed again (false), or null when unchanged.
+  final bool? creditBlocked;
+
   Map<String, Object?> documentData() => <String, Object?>{
     for (final entry in changes.entries) entry.key.wireKey: entry.value,
     if (whatsappOptIn != null) 'whatsappOptIn': whatsappOptIn,
     if (active != null) 'active': active,
     if (creditLimit case final limit?) 'creditLimitMinor': limit.value,
+    if (creditBlocked != null) 'creditBlocked': creditBlocked,
     if (search case final search?) ...<String, Object?>{
       'searchName': search.searchName,
       'searchPrefixes': search.searchPrefixes,
@@ -671,7 +691,8 @@ final class TenantCustomerRepository extends TenantReadRepository {
     // Credit is lending the shop's money, which is a manager's decision even
     // where a cashier may add the customer.
     final creditLimit = draft.normalizedCreditLimit();
-    if (creditLimit != null && !canManageInSession(session)) {
+    if ((creditLimit != null || !draft.creditAllowed) &&
+        !canManageInSession(session)) {
       throw const TenantCustomerException('customer_forbidden');
     }
     final customerId = _deterministicCustomerId(
@@ -687,6 +708,7 @@ final class TenantCustomerRepository extends TenantReadRepository {
       whatsappOptIn: optedIn,
       createdBy: session.uid,
       creditLimitMinor: creditLimit,
+      creditBlocked: !draft.creditAllowed,
     );
   }
 
@@ -722,7 +744,8 @@ final class TenantCustomerRepository extends TenantReadRepository {
     }
     final creditLimit = draft.normalizedCreditLimit();
     final limitChanges = creditLimit != customer.creditLimitMinor;
-    if (changes.isEmpty && optIn == null && !limitChanges) {
+    final blockChanges = draft.creditAllowed == customer.creditBlocked;
+    if (changes.isEmpty && optIn == null && !limitChanges && !blockChanges) {
       throw const TenantCustomerException('customer_unchanged');
     }
     final renamed =
@@ -735,6 +758,7 @@ final class TenantCustomerRepository extends TenantReadRepository {
       whatsappOptIn: optIn,
       active: null,
       creditLimit: limitChanges ? (value: creditLimit) : null,
+      creditBlocked: blockChanges ? !draft.creditAllowed : null,
       search: renamed
           ? tenantCustomerSearchFields(
               name: changes[TenantCustomerField.name] ?? customer.name,

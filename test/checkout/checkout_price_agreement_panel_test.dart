@@ -31,6 +31,15 @@ const Map<String, Object?> _policy = <String, Object?>{
   'updatedBy': _owner,
 };
 
+/// The current shape: everyone, except Grace.
+const Map<String, Object?> _allButGrace = <String, Object?>{
+  'everyone': true,
+  'blocked': <Map<String, Object?>>[
+    <String, Object?>{'uid': 'st-grace'},
+  ],
+  'updatedBy': _owner,
+};
+
 const Map<String, Object?> _onlyGrace = <String, Object?>{
   'allowed': <Map<String, Object?>>[
     <String, Object?>{'uid': 'st-grace'},
@@ -39,7 +48,9 @@ const Map<String, Object?> _onlyGrace = <String, Object?>{
 };
 
 void main() {
-  testWidgets('the published list is read back, person by person', (
+  // **A list saved under the first rule still means only those people**: it
+  // was an owner's choice, so everybody it did not name reads as switched off.
+  testWidgets('a list saved under the first rule is read back, person by person', (
     tester,
   ) async {
     await _pump(tester, _Reader(policy: _policy), writer: _Writer());
@@ -48,9 +59,9 @@ void main() {
     expect(
       _allowed(tester, _owner),
       isFalse,
-      reason: 'the owner is not allowed unless the owner is named',
+      reason: 'the owner was not named on the list that was saved',
     );
-    expect(_text(tester, 'price-agreement-count'), '3 people');
+    expect(_text(tester, 'price-agreement-count'), 'Off for 2 people');
     expect(
       _noteText(tester, 'st-david'),
       'Cannot sign in, so never offered it',
@@ -63,16 +74,16 @@ void main() {
     );
   });
 
-  testWidgets('nothing published allows nobody and says so', (tester) async {
+  testWidgets('nothing published lets everyone agree a price', (tester) async {
     await _pump(tester, _Reader(), writer: _Writer());
 
-    expect(_text(tester, 'price-agreement-count'), 'Nobody');
+    expect(_text(tester, 'price-agreement-count'), 'Everyone');
     for (final uid in _staff.keys) {
-      expect(_allowed(tester, uid), isFalse, reason: uid);
+      expect(_allowed(tester, uid), isTrue, reason: uid);
     }
   });
 
-  testWidgets('allowing somebody and saving publishes that list', (
+  testWidgets('switching somebody off saves who it is off for', (
     tester,
   ) async {
     final writer = _Writer();
@@ -81,12 +92,18 @@ void main() {
     await _choose(tester, _owner, 'yes');
     await _choose(tester, 'st-david', 'no');
     expect(_allowed(tester, _owner), isTrue);
-    expect(_text(tester, 'price-agreement-count'), '3 people');
+    expect(_text(tester, 'price-agreement-count'), 'Off for 2 people');
 
     await _save(tester);
 
     expect(writer.merges.single.path, _policyPath);
     expect(writer.merges.single.data, <String, Object?>{
+      'everyone': true,
+      'blocked': <Map<String, Object?>>[
+        <String, Object?>{'uid': 'st-david'},
+        <String, Object?>{'uid': 'st-grace'},
+      ],
+      // The same answers, for a build from before the change.
       'allowed': <Map<String, Object?>>[
         <String, Object?>{'uid': _owner},
         <String, Object?>{'uid': 'st-lydia'},
@@ -101,7 +118,7 @@ void main() {
     tester,
   ) async {
     final writer = _Writer();
-    await _pump(tester, _Reader(policy: _policy), writer: writer);
+    await _pump(tester, _Reader(policy: _allButGrace), writer: writer);
 
     await _save(tester);
 

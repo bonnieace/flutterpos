@@ -6,29 +6,25 @@ import '../support/collection_pages.dart';
 
 /// Who may sell for a price agreed with the customer.
 ///
-/// **The defaults are the important part, and they point the other way from
-/// the stock count rota's.** Nothing configured, or nothing readable, allows
-/// nobody - owner included - so a till that cannot tell sells at the listed
-/// price, which is what it did before this setting existed.
+/// **The defaults are the important part.** Since 2026-10-02 nothing
+/// configured lets everyone agree a price, and the setting is who it is
+/// switched off for. Nothing *readable* still allows nobody, so a corrupt
+/// setting can never become a way to sell below the listed price.
 void main() {
   group('when nothing is configured', () {
-    test('the empty policy allows nobody, the owner included', () {
-      expect(TenantPriceAgreementPolicy.none.allows('owner'), isFalse);
-      expect(TenantPriceAgreementPolicy.none.allowed, isEmpty);
+    test('nothing published lets everyone agree a price', () {
+      const absent = TenantPublishedPriceAgreement.absent();
+      expect(absent.policy.allows('user-a'), isTrue);
+      expect(absent.policy.allows('owner'), isTrue);
+      expect(absent.published, isNull);
+      expect(TenantPriceAgreementPolicy.everybody.allows('anyone'), isTrue);
     });
 
-    test('an absent or malformed document allows nobody, never a guess', () {
-      for (final published in <TenantPublishedPriceAgreement>[
-        const TenantPublishedPriceAgreement.absent(),
-        const TenantPublishedPriceAgreement.malformed(),
-      ]) {
-        expect(published.policy.allows('user-a'), isFalse);
-        expect(published.published, isNull);
-      }
-      expect(
-        const TenantPublishedPriceAgreement.malformed().state,
-        TenantPriceAgreementState.malformed,
-      );
+    test('a malformed document allows nobody, never a guess', () {
+      const malformed = TenantPublishedPriceAgreement.malformed();
+      expect(malformed.policy.allows('user-a'), isFalse);
+      expect(malformed.state, TenantPriceAgreementState.malformed);
+      expect(TenantPriceAgreementPolicy.none.allows('owner'), isFalse);
     });
   });
 
@@ -58,6 +54,49 @@ void main() {
       expect(TenantPriceAgreementPolicy.fromMap(written), parsed);
     });
 
+    test('the current shape names who it is switched off for', () {
+      final parsed = TenantPriceAgreementPolicy.fromMap(<String, Object?>{
+        'everyone': true,
+        'blocked': <Map<String, Object?>>[
+          <String, Object?>{'uid': 'user-b'},
+        ],
+        'allowed': <Map<String, Object?>>[
+          <String, Object?>{'uid': 'user-a'},
+        ],
+      });
+
+      expect(parsed.allows('user-a'), isTrue);
+      expect(parsed.allows('user-b'), isFalse);
+      // Somebody nobody has decided about yet may.
+      expect(parsed.allows('user-c'), isTrue);
+
+      final written = parsed.documentData(
+        updatedBy: 'owner',
+        members: const <String>['user-a', 'user-b', 'user-c'],
+      );
+      expect(written['everyone'], isTrue);
+      expect(written['blocked'], <Map<String, Object?>>[
+        <String, Object?>{'uid': 'user-b'},
+      ]);
+      // What a build from before the change reads: the same answer for each.
+      expect(written['allowed'], <Map<String, Object?>>[
+        <String, Object?>{'uid': 'user-a'},
+        <String, Object?>{'uid': 'user-c'},
+      ]);
+      expect(TenantPriceAgreementPolicy.fromMap(written), parsed);
+    });
+
+    test('a list saved under the first rule still means only those people', () {
+      final legacy = TenantPriceAgreementPolicy.fromMap(<String, Object?>{
+        'allowed': <Map<String, Object?>>[
+          <String, Object?>{'uid': 'user-a'},
+        ],
+      });
+      expect(legacy.everyone, isFalse);
+      expect(legacy.allows('user-a'), isTrue);
+      expect(legacy.allows('user-b'), isFalse);
+    });
+
     test('an unknown field is ignored, a known one must be right', () {
       expect(
         TenantPriceAgreementPolicy.fromMap(<String, Object?>{
@@ -70,6 +109,8 @@ void main() {
       for (final broken in <Map<String, Object?>>[
         <String, Object?>{},
         <String, Object?>{'allowed': 'user-a'},
+        <String, Object?>{'everyone': true},
+        <String, Object?>{'everyone': true, 'blocked': 'user-a'},
         <String, Object?>{
           'allowed': const <Object>['user-a'],
         },
@@ -130,7 +171,7 @@ void main() {
               session: _session(TenantRole.manager),
               reader: _Reader(null),
             ).buildIntent(
-              allowed: const <String>{'user-a'},
+              blocked: const <String>{'user-a'},
               published: const TenantPublishedPriceAgreement.absent(),
             ),
         throwsA(
@@ -149,12 +190,17 @@ void main() {
             session: _session(TenantRole.owner),
             reader: _Reader(null),
           ).buildIntent(
-            allowed: const <String>{'user-a'},
+            blocked: const <String>{'user-b'},
+            members: const <String>{'user-a', 'user-b'},
             published: const TenantPublishedPriceAgreement.absent(),
           );
 
       expect(intent.path, 'tenants/tenant-a/configuration/price_agreement');
       expect(intent.documentData(), <String, Object?>{
+        'everyone': true,
+        'blocked': <Map<String, Object?>>[
+          <String, Object?>{'uid': 'user-b'},
+        ],
         'allowed': <Map<String, Object?>>[
           <String, Object?>{'uid': 'user-a'},
         ],
@@ -169,10 +215,10 @@ void main() {
               session: _session(TenantRole.owner),
               reader: _Reader(null),
             ).buildIntent(
-              allowed: const <String>{'user-b', 'user-a'},
+              blocked: const <String>{'user-b', 'user-a'},
               published: TenantPublishedPriceAgreement.published(
-                TenantPriceAgreementPolicy(
-                  allowed: const <String>{'user-a', 'user-b'},
+                TenantPriceAgreementPolicy.everyoneExcept(
+                  const <String>{'user-a', 'user-b'},
                 ),
               ),
             ),

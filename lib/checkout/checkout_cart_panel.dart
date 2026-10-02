@@ -1838,12 +1838,12 @@ final class _CartEditorState extends State<_CartEditor> {
     );
   }
 
-  /// *Agree a price*, or changing and removing one, for the people allowed.
+  /// *Agree a price* and *Put on credit*, on one row, for whoever may use each.
   ///
-  /// **Nothing at all for everybody else**, rather than a disabled button: a
-  /// control a cashier may never use is a question they will keep asking.
-  /// For the people allowed it is `secondary`, beneath the total it changes
-  /// and above the save it must never be mistaken for.
+  /// **Side by side, at the developer's direction on 2026-10-02**: both change
+  /// what the customer pays now, and both sit between the total and the save.
+  /// **Nothing at all where neither applies**, rather than a disabled button:
+  /// a control a cashier may never use is a question they will keep asking.
   List<Widget> _agreeSection(
     BuildContext context,
     AppTokens tokens,
@@ -1853,33 +1853,33 @@ final class _CartEditorState extends State<_CartEditor> {
     final dropped = _dropped;
     final offered =
         _mayAgreePrice && widget.drafts != null && _quantities.isNotEmpty;
+    // Once chosen, credit is stated in place of the payment methods below,
+    // with its own Change; the button here is for choosing it.
+    final creditOffered = _creditOffered && _credit == null;
     return <Widget>[
-      if (offered) ...<Widget>[
+      if (offered || creditOffered) ...<Widget>[
         SizedBox(height: tokens.spacing.s12),
-        if (_agreed == null)
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: AppButton(
-              key: const ValueKey('checkout-agree-price'),
-              label: 'Agree a price',
-              tier: AppButtonTier.secondary,
-              icon: Icons.handshake_outlined,
-              // Only against a total the till could record: agreeing a price
-              // for a cart that cannot be saved is a figure for nothing.
-              onPressed: _blocker(total) == null && !_saving
-                  ? () => _agreePrice(context, currency)
-                  : null,
-            ),
-          )
-        else
-          // **No glyph on this one, which the phone measured.** With it, the
-          // pair wrapped onto two rows at 411 and the foot - which does not
-          // scroll - took another row from the lines above it. The words say
-          // what the glyph did, and the pair still wraps at a larger text size.
-          Wrap(
-            spacing: tokens.spacing.s8,
-            runSpacing: tokens.spacing.s8,
-            children: <Widget>[
+        Wrap(
+          spacing: tokens.spacing.s8,
+          runSpacing: tokens.spacing.s8,
+          children: <Widget>[
+            if (offered && _agreed == null)
+              AppButton(
+                key: const ValueKey('checkout-agree-price'),
+                label: 'Agree a price',
+                tier: AppButtonTier.secondary,
+                icon: Icons.handshake_outlined,
+                // Only against a total the till could record: agreeing a
+                // price for a cart that cannot be saved is a figure for
+                // nothing.
+                onPressed: _blocker(total) == null && !_saving
+                    ? () => _agreePrice(context, currency)
+                    : null,
+              ),
+            // **No glyph on these, which the phone measured.** With one, the
+            // pair wrapped onto two rows at 411 and the foot - which does not
+            // scroll - took another row from the lines above it.
+            if (offered && _agreed != null) ...<Widget>[
               AppButton(
                 key: const ValueKey('checkout-change-agreed-price'),
                 label: 'Change agreed price',
@@ -1893,7 +1893,18 @@ final class _CartEditorState extends State<_CartEditor> {
                 onPressed: _saving ? null : _removeAgreement,
               ),
             ],
-          ),
+            if (creditOffered)
+              AppButton(
+                key: const ValueKey('checkout-put-on-credit'),
+                label: 'Put on credit',
+                tier: AppButtonTier.secondary,
+                icon: Icons.account_balance_wallet_outlined,
+                onPressed: _saving || _blocker(total) != null
+                    ? null
+                    : () => _chooseCredit(context, currency),
+              ),
+          ],
+        ),
       ],
       if (dropped != null && _agreed == null && _quantities.isNotEmpty) ...[
         SizedBox(height: tokens.spacing.s12),
@@ -2348,24 +2359,8 @@ final class _CartEditorState extends State<_CartEditor> {
   ) => <Widget>[
     if (_credit case final credit?)
       ..._creditSummary(context, tokens, currency, credit)
-    else ...<Widget>[
+    else
       ..._paidInFullSection(context, tokens),
-      if (_creditOffered) ...<Widget>[
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: AppButton(
-            key: const ValueKey('checkout-put-on-credit'),
-            label: 'Put on credit',
-            tier: AppButtonTier.secondary,
-            icon: Icons.account_balance_wallet_outlined,
-            onPressed: _saving || _blocker(_totalMinor) != null
-                ? null
-                : () => _chooseCredit(context, currency),
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s20),
-      ],
-    ],
   ];
 
   /// What this sale leaves the customer owing, in place of the tender chips.
@@ -2391,8 +2386,7 @@ final class _CartEditorState extends State<_CartEditor> {
         <String>[
           if (paid > 0)
             'Paid now: $currency ${_money(paid)} by ${credit.paidTender!.label}',
-          'Balance after: $currency ${_money(after)} of '
-              '$currency ${_money(customer.creditLimitMinor ?? 0)}',
+          'Balance after: $currency ${_money(after)}',
         ].join('\n'),
         style: tokens.typography.caption.copyWith(
           color: tokens.colors.text.secondary,
@@ -2762,9 +2756,10 @@ final class _CreditChoice {
 /// *Put on credit*: what the customer pays now, if anything, and how.
 ///
 /// **What is paid, not what is owed**, because that is what is in the
-/// cashier's hand. The rest is owed, and the dialog shows where that leaves
-/// the customer against their limit as the cashier types - and refuses a sale
-/// that would take them over it, which is the limit a manager set.
+/// cashier's hand. The rest is owed, and the dialog shows it as the cashier
+/// types. There is no limit to check: the developer withdrew limits on
+/// 2026-10-02, and a customer the shop will not lend to is blocked instead,
+/// which keeps this button off the till for them.
 final class _CreditDialog extends StatefulWidget {
   const _CreditDialog({
     required this.currency,
@@ -2819,13 +2814,6 @@ class _CreditDialogState extends State<_CreditDialog> {
     if (paid > 0 && _paidTender == null) {
       return 'Say how the part paid now was paid.';
     }
-    final limit = widget.customer.creditLimitMinor ?? 0;
-    final after = widget.customer.balanceMinor + widget.totalMinor - paid;
-    if (after > limit) {
-      return 'That takes ${widget.customer.name} to ${widget.currency} '
-          '${_money(after)}, over their limit of ${widget.currency} '
-          '${_money(limit)}. Take more now, or sell less on credit.';
-    }
     return null;
   }
 
@@ -2863,8 +2851,10 @@ class _CreditDialogState extends State<_CreditDialog> {
         children: <Widget>[
           Text(
             key: const ValueKey('credit-standing'),
-            '${customer.name} owes $currency ${_money(customer.owedMinor)} '
-            'of a $currency ${_money(customer.creditLimitMinor ?? 0)} limit.',
+            customer.owedMinor > 0
+                ? '${customer.name} already owes $currency '
+                      '${_money(customer.owedMinor)}.'
+                : '${customer.name} owes nothing yet.',
             style: secondary,
           ),
           SizedBox(height: tokens.spacing.s4),

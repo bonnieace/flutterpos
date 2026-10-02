@@ -16,11 +16,12 @@ import type {DocumentSnapshot} from "firebase-admin/firestore";
  * estimate (`creditBalanceAfterMinor`) and the customer's `balanceMinor` is
  * moved here, once per sale, in the transaction that counts the sale.
  *
- * **Over the limit is recorded, not refused.** The till refuses a sale it can
- * see would go over; one it could not see - two tills, one offline - has
- * already happened by the time it reaches the server, and the goods have gone.
- * The sale's ledger entry says `overLimit: true` and the owner sees the
- * customer above their limit.
+ * **Blocked is recorded, not refused.** Any named customer may buy on credit
+ * unless a manager has blocked them (`creditBlocked`). The till refuses a
+ * blocked customer it knows about; a sale from a till that had not heard yet
+ * has already happened by the time it reaches the server, and the goods have
+ * gone, so its ledger entry says `whileBlocked: true` instead. A limit set
+ * before limits were withdrawn is still compared, as `overLimit`.
  */
 
 export const CREDIT_TENDER = "credit";

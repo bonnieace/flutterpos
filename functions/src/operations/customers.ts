@@ -32,11 +32,12 @@ import {MAXIMUM_PRODUCT_NAME_LENGTH} from "./productUpdate";
  * follows, for the same reason: a tick recorded against one number is not
  * permission to message another.
  *
- * **Credit is a limit a manager sets, and a balance only the server moves.**
- * `creditLimitMinor` is the most this customer may owe; absent means they buy
- * for money only. A cashier may add a customer at the till but may not give
- * them credit - that is the same decision as lending the shop's money, and it
- * is a manager's. `balanceMinor` and `owingSince` are written by
+ * **Any named customer may buy on credit, unless a manager blocks them.**
+ * The developer ruled on 2026-10-02 that a limit is a step a shop does not
+ * need: `creditBlocked: true` is the one switch, and it is a manager's,
+ * because it is the decision whether to lend the shop's money. A
+ * `creditLimitMinor` written before then is still read and kept, and no
+ * longer offered. `balanceMinor` and `owingSince` are written by
  * `processCustomerSale` and `recordCustomerPayment`, never here.
  *
  * **A customer is never deleted, only marked inactive.** Sales name them, and a
@@ -118,6 +119,7 @@ const ACCEPTED_CUSTOMER_DOCUMENT_KEYS = new Set<string>([
   "whatsappOptIn",
   "active",
   "creditLimitMinor",
+  "creditBlocked",
   "createdBy",
   "updatedBy",
   "searchName",
@@ -141,6 +143,9 @@ export interface CustomerFields {
 
   /** A limit to set, or null to stop giving credit. Absent leaves it alone. */
   creditLimitMinor?: number | null;
+
+  /** True blocks credit, false allows it again. Absent leaves it alone. */
+  creditBlocked?: boolean;
 }
 
 /**
@@ -353,6 +358,15 @@ export function readCustomerDocument(
     const limit = readCreditLimit(document.creditLimitMinor);
     if (mode === "update" || limit !== null) fields.creditLimitMinor = limit;
   }
+  if (document.creditBlocked !== undefined && document.creditBlocked !== null) {
+    if (typeof document.creditBlocked !== "boolean") {
+      throw new HttpsError("invalid-argument", "creditBlocked must be true or false.");
+    }
+    // A create that allows credit says nothing: credit is allowed by default.
+    if (mode === "update" || document.creditBlocked) {
+      fields.creditBlocked = document.creditBlocked;
+    }
+  }
   if (mode === "update" && Object.keys(fields).length === 0) {
     throw new HttpsError(
       "invalid-argument",
@@ -455,6 +469,7 @@ export function customerCreateData(
   if (typeof fields.creditLimitMinor === "number") {
     data.creditLimitMinor = fields.creditLimitMinor;
   }
+  if (fields.creditBlocked === true) data.creditBlocked = true;
   data.active = true;
   data.createdBy = actorUid;
   return data;
@@ -580,6 +595,9 @@ export async function applyCustomerUpdate(
     if (fields.creditLimitMinor === null) cleared.push("creditLimitMinor");
     else update.creditLimitMinor = fields.creditLimitMinor;
   }
+  // Stored as an explicit `false` when allowed again, as consent is, so a
+  // queued change is confirmed by reading back the value it sent.
+  if (fields.creditBlocked !== undefined) update.creditBlocked = fields.creditBlocked;
   transaction.update(customerRef, {
     ...update,
     // Cleared fields are deleted inside the write that performs it, so the
@@ -653,7 +671,10 @@ export const createCustomer = onCall<
  * cashier promoted between queueing and draining is a manager by then.
  */
 export function requireCreditGranter(role: string, fields: CustomerFields): void {
-  if (fields.creditLimitMinor === undefined || fields.creditLimitMinor === null) return;
+  const decidesCredit =
+    (fields.creditLimitMinor !== undefined && fields.creditLimitMinor !== null) ||
+    fields.creditBlocked !== undefined;
+  if (!decidesCredit) return;
   if ((CUSTOMER_UPDATE_ROLES as readonly string[]).includes(role)) return;
   throw new HttpsError(
     "permission-denied",

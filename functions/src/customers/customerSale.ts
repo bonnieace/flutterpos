@@ -177,7 +177,8 @@ export async function applyCustomerSale(
         balanceChangeMinor: credit.owedMinor,
         balanceAfterMinor: after,
         creditLimitMinor: limit,
-        overLimit: limit === null || after > limit,
+        overLimit: limit !== null && after > limit,
+        whileBlocked: customer.get("creditBlocked") === true,
       }),
       createdAt: FieldValue.serverTimestamp(),
     });

@@ -7,10 +7,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:uzapay_pos/observability/app_telemetry.dart';
 
-import '../inventory/catalog_management.dart';
 
 import '../tenancy/phone_number.dart';
 import '../tenancy/tenant_repository.dart';
@@ -168,16 +166,10 @@ class _CustomerFormState extends State<_CustomerForm> {
     text: _editing?.notes ?? '',
   );
   late bool _optedIn = _editing?.whatsappOptIn ?? false;
-  late final TextEditingController _creditLimit = TextEditingController(
-    text: switch (_editing?.creditLimitMinor) {
-      final limit? => _typedAmount(limit),
-      null => '',
-    },
-  );
-  String? _creditLimitError;
+  late bool _creditAllowed = !(_editing?.creditBlocked ?? false);
 
-  /// Whether this form offers a credit limit: away from the till, to the
-  /// people who may lend the shop's money.
+  /// Whether this form offers the credit switch: away from the till, to the
+  /// people who may decide whether the shop lends its money.
   bool get _offersCredit =>
       !widget.atTill &&
       TenantCustomerRepository.canManageInSession(widget.session);
@@ -200,30 +192,7 @@ class _CustomerFormState extends State<_CustomerForm> {
     _email.dispose();
     _kraPin.dispose();
     _notes.dispose();
-    _creditLimit.dispose();
     super.dispose();
-  }
-
-  /// The typed credit limit in minor units: nothing typed is no credit, and
-  /// null is something that does not read as money - the field then says so.
-  int? _composedCreditLimit() {
-    final typed = _creditLimit.text.trim();
-    if (typed.isEmpty) return 0;
-    try {
-      return tenantCatalogPriceMinorUnits(typed);
-    } on TenantCatalogManagementException {
-      setState(
-        () => _creditLimitError = 'Enter an amount, like 5000, or leave it '
-            'empty for no credit.',
-      );
-      return null;
-    }
-  }
-
-  static String _typedAmount(int minorUnits) {
-    final major = minorUnits ~/ 100;
-    final minor = minorUnits % 100;
-    return minor == 0 ? '$major' : '$major.${minor.toString().padLeft(2, '0')}';
   }
 
   bool get _hasNumber => _phone.text.trim().isNotEmpty;
@@ -245,20 +214,21 @@ class _CustomerFormState extends State<_CustomerForm> {
     return normalizeE164(dialCode: _dialCode, localNumber: _phone.text);
   }
 
-  TenantCustomerDraft _draft(String phone, int? creditLimit) =>
-      TenantCustomerDraft(
-        name: _name.text,
-        phone: phone,
-        email: _email.text,
-        kraPin: _kraPin.text,
-        notes: _notes.text,
-        whatsappOptIn: phone.isNotEmpty && _optedIn,
-        // Untouched where the form does not offer it: a cashier editing
-        // nothing about credit changes nothing about credit.
-        creditLimitMinor: _offersCredit
-            ? creditLimit
-            : _editing?.creditLimitMinor,
-      );
+  TenantCustomerDraft _draft(String phone) => TenantCustomerDraft(
+    name: _name.text,
+    phone: phone,
+    email: _email.text,
+    kraPin: _kraPin.text,
+    notes: _notes.text,
+    whatsappOptIn: phone.isNotEmpty && _optedIn,
+    // A limit set before limits were withdrawn is carried, never changed.
+    creditLimitMinor: _editing?.creditLimitMinor,
+    // Untouched where the form does not offer it: a cashier editing nothing
+    // about credit changes nothing about credit.
+    creditAllowed: _offersCredit
+        ? _creditAllowed
+        : !(_editing?.creditBlocked ?? false),
+  );
 
   TenantCustomerRepository _repository(TenantDocumentReader reader) =>
       TenantCustomerRepository(session: widget.session, reader: reader);
@@ -287,8 +257,6 @@ class _CustomerFormState extends State<_CustomerForm> {
   Future<void> _submit() async {
     final phone = _composedPhone();
     if (phone == null) return;
-    final creditLimit = _offersCredit ? _composedCreditLimit() : 0;
-    if (creditLimit == null) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -301,7 +269,7 @@ class _CustomerFormState extends State<_CustomerForm> {
       context: {'customer_id': _editing?.id},
     );
     try {
-      final draft = _draft(phone, creditLimit);
+      final draft = _draft(phone);
       if (phone.isNotEmpty && phone != _editing?.phone) {
         final holder = await _holderOf(phone);
         if (!mounted) return;
@@ -516,23 +484,21 @@ class _CustomerFormState extends State<_CustomerForm> {
           ),
         ],
         if (_offersCredit) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          AppTextField(
-            key: const ValueKey('customer-form-credit-limit'),
-            controller: _creditLimit,
-            enabled: !_busy,
-            label: 'Credit limit (optional)',
-            leading: Icons.account_balance_wallet_outlined,
-            placeholder: '5000',
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: <TextInputFormatter>[
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-            ],
-            helper:
-                'The most they may owe. Leave it empty and they pay for '
-                'everything at the counter.',
-            error: _creditLimitError,
-            onChanged: (_) => setState(() => _creditLimitError = null),
+          SizedBox(height: tokens.spacing.s4),
+          CheckboxListTile(
+            key: const ValueKey('customer-form-credit-allowed'),
+            value: _creditAllowed,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text('Can buy on credit'),
+            subtitle: Text(
+              _creditAllowed
+                  ? 'The till can put their sales on their account.'
+                  : 'The till will not put their sales on credit.',
+            ),
+            onChanged: _busy
+                ? null
+                : (value) => setState(() => _creditAllowed = value ?? true),
           ),
         ],
         if (_error case final message?) ...<Widget>[

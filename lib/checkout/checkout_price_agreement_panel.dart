@@ -71,8 +71,12 @@ final class TenantPriceAgreementSettingsPanel extends StatefulWidget {
 
 class _TenantPriceAgreementSettingsPanelState
     extends State<TenantPriceAgreementSettingsPanel> {
-  /// Who the form allows, which is what Save publishes.
-  final Set<String> _allowed = <String>{};
+  /// Who the form switches agreeing a price off for, which is what Save
+  /// publishes. Everyone else may.
+  final Set<String> _blocked = <String>{};
+
+  /// The people the form showed, which Save also writes for older builds.
+  final Set<String> _members = <String>{};
 
   /// What the form was last filled from. See [_seed].
   TenantPublishedPriceAgreement? _seededFrom;
@@ -147,10 +151,22 @@ class _TenantPriceAgreementSettingsPanelState
     final seeded = _seededFrom;
     if (seeded != null && _samePublished(seeded, data.published)) return;
     _seededFrom = data.published;
-    _allowed
+    final policy = data.published.policy;
+    _members
       ..clear()
-      ..addAll(data.published.policy.allowed);
+      ..addAll(data.staff.map((member) => member.uid));
+    // A list saved under the earlier rule names who may; everybody else on
+    // the screen is who it was off for.
+    _blocked
+      ..clear()
+      ..addAll(
+        policy.everyone
+            ? policy.blocked
+            : _members.where((uid) => !policy.allowed.contains(uid)),
+      );
   }
+
+  bool _allows(String uid) => !_blocked.contains(uid);
 
   static bool _samePublished(
     TenantPublishedPriceAgreement a,
@@ -227,7 +243,7 @@ class _TenantPriceAgreementSettingsPanelState
     required bool wide,
   }) {
     final colors = tokens.colors;
-    final count = _allowed.length;
+    final count = _blocked.length;
     final heading = Row(
       crossAxisAlignment: CrossAxisAlignment.baseline,
       textBaseline: TextBaseline.alphabetic,
@@ -236,8 +252,8 @@ class _TenantPriceAgreementSettingsPanelState
         SizedBox(width: tokens.spacing.s12),
         Text(
           count == 0
-              ? 'Nobody'
-              : '$count ${count == 1 ? 'person' : 'people'}',
+              ? 'Everyone'
+              : 'Off for $count ${count == 1 ? 'person' : 'people'}',
           key: const ValueKey('price-agreement-count'),
           style: tokens.typography.caption.copyWith(
             color: colors.text.tertiary,
@@ -248,10 +264,10 @@ class _TenantPriceAgreementSettingsPanelState
     // What the person chosen here meets at the till, in the till's own words,
     // and what everybody else does - which is the half that makes it safe.
     final explanation = Text(
-      'At the register, the people chosen here can press Agree a price, type '
-      'the total the customer agreed to and say why. Everybody else sells at '
-      'the listed price. The sale keeps the listed prices, the agreed total '
-      'and the reason.',
+      'At the register, everyone can press Agree a price, type the total the '
+      'customer agreed to and say why - unless it is switched off for them '
+      'here, when they sell at the listed price. The sale keeps the listed '
+      'prices, the agreed total and the reason.',
       key: const ValueKey('price-agreement-explanation'),
       style: tokens.density
           .body(tokens.typography)
@@ -339,7 +355,7 @@ class _TenantPriceAgreementSettingsPanelState
     label: 'Whether ${member.displayName} can agree a price',
     dense: true,
     leading: Icons.handshake_outlined,
-    value: _allowed.contains(member.uid),
+    value: _allows(member.uid),
     items: <AppSelectItem<bool>>[
       AppSelectItem<bool>(
         key: ValueKey('price-agreement-allow-${member.uid}-no'),
@@ -357,9 +373,9 @@ class _TenantPriceAgreementSettingsPanelState
       setState(() {
         _edited = true;
         if (value) {
-          _allowed.add(member.uid);
+          _blocked.remove(member.uid);
         } else {
-          _allowed.remove(member.uid);
+          _blocked.add(member.uid);
         }
       });
     },
@@ -367,7 +383,7 @@ class _TenantPriceAgreementSettingsPanelState
 
   /// One person's answer, for a build that cannot change it.
   Widget _answerAsSet(AppTokens tokens, TenantStaffSummary member) {
-    final allowed = _allowed.contains(member.uid);
+    final allowed = _allows(member.uid);
     return Row(
       key: ValueKey('price-agreement-as-set-${member.uid}'),
       children: <Widget>[
@@ -400,7 +416,7 @@ class _TenantPriceAgreementSettingsPanelState
 
   /// What a row says under the name when the role line is not the point.
   TenantStaffRosterNote? _noteFor(TenantStaffSummary member) {
-    if (!_allowed.contains(member.uid)) return null;
+    if (!_allows(member.uid)) return null;
     return switch (member.status) {
       MembershipStatus.inactive => const TenantStaffRosterNote(
         status: AppStatus.attention,
@@ -486,7 +502,11 @@ class _TenantPriceAgreementSettingsPanelState
       intent = TenantPriceAgreementPublisher(
         session: session,
         reader: widget.reader,
-      ).buildIntent(allowed: _allowed, published: published);
+      ).buildIntent(
+        blocked: _blocked,
+        members: _members,
+        published: published,
+      );
     } on TenantPriceAgreementException catch (error) {
       showAppSnackBar(context, _refusal(error.code));
       return;

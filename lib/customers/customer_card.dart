@@ -148,20 +148,29 @@ final class TenantCustomerCard extends StatelessWidget {
                   ),
                   SizedBox(height: tokens.spacing.s12),
                   CustomerFactsWell(customer: customer),
-                  if (customer.owedMinor > 0) ...<Widget>[
+                  if (customer.owedMinor > 0 || customer.creditBlocked) ...<Widget>[
                     SizedBox(height: tokens.spacing.s8),
                     Wrap(
                       spacing: tokens.spacing.s8,
                       runSpacing: tokens.spacing.s4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: <Widget>[
-                        Text(
-                          customerOwingLabel(customer),
-                          key: ValueKey('customer-owes-${customer.id}'),
-                          style: tokens.typography.bodyMedium.copyWith(
-                            color: tokens.colors.text.primary,
+                        if (customer.owedMinor > 0)
+                          Text(
+                            customerOwingLabel(customer),
+                            key: ValueKey('customer-owes-${customer.id}'),
+                            style: tokens.typography.bodyMedium.copyWith(
+                              color: tokens.colors.text.primary,
+                            ),
                           ),
-                        ),
+                        if (customer.creditBlocked)
+                          StatusBadge(
+                            key: ValueKey(
+                              'customer-credit-blocked-${customer.id}',
+                            ),
+                            status: AppStatus.neutral,
+                            label: 'No credit',
+                          ),
                         if (customer.overLimit)
                           StatusBadge(
                             key: ValueKey(

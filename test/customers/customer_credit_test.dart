@@ -26,18 +26,54 @@ void main() {
       // Paid ahead: owes nothing, and the shop owes them.
       final ahead = _customer(<String, Object?>{'balanceMinor': -5000});
       expect(ahead.owedMinor, 0);
-      expect(ahead.allowsCredit, isFalse);
 
-      // A limit taken away while they still owe is over it.
-      final withdrawn = _customer(<String, Object?>{'balanceMinor': 100});
-      expect(withdrawn.overLimit, isTrue);
-      // An inactive customer is offered no credit at the till.
+      // **Any named customer may buy on credit, with no limit at all**, and
+      // owing without one is not being over anything.
+      final plain = _customer(<String, Object?>{'balanceMinor': 100});
+      expect(plain.allowsCredit, isTrue);
+      expect(plain.overLimit, isFalse);
+      // Blocked by a manager, or inactive: offered no credit at the till.
       expect(
-        _customer(<String, Object?>{
-          'creditLimitMinor': 100,
-          'active': false,
-        }).allowsCredit,
+        _customer(<String, Object?>{'creditBlocked': true}).allowsCredit,
         isFalse,
+      );
+      expect(
+        _customer(<String, Object?>{'active': false}).allowsCredit,
+        isFalse,
+      );
+    });
+
+    test('blocking credit is a manager\'s switch, sent only when it moves', () {
+      final manager = TenantCustomerRepository(
+        session: _session(TenantRole.manager),
+        reader: _Reader(),
+      );
+      final jane = _customer(const <String, Object?>{});
+      final blocked = manager.buildUpdateIntent(
+        customer: jane,
+        draft: const TenantCustomerDraft(
+          name: 'Jane Wanjiku',
+          creditAllowed: false,
+        ),
+      );
+      expect(blocked.documentData()['creditBlocked'], isTrue);
+
+      final again = manager.buildUpdateIntent(
+        customer: _customer(const <String, Object?>{'creditBlocked': true}),
+        draft: const TenantCustomerDraft(name: 'Jane Wanjiku'),
+      );
+      expect(again.documentData()['creditBlocked'], isFalse);
+
+      // A cashier may add a customer, never blocked from credit.
+      expect(
+        () => TenantCustomerRepository(
+          session: _session(TenantRole.cashier),
+          reader: _Reader(),
+        ).buildCreateIntent(
+          draft: const TenantCustomerDraft(name: 'Jane', creditAllowed: false),
+          requestId: 'customer-request-0003',
+        ),
+        throwsA(isA<TenantCustomerException>()),
       );
     });
 

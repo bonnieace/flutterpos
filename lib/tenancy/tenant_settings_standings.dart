@@ -292,26 +292,35 @@ final class TenantSettingsStandingsRepository extends TenantReadRepository {
 
       case TenantSettingKind.agreedPrices:
         // **Absent is `set`, as the counting rota's is.** No published policy
-        // is `TenantPriceAgreementPolicy.none` - every till sells at the listed
-        // price - which is a working state and the one a business starts in.
+        // is `TenantPriceAgreementPolicy.everybody` since 2026-10-02 - every
+        // till may agree a price - which is the state a business starts in.
         if (data == null) {
           return const TenantSettingStanding(
             kind: TenantSettingKind.agreedPrices,
             state: TenantSettingState.set,
-            detail: 'Nobody can agree a price.',
+            detail: 'Everyone can agree a price.',
           );
         }
         try {
-          final allowed = TenantPriceAgreementPolicy.fromMap(
-            data,
-          ).allowed.length;
+          final policy = TenantPriceAgreementPolicy.fromMap(data);
+          final String detail;
+          if (policy.everyone) {
+            final off = policy.blocked.length;
+            detail = off == 0
+                ? 'Everyone can agree a price.'
+                : 'Everyone can agree a price but $off '
+                      '${off == 1 ? 'person' : 'people'}.';
+          } else {
+            final allowed = policy.allowed.length;
+            detail = allowed == 0
+                ? 'Nobody can agree a price.'
+                : '$allowed ${allowed == 1 ? 'person' : 'people'} can agree a '
+                      'price';
+          }
           return TenantSettingStanding(
             kind: TenantSettingKind.agreedPrices,
             state: TenantSettingState.set,
-            detail: allowed == 0
-                ? 'Nobody can agree a price.'
-                : '$allowed ${allowed == 1 ? 'person' : 'people'} can agree a '
-                      'price',
+            detail: detail,
           );
         } on FormatException {
           return const TenantSettingStanding(
