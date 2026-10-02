@@ -1856,8 +1856,43 @@ final class _CartEditorState extends State<_CartEditor> {
     // Once chosen, credit is stated in place of the payment methods below,
     // with its own Change; the button here is for choosing it.
     final creditOffered = _creditOffered && _credit == null;
+    // **One row, halves of it, when both are offered** - the developer's
+    // ruling of 2026-10-02 - and no glyphs then, which the phone measured: a
+    // 360 wide phone has 328 between the insets, and either button with its
+    // glyph is wider than half of that, so a `Wrap` put them in a column.
+    final paired = offered && _agreed == null && creditOffered;
     return <Widget>[
-      if (offered || creditOffered) ...<Widget>[
+      if (paired) ...<Widget>[
+        SizedBox(height: tokens.spacing.s12),
+        Row(
+          key: const ValueKey('checkout-adjust-row'),
+          children: <Widget>[
+            Expanded(
+              child: AppButton(
+                key: const ValueKey('checkout-agree-price'),
+                label: 'Agree a price',
+                tier: AppButtonTier.secondary,
+                expand: true,
+                onPressed: _blocker(total) == null && !_saving
+                    ? () => _agreePrice(context, currency)
+                    : null,
+              ),
+            ),
+            SizedBox(width: tokens.spacing.s8),
+            Expanded(
+              child: AppButton(
+                key: const ValueKey('checkout-put-on-credit'),
+                label: 'Put on credit',
+                tier: AppButtonTier.secondary,
+                expand: true,
+                onPressed: _saving || _blocker(total) != null
+                    ? null
+                    : () => _chooseCredit(context, currency),
+              ),
+            ),
+          ],
+        ),
+      ] else if (offered || creditOffered) ...<Widget>[
         SizedBox(height: tokens.spacing.s12),
         Wrap(
           spacing: tokens.spacing.s8,

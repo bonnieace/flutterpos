@@ -1995,6 +1995,42 @@ void main() {
   });
 
   group('agreeing a price', () {
+    // **One row on a 360 phone, at the developer's direction of 2026-10-02.**
+    // A `Wrap` of the two put them in a column on a Redmi, because either
+    // button with its glyph is wider than half of what the phone has.
+    testWidgets('sits on one row with Put on credit, on a narrow phone', (
+      tester,
+    ) async {
+      await _pumpAt(
+        tester,
+        sessions,
+        catalog,
+        drafts,
+        const Size(360, 1400),
+        loadPriceAgreement: _agreementPolicy(onDevice: <String>{'user-a'}),
+        customers: CheckoutCustomerServices(reader: _Customers()),
+      );
+      await tester.tap(find.byKey(const ValueKey('screen-title-action')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('checkout-customer-$_janeId')));
+      await tester.pumpAndSettle();
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-open-cart');
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final agree = tester.getRect(
+        find.byKey(const ValueKey('checkout-agree-price')),
+      );
+      final credit = tester.getRect(
+        find.byKey(const ValueKey('checkout-put-on-credit')),
+      );
+      expect(agree.top, credit.top);
+      expect(agree.right, lessThan(credit.left));
+      expect(credit.right, lessThanOrEqualTo(360));
+      expect(agree.height, greaterThanOrEqualTo(48));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('is offered only to a person the business names', (
       tester,
     ) async {
