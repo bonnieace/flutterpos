@@ -623,6 +623,69 @@ void main() {
       expect(update['totalSalesMinor'], 4500);
     });
 
+    test('states what the shift lent and took back, as the server counts it', () async {
+      final ledger = _Ledger()
+        ..summary = const ShiftSalesSummary(
+          transactionCount: 1,
+          totalMinor: 1000,
+          unsettledCount: 0,
+          creditOwedMinor: 600,
+        );
+      final controller = _controller(
+        sessions,
+        state,
+        server,
+        salesLedger: ledger,
+        serverTotals: _Totals(
+          const ShiftServerTotals(
+            transactionCount: 1,
+            totalMinor: 1000,
+            creditOwedMinor: 600,
+            repaidMinor: 600,
+          ),
+        ),
+      );
+      await controller.openShift();
+      await controller.startCashCount();
+
+      await controller.closeShift(declaration: _declared(1000));
+
+      final update = server.updated.single.$2;
+      expect(update['creditOwedMinor'], 600);
+      expect(update['repaidMinor'], 600);
+    });
+
+    // **A credit figure the server cannot count is not zero.** On SIT the
+    // sum needs its own index; a phone that cannot read it states what it
+    // proved itself rather than closing as though nothing was lent.
+    test('a credit figure the server cannot count falls back to the phone', () async {
+      final ledger = _Ledger()
+        ..summary = const ShiftSalesSummary(
+          transactionCount: 1,
+          totalMinor: 1000,
+          unsettledCount: 0,
+          creditOwedMinor: 600,
+        );
+      final controller = _controller(
+        sessions,
+        state,
+        server,
+        salesLedger: ledger,
+        serverTotals: _Totals(
+          const ShiftServerTotals(transactionCount: 1, totalMinor: 1000),
+        ),
+      );
+      await controller.openShift();
+      await controller.startCashCount();
+
+      await controller.closeShift(declaration: _declared(400));
+
+      final update = server.updated.single.$2;
+      expect(update['totalSalesMinor'], 1000);
+      expect(update['creditOwedMinor'], 600);
+      expect(update.containsKey('repaidMinor'), isFalse);
+    });
+
     for (final (name, counted) in <(String, ShiftServerTotals?)>[
       ('cannot be read', null),
       (

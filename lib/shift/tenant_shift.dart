@@ -729,26 +729,26 @@ final class FirebaseShiftServerSalesTotals implements ShiftServerSalesTotals {
           .collection(TenantPaths(tenantId).sales)
           .where('shiftId', isEqualTo: shiftId)
           .where('soldById', isEqualTo: uid)
-          .aggregate(count(), sum('totalMinor'), sum('creditOwedMinor'))
+          .aggregate(count(), sum('totalMinor'))
           .get(source: AggregateSource.server)
           .timeout(_timeout);
       final transactionCount = snapshot.count;
       final total = snapshot.getSum('totalMinor');
-      // A sale paid in full has no `creditOwedMinor`, which a sum skips.
-      final owed = snapshot.getSum('creditOwedMinor') ?? 0;
       if (transactionCount == null || transactionCount < 0 || total == null) {
         return null;
       }
       // Stored as whole minor units, so a sum that is not one is a record
       // this cannot vouch for.
       if (total < 0 || total != total.roundToDouble()) return null;
-      if (owed < 0 || owed > total || owed != owed.roundToDouble()) {
-        return null;
-      }
       return ShiftServerTotals(
         transactionCount: transactionCount,
         totalMinor: total.toInt(),
-        creditOwedMinor: owed.toInt(),
+        creditOwedMinor: await _owed(
+          tenantId: tenantId,
+          uid: uid,
+          shiftId: shiftId,
+          totalMinor: total.toInt(),
+        ),
         repaidMinor: await _repaid(tenantId: tenantId, uid: uid, shiftId: shiftId),
       );
     } catch (error, stackTrace) {
@@ -762,7 +762,45 @@ final class FirebaseShiftServerSalesTotals implements ShiftServerSalesTotals {
   }
 }
 
+/// **Each credit figure is its own read, apart from the sales totals.** A
+/// filtered `sum()` needs a composite index that names the summed field, so
+/// folding a second sum into the totals query made it need an index that did
+/// not exist, and on SIT the whole read failed - every close then fell back to
+/// this phone's own sales, which is the shortfall `ShiftServerTotals` exists to
+/// avoid. Apart, a credit figure that cannot be read costs only itself.
 extension on FirebaseShiftServerSalesTotals {
+  /// The part of the shift's sales left owing, or null where it could not be
+  /// read. Backed by `sales (shiftId, soldById, creditOwedMinor)`; a sale paid
+  /// in full has no `creditOwedMinor` and is not in that index at all.
+  Future<int?> _owed({
+    required String tenantId,
+    required String uid,
+    required String shiftId,
+    required int totalMinor,
+  }) async {
+    try {
+      final snapshot = await _firestore
+          .collection(TenantPaths(tenantId).sales)
+          .where('shiftId', isEqualTo: shiftId)
+          .where('soldById', isEqualTo: uid)
+          .aggregate(sum('creditOwedMinor'))
+          .get(source: AggregateSource.server)
+          .timeout(_timeout);
+      final owed = snapshot.getSum('creditOwedMinor') ?? 0;
+      if (owed < 0 || owed > totalMinor || owed != owed.roundToDouble()) {
+        return null;
+      }
+      return owed.toInt();
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.server_owed_read',
+      );
+      return null;
+    }
+  }
+
   /// What customers paid back into the shift, counted on the server, or null
   /// where that could not be read. Rules let a cashier read the payments they
   /// took, which is exactly what this filters to.

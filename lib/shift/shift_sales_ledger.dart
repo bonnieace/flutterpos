@@ -191,15 +191,16 @@ final class ShiftServerTotals {
   const ShiftServerTotals({
     required this.transactionCount,
     required this.totalMinor,
-    this.creditOwedMinor = 0,
+    this.creditOwedMinor,
     this.repaidMinor,
   });
 
   final int transactionCount;
   final int totalMinor;
 
-  /// The part of [totalMinor] left owing on credit sales.
-  final int creditOwedMinor;
+  /// The part of [totalMinor] left owing on credit sales, or null where that
+  /// could not be read - which is never zero.
+  final int? creditOwedMinor;
 
   /// What customers paid back into the shift, or null where that could not
   /// be read - which is never zero.

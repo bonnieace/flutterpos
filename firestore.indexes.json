@@ -25,6 +25,28 @@
         {
           "fieldPath": "recordedBy",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amountMinor",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "shiftId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "soldById",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "creditOwedMinor",
+          "order": "ASCENDING"
         }
       ]
     },

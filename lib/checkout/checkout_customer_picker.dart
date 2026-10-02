@@ -357,10 +357,12 @@ final class _CustomerPickerState extends State<_CustomerPicker> {
               rowKey: ValueKey('checkout-customer-${customer.id}'),
               icon: Icons.person_outline,
               title: customer.name,
+              // What they owe leads, so a long contact line can never be the
+              // part that survives the one-line cut and the debt the part lost.
               subtitle: <String>[
-                customerContactLine(customer),
                 if (customer.owedMinor > 0)
                   'Owes ${moneyTextOfMinor(customer.owedMinor)}',
+                customerContactLine(customer),
                 if (customer.points > 0) customerPointsLabel(customer.points),
               ].join(' · '),
               selected: customer.id == selectedId,

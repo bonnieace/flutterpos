@@ -1216,8 +1216,8 @@ final class TenantShiftController extends ChangeNotifier {
       transactionCount: server.transactionCount,
       totalMinor: server.totalMinor,
       unsettledCount: local.unsettledCount,
-      creditOwedMinor: server.creditOwedMinor,
       // Unreadable is never zero: what this phone holds is the floor.
+      creditOwedMinor: server.creditOwedMinor ?? local.creditOwedMinor,
       repaidMinor: server.repaidMinor ?? local.repaidMinor,
     );
   }
