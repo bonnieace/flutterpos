@@ -91,6 +91,55 @@ function retryableHttpStatus(status: number): boolean {
     status === 429 || status >= 500;
 }
 
+/**
+ * Sends one prepared message through Brevo's transactional API and answers
+ * the message ID it assigned.
+ *
+ * Every failure is an [EmailProviderError] carrying a code safe to store and
+ * whether trying again could help. The receipt sender shares this with
+ * [BrevoEmailProvider]; only the body differs.
+ */
+export async function postBrevoEmail(
+  apiKey: string,
+  body: Record<string, unknown>,
+  fetchImplementation: FetchLike = fetch
+): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetchImplementation("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "api-key": apiKey,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new EmailProviderError("provider_transport_failure", true);
+  }
+  if (!response.ok) {
+    throw new EmailProviderError(
+      `provider_http_${response.status}`,
+      retryableHttpStatus(response.status)
+    );
+  }
+
+  let answer: unknown;
+  try {
+    answer = await response.json();
+  } catch {
+    throw new EmailProviderError("provider_invalid_response", true);
+  }
+  const providerMessageId = answer && typeof answer === "object" &&
+    typeof (answer as {messageId?: unknown}).messageId === "string" ?
+    (answer as {messageId: string}).messageId : "";
+  if (!providerMessageId || providerMessageId.length > 256) {
+    throw new EmailProviderError("provider_invalid_response", true);
+  }
+  return providerMessageId;
+}
+
 export class BrevoEmailProvider implements EmailProvider {
   constructor(
     private readonly config: BrevoProviderConfiguration,
@@ -99,39 +148,11 @@ export class BrevoEmailProvider implements EmailProvider {
 
   async send(message: ProviderEmailMessage): Promise<ProviderSendResult> {
     requireProviderConfiguration(this.config);
-    let response: Response;
-    try {
-      response = await this.fetchImplementation("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "api-key": this.config.apiKey,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(messageBody(message, this.config)),
-      });
-    } catch {
-      throw new EmailProviderError("provider_transport_failure", true);
-    }
-    if (!response.ok) {
-      throw new EmailProviderError(
-        `provider_http_${response.status}`,
-        retryableHttpStatus(response.status)
-      );
-    }
-
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      throw new EmailProviderError("provider_invalid_response", true);
-    }
-    const providerMessageId = body && typeof body === "object" &&
-      typeof (body as {messageId?: unknown}).messageId === "string" ?
-      (body as {messageId: string}).messageId : "";
-    if (!providerMessageId || providerMessageId.length > 256) {
-      throw new EmailProviderError("provider_invalid_response", true);
-    }
+    const providerMessageId = await postBrevoEmail(
+      this.config.apiKey,
+      messageBody(message, this.config),
+      this.fetchImplementation
+    );
     return {provider: "brevo", providerMessageId};
   }
 }

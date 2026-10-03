@@ -27,11 +27,21 @@ String customerLastBoughtLabel(TenantCustomer customer) {
 }
 
 /// How a customer is reached, in one line: the masked number, and whether
-/// their receipts go to it on WhatsApp - said in words, never by a colour.
+/// their receipts go to it on WhatsApp or by email - said in words, never by a
+/// colour.
 String customerContactLine(TenantCustomer customer) {
   final masked = customer.maskedPhone;
-  if (masked == null) return customer.email ?? 'No number recorded';
-  return customer.whatsappOptIn ? '$masked · WhatsApp receipts' : masked;
+  final whatsapp = masked != null && customer.whatsappOptIn;
+  final email = customer.email != null && customer.emailOptIn;
+  final receipts = whatsapp && email
+      ? 'WhatsApp and email receipts'
+      : whatsapp
+      ? 'WhatsApp receipts'
+      : email
+      ? 'Email receipts'
+      : null;
+  final contact = masked ?? customer.email ?? 'No number recorded';
+  return receipts == null ? contact : '$contact · $receipts';
 }
 
 /// `Owes 1,200 · since 22 Sep`: what a customer owes and how long for.

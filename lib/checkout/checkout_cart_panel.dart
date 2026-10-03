@@ -48,6 +48,9 @@ import 'package:flutter/services.dart';
 
 import '../customers/customer.dart';
 import '../customers/customer_form.dart';
+import '../email_receipts/email_receipt_delivery.dart';
+import '../email_receipts/email_receipt_settings.dart';
+import '../email_receipts/send_email_receipt_sheet.dart';
 import '../inventory/catalog_management.dart';
 import '../inventory/product_visual.dart';
 import '../tenancy/tenant_catalog.dart';
@@ -474,6 +477,20 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
     ).load()).settings;
   }
 
+  /// What the business has chosen for email receipts, from one read - null
+  /// where the till cannot queue one, as for WhatsApp.
+  _EmailReceiptRead? _emailReceiptsFor(TenantSession session) {
+    final services = widget.customers;
+    if (services == null || services.emailReceiptWriter == null) return null;
+    return ({required bool cached}) async =>
+        (await TenantEmailReceiptRepository(
+          session: session,
+          reader: cached
+              ? (services.reader.cached ?? services.reader)
+              : services.reader,
+        ).load()).settings;
+  }
+
   /// Whether this session's person may agree a price, from one read.
   _PriceAgreementRead? _mayAgreePriceFor(TenantSession session) {
     final load = widget.loadPriceAgreement;
@@ -536,6 +553,8 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
           onCustomerUsed: widget.onCustomerUsed,
           readEReceipts: _eReceiptsFor(session),
           receiptWriter: widget.customers?.receiptWriter,
+          readEmailReceipts: _emailReceiptsFor(session),
+          emailReceiptWriter: widget.customers?.emailReceiptWriter,
           onSetUpPrinter:
               session.canAccess(
                 allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
@@ -844,6 +863,8 @@ final class _CartEditor extends StatefulWidget {
     this.onCustomerUsed,
     this.readEReceipts,
     this.receiptWriter,
+    this.readEmailReceipts,
+    this.emailReceiptWriter,
   });
 
   /// Reads the business's WhatsApp receipt setting, from this device or the
@@ -852,6 +873,13 @@ final class _CartEditor extends StatefulWidget {
 
   /// Where *Send on WhatsApp* queues a receipt.
   final TenantWhatsappReceiptWriter? receiptWriter;
+
+  /// Reads the business's email receipt setting. Absent, no sale offers a
+  /// receipt by email.
+  final _EmailReceiptRead? readEmailReceipts;
+
+  /// Where *Send by email* queues a receipt.
+  final TenantEmailReceiptWriter? emailReceiptWriter;
 
   /// Told once a sale is durable, so the till can read the stock again.
   final VoidCallback? onSaved;
@@ -977,11 +1005,15 @@ final class _CartEditorState extends State<_CartEditor> {
   /// the setting reports a sale as it always did.
   TenantEReceiptSettings _eReceipts = TenantEReceiptSettings.off;
 
+  /// The same for email receipts.
+  TenantEmailReceiptSettings _emailReceipts = TenantEmailReceiptSettings.off;
+
   @override
   void initState() {
     super.initState();
     unawaited(_readPriceAgreement());
     unawaited(_readEReceipts());
+    unawaited(_readEmailReceipts());
   }
 
   @override
@@ -1054,6 +1086,22 @@ final class _CartEditorState extends State<_CartEditor> {
       }
       if (!mounted) return;
       setState(() => _eReceipts = settings);
+    }
+  }
+
+  /// The email setting, read as the WhatsApp one is.
+  Future<void> _readEmailReceipts() async {
+    final read = widget.readEmailReceipts;
+    if (read == null) return;
+    for (final cached in const <bool>[true, false]) {
+      final TenantEmailReceiptSettings settings;
+      try {
+        settings = await read(cached: cached);
+      } catch (_) {
+        continue;
+      }
+      if (!mounted) return;
+      setState(() => _emailReceipts = settings);
     }
   }
 
@@ -2047,13 +2095,18 @@ final class _CartEditorState extends State<_CartEditor> {
   bool get _offersWhatsapp =>
       widget.receiptWriter != null && _eReceipts.whatsappEnabled;
 
+  /// Whether this till offers email receipts at all.
+  bool get _offersEmail =>
+      widget.emailReceiptWriter != null && _emailReceipts.emailEnabled;
+
   /// The sentence a saved sale is reported in, and - where the business sends
-  /// receipts on WhatsApp - what happens to its receipt.
+  /// receipts on WhatsApp or by email - what happens to its receipt.
   ///
   /// **Automatic, for a customer who agreed**: the sentence says the receipt is
-  /// coming and needs no button. **Anyone else**: the sentence is the usual one
-  /// and carries *Send on WhatsApp*, opened on the customer's number when the
-  /// sale named one. Either way the sale is already written; nothing here
+  /// coming, and how, and needs no button. **Anyone else**: the sentence is the
+  /// usual one and carries the send button - *Send on WhatsApp* or *Send by
+  /// email* where the business uses one channel, *Send receipt* asking which
+  /// where it uses both. Either way the sale is already written; nothing here
   /// stands between the cashier and the next customer.
   void _reportSaved(
     BuildContext context,
@@ -2061,19 +2114,34 @@ final class _CartEditorState extends State<_CartEditor> {
     String? checkoutId,
     TenantCustomer? customer,
   ]) {
-    if (!_offersWhatsapp || checkoutId == null) {
+    final whatsapp = _offersWhatsapp;
+    final email = _offersEmail;
+    if ((!whatsapp && !email) || checkoutId == null) {
       showAppSnackBar(
         context,
         AppNotice.confirmed('Saved as $receipt. It syncs on its own.'),
       );
       return;
     }
-    if (_eReceipts.sendsAutomatically && (customer?.receivesWhatsapp ?? false)) {
+    final byWhatsapp =
+        whatsapp &&
+        _eReceipts.sendsAutomatically &&
+        (customer?.receivesWhatsapp ?? false);
+    final byEmail =
+        email &&
+        _emailReceipts.sendsAutomatically &&
+        (customer?.receivesEmail ?? false);
+    if (byWhatsapp || byEmail) {
+      final how = byWhatsapp && byEmail
+          ? 'on WhatsApp and by email'
+          : byWhatsapp
+          ? 'on WhatsApp'
+          : 'by email';
       showAppSnackBar(
         context,
         AppNotice.confirmed(
-          'Saved as $receipt. ${customer!.name} gets the receipt on WhatsApp '
-          'once it syncs.',
+          'Saved as $receipt. ${customer!.name} gets the receipt $how once it '
+          'syncs.',
         ),
       );
       return;
@@ -2081,14 +2149,81 @@ final class _CartEditorState extends State<_CartEditor> {
     showAppSnackBar(
       context,
       AppNotice.confirmed('Saved as $receipt. It syncs on its own.'),
-      action: AppButton(
-        key: const ValueKey('checkout-send-whatsapp'),
-        label: 'Send on WhatsApp',
-        icon: Icons.send_outlined,
-        tier: AppButtonTier.tertiary,
-        onPressed: () => _sendOnWhatsapp(context, receipt, checkoutId, customer),
+      action: whatsapp && email
+          ? AppButton(
+              key: const ValueKey('checkout-send-receipt'),
+              label: 'Send receipt',
+              icon: Icons.send_outlined,
+              tier: AppButtonTier.tertiary,
+              onPressed: () =>
+                  _chooseChannel(context, receipt, checkoutId, customer),
+            )
+          : whatsapp
+          ? AppButton(
+              key: const ValueKey('checkout-send-whatsapp'),
+              label: 'Send on WhatsApp',
+              icon: Icons.send_outlined,
+              tier: AppButtonTier.tertiary,
+              onPressed: () =>
+                  _sendOnWhatsapp(context, receipt, checkoutId, customer),
+            )
+          : AppButton(
+              key: const ValueKey('checkout-send-email'),
+              label: 'Send by email',
+              icon: Icons.mail_outline,
+              tier: AppButtonTier.tertiary,
+              onPressed: () =>
+                  _sendByEmail(context, receipt, checkoutId, customer),
+            ),
+    );
+  }
+
+  /// *Send receipt* where both channels are on: which one, then its sheet.
+  Future<void> _chooseChannel(
+    BuildContext context,
+    String receipt,
+    String checkoutId,
+    TenantCustomer? customer,
+  ) async {
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    final channel = await showAppSheet<_ReceiptChannel>(
+      context,
+      builder: (sheetContext, scrollController) => _ReceiptChannelSheet(
+        receipt: receipt,
+        scrollController: scrollController,
+        onChosen: (channel) => Navigator.of(sheetContext).pop(channel),
       ),
     );
+    if (!context.mounted || channel == null) return;
+    switch (channel) {
+      case _ReceiptChannel.whatsapp:
+        await _sendOnWhatsapp(context, receipt, checkoutId, customer);
+      case _ReceiptChannel.email:
+        await _sendByEmail(context, receipt, checkoutId, customer);
+    }
+  }
+
+  Future<void> _sendByEmail(
+    BuildContext context,
+    String receipt,
+    String checkoutId,
+    TenantCustomer? customer,
+  ) async {
+    final writer = widget.emailReceiptWriter;
+    final session = TenantSessionScope.of(context).session;
+    if (writer == null || session == null) return;
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    final notice = await showSendEmailReceiptSheet(
+      context,
+      session: session,
+      writer: writer,
+      saleId: checkoutId,
+      receiptLabel: receipt,
+      customerName: customer?.name,
+      customerEmail: customer?.email,
+    );
+    if (!context.mounted || notice == null) return;
+    showAppSnackBar(context, notice);
   }
 
   Future<void> _sendOnWhatsapp(
@@ -2568,6 +2703,62 @@ typedef _PriceAgreementRead = Future<bool> Function({required bool cached});
 /// server - the same two reads, for the same reason, as the price agreement.
 typedef _EReceiptRead =
     Future<TenantEReceiptSettings> Function({required bool cached});
+
+/// Reads the business's email receipt setting, as [_EReceiptRead] does.
+typedef _EmailReceiptRead =
+    Future<TenantEmailReceiptSettings> Function({required bool cached});
+
+/// The two ways a receipt can leave the till other than paper.
+enum _ReceiptChannel { whatsapp, email }
+
+/// *Send receipt*, where the business sends both ways: one tap each.
+final class _ReceiptChannelSheet extends StatelessWidget {
+  const _ReceiptChannelSheet({
+    required this.receipt,
+    required this.scrollController,
+    required this.onChosen,
+  });
+
+  final String receipt;
+  final ScrollController scrollController;
+  final ValueChanged<_ReceiptChannel> onChosen;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('checkout-receipt-channel'),
+      controller: scrollController,
+      padding: EdgeInsets.all(tokens.spacing.s24),
+      children: <Widget>[
+        Text(
+          'Send receipt $receipt',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s24),
+        AppButton(
+          key: const ValueKey('checkout-receipt-channel-whatsapp'),
+          label: 'On WhatsApp',
+          icon: Icons.chat_outlined,
+          tier: AppButtonTier.secondary,
+          expand: true,
+          onPressed: () => onChosen(_ReceiptChannel.whatsapp),
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        AppButton(
+          key: const ValueKey('checkout-receipt-channel-email'),
+          label: 'By email',
+          icon: Icons.mail_outline,
+          tier: AppButtonTier.secondary,
+          expand: true,
+          onPressed: () => onChosen(_ReceiptChannel.email),
+        ),
+      ],
+    );
+  }
+}
 
 /// One price agreed at the till, against the listed total it was agreed from.
 @immutable

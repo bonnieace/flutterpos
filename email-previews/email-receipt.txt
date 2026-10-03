@@ -1,0 +1,33 @@
+Subject: Receipt JOHN-CT-7F2-001 from Mama Njeri Shop
+
+UZAPAY
+
+Thank you for shopping at Mama Njeri Shop
+
+Here is your receipt for KES 700.00. A PDF copy is attached to keep.
+
+Mama Njeri Shop
+Fresh every morning
+
+Receipt: JOHN-CT-7F2-001
+Date: 3 Oct 2026
+Served by: John Kamau
+Customer: Jane Wanjiku
+
+2 x Maize flour 2kg - KES 271.00
+  @ KES 135.50
+1 x Sugar 1kg - KES 135.00
+  SUG-1KG
+1 x Cooking oil 1L - KES 320.00
+
+Subtotal: KES 726.00
+Discount: KES -26.00
+TOTAL: KES 700.00
+Paid by: M-Pesa
+
+Keep this receipt for returns
+
+You are receiving this because you agreed to get receipts from Mama Njeri Shop by email.
+
+Don't want receipts by email? Stop email receipts:
+https://auth.uzapay.co.ke/receipts/unsubscribe?t=r1.v1.preview.preview

@@ -25,6 +25,7 @@ import 'package:flutter/material.dart';
 import '../customers/customer.dart';
 import '../customers/customer_card.dart';
 import '../customers/customer_form.dart';
+import '../email_receipts/email_receipt_delivery.dart';
 import '../observability/app_telemetry.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
@@ -46,6 +47,7 @@ final class CheckoutCustomerServices {
     required this.reader,
     this.writer,
     this.receiptWriter,
+    this.emailReceiptWriter,
   });
 
   /// The overlay reader the routes hold, so a customer queued on this device
@@ -59,6 +61,10 @@ final class CheckoutCustomerServices {
   /// Where a cashier's *Send on WhatsApp* is queued. Null offers no such
   /// button, whatever the business's WhatsApp setting says.
   final TenantWhatsappReceiptWriter? receiptWriter;
+
+  /// Where a cashier's *Send by email* is queued. Null offers no such button,
+  /// whatever the business's email setting says.
+  final TenantEmailReceiptWriter? emailReceiptWriter;
 }
 
 /// What the cashier chose.

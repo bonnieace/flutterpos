@@ -39,6 +39,7 @@ import 'package:uzapay_pos/checkout/checkout_configuration.dart';
 import 'package:uzapay_pos/checkout/checkout_price_agreement.dart';
 import 'package:uzapay_pos/checkout/checkout_print_configuration.dart';
 import 'package:uzapay_pos/customers/customers.dart';
+import 'package:uzapay_pos/email_receipts/email_receipts.dart';
 import 'package:uzapay_pos/expenses/expense_repository.dart';
 import 'package:uzapay_pos/inventory/bulk_catalog.dart';
 import 'package:uzapay_pos/inventory/catalog_management.dart';
@@ -425,6 +426,23 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
         'Receipt deliveries: the management three, who can act on a failed '
         'one.',
   ),
+  // **The three registered on 2026-10-03 with email receipts**, the WhatsApp
+  // three again for the inbox. Server-side, the `configuration` and
+  // `email_receipt_deliveries` rules.
+  'TenantEmailReceiptRepository.writeRoles': (
+    expected: TenantEmailReceiptRepository.writeRoles,
+    row: 'Email receipt settings: owner/administrator.',
+  ),
+  'TenantEmailReceiptPublisher.allowedRoles': (
+    expected: TenantEmailReceiptPublisher.allowedRoles,
+    row: 'Publish email receipt settings: owner/administrator.',
+  ),
+  // | Email receipt deliveries | Full | Full | Full | No |
+  'TenantEmailReceiptDeliveryRepository.readRoles': (
+    expected: TenantEmailReceiptDeliveryRepository.readRoles,
+    row:
+        'Email receipt deliveries: the management three, as for WhatsApp.',
+  ),
 };
 
 /// What each guard should hold, written out rather than read off the guard.
@@ -501,6 +519,10 @@ const Map<String, List<TenantRole>> _fromTheMatrix = <String, List<TenantRole>>{
   'TenantEReceiptRepository.writeRoles': <TenantRole>[_o, _a],
   'TenantEReceiptPublisher.allowedRoles': <TenantRole>[_o, _a],
   'TenantReceiptDeliveryRepository.readRoles': _management,
+  // Registered 2026-10-03 with email receipts.
+  'TenantEmailReceiptRepository.writeRoles': <TenantRole>[_o, _a],
+  'TenantEmailReceiptPublisher.allowedRoles': <TenantRole>[_o, _a],
+  'TenantEmailReceiptDeliveryRepository.readRoles': _management,
 };
 
 /// Why this file does not assert which routes a role is offered.

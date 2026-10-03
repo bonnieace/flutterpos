@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:uzapay_pos/checkout/checkout.dart';
+import 'package:uzapay_pos/email_receipts/email_receipt_delivery.dart';
 import 'package:uzapay_pos/reporting/reporting.dart';
 import 'package:uzapay_pos/reports/analysis/sales_report.dart';
 import 'package:uzapay_pos/reports/report_period.dart';
@@ -1039,6 +1040,55 @@ void main() {
       expect(find.byKey(const ValueKey('sales-set-tender-co-1')), findsNothing);
     });
 
+    testWidgets('no sale offers email where the business sends none', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _SalesReader(<TenantQueryDocumentSnapshot>[_sale('co-1')]),
+        width: 1024,
+        role: TenantRole.manager,
+        emailReceiptWriter: _EmailReceiptWriter(),
+      );
+      await tester.tap(find.byKey(const ValueKey('sales-actions-co-1')));
+      await tester.pumpAndSettle();
+      // The business has not turned email receipts on.
+      expect(find.byKey(const ValueKey('sales-send-email-co-1')), findsNothing);
+    });
+
+    testWidgets('a sale is emailed from its menu where the business emails', (
+      tester,
+    ) async {
+      final writer = _EmailReceiptWriter();
+      await _pump(
+        tester,
+        _SalesReader(
+          <TenantQueryDocumentSnapshot>[_sale('co-1')],
+          emailReceipts: const <String, Object?>{
+            'emailEnabled': true,
+            'mode': 'manual',
+          },
+        ),
+        width: 1024,
+        role: TenantRole.manager,
+        emailReceiptWriter: writer,
+      );
+      await tester.tap(find.byKey(const ValueKey('sales-actions-co-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('sales-send-email-co-1')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('send-email-receipt-address')),
+        'jane@example.com',
+      );
+      await tester.tap(find.byKey(const ValueKey('send-email-receipt-submit')));
+      await tester.pumpAndSettle();
+
+      expect(writer.sent.single.saleId, 'co-1');
+      expect(writer.sent.single.email, 'jane@example.com');
+      expect(snackNotice(tester).message, contains('on its way'));
+    });
+
     testWidgets('a manager reprints, and the sentence names the receipt', (
       tester,
     ) async {
@@ -1334,6 +1384,7 @@ Future<void> _pump(
   SetSaleTenderCallable? tenderCallable,
   String? initialBusinessDate,
   String? initialStaffId,
+  TenantEmailReceiptWriter? emailReceiptWriter,
 }) async {
   tester.view.physicalSize = Size(width, 2400);
   tester.view.devicePixelRatio = 1;
@@ -1356,12 +1407,20 @@ Future<void> _pump(
             pageSize: pageSize,
             initialBusinessDate: initialBusinessDate,
             initialStaffId: initialStaffId,
+            emailReceiptWriter: emailReceiptWriter,
           ),
         ),
       ),
     ),
   );
   await tester.pumpAndSettle();
+}
+
+final class _EmailReceiptWriter implements TenantEmailReceiptWriter {
+  final List<TenantEmailReceiptIntent> sent = <TenantEmailReceiptIntent>[];
+
+  @override
+  Future<void> send(TenantEmailReceiptIntent intent) async => sent.add(intent);
 }
 
 /// A totals callable that answers only when the test says so.
@@ -1629,9 +1688,13 @@ final class _SalesReader
   _SalesReader(
     this.sales, {
     this.returns = const <TenantQueryDocumentSnapshot>[],
+    this.emailReceipts,
   });
 
   final List<TenantQueryDocumentSnapshot> sales;
+
+  /// The business's `configuration/email_receipts`, or null for none.
+  final Map<String, Object?>? emailReceipts;
 
   /// Holds every sales read until it completes, so a page turn can be watched
   /// while its page is still being read. Null answers at once.
@@ -1658,6 +1721,10 @@ final class _SalesReader
         path: path,
         data: const <String, Object?>{'currency': 'KES'},
       );
+    }
+    if (path == 'tenants/tenant-a/configuration/email_receipts' &&
+        emailReceipts != null) {
+      return TenantDocumentSnapshot(path: path, data: emailReceipts!);
     }
     final match = RegExp(r'^tenants/tenant-a/staff/([^/]+)$').firstMatch(path);
     if (match != null) {

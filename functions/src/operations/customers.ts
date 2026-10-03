@@ -30,7 +30,8 @@ import {MAXIMUM_PRODUCT_NAME_LENGTH} from "./productUpdate";
  * Changing or clearing the phone clears the consent in the same write, unless the
  * same correction records it again - the rule carerota's notification consent
  * follows, for the same reason: a tick recorded against one number is not
- * permission to message another.
+ * permission to message another. **Consent to email receipts belongs to the
+ * address the same way**, and is cleared when the email changes.
  *
  * **Any named customer may buy on credit, unless a manager blocks them.**
  * The developer ruled on 2026-10-02 that a limit is a step a shop does not
@@ -117,6 +118,7 @@ const ACCEPTED_CUSTOMER_DOCUMENT_KEYS = new Set<string>([
   "name",
   ...OPTIONAL_CUSTOMER_FIELDS,
   "whatsappOptIn",
+  "emailOptIn",
   "active",
   "creditLimitMinor",
   "creditBlocked",
@@ -138,6 +140,9 @@ export interface CustomerFields {
 
   /** True records consent now; false withdraws it. Absent leaves it alone. */
   whatsappOptIn?: boolean;
+
+  /** Consent to email receipts, read as [whatsappOptIn] is. */
+  emailOptIn?: boolean;
 
   active?: boolean;
 
@@ -345,6 +350,20 @@ export function readCustomerDocument(
       "A customer can agree to WhatsApp receipts only with a phone number."
     );
   }
+  if (document.emailOptIn !== undefined && document.emailOptIn !== null) {
+    if (typeof document.emailOptIn !== "boolean") {
+      throw new HttpsError("invalid-argument", "emailOptIn must be true or false.");
+    }
+    if (mode === "update" || document.emailOptIn) {
+      fields.emailOptIn = document.emailOptIn;
+    }
+  }
+  if (mode === "create" && fields.emailOptIn === true && !fields.email) {
+    throw new HttpsError(
+      "invalid-argument",
+      "A customer can agree to email receipts only with an email address."
+    );
+  }
   if (document.active !== undefined && document.active !== null) {
     if (typeof document.active !== "boolean") {
       throw new HttpsError("invalid-argument", "active must be true or false.");
@@ -463,6 +482,10 @@ export function customerCreateData(
     // From the actor, never from the payload.
     data.whatsappOptInBy = actorUid;
   }
+  if (fields.emailOptIn === true) {
+    data.emailOptIn = true;
+    data.emailOptInBy = actorUid;
+  }
   const search = customerSearchFields(fields.name as string, fields.phone);
   data.searchName = search.searchName;
   data.searchPrefixes = search.searchPrefixes;
@@ -501,6 +524,9 @@ export async function applyCustomerCreate(
     ...(data.whatsappOptIn === true ?
       {whatsappOptInAt: FieldValue.serverTimestamp()} :
       {}),
+    ...(data.emailOptIn === true ?
+      {emailOptInAt: FieldValue.serverTimestamp()} :
+      {}),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -513,6 +539,7 @@ export async function applyCustomerCreate(
 
 /** Who recorded consent and when, which go when consent does. */
 const OPT_IN_STAMP_FIELDS = ["whatsappOptInAt", "whatsappOptInBy"] as const;
+const EMAIL_OPT_IN_STAMP_FIELDS = ["emailOptInAt", "emailOptInBy"] as const;
 
 /**
  * Corrects one customer: their name, contact details, consent or standing.
@@ -557,6 +584,16 @@ export async function applyCustomerUpdate(
       "A customer can agree to WhatsApp receipts only with a phone number."
     );
   }
+  const storedEmail = snapshot.get("email");
+  const currentEmail = typeof storedEmail === "string" ? storedEmail : null;
+  const emailChanges = fields.email !== undefined && fields.email !== currentEmail;
+  const resultingEmail = fields.email !== undefined ? fields.email : currentEmail;
+  if (fields.emailOptIn === true && !resultingEmail) {
+    throw new HttpsError(
+      "failed-precondition",
+      "A customer can agree to email receipts only with an email address."
+    );
+  }
 
   const update: Record<string, unknown> = {};
   const cleared: string[] = [];
@@ -580,6 +617,19 @@ export async function applyCustomerUpdate(
     // confirmed by reading back the `false` it sent.
     update.whatsappOptIn = false;
     cleared.push(...OPT_IN_STAMP_FIELDS);
+  }
+  if (fields.emailOptIn === true) {
+    update.emailOptIn = true;
+    update.emailOptInAt = FieldValue.serverTimestamp();
+    update.emailOptInBy = options.actorUid;
+  } else if (
+    fields.emailOptIn === false ||
+    (emailChanges && snapshot.get("emailOptIn") === true)
+  ) {
+    // Withdrawn, or given for an address this customer no longer has - and
+    // an explicit `false`, as WhatsApp's is, for the queue to read back.
+    update.emailOptIn = false;
+    cleared.push(...EMAIL_OPT_IN_STAMP_FIELDS);
   }
   if (fields.name !== undefined || fields.phone !== undefined) {
     const storedName = snapshot.get("name");

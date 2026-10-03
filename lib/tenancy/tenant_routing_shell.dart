@@ -153,6 +153,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.customersRoles = const <TenantRole>[],
     this.whatsappReceiptsRoute,
     this.whatsappReceiptsRoles = const <TenantRole>[],
+    this.emailReceiptsRoute,
+    this.emailReceiptsRoles = const <TenantRole>[],
     this.productionRoute,
     this.productionRoles = const <TenantRole>[],
     this.receiptLookupRoute,
@@ -447,6 +449,13 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles the WhatsApp receipts route is offered to.
   final List<TenantRole> whatsappReceiptsRoles;
+
+  /// Optional email receipts route: whether receipts go to customers by
+  /// email, and what became of each one.
+  final Widget Function(TenantDataReader reader)? emailReceiptsRoute;
+
+  /// The roles the email receipts route is offered to.
+  final List<TenantRole> emailReceiptsRoles;
 
   /// Optional production route: what was made, and what it cost to make.
   final Widget Function(TenantDataReader reader)? productionRoute;
@@ -1477,6 +1486,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       customersRoles: widget.customersRoles,
       whatsappReceiptsRoute: widget.whatsappReceiptsRoute,
       whatsappReceiptsRoles: widget.whatsappReceiptsRoles,
+      emailReceiptsRoute: widget.emailReceiptsRoute,
+      emailReceiptsRoles: widget.emailReceiptsRoles,
       productionRoute: widget.productionRoute,
       productionRoles: widget.productionRoles,
       receiptLookupRoute: widget.receiptLookupRoute,
@@ -2824,6 +2835,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.customersRoles = const <TenantRole>[],
     this.whatsappReceiptsRoute,
     this.whatsappReceiptsRoles = const <TenantRole>[],
+    this.emailReceiptsRoute,
+    this.emailReceiptsRoles = const <TenantRole>[],
     this.productionRoute,
     this.productionRoles = const <TenantRole>[],
     this.receiptLookupRoute,
@@ -2957,6 +2970,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to: those who may publish its settings.
   final List<TenantRole> whatsappReceiptsRoles;
+
+  /// Builds the email receipts route; unreachable while it is absent.
+  final Widget Function(TenantDataReader reader)? emailReceiptsRoute;
+
+  /// The roles that route is offered to: those who may publish its settings.
+  final List<TenantRole> emailReceiptsRoles;
 
   /// Builds the production route; unreachable while it is absent.
   final Widget Function(TenantDataReader reader)? productionRoute;
@@ -4043,6 +4062,29 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               builder: (_) => TenantSessionScope(
                 controller: controller,
                 child: whatsappReceiptsRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    // **Beside WhatsApp, the third way a receipt leaves the shop**, added on
+    // 2026-10-03: the whole receipt in the customer's inbox, with the PDF.
+    if (emailReceiptsRoute != null &&
+        membership.role.canAccess(emailReceiptsRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('email-receipts'),
+        accent: AppIdentityAccent.blue,
+        label: 'Email',
+        description: 'Send receipts to customers by email instead of paper.',
+        group: 'Business',
+        icon: Symbols.mail_rounded,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: emailReceiptsRoute!(reader),
               ),
             ),
           );

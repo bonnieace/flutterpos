@@ -24,6 +24,7 @@ library;
 import '../checkout/checkout_configuration_writer.dart';
 import '../customers/customer.dart';
 import '../customers/customer_credit.dart';
+import '../email_receipts/email_receipt_delivery.dart';
 import '../expenses/expense_request.dart';
 import '../inventory/catalog_management.dart';
 import '../inventory/stock_take.dart';
@@ -378,6 +379,39 @@ final class QueuedTenantWhatsappReceiptWriter
       tenantId: intent.tenantId,
       operationId: 'whatsapp-receipt-${intent.deliveryId}',
       kind: TenantPendingMutationKind.whatsappReceiptRequest,
+      targetPath: intent.path,
+      payload: intent.callablePayload(),
+    );
+    _onQueued?.call();
+  }
+}
+
+/// Durable-first email receipt requests, for the WhatsApp writer's reason: the
+/// till promises the receipt the moment the cashier asks, offline or not.
+final class QueuedTenantEmailReceiptWriter implements TenantEmailReceiptWriter {
+  const QueuedTenantEmailReceiptWriter({
+    required TenantPendingMutationStore store,
+    required TenantPendingMutationUidProvider currentUid,
+    TenantQueuedMutationSignal? onQueued,
+  }) : _store = store,
+       _currentUid = currentUid,
+       _onQueued = onQueued;
+
+  final TenantPendingMutationStore _store;
+  final TenantPendingMutationUidProvider _currentUid;
+  final TenantQueuedMutationSignal? _onQueued;
+
+  @override
+  Future<void> send(TenantEmailReceiptIntent intent) async {
+    final uid = _currentUid();
+    if (uid == null) {
+      throw const TenantEmailReceiptException('receipt_no_session');
+    }
+    await _store.enqueue(
+      uid: uid,
+      tenantId: intent.tenantId,
+      operationId: 'email-receipt-${intent.deliveryId}',
+      kind: TenantPendingMutationKind.emailReceiptRequest,
       targetPath: intent.path,
       payload: intent.callablePayload(),
     );

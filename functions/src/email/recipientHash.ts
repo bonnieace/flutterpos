@@ -93,7 +93,8 @@ function recipientDigest(email: string, version: string, secret: string): string
     .digest("base64url");
 }
 
-function suppressionDocumentId(keyVersion: string, recipientHash: string): string {
+/** The suppression document a recipient's digest is kept under. */
+export function suppressionDocumentId(keyVersion: string, recipientHash: string): string {
   return createHash("sha256")
     .update(["email-suppression", keyVersion, recipientHash].join("\u0000"), "utf8")
     .digest("hex");

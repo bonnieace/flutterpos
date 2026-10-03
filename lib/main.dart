@@ -40,6 +40,7 @@ import 'shift/shift.dart';
 import 'suppliers/suppliers.dart';
 import 'customers/customers.dart';
 import 'whatsapp/whatsapp.dart';
+import 'email_receipts/email_receipts.dart';
 import 'ui/routes.dart';
 
 Future<void> main() async {
@@ -827,6 +828,12 @@ class SpiritPOSApp extends StatelessWidget {
       currentUid: () => FirebaseAuth.instance.currentUser?.uid,
       onQueued: checkoutSyncSignals.requestSyncAfterSave,
     );
+    // And one for every *Send by email*, for the same reason.
+    final emailReceiptWriter = QueuedTenantEmailReceiptWriter(
+      store: tenantMutationStore,
+      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+      onQueued: checkoutSyncSignals.requestSyncAfterSave,
+    );
     // **One counting screen, two doors onto it.** A cashier opens it from the
     // home menu; anybody who can read *Stock counts* opens it from the button on
     // that screen. Built once rather than at each call site, so the draft box,
@@ -1000,6 +1007,7 @@ class SpiritPOSApp extends StatelessWidget {
       initialBusinessDate: businessDate,
       initialStaffId: staffId,
       receiptWriter: whatsappReceiptWriter,
+      emailReceiptWriter: emailReceiptWriter,
       reportSaver: const SharedFileTenantReportSaver(),
       imageCache: tenantImageCache,
     );
@@ -1546,6 +1554,21 @@ class SpiritPOSApp extends StatelessWidget {
               statusCheck: firebaseWhatsappReceiptStatus,
             ),
             whatsappReceiptsRoles: TenantEReceiptPublisher.allowedRoles,
+            // Straight at the server too, with no status check: email goes
+            // through the Brevo account the account emails already use.
+            emailReceiptsRoute: (reader) => TenantEmailReceiptsScreen(
+              reader: reader,
+              writer: QueuedTenantConfigurationWriter(
+                store: tenantMutationStore,
+                cacheReader: reader.cached ?? reader,
+                currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                remote: FirebaseTenantConfigurationDocumentWriter(
+                  firestore: FirebaseFirestore.instance,
+                  isOnline: isOnline,
+                ),
+              ),
+            ),
+            emailReceiptsRoles: TenantEmailReceiptPublisher.allowedRoles,
             returnFeedRoute: (reader) => TenantReturnFeedScreen(
               reader: reader,
               actions: returnActions,
@@ -1688,6 +1711,7 @@ class SpiritPOSApp extends StatelessWidget {
                     reader: tenantDataReader,
                     writer: customerWriter,
                     receiptWriter: whatsappReceiptWriter,
+                    emailReceiptWriter: emailReceiptWriter,
                   ),
                   // **Cache first, then the server, and neither holds the
                   // till.** The cached answer is what lets *Agree a price*

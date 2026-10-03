@@ -207,6 +207,61 @@ test("consent is withdrawn on its own and the number stays", async () => {
   assert.equal(stored.whatsappOptIn, false);
 });
 
+test("email consent is recorded with who gave it, and needs an address", async () => {
+  const createError = await refusal(() => readCustomerDocument(
+    {name: "Jane", emailOptIn: true},
+    "create"
+  ));
+  assert.equal(createError.code, "invalid-argument");
+
+  const db = seeded();
+  await create(db, "cu_one", {name: "Jane", email: "jane@example.com", emailOptIn: true});
+  const stored = db.read(customerPath("cu_one")) ?? {};
+  assert.equal(stored.emailOptIn, true);
+  assert.equal(stored.emailOptInBy, ACTOR);
+  assert.ok(stored.emailOptInAt);
+  // The two consents are separate: agreeing to email says nothing of WhatsApp.
+  assert.equal("whatsappOptIn" in stored, false);
+
+  const bare = seeded({cu_two: {name: "Ann", active: true}});
+  const updateError = await refusal(() => update(bare, "cu_two", {emailOptIn: true}));
+  assert.equal(updateError.code, "failed-precondition");
+});
+
+test("changing the email clears email consent and leaves WhatsApp's alone", async () => {
+  const db = seeded({
+    cu_one: {
+      name: "Jane",
+      phone: "+254712345678",
+      email: "jane@example.com",
+      whatsappOptIn: true,
+      emailOptIn: true,
+      emailOptInBy: "uid-manager",
+      active: true,
+    },
+  });
+
+  await update(db, "cu_one", {email: "jane@work.example"});
+
+  const stored = db.read(customerPath("cu_one")) ?? {};
+  assert.equal(stored.email, "jane@work.example");
+  assert.equal(stored.emailOptIn, false);
+  assert.equal("emailOptInBy" in stored, false);
+  assert.equal(stored.whatsappOptIn, true);
+});
+
+test("email consent is withdrawn on its own and the address stays", async () => {
+  const db = seeded({
+    cu_one: {name: "Jane", email: "jane@example.com", emailOptIn: true, active: true},
+  });
+
+  await update(db, "cu_one", {emailOptIn: false});
+
+  const stored = db.read(customerPath("cu_one")) ?? {};
+  assert.equal(stored.email, "jane@example.com");
+  assert.equal(stored.emailOptIn, false);
+});
+
 test("a customer is marked inactive and back, and keeps their points", async () => {
   const db = seeded({cu_one: {name: "Jane", points: 40, active: true}});
 

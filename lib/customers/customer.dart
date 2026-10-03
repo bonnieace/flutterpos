@@ -60,6 +60,7 @@ final class TenantCustomer {
        // Consent is a `true` and nothing else: absent, `false` or malformed all
        // read as no, because a receipt sent without consent cannot be unsent.
        whatsappOptIn = data['whatsappOptIn'] == true,
+       emailOptIn = data['emailOptIn'] == true,
        // Absent reads as active: a customer is written active and only ever
        // marked otherwise explicitly.
        active = data['active'] != false,
@@ -87,6 +88,9 @@ final class TenantCustomer {
 
   /// Whether this customer agreed to get receipts on WhatsApp, for [phone].
   final bool whatsappOptIn;
+
+  /// Whether this customer agreed to get receipts by email, for [email].
+  final bool emailOptIn;
 
   /// Whether the customer is still offered at the till. An inactive customer
   /// keeps their name, history and points; they are simply not offered.
@@ -123,6 +127,9 @@ final class TenantCustomer {
 
   /// Whether a receipt may go to this customer on WhatsApp.
   bool get receivesWhatsapp => active && phone != null && whatsappOptIn;
+
+  /// Whether a receipt may go to this customer by email.
+  bool get receivesEmail => active && email != null && emailOptIn;
 
   /// The number shown beside the name where somebody else might see the
   /// screen: enough to tell two Johns apart, not enough to copy down.
@@ -203,6 +210,7 @@ final class TenantCustomerDraft {
     this.kraPin = '',
     this.notes = '',
     this.whatsappOptIn = false,
+    this.emailOptIn = false,
     this.creditLimitMinor,
     this.creditAllowed = true,
   });
@@ -215,6 +223,7 @@ final class TenantCustomerDraft {
         kraPin: customer.kraPin ?? '',
         notes: customer.notes ?? '',
         whatsappOptIn: customer.whatsappOptIn,
+        emailOptIn: customer.emailOptIn,
         creditLimitMinor: customer.creditLimitMinor,
         creditAllowed: !customer.creditBlocked,
       );
@@ -225,6 +234,7 @@ final class TenantCustomerDraft {
   final String kraPin;
   final String notes;
   final bool whatsappOptIn;
+  final bool emailOptIn;
 
   /// The credit limit to give, or null for none. Zero means none too.
   final int? creditLimitMinor;
@@ -376,6 +386,7 @@ final class TenantCustomerCreateIntent {
     required this.fields,
     required this.whatsappOptIn,
     required this.createdBy,
+    this.emailOptIn = false,
     this.creditLimitMinor,
     this.creditBlocked = false,
   });
@@ -385,6 +396,7 @@ final class TenantCustomerCreateIntent {
   final String customerId;
   final Map<TenantCustomerField, String?> fields;
   final bool whatsappOptIn;
+  final bool emailOptIn;
   final String createdBy;
 
   /// The credit limit given with the customer, or null for none.
@@ -406,6 +418,7 @@ final class TenantCustomerCreateIntent {
       for (final entry in fields.entries)
         if (entry.value != null) entry.key.wireKey: entry.value,
       if (whatsappOptIn) 'whatsappOptIn': true,
+      if (emailOptIn) 'emailOptIn': true,
       if (creditLimitMinor != null) 'creditLimitMinor': creditLimitMinor,
       if (creditBlocked) 'creditBlocked': true,
       'active': true,
@@ -430,6 +443,7 @@ final class TenantCustomerUpdateIntent {
     required this.whatsappOptIn,
     required this.active,
     required this.search,
+    this.emailOptIn,
     this.creditLimit,
     this.creditBlocked,
   });
@@ -443,6 +457,9 @@ final class TenantCustomerUpdateIntent {
 
   /// Consent recorded (true) or withdrawn (false), or null when unchanged.
   final bool? whatsappOptIn;
+
+  /// Email consent, read as [whatsappOptIn] is.
+  final bool? emailOptIn;
 
   /// The new standing, or null when it is not changing.
   final bool? active;
@@ -459,6 +476,7 @@ final class TenantCustomerUpdateIntent {
   Map<String, Object?> documentData() => <String, Object?>{
     for (final entry in changes.entries) entry.key.wireKey: entry.value,
     if (whatsappOptIn != null) 'whatsappOptIn': whatsappOptIn,
+    if (emailOptIn != null) 'emailOptIn': emailOptIn,
     if (active != null) 'active': active,
     if (creditLimit case final limit?) 'creditLimitMinor': limit.value,
     if (creditBlocked != null) 'creditBlocked': creditBlocked,
@@ -674,6 +692,10 @@ final class TenantCustomerRepository extends TenantReadRepository {
     if (optedIn && fields[TenantCustomerField.phone] == null) {
       throw const TenantCustomerException('consent_needs_phone');
     }
+    final emailOptedIn = draft.emailOptIn;
+    if (emailOptedIn && fields[TenantCustomerField.email] == null) {
+      throw const TenantCustomerException('consent_needs_email');
+    }
     // Credit is lending the shop's money, which is a manager's decision even
     // where a cashier may add the customer.
     final creditLimit = draft.normalizedCreditLimit();
@@ -692,6 +714,7 @@ final class TenantCustomerRepository extends TenantReadRepository {
       customerId: customerId,
       fields: Map<TenantCustomerField, String?>.unmodifiable(fields),
       whatsappOptIn: optedIn,
+      emailOptIn: emailOptedIn,
       createdBy: session.uid,
       creditLimitMinor: creditLimit,
       creditBlocked: !draft.creditAllowed,
@@ -728,10 +751,29 @@ final class TenantCustomerRepository extends TenantReadRepository {
     } else if (!draft.whatsappOptIn && customer.whatsappOptIn) {
       optIn = false;
     }
+    // **A new address withdraws the email consent given for the old one**, as
+    // a new number does WhatsApp's - the server's rule, sent explicitly.
+    final emailChanges = changes.containsKey(TenantCustomerField.email);
+    final resultingEmail = emailChanges
+        ? changes[TenantCustomerField.email]
+        : customer.email;
+    if (draft.emailOptIn && resultingEmail == null) {
+      throw const TenantCustomerException('consent_needs_email');
+    }
+    bool? emailOptIn;
+    if (draft.emailOptIn && (!customer.emailOptIn || emailChanges)) {
+      emailOptIn = true;
+    } else if (!draft.emailOptIn && customer.emailOptIn) {
+      emailOptIn = false;
+    }
     final creditLimit = draft.normalizedCreditLimit();
     final limitChanges = creditLimit != customer.creditLimitMinor;
     final blockChanges = draft.creditAllowed == customer.creditBlocked;
-    if (changes.isEmpty && optIn == null && !limitChanges && !blockChanges) {
+    if (changes.isEmpty &&
+        optIn == null &&
+        emailOptIn == null &&
+        !limitChanges &&
+        !blockChanges) {
       throw const TenantCustomerException('customer_unchanged');
     }
     final renamed =
@@ -742,6 +784,7 @@ final class TenantCustomerRepository extends TenantReadRepository {
       customerId: customer.id,
       changes: Map<TenantCustomerField, String?>.unmodifiable(changes),
       whatsappOptIn: optIn,
+      emailOptIn: emailOptIn,
       active: null,
       creditLimit: limitChanges ? (value: creditLimit) : null,
       creditBlocked: blockChanges ? !draft.creditAllowed : null,

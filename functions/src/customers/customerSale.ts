@@ -9,6 +9,7 @@ import type {DocumentReference, Firestore} from "firebase-admin/firestore";
 import {getFunctions} from "firebase-admin/functions";
 import {onDocumentCreated} from "firebase-functions/v2/firestore";
 import {onTaskDispatched} from "firebase-functions/v2/tasks";
+import {queueAutomaticEmailReceipt} from "../emailReceipts/deliveries";
 import {queueAutomaticReceipt} from "../whatsapp/deliveries";
 import {CUSTOMER_ID_SHAPE} from "./customerId";
 import {
@@ -382,6 +383,7 @@ export const processCustomerSale = onTaskDispatched<CustomerSaleTask>(
     // and the number, so queueing it twice sends it once.
     if (outcome.outcome === "counted" || outcome.outcome === "already_counted") {
       await queueAutomaticReceipt(db, data);
+      await queueAutomaticEmailReceipt(db, data);
     }
   }
 );

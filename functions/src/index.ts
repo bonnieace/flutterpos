@@ -119,3 +119,12 @@ export {
   receiveWhatsappWebhook,
   sendWhatsappReceipt,
 } from "./whatsapp/functions";
+
+// Receipts by email, through the Brevo account the account emails use: the
+// send itself, a cashier's request for one, and the page a customer stops
+// them on. Brevo's events reach them through `receiveBrevoEmailWebhook`.
+export {
+  deliverEmailReceipt,
+  sendEmailReceipt,
+  unsubscribeEmailReceipts,
+} from "./emailReceipts/functions";

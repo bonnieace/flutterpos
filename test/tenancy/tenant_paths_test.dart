@@ -114,6 +114,11 @@ void main() {
         TenantCollection.customers: 'tenants/tenant-a/customers',
         TenantCollection.receiptDeliveries:
             'tenants/tenant-a/receipt_deliveries',
+        // The email receipt counterpart, kept apart from WhatsApp's so neither
+        // channel's list or per-sale cap counts the other. Added deliberately
+        // on 2026-10-03.
+        TenantCollection.emailReceiptDeliveries:
+            'tenants/tenant-a/email_receipt_deliveries',
         // What customers paid back on credit, written only by
         // `recordCustomerPayment`. Added deliberately on 2026-10-01.
         TenantCollection.customerPayments:

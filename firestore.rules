@@ -945,6 +945,13 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // The same, for receipts sent by email: the address is stored masked,
+      // and only the delivery worker and Brevo's webhook write here.
+      match /email_receipt_deliveries/{deliveryId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
       // What customers paid back on credit. Management reads them all; a
       // cashier reads the ones they took, which is what their own shift's
       // drawer has to account for. Written only by `recordCustomerPayment`,
@@ -1148,6 +1155,17 @@ service cloud.firestore {
     }
 
     match /whatsapp_auto_replies/{documentId} {
+      allow read, write: if false;
+    }
+
+    // The email receipt counterparts: which business a Brevo message belongs
+    // to, and which addresses stopped email receipts. Server-only, keyed by
+    // digests rather than addresses.
+    match /email_receipt_messages/{documentId} {
+      allow read, write: if false;
+    }
+
+    match /email_receipt_suppressions/{documentId} {
       allow read, write: if false;
     }
 

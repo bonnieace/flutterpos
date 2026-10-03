@@ -90,6 +90,10 @@ enum TenantCollection {
   /// Written by the delivery worker and the webhook alone; read by management.
   receiptDeliveries('receipt_deliveries'),
 
+  /// The same for receipts sent by email, kept apart so neither channel's list
+  /// or three-per-sale cap counts the other's.
+  emailReceiptDeliveries('email_receipt_deliveries'),
+
   /// What customers paid back on credit. Written only by
   /// `recordCustomerPayment`, which moves the balance in the same
   /// transaction; read by management, and by the cashier who took each one.
@@ -167,6 +171,7 @@ final class TenantPaths {
     TenantCollection.productionBatches,
     TenantCollection.customers,
     TenantCollection.receiptDeliveries,
+    TenantCollection.emailReceiptDeliveries,
     TenantCollection.customerPayments,
   ];
 
@@ -209,6 +214,8 @@ final class TenantPaths {
   String get customers => collectionPath(TenantCollection.customers);
   String get receiptDeliveries =>
       collectionPath(TenantCollection.receiptDeliveries);
+  String get emailReceiptDeliveries =>
+      collectionPath(TenantCollection.emailReceiptDeliveries);
 
   String product(String productId) =>
       documentPath(TenantCollection.products, productId);
@@ -231,6 +238,8 @@ final class TenantPaths {
       documentPath(TenantCollection.customers, customerId);
   String receiptDelivery(String deliveryId) =>
       documentPath(TenantCollection.receiptDeliveries, deliveryId);
+  String emailReceiptDelivery(String deliveryId) =>
+      documentPath(TenantCollection.emailReceiptDeliveries, deliveryId);
   String customerPayment(String paymentId) =>
       documentPath(TenantCollection.customerPayments, paymentId);
   String staffMember(String uid) => documentPath(TenantCollection.staff, uid);

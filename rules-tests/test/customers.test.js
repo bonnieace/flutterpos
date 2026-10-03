@@ -58,6 +58,11 @@ async function seedRecords() {
       status: "sent",
       phoneMasked: "+25•••678",
     },
+    [`${ROOT}/email_receipt_deliveries/ed_one`]: {
+      saleId: "sale-a",
+      status: "delivered",
+      emailMasked: "j•••@example.com",
+    },
   });
 }
 
@@ -92,10 +97,12 @@ test("the points ledger and receipt deliveries are management's to read", async 
     const db = await asRole(role);
     await assertSucceeds(getDoc(doc(db, `${CUSTOMER}/activity/sale-a`)));
     await assertSucceeds(getDoc(doc(db, `${ROOT}/receipt_deliveries/rd_one`)));
+    await assertSucceeds(getDoc(doc(db, `${ROOT}/email_receipt_deliveries/ed_one`)));
   }
   const cashier = await asRole("cashier");
   await assertFails(getDoc(doc(cashier, `${CUSTOMER}/activity/sale-a`)));
   await assertFails(getDoc(doc(cashier, `${ROOT}/receipt_deliveries/rd_one`)));
+  await assertFails(getDoc(doc(cashier, `${ROOT}/email_receipt_deliveries/ed_one`)));
 });
 
 test("nobody writes the points ledger or a delivery record", async () => {
@@ -105,6 +112,9 @@ test("nobody writes the points ledger or a delivery record", async () => {
   await assertFails(
     updateDoc(doc(owner, `${ROOT}/receipt_deliveries/rd_one`), { status: "read" }),
   );
+  await assertFails(
+    updateDoc(doc(owner, `${ROOT}/email_receipt_deliveries/ed_one`), { status: "sent" }),
+  );
 });
 
 test("another business's customers are not readable", async () => {
@@ -113,17 +123,21 @@ test("another business's customers are not readable", async () => {
   await assertFails(getDoc(doc(outsider, CUSTOMER)));
 });
 
-test("the WhatsApp bookkeeping is server-only", async () => {
+test("the WhatsApp and email receipt bookkeeping is server-only", async () => {
   await seedDocuments(testEnvironment, {
     "whatsapp_messages/wamid.one": { tenantId: "tenant-a", deliveryId: "rd_one" },
     "whatsapp_suppressions/hash": { at: Timestamp.fromMillis(0) },
     "whatsapp_auto_replies/hash": { at: Timestamp.fromMillis(0) },
+    "email_receipt_messages/hash": { tenantId: "tenant-a", deliveryId: "ed_one" },
+    "email_receipt_suppressions/hash": { at: Timestamp.fromMillis(0) },
   });
   const owner = await asRole("owner");
   for (const path of [
     "whatsapp_messages/wamid.one",
     "whatsapp_suppressions/hash",
     "whatsapp_auto_replies/hash",
+    "email_receipt_messages/hash",
+    "email_receipt_suppressions/hash",
   ]) {
     await assertFails(getDoc(doc(owner, path)));
     await assertFails(setDoc(doc(owner, path), { forged: true }));

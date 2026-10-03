@@ -5,6 +5,7 @@ import {
   Timestamp,
 } from "firebase-admin/firestore";
 import {onRequest, Request} from "firebase-functions/v2/https";
+import {applyEmailReceiptEvent} from "../emailReceipts/deliveries";
 import {EMAIL_BREVO_WEBHOOK_SECRET, EMAIL_RECIPIENT_HMAC_KEYRING} from "./config";
 import {
   classifyBrevoEvent,
@@ -392,6 +393,19 @@ export const receiveBrevoEmailWebhook = onRequest(
         }, {merge: true});
       }
     });
+
+    // **A receipt's events too.** Its record lives with the business that sent
+    // it, not in `email_deliveries`, so it is found by its own index; an
+    // account email's message ID is in no such index and this does nothing.
+    // Applied on a replayed event as well: the move is monotonic, and a
+    // replay is how one that failed here gets a second try.
+    if (!matchingDelivery) {
+      await applyEmailReceiptEvent(db, {
+        providerMessageId: event.providerMessageId,
+        disposition: event.classification.disposition,
+        failure: event.classification.suppressionCategory ?? event.eventType,
+      });
+    }
 
     response.status(204).send();
   }

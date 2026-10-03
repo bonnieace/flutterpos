@@ -107,6 +107,8 @@ String customerRefusalMessage(String code) => switch (code) {
     'Notes may be up to $maximumCustomerNotesLength characters.',
   'consent_needs_phone' =>
     'Add their number first: WhatsApp receipts go to a phone number.',
+  'consent_needs_email' =>
+    'Add their email first: email receipts go to an email address.',
   'invalid_customer_credit_limit' =>
     'A credit limit is a whole amount, zero or more.',
   'customer_unchanged' => 'Nothing has been changed yet.',
@@ -166,6 +168,7 @@ class _CustomerFormState extends State<_CustomerForm> {
     text: _editing?.notes ?? '',
   );
   late bool _optedIn = _editing?.whatsappOptIn ?? false;
+  late bool _emailOptedIn = _editing?.emailOptIn ?? false;
   late bool _creditAllowed = !(_editing?.creditBlocked ?? false);
 
   /// Whether this form offers the credit switch: away from the till, to the
@@ -197,6 +200,8 @@ class _CustomerFormState extends State<_CustomerForm> {
 
   bool get _hasNumber => _phone.text.trim().isNotEmpty;
 
+  bool get _hasEmail => _email.text.trim().isNotEmpty;
+
   bool get _canSubmit => !_busy && _name.text.trim().isNotEmpty;
 
   /// The number in E.164, '' for none, or null when what was typed is not a
@@ -221,6 +226,7 @@ class _CustomerFormState extends State<_CustomerForm> {
     kraPin: _kraPin.text,
     notes: _notes.text,
     whatsappOptIn: phone.isNotEmpty && _optedIn,
+    emailOptIn: _hasEmail && _emailOptedIn,
     // A limit set before limits were withdrawn is carried, never changed.
     creditLimitMinor: _editing?.creditLimitMinor,
     // Untouched where the form does not offer it: a cashier editing nothing
@@ -470,7 +476,25 @@ class _CustomerFormState extends State<_CustomerForm> {
             label: 'Email (optional)',
             leading: Icons.mail_outline,
             keyboardType: TextInputType.emailAddress,
+            onChanged: (_) => setState(() {}),
           ),
+          // Only once there is an address to agree for, as with WhatsApp.
+          if (_hasEmail) ...<Widget>[
+            SizedBox(height: tokens.spacing.s4),
+            CheckboxListTile(
+              key: const ValueKey('customer-form-email-consent'),
+              value: _emailOptedIn,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: const Text('Agreed to get receipts by email'),
+              subtitle: const Text(
+                'Ask them first. Every receipt has a link to stop them.',
+              ),
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() => _emailOptedIn = value ?? false),
+            ),
+          ],
           SizedBox(height: tokens.spacing.s12),
           AppTextField(
             key: const ValueKey('customer-form-notes'),

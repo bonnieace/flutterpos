@@ -145,9 +145,11 @@ final class FirebaseTenantMutationGateway
     // fail - and a failing read is retried for ever rather than ever sending
     // again. Answering "nothing there" lets the worker do what settles it:
     // send again, which the server answers from its idempotency record.
+    // An email receipt request is the same, for the same reason.
     final segments = targetPath.split('/');
     if (segments.length == 4 &&
-        segments[2] == TenantCollection.receiptDeliveries.segment) {
+        (segments[2] == TenantCollection.receiptDeliveries.segment ||
+            segments[2] == TenantCollection.emailReceiptDeliveries.segment)) {
       return null;
     }
     final snapshot = await _firestore
@@ -287,6 +289,8 @@ final class FirebaseTenantMutationGateway
         // record on the request ID inside it, so a replay sends one receipt.
         case TenantPendingMutationKind.whatsappReceiptRequest:
           await _call('sendWhatsappReceipt', record.payload);
+        case TenantPendingMutationKind.emailReceiptRequest:
+          await _call('sendEmailReceipt', record.payload);
         // The request without what the queue keeps to confirm it by: the
         // server reads the day from the shift and the cashier from the call.
         case TenantPendingMutationKind.customerPayment:

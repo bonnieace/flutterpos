@@ -115,6 +115,13 @@ enum TenantPendingMutationKind {
   /// not read `receipt_deliveries`, so reading back could never confirm it.
   whatsappReceiptRequest,
 
+  /// Asking for one sale's receipt to be sent to one address by email.
+  ///
+  /// [whatsappReceiptRequest] in every respect but the channel: the payload is
+  /// the callable's whole request, addressed to the delivery record the server
+  /// will write, and settled by sending it again.
+  emailReceiptRequest,
+
   /// A customer paying back what they owe, into the cashier's own shift.
   ///
   /// **Confirmed by reading it back**, which a cashier may: the payment
@@ -156,6 +163,7 @@ bool tenantMutationIsCallable(TenantPendingMutationKind kind) => switch (kind) {
   // A delivery record is the server's to write, and sending is the server's
   // to do.
   TenantPendingMutationKind.whatsappReceiptRequest ||
+  TenantPendingMutationKind.emailReceiptRequest ||
   // A balance is the server's to move, with the ledger entry that explains it.
   TenantPendingMutationKind.customerPayment ||
   // **Neither of these writes a quantity.** They are here for the other half of
@@ -193,7 +201,8 @@ bool tenantMutationIsCallable(TenantPendingMutationKind kind) => switch (kind) {
 /// what it already did.
 bool tenantMutationResendConfirms(TenantPendingMutationKind kind) =>
     kind == TenantPendingMutationKind.stockAdjust ||
-    kind == TenantPendingMutationKind.whatsappReceiptRequest;
+    kind == TenantPendingMutationKind.whatsappReceiptRequest ||
+    kind == TenantPendingMutationKind.emailReceiptRequest;
 
 /// Whether the documents a record of [kind] touched are read from the server
 /// once it lands.
@@ -1574,6 +1583,21 @@ final class TenantPendingMutationOverlayReader
             'customerName': name,
           'createdAt': canonical?['createdAt'] ?? record.createdAt,
         };
+      // The same, masked the way the server masks an address.
+      case TenantPendingMutationKind.emailReceiptRequest:
+        final email = record.payload['email'];
+        final at = email is String ? email.lastIndexOf('@') : -1;
+        return <String, Object?>{
+          if (canonical != null) ...canonical,
+          'saleId': record.payload['saleId'],
+          'trigger': 'manual',
+          'status': canonical?['status'] ?? 'queued',
+          if (email is String && at > 0)
+            'emailMasked': '${email.substring(0, 1)}•••${email.substring(at)}',
+          if (record.payload['customerName'] case final String name)
+            'customerName': name,
+          'createdAt': canonical?['createdAt'] ?? record.createdAt,
+        };
       // The payment as the server will write it. The customer it touches is
       // drawn as the server last said: lowering a balance here and again when
       // the server's own figure arrives would show it paid twice.
@@ -1990,6 +2014,7 @@ void _requireTarget(
     TenantPendingMutationKind.customerCreate ||
     TenantPendingMutationKind.customerUpdate => 'customers',
     TenantPendingMutationKind.whatsappReceiptRequest => 'receipt_deliveries',
+    TenantPendingMutationKind.emailReceiptRequest => 'email_receipt_deliveries',
     TenantPendingMutationKind.customerPayment => 'customer_payments',
   };
   if (collection != expected) {

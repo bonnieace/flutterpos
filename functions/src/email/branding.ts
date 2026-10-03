@@ -50,6 +50,46 @@ export interface BrandedNotice {
   body: string;
 }
 
+/** One labelled figure on a receipt: its date, who served, a total. */
+export interface BrandedFact {
+  label: string;
+  value: string;
+  /** Drawn larger and bold, for the one figure the reader is looking for. */
+  emphasis?: boolean;
+}
+
+/** One line of a receipt: what was bought, at what, and what it came to. */
+export interface BrandedLineItem {
+  description: string;
+  /** The smaller line under it - the unit price, the SKU. */
+  detail?: string;
+  amount: string;
+}
+
+/**
+ * An itemised record, in the paper receipt's order: whose it is and when,
+ * what was bought, and what it came to.
+ *
+ * **Only the receipt email draws one.** The account emails carry a single
+ * action and nothing to itemise, and render exactly as they did before this
+ * block existed.
+ */
+export interface BrandedReceipt {
+  heading: string;
+  subheading?: string;
+  facts: BrandedFact[];
+  items: BrandedLineItem[];
+  totals: BrandedFact[];
+  closing?: string;
+}
+
+/** A link in the footer: the way out of messages the reader keeps getting. */
+export interface BrandedFooterLink {
+  text: string;
+  label: string;
+  url: string;
+}
+
 export interface BrandedEmail {
   /**
    * The snippet an inbox prints beside the subject. It is the second thing a
@@ -59,11 +99,13 @@ export interface BrandedEmail {
   eyebrow: string;
   title: string;
   lead: string;
+  receipt?: BrandedReceipt;
   body?: string[];
   steps?: string[];
   action?: BrandedAction;
   notice?: BrandedNotice;
   footnote: string;
+  footerLink?: BrandedFooterLink;
 }
 
 export function htmlEscape(value: string): string {
@@ -193,6 +235,95 @@ function noticePanel(notice: BrandedNotice): string {
     "</td></tr></table></td></tr>";
 }
 
+const FACT_LABEL_STYLE = `font-family:${INTERFACE_STACK};font-size:14px;` +
+  `line-height:22px;color:${brandPalette.muted};`;
+
+const FACT_VALUE_STYLE = `font-family:${INTERFACE_STACK};font-size:14px;` +
+  `line-height:22px;color:${brandPalette.ink};`;
+
+const EMPHASIS_STYLE = `font-family:${HEADING_STACK};font-size:18px;` +
+  `line-height:26px;font-weight:700;color:${brandPalette.ink};`;
+
+/** Label left, value right; the value never wraps, the label may. */
+function factRows(facts: BrandedFact[]): string {
+  return facts.map((fact) => {
+    const label = fact.emphasis ? EMPHASIS_STYLE : FACT_LABEL_STYLE;
+    const value = fact.emphasis ? EMPHASIS_STYLE : FACT_VALUE_STYLE;
+    const top = fact.emphasis ? 8 : 3;
+    return "<tr>" +
+      `<td valign="top" style="padding:${top}px 12px 3px 0;${label}">` +
+      `${htmlEscape(fact.label)}</td>` +
+      `<td valign="top" align="right" style="padding:${top}px 0 3px;` +
+      `white-space:nowrap;${value}">${htmlEscape(fact.value)}</td>` +
+      "</tr>";
+  }).join("");
+}
+
+/** A dashed rule, the paper receipt's separator, as a one-row table. */
+function receiptRule(): string {
+  return '<tr><td style="padding:0 20px;">' +
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" ` +
+    `width="100%"><tr><td style="border-top:1px dashed ${brandPalette.raised};` +
+    'font-size:0;line-height:0;height:1px;">&nbsp;</td></tr></table>' +
+    "</td></tr>";
+}
+
+/**
+ * The receipt, boxed.
+ *
+ * **The inner tables are not fixed-layout**, unlike the rest of this file: an
+ * amount is set `nowrap` and takes the width it needs, and the description
+ * beside it wraps into what is left - which on a 320 px phone is the only
+ * arrangement that keeps `KES 12,450.00` on one line.
+ */
+function receiptBlock(receipt: BrandedReceipt): string {
+  const table = (rows: string) =>
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" ` +
+    `width="100%">${rows}</table>`;
+  const items = receipt.items.map((item) =>
+    "<tr>" +
+    `<td valign="top" style="padding:6px 12px 6px 0;` +
+    `font-family:${INTERFACE_STACK};font-size:15px;line-height:22px;` +
+    `color:${brandPalette.ink};">${htmlEscape(item.description)}` +
+    (item.detail ?
+      `<div style="font-size:13px;line-height:20px;color:${brandPalette.muted};">` +
+      `${htmlEscape(item.detail)}</div>` :
+      "") +
+    "</td>" +
+    `<td valign="top" align="right" style="padding:6px 0;white-space:nowrap;` +
+    `font-family:${INTERFACE_STACK};font-size:15px;line-height:22px;` +
+    `color:${brandPalette.ink};">${htmlEscape(item.amount)}</td>` +
+    "</tr>"
+  ).join("");
+  return `<tr><td style="padding-top:28px;">` +
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" ` +
+    `width="100%" style="table-layout:fixed;border-collapse:separate;` +
+    `border:1px solid ${brandPalette.hairline};border-radius:14px;">` +
+    `<tr><td style="padding:20px 20px 4px;">` +
+    `<p style="margin:0;font-family:${HEADING_STACK};font-size:18px;` +
+    `line-height:26px;font-weight:700;color:${brandPalette.ink};">` +
+    `${htmlEscape(receipt.heading)}</p>` +
+    (receipt.subheading ?
+      `<p style="margin:2px 0 0;font-family:${INTERFACE_STACK};font-size:13px;` +
+      `line-height:20px;color:${brandPalette.muted};">` +
+      `${htmlEscape(receipt.subheading)}</p>` :
+      "") +
+    "</td></tr>" +
+    `<tr><td style="padding:8px 20px 14px;">${table(factRows(receipt.facts))}</td></tr>` +
+    receiptRule() +
+    `<tr><td style="padding:10px 20px;">${table(items)}</td></tr>` +
+    receiptRule() +
+    `<tr><td style="padding:12px 20px 18px;">` +
+    `${table(factRows(receipt.totals))}</td></tr>` +
+    "</table>" +
+    (receipt.closing ?
+      `<p style="margin:14px 0 0;font-family:${INTERFACE_STACK};font-size:13px;` +
+      `line-height:20px;text-align:center;color:${brandPalette.muted};">` +
+      `${htmlEscape(receipt.closing)}</p>` :
+      "") +
+    "</td></tr>";
+}
+
 /** Approved UzaPay logo on the landing page's deep-green header. */
 function masthead(): string {
   return '<tr><td bgcolor="#0c1510" ' +
@@ -222,6 +353,15 @@ const PROGRESSIVE_STYLES = `
       .cta { display: block !important; text-align: center !important; }
     }`;
 
+/** The footer's one link, underlined so it reads as a link without colour. */
+function footerLink(link: BrandedFooterLink): string {
+  return `<p class="muted" style="margin:12px 0 0;font-family:${INTERFACE_STACK};` +
+    `font-size:12px;line-height:19px;color:${brandPalette.outline};">` +
+    `${htmlEscape(link.text)} <a href="${htmlEscape(link.url)}" ` +
+    `style="color:${brandPalette.secondary};text-decoration:underline;">` +
+    `${htmlEscape(link.label)}</a></p>\n`;
+}
+
 export function renderBrandedEmailHtml(email: BrandedEmail): string {
   const sections = [
     "<tr><td>" +
@@ -237,6 +377,7 @@ export function renderBrandedEmailHtml(email: BrandedEmail): string {
     `<tr><td style="padding-top:14px;">` +
       `<p class="ink" style="${LEAD_STYLE}">${htmlEscape(email.lead)}</p>` +
       "</td></tr>",
+    email.receipt ? receiptBlock(email.receipt) : "",
     email.body?.length ? paragraphs(email.body) : "",
     email.steps?.length ? steps(email.steps) : "",
     email.action ? actionButton(email.action) : "",
@@ -276,7 +417,7 @@ ${masthead()}
 </td></tr>
 <tr><td style="padding:24px 8px 0;">
 <p class="muted" style="margin:0;font-family:${INTERFACE_STACK};font-size:12px;line-height:19px;color:${brandPalette.outline};">${htmlEscape(email.footnote)}</p>
-<p class="muted" style="margin:12px 0 0;font-family:${INTERFACE_STACK};font-size:12px;line-height:19px;color:${brandPalette.outline};">Sent by ${htmlEscape(BRAND_NAME)}. This message carries no tracking pixel and no click tracking.</p>
+${email.footerLink ? footerLink(email.footerLink) : ""}<p class="muted" style="margin:12px 0 0;font-family:${INTERFACE_STACK};font-size:12px;line-height:19px;color:${brandPalette.outline};">Sent by ${htmlEscape(BRAND_NAME)}. This message carries no tracking pixel and no click tracking.</p>
 </td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
@@ -301,6 +442,7 @@ export function renderBrandedEmailText(email: BrandedEmail): string {
     "",
     email.lead,
   ];
+  if (email.receipt) lines.push("", ...receiptText(email.receipt));
   for (const paragraph of email.body ?? []) lines.push("", paragraph);
   if (email.steps?.length) {
     lines.push("");
@@ -313,5 +455,24 @@ export function renderBrandedEmailText(email: BrandedEmail): string {
     lines.push("", `${email.notice.title.toUpperCase()}: ${email.notice.body}`);
   }
   lines.push("", email.footnote);
+  if (email.footerLink) {
+    lines.push("", `${email.footerLink.text} ${email.footerLink.label}:`,
+      email.footerLink.url);
+  }
   return lines.join("\n");
+}
+
+/** The receipt as plain lines: facts, items with their detail, totals. */
+function receiptText(receipt: BrandedReceipt): string[] {
+  const fact = (item: BrandedFact) => `${item.label}: ${item.value}`;
+  const lines = [receipt.heading];
+  if (receipt.subheading) lines.push(receipt.subheading);
+  lines.push("", ...receipt.facts.map(fact), "");
+  for (const item of receipt.items) {
+    lines.push(`${item.description} - ${item.amount}`);
+    if (item.detail) lines.push(`  ${item.detail}`);
+  }
+  lines.push("", ...receipt.totals.map(fact));
+  if (receipt.closing) lines.push("", receipt.closing);
+  return lines;
 }

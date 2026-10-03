@@ -85,6 +85,13 @@
       "**/.git/**",
       "**/.DS_Store"
     ],
+    "_comment_rewrites": "/receipts/unsubscribe is the link in every email receipt (functions/src/emailReceipts/unsubscribe.ts), served on this domain rather than a Cloud Run hostname. Deploy hosting with the functions, or the link 404s.",
+    "rewrites": [
+      {
+        "source": "/receipts/unsubscribe",
+        "function": {"functionId": "unsubscribeEmailReceipts", "region": "us-central1"}
+      }
+    ],
     "headers": [
       {
         "source": "**",
