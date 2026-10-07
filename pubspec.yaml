@@ -42,7 +42,6 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   flutter_secure_storage: ^9.2.4
-  flutter_native_splash: ^2.3.10
   image_picker: ^1.0.7
   
 
@@ -218,6 +217,13 @@ flutter_launcher_icons:
   remove_alpha_ios: true
   background_color_ios: "#071610"
 
+# Splash images, already generated into android/ and ios/. The package is not a
+# dependency: the app never calls it, and Flutter puts every plugin - dev ones
+# too - into the iOS build, where 2.4.4's Swift package is rejected by Xcode
+# (2.4.5+ fixes it but needs archive 4, which excel 4.0.6 cannot share). To
+# regenerate after changing this section:
+#   dart pub global activate flutter_native_splash 2.4.4
+#   dart pub global run flutter_native_splash:create
 flutter_native_splash:
   color: "#071610"
   color_dark: "#071610"
