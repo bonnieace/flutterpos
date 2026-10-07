@@ -1,0 +1,73 @@
+# Compiles the iOS app without signing, so no Apple account is needed.
+#
+# Two builds:
+#   - `flutter build ios --release --no-codesign`: the real device build,
+#     every plugin's native code included. It proves the app compiles; it
+#     cannot be installed anywhere.
+#   - `flutter build ios --simulator`: a debug build for the iOS Simulator,
+#     uploaded as an artifact. Unzip it on a Mac and drag Runner.app onto a
+#     booted simulator to use the app against SIT.
+#
+# The Podfile is not committed yet, so Flutter generates one here; it and its
+# lock file are uploaded either way, for committing once the build is green.
+#
+# macOS minutes bill at 10x on private repositories.
+
+name: iOS build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/ios-build.yml'
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build for device (unsigned)
+        run: flutter build ios --release --no-codesign
+
+      - name: Build for simulator
+        run: flutter build ios --simulator
+
+      - name: Zip simulator app
+        run: ditto -c -k --keepParent build/ios/iphonesimulator/Runner.app "$RUNNER_TEMP/Runner-simulator.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-app
+          path: ${{ runner.temp }}/Runner-simulator.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-podfile
+          path: |
+            ios/Podfile
+            ios/Podfile.lock
+          if-no-files-found: ignore
+          retention-days: 14
