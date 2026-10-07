@@ -15,6 +15,7 @@ import {
   SaleLike,
   TenderBreakdown,
 } from "./domain";
+import {readSalesSummaries} from "./salesSummaries";
 import {readPeriodReturns} from "./returnOffsets";
 
 interface SalesComparisonRequest {
@@ -65,13 +66,21 @@ export interface SalesComparisonQuery {
 }
 
 const SALES_QUERY_LIMIT = 5_000;
-// Tenant-wide revenue and profit are management data. Cashier reporting needs
-// a separate self-scoped contract that cannot be widened by the client.
-const REPORTING_ROLES = ["owner", "admin", "manager"] as const;
+// Cashier requests are forced to self and have profit redacted below.
+const REPORTING_ROLES = ["owner", "admin", "manager", "cashier"] as const;
 
 function optionalDocumentId(value: unknown, field: string): string | undefined {
   const parsed = optionalString(value, field, {maxLength: 128});
   return parsed === undefined ? undefined : requireDocumentId(parsed, field);
+}
+
+/** Enforced after canonical membership authorization, before any report read. */
+export function resolveSalesReportStaff(role: string, uid: string, requested?: string): string | undefined {
+  if (role !== "cashier") return requested;
+  if (requested !== undefined && requested !== uid) {
+    throw new HttpsError("permission-denied", "Cashiers may only read their own totals.");
+  }
+  return uid;
 }
 
 export const getTenantSalesComparison = onCall<
@@ -83,17 +92,25 @@ export const getTenantSalesComparison = onCall<
   const previousStartDate = requireIsoDate(data.previousStartDate, "previousStartDate");
   const previousEndDate = requireIsoDate(data.previousEndDate, "previousEndDate");
   assertDateRange(previousStartDate, previousEndDate);
-  const soldById = optionalDocumentId(data.soldById, "soldById");
+  let soldById = optionalDocumentId(data.soldById, "soldById");
   const categoryId = optionalDocumentId(data.categoryId, "categoryId");
   const db = getFirestore();
-  await requireTenantMember(db, request, tenantId, REPORTING_ROLES);
-  return buildSalesComparison(db, {
+  const actor = await requireTenantMember(db, request, tenantId, REPORTING_ROLES);
+  soldById = resolveSalesReportStaff(actor.staff.role, actor.uid, soldById);
+  const answer = await readSalesSummaries(db, {
     tenantId,
     previousStartDate,
     previousEndDate,
     soldById,
     categoryId,
   });
+  if (actor.staff.role === "cashier") {
+    answer.previous.profit = 0;
+    answer.net.profit = 0;
+    answer.previous.incompleteCostLineCount = 1;
+    answer.net.incompleteCostLineCount = 1;
+  }
+  return answer;
 });
 
 /**

@@ -163,6 +163,7 @@ final class _TenantShiftAmendmentPanelState
       allowedRoles: TenantShiftAmendmentFeedRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (page) => page.items.isEmpty,
       denied: const Center(
         key: ValueKey('shift-amendments-denied'),
         child: Text('Shift corrections are available to managers and owners.'),

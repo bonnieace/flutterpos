@@ -826,6 +826,7 @@ final class _NavigationDrawer extends StatelessWidget {
                       destinationKey: destination.destinationKey,
                       label: destination.label,
                       icon: destination.icon,
+                      brandIcon: destination.brandIcon,
                       status: destination.status,
                       isPrimary: destination.isPrimary,
                       group: destination.group,

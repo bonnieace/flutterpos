@@ -21,11 +21,18 @@
 ///
 /// **The state matrix is the detents**, because that is the only thing that
 /// varies: a sheet is a container and has no hover, no focus, no disabled and no
-/// error of its own. What it holds brings those.
+/// error of its own. What it holds brings those - and its close control, which
+/// is an [AppIconButton] and brings that component's.
+///
+/// **Every sheet carries a close control at its top right**, at the
+/// developer's direction on 2026-10-05. No drag dismisses a sheet and a form's
+/// scrim may not either, so without it the way out was whatever button the
+/// content happened to end on, sometimes a scroll away.
 library;
 
 import 'package:flutter/material.dart';
 
+import 'buttons.dart';
 import 'tokens.dart';
 
 /// Where a sheet is allowed to come to rest, as a fraction of the screen.
@@ -290,6 +297,26 @@ final class _Surface extends StatelessWidget {
   static Widget _inkable(Widget child) =>
       Material(type: MaterialType.transparency, child: child);
 
+  /// The close control, at the top right of every sheet.
+  ///
+  /// **`maybePop`, so it is a back gesture and not a trapdoor**: a sheet that
+  /// guards itself with a `PopScope` - mid-save, say - refuses it the way it
+  /// refuses the system back. It answers null, which every caller already reads
+  /// as cancelled, because the scrim has always answered the same.
+  ///
+  /// **The headings' ink, not the tier's green**, at the developer's direction
+  /// on 2026-10-05: green is the colour of an action that does something, and
+  /// closing a sheet does nothing to anything.
+  Widget _close(BuildContext context) => AppIconButton(
+    key: const ValueKey('app-sheet-close'),
+    icon: Icons.close,
+    semanticLabel: 'Close',
+    tier: AppButtonTier.tertiary,
+    bordered: false,
+    glyphColor: AppTokens.componentOf(context).colors.text.primary,
+    onPressed: () => Navigator.of(context).maybePop(),
+  );
+
   /// The bar itself, without the strip it normally sits in.
   Widget _handle(AppTokens tokens) => Semantics(
     label: 'Drag to resize',
@@ -321,9 +348,29 @@ final class _Surface extends StatelessWidget {
             // **The handle is outside the content's scroll**, so it stays under
             // the finger while the list moves. It is also the drag target a
             // person aims at when the content itself is scrolled to the top.
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: tokens.spacing.s12),
-              child: _handle(tokens),
+            //
+            // The close control shares its strip rather than floating over the
+            // content, where it would sit on the end of a long title. The strip
+            // is the control's own height, and the handle keeps its place at
+            // the top of it.
+            Stack(
+              alignment: Alignment.topCenter,
+              children: <Widget>[
+                Padding(
+                  padding: EdgeInsets.only(top: tokens.spacing.s12),
+                  child: _handle(tokens),
+                ),
+                Align(
+                  alignment: Alignment.topRight,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top: tokens.spacing.s4,
+                      right: tokens.spacing.s8,
+                    ),
+                    child: _close(context),
+                  ),
+                ),
+              ],
             ),
             Expanded(child: _inkable(child)),
           ],
@@ -372,6 +419,28 @@ final class _Surface extends StatelessWidget {
                             padding: EdgeInsets.all(tokens.spacing.s4),
                             child: _handle(tokens),
                           ),
+                        ),
+                      ),
+                    ),
+                    // **On the sheet's own surface, not the handle's scrim.** A
+                    // glyph has to hold §9's contrast over a photograph of any
+                    // brightness, and a fifth of the scrim does that for a bar,
+                    // not for a cross someone has to read.
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          top: tokens.spacing.s4,
+                          right: tokens.spacing.s8,
+                        ),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: tokens.colors.surface.overlay,
+                            borderRadius: BorderRadius.circular(
+                              tokens.radius.md,
+                            ),
+                          ),
+                          child: _close(context),
                         ),
                       ),
                     ),

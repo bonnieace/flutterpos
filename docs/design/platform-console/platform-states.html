@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform console &#8212; states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@500&amp;display=swap">
+<style>
+/* Profound Verdant tokens, as lib/ui/tokens.dart states them. Sample world: Tue 20 Oct 2026, 09:40. */
+
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, input, select, textarea { font: inherit; }
+p { margin: 0; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 48px 32px; padding: 20px 24px 64px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.frame { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; overflow: hidden; }
+figcaption { font-size: 13px; line-height: 19px; color: #869585; max-width: 760px; text-align: center; }
+figcaption b { color: #BCCBB9; font-weight: 600; }
+
+/* Frames. 1280 is the harness's desktop viewport, 411 its mobile one. */
+.desk { width: 1280px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; }
+.phone { width: 411px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; }
+.bar { height: 72px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 32px; }
+.phone .bar { height: 56px; padding: 0 4px; gap: 4px; }
+.bar-title { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .bar-title { padding-left: 12px; }
+.phone .bar .ibtn + .bar-title { padding-left: 0; }
+.grow { flex-grow: 1; min-width: 0; }
+.ibtn { width: 48px; height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: transparent; color: #D4E7DD; position: relative; cursor: pointer; }
+.ibtn.muted { color: #869585; }
+.ibtn.go { color: #4BE277; }
+.count { position: absolute; top: 4px; right: 4px; min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box; border-radius: 999px; background: #EF4444; color: #071610; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 500; display: flex; align-items: center; justify-content: center; }
+.body { padding: 8px 32px 40px; display: flex; flex-direction: column; gap: 24px; }
+.phone .body { padding: 4px 16px 24px; gap: 16px; }
+
+.card { background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.pad { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.phone .pad { padding: 16px; }
+.h-sec { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+.overline { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #BCCBB9; }
+.body-m { font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.body-l { font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.cap { font-size: 12px; line-height: 16px; color: #869585; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.name { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; }
+.row { display: flex; align-items: center; gap: 16px; }
+.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; }
+.stack { display: flex; flex-direction: column; }
+.divider { height: 1px; background: #283831; border: 0; margin: 0; }
+
+/* StatusBadge: a container, a glyph and a word. */
+.bdg { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; box-sizing: border-box; border-radius: 8px; border: 1px solid; font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.t-ok { background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30); color: #4BE277; }
+.t-att { background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30); color: #F2C14E; }
+.t-prob { background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); color: #EF4444; }
+.t-info { background: rgba(176, 205, 189, 0.10); border-color: rgba(176, 205, 189, 0.30); color: #B0CDBD; }
+.t-neu { background: #283831; border-color: #3D4A3D; color: #BCCBB9; }
+.t-priv { background: rgba(167, 139, 250, 0.16); border-color: rgba(167, 139, 250, 0.30); color: #A78BFA; }
+.pill { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; box-sizing: border-box; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.you { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 999px; background: #283831; color: #D4E7DD; font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; }
+
+/* AppButton: 48 tall (40 at md), radius.md, labelLarge. */
+.btn { height: 48px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-sizing: border-box; border-radius: 8px; border: 1px solid #3D4A3D; background: #132A1F; color: #D4E7DD; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+.btn.md { height: 40px; padding: 0 16px; }
+.btn.pri { background: #4BE277; border-color: #4BE277; color: #003915; }
+.btn.danger, .btn.danger-fill { background: transparent; border-color: #EF4444; color: #EF4444; }
+.btn.ghost { background: transparent; border-color: transparent; color: #4BE277; padding: 0 12px; }
+.btn.full { width: 100%; }
+.btn:disabled { background: #1E3A2B; border-color: #1E3A2B; color: #5D7468; cursor: not-allowed; }
+.btn.hov { background: #6BFF8F; border-color: #6BFF8F; }
+.btn.foc { outline: 2px solid #4BE277; outline-offset: 2px; }
+
+/* FilterChipBar: 32 tall, radius.lg, the count in the label. */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.phone .chips { flex-wrap: nowrap; overflow: hidden; margin-right: -16px; }
+.chip { height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; border-radius: 12px; border: 1px solid #3D4A3D; background: transparent; color: #BCCBB9; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+.chip .n { color: inherit; font-weight: 600; }
+.chip.on { background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30); color: #4BE277; }
+.chip.on .n { color: #4BE277; }
+
+/* Fields. */
+.field { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #869585; font-size: 16px; line-height: 24px; }
+.field.val { color: #D4E7DD; }
+.field.err { border-color: #EF4444; }
+.field.foc { border-color: #4BE277; box-shadow: 0 0 0 1px #4BE277; }
+.field.area { height: auto; min-height: 96px; align-items: flex-start; padding: 12px 16px; }
+.field .sel { margin-left: auto; color: #BCCBB9; display: flex; }
+.lbl { font-size: 14px; line-height: 20px; font-weight: 600; color: #D4E7DD; }
+.help { font-size: 12px; line-height: 16px; color: #869585; }
+.help.err { color: #EF4444; }
+.fgroup { display: flex; flex-direction: column; gap: 8px; }
+
+/* The identity ring from the staff design: surface.field behind the
+   initials, the hue only on the ring. */
+.av { width: 48px; height: 48px; flex-shrink: 0; box-sizing: border-box; border-radius: 12px; background: #132A1F; border: 2px solid; display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 24px; font-weight: 700; color: #D4E7DD; }
+.av.sm { width: 40px; height: 40px; font-size: 14px; }
+.av.muted { color: #869585; }
+
+/* List rows: one card per record, as Staff draws them. */
+.rows { display: flex; flex-direction: column; gap: 8px; }
+.lrow { display: flex; align-items: center; gap: 16px; padding: 16px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.lrow.prob { border-color: rgba(239, 68, 68, 0.30); }
+.lrow.top { align-items: flex-start; }
+.phone .lrow { gap: 12px; padding: 12px; }
+.lmain { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.lline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lsub { font-size: 14px; line-height: 21px; color: #BCCBB9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lside { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; text-align: right; }
+.lnote { font-size: 12px; line-height: 16px; color: #869585; }
+.lnote.prob { color: #EF4444; }
+.lnote.att { color: #F2C14E; }
+
+/* Callouts. */
+.callout { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border-radius: 12px; border: 1px solid; }
+.callout.prob { background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); }
+.callout.info { background: rgba(176, 205, 189, 0.10); border-color: rgba(176, 205, 189, 0.30); }
+.callout.ok { background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30); }
+.callout.att { background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30); }
+.callout > svg { flex-shrink: 0; margin-top: 2px; }
+.ct { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; }
+.cb { font-size: 14px; line-height: 21px; color: #BCCBB9; }
+
+/* Module tiles: the tenant home's tile, a glyph well in a module hue. */
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.tile { display: flex; gap: 16px; align-items: flex-start; padding: 20px; background: #132A1F; border: 1px solid #283831; border-radius: 12px; text-align: left; cursor: pointer; color: inherit; }
+.tile:hover { border-color: #3D4A3D; }
+.well { width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; position: relative; box-sizing: border-box; }
+.well .count { top: -6px; right: -6px; }
+.tile-t { font-size: 18px; line-height: 28px; font-weight: 600; color: #D4E7DD; }
+.tile-d { font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.ptiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 4px; }
+.ptile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0; background: transparent; border: 0; color: #D4E7DD; font-size: 14px; line-height: 20px; font-weight: 600; cursor: pointer; }
+.ptile .well { width: 56px; height: 56px; border-radius: 16px; }
+
+/* The figures band. */
+.figs { display: flex; padding: 20px 8px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.fig { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 0 16px; min-width: 0; }
+.fig + .fig { border-left: 1px solid #283831; }
+.fig-head { display: flex; align-items: center; gap: 10px; }
+.fig-chip { width: 32px; height: 32px; flex-shrink: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.fig-v { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 30px; line-height: 36px; font-weight: 500; color: #D4E7DD; }
+.fig-v.prob { color: #EF4444; }
+.fig-d { font-size: 12px; line-height: 16px; color: #869585; }
+.pfigs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pfig { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+
+/* Facts strip: label over value, no chips. */
+.facts { display: grid; grid-template-columns: repeat(4, 1fr); }
+.facts > div { padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.facts > div + div { border-left: 1px solid #283831; }
+.fact-v { font-size: 16px; line-height: 24px; color: #D4E7DD; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pfacts { display: flex; flex-direction: column; }
+.pfacts > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; min-height: 48px; box-sizing: border-box; }
+.pfacts > div + div { border-top: 1px solid #283831; }
+
+/* History timeline. */
+.tl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.tl li { display: flex; gap: 12px; position: relative; padding-bottom: 20px; }
+.tl li:last-child { padding-bottom: 0; }
+.tl li:not(:last-child)::before { content: ''; position: absolute; left: 15.5px; top: 32px; bottom: 0; width: 1px; background: #283831; }
+.tl .dot { width: 32px; height: 32px; box-sizing: border-box; border-radius: 999px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid; }
+.tl .tx { display: flex; flex-direction: column; gap: 4px; padding-top: 5px; min-width: 0; }
+
+/* Activity lines. */
+.acts { display: flex; flex-direction: column; }
+.act { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; }
+.act + .act { border-top: 1px solid #1C3328; }
+.act-i { width: 36px; height: 36px; box-sizing: border-box; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #132A1F; border: 1px solid #283831; color: #BCCBB9; }
+.act-m { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.act-s { font-size: 14px; line-height: 21px; color: #D4E7DD; }
+.act-s b { font-weight: 600; }
+.act-r { font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.act-t { font-size: 12px; line-height: 21px; color: #869585; flex-shrink: 0; white-space: nowrap; }
+.day { padding: 16px 0 4px; }
+
+/* Dialog. */
+.backdrop { background: rgba(3, 17, 11, 0.72); padding: 32px; display: flex; justify-content: center; align-items: flex-start; }
+.dlg { width: 480px; box-sizing: border-box; background: #132A1F; border: 1px solid #283831; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); }
+.dlg h3 { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.dlg .acts-row { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; }
+.dlg .field { background: #0D1F16; }
+.sheet { width: 411px; box-sizing: border-box; background: #132A1F; border-top: 1px solid #283831; border-radius: 12px 12px 0 0; padding: 8px 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+.grab { width: 32px; height: 4px; border-radius: 2px; background: #3D4A3D; align-self: center; margin: 4px 0 4px; }
+
+/* Skeletons: surface.raised bars centred in the line they stand for. */
+.sk { background: #132A1F; border-radius: 4px; }
+
+/* Charts. */
+.legend { display: flex; flex-direction: column; gap: 8px; }
+.legend > div { display: flex; align-items: center; gap: 12px; }
+.legend .v { margin-left: auto; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; font-weight: 500; color: #D4E7DD; }
+.stackbar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; gap: 2px; }
+
+/* States board. */
+.spec { display: flex; flex-direction: column; gap: 12px; }
+.spec-t { font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: #869585; }
+.board { width: 1280px; box-sizing: border-box; padding: 40px; background: #071610; display: flex; flex-direction: column; gap: 48px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.wrap8 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* ---- Bottom navigation: a floating stadium. Inactive destinations are a
+   56 circle with a glyph; the current one grows into a pill holding a
+   primary-filled circle and its name. One bar for desktop and phone. */
+.has-nav { position: relative; }
+.has-nav .body { padding-bottom: 128px; }
+.phone.has-nav .body { padding-bottom: 104px; }
+.nav { position: absolute; left: 50%; transform: translateX(-50%); bottom: 24px; display: flex; align-items: center; gap: 8px; padding: 8px; background: #0D1F16; border: 1px solid #283831; border-radius: 999px; box-shadow: 0 16px 40px rgba(3, 17, 11, 0.7); z-index: 2; }
+.nav.static { position: static; transform: none; box-shadow: none; }
+.nv-i { display: flex; align-items: center; gap: 12px; height: 56px; border-radius: 999px; background: #132A1F; color: #BCCBB9; text-decoration: none; position: relative; flex-shrink: 0; }
+.nv-c { width: 56px; height: 56px; box-sizing: border-box; border-radius: 999px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.nv-i.on { padding-right: 24px; }
+.nv-i.on .nv-c { background: #4BE277; color: #003915; }
+.nv-l { font-size: 14px; line-height: 20px; font-weight: 600; color: #D4E7DD; white-space: nowrap; }
+.nv-i .count { top: 0; right: 0; }
+.nv-i.on .count { right: auto; left: 36px; }
+.nv-i.hov { background: #283831; color: #D4E7DD; }
+.nv-i.foc { outline: 2px solid #4BE277; outline-offset: 2px; }
+.nv-i.prs { background: #3D4A3D; color: #D4E7DD; }
+.phone .nav { bottom: 16px; gap: 6px; padding: 6px; }
+.phone .nv-i { height: 48px; gap: 8px; }
+.phone .nv-c { width: 48px; height: 48px; }
+.phone .nv-i.on { padding-right: 16px; }
+.phone .nv-l { font-size: 14px; line-height: 20px; }
+.phone .nv-i.on .count { left: 32px; }
+.scrim-b { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; background: linear-gradient(to bottom, rgba(7, 22, 16, 0), #071610 70%); z-index: 1; pointer-events: none; }
+.viewport { height: 891px; overflow: hidden; }
+
+/* Alternatives from the references, for comparison only. */
+.navb { display: flex; align-items: center; justify-content: space-around; height: 72px; padding: 0 12px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.navb a { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px; border-radius: 999px; color: #BCCBB9; text-decoration: none; box-sizing: border-box; }
+.navb a.on { background: rgba(75, 226, 119, 0.10); border: 1px solid rgba(75, 226, 119, 0.30); color: #4BE277; padding: 0 16px; font-size: 14px; font-weight: 600; }
+.navc { position: relative; display: flex; align-items: center; justify-content: space-around; height: 64px; padding: 0 12px; background: #132A1F; border-radius: 999px; margin-top: 28px; }
+.navc a { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; color: #BCCBB9; }
+.navc a.on { width: 64px; height: 64px; margin-top: -40px; border-radius: 999px; background: #4BE277; color: #003915; box-shadow: 0 0 0 8px #071610; }
+
+/* ---- Dashboard tile: the one component the overview is made of. Header
+   (glyph chip, overline, go), value line (figure + context), a visual of
+   fixed height, footer. Every tile, every size. */
+.dash { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.dt { display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; color: inherit; min-width: 0; }
+.dt:hover { border-color: #3D4A3D; }
+.dt.s2 { grid-column: span 2; }
+.dt-h { display: flex; align-items: center; gap: 10px; height: 32px; }
+.dt-h .go { margin-left: auto; color: #869585; display: flex; }
+.dt-vrow { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.dt-v { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 30px; line-height: 36px; font-weight: 500; color: #D4E7DD; flex-shrink: 0; }
+.dt-v.prob { color: #EF4444; }
+.dt-c { font-size: 14px; line-height: 21px; color: #BCCBB9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dt-vis { height: 56px; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
+.dt-vis.tall { height: 184px; justify-content: flex-start; }
+.dt-f { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 16px; font-size: 12px; line-height: 16px; color: #869585; }
+.dt-f .sw { display: inline-flex; align-items: center; gap: 6px; }
+.mini { display: flex; align-items: center; gap: 12px; height: 46px; border-top: 1px solid #1C3328; min-width: 0; }
+.mini:first-child { border-top: 0; }
+.mini .mt { font-size: 14px; line-height: 21px; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-grow: 1; }
+.mini .mt b { font-weight: 600; }
+.mini .mm { font-size: 12px; line-height: 16px; color: #869585; flex-shrink: 0; }
+.phone .dash { grid-template-columns: 1fr 1fr; gap: 8px; }
+.phone .dt { padding: 16px; gap: 10px; }
+.phone .dt.s2 { grid-column: span 2; }
+.phone .dt-v { font-size: 22px; line-height: 30.8px; }
+.phone .dt-c { font-size: 12px; line-height: 16px; }
+
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All platform console artboards</a></nav>
+<div class="page-stage">
+<figure>
+<div class="frame desk">
+<div class="board">
+  <div class="spec"><span class="spec-t">Standings &#8212; a glyph and a word, never colour alone</span>
+    <div class="grid3">
+      <div class="stack" style="gap: 8px;"><span class="cap">Business</span><div class="wrap8"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span><span class="bdg t-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg>Suspended</span><span class="bdg t-neu"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M10 12h4"/></svg>Archived</span></div></div>
+      <div class="stack" style="gap: 8px;"><span class="cap">Person</span><div class="wrap8"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Active</span><span class="bdg t-prob"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M17 8l4 4"/><path d="M21 8l-4 4"/></svg>Disabled</span><span class="bdg t-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></svg>Disabling</span><span class="bdg t-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></svg>Reactivating</span><span class="bdg t-priv"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/></svg>Platform administrator</span></div></div>
+      <div class="stack" style="gap: 8px;"><span class="cap">Alert, email, operation</span><div class="wrap8"><span class="bdg t-prob"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg>Open</span><span class="bdg t-neu"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Handled</span><span class="bdg t-prob"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6.5 8.5-6.5"/><path d="M2.5 2.5l19 19"/></svg>Not delivering</span><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6.5 8.5-6.5"/></svg>Delivering</span><span class="bdg t-neu"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Cleared</span><span class="bdg t-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></svg>Retrying</span><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Done</span></div></div>
+    </div>
+  </div>
+  <div class="spec"><span class="spec-t">Bottom navigation &#8212; the second reference, in this app&#8217;s tokens</span>
+    <div class="grid2" style="align-items: start;">
+      <div class="stack" style="gap: 12px;"><span class="cap">Each destination current, desktop size (56 targets)</span><div style="display: flex;"><nav class="nav static" aria-label="Platform"><a href="#" class="nv-i on " aria-current="page"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></span><span class="nv-l">Overview</span></a><a href="#" class="nv-i " aria-label="Businesses" title="Businesses"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span></a><a href="#" class="nv-i " aria-label="People" title="People"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></span></a><a href="#" class="nv-i " aria-label="Alerts, 2 open" title="Alerts"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></span><span class="count" aria-hidden="true">2</span></a><a href="#" class="nv-i " aria-label="Activity" title="Activity"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span></a></nav></div><div style="display: flex;"><nav class="nav static" aria-label="Platform"><a href="#" class="nv-i " aria-label="Overview" title="Overview"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></span></a><a href="#" class="nv-i on " aria-current="page"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span><span class="nv-l">Businesses</span></a><a href="#" class="nv-i " aria-label="People" title="People"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></span></a><a href="#" class="nv-i " aria-label="Alerts, 2 open" title="Alerts"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></span><span class="count" aria-hidden="true">2</span></a><a href="#" class="nv-i " aria-label="Activity" title="Activity"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span></a></nav></div><div style="display: flex;"><nav class="nav static" aria-label="Platform"><a href="#" class="nv-i " aria-label="Overview" title="Overview"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></span></a><a href="#" class="nv-i " aria-label="Businesses" title="Businesses"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span></a><a href="#" class="nv-i on " aria-current="page"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></span><span class="nv-l">People</span></a><a href="#" class="nv-i " aria-label="Alerts, 2 open" title="Alerts"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></span><span class="count" aria-hidden="true">2</span></a><a href="#" class="nv-i " aria-label="Activity" title="Activity"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span></a></nav></div><div style="display: flex;"><nav class="nav static" aria-label="Platform"><a href="#" class="nv-i " aria-label="Overview" title="Overview"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></span></a><a href="#" class="nv-i " aria-label="Businesses" title="Businesses"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span></a><a href="#" class="nv-i " aria-label="People" title="People"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></span></a><a href="#" class="nv-i on " aria-current="page"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></span><span class="nv-l">Alerts</span><span class="count" aria-hidden="true">2</span></a><a href="#" class="nv-i " aria-label="Activity" title="Activity"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span></a></nav></div><div style="display: flex;"><nav class="nav static" aria-label="Platform"><a href="#" class="nv-i " aria-label="Overview" title="Overview"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></span></a><a href="#" class="nv-i " aria-label="Businesses" title="Businesses"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span></a><a href="#" class="nv-i " aria-label="People" title="People"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></span></a><a href="#" class="nv-i " aria-label="Alerts, 2 open" title="Alerts"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></span><span class="count" aria-hidden="true">2</span></a><a href="#" class="nv-i on " aria-current="page"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span><span class="nv-l">Activity</span></a></nav></div></div>
+      <div class="stack" style="gap: 12px;">
+        <span class="cap">Hover on People, focus-visible on Alerts, pressed on Activity</span><div style="display: flex;"><nav class="nav static" aria-label="Platform"><a href="#" class="nv-i " aria-label="Overview" title="Overview"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></span></a><a href="#" class="nv-i on " aria-current="page"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span><span class="nv-l">Businesses</span></a><a href="#" class="nv-i hov" aria-label="People" title="People"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></span></a><a href="#" class="nv-i foc" aria-label="Alerts, 2 open" title="Alerts"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></span><span class="count" aria-hidden="true">2</span></a><a href="#" class="nv-i prs" aria-label="Activity" title="Activity"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span></a></nav></div>
+        <span class="cap" style="padding-top: 12px;">Phone size (48 targets), Alerts current, count kept</span><div class="phone" style="padding: 16px 0; align-items: center;"><nav class="nav static" aria-label="Platform"><a href="#" class="nv-i " aria-label="Overview" title="Overview"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></span></a><a href="#" class="nv-i " aria-label="Businesses" title="Businesses"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span></a><a href="#" class="nv-i " aria-label="People" title="People"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></span></a><a href="#" class="nv-i on " aria-current="page"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></span><span class="nv-l">Alerts</span><span class="count" aria-hidden="true">2</span></a><a href="#" class="nv-i " aria-label="Activity" title="Activity"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span></a></nav></div>
+        <span class="cap" style="padding-top: 12px;">Considered: a tinted pill in a flat bar (first reference)</span><div class="navb"><a href="#" class="on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg>Overview</a><a href="#" aria-label="store"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></a><a href="#" aria-label="users"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></a><a href="#" aria-label="bell"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></a><a href="#" aria-label="activity"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></a></div>
+        <span class="cap" style="padding-top: 12px;">Considered: the current item raised out of a notch (third reference)</span><div class="navc"><a href="#" class=""><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></a><a href="#" class="on"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></a><a href="#" class=""><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></a><a href="#" class=""><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></a><a href="#" class=""><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></a></div>
+      </div>
+    </div>
+  </div>
+  <div class="spec"><span class="spec-t">Buttons &#8212; enabled, hover, focus-visible, disabled, loading</span><div class="wrap8"><button type="button" class="btn pri">Reactivate</button><button type="button" class="btn pri hov">Reactivate</button><button type="button" class="btn pri foc">Reactivate</button><button type="button" class="btn pri" disabled>Reactivate</button><button type="button" class="btn pri" aria-busy="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 109 9"/></svg>Reactivating</button></div><div class="wrap8"><button type="button" class="btn danger"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg>Suspend</button><button type="button" class="btn danger foc"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg>Suspend</button><button type="button" class="btn ">Open business</button><button type="button" class="btn foc">Open business</button><button type="button" class="btn " disabled>Open business</button></div></div>
+  <div class="spec"><span class="spec-t">Overview &#8212; loading, nothing needs you, failed, alerts unreadable</span>
+    <div class="figs"><div class="fig" style="gap: 14px;"><span class="sk" style="display: block; width: 120px; height: 12px;"></span><span class="sk" style="display: block; width: 64px; height: 30px;"></span><span class="sk" style="display: block; width: 160px; height: 12px;"></span></div><div class="fig" style="gap: 14px;"><span class="sk" style="display: block; width: 120px; height: 12px;"></span><span class="sk" style="display: block; width: 64px; height: 30px;"></span><span class="sk" style="display: block; width: 160px; height: 12px;"></span></div><div class="fig" style="gap: 14px;"><span class="sk" style="display: block; width: 120px; height: 12px;"></span><span class="sk" style="display: block; width: 64px; height: 30px;"></span><span class="sk" style="display: block; width: 160px; height: 12px;"></span></div><div class="fig" style="gap: 14px;"><span class="sk" style="display: block; width: 120px; height: 12px;"></span><span class="sk" style="display: block; width: 64px; height: 30px;"></span><span class="sk" style="display: block; width: 160px; height: 12px;"></span></div></div>
+<div class="rows"><div class="lrow"><span class="sk" style="width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;"></span><div class="lmain" style="gap: 10px;"><span class="sk" style="display: block; width: 220px; height: 14px;"></span><span class="sk" style="display: block; width: 320px; height: 12px;"></span></div><span class="sk" style="display: block; width: 96px; height: 28px;"></span></div><div class="lrow"><span class="sk" style="width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;"></span><div class="lmain" style="gap: 10px;"><span class="sk" style="display: block; width: 220px; height: 14px;"></span><span class="sk" style="display: block; width: 320px; height: 12px;"></span></div><span class="sk" style="display: block; width: 96px; height: 28px;"></span></div><div class="lrow"><span class="sk" style="width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;"></span><div class="lmain" style="gap: 10px;"><span class="sk" style="display: block; width: 220px; height: 14px;"></span><span class="sk" style="display: block; width: 320px; height: 12px;"></span></div><span class="sk" style="display: block; width: 96px; height: 28px;"></span></div></div>
+    <div class="grid2"><div class="callout ok"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg><div class="grow stack" style="gap: 2px;"><span class="ct">Nothing needs you.</span><span class="cb">No open alerts. All 17 businesses are where someone put them.</span></div></div><div class="callout prob"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg><div class="grow stack" style="gap: 2px;"><span class="ct">The figures did not load.</span><span class="cb">The connection dropped before the platform answered. Nothing was changed.</span></div><button type="button" class="btn "><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></svg>Try again</button></div></div>
+    <div class="grid2"><div class="callout att"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2C14E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg><div class="grow stack" style="gap: 2px;"><span class="ct">Alerts can&#8217;t be read yet.</span><span class="cb">The database refused the read. The alert emails still arrive.</span></div></div><div class="card pad">
+  <div class="sec-head" style="min-height: 0;"><span class="overline">New businesses</span><span class="cap">Last 12 weeks</span></div>
+  <div class="row" style="align-items: baseline; gap: 8px;"><span class="fig-v">1</span><span class="body-m">this week</span></div>
+  <div style="height: 120px; display: flex; align-items: center; justify-content: center; border: 1px dashed #283831; border-radius: 8px;"><span class="body-m">The chart starts after two weeks of businesses.</span></div>
+</div></div>
+  </div>
+  <div class="spec"><span class="spec-t">Lists &#8212; empty filter, no match</span><div class="grid2"><div class="card" style="padding: 48px 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
+  <span style="width: 72px; height: 72px; border-radius: 50%; background: #0D1F16; border: 1px solid #283831; display: flex; align-items: center; justify-content: center; color: #869585;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M10 12h4"/></svg></span>
+  <span style="font-size: 18px; line-height: 28px; font-weight: 500; padding-top: 8px;">No archived businesses</span>
+  <span class="body-l">Archiving is permanent, and nobody has needed it yet.</span>
+</div><div class="card" style="padding: 48px 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
+  <span style="width: 72px; height: 72px; border-radius: 50%; background: #0D1F16; border: 1px solid #283831; display: flex; align-items: center; justify-content: center; color: #869585;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></span>
+  <span style="font-size: 18px; line-height: 28px; font-weight: 500; padding-top: 8px;">Nobody matches &#8220;wanjiru@&#8221;</span>
+  <span class="body-l">Search looks at names and email addresses.</span>
+  <div style="padding-top: 8px;"><button type="button" class="btn ">Clear search</button></div>
+</div></div></div>
+  <div class="spec"><span class="spec-t">Suspend &#8212; no reason, too short, suspending, failed</span>
+    <div class="grid2">
+      <div class="backdrop"><div class="dlg"><h3>Suspend Mwangi Hardware?</h3><p class="body-m">Nobody at Mwangi Hardware can open it, owner included, until it is reactivated. Every record is kept.</p><div class="fgroup"><span class="lbl">Reason</span><span class="field area ">Why it is being suspended</span><span class="help">Recorded in Activity and the business history. 3 to 1000 characters.</span></div><div class="acts-row"><button type="button" class="btn ">Cancel</button><button type="button" class="btn danger-fill" disabled>Suspend</button></div></div></div><div class="backdrop"><div class="dlg"><h3>Suspend Mwangi Hardware?</h3><p class="body-m">Nobody at Mwangi Hardware can open it, owner included, until it is reactivated. Every record is kept.</p><div class="fgroup"><span class="lbl">Reason</span><span class="field area err"><span style="color: #D4E7DD;">ok</span></span><span class="help err">Give at least 3 characters.</span></div><div class="acts-row"><button type="button" class="btn ">Cancel</button><button type="button" class="btn danger-fill" disabled>Suspend</button></div></div></div>
+      <div class="backdrop"><div class="dlg"><h3>Suspend Mwangi Hardware?</h3><p class="body-m">Nobody at Mwangi Hardware can open it, owner included, until it is reactivated. Every record is kept.</p><div class="fgroup"><span class="lbl">Reason</span><span class="field area "><span style="color: #D4E7DD;">Owner asked to pause trading during the stock-take.</span></span><span class="help">52 of 1000</span></div><div class="acts-row"><button type="button" class="btn " disabled>Cancel</button><button type="button" class="btn danger-fill" aria-busy="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 109 9"/></svg>Suspending</button></div></div></div><div class="backdrop"><div class="dlg"><h3>Suspend Mwangi Hardware?</h3><div class="callout prob"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg><span class="cb">It was not suspended: the request did not reach the platform. Trying again is safe; it cannot happen twice.</span></div><div class="fgroup"><span class="lbl">Reason</span><span class="field area "><span style="color: #D4E7DD;">Owner asked to pause trading during the stock-take.</span></span><span class="help">52 of 1000</span></div><div class="acts-row"><button type="button" class="btn ">Cancel</button><button type="button" class="btn danger-fill"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></svg>Try again</button></div></div></div>
+    </div>
+    <div class="callout ok"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg><div class="grow stack" style="gap: 2px;"><span class="ct">Mwangi Hardware is suspended.</span><span class="cb">Recorded in its history and in Activity with your reason.</span></div></div>
+  </div>
+  <div class="spec"><span class="spec-t">Archive and disable &#8212; the two that need typing</span>
+    <div class="grid2"><div class="backdrop"><div class="dlg"><h3>Archive Nyeri Agrovet for good?</h3><div class="callout prob"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5"/><path d="M12 17.5h.01"/></svg><span class="cb"><b style="color: #D4E7DD;">This cannot be undone.</b> An archived business can never trade or be opened again. Its records are kept, and Paul Maina can create another business.</span></div><div class="fgroup"><span class="lbl">Type the slug to confirm</span><span class="field val err"><span class="mono" style="font-size: 14px;">nyeri-agrovt</span></span><span class="help err">Doesn&#8217;t match <span class="mono">nyeri-agrovet</span>.</span></div><div class="fgroup"><span class="lbl">Reason</span><span class="field area "><span style="color: #D4E7DD;">Business closed; owner asked for it to be closed for good.</span></span><span class="help">58 of 1000</span></div><div class="acts-row"><button type="button" class="btn ">Cancel</button><button type="button" class="btn danger-fill" disabled>Archive</button></div></div></div><div class="backdrop"><div class="dlg"><h3>Disable Esther Wairimu?</h3><p class="body-m">She is signed out everywhere and cannot sign in. Her businesses keep trading.</p><div class="callout att"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2C14E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5"/><path d="M12 17.5h.01"/></svg><div class="stack" style="gap: 2px;"><span class="ct" style="font-size: 14px; line-height: 21px;">Wairimu Salon &amp; Spa is left without an owner who can sign in</span><span class="cb">An alert will be raised and emailed to the platform administrators.</span></div></div><div class="fgroup"><span class="lbl">Reason</span><span class="field area "><span style="color: #D4E7DD;">Owner reported her phone and password stolen.</span></span><span class="help">47 of 1000</span></div><div class="fgroup"><span class="lbl">Type her user ID to confirm</span><span class="field val"><span class="mono" style="font-size: 14px;">u_Q7vN3c2LpT</span></span><span class="help" style="color: #4BE277;">Matches.</span></div><div class="acts-row"><button type="button" class="btn ">Cancel</button><button type="button" class="btn danger-fill">Disable</button></div></div></div></div>
+    <div class="callout att"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2C14E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></svg><div class="grow stack" style="gap: 2px;"><span class="ct">Kevin Odhiambo is part-way reactivated.</span><span class="cb">Attempt 1 stopped on <span class="mono" style="font-size: 12px;">unavailable</span>. Attempt 2 retries on its own at 09:45; nothing needs redoing.</span></div><button type="button" class="btn ">Retry now</button></div>
+  </div>
+  <div class="spec"><span class="spec-t">No platform access</span><div style="max-width: 560px;"><div class="card" style="padding: 40px 32px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center;">
+  <span class="well" style="background: #283831; border: 1px solid #3D4A3D;" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#BCCBB9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>
+  <span style="font-size: 22px; line-height: 30.8px; font-weight: 600;">Platform access isn&#8217;t on this account</span>
+  <span class="body-l">This account is not a platform administrator, or it was changed since you signed in. Sign out and back in to pick up a new grant.</span>
+  <button type="button" class="btn "><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/></svg>Sign out</button>
+</div></div></div>
+</div>
+</div>
+<figcaption><b>States.</b> The bottom bar and two alternatives, standings, buttons, loading, empty, failure, every dialog state, and no access.</figcaption>
+</figure>
+
+</div>
+</body>
+</html>

@@ -60,6 +60,7 @@ final class TenantSettingsDestination {
     required this.icon,
     required this.allowedRoles,
     required this.builder,
+    this.ownsScroll = false,
   });
 
   /// Stable across renames, because the home links to one setting by it.
@@ -79,6 +80,15 @@ final class TenantSettingsDestination {
   final List<TenantRole> allowedRoles;
 
   final WidgetBuilder builder;
+
+  /// Whether the panel scrolls itself and pads itself, rather than being
+  /// scrolled and inset by the page that hosts it.
+  ///
+  /// **For a panel whose tabs are a `TabBarView`**, which needs a height of
+  /// its own and gives each tab its own scroll - the printer's, on 2026-10-05,
+  /// so its tabs follow the finger as every other tabbed page's do. A scroll
+  /// view round one would hand it an unbounded height.
+  final bool ownsScroll;
 
   /// The word on the row. The kind owns it, so the index and anything else
   /// naming this setting cannot drift apart.
@@ -171,12 +181,16 @@ final class TenantSettingPage extends StatelessWidget {
     // strip supplied it too. Dropping it when the strip became a list is what
     // put every settings page against the edge of the screen and left a long
     // counting rota with nothing to scroll.
-    body: SingleChildScrollView(
-      padding: EdgeInsets.all(
-        AppScaffold.horizontalInset(AppTokens.componentOf(context).spacing),
-      ),
-      child: Builder(builder: destination.builder),
-    ),
+    body: destination.ownsScroll
+        ? Builder(builder: destination.builder)
+        : SingleChildScrollView(
+            padding: EdgeInsets.all(
+              AppScaffold.horizontalInset(
+                AppTokens.componentOf(context).spacing,
+              ),
+            ),
+            child: Builder(builder: destination.builder),
+          ),
   );
 }
 

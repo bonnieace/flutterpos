@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp receipts screen &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) {
+  .board { flex-direction: column; gap: 6px; }
+  .board h2 { width: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">WhatsApp receipts screen</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Three artboards for both tabs of <code class="mono">TenantWhatsappReceiptsScreen</code>, minimal and shaped like WhatsApp &#8212; its bubbles, flat settings rows, chat list and ticks &#8212; in this app&#8217;s own tokens rather than WhatsApp&#8217;s colours. Checked against the harness capture <code class="mono">whatsapp-receipts</code>. Read <a href="README.md">README.md</a> for what changes, what was left out, and what is still open.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="whatsapp-receipts-settings.html">
+      <h2>Settings &#8212; phone</h2>
+      <p>The preview first, as the chat the customer opens; then the switch and four plain rows, no cards. The receipt as a PDF, the totals sent by hand, and receipts switched off.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="whatsapp-receipts-sent.html">
+      <h2>Sent receipts &#8212; phone</h2>
+      <p>A chat list: who, when, and what became of each receipt in ticks and a word, with the reason underneath only when there is one. Nothing sent yet, and reading.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="whatsapp-receipts-states.html">
+      <h2>States</h2>
+      <p>All seven statuses as ticks and words, every row variant and reason line, the switch and choice rows in each state, both previews, the notices above the settings, and every answer Save can come back with.</p>
+      <span class="size">1280</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

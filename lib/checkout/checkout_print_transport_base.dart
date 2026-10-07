@@ -18,13 +18,27 @@
 /// inside a 3,000-line widget.
 library;
 
+/// How a [PrinterEndpoint] is reached.
+enum PrinterEndpointKind {
+  /// A raw ESC/POS socket, `host:port`.
+  network,
+
+  /// A Bluetooth Classic serial (SPP) link to a paired device.
+  bluetooth,
+}
+
 /// A printer address. Immutable, and validated at construction.
 ///
 /// **There is no way to hold an instance describing an address we would refuse
 /// to dial**, which is the property the whole class exists for: every caller
 /// below this point can treat `host` and `port` as already safe.
+///
+/// **A Bluetooth printer is the same class rather than a second one**, so the
+/// durable queue, its per-printer mutex and every transport keep the one type
+/// they already pass around. Its [host] is the device address and its [port]
+/// is 0: SPP finds its channel by service record, never by a number.
 final class PrinterEndpoint {
-  const PrinterEndpoint._(this.host, this.port);
+  const PrinterEndpoint._(this.host, this.port, this.kind);
 
   /// Throws [ArgumentError] for anything this app will not dial.
   ///
@@ -61,8 +75,36 @@ final class PrinterEndpoint {
     if (port < _minimumPort || port > _maximumPort) {
       throw ArgumentError.value(port, 'port', 'Outside 1-65535.');
     }
-    return PrinterEndpoint._(trimmed, port);
+    return PrinterEndpoint._(trimmed, port, PrinterEndpointKind.network);
   }
+
+  /// A paired Bluetooth printer, by its device address.
+  ///
+  /// Accepts either case and stores upper case, which is how Android reports
+  /// an address - so one printer is one endpoint, and one mutex, however the
+  /// address arrived. Throws [ArgumentError] for anything that is not six
+  /// colon-separated hex pairs.
+  factory PrinterEndpoint.bluetooth(String address) {
+    if (!_bluetoothAddressPattern.hasMatch(address)) {
+      throw ArgumentError.value(
+        address,
+        'address',
+        'Must be a Bluetooth address such as 00:11:22:AA:BB:CC.',
+      );
+    }
+    return PrinterEndpoint._(
+      address.toUpperCase(),
+      bluetoothPort,
+      PrinterEndpointKind.bluetooth,
+    );
+  }
+
+  /// The [port] every Bluetooth endpoint carries. See the class note.
+  static const int bluetoothPort = 0;
+
+  static final RegExp _bluetoothAddressPattern = RegExp(
+    r'^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$',
+  );
 
   /// The port every ESC/POS network printer this app has met listens on.
   ///
@@ -87,17 +129,25 @@ final class PrinterEndpoint {
 
   final String host;
   final int port;
+  final PrinterEndpointKind kind;
+
+  bool get isBluetooth => kind == PrinterEndpointKind.bluetooth;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is PrinterEndpoint && other.host == host && other.port == port;
+      other is PrinterEndpoint &&
+          other.host == host &&
+          other.port == port &&
+          other.kind == kind;
 
   @override
-  int get hashCode => Object.hash(host, port);
+  int get hashCode => Object.hash(host, port, kind);
 
+  /// `192.168.1.50:9100`, or the bare Bluetooth address. Never ambiguous: a
+  /// network host cannot contain a colon, and a Bluetooth address has five.
   @override
-  String toString() => '$host:$port';
+  String toString() => isBluetooth ? host : '$host:$port';
 }
 
 /// Which implementation answered.
@@ -110,6 +160,11 @@ enum PrinterTransportKind {
 
   /// No transport on this platform. Phase 1's answer on web.
   none,
+
+  /// A Bluetooth Classic serial link from this device. Android only, and
+  /// **never a business setting**: a Bluetooth printer is paired with one
+  /// phone, so it is chosen on that phone and stored there.
+  bluetooth,
 }
 
 /// What the setup screen needs to explain which path is active.
@@ -193,7 +248,20 @@ abstract final class PrinterTransportCode {
   /// Phase 2. Token missing or wrong.
   static const String bridgeUnauthorized = 'bridge_unauthorized';
 
-  /// Every code, in the order §8 lists them.
+  /// Bluetooth is switched off on this device.
+  static const String bluetoothOff = 'bluetooth_off';
+
+  /// This app may not use Bluetooth: Android's *Nearby devices* permission was
+  /// refused.
+  static const String bluetoothPermissionDenied = 'bluetooth_permission_denied';
+
+  /// The Bluetooth printer did not accept a connection - off, out of range,
+  /// or connected to another phone. **One code for refused and timed out
+  /// alike**, unlike TCP: Android reports both as the same failed `connect`,
+  /// and the advice to the operator is the same.
+  static const String bluetoothUnreachable = 'bluetooth_printer_unreachable';
+
+  /// Every code: §8's eight, then the three Bluetooth added.
   static const List<String> all = <String>[
     unreachable,
     connectTimeout,
@@ -203,6 +271,9 @@ abstract final class PrinterTransportCode {
     bridgeUnreachable,
     bridgeRejected,
     bridgeUnauthorized,
+    bluetoothOff,
+    bluetoothPermissionDenied,
+    bluetoothUnreachable,
   ];
 }
 
@@ -227,4 +298,43 @@ abstract interface class PrinterTransport {
   Future<void> send(PrinterEndpoint endpoint, List<int> bytes);
 
   Future<void> dispose();
+}
+
+/// One transport that sends each endpoint down the link it names.
+///
+/// **This is what lets a Bluetooth receipt print "the normal way".** The queue
+/// and the dispatcher hold one [PrinterTransport] and never ask what kind of
+/// printer a job is for; the job's own endpoint says, so a receipt queued for a
+/// Bluetooth printer is retried and reprinted over Bluetooth by the same code
+/// that retries a network one.
+final class RoutedPrinterTransport implements PrinterTransport {
+  const RoutedPrinterTransport({
+    required PrinterTransport network,
+    required PrinterTransport bluetooth,
+  }) : _network = network,
+       _bluetooth = bluetooth;
+
+  final PrinterTransport _network;
+  final PrinterTransport _bluetooth;
+
+  /// The network transport's, because that is what the setup form's address
+  /// fields describe. The Bluetooth tab asks its own questions.
+  @override
+  PrinterTransportCapability get capability => _network.capability;
+
+  PrinterTransport _for(PrinterEndpoint endpoint) =>
+      endpoint.isBluetooth ? _bluetooth : _network;
+
+  @override
+  Future<void> probe(PrinterEndpoint endpoint) => _for(endpoint).probe(endpoint);
+
+  @override
+  Future<void> send(PrinterEndpoint endpoint, List<int> bytes) =>
+      _for(endpoint).send(endpoint, bytes);
+
+  @override
+  Future<void> dispose() async {
+    await _network.dispose();
+    await _bluetooth.dispose();
+  }
 }

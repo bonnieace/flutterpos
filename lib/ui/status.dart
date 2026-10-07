@@ -56,14 +56,13 @@ enum AppStatus {
   neutral;
 
   /// This status's colour triple, out of the token layer.
-  AppStatusRole role(AppTokens tokens) =>
-      switch (this) {
-        AppStatus.ok => tokens.colors.status.ok,
-        AppStatus.attention => tokens.colors.status.attention,
-        AppStatus.problem => tokens.colors.status.problem,
-        AppStatus.info => tokens.colors.status.info,
-        AppStatus.neutral => tokens.colors.status.neutral,
-      };
+  AppStatusRole role(AppTokens tokens) => switch (this) {
+    AppStatus.ok => tokens.colors.status.ok,
+    AppStatus.attention => tokens.colors.status.attention,
+    AppStatus.problem => tokens.colors.status.problem,
+    AppStatus.info => tokens.colors.status.info,
+    AppStatus.neutral => tokens.colors.status.neutral,
+  };
 
   /// The glyph this status wears when a call site does not name one.
   ///
@@ -73,14 +72,13 @@ enum AppStatus {
   /// the drift §1 describes in colour. A call site may still override it -
   /// "pending invitation" is better served by an envelope than by a clock - but
   /// it overrides a system rather than filling a blank.
-  IconData get defaultIcon =>
-      switch (this) {
-        AppStatus.ok => Icons.check_circle_outline,
-        AppStatus.attention => Icons.schedule,
-        AppStatus.problem => Icons.error_outline,
-        AppStatus.info => Icons.info_outline,
-        AppStatus.neutral => Icons.remove_circle_outline,
-      };
+  IconData get defaultIcon => switch (this) {
+    AppStatus.ok => Icons.check_circle_outline,
+    AppStatus.attention => Icons.schedule,
+    AppStatus.problem => Icons.error_outline,
+    AppStatus.info => Icons.info_outline,
+    AppStatus.neutral => Icons.remove_circle_outline,
+  };
 }
 
 /// One sentence a surface says about the write it just attempted, carrying the
@@ -133,9 +131,7 @@ final class AppNotice {
 
   @override
   bool operator ==(Object other) =>
-      other is AppNotice &&
-      other.message == message &&
-      other.status == status;
+      other is AppNotice && other.message == message && other.status == status;
 
   @override
   int get hashCode => Object.hash(message, status);
@@ -242,7 +238,11 @@ final class StatusBadge extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Icon(icon ?? status.defaultIcon, size: iconSize, color: role.fg),
+                  Icon(
+                    icon ?? status.defaultIcon,
+                    size: iconSize,
+                    color: role.fg,
+                  ),
                   SizedBox(width: tokens.spacing.s4),
                   // **`Flexible`, or the `maxLines` below never fires.** A
                   // `Row` at `MainAxisSize.min` offers its children unbounded
@@ -408,6 +408,7 @@ final class Disclosure extends StatefulWidget {
     this.onExpansionChanged,
     this.focusNode,
     this.autofocus = false,
+    this.indentChild = true,
   });
 
   /// The one line shown when it is closed. §5.2: one line, and the copy rule is
@@ -443,6 +444,15 @@ final class Disclosure extends StatefulWidget {
   final FocusNode? focusNode;
 
   final bool autofocus;
+
+  /// Whether [child] is indented to where the summary's text starts.
+  ///
+  /// **Off for a disclosure that folds away a block rather than prose** - the
+  /// Bluetooth printer tab's devices with no name, which open as the same card
+  /// of rows the named ones sit in. Indented, that card would be narrower than
+  /// the one above it and read as a different kind of list. Off, it spans the
+  /// disclosure's full width under the line that opened it.
+  final bool indentChild;
 
   /// The leading info glyph and the chevron, both at §5.2's **only** named
   /// leading-icon size.
@@ -505,12 +515,11 @@ class _DisclosureState extends State<Disclosure>
   late AppTokens _tokens;
   bool _reducedMotion = false;
 
-  SpringDrive get _spring =>
-      _drive ??= SpringDrive(
-        vsync: this,
-        spring: _tokens.motion.smooth,
-        value: _expanded ? 1 : 0,
-      );
+  SpringDrive get _spring => _drive ??= SpringDrive(
+    vsync: this,
+    spring: _tokens.motion.smooth,
+    value: _expanded ? 1 : 0,
+  );
 
   @override
   void dispose() {
@@ -644,12 +653,16 @@ class _DisclosureState extends State<Disclosure>
             // explanation reads as belonging to the line that opened it rather
             // than as a second paragraph beside it. Composed of the header's
             // own padding and glyph rather than restated as one figure.
-            padding: EdgeInsets.fromLTRB(
-              tokens.spacing.s8 + Disclosure.glyphSize + tokens.spacing.s8,
-              tokens.spacing.s4,
-              tokens.spacing.s8,
-              tokens.spacing.s8,
-            ),
+            padding: widget.indentChild
+                ? EdgeInsets.fromLTRB(
+                    tokens.spacing.s8 +
+                        Disclosure.glyphSize +
+                        tokens.spacing.s8,
+                    tokens.spacing.s4,
+                    tokens.spacing.s8,
+                    tokens.spacing.s8,
+                  )
+                : EdgeInsets.only(top: tokens.spacing.s4),
             child: DefaultTextStyle.merge(
               style: body.copyWith(color: tokens.colors.text.secondary),
               child: widget.child,

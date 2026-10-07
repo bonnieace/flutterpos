@@ -17,6 +17,12 @@
 /// ruler one row wide — which is the first thing worth having when a shop
 /// phones in. It runs against what is **typed**, not what is stored, so a
 /// printer can be checked before it is saved.
+///
+/// **Two tabs since 2026-10-03, at the developer's direction:** *Network* is
+/// everything above, the business's printer for every till; *Bluetooth* finds,
+/// pairs and connects a printer for this device alone -
+/// `checkout_bluetooth_printer_panel.dart`. The page opens on whichever this
+/// device is printing with.
 library;
 
 import 'package:uzapay_pos/observability/app_telemetry.dart';
@@ -34,7 +40,10 @@ import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/snackbar.dart';
 import '../ui/status.dart';
+import '../ui/tabs.dart';
 import '../ui/tokens.dart';
+import 'checkout_bluetooth_printer.dart';
+import 'checkout_bluetooth_printer_panel.dart';
 import 'checkout_configuration_writer.dart';
 import 'checkout_print_configuration.dart';
 import 'checkout_print_failures.dart';
@@ -58,6 +67,7 @@ final class TenantPrinterConfigurationScreen extends StatelessWidget {
     this.writer,
     this.testPrint,
     this.onPublished,
+    this.bluetooth,
   });
 
   final TenantDocumentReader reader;
@@ -73,25 +83,32 @@ final class TenantPrinterConfigurationScreen extends StatelessWidget {
 
   final VoidCallback? onPublished;
 
+  /// While absent the page is the network form alone, with no tabs.
+  final BluetoothPrinterSetup? bluetooth;
+
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Printer',
     // §4.2's "reading and forms" row. This is a form.
     contentWidth: AppContentWidth.reading,
-    body: SingleChildScrollView(
-      padding: EdgeInsets.all(
-        AppScaffold.horizontalInset(AppTokens.componentOf(context).spacing),
-      ),
-      child: TenantPrinterConfigurationPanel(
-        reader: reader,
-        writer: writer,
-        testPrint: testPrint,
-        onPublished: onPublished,
-      ),
+    // The panel scrolls and insets itself: its tabs are a `TabBarView`, which
+    // needs the page's height rather than a scroll view's unbounded one.
+    body: TenantPrinterConfigurationPanel(
+      reader: reader,
+      writer: writer,
+      testPrint: testPrint,
+      onPublished: onPublished,
+      bluetooth: bluetooth,
     ),
   );
 }
 
+/// The printer settings, scrolled and inset by the panel itself.
+///
+/// **Host it with no scroll view round it** - `ownsScroll` on a settings
+/// destination. With Bluetooth it is two tabs in a `TabBarView`, which needs a
+/// height of its own and scrolls each tab separately; without, it is the
+/// network form in a scroll view of its own, so both read the same to a host.
 final class TenantPrinterConfigurationPanel extends StatefulWidget {
   const TenantPrinterConfigurationPanel({
     super.key,
@@ -99,12 +116,16 @@ final class TenantPrinterConfigurationPanel extends StatefulWidget {
     this.writer,
     this.testPrint,
     this.onPublished,
+    this.bluetooth,
   });
 
   final TenantDocumentReader reader;
   final TenantConfigurationDocumentWriter? writer;
   final PrinterTestPrint? testPrint;
   final VoidCallback? onPublished;
+
+  /// See [TenantPrinterConfigurationScreen.bluetooth].
+  final BluetoothPrinterSetup? bluetooth;
 
   @override
   State<TenantPrinterConfigurationPanel> createState() =>
@@ -368,30 +389,130 @@ final class _TenantPrinterConfigurationPanelState
   Widget build(BuildContext context) {
     final guardKey = 'printer-configuration:$_generation';
     _composeLoaders(guardKey);
+    // The inset the hosts used to pad this panel with, now applied inside it.
+    final inset = AppScaffold.horizontalInset(
+      AppTokens.componentOf(context).spacing,
+    );
+    Widget scrolled(Widget child) =>
+        SingleChildScrollView(padding: EdgeInsets.all(inset), child: child);
     return TenantRouteGuard<TenantConfiguredPrinter>(
       allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
-      loading: const LoadingState(message: 'Reading the printer settings.'),
-      denied: const ErrorState(
-        key: ValueKey('printer-configuration-denied'),
-        badgeLabel: 'No access',
-        statement: 'Only an owner or administrator may set up the printer.',
-        stillTrue: 'Receipts still print on whatever is already set up.',
+      loading: scrolled(
+        const LoadingState(message: 'Reading the printer settings.'),
       ),
-      failure: (context, error) => const ErrorState(
-        key: ValueKey('printer-configuration-failure'),
-        badgeLabel: 'Not read',
-        statement: 'The printer settings could not be read.',
-        stillTrue: 'Nothing was changed.',
+      denied: scrolled(
+        const ErrorState(
+          key: ValueKey('printer-configuration-denied'),
+          badgeLabel: 'No access',
+          statement: 'Only an owner or administrator may set up the printer.',
+          stillTrue: 'Receipts still print on whatever is already set up.',
+        ),
       ),
-      builder: (context, session, configured) => _PrinterContents(
-        configured: configured,
-        busy: _busy,
-        canPublish: widget.writer != null,
-        canTest: widget.testPrint != null,
-        onPublish: (values) => _publish(session, configured, values),
-        onTest: _test,
+      failure: (context, error) => scrolled(
+        const ErrorState(
+          key: ValueKey('printer-configuration-failure'),
+          badgeLabel: 'Not read',
+          statement: 'The printer settings could not be read.',
+          stillTrue: 'Nothing was changed.',
+        ),
+      ),
+      builder: (context, session, configured) {
+        final bluetooth = widget.bluetooth;
+        // Read on every build, which is cheap - one key in a small box - and
+        // means the network tab restates where receipts go the moment the
+        // Bluetooth tab changes it.
+        DeviceBluetoothPrinter? inUse;
+        var bluetoothChosen = false;
+        if (bluetooth != null) {
+          try {
+            inUse = bluetooth.store.read(session.tenantId);
+            bluetoothChosen = inUse != null;
+          } on FormatException {
+            // Unreadable is still *chosen*: the Bluetooth tab owns saying so,
+            // and this device is not printing on the network printer.
+            bluetoothChosen = true;
+          }
+        }
+        final network = _PrinterContents(
+          configured: configured,
+          bluetoothInUse: inUse,
+          busy: _busy,
+          canPublish: widget.writer != null,
+          canTest: widget.testPrint != null,
+          onPublish: (values) => _publish(session, configured, values),
+          onTest: _test,
+        );
+        if (bluetooth == null) return scrolled(network);
+        return _PrinterTabs(
+          inset: inset,
+          startOnBluetooth: bluetoothChosen,
+          network: network,
+          bluetooth: BluetoothPrinterTab(
+            setup: bluetooth,
+            tenantId: session.tenantId,
+            // Already read for the network tab; the Bluetooth tab says where
+            // this device prints from it rather than reading it again.
+            business: configured,
+            testPrint: widget.testPrint,
+            onChanged: () => setState(() {}),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// *Network* and *Bluetooth*, as two tabs of one page.
+///
+/// **A `TabBarView`, as every other tabbed page is**, at the developer's
+/// direction on 2026-10-05. Until then the two were shown one at a time inside
+/// the host's scroll view, so a swipe moved nothing under the finger - and the
+/// first fix, a swipe that changed tab on release, still did not. Here a tab
+/// follows the finger, springs back from a short drag, and keeps its own
+/// scroll position. Both stay alive once opened, so switching never loses
+/// what was typed or found.
+final class _PrinterTabs extends StatelessWidget {
+  const _PrinterTabs({
+    required this.inset,
+    required this.startOnBluetooth,
+    required this.network,
+    required this.bluetooth,
+  });
+
+  /// The page's own inset, which the strip and each tab's scroll take.
+  final double inset;
+
+  /// Open on the tab this device is printing with.
+  final bool startOnBluetooth;
+  final Widget network;
+  final Widget bluetooth;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    // Both tabs open on a `Disclosure`, whose line sits in its focus-ring
+    // gutter: `s12` here puts it `s16` under the tabs, where
+    // `docs/design/bluetooth-printer/` draws it.
+    Widget tab(Widget child) => AppKeptTab(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(inset, tokens.spacing.s12, inset, inset),
+        child: child,
+      ),
+    );
+    return DefaultTabController(
+      length: 2,
+      initialIndex: startOnBluetooth ? 1 : 0,
+      child: Column(
+        key: const ValueKey('printer-configuration-tabs'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          AppTabs(tabs: const <String>['Network', 'Bluetooth'], inset: inset),
+          Expanded(
+            child: TabBarView(children: <Widget>[tab(network), tab(bluetooth)]),
+          ),
+        ],
       ),
     );
   }
@@ -399,8 +520,10 @@ final class _TenantPrinterConfigurationPanelState
 
 AppNotice _resultNotice(TenantConfigurationWriteResult result) =>
     switch (result.kind) {
-      TenantConfigurationWriteKind.queued => const AppNotice.offline(
-        'Saved on this device; waiting to sync.',
+      // Every save is queued, online or not, so this is the settings pages'
+      // own sentence rather than one that announces an outage.
+      TenantConfigurationWriteKind.queued => const AppNotice.confirmed(
+        'Saved on this device and on its way to the others.',
       ),
       TenantConfigurationWriteKind.committed => const AppNotice.confirmed(
         'Saved. Receipts from this device go there from the next sale.',
@@ -468,6 +591,7 @@ final class _PrinterFormValues {
 final class _PrinterContents extends StatefulWidget {
   const _PrinterContents({
     required this.configured,
+    required this.bluetoothInUse,
     required this.busy,
     required this.canPublish,
     required this.canTest,
@@ -476,6 +600,9 @@ final class _PrinterContents extends StatefulWidget {
   });
 
   final TenantConfiguredPrinter configured;
+
+  /// The Bluetooth printer this device prints on instead, or null.
+  final DeviceBluetoothPrinter? bluetoothInUse;
   final bool busy;
   final bool canPublish;
   final bool canTest;
@@ -563,9 +690,25 @@ class _PrinterContentsState extends State<_PrinterContents> {
         // *"unreadable"*; `attention` for none set up is its *"awaiting"*,
         // because that is a setup step nobody has taken yet.
         //
+        // **This device's exception, stated where the business setting is.**
+        // A Bluetooth printer chosen here takes this device's receipts, so the
+        // form below no longer describes them - only the other tills'.
+        if (widget.bluetoothInUse case final inUse?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s12),
+          Callout(
+            key: const ValueKey('printer-configuration-bluetooth-in-use'),
+            status: AppStatus.info,
+            icon: Icons.bluetooth_connected,
+            message:
+                'This device prints its receipts on the Bluetooth printer '
+                '${inUse.name}. The network printer here is for this '
+                'business’s other devices.',
+          ),
+        ],
         // **Only when receipts are going nowhere**, since 2026-09-23: a working
-        // printer is already stated by the filled fields under it.
-        if (!configured.canPrint) ...<Widget>[
+        // printer is already stated by the filled fields under it. Not on a
+        // device printing over Bluetooth, where it would not be true.
+        if (!configured.canPrint && widget.bluetoothInUse == null) ...<Widget>[
           SizedBox(height: tokens.spacing.s12),
           Callout(
             key: const ValueKey('printer-configuration-current'),

@@ -284,6 +284,18 @@ function seedSale(
   });
 }
 
+test("shift close processes only its business day and leaves other dirty days for overnight", async () => {
+  const job = claimedJob({source: "shift_close"});
+  const db = firestoreWithClaimedJob(job);
+  seedDirtyDay(db, LOCAL_DATE);
+  seedDirtyDay(db, "2026-08-04");
+  seedSale(db, "one", LOCAL_DATE, "shift-a", 10, 5);
+  const result = await processMetricsPage(db.asFirestore(), job);
+  assert.equal(result.processed, 1);
+  assert.equal(result.hasMore, false);
+  assert.equal(stored(db, `tenants/${TENANT}/reconciliation_dirty_days/2026-08-04`).status, "dirty");
+});
+
 test("a metrics phase with nothing dirty writes nothing", async () => {
   const db = firestoreWithClaimedJob();
 

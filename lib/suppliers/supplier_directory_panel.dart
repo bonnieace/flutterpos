@@ -274,6 +274,7 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
       allowedRoles: TenantSupplierRepository.allowedRoles,
       load: _loader,
       loadCached: _loaderCached,
+      holdsNothing: (directory) => directory.suppliers.isEmpty,
       loading: const _SuppliersFrame(
         child: LoadingState(message: 'Reading suppliers'),
       ),

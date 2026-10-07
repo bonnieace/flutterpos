@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bluetooth printer &#8212; states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+/* A catalogue at 1280. Component values are the phone board's. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, select { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; flex-wrap: wrap; gap: 32px; padding: 20px 24px 48px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.page-stage > figure > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+figcaption { font-size: 13px; color: #869585; max-width: 411px; text-align: center; line-height: 19px; }
+figcaption b { color: #BCCBB9; font-weight: 600; }
+
+.phone { position: relative; width: 411px; height: 891px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+.bar { height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 4px; background: #071610; position: relative; z-index: 2; }
+.bar button { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #D4E7DD; cursor: pointer; }
+.bar span { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.body { flex-grow: 1; min-height: 0; padding: 28px 20px 20px; display: flex; flex-direction: column; }
+.body > * { flex-shrink: 0; }
+.scrolled { padding-top: 0; justify-content: flex-end; }
+.al { margin-left: 4px; margin-right: 4px; }
+.gap4 { height: 4px; } .gap8 { height: 8px; } .gap12 { height: 12px; } .gap16 { height: 16px; } .gap24 { height: 24px; }
+
+/* AppTabs: labelLarge, text.secondary to text.primary, a 2px indicator. */
+.tabs { display: flex; border-bottom: 1px solid #132A1F; }
+.tab { flex: 1 1 0; height: 48px; border: 0; padding: 0; background: transparent; display: flex; justify-content: center; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; }
+.tab span { position: relative; display: flex; align-items: center; height: 48px; }
+.tab-on { color: #D4E7DD; }
+.tab-on span::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #4BE277; }
+
+/* Disclosure: info glyph, body 16/24, chevron. */
+.disc { display: flex; align-items: center; gap: 8px; padding: 8px; margin: 0 4px; border-radius: 4px; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.disc .grow { flex-grow: 1; }
+
+h2 { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.hint { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.label { font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; display: flex; justify-content: space-between; }
+.label span:last-child { color: #869585; font-weight: 400; }
+
+/* AppButton, lg. */
+/* AppActionRow: s12 between actions, so 20 between two buttons' faces
+   once each stands in its 4px gutter. */
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.row-end { justify-content: flex-end; }
+.btn { height: 48px; box-sizing: border-box; padding: 0 16px; margin: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; }
+.btn-pri { background: #4BE277; color: #003915; border: 0; }
+.btn-sec { background: #132A1F; color: #D4E7DD; border: 1px solid #3D4A3D; }
+.btn-des { background: transparent; color: #EF4444; border: 1px solid #EF4444; }
+.btn-off { background: #1E3A2B; color: #5D7468; border: 0; cursor: default; }
+.btn-wide { flex: 1 1 0; }
+
+/* StatusBadge: 24 tall, radius.md, labelMedium, 14 glyph. */
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 24px; box-sizing: border-box; padding: 0 8px; border-radius: 8px; border: 1px solid; font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; }
+.b-ok { background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30); color: #4BE277; }
+.b-neu { background: #283831; border-color: #3D4A3D; color: #BCCBB9; }
+.b-info { background: rgba(176, 205, 189, 0.10); border-color: rgba(176, 205, 189, 0.30); color: #B0CDBD; }
+
+/* Callout: radius.md, 16 in, 18 glyph, the density body in text.secondary. */
+.callout { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; }
+.callout svg { flex-shrink: 0; margin-top: 3px; }
+.callout p { margin: 0; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.c-info { background: rgba(176, 205, 189, 0.10); border-color: rgba(176, 205, 189, 0.30); }
+.c-att { background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30); }
+
+/* AppCard. */
+.card { background: #0D1F16; border: 1px solid #283831; border-radius: 12px; padding: 16px; }
+.dest-head { display: flex; align-items: flex-start; gap: 8px; }
+.dest-head > div { flex-grow: 1; min-width: 0; }
+.dest-name { font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+.dest-sub { margin-top: 4px; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.dest-line { margin: 8px 0 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+
+/* The device list: one card, rows on PressSurface, a chevron to the sheet. */
+.list { margin: 0; padding: 0; list-style: none; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.list > li + li { border-top: 1px solid #132A1F; }
+.dev { display: flex; align-items: center; gap: 12px; min-height: 64px; box-sizing: border-box; padding: 12px 8px 12px 16px; cursor: pointer; }
+.well { width: 40px; height: 40px; flex-shrink: 0; border-radius: 8px; background: #071610; display: flex; align-items: center; justify-content: center; color: #869585; }
+.well-on { color: #4BE277; }
+.dev-body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
+.dev-name { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dev-sub { font-size: 12px; line-height: 16px; color: #869585; }
+.dev-sub em { font-style: normal; color: #4BE277; }
+.chev { flex-shrink: 0; color: #869585; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
+
+/* AppSheet at its half detent over surface.scrim. */
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 3; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 624px; z-index: 4; box-sizing: border-box; background: #132A1F; border-radius: 12px 12px 0 0; padding: 12px 20px 20px; display: flex; flex-direction: column; }
+.sheet > * { flex-shrink: 0; }
+.handle { width: 32px; height: 4px; border-radius: 999px; background: #3D4A3D; align-self: center; }
+.sheet-title { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.sheet-sub { margin: 4px 0 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+
+/* AppSelect and the cutter row. On the sheet the field and the overlay are
+   the same surface; the border is what draws the field. */
+.field-label { margin: 0 4px 8px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; }
+.select { position: relative; margin: 0 4px; }
+.select select { display: block; appearance: none; -webkit-appearance: none; width: 100%; height: 48px; padding: 0 44px 0 16px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 16px; cursor: pointer; }
+.select svg { position: absolute; right: 12px; top: 12px; pointer-events: none; color: #BCCBB9; }
+.check { display: flex; align-items: center; justify-content: space-between; min-height: 56px; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+/* The app's checkbox theme: 1px border.strong over surface.field, radius.sm. */
+.box { width: 18px; height: 18px; box-sizing: border-box; border: 1px solid #3D4A3D; background: #132A1F; border-radius: 2px; margin-right: 11px; }
+
+/* AppSnackBar: surface.overlay under the status container, 16 off every edge. */
+.snack { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 5; border-radius: 8px; background: #132A1F; }
+.snack > div { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid rgba(75, 226, 119, 0.30); background: rgba(75, 226, 119, 0.10); color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.snack svg { flex-shrink: 0; margin-top: 3px; }
+
+.wrap { max-width: 1232px; margin: 0 auto; padding: 8px 24px 64px; }
+.intro h1 { margin: 16px 0 8px; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px; color: #D4E7DD; }
+.intro p { margin: 0; max-width: 760px; font-size: 15px; line-height: 22px; color: #BCCBB9; }
+section { margin-top: 48px; }
+.sec { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.sec-note { margin: 4px 0 24px; max-width: 760px; font-size: 14px; line-height: 21px; color: #869585; }
+.grid { display: grid; grid-template-columns: repeat(3, 371px); gap: 40px 48px; align-items: start; }
+.spec { display: flex; flex-direction: column; gap: 8px; }
+.spec-label { font-size: 13px; line-height: 19px; color: #869585; }
+.spec-label b { color: #D4E7DD; font-weight: 600; }
+.spec-foot { font-size: 13px; line-height: 19px; color: #869585; }
+code { font-family: ui-monospace, monospace; font-size: 12px; color: #B0CDBD; }
+.tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.4px; vertical-align: 1px; }
+.tag-built { background: #283831; color: #BCCBB9; }
+.tag-new { background: rgba(75, 226, 119, 0.15); color: #4BE277; }
+.spec .row .btn:first-child { margin-left: 4px; }
+.callout > div p { margin: 0; }
+.c-prob { background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); }
+.b-att { background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30); color: #F2C14E; }
+.dev-hover { background: rgba(75, 226, 119, 0.08); }
+.dev-pressed { background: rgba(75, 226, 119, 0.12); transform: scale(0.98); }
+.dev-focus { box-shadow: inset 0 0 0 2px #4BE277; border-radius: 4px; }
+.dev-off .dev-name, .dev-off .dev-sub, .dev-off .well, .dev-off .chev { color: #5D7468; }
+.disc-open { margin: 0 4px 8px; }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.snack-s { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.snack-s svg { flex-shrink: 0; margin-top: 3px; }
+.s-ok { background: linear-gradient(rgba(75, 226, 119, 0.10), rgba(75, 226, 119, 0.10)), #132A1F; border-color: rgba(75, 226, 119, 0.30); }
+.s-prob { background: linear-gradient(rgba(147, 0, 10, 0.20), rgba(147, 0, 10, 0.20)), #132A1F; border-color: rgba(239, 68, 68, 0.30); }
+.s-att { background: linear-gradient(rgba(242, 193, 78, 0.10), rgba(242, 193, 78, 0.10)), #132A1F; border-color: rgba(242, 193, 78, 0.30); }
+@media (max-width: 1240px) { .grid { grid-template-columns: repeat(auto-fill, 371px); } }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Bluetooth printer artboards</a></nav>
+<div class="wrap">
+
+<header class="intro">
+  <h1>Bluetooth printer &#8212; states</h1>
+  <p>Every state the Bluetooth tab can be in, each at the phone column&#8217;s own width (371, a 411 screen less two 20 insets). Sentences the build already says are quoted unchanged and marked <span class="tag tag-built">built</span>; sentences these boards add are marked <span class="tag tag-new">new</span>. Under each, the field or answer that produces it.</p>
+</header>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">Before a search</h2>
+  <p class="sec-note">What the phone allows. Each appears only after <em>Search for printers</em> is pressed &#8212; opening the tab asks Android nothing.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>Bluetooth is off</b> <span class="tag tag-built">built</span> <span class="tag tag-new">glyph new</span><br><code>prepare()</code> &#8594; <code>off</code></div>
+      <div class="callout c-att"><svg width="18" height="18" viewBox="0 0 24 24" fill="#F2C14E" aria-hidden="true"><path d="M13 5.83l1.88 1.88-1.6 1.6 1.41 1.41 3.02-3.02L12 2h-1v5.03l2 2v-3.2zM5.41 4L4 5.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l4.29-4.29 2.3 2.29L20 18.59 5.41 4zM13 18.17v-3.76l1.88 1.88L13 18.17z"></path></svg><div><p>Bluetooth is off on this device.</p><div class="gap12"></div><button type="button" class="btn btn-sec" style="margin: 0;">Turn on Bluetooth</button></div></div>
+      <div class="spec-foot"><code>bluetooth_disabled</code> in place of <code>attention</code>&#8217;s clock, which the build draws today: nothing is waiting, a switch is off.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Nearby devices refused</b> <span class="tag tag-built">built</span><br><code>prepare()</code> &#8594; <code>permissionDenied</code></div>
+      <div class="callout c-prob"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><div><p>UzaPay is not allowed to use Bluetooth, so it cannot find printers. Allow Nearby devices in the phone settings, then search again.</p><div class="gap12"></div><button type="button" class="btn btn-sec" style="margin: 0;">Open settings</button></div></div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>No radio</b> <span class="tag tag-built">built</span><br><code>prepare()</code> &#8594; <code>unsupported</code></div>
+      <div class="callout c-info"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><p>This device has no Bluetooth.</p></div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Web, desktop, iOS</b> <span class="tag tag-built">built</span><br><code>discovery.isSupported == false</code>; the whole tab</div>
+      <div class="callout c-info"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><p>Bluetooth printers are set up in the Android app. This device prints to the network printer.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">A search</h2>
+  <p class="sec-note">Android&#8217;s discovery runs about twelve seconds; the list fills as it hears. The search button is primary only while it is the one thing to do.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>Not yet searched</b> <span class="tag tag-built">built</span><br>no printer in use</div>
+      <div class="row"><button type="button" class="btn btn-pri"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.24 12.01l2.32 2.32c.28-.72.44-1.51.44-2.33 0-.82-.16-1.59-.43-2.31l-2.33 2.32zm5.29-5.3l-1.26 1.26c.63 1.21.98 2.57.98 4.02s-.36 2.82-.98 4.02l1.2 1.2c.97-1.54 1.54-3.36 1.54-5.31-.01-1.89-.55-3.67-1.48-5.19zm-3.82 1L10 2H9v7.59L4.41 5 3 6.41 8.59 12 3 17.59 4.41 19 9 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM11 5.83l1.88 1.88L11 9.59V5.83zm1.88 10.46L11 18.17v-3.76l1.88 1.88z"></path></svg>Search for printers</button></div>
+      <div class="spec-label" style="margin-top: 8px;"><b>Asking Android</b> <span class="tag tag-built">built</span><br>the permission prompt is up</div>
+      <div class="row"><button type="button" class="btn btn-pri" style="width: 192px;" aria-label="Search for printers, waiting"><svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#003915" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 1-9 9"></path></svg></button></div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Searching</b> <span class="tag tag-built">built</span><br>discovery running</div>
+      <div class="row">
+        <button type="button" class="btn btn-sec"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 16h8V8H8v8zm4-14C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg>Stop searching</button>
+        <span class="badge b-info" role="status"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.24 12.01l2.32 2.32c.28-.72.44-1.51.44-2.33 0-.82-.16-1.59-.43-2.31l-2.33 2.32zm5.29-5.3l-1.26 1.26c.63 1.21.98 2.57.98 4.02s-.36 2.82-.98 4.02l1.2 1.2c.97-1.54 1.54-3.36 1.54-5.31-.01-1.89-.55-3.67-1.48-5.19zm-3.82 1L10 2H9v7.59L4.41 5 3 6.41 8.59 12 3 17.59 4.41 19 9 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM11 5.83l1.88 1.88L11 9.59V5.83zm1.88 10.46L11 18.17v-3.76l1.88 1.88z"></path></svg>Searching</span>
+      </div>
+      <div class="spec-foot">A word and a glyph beside the control, not a spinner: twelve seconds of spinning reads as stuck.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Nothing heard</b> <span class="tag tag-built">built</span><br>discovery ended, no devices, none paired</div>
+      <div class="callout c-info"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><p>No Bluetooth devices were found. Check the printer is switched on and close by, then search again.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">Device rows</h2>
+  <p class="sec-note">One row per address, however often discovery repeats it. A name that arrives late replaces the address; a paired device stays paired. Every row opens the printer&#8217;s sheet.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>Paired, nearby, in use</b> <span class="tag tag-new">new</span><br><code>paired</code>, and the device store&#8217;s address</div>
+      <ul class="list">
+        <li class="dev"><span class="well well-on"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 8h-1V3H6v5H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zM8 5h8v3H8V5zm8 14H8v-4h8v4zm2-4v-2H6v2H4v-4c0-.55.45-1 1-1h14c.55 0 1 .45 1 1v4h-2z"></path><circle cx="18" cy="11.5" r="1"></circle></svg></span><span class="dev-body"><span class="dev-name">MPT-II</span><span class="dev-sub"><em>In use on this device</em> &#183; DC:0D:30:9A:4E:21</span></span><span class="chev"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></li>
+        <li class="dev"><span class="well"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"></path></svg></span><span class="dev-body"><span class="dev-name">oraimo FreePods lite</span><span class="dev-sub">Paired &#183; 3C:B0:ED:41:7A:02</span></span><span class="chev"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></li>
+        <li class="dev"><span class="well"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"></path></svg></span><span class="dev-body"><span class="dev-name">XP-P323B</span><span class="dev-sub">Not paired yet &#183; 86:67:7A:0C:53:9E</span></span><span class="chev"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></li>
+      </ul>
+      <div class="spec-foot">The printer in use takes the print glyph in <code>action.primary</code> and says so in words &#8212; never the colour alone.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Hover, focus, pressed</b> <span class="tag tag-new">new</span><br><code>PressSurface</code>&#8217;s own</div>
+      <ul class="list">
+        <li class="dev dev-hover"><span class="well"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"></path></svg></span><span class="dev-body"><span class="dev-name">Hover</span><span class="dev-sub">0.08 wash</span></span><span class="chev"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></li>
+        <li class="dev dev-focus"><span class="well"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"></path></svg></span><span class="dev-body"><span class="dev-name">Focus-visible</span><span class="dev-sub">2px focus ring, inside the card</span></span><span class="chev"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></li>
+        <li class="dev dev-pressed"><span class="well"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"></path></svg></span><span class="dev-body"><span class="dev-name">Pressed</span><span class="dev-sub">0.12 wash and the press spring</span></span><span class="chev"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></li>
+      </ul>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>No name, and busy</b> <span class="tag tag-new">new</span><br><code>hasName == false</code>; a connect in flight</div>
+      <div class="disc disc-open"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><span class="grow">2 devices with no name</span><svg width="24" height="24" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"></path></svg></div>
+      <ul class="list">
+        <li class="dev"><span class="well"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"></path></svg></span><span class="dev-body"><span class="dev-name">4F:21:9C:05:BB:10</span><span class="dev-sub">Not paired yet</span></span><span class="chev"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></li>
+        <li class="dev dev-off"><span class="well"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"></path></svg></span><span class="dev-body"><span class="dev-name">61:0A:EE:73:1D:58</span><span class="dev-sub">Disabled while another printer connects</span></span><span class="chev"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></span></li>
+      </ul>
+      <div class="spec-foot">The address stands in for a missing name, as the build already does; folded, because a receipt printer always broadcasts one.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">Where this device prints</h2>
+  <p class="sec-note">The card at the top of the tab. It always answers, so the tab opens on the question it is opened with.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>Bluetooth, in use</b> <span class="tag tag-built">built</span><br>the device store holds a printer for this business</div>
+      <div class="card">
+        <div class="dest-head"><div><div class="dest-name">MPT-II</div><div class="dest-sub">DC:0D:30:9A:4E:21 &#183; 58mm roll</div></div><span class="badge b-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg>In use</span></div>
+        <p class="dest-line">Receipts from this device print here.</p>
+        <div class="gap8"></div>
+        <div class="row row-end"><button type="button" class="btn btn-des">Stop using</button><button type="button" class="btn btn-sec"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 8h-1V3H6v5H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zM8 5h8v3H8V5zm8 14H8v-4h8v4zm2-4v-2H6v2H4v-4c0-.55.45-1 1-1h14c.55 0 1 .45 1 1v4h-2z"></path><circle cx="18" cy="11.5" r="1"></circle></svg>Test print</button></div>
+      </div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Test print sending</b> <span class="tag tag-built">built</span><br>its own button spins; the other waits disabled</div>
+      <div class="card">
+        <div class="dest-head"><div><div class="dest-name">MPT-II</div><div class="dest-sub">DC:0D:30:9A:4E:21 &#183; 58mm roll</div></div><span class="badge b-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg>In use</span></div>
+        <p class="dest-line">Receipts from this device print here.</p>
+        <div class="gap8"></div>
+        <div class="row row-end"><button type="button" class="btn btn-off" disabled>Stop using</button><button type="button" class="btn btn-sec" style="width: 136px;" aria-label="Test print, sending"><svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D4E7DD" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 1-9 9"></path></svg></button></div>
+      </div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>The network printer</b> <span class="tag tag-new">new</span><br>no Bluetooth printer; the business document is <code>configured</code></div>
+      <div class="card">
+        <div class="dest-head"><div><div class="dest-name">Network printer</div><div class="dest-sub">192.168.1.50:9100 &#183; 80mm roll</div></div><span class="badge b-neu"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 22h8v-7h-3v-4h-5V9h3V2H8v7h3v2H6v4H3v7h8v-7H8v-2h8v2h-3z"></path></svg>Network</span></div>
+        <p class="dest-line">Receipts from this device go to the business&#8217;s network printer. Connect one below to print here instead.</p>
+      </div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>No printer at all</b> <span class="tag tag-new">new</span><br>no Bluetooth printer; the business document is <code>absent</code></div>
+      <div class="card">
+        <div class="dest-head"><div><div class="dest-name">No printer</div><div class="dest-sub">Sales are recorded as normal</div></div><span class="badge b-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg>Not set up</span></div>
+        <p class="dest-line">Receipts from this device are not sent anywhere. Connect a Bluetooth printer below, or set up the network printer on the Network tab.</p>
+      </div>
+      <div class="spec-foot"><code>attention</code>, the network tab&#8217;s own reading of a printer nobody has set up: a step not taken yet, not a fault.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>The saved printer cannot be read</b> <span class="tag tag-built">built</span><br><code>read()</code> threw <code>FormatException</code></div>
+      <div class="callout c-prob"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><div><p>The Bluetooth printer saved on this device cannot be read, so receipts from this device are not sent anywhere. Connect a printer below, or stop using Bluetooth.</p><div class="gap12"></div><button type="button" class="btn btn-sec" style="margin: 0;">Stop using Bluetooth</button></div></div>
+      <div class="spec-foot">It refuses rather than falling back to the network printer: receipts on the wrong counter without a word would be worse.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">Every answer</h2>
+  <p class="sec-note">One snack bar, replaced rather than queued &#8212; or, while a printer&#8217;s sheet is open, the same sentence in a callout in the sheet, under its title: a snack bar is drawn by the page, and the page is under the sheet. Sentences from <code>PrinterFailureNotice</code> are the same ones a failed receipt shows in the print queue, so the till and this page never word one fault twice.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>Connected</b> <span class="tag tag-built">built</span><br>paired, probed, stored</div>
+      <div class="snack-s s-ok"><svg width="18" height="18" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>Connected to MPT-II. Receipts from this device now print on it.</span></div>
+      <div class="spec-label" style="margin-top: 8px;"><b>Test page sent</b> <span class="tag tag-built">built</span><br>sent, never &#8220;printed&#8221;</div>
+      <div class="snack-s s-ok"><svg width="18" height="18" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>A test page was sent to the printer. Check that what comes out fills the width of the roll.</span></div>
+      <div class="spec-label" style="margin-top: 8px;"><b>Stopped using</b> <span class="tag tag-built">built</span></div>
+      <div class="snack-s s-ok"><svg width="18" height="18" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>MPT-II is no longer used. Receipts from this device go to the network printer, if this business has one.</span></div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Did not pair</b> <span class="tag tag-built">built</span><br><code>pair()</code> &#8594; false; nothing probed or stored</div>
+      <div class="snack-s s-prob"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>The printer did not pair. Check it is switched on and close by, and accept the pairing request if the phone shows one.</span></div>
+      <div class="spec-label" style="margin-top: 8px;"><b>Did not answer</b> <span class="tag tag-built">built</span><br><code>bluetooth_printer_unreachable</code></div>
+      <div class="snack-s s-prob"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>The Bluetooth printer did not answer. Check it is switched on, close to this device and not connected to another phone.</span></div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Bluetooth off</b> <span class="tag tag-built">built</span><br><code>bluetooth_off</code></div>
+      <div class="snack-s s-prob"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>Bluetooth is off on this device. Turn it on, then send it again.</span></div>
+      <div class="spec-label" style="margin-top: 8px;"><b>Not allowed</b> <span class="tag tag-built">built</span><br><code>bluetooth_permission_denied</code></div>
+      <div class="snack-s s-prob"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>This app is not allowed to use Bluetooth. Allow Nearby devices for UzaPay in the phone settings, then send it again.</span></div>
+      <div class="spec-label" style="margin-top: 8px;"><b>Stopped part-way</b> <span class="tag tag-built">built</span><br><code>printer_write_timeout</code>, the one <code>attention</code></div>
+      <div class="snack-s s-att"><svg width="18" height="18" viewBox="0 0 24 24" fill="#F2C14E" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg><span>The printer stopped part-way. Check for a paper jam or an open cover, then send it again.</span></div>
+      <div class="spec-foot">&#8220;Send it again&#8221; in a sentence on this page, where the control is <em>Connect</em> or <em>Test print</em>. Shared with the queue, so left as it is &#8212; see the README.</div>
+    </div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

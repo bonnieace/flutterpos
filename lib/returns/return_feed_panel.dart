@@ -480,6 +480,7 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
     return TenantRouteGuard<_ReturnFeedView>(
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (view) => view.page.items.isEmpty,
       denied: const Center(
         key: ValueKey('return-feed-denied'),
         child: Text('Returns are unavailable for this business.'),

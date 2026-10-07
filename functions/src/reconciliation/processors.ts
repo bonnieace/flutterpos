@@ -22,6 +22,7 @@ import {
 } from "./model";
 import {ClaimedReconciliationJob} from "./jobs";
 import {SaleLike, moneyToMinorUnits, minorUnitsToMoney} from "../operations/domain";
+import {repairTotalsDay} from "../operations/salesSummaries";
 import {readPeriodReturns} from "../operations/returnOffsets";
 
 const DAILY_METRICS_PAGE_SIZE = 5;
@@ -231,6 +232,9 @@ async function regenerateDailyMetric(
       `Business date ${businessDate} exceeds the bounded shift expectation limit.`
     );
   }
+  if (job.source !== "sale_trigger" && job.source !== "shift_close") {
+    await repairTotalsDay(db, tenantId, businessDate, salesSnapshot.docs.map((sale) => sale.id));
+  }
   const expectedIds = new Set(result.shifts.map((shift) =>
     shiftExpectationId(businessDate, shift.shiftId)
   ));
@@ -329,8 +333,9 @@ export async function processMetricsPage(
 ): Promise<MetricsPageResult> {
   const dirtyCollection = db.collection("tenants").doc(job.tenantId)
     .collection("reconciliation_dirty_days");
-  const snapshot = await dirtyCollection
-    .where("status", "==", "dirty")
+  let dirtyQuery = dirtyCollection.where("status", "==", "dirty");
+  if (job.source === "shift_close") dirtyQuery = dirtyQuery.where(FieldPath.documentId(), "==", job.localDate);
+  const snapshot = await dirtyQuery
     .orderBy(FieldPath.documentId())
     .limit(DAILY_METRICS_PAGE_SIZE)
     .get();
@@ -338,7 +343,7 @@ export async function processMetricsPage(
   for (const document of snapshot.docs) {
     if (await regenerateDailyMetric(db, job, document)) processed += 1;
   }
-  const remainder = await dirtyCollection.where("status", "==", "dirty").limit(1).get();
+  const remainder = await dirtyQuery.limit(1).get();
   return {processed, hasMore: !remainder.empty};
 }
 
@@ -1299,7 +1304,9 @@ export async function processShiftPage(
 ): Promise<ShiftPageResult> {
   const collection = db.collection("tenants").doc(job.tenantId)
     .collection("shift_expectations");
-  const snapshot = await collection.where("needsVerification", "==", true)
+  let pendingQuery = collection.where("needsVerification", "==", true);
+  if (job.source === "shift_close") pendingQuery = pendingQuery.where("businessDate", "==", job.localDate);
+  const snapshot = await pendingQuery
     .orderBy(FieldPath.documentId())
     .limit(SHIFT_PAGE_SIZE)
     .get();
@@ -1312,6 +1319,6 @@ export async function processShiftPage(
     if (result.tenderVariance) tenderVarianceCount += 1;
     processed += 1;
   }
-  const remainder = await collection.where("needsVerification", "==", true).limit(1).get();
+  const remainder = await pendingQuery.limit(1).get();
   return {processed, varianceCount, tenderVarianceCount, hasMore: !remainder.empty};
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/ui/brand_icon.dart';
 import 'package:uzapay_pos/ui/home_navigation.dart';
 import 'package:uzapay_pos/ui/press.dart';
 import 'package:uzapay_pos/ui/tokens.dart';
@@ -48,6 +49,7 @@ HomeDestination _destination(
   String? group,
   String? description,
   int? badgeCount,
+  AppBrandIcon? brandIcon,
 }) => HomeDestination(
   destinationKey: ValueKey(label),
   label: label,
@@ -57,6 +59,7 @@ HomeDestination _destination(
   group: group,
   description: description,
   badgeCount: badgeCount,
+  brandIcon: brandIcon,
   onPressed: enabled ? () {} : null,
 );
 
@@ -181,6 +184,81 @@ void main() {
         ),
       );
       expect(glyph.color, isNot(tokens.colors.status.problem.fg));
+    });
+
+    // ------------------------------------------------------------------
+    // Another app's own icon, for the tiles that send through it - asked for
+    // on 2026-10-04 for WhatsApp and Email.
+    // ------------------------------------------------------------------
+
+    for (final (name, width) in const <(String, double)>[
+      ('a phone launcher', 360),
+      ('a card', 1024),
+    ]) {
+      testWidgets('on $name, an app icon takes the place of the glyph', (
+        tester,
+      ) async {
+        await _pump(
+          tester,
+          HomeModuleGrid(
+            destinations: <HomeDestination>[
+              _destination('WhatsApp', brandIcon: AppBrandIcon.whatsapp),
+            ],
+          ),
+          width: width,
+        );
+
+        final mark = find.descendant(
+          of: find.byKey(const ValueKey('WhatsApp')),
+          matching: find.byType(AppBrandIconMark),
+        );
+        expect(mark, findsOneWidget);
+        expect(
+          tester.widget<AppBrandIconMark>(mark).icon,
+          AppBrandIcon.whatsapp,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('WhatsApp')),
+            matching: find.byType(Icon),
+          ),
+          findsNothing,
+          reason: 'The app icon is the well, not a logo beside a glyph.',
+        );
+      });
+    }
+
+    testWidgets('a disabled app tile is the grey glyph, not the app icon', (
+      tester,
+    ) async {
+      // An app icon has no disabled colour of its own, so a disabled tile
+      // reads as every other disabled tile does.
+      await _pump(
+        tester,
+        HomeModuleGrid(
+          destinations: <HomeDestination>[
+            _destination(
+              'WhatsApp',
+              brandIcon: AppBrandIcon.whatsapp,
+              enabled: false,
+            ),
+          ],
+        ),
+        width: 360,
+      );
+
+      expect(find.byType(AppBrandIconMark), findsNothing);
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(const ValueKey('WhatsApp')),
+                matching: find.byType(Icon),
+              ),
+            )
+            .color,
+        AppTokens.profoundVerdant.colors.text.disabled,
+      );
     });
 
     testWidgets('phone colours repeat diagonally without adjacent duplicates', (

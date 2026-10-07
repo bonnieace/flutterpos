@@ -147,6 +147,10 @@ final class FirebaseCheckoutSubmissionGateway
     for (final decrement in submission.stockDecrements) {
       batch.update(firestore.doc(decrement.productPath), <String, Object?>{
         'quantity': FieldValue.increment(decrement.quantityDelta),
+        // The sale this stock left in, being created in this same save. Rules
+        // accept the change on the strength of that sale rather than asking
+        // again, for every line, whether the cashier is active staff.
+        'lastSaleId': submission.checkoutId,
         for (final field in submission.stockServerTimestampFields)
           field: FieldValue.serverTimestamp(),
       });

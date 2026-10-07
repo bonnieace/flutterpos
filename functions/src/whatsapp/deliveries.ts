@@ -3,6 +3,7 @@ import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import type {DocumentReference, Firestore} from "firebase-admin/firestore";
 import {getFunctions} from "firebase-admin/functions";
 import {HttpsError} from "firebase-functions/v2/https";
+import {logAbsorbedFailure} from "../core/absorbedFailure";
 import {CUSTOMER_ID_SHAPE} from "../customers/customerId";
 import {
   WhatsappFetch,
@@ -430,6 +431,10 @@ export async function executeReceiptDelivery(
     await ref.update({
       status: "queued",
       reason: "waiting_for_sale",
+      // Waiting for the sale is not a try at Meta: the claim's attempt is
+      // given back, so a sale from a till offline for hours does not spend
+      // the retries a provider outage needs.
+      attempts: FieldValue.increment(-1),
       leaseUntil: FieldValue.delete(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -437,8 +442,8 @@ export async function executeReceiptDelivery(
   }
 
   const format: ReceiptFormat = claimed.format === "summary" ? "summary" : "pdf";
+  let providerMessageId: string;
   try {
-    let providerMessageId: string;
     if (format === "pdf") {
       const bytes = await (dependencies.renderPdf ?? renderReceiptPdf)(content);
       const filename = receiptFilename(content);
@@ -462,32 +467,6 @@ export async function executeReceiptDelivery(
         bodyParameters: receiptSummaryParameters(content),
       }, dependencies.fetchImpl));
     }
-    const month = now().toDate().toISOString().slice(0, 7);
-    // Together or not at all: a sent receipt the webhook could not find, or
-    // one the usage count missed, would each be a record that disagrees.
-    await db.runTransaction(async (transaction) => {
-      transaction.update(ref, {
-        status: "sent",
-        reason: null,
-        receiptNumber: content.receiptNumber,
-        providerMessageId,
-        leaseUntil: FieldValue.delete(),
-        sentAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-      transaction.set(db.collection("whatsapp_messages").doc(providerMessageId), {
-        tenantId: task.tenantId,
-        deliveryId: task.deliveryId,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-      // What the business's receipts cost Meta, counted for when it is billed.
-      transaction.set(tenantRef.collection("whatsapp_usage").doc(month), {
-        month,
-        sent: FieldValue.increment(1),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
-    });
-    return "sent";
   } catch (error) {
     if (error instanceof WhatsappSendError) {
       if (error.retryable && attempts < MAXIMUM_SEND_ATTEMPTS) {
@@ -514,6 +493,71 @@ export async function executeReceiptDelivery(
     });
     throw error;
   }
+
+  // **Meta has the message, so nothing from here re-queues it.** A retry
+  // would send the customer the same receipt again. The record is written
+  // together where it can be - a sent receipt the webhook could not find, or
+  // one the usage count missed, would each disagree - and as plainly "sent"
+  // where it cannot, with the failure logged rather than retried.
+  const month = now().toDate().toISOString().slice(0, 7);
+  const sent = {
+    status: "sent",
+    reason: null,
+    receiptNumber: content.receiptNumber,
+    providerMessageId,
+    leaseUntil: FieldValue.delete(),
+    sentAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  try {
+    await db.runTransaction(async (transaction) => {
+      transaction.update(ref, sent);
+      transaction.set(db.collection("whatsapp_messages").doc(whatsappMessageKey(providerMessageId)), {
+        tenantId: task.tenantId,
+        deliveryId: task.deliveryId,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      // What the business's receipts cost Meta, counted for when it is billed.
+      transaction.set(tenantRef.collection("whatsapp_usage").doc(month), {
+        month,
+        sent: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+    });
+  } catch (error) {
+    logAbsorbedFailure("whatsapp_receipt_sent_unrecorded", error, {
+      tenantId: task.tenantId,
+      deliveryId: task.deliveryId,
+    });
+    await ref.update(sent).catch((fallback: unknown) => {
+      logAbsorbedFailure("whatsapp_receipt_sent_unmarked", fallback, {
+        tenantId: task.tenantId,
+        deliveryId: task.deliveryId,
+      });
+    });
+  }
+  return "sent";
+}
+
+/**
+ * The `whatsapp_messages` document a Meta message ID is indexed under.
+ *
+ * **Every ID Firestore accepts keys exactly as it always did**, so a receipt
+ * sent before this still finds its index. A `/` is escaped; an ID that is
+ * still no document ID after that - `.`, `..`, `__reserved__`, or longer than
+ * Firestore allows - is keyed by its digest instead. Meta's IDs are opaque,
+ * and a receipt indexed under nothing would stay "sent" for ever.
+ */
+export function whatsappMessageKey(providerMessageId: string): string {
+  const escaped = providerMessageId.replace(/\//g, "%2F");
+  const usable = escaped.length > 0 &&
+    escaped !== "." &&
+    escaped !== ".." &&
+    !/^__.*__$/.test(escaped) &&
+    Buffer.byteLength(escaped, "utf8") <= 1500;
+  return usable ?
+    escaped :
+    `h_${createHash("sha256").update(providerMessageId).digest("hex")}`;
 }
 
 /**
@@ -526,7 +570,8 @@ export async function applyDeliveryStatus(
   db: Firestore,
   update: {providerMessageId: string; status: "sent" | "delivered" | "read" | "failed"; error?: string}
 ): Promise<boolean> {
-  const index = await db.collection("whatsapp_messages").doc(update.providerMessageId).get();
+  const index = await db.collection("whatsapp_messages")
+    .doc(whatsappMessageKey(update.providerMessageId)).get();
   const tenantId = index.get("tenantId");
   const deliveryId = index.get("deliveryId");
   if (!index.exists || typeof tenantId !== "string" || typeof deliveryId !== "string") {

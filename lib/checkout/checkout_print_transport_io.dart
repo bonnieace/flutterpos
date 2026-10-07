@@ -24,7 +24,9 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'checkout_bluetooth_printer.dart';
 import 'checkout_print_transport_base.dart';
+import 'checkout_print_transport_bluetooth.dart';
 
 /// Opens a real socket. Injected so a test can drive a `ServerSocket` that
 /// accepts, or stalls, or refuses — which is `docs/printer_transport.md` §9's
@@ -32,7 +34,43 @@ import 'checkout_print_transport_base.dart';
 typedef PrinterSocketConnector =
     Future<Socket> Function(String host, int port, {Duration? timeout});
 
-PrinterTransport createPrinterTransport() => IoPrinterTransport();
+/// Sockets for network printers and, on Android, Bluetooth for paired ones -
+/// chosen per job by the job's own endpoint.
+PrinterTransport createPrinterTransport() => RoutedPrinterTransport(
+  network: IoPrinterTransport(),
+  // Only Android has Bluetooth Classic serial. Elsewhere a Bluetooth endpoint
+  // cannot be chosen in the first place, and the stub says so if one arrives.
+  bluetooth: Platform.isAndroid
+      ? AndroidBluetoothPrinterTransport()
+      : const _NoBluetoothPrinterTransport(),
+);
+
+BluetoothPrinterDiscovery createBluetoothPrinterDiscovery() =>
+    Platform.isAndroid
+    ? AndroidBluetoothPrinterDiscovery()
+    : const UnsupportedBluetoothPrinterDiscovery();
+
+final class _NoBluetoothPrinterTransport implements PrinterTransport {
+  const _NoBluetoothPrinterTransport();
+
+  @override
+  PrinterTransportCapability get capability => const PrinterTransportCapability(
+    kind: PrinterTransportKind.none,
+    endpointIsPrinter: false,
+    label: 'Bluetooth printing is not available on this platform',
+  );
+
+  @override
+  Future<void> probe(PrinterEndpoint endpoint) async =>
+      throw const PrinterTransportException(PrinterTransportCode.unsupported);
+
+  @override
+  Future<void> send(PrinterEndpoint endpoint, List<int> bytes) async =>
+      throw const PrinterTransportException(PrinterTransportCode.unsupported);
+
+  @override
+  Future<void> dispose() async {}
+}
 
 final class IoPrinterTransport implements PrinterTransport {
   IoPrinterTransport({

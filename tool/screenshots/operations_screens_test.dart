@@ -21,9 +21,7 @@ import 'package:uzapay_pos/sales/sales.dart';
 import 'package:uzapay_pos/shift/shift.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/tenancy/tenant_configuration_screens.dart';
-import 'package:uzapay_pos/ui/scaffold.dart';
 import 'package:uzapay_pos/ui/snackbar.dart';
-import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -258,9 +256,7 @@ void main() {
     build: () => inSession(
       TenantCheckoutScreen(
         cache: FakeCatalogSource(),
-        drafts: FakeDraftSink(
-          printFailure: PrinterTransportCode.notConfigured,
-        ),
+        drafts: FakeDraftSink(printFailure: PrinterTransportCode.notConfigured),
         printerSetupReminder: _NeverSilenced(),
         onSetUpPrinter: (_) {},
       ),
@@ -456,11 +452,10 @@ void main() {
     viewports: responsiveViewports,
   );
 
-  // **Configs, the three tabs**, at the phone width and at 320. The strip was
-  // three fixed shares until 2026-09-29, when the third tab cut *Stock counts*
-  // and *Agreed prices* off mid-word on a 320 emulator; it now keeps the
-  // shares where the labels fit and scrolls where they do not. This is the
-  // capture that shows which, in the shipped face.
+  // **Configs**, at the phone width and at 320. The strip was three fixed
+  // shares until 2026-09-29, when the third tab cut *Stock counts* and *Agreed
+  // prices* off mid-word on a 320 emulator. The rota moved to the Stock counts
+  // screen on 2026-10-04, which leaves this build two tabs - a switch.
   screenshotCase(
     '16k-configs',
     build: () {
@@ -468,7 +463,6 @@ void main() {
       return inSession(
         TenantConfigurationsScreen(
           currencyBuilder: destinations[0].builder,
-          stockCountsBuilder: destinations[2].builder,
           agreedPricesBuilder: destinations[3].builder,
         ),
       );
@@ -1540,6 +1534,42 @@ void main() {
     viewports: responsiveViewports,
   );
 
+  // **The counts, as the screen's first tab** since 2026-10-04: the switch is
+  // over the button, the filters and the cards, on one edge with them.
+  screenshotCase(
+    '38a-stock-counts-tabs',
+    build: () => inSession(
+      TenantStockTakeReviewScreen(
+        reader: _stockTakeReader(),
+        countRoute: (context) => const SizedBox.shrink(),
+        settings: (_) => const SizedBox.shrink(),
+      ),
+      controller: seedSession(),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  // **The rota, as the screen's second tab** since 2026-10-04, over the stock
+  // count captures' shop. Only an owner or administrator gets the switch.
+  screenshotCase(
+    '38c-stock-counts-settings',
+    build: () => inSession(
+      TenantStockTakeReviewScreen(
+        reader: _stockCountsReader(schedule: _stockCountsSchedule),
+        countRoute: (context) => const SizedBox.shrink(),
+        settings: (_) => TenantStockTakeSettingsPanel(
+          reader: _stockCountsReader(schedule: _stockCountsSchedule),
+          writer: FakeConfigurationDocumentWriter(),
+        ),
+      ),
+    ),
+    afterPump: (tester) async {
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+    },
+    viewports: responsiveViewports,
+  );
+
   // The count that needs review, opened: what differs, biggest first, and the
   // accept pinned under it.
   screenshotCase(
@@ -2044,17 +2074,10 @@ List<TenantSettingsDestination> _settingsDestinations(
     kind: TenantSettingKind.printer,
     icon: Icons.print_outlined,
     allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
-    // The printer, then the receipt branding under it, as `lib/main.dart`.
-    builder: (context) => Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        TenantPrinterConfigurationPanel(reader: reader),
-        SizedBox(height: AppTokens.componentOf(context).spacing.s32),
-        const SectionHeading('Receipt branding'),
-        SizedBox(height: AppTokens.componentOf(context).spacing.s12),
-        TenantBrandingPanel(reader: reader),
-      ],
-    ),
+    // The printer alone, as `lib/main.dart`: its tabs scroll themselves, and
+    // the receipt branding moved to *Business details*.
+    ownsScroll: true,
+    builder: (_) => TenantPrinterConfigurationPanel(reader: reader),
   ),
   TenantSettingsDestination(
     settingKey: 'stock-take',

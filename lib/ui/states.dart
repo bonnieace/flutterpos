@@ -67,7 +67,11 @@ final class EmptyState extends StatelessWidget {
     this.hint,
     this.action,
     this.illustration,
-  });
+    this.icon,
+  }) : assert(
+         illustration == null || icon == null,
+         'One mark: an illustration or a glyph, not both.',
+       );
 
   /// §7's "one-line statement of what would be here". A noun phrase about the
   /// records, not an apology: *No products yet*, not *Sorry, nothing found*.
@@ -100,6 +104,16 @@ final class EmptyState extends StatelessWidget {
   /// The file's own colours are not used; see `AppIllustration`.
   final String? illustration;
 
+  /// A glyph to draw in a ring in place of the painted mark, for a list that
+  /// is empty because nothing has happened yet rather than because a search
+  /// found nothing.
+  ///
+  /// **New on 2026-10-04, for the WhatsApp receipts screen's sent tab**, where
+  /// `file-search.svg` said *a record was looked for* and nothing was: the tab
+  /// lists receipts as they go, and an empty one is a chat list nobody has
+  /// written to yet. One glyph in a ring is how such a list sits.
+  final IconData? icon;
+
   /// The mark's side, in logical pixels.
   ///
   /// Named rather than tokenised: `design.md` states no illustration size
@@ -130,6 +144,8 @@ final class EmptyState extends StatelessWidget {
             children: <Widget>[
               if (illustration case final asset?)
                 AppIllustration(asset: asset, size: illustrationSize)
+              else if (icon case final glyph?)
+                _GlyphRing(icon: glyph)
               else
                 const _EmptyMark(),
               SizedBox(height: tokens.spacing.s16),
@@ -156,6 +172,40 @@ final class EmptyState extends StatelessWidget {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// [EmptyState.icon], in its ring: a card's surface and edge, round.
+///
+/// **Still, and decoration only.** It is the title under it that says the list
+/// is empty; the glyph names what the list would hold, and a screen reader is
+/// given the title rather than a description of a picture.
+final class _GlyphRing extends StatelessWidget {
+  const _GlyphRing({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    return ExcludeSemantics(
+      child: Container(
+        width: tokens.icons.emptyRing,
+        height: tokens.icons.emptyRing,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: colors.surface.raised,
+          border: Border.all(color: colors.surface.cardEdge),
+        ),
+        child: Icon(
+          icon,
+          size: tokens.icons.empty,
+          color: colors.text.tertiary,
         ),
       ),
     );

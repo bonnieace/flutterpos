@@ -123,6 +123,9 @@ function checkoutBatch(
       ["tenants/tenant-a/products/product-a", -2],
       ["tenants/tenant-a/products/product-b", -1],
     ],
+    // What a till built before 2026-10-05 writes is no `lastSaleId`; every
+    // existing case here is that till, and still has to commit.
+    lastSaleId,
   } = {},
 ) {
   const batch = writeBatch(firestore);
@@ -134,6 +137,7 @@ function checkoutBatch(
     batch.update(doc(firestore, path), {
       quantity: increment(delta),
       updatedAt: serverTimestamp(),
+      ...(lastSaleId === undefined ? {} : { lastSaleId }),
     });
   }
   return batch;
@@ -381,6 +385,7 @@ test("a credit sale must name who owes, and owe a sensible amount", async () => 
   const credit = { tender: "credit", customerId: CUSTOMER_ID, creditOwedMinor: 1 };
   const refused = [
     ["nobody", { ...credit, customerId: undefined }],
+    ["a customer the server cannot charge", { ...credit, customerId: "x" }],
     ["nothing owed", { ...credit, creditOwedMinor: 0 }],
     ["more than it cost", { ...credit, creditOwedMinor: total + 1 }],
     ["a fraction", { ...credit, creditOwedMinor: 1.5 }],
@@ -537,6 +542,121 @@ test("the largest allowed schema v2 sale still evaluates within the Rules budget
   }
 
   await assertSucceeds(batch.commit());
+});
+
+// **Four hundred lines, on credit, measured 2026-10-05.** A stock change that
+// names its sale proves itself through it rather than asking again whether
+// the cashier is active staff, and the sale's lines are no longer checked
+// position by position, so a basket is bounded by the save - one sale and a
+// stock change per line inside Firestore's 500 writes - and not by the Rules
+// budget, which used to stop a credit sale at fourteen lines.
+test("a four-hundred-line credit sale fits the Rules budget", async () => {
+  const lines = 400;
+  await seedCheckoutTenant();
+  await seedDocuments(
+    testEnvironment,
+    Object.fromEntries(
+      Array.from({ length: lines }, (_, index) => [
+        `tenants/tenant-a/products/product-${index}`,
+        {
+          name: `Product ${index}`,
+          quantity: 100,
+          updatedAt: Timestamp.fromMillis(0),
+        },
+      ]),
+    ),
+  );
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+  const total = lines * 100;
+
+  await assertSucceeds(
+    checkoutBatch(firestore, {
+      checkoutId: "checkout-full-credit",
+      sale: {
+        tender: "credit",
+        customerId: CUSTOMER_ID,
+        customerName: "Jane Wanjiku",
+        customerKraPin: "A012345678Z",
+        creditOwedMinor: total - 1,
+        creditPaidTender: "mpesa",
+        items: Array.from({ length: lines }, (_, index) =>
+          saleLine(`product-${index}`, 1, 100),
+        ),
+        subtotalMinor: total,
+        subtotal: total / 100,
+        totalMinor: total,
+        total: total / 100,
+      },
+      decrements: Array.from({ length: lines }, (_, index) => [
+        `tenants/tenant-a/products/product-${index}`,
+        -1,
+      ]),
+      lastSaleId: "checkout-full-credit",
+    }).commit(),
+  );
+});
+
+test("a sale holds a list of up to four hundred lines", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+  for (const [name, items] of [
+    ["no lines", []],
+    ["not a list", { 0: saleLine("product-a", 2, 100) }],
+    ["too many", Array.from({ length: 401 }, () => saleLine("product-a", 1, 100))],
+  ]) {
+    await assertFails(
+      checkoutBatch(firestore, {
+        checkoutId: `checkout-items-${name.replaceAll(" ", "-")}`,
+        sale: { items },
+        lastSaleId: `checkout-items-${name.replaceAll(" ", "-")}`,
+      }).commit(),
+    );
+  }
+});
+
+// **The cheap route proves a sale is being written now, by this person.**
+// Without that, naming any old sale would let a cashier take stock down
+// whenever they liked, with no staff check at all.
+test("a stock change is accepted for a sale only as that sale is written", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+
+  await assertSucceeds(
+    checkoutBatch(firestore, { lastSaleId: "checkout-a" }).commit(),
+  );
+
+  // A sale named but not in the save.
+  const alone = writeBatch(firestore);
+  alone.update(doc(firestore, "tenants/tenant-a/products/product-a"), {
+    quantity: increment(-1),
+    updatedAt: serverTimestamp(),
+    lastSaleId: "checkout-nowhere",
+  });
+  await assertFails(alone.commit());
+
+  // A sale already written, named by someone no longer on the staff to take
+  // more stock: the sale is not being written now, so it proves nothing, and
+  // the staff check the older route asks refuses them too.
+  await seedDocuments(testEnvironment, {
+    "tenants/tenant-a/staff/cashier": {
+      uid: "cashier",
+      role: "cashier",
+      status: "inactive",
+    },
+    "tenants/tenant-a/products/product-a": {
+      name: "Product A",
+      quantity: 10,
+      updatedAt: Timestamp.fromMillis(0),
+      lastSaleId: "checkout-other",
+    },
+  });
+  const again = writeBatch(firestore);
+  again.update(doc(firestore, "tenants/tenant-a/products/product-a"), {
+    quantity: increment(-1),
+    updatedAt: serverTimestamp(),
+    lastSaleId: "checkout-a",
+  });
+  await assertFails(again.commit());
 });
 
 test("an inactive canonical cashier cannot submit a checkout batch", async () => {

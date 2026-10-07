@@ -149,6 +149,7 @@ final class _TenantProductLedgerPanelState
       allowedRoles: TenantProductStockRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (view) => view.ledger.movements.items.isEmpty,
       denied: const Center(
         key: ValueKey('product-ledger-denied'),
         child: Text('This product ledger is unavailable for this business.'),

@@ -248,8 +248,10 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
       }
     });
     _report(switch (result.kind) {
-      TenantConfigurationWriteKind.queued => const AppNotice.offline(
-        'Saved on this device; waiting to sync.',
+      // Every save is queued, online or not, so this is the settings pages'
+      // own sentence rather than one that announces an outage.
+      TenantConfigurationWriteKind.queued => const AppNotice.confirmed(
+        'Saved on this device and on its way to the others.',
       ),
       TenantConfigurationWriteKind.committed => const AppNotice.confirmed(
         'Saved. Every receipt printed from now on carries this branding.',

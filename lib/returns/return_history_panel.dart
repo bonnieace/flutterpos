@@ -401,6 +401,9 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     return TenantRouteGuard<_ReturnsView>(
       load: _loader!,
       loadCached: _loaderCached,
+      // What may still be returned is worked out from the returns read, so an
+      // empty copy would also offer back what was already returned.
+      holdsNothing: (view) => view.page.items.isEmpty,
       denied: const Center(
         key: ValueKey('sale-returns-denied'),
         child: Text('Returns are unavailable for this business.'),
@@ -541,9 +544,10 @@ AppNotice _verificationNotice(TenantReturnVerificationFailure failure) =>
 /// only that the record this screen was asked to write exists.
 AppNotice _resultNotice(TenantReturnWriteResult result) =>
     switch (result.kind) {
-      TenantReturnWriteKind.queued => const AppNotice.offline(
-        'Saved on this device; waiting to sync. No stock has been restored.',
-      ),
+      // **Queued is every return, online or not**: the writer stores it here
+      // and the worker carries it on, so *waiting to sync* announced an outage
+      // on a connected phone. The sync badge says when one is genuinely stuck.
+      TenantReturnWriteKind.queued ||
       TenantReturnWriteKind.committed => const AppNotice.confirmed(
         'Return recorded. No stock has been restored yet; a manager must '
         'verify it first.',

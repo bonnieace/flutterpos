@@ -1381,31 +1381,9 @@ final class _TenantCatalogManagementPanelState
     };
     _loader = readWith(widget.reader, widget.productSearchReader);
     final cache = widget.reader.cached;
-    final cachedSearch = widget.productSearchReader?.cachedProductSearch;
-    if (cache == null) {
-      _loaderCached = null;
-      return;
-    }
-    final readCached = readWith(cache, cachedSearch);
-    // **An empty answer from the disk is not an answer.** `Source.cache` is
-    // silent rather than failing for a path it has never seen - it hands back
-    // an empty page - so a device that has never synced cannot be told apart
-    // from a business that sells nothing. Drawing that would put *no products*
-    // on screen and then take it back a moment later, which on the catalog
-    // reads as the shop's products having been lost.
-    //
-    // Throwing is how a cached pass says it holds nothing:
-    // `TenantRouteGuard._loadFromCache` swallows every failure in silence and
-    // leaves the page on its shimmer until the server answers. Categories and
-    // products both, because a business with categories and no products yet is
-    // a real state worth drawing at once.
-    _loaderCached = (session) async {
-      final view = await readCached(session);
-      if (view.categories.items.isEmpty && view.products.items.isEmpty) {
-        throw const _NothingHeldOnThisDevice();
-      }
-      return view;
-    };
+    _loaderCached = cache == null
+        ? null
+        : readWith(cache, widget.productSearchReader?.cachedProductSearch);
   }
 
   String? _loaderKey;
@@ -1430,6 +1408,12 @@ final class _TenantCatalogManagementPanelState
       allowedRoles: null,
       load: _loader!,
       loadCached: _loaderCached,
+      // **An empty copy would read as the shop's products having been lost**,
+      // drawn as *no products* and taken back a moment later. Categories and
+      // products both, because a business with categories and no products yet
+      // is a real state worth drawing at once.
+      holdsNothing: (view) =>
+          view.categories.items.isEmpty && view.products.items.isEmpty,
       // **A shimmer of the catalog rather than a spinner, at the developer's
       // direction on 2026-08-28.** This route was on the guard's default
       // `LoadingState`, which is one indicator and one sentence in the middle
@@ -1553,15 +1537,6 @@ final class _CatalogView {
 
   final TenantCatalogPage<TenantCategory> categories;
   final TenantCatalogPage<TenantProduct> products;
-}
-
-/// What the cached pass throws when this device is holding no catalog at all.
-///
-/// Never shown to anybody and never caught by name: it exists so the guard's
-/// silent-failure path can carry the one fact a `Source.cache` read cannot
-/// state for itself - see `_composeLoaders`.
-final class _NothingHeldOnThisDevice implements Exception {
-  const _NothingHeldOnThisDevice();
 }
 
 /// The legacy `goods.dart` hierarchy rebuilt on the tenant-safe catalog model.

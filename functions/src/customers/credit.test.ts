@@ -11,7 +11,11 @@ import {
 import {planSaleTenderRecord} from "../operations/saleTender";
 import {aggregateDailySales} from "../reconciliation/model";
 import {readSaleCredit} from "./credit";
-import {applyCustomerSale, planReturnedPoints} from "./customerSale";
+import {
+  applyCustomerSale,
+  CustomerNotYetArrived,
+  planReturnedPoints,
+} from "./customerSale";
 import {applyCustomerPayment, readCustomerPaymentRequest} from "./payments";
 
 /**
@@ -147,18 +151,23 @@ test("blocking credit is a manager's switch, and allowing it is the default", ()
 
 test("a sale paid in full is not a debt, whatever its tender says", () => {
   assert.equal(readSaleCredit({tender: "cash", totalMinor: 100}), null);
+  const credit = {tender: "credit", customerId: JANE, totalMinor: 100};
   for (const forged of [
-    {tender: "credit", totalMinor: 100, creditOwedMinor: 0},
-    {tender: "credit", totalMinor: 100, creditOwedMinor: 101},
-    {tender: "credit", totalMinor: 100, creditOwedMinor: 1.5},
-    {tender: "credit", totalMinor: 100, creditOwedMinor: 40},
-    {tender: "credit", totalMinor: 100, creditOwedMinor: 40, creditPaidTender: "cheque"},
-    {tender: "credit", totalMinor: 100, creditOwedMinor: 100, creditPaidTender: "cash"},
+    {...credit, creditOwedMinor: 0},
+    {...credit, creditOwedMinor: 101},
+    {...credit, creditOwedMinor: 1.5},
+    {...credit, creditOwedMinor: 40},
+    {...credit, creditOwedMinor: 40, creditPaidTender: "cheque"},
+    {...credit, creditOwedMinor: 100, creditPaidTender: "cash"},
+    // Nobody the server can charge: the owed part would leave the drawer
+    // expectation and land on no balance.
+    {...credit, creditOwedMinor: 100, customerId: undefined},
+    {...credit, creditOwedMinor: 100, customerId: "x"},
   ]) {
     assert.equal(readSaleCredit(forged), null, JSON.stringify(forged));
   }
   assert.deepEqual(
-    readSaleCredit({tender: "credit", totalMinor: 100, creditOwedMinor: 100}),
+    readSaleCredit({...credit, creditOwedMinor: 100}),
     {owedMinor: 100, paidMinor: 0, paidTender: null}
   );
 });
@@ -214,6 +223,141 @@ test("goods returned on a credit sale cancel what is still owed, and no more", a
   );
 
   assert.equal(await giveBack(db, "ret-3", [{productId: "sugar", quantity: 1}]), false);
+});
+
+test("a return verified before the sale was counted is applied by the count", async () => {
+  const db = seeded({
+    [`${ROOT}/sales/sale-1`]: creditSale(),
+    [`${ROOT}/customers/${JANE}`]: {name: "Jane", active: true},
+    [`${ROOT}/return_verifications/rv_1`]: {
+      tenantId: TENANT,
+      returnId: "ret-1",
+      saleId: "sale-1",
+      restoredProducts: [{productId: "flour", quantityRestored: 2}],
+    },
+  });
+
+  await applyCustomerSale(db.asFirestore(), {tenantId: TENANT, saleId: "sale-1"});
+
+  // The flour was 60000 of the 70000 owed: the customer owes only the rest.
+  assert.equal(customer(db)?.balanceMinor, 10000);
+  const sale = db.read(`${ROOT}/customers/${JANE}/activity/sale-1`);
+  assert.equal(sale?.creditReturnedMinor, 60000);
+  assert.equal(sale?.balanceAfterMinor, 70000);
+  const returned = db.read(`${ROOT}/customers/${JANE}/activity/return-ret-1`);
+  assert.equal(returned?.balanceChangeMinor, -60000);
+  assert.equal(returned?.balanceAfterMinor, 10000);
+});
+
+test("returns verified before the count apply in the order they were verified", async () => {
+  // The sugar came back first and the flour second. Applied in that order
+  // the sugar cancels 40000 and the flour the 30000 left; their IDs sort the
+  // other way round, which would hand the flour all but 10000 of it.
+  const db = seeded({
+    [`${ROOT}/sales/sale-1`]: creditSale(),
+    [`${ROOT}/customers/${JANE}`]: {name: "Jane", active: true},
+    [`${ROOT}/return_verifications/rv_b`]: {
+      returnId: "ret-sugar",
+      saleId: "sale-1",
+      restoredProducts: [{productId: "sugar", quantityRestored: 4}],
+      createdAt: Timestamp.fromMillis(1000),
+    },
+    [`${ROOT}/return_verifications/rv_a`]: {
+      returnId: "ret-flour",
+      saleId: "sale-1",
+      restoredProducts: [{productId: "flour", quantityRestored: 2}],
+      createdAt: Timestamp.fromMillis(2000),
+    },
+  });
+
+  await applyCustomerSale(db.asFirestore(), {tenantId: TENANT, saleId: "sale-1"});
+
+  const activity = `${ROOT}/customers/${JANE}/activity`;
+  const sugar = db.read(`${activity}/return-ret-sugar`);
+  const flour = db.read(`${activity}/return-ret-flour`);
+  assert.equal(sugar?.balanceChangeMinor, -40000);
+  assert.equal(sugar?.balanceAfterMinor, 30000);
+  assert.equal(flour?.balanceChangeMinor, -30000);
+  assert.equal(flour?.balanceAfterMinor, 0);
+  assert.equal(customer(db)?.balanceMinor, 0);
+  // The statement lists by time: the sale, then each return in turn.
+  const at = (entry: DocumentData | undefined) =>
+    (entry?.createdAt as Timestamp).toMillis();
+  const sale = db.read(`${activity}/sale-1`);
+  assert.ok(at(sale) < at(sugar) && at(sugar) < at(flour));
+});
+
+test("a credit sale to a customer refused for a taken number owes the holder", async () => {
+  // The till added "Jane" offline with a number Jane already had, and sold
+  // to the new record on credit. The create was refused; the sale counts on
+  // the customer who holds the number, and so does its return later.
+  const added = `cu_${"f".repeat(40)}`;
+  const db = seeded({
+    [`${ROOT}/sales/sale-1`]: creditSale({customerId: added}),
+    [`${ROOT}/customers/${JANE}`]: {name: "Jane", active: true},
+    [`${ROOT}/customer_aliases/${added}`]: {customerId: JANE, reason: "phone_taken"},
+  });
+
+  const outcome = await applyCustomerSale(
+    db.asFirestore(),
+    {tenantId: TENANT, saleId: "sale-1"}
+  );
+
+  assert.deepEqual(outcome, {outcome: "counted", customerId: JANE, points: 0, owedMinor: 70000});
+  assert.equal(customer(db)?.balanceMinor, 70000);
+  assert.equal(db.read(`${ROOT}/customers/${added}`), undefined);
+
+  await db.runTransaction(async (transaction) => {
+    const tx = transaction as unknown as Transaction;
+    const plan = await planReturnedPoints(
+      tx,
+      db.asFirestore().collection("tenants").doc(TENANT),
+      {
+        saleId: "sale-1",
+        sale: creditSale({customerId: added}),
+        returnId: "ret-1",
+        lines: [{productId: "flour", quantity: 2}],
+      }
+    );
+    plan?.(tx);
+  });
+  assert.equal(customer(db)?.balanceMinor, 10000);
+});
+
+test("a credit sale whose customer never arrives adds them on the last attempt", async () => {
+  const db = seeded({[`${ROOT}/sales/sale-1`]: creditSale()});
+  const task = {tenantId: TENANT, saleId: "sale-1"};
+
+  await assert.rejects(
+    applyCustomerSale(db.asFirestore(), task),
+    CustomerNotYetArrived
+  );
+  assert.equal(customer(db), undefined);
+
+  await applyCustomerSale(db.asFirestore(), task, {lastAttempt: true});
+
+  const added = customer(db);
+  assert.equal(added?.name, "Jane Wanjiku");
+  assert.equal(added?.createdFromSaleId, "sale-1");
+  assert.equal(added?.balanceMinor, 70000);
+  assert.equal(added?.owing, true);
+  assert.equal(added?.saleCount, 1);
+});
+
+test("a sale owing nothing still waits for its customer, however late", async () => {
+  const db = seeded({
+    [`${ROOT}/sales/sale-1`]: creditSale({tender: "cash", creditOwedMinor: undefined}),
+  });
+
+  await assert.rejects(
+    applyCustomerSale(
+      db.asFirestore(),
+      {tenantId: TENANT, saleId: "sale-1"},
+      {lastAttempt: true}
+    ),
+    CustomerNotYetArrived
+  );
+  assert.equal(customer(db), undefined);
 });
 
 function paymentRequest(overrides: Record<string, unknown> = {}) {
@@ -330,6 +474,18 @@ test("the period report splits a credit sale between paid and owed", () => {
   assert.equal(breakdown.other.sales, 700);
   assert.equal(breakdown.other.transactions, 1);
   assert.equal(breakdown.cash.transactions, 0);
+});
+
+test("a partly returned credit sale reports its debt cancelled first", () => {
+  // The flour (60000) came back: it cancels 60000 of the 70000 owed, as the
+  // customer's ledger does, and the 30000 paid in cash stays paid.
+  const breakdown = aggregateSalesByTender(
+    [creditSale({saleId: "sale-1"})],
+    undefined,
+    new Map([["sale-1", new Map([["flour", 2]])]])
+  );
+  assert.equal(breakdown.cash.sales, 300);
+  assert.equal(breakdown.other.sales, 100);
 });
 
 test("a credit limit is a manager's to give, and zero gives none", () => {

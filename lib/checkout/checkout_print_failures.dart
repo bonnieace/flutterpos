@@ -1,4 +1,4 @@
-/// The eight failure codes, as the eight sentences a shopkeeper reads.
+/// The failure codes, as the sentences a shopkeeper reads.
 ///
 /// **`docs/printer_transport.md` §8: "Mapping happens at the UI edge. The
 /// transport never builds a sentence."** This file is that edge, and it is the
@@ -66,6 +66,21 @@ abstract final class PrinterFailureNotice {
     ),
     PrinterTransportCode.bridgeUnauthorized => const AppNotice.refused(
       'The print bridge did not accept this device. Re-enter the print token.',
+    ),
+    // **The Bluetooth three name the phone's own switch and permission**,
+    // because those are the faults a person can see and fix from where they
+    // stand - a printer that is "not on this network" means nothing over
+    // Bluetooth.
+    PrinterTransportCode.bluetoothOff => const AppNotice.refused(
+      'Bluetooth is off on this device. Turn it on, then send it again.',
+    ),
+    PrinterTransportCode.bluetoothPermissionDenied => const AppNotice.refused(
+      'This app is not allowed to use Bluetooth. Allow Nearby devices for '
+      'UzaPay in the phone settings, then send it again.',
+    ),
+    PrinterTransportCode.bluetoothUnreachable => const AppNotice.refused(
+      'The Bluetooth printer did not answer. Check it is switched on, close '
+      'to this device and not connected to another phone.',
     ),
     _ => AppNotice.unknown(
       'This device does not recognise the printing result "$code". It may '

@@ -106,7 +106,10 @@ void main() {
     await _pump(tester, server: _server(takes: 6), sizeViewport: false);
 
     expect(tester.takeException(), isNull);
-    expect(find.byKey(const ValueKey('stock-take-review-list')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('stock-take-review-list')),
+      findsOneWidget,
+    );
 
     // And it really scrolls: the last count is reachable.
     await tester.drag(
@@ -116,6 +119,78 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('an owner gets the counts and the rota as two tabs', (
+    tester,
+  ) async {
+    // The rota moved here from *Configs* on 2026-10-04. Both tabs stay alive,
+    // so a half-made change to the rota survives a look at the counts.
+    await _pumpTabbed(tester, server: _server());
+
+    expect(
+      find.byKey(const ValueKey('stock-take-review-tabs')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Wamweki Njoroge'), findsOneWidget);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('rota-edit')), 'Fridays');
+
+    await tester.tap(find.text('Counts'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Wamweki Njoroge'), findsOneWidget);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fridays'), findsOneWidget);
+  });
+
+  testWidgets('a manager reads the counts with no rota tab above them', (
+    tester,
+  ) async {
+    // Only an owner or administrator may publish the rota, and a tab that only
+    // says *Not allowed* is not one worth offering.
+    await _pumpTabbed(tester, server: _server(), role: TenantRole.manager);
+
+    expect(find.byKey(const ValueKey('stock-take-review-tabs')), findsNothing);
+    expect(find.byKey(const ValueKey('rota-edit')), findsNothing);
+    expect(find.textContaining('Wamweki Njoroge'), findsOneWidget);
+  });
+
+  testWidgets('no tabs where no rota is wired', (tester) async {
+    await _pumpScreen(tester, server: _server());
+
+    expect(find.byKey(const ValueKey('stock-take-review-tabs')), findsNothing);
+  });
+}
+
+/// The screen as the app wires it for [role], with a rota that is one field.
+Future<void> _pumpTabbed(
+  WidgetTester tester, {
+  required _Server server,
+  TenantRole role = TenantRole.owner,
+}) async {
+  tester.view.physicalSize = const Size(1400, 3600);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(
+    MaterialApp(
+      home: TenantSessionScope(
+        controller: TenantSessionController()
+          ..open(
+            uid: 'staff-owner',
+            membership: _membership(role: role),
+          ),
+        child: TenantStockTakeReviewScreen(
+          reader: _Reader(server),
+          settings: (_) => const TextField(key: ValueKey('rota-edit')),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 Future<void> _pumpScreen(
@@ -130,10 +205,8 @@ Future<void> _pumpScreen(
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(
-        controller: TenantSessionController()..open(
-          uid: 'staff-owner',
-          membership: _membership(),
-        ),
+        controller: TenantSessionController()
+          ..open(uid: 'staff-owner', membership: _membership()),
         child: TenantStockTakeReviewScreen(
           reader: _Reader(server),
           countRoute: onCount == null
@@ -163,10 +236,8 @@ Future<void> _pumpScreenWithRoutes(
     MaterialApp(
       navigatorObservers: <NavigatorObserver>[tenantRouteObserver],
       home: TenantSessionScope(
-        controller: TenantSessionController()..open(
-          uid: 'staff-owner',
-          membership: _membership(),
-        ),
+        controller: TenantSessionController()
+          ..open(uid: 'staff-owner', membership: _membership()),
         child: TenantStockTakeReviewScreen(
           reader: _Reader(server),
           countRoute: (routeContext) => Scaffold(
@@ -219,10 +290,8 @@ Future<void> _pump(
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(
-        controller: TenantSessionController()..open(
-          uid: 'staff-owner',
-          membership: _membership(),
-        ),
+        controller: TenantSessionController()
+          ..open(uid: 'staff-owner', membership: _membership()),
         child: Scaffold(
           body: TenantStockTakeReviewPanel(reader: _Reader(server)),
         ),
@@ -232,21 +301,22 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
-TenantMembership _membership() => TenantMembership(
-  tenantId: 'tenant-a',
-  tenantName: 'tenant-a',
-  tenantSlug: 'tenant-a',
-  role: TenantRole.owner,
-  membershipStatus: MembershipStatus.active,
-  tenantStatus: TenantStatus.active,
-  isOwner: true,
-  mirrorVersion: 1,
-  createdAt: DateTime.utc(2026, 8, 1),
-  updatedAt: DateTime.utc(2026, 8, 1),
-  serverCanAccess: true,
-  canonicalTenantExists: true,
-  canonicalMembershipExists: true,
-);
+TenantMembership _membership({TenantRole role = TenantRole.owner}) =>
+    TenantMembership(
+      tenantId: 'tenant-a',
+      tenantName: 'tenant-a',
+      tenantSlug: 'tenant-a',
+      role: role,
+      membershipStatus: MembershipStatus.active,
+      tenantStatus: TenantStatus.active,
+      isOwner: role == TenantRole.owner,
+      mirrorVersion: 1,
+      createdAt: DateTime.utc(2026, 8, 1),
+      updatedAt: DateTime.utc(2026, 8, 1),
+      serverCanAccess: true,
+      canonicalTenantExists: true,
+      canonicalMembershipExists: true,
+    );
 
 /// One count by the viewer and one by somebody else, plus however many more the
 /// overflow case needs.
@@ -280,8 +350,7 @@ final class _Server {
   final Map<String, Map<String, Object?>> staff =
       <String, Map<String, Object?>>{};
 
-  Map<String, Object?>? documentAt(String path) =>
-      takes[path] ?? staff[path];
+  Map<String, Object?>? documentAt(String path) => takes[path] ?? staff[path];
 }
 
 final class _Reader implements TenantDataReader {

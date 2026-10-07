@@ -171,6 +171,9 @@ class _TenantMonthlyReportScreenState extends State<TenantMonthlyReportScreen> {
       allowedRoles: TenantSalesTotalsGateway.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      // Only a month with no sales on this device. One that has not begun
+      // holds no totals at all, and that is true wherever it is read.
+      holdsNothing: (view) => view.report.totals?.transactions == 0,
       denied: const _MonthFrame(
         month: null,
         body: Center(

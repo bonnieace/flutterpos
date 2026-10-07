@@ -642,6 +642,7 @@ void main() {
             totalMinor: 1000,
             creditOwedMinor: 600,
             repaidMinor: 600,
+            repaidPaymentIds: <String>{'cp_landed'},
           ),
         ),
       );
@@ -653,6 +654,59 @@ void main() {
       final update = server.updated.single.$2;
       expect(update['creditOwedMinor'], 600);
       expect(update['repaidMinor'], 600);
+    });
+
+    // **A repayment taken with no signal is in the drawer already.** It is a
+    // callable, so the server cannot count it until the queue drains; the
+    // close adds it, and does not add one that has landed a second time.
+    test('adds repayments still queued on this phone, once', () async {
+      final controller = _controller(
+        sessions,
+        state,
+        server,
+        serverTotals: _Totals(
+          const ShiftServerTotals(
+            transactionCount: 0,
+            totalMinor: 0,
+            repaidMinor: 500,
+            repaidPaymentIds: <String>{'cp_landed'},
+          ),
+        ),
+        queuedRepayments: _Queued(<String, int>{
+          'cp_landed': 500,
+          'cp_queued': 2000,
+        }),
+      );
+      await controller.openShift();
+      await controller.startCashCount();
+
+      await controller.closeShift(declaration: _declared(2500));
+
+      expect(server.updated.single.$2['repaidMinor'], 2500);
+    });
+
+    test("a close with no server count states this phone's repayments", () async {
+      await state.save(
+        _record(closeInProgress: true, declaration: _declared(2000)),
+      );
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      final queued = _Queued(<String, int>{'cp_queued': 2000});
+      await _controller(
+        sessions,
+        state,
+        server,
+        online: false,
+        queuedRepayments: queued,
+      ).closeShift(declaration: _declared(2000));
+
+      await _controller(
+        sessions,
+        state,
+        server,
+        queuedRepayments: queued,
+      ).restore(sessions.requireSession());
+
+      expect(server.updated.single.$2['repaidMinor'], 2000);
     });
 
     // **A credit figure the server cannot count is not zero.** On SIT the
@@ -1423,6 +1477,7 @@ TenantShiftController _controller(
   VoidCallback? beforeRead,
   ShiftSalesLedger? salesLedger,
   ShiftServerSalesTotals? serverTotals,
+  ShiftQueuedRepayments? queuedRepayments,
   TenantDataReader? reader,
 }) {
   var nextShift = 0;
@@ -1431,6 +1486,7 @@ TenantShiftController _controller(
     localState: state,
     salesLedger: salesLedger ?? _Ledger(),
     serverTotals: serverTotals,
+    queuedRepayments: queuedRepayments,
     reader: reader ?? _Reader(server, beforeRead: beforeRead),
     writer: FirebaseTenantShiftWriter.forTesting(
       isOnline: () async => online,
@@ -1641,6 +1697,19 @@ final class _Ledger implements ShiftSalesLedger {
 }
 
 /// What the server would count for a shift, whichever phones sold into it.
+final class _Queued implements ShiftQueuedRepayments {
+  _Queued(this.repayments);
+
+  final Map<String, int> repayments;
+
+  @override
+  Future<Map<String, int>> forShift({
+    required String uid,
+    required String tenantId,
+    required String shiftId,
+  }) async => repayments;
+}
+
 final class _Totals implements ShiftServerSalesTotals {
   _Totals(this.totals);
 

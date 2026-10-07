@@ -23,8 +23,18 @@ const Set<int> supportedCheckoutSalePayloadSchemaVersions = <int>{
   checkoutSaleTenderSchemaVersion,
 };
 
-/// Firestore Rules validate at most sixteen explicit sale lines.
-const int maximumCheckoutSaleLines = 16;
+/// The most lines one sale may hold: the save's own bound, not the Rules'.
+///
+/// **Sixteen until 2026-10-05**, because Rules checked each line by writing
+/// every index out and asked again, for each line's stock change, whether
+/// this person was active staff - which spent the 1000-expression budget at
+/// sixteen lines, and at fourteen on credit. Each stock change now proves
+/// itself through the sale it names (`lastSaleId`), and the sale's lines are
+/// read strictly wherever they are read rather than position by position, so
+/// what bounds a sale is the save: the sale and one stock change per line
+/// within Firestore's 500 writes. Measured on the emulator at 399 lines, on
+/// credit and off.
+const int maximumCheckoutSaleLines = 400;
 
 /// The largest quantity accepted on one immutable sale line.
 const int maximumCheckoutLineQuantity = 1000000;

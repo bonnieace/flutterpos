@@ -1586,6 +1586,19 @@ void main() {
       expect(pv.surface.borderStrong, const Color(0xFF3D4A3D));
     });
 
+    test('surface.selected is a role over a value the palette already had', () {
+      // Added 2026-10-04 for the two-tab switch's thumb. It is
+      // `surfaceContainerHighest`, which the card edge already paints, so the
+      // role is new and the hex is not.
+      expect(pv.surface.selected, const Color(0xFF283831));
+      expect(pv.surface.selected, pv.surface.cardEdge);
+      // A step above the track it sits on, which is `raised`.
+      expect(
+        pv.surface.selected.computeLuminance(),
+        greaterThan(pv.surface.raised.computeLuminance()),
+      );
+    });
+
     test('decision 17: the scrim is carried, not taken from the prose', () {
       expect(pv.surface.scrim, AppColorRoles.dark.surface.scrim);
       expect(pv.surface.scrim.a, closeTo(0.6, 0.001));

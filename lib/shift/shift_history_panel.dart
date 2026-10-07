@@ -508,6 +508,7 @@ final class _TenantShiftHistoryPanelState
     return TenantRouteGuard<ShiftHistoryLoad>(
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (load) => load.page.items.isEmpty,
       loading: switch (scoped) {
         final session? => contents(context, session),
         // No session in scope at all is the guard's own `denied` case arriving

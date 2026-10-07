@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp receipts &#8212; sent</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+/* Profound Verdant tokens, as lib/ui/tokens.dart states them. 411 is the
+   harness's mobile viewport; checked against screenshots/mobile-full/
+   whatsapp-receipts.png. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, select { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; align-items: flex-start; flex-wrap: wrap; gap: 32px; padding: 20px 24px 48px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.page-stage > figure > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+figcaption { font-size: 13px; color: #869585; max-width: 411px; text-align: center; line-height: 19px; }
+figcaption b { color: #BCCBB9; font-weight: 600; }
+
+/* The phone: 411, the harness's mobile viewport. `.tall` is the whole page,
+   as the harness's mobile-full capture draws it. */
+.phone { position: relative; width: 411px; height: 891px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+.phone.tall { height: auto; overflow: visible; }
+.bar { height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+.bar button { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #D4E7DD; cursor: pointer; }
+.bar span { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+
+/* AppTabs, edge to edge as the screen draws them. */
+.tabs { display: flex; flex-shrink: 0; border-bottom: 1px solid #132A1F; }
+.tab { flex: 1 1 0; height: 48px; border: 0; padding: 0; background: transparent; display: flex; justify-content: center; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; }
+.tab span { position: relative; display: flex; align-items: center; height: 48px; }
+.tab-on { color: #D4E7DD; }
+.tab-on span::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #4BE277; }
+
+/* The tab's list: space.16 in at compact, as the screen already insets it. */
+.content { flex-grow: 1; min-height: 0; padding: 16px; display: flex; flex-direction: column; }
+.content > * { flex-shrink: 0; }
+.gap4 { height: 4px; } .gap8 { height: 8px; } .gap12 { height: 12px; } .gap16 { height: 16px; } .gap24 { height: 24px; }
+
+/* ---- The preview: a chat, shaped like the one the customer opens ------- */
+/* Shapes from WhatsApp - the date pill, the bubble with its tail, the time
+   inside it, the document tile. Colours from this app's tokens: the
+   wallpaper is surface.sunken, the bubble surface.overlay, the tile
+   surface.raised. */
+.chat { border-radius: 12px; background: #03110B; padding: 12px 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.pill { align-self: center; padding: 4px 12px; border-radius: 8px; background: #0D1F16; color: #869585; font-size: 12px; line-height: 16px; }
+.bubble { position: relative; align-self: flex-start; max-width: 88%; margin-left: 8px; background: #132A1F; border-radius: 0 8px 8px 8px; padding: 4px; }
+.bubble::before { content: ''; position: absolute; left: -8px; top: 0; width: 0; height: 0; border-right: 8px solid #132A1F; border-bottom: 12px solid transparent; }
+.doc { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; background: #0D1F16; }
+.doc svg { flex-shrink: 0; color: #BCCBB9; }
+.doc-name { font-size: 14px; line-height: 20px; font-weight: 600; color: #D4E7DD; }
+.doc-meta { font-size: 12px; line-height: 16px; color: #869585; }
+.msg { margin: 0; padding: 4px 8px 0; font-size: 14px; line-height: 21px; color: #D4E7DD; }
+.time { display: block; text-align: right; padding: 0 8px 4px; font-size: 12px; line-height: 16px; color: #869585; }
+.chat-cap { margin: 8px 0 0; text-align: center; font-size: 12px; line-height: 16px; color: #869585; }
+
+/* ---- Flat settings rows ----------------------------------------------- */
+/* No cards: a row is a glyph, its words, and its control, on the page. The
+   row's own wash is its hover and pressed state. */
+.slabel { margin: 0; padding: 0 8px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; }
+.srow { display: flex; align-items: center; gap: 16px; min-height: 56px; box-sizing: border-box; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
+.srow .ico { flex-shrink: 0; color: #869585; display: flex; }
+.srow .t { flex-grow: 1; min-width: 0; font-size: 16px; line-height: 24px; color: #D4E7DD; }
+.srow-on .ico { color: #4BE277; }
+.srow-hover { background: rgba(75, 226, 119, 0.08); }
+.srow-focus { box-shadow: inset 0 0 0 2px #4BE277; }
+.srow-off .t, .srow-off .ico { color: #5D7468; cursor: default; }
+.rule { height: 1px; background: #132A1F; margin: 8px 0; }
+
+.radio { width: 20px; height: 20px; flex-shrink: 0; box-sizing: border-box; border-radius: 50%; border: 2px solid #869585; display: flex; align-items: center; justify-content: center; }
+.radio-on { border-color: #4BE277; }
+.radio-on::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: #4BE277; }
+.srow-off .radio { border-color: #5D7468; }
+.srow-off .radio-on::after { background: #5D7468; }
+
+/* AppSwitchRow's switch: a check in the thumb when on, so on is never the
+   colour alone. */
+.switch { width: 52px; height: 32px; flex-shrink: 0; box-sizing: border-box; border-radius: 16px; background: #4BE277; border: 2px solid #4BE277; display: flex; align-items: center; justify-content: flex-end; padding: 0 2px; }
+.switch i { width: 24px; height: 24px; border-radius: 50%; background: #003915; display: flex; align-items: center; justify-content: center; }
+.switch-off { background: #132A1F; border-color: #869585; justify-content: flex-start; padding: 0 6px; }
+.switch-off i { width: 16px; height: 16px; background: #869585; }
+.switch-dis { background: #1E3A2B; border-color: #1E3A2B; }
+.switch-dis i { background: #5D7468; }
+
+/* Disclosure. */
+.disc { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 4px; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.disc .grow { flex-grow: 1; }
+.disc-body { margin: 0; padding: 4px 8px 8px 34px; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+
+/* ---- The sent list: a chat list --------------------------------------- */
+.chats { list-style: none; margin: 0; padding: 0; }
+.cr { display: flex; gap: 16px; padding: 12px 0; }
+.av { width: 48px; height: 48px; flex-shrink: 0; border-radius: 50%; background: #132A1F; color: #BCCBB9; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; }
+.av svg { color: #869585; }
+.cr-body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.cr-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cr-name { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cr-time { flex-shrink: 0; font-size: 12px; line-height: 16px; color: #869585; }
+.cr-line { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.cr-line svg { flex-shrink: 0; }
+.cr-line .w { flex-shrink: 0; font-weight: 600; }
+.cr-line .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cr-line .trig { margin-left: auto; padding-left: 8px; flex-shrink: 0; color: #869585; display: flex; }
+.cr-why { margin: 0; font-size: 12px; line-height: 16px; color: #869585; }
+.st-read { color: #4BE277; } .st-plain { color: #BCCBB9; } .st-info { color: #B0CDBD; } .st-prob { color: #EF4444; } .st-neu { color: #869585; }
+.list-foot { margin: 0; padding: 16px 0 8px; text-align: center; font-size: 12px; line-height: 16px; color: #869585; }
+
+/* SkeletonLine on surface.raised. */
+.sk { border-radius: 4px; background: #132A1F; }
+.sk-av { width: 48px; height: 48px; border-radius: 50%; background: #132A1F; flex-shrink: 0; }
+
+/* EmptyState, minimal: a glyph in a ring, a title, a hint. */
+.empty { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 32px 80px; }
+.empty-ring { width: 72px; height: 72px; border-radius: 50%; background: #0D1F16; border: 1px solid #283831; display: flex; align-items: center; justify-content: center; color: #869585; }
+.empty h3 { margin: 16px 0 8px; font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+.empty p { margin: 0; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+
+/* ---- Shared components ------------------------------------------------- */
+.btn { height: 48px; box-sizing: border-box; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; }
+.btn-pri { background: #4BE277; color: #003915; border: 0; }
+.btn-sec { background: #132A1F; color: #D4E7DD; border: 1px solid #3D4A3D; }
+.btn-off { background: #1E3A2B; color: #5D7468; border: 0; cursor: default; }
+.btn-wide { width: 100%; }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+.callout { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; }
+.callout svg { flex-shrink: 0; margin-top: 3px; }
+.callout p { margin: 0; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.callout .ct { margin: 0 0 4px; font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+.c-info { background: rgba(176, 205, 189, 0.10); border-color: rgba(176, 205, 189, 0.30); }
+.c-att { background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30); }
+.c-prob { background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); }
+
+.snack { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.snack svg { flex-shrink: 0; margin-top: 3px; }
+.s-ok { background: linear-gradient(rgba(75, 226, 119, 0.10), rgba(75, 226, 119, 0.10)), #132A1F; border-color: rgba(75, 226, 119, 0.30); }
+.s-info { background: linear-gradient(rgba(176, 205, 189, 0.10), rgba(176, 205, 189, 0.10)), #132A1F; border-color: rgba(176, 205, 189, 0.30); }
+.s-att { background: linear-gradient(rgba(242, 193, 78, 0.10), rgba(242, 193, 78, 0.10)), #132A1F; border-color: rgba(242, 193, 78, 0.30); }
+.s-prob { background: linear-gradient(rgba(147, 0, 10, 0.20), rgba(147, 0, 10, 0.20)), #132A1F; border-color: rgba(239, 68, 68, 0.30); }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All WhatsApp receipts artboards</a></nav>
+<div class="page-stage">
+
+<!-- Frame 1: the list -->
+<figure>
+<div class="phone">
+  <div class="bar"><button type="button" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button><span>WhatsApp receipts</span></div>
+  <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="false"><span>Settings</span></button><button class="tab tab-on" role="tab" aria-selected="true"><span>Sent receipts</span></button></div>
+  <div class="content" style="padding-top: 4px;">
+    <ul class="chats">
+      <li class="cr"><span class="av" aria-hidden="true">WM</span><div class="cr-body">
+        <div class="cr-top"><span class="cr-name">Wanjiku Mwangi</span><span class="cr-time">14:32</span></div>
+        <div class="cr-line"><span class="st-read"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 7.48 12l-1.41 1.41L11.66 19l12-12-1.42-1.41zM.41 13.41L6 19l1.41-1.41L1.83 12 .41 13.41z"></path></svg></span><span class="w st-read">Read</span><span class="n">&#183; CT-A7F-20261003-0042</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+      </div></li>
+      <li class="cr"><span class="av" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></svg></span><div class="cr-body">
+        <div class="cr-top"><span class="cr-name">+254&#8226;&#8226;&#8226;678</span><span class="cr-time">14:05</span></div>
+        <div class="cr-line"><span class="st-plain"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 7.48 12l-1.41 1.41L11.66 19l12-12-1.42-1.41zM.41 13.41L6 19l1.41-1.41L1.83 12 .41 13.41z"></path></svg></span><span class="w st-plain">Delivered</span><span class="n">&#183; CT-A7F-20261003-0041</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+      </div></li>
+      <li class="cr"><span class="av" aria-hidden="true">OO</span><div class="cr-body">
+        <div class="cr-top"><span class="cr-name">Otieno Ouma</span><span class="cr-time">13:58</span></div>
+        <div class="cr-line"><span class="st-plain"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg></span><span class="w st-plain">Sent</span><span class="n">&#183; CT-A7F-20261003-0040</span><span class="trig" title="Sent by hand"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.19 12.44l-3.24-1.62c1.29-1 2.12-2.56 2.12-4.32 0-3.03-2.47-5.5-5.5-5.5s-5.5 2.47-5.5 5.5c0 2.13 1.22 3.98 3 4.89v3.26c-2.15-.46-2.02-.44-2.26-.44-.53 0-1.03.21-1.41.59L4 16.22l5.09 5.09c.43.44 1.03.69 1.65.69h6.3c.98 0 1.81-.7 1.97-1.67l.8-4.71c.22-1.3-.43-2.58-1.62-3.18zm-.35 2.85l-.8 4.71h-6.3c-.09 0-.17-.04-.24-.1l-3.68-3.68 4.25.89V6.5c0-.28.22-.5.5-.5s.5.22.5.5v6h1.76l3.46 1.73c.4.2.62.63.55 1.06zM8.07 9.13V6.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5c0 .95-.38 1.81-1 2.44V6.5c0-1.38-1.12-2.5-2.5-2.5s-2.5 1.12-2.5 2.5v2.63z"></path></svg></span></div>
+      </div></li>
+      <li class="cr"><span class="av" aria-hidden="true">AA</span><div class="cr-body">
+        <div class="cr-top"><span class="cr-name">Achieng Atieno</span><span class="cr-time">13:57</span></div>
+        <div class="cr-line"><span class="st-info"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg></span><span class="w st-info">Sending</span><span class="n">&#183; CT-A7F-20261003-0039</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+      </div></li>
+      <li class="cr"><span class="av" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></svg></span><div class="cr-body">
+        <div class="cr-top"><span class="cr-name">+254&#8226;&#8226;&#8226;219</span><span class="cr-time">12:40</span></div>
+        <div class="cr-line"><span class="st-prob"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg></span><span class="w st-prob">Not delivered</span><span class="n">&#183; CT-A7F-20261003-0035</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+        <p class="cr-why">WhatsApp could not deliver it - the number may not be on WhatsApp.</p>
+      </div></li>
+      <li class="cr"><span class="av" aria-hidden="true">KN</span><div class="cr-body">
+        <div class="cr-top"><span class="cr-name">Kamau Njoroge</span><span class="cr-time">11:02</span></div>
+        <div class="cr-line"><span class="st-neu"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 11v2h10v-2H7zm5-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg></span><span class="w st-neu">Not sent</span><span class="n">&#183; CT-A7F-20261003-0031</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+        <p class="cr-why">The customer replied STOP.</p>
+      </div></li>
+      <li class="cr"><span class="av" aria-hidden="true">MW</span><div class="cr-body">
+        <div class="cr-top"><span class="cr-name">Mary Wambui</span><span class="cr-time">Yesterday</span></div>
+        <div class="cr-line"><span class="st-read"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 7.48 12l-1.41 1.41L11.66 19l12-12-1.42-1.41zM.41 13.41L6 19l1.41-1.41L1.83 12 .41 13.41z"></path></svg></span><span class="w st-read">Read</span><span class="n">&#183; CT-A7F-20261002-0058</span><span class="trig" title="Sent by hand"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.19 12.44l-3.24-1.62c1.29-1 2.12-2.56 2.12-4.32 0-3.03-2.47-5.5-5.5-5.5s-5.5 2.47-5.5 5.5c0 2.13 1.22 3.98 3 4.89v3.26c-2.15-.46-2.02-.44-2.26-.44-.53 0-1.03.21-1.41.59L4 16.22l5.09 5.09c.43.44 1.03.69 1.65.69h6.3c.98 0 1.81-.7 1.97-1.67l.8-4.71c.22-1.3-.43-2.58-1.62-3.18zm-.35 2.85l-.8 4.71h-6.3c-.09 0-.17-.04-.24-.1l-3.68-3.68 4.25.89V6.5c0-.28.22-.5.5-.5s.5.22.5.5v6h1.76l3.46 1.73c.4.2.62.63.55 1.06zM8.07 9.13V6.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5c0 .95-.38 1.81-1 2.44V6.5c0-1.38-1.12-2.5-2.5-2.5s-2.5 1.12-2.5 2.5v2.63z"></path></svg></span></div>
+      </div></li>
+      <li class="cr"><span class="av" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></svg></span><div class="cr-body">
+        <div class="cr-top"><span class="cr-name">+254&#8226;&#8226;&#8226;530</span><span class="cr-time">Yesterday</span></div>
+        <div class="cr-line"><span class="st-info"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg></span><span class="w st-info">Waiting to send</span><span class="n">&#183; CT-A7F-20261002-0057</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+        <p class="cr-why">Waiting for the sale to reach the server.</p>
+      </div></li>
+    </ul>
+    <p class="list-foot">The 20 most recent receipts</p>
+  </div>
+</div>
+<figcaption><b>Sent receipts &#8212; 411.</b> A chat list: who, when, and what became of it, one line each. The ticks are WhatsApp&#8217;s own vocabulary &#8212; one for sent, two for delivered, two in <code>action.primary</code> for read &#8212; and the word is always beside them. A reason gets a quiet third line, only when there is one.</figcaption>
+</figure>
+
+<!-- Frame 2: nothing sent yet -->
+<figure>
+<div class="phone">
+  <div class="bar"><button type="button" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button><span>WhatsApp receipts</span></div>
+  <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="false"><span>Settings</span></button><button class="tab tab-on" role="tab" aria-selected="true"><span>Sent receipts</span></button></div>
+  <div class="content">
+    <div class="empty">
+      <div class="empty-ring" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 4h16v12H5.17L4 17.17V4m0-2c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2H4zm2 10h8v2H6v-2zm0-3h12v2H6V9zm0-3h12v2H6V6z"></path></svg></div>
+      <h3>No receipts sent yet</h3>
+      <p>Each receipt sent on WhatsApp is listed here with what became of it.</p>
+    </div>
+  </div>
+</div>
+<figcaption><b>Nothing sent yet &#8212; 411.</b> The build&#8217;s own words, centred under one glyph in a ring, the way an empty chat list sits. The file-search illustration goes: it belongs to finding a record, and nothing here was searched for.</figcaption>
+</figure>
+
+<!-- Frame 3: reading -->
+<figure>
+<div class="phone">
+  <div class="bar"><button type="button" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button><span>WhatsApp receipts</span></div>
+  <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="false"><span>Settings</span></button><button class="tab tab-on" role="tab" aria-selected="true"><span>Sent receipts</span></button></div>
+  <div class="content" style="padding-top: 4px;" aria-busy="true" aria-label="Reading the recent receipts.">
+    <ul class="chats">
+      <li class="cr"><span class="sk-av"></span><div class="cr-body" style="gap: 8px;"><div class="cr-top"><span class="sk" style="width: 58%; height: 16px;"></span><span class="sk" style="width: 32px; height: 12px;"></span></div><span class="sk" style="width: 72%; height: 12px;"></span></div></li>
+      <li class="cr"><span class="sk-av"></span><div class="cr-body" style="gap: 8px;"><div class="cr-top"><span class="sk" style="width: 44%; height: 16px;"></span><span class="sk" style="width: 32px; height: 12px;"></span></div><span class="sk" style="width: 64%; height: 12px;"></span></div></li>
+      <li class="cr"><span class="sk-av"></span><div class="cr-body" style="gap: 8px;"><div class="cr-top"><span class="sk" style="width: 52%; height: 16px;"></span><span class="sk" style="width: 32px; height: 12px;"></span></div><span class="sk" style="width: 70%; height: 12px;"></span></div></li>
+    </ul>
+  </div>
+</div>
+<figcaption><b>Reading &#8212; 411.</b> The build&#8217;s three placeholder rows, reshaped to the row they stand for: a circle where the avatar lands, the name and time on one line, the status under it. Nothing moves when the real rows arrive.</figcaption>
+</figure>
+
+</div>
+</body>
+</html>

@@ -104,8 +104,14 @@ final class TenantReceiptDeliveryRepository extends TenantReadRepository {
     TenantRole.manager,
   ];
 
+  /// How many [loadRecent] reads unless told otherwise. Named so the screen
+  /// can say how far back its list goes without a second copy of the number.
+  static const int recentPageSize = 20;
+
   /// The most recent deliveries, newest first.
-  Future<List<TenantReceiptDelivery>> loadRecent({int pageSize = 20}) async {
+  Future<List<TenantReceiptDelivery>> loadRecent({
+    int pageSize = recentPageSize,
+  }) async {
     final page = await readCollectionPage(
       TenantCollection.receiptDeliveries,
       collectionReader: _collectionReader,

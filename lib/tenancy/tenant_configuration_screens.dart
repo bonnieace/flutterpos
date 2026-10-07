@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../ui/measure.dart';
 import '../ui/scaffold.dart';
 import '../ui/tabs.dart';
 import '../ui/tokens.dart';
@@ -11,21 +10,29 @@ final class TenantConfigurationPage extends StatelessWidget {
     super.key,
     required this.title,
     required this.builder,
+    this.ownsScroll = false,
   });
 
   final String title;
   final WidgetBuilder builder;
 
+  /// See [TenantSettingsDestination.ownsScroll].
+  final bool ownsScroll;
+
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: title,
     contentWidth: AppContentWidth.reading,
-    body: SingleChildScrollView(
-      padding: EdgeInsets.all(
-        AppScaffold.horizontalInset(AppTokens.componentOf(context).spacing),
-      ),
-      child: Builder(builder: builder),
-    ),
+    body: ownsScroll
+        ? Builder(builder: builder)
+        : SingleChildScrollView(
+            padding: EdgeInsets.all(
+              AppScaffold.horizontalInset(
+                AppTokens.componentOf(context).spacing,
+              ),
+            ),
+            child: Builder(builder: builder),
+          ),
   );
 }
 
@@ -34,52 +41,27 @@ final class TenantConfigurationsScreen extends StatelessWidget {
   const TenantConfigurationsScreen({
     super.key,
     required this.currencyBuilder,
-    required this.stockCountsBuilder,
     required this.agreedPricesBuilder,
-    this.loyaltyBuilder,
   });
 
   final WidgetBuilder currencyBuilder;
-  final WidgetBuilder stockCountsBuilder;
 
   /// Who may sell for a price agreed with the customer. Added on 2026-09-29
-  /// beside *Stock counts*, because it is set up the same way: per person.
+  /// beside the stock count rota, because it is set up the same way: per
+  /// person. The rota moved to the *Stock counts* screen's own *Settings* tab
+  /// on 2026-10-04, and loyalty to the *Customers* screen's own tab the same
+  /// day, which leaves this screen two tabs - a switch.
   final WidgetBuilder agreedPricesBuilder;
 
-  /// Whether customers earn points, and for how much. Added on 2026-10-01 with
-  /// customers. Absent in a build that wires none, which draws three tabs.
-  final WidgetBuilder? loyaltyBuilder;
+  List<String> get _tabs => const <String>['Currency', 'Agreed prices'];
 
-  List<String> get _tabs => <String>[
-    'Currency',
-    'Stock counts',
-    'Agreed prices',
-    if (loyaltyBuilder != null) 'Loyalty',
+  /// The glyph each tab's own panel already leads with, for the icon tabs a
+  /// third tab would turn these into: the currency field's and the
+  /// agreed-price rows'.
+  List<IconData> get _icons => const <IconData>[
+    Icons.payments_outlined,
+    Icons.handshake_outlined,
   ];
-
-  /// Whether every label fits in an equal share of [width].
-  ///
-  /// **Measured, because the third tab broke the fixed strip on a small
-  /// phone.** At 320 wide the three shares cut *Stock counts* and *Agreed
-  /// prices* off mid-word, seen on an emulator on 2026-09-29. Where the
-  /// labels fit, the strip keeps its equal shares; where they do not, it
-  /// scrolls rather than cutting a word.
-  bool _labelsFit(BuildContext context, double width) {
-    final tokens = AppTokens.componentOf(context);
-    final share = width / _tabs.length;
-    final scaler = MediaQuery.textScalerOf(context);
-    for (final label in _tabs) {
-      final needed =
-          measureTextWidth(
-            label,
-            tokens.typography.labelLarge,
-            textScaler: scaler,
-          ) +
-          kTabLabelPadding.horizontal;
-      if (needed > share) return false;
-    }
-    return true;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,23 +75,21 @@ final class TenantConfigurationsScreen extends StatelessWidget {
         contentWidth: AppContentWidth.reading,
         body: Column(
           children: <Widget>[
-            // `AppTabs` rather than a bare `TabBar`: the system's type and
-            // colours, and §9's 48 where Material's tab is 46.
-            LayoutBuilder(
-              builder: (context, constraints) => AppTabs(
-                key: const ValueKey('configurations-tabs'),
-                tabs: _tabs,
-                isScrollable: !_labelsFit(context, constraints.maxWidth),
-              ),
+            // Three tabs draw as icon tabs, packed from the start and
+            // scrolling where they do not fit, and two as a switch; `AppTabs`
+            // decides both, which is the measuring this screen used to do for
+            // itself. The inset puts the tabs over the panels' own text.
+            AppTabs(
+              key: const ValueKey('configurations-tabs'),
+              tabs: _tabs,
+              icons: _icons,
+              inset: inset,
             ),
             Expanded(
               child: TabBarView(
                 children: <Widget>[
                   _ConfigurationTab(builder: currencyBuilder, inset: inset),
-                  _ConfigurationTab(builder: stockCountsBuilder, inset: inset),
                   _ConfigurationTab(builder: agreedPricesBuilder, inset: inset),
-                  if (loyaltyBuilder case final loyalty?)
-                    _ConfigurationTab(builder: loyalty, inset: inset),
                 ],
               ),
             ),

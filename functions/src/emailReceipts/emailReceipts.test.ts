@@ -463,6 +463,29 @@ test("a receipt waits for a sale still on its way", async () => {
   const delivery = db.read(`${ROOT}/email_receipt_deliveries/${deliveryId}`);
   assert.equal(delivery?.status, "queued");
   assert.equal(delivery?.reason, "waiting_for_sale");
+  // Waiting is not a try at Brevo, so it spends none of the provider retries.
+  assert.equal(delivery?.attempts, 0);
+});
+
+test("a receipt Brevo took is not sent again when recording it fails", async () => {
+  const db = business();
+  const deliveryId = await automaticDelivery(db);
+  const {fetch, calls} = brevo([ACCEPTED]);
+  // The claim commits; the transaction that records the send does not.
+  const runTransaction = db.runTransaction.bind(db);
+  let transactions = 0;
+  db.runTransaction = (async (body: Parameters<typeof runTransaction>[0]) => {
+    transactions += 1;
+    if (transactions === 2) throw new Error("contention");
+    return runTransaction(body);
+  }) as typeof db.runTransaction;
+
+  const outcome = await executeEmailReceiptDelivery(db.asFirestore(),
+    {tenantId: TENANT, deliveryId}, dependencies(fetch));
+
+  assert.equal(outcome, "sent");
+  assert.equal(calls.length, 1);
+  assert.equal(db.read(`${ROOT}/email_receipt_deliveries/${deliveryId}`)?.status, "sent");
 });
 
 test("Brevo busy is tried again; Brevo refusing is recorded", async () => {

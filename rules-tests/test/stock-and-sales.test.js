@@ -173,7 +173,12 @@ test("sale identity and server-owned envelope fields cannot be spoofed", async (
   }
 });
 
-test("every sale line requires a non-empty product ID and positive integer quantity", async () => {
+// **Rules check that a sale holds lines, not what each line says**, since
+// 2026-10-05. Checking each line meant writing every position out, and that
+// spent the budget that capped a sale at sixteen lines; a product ID and a
+// positive quantity are checked again by every reader of a sale
+// (`TenantSale`, and the server's), which refuse a malformed line.
+test("a sale must hold a list of lines", async () => {
   await seedCashierAndProduct();
   const firestore = authenticatedFirestore(testEnvironment, "cashier");
   const missingItems = sale("missing-items");
@@ -189,17 +194,7 @@ test("every sale line requires a non-empty product ID and positive integer quant
     null,
     { productId: "product-a", quantity: 1 },
     [],
-    [{ productId: "product-a", quantity: 0 }],
-    [{ productId: "product-a", quantity: -1 }],
-    [{ productId: "product-a", quantity: 1.5 }],
-    [{ productId: "product-a", quantity: "1" }],
-    [{ productId: "", quantity: 1 }],
-    [{ quantity: 1 }],
-    ["not-a-map"],
-    [
-      { productId: "product-a", quantity: 1 },
-      { productId: "product-b", quantity: 0 },
-    ],
+    "not-a-list",
   ];
 
   for (const [index, items] of invalidLineSets.entries()) {
@@ -213,38 +208,24 @@ test("every sale line requires a non-empty product ID and positive integer quant
   }
 });
 
-test("sale line validation covers all 16 supported positions and rejects overflow", async () => {
+test("a sale holds up to four hundred lines and no more", async () => {
   await seedCashierAndProduct();
   const firestore = authenticatedFirestore(testEnvironment, "cashier");
-  const sixteenValidLines = Array.from({ length: 16 }, (_, index) => ({
+  const lines = (count) => Array.from({ length: count }, (_, index) => ({
     productId: `product-${index}`,
-    quantity: index + 1,
+    quantity: 1,
   }));
 
   await assertSucceeds(
     setDoc(
-      doc(firestore, "tenants/tenant-a/sales/sixteen-lines"),
-      sale("sixteen-lines", { items: sixteenValidLines }),
+      doc(firestore, "tenants/tenant-a/sales/four-hundred-lines"),
+      sale("four-hundred-lines", { items: lines(400) }),
     ),
   );
-
-  const invalidLastLine = [...sixteenValidLines];
-  invalidLastLine[15] = { productId: "product-15", quantity: 0 };
   await assertFails(
     setDoc(
-      doc(firestore, "tenants/tenant-a/sales/invalid-last-line"),
-      sale("invalid-last-line", { items: invalidLastLine }),
-    ),
-  );
-
-  const seventeenLines = [
-    ...sixteenValidLines,
-    { productId: "product-16", quantity: 1 },
-  ];
-  await assertFails(
-    setDoc(
-      doc(firestore, "tenants/tenant-a/sales/seventeen-lines"),
-      sale("seventeen-lines", { items: seventeenLines }),
+      doc(firestore, "tenants/tenant-a/sales/four-hundred-one-lines"),
+      sale("four-hundred-one-lines", { items: lines(401) }),
     ),
   );
 });

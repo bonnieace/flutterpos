@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {HttpsError} from "firebase-functions/v2/https";
 import {
+  MAXIMUM_SALE_LINES,
   STRANDED_SALE_WINDOW_MS,
   validateStrandedSale,
 } from "./strandedSales";
@@ -140,7 +141,7 @@ test("the tender contract is the one Rules apply on an ordinary create", () => {
 test("a malformed sale is refused rather than written", () => {
   const cases: Array<[string, Record<string, unknown>]> = [
     ["no lines", sale({items: []})],
-    ["too many lines", sale({items: Array.from({length: 17}, () => ({
+    ["too many lines", sale({items: Array.from({length: MAXIMUM_SALE_LINES + 1}, () => ({
       productId: "product-a",
       quantity: 1,
     }))})],

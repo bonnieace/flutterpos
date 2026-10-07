@@ -12,10 +12,14 @@
 /// behaviour: honest and loud.
 library;
 
+import 'checkout_bluetooth_printer.dart';
 import 'checkout_print_transport_base.dart';
 
 PrinterTransport createPrinterTransport() =>
     const UnsupportedPrinterTransport();
+
+BluetoothPrinterDiscovery createBluetoothPrinterDiscovery() =>
+    const UnsupportedBluetoothPrinterDiscovery();
 
 final class UnsupportedPrinterTransport implements PrinterTransport {
   const UnsupportedPrinterTransport();

@@ -137,6 +137,73 @@ void main() {
     expect(rows[CheckoutTender.card]?.sales, 5);
   });
 
+  test('a partly returned credit sale has its debt cancelled first', () async {
+    // As the server's split does, and as the customer's ledger does: goods
+    // that come back pay for themselves, so the 300 paid in cash stays paid
+    // and the 600 returned comes off the 700 owed.
+    final credit = _canonicalSale(
+      checkoutId: 'checkout-a',
+      totalMinor: 1000,
+      lineTotalMinor: 1000,
+      categoryId: 'drinks',
+      costMinor: null,
+      tender: 'credit',
+    );
+    final reader = _Reader(
+      <TenantQueryDocumentSnapshot>[
+        TenantQueryDocumentSnapshot(
+          path: credit.path,
+          data: <String, Object?>{
+            ...credit.data,
+            'customerId': 'cu_${'ab' * 20}',
+            'customerName': 'Jane Wanjiku',
+            'creditOwedMinor': 700,
+            'creditPaidTender': 'cash',
+            'items': <Object?>[
+              <String, Object?>{
+                'productId': 'flour',
+                'name': 'Flour',
+                'categoryId': 'drinks',
+                'quantity': 1,
+                'unitPriceMinor': 600,
+                'lineTotalMinor': 600,
+              },
+              <String, Object?>{
+                'productId': 'sugar',
+                'name': 'Sugar',
+                'categoryId': 'drinks',
+                'quantity': 1,
+                'unitPriceMinor': 400,
+                'lineTotalMinor': 400,
+              },
+            ],
+          },
+        ),
+      ],
+      returns: <Map<String, Object?>>[
+        _cachedReturn(
+          returnId: 'return-a',
+          saleId: 'checkout-a',
+          productId: 'flour',
+        ),
+      ],
+    );
+    final aggregator = TenantDeviceSalesAggregator(
+      session: _session(),
+      cacheReader: reader,
+      cacheReportReader: reader,
+      clock: () => DateTime.utc(2026, 9, 1, 12),
+    );
+
+    final totals = (await aggregator.load(
+      aggregator.createBusinessDateQuery(businessDate: '2026-09-01'),
+    )).totals!;
+
+    final net = totals.net!.tenderBreakdown!;
+    expect(net.recorded[CheckoutTender.cash]?.sales, 3);
+    expect(net.unrecognised.sales, 1);
+  });
+
   test('a day with nothing returned still states that it netted', () async {
     // Absent and zero are different facts. A period that read its returns and
     // found none can say so; one that never read them must not.

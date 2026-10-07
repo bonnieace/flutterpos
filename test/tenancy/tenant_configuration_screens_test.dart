@@ -11,17 +11,12 @@ void main() {
         home: TenantConfigurationsScreen(
           currencyBuilder: (_) =>
               const TextField(key: ValueKey('currency-edit')),
-          stockCountsBuilder: (_) => const Text('Stock count schedule'),
           agreedPricesBuilder: (_) => const Text('Who can agree a price'),
         ),
       ),
     );
 
     await tester.enterText(find.byKey(const ValueKey('currency-edit')), 'KES');
-    await tester.tap(find.text('Stock counts'));
-    await tester.pumpAndSettle();
-    expect(find.text('Stock count schedule'), findsOneWidget);
-
     await tester.tap(find.text('Agreed prices'));
     await tester.pumpAndSettle();
     expect(find.text('Who can agree a price'), findsOneWidget);
@@ -31,19 +26,24 @@ void main() {
     expect(find.text('KES'), findsOneWidget);
   });
 
-  testWidgets('three tabs share the width evenly where their labels fit', (
-    tester,
-  ) async {
-    // **Not 411, and that is the test font.** Every glyph in it is a full
-    // square, so *Agreed prices* measures about 214 here and about 127 in the
-    // shipped face. The fit is real at 411 on a phone; this proves the rule.
+  testWidgets('the rota and loyalty are no longer tabs here', (tester) async {
+    // Both moved on 2026-10-04 beside what they decide: the rota to the
+    // *Stock counts* screen's *Settings* tab, loyalty to *Customers*.
+    await _pumpAt(tester, const Size(1024, 800));
+
+    expect(find.text('Stock counts'), findsNothing);
+    expect(find.text('Loyalty'), findsNothing);
+  });
+
+  testWidgets('two tabs draw as a switch, in equal halves', (tester) async {
     await _pumpAt(tester, const Size(1024, 800));
 
     expect(tester.takeException(), isNull);
     expect(_strip(tester).isScrollable, isFalse);
+    expect(find.byIcon(Icons.payments_outlined), findsNothing);
   });
 
-  testWidgets('a small phone scrolls the tabs rather than cutting a word', (
+  testWidgets('a small phone fits both words without cutting one', (
     tester,
   ) async {
     // 320 wide cut *Stock counts* and *Agreed prices* off mid-word on an
@@ -51,7 +51,7 @@ void main() {
     await _pumpAt(tester, const Size(320, 640));
 
     expect(tester.takeException(), isNull);
-    expect(_strip(tester).isScrollable, isTrue);
+    expect(find.text('Agreed prices'), findsOneWidget);
   });
 }
 
@@ -64,7 +64,6 @@ Future<void> _pumpAt(WidgetTester tester, Size size) async {
     MaterialApp(
       home: TenantConfigurationsScreen(
         currencyBuilder: (_) => const SizedBox(),
-        stockCountsBuilder: (_) => const SizedBox(),
         agreedPricesBuilder: (_) => const SizedBox(),
       ),
     ),

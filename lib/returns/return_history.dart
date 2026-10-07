@@ -680,8 +680,9 @@ DateTime? _optionalInstant(Map<String, Object?> data, String field) {
   throw const TenantReturnException('invalid_return_document');
 }
 
-/// `MAX_RETURN_LINES` in `functions/src/operations/domain.ts`.
-const int maximumReturnLines = 50;
+/// `MAX_RETURN_LINES` in `functions/src/operations/domain.ts`: as many lines
+/// as a sale may hold, so any sale can be returned in one return.
+const int maximumReturnLines = 400;
 
 /// `MAX_QUANTITY_DELTA` in `functions/src/operations/domain.ts`.
 const int maximumReturnLineQuantity = 1000000;

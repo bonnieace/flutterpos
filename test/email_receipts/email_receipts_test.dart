@@ -35,6 +35,37 @@ void main() {
       expect(odd.offersManualSend, isTrue);
     });
 
+    test('a receipt is dated the way an inbox dates a message', () {
+      final now = DateTime(2026, 10, 3, 14, 40);
+      // Today, the time; earlier this year, the date - no *Yesterday* and no
+      // weekday, as Gmail does without them; another year, with the year.
+      expect(
+        emailReceiptDeliveryWhen(DateTime(2026, 10, 3, 9, 5), now),
+        '09:05',
+      );
+      expect(
+        emailReceiptDeliveryWhen(DateTime(2026, 10, 2, 23, 59), now),
+        '2 Oct',
+      );
+      expect(
+        emailReceiptDeliveryWhen(DateTime(2026, 9, 29, 12), now),
+        '29 Sep',
+      );
+      expect(
+        emailReceiptDeliveryWhen(DateTime(2025, 12, 30, 12), now),
+        '30 Dec 2025',
+      );
+      // A record caught mid-write.
+      expect(emailReceiptDeliveryWhen(null, now), isNull);
+    });
+
+    test('an avatar is the first letter of the name or the address', () {
+      expect(emailReceiptAvatarLetter('Wanjiku Mwangi'), 'W');
+      expect(emailReceiptAvatarLetter('n•••@gmail.com'), 'N');
+      expect(emailReceiptAvatarLetter('  your business via UzaPay'), 'Y');
+      expect(emailReceiptAvatarLetter(''), '');
+    });
+
     test('a refusal says whose problem it was, in words', () {
       String? reasonFor(String reason) =>
           TenantEmailReceiptDelivery.fromSnapshot(
@@ -285,16 +316,153 @@ void main() {
       tester,
     ) async {
       await _pump(tester, const _Reader(withDeliveries: true));
-      expect(find.text('Delivered'), findsNothing);
+      expect(find.textContaining('Delivered'), findsNothing);
       await tester.tap(find.text('Sent receipts'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Delivered'), findsOneWidget);
-      expect(find.text('JOHN-CT-7F2-001 · Jane'), findsOneWidget);
-      expect(find.text('Not delivered'), findsOneWidget);
-      expect(find.text('The address does not accept mail.'), findsOneWidget);
-      // The masked address stands in for a walk-in's name.
+      // An inbox's three lines: who, the receipt as the subject, and what
+      // became of it - then why, after a dot.
+      expect(find.text('Jane'), findsOneWidget);
+      expect(find.text('Receipt JOHN-CT-7F2-001'), findsOneWidget);
+      expect(find.textContaining('Delivered'), findsOneWidget);
+      expect(
+        find.textContaining(
+          'Not delivered · The address does not accept mail.',
+        ),
+        findsOneWidget,
+      );
+      // The masked address stands in for a walk-in's name, and its first
+      // letter for their avatar.
       expect(find.text('w•••@example.com'), findsOneWidget);
+      expect(find.text('W'), findsOneWidget);
+    });
+
+    testWidgets('a sent receipt says who, when, what became of it, and how', (
+      tester,
+    ) async {
+      final now = DateTime(2026, 10, 3, 14, 40);
+      await _pump(
+        tester,
+        const _Reader(withDeliveries: true),
+        clock: () => now,
+      );
+      await tester.tap(find.text('Sent receipts'));
+      await tester.pumpAndSettle();
+
+      // One letter, as an inbox draws a sender.
+      expect(find.text('J'), findsOneWidget);
+      // How it went is a glyph, with its words for a screen reader.
+      expect(
+        tester
+            .getSemantics(
+              find.byKey(const ValueKey('email-receipts-delivery-ed_1')),
+            )
+            .label,
+        allOf(
+          contains('Jane'),
+          contains('Receipt JOHN-CT-7F2-001'),
+          contains('Delivered'),
+          contains('Sent automatically'),
+        ),
+      );
+      // Not numbered yet: two lines, with no subject.
+      expect(
+        tester
+            .getSemantics(
+              find.byKey(const ValueKey('email-receipts-delivery-ed_3')),
+            )
+            .label,
+        allOf(
+          contains('Waiting to send'),
+          contains('Sent by hand'),
+          isNot(contains('Receipt')),
+        ),
+      );
+      // Two receipts are every receipt there is, so no limit is claimed: the
+      // footer is for a full page, where the list stops short of the rest.
+      expect(find.byKey(const ValueKey('email-receipts-deliveries-end')), findsNothing);
+    });
+
+    testWidgets('the preview is the inbox, the PDF a chip beside the words', (
+      tester,
+    ) async {
+      await _pump(tester, const _Reader());
+      // Off, there is nothing to preview.
+      expect(
+        find.byKey(const ValueKey('email-receipts-preview')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('email-receipts-enabled')));
+      await tester.pumpAndSettle();
+
+      // It leads the page, above the switch.
+      expect(
+        tester
+            .getTopLeft(find.byKey(const ValueKey('email-receipts-preview')))
+            .dy,
+        lessThan(
+          tester
+              .getTopLeft(find.byKey(const ValueKey('email-receipts-enabled')))
+              .dy,
+        ),
+      );
+      // The snippet is the preheader, which an inbox shows first; the file is
+      // its own chip, not words in it.
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('email-receipts-preview-text')),
+            )
+            .data,
+        'KES 1,250.00 at Mama Njeri Shop, 1 Oct 2026. The receipt is below '
+        'and attached as a PDF.',
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('email-receipts-preview-file')),
+            )
+            .data,
+        'Receipt-JOHN-CT-7F2-001.pdf',
+      );
+    });
+
+    testWidgets('an empty device copy holds the receipts as placeholders', (
+      tester,
+    ) async {
+      final server = Completer<List<TenantQueryDocumentSnapshot>>();
+      await _pump(tester, _HeldDeliveries(server.future), settle: false);
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Sent receipts'));
+      await tester.pump();
+      // The tab's slide; the placeholders sweep for ever, so no settling.
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(
+        find.byKey(const ValueKey('email-receipts-deliveries-reading')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('email-receipts-deliveries-empty')),
+        findsNothing,
+      );
+
+      // The server saying none is the truth, drawn under the mail glyph.
+      server.complete(const <TenantQueryDocumentSnapshot>[]);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('email-receipts-deliveries-empty')),
+          matching: find.byIcon(Icons.mail_outline),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('email-receipts-deliveries-reading')),
+        findsNothing,
+      );
     });
 
     testWidgets('a manager is told it is not theirs to decide', (tester) async {
@@ -413,6 +581,8 @@ Future<void> _pump(
   TenantDataReader reader, {
   TenantConfigurationDocumentWriter? writer,
   TenantRole role = TenantRole.owner,
+  DateTime Function()? clock,
+  bool settle = true,
 }) async {
   tester.view.physicalSize = const Size(1200, 3000);
   tester.view.devicePixelRatio = 1;
@@ -445,11 +615,33 @@ Future<void> _pump(
         child: TenantEmailReceiptsScreen(
           reader: reader,
           writer: writer ?? _Writer(),
+          clock: clock,
         ),
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) await tester.pumpAndSettle();
+}
+
+/// The server holds the receipts back; the device's copy has none of them.
+final class _HeldDeliveries implements TenantCacheReadable {
+  const _HeldDeliveries(this._deliveries);
+
+  final Future<List<TenantQueryDocumentSnapshot>> _deliveries;
+
+  @override
+  TenantDataReader get cacheOnly => const _Reader();
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) =>
+      const _Reader().getDocument(path);
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) => query.collectionPath.endsWith('/email_receipt_deliveries')
+      ? _deliveries
+      : const _Reader().getCollectionPage(query);
 }
 
 final class _ReceiptWriter implements TenantEmailReceiptWriter {
@@ -520,6 +712,18 @@ final class _Reader implements TenantDataReader {
           'status': 'failed',
           'reason': 'hard_bounce',
           'createdAt': DateTime.utc(2026, 10, 3, 8),
+        },
+      ),
+      // Asked for by hand before the sale reached the server: no number yet.
+      TenantQueryDocumentSnapshot(
+        path: '${query.collectionPath}/ed_3',
+        data: <String, Object?>{
+          'saleId': 'co-3',
+          'emailMasked': 'k•••@example.com',
+          'trigger': 'manual',
+          'status': 'queued',
+          'reason': 'waiting_for_sale',
+          'createdAt': DateTime.utc(2026, 10, 3, 7),
         },
       ),
     ];

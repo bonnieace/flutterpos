@@ -2,6 +2,7 @@ import '../checkout/checkout_outbox.dart';
 import '../checkout/checkout_sale.dart';
 import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_id.dart';
+import '../tenancy/tenant_pending_mutation.dart';
 
 /// Raised when local sale evidence cannot be summarized for a shift.
 final class ShiftSalesLedgerException implements Exception {
@@ -193,7 +194,11 @@ final class ShiftServerTotals {
     required this.totalMinor,
     this.creditOwedMinor,
     this.repaidMinor,
-  });
+    this.repaidPaymentIds,
+  }) : assert(
+         (repaidMinor == null) == (repaidPaymentIds == null),
+         'A repaid figure is read with the payments that make it up.',
+       );
 
   final int transactionCount;
   final int totalMinor;
@@ -205,6 +210,59 @@ final class ShiftServerTotals {
   /// What customers paid back into the shift, or null where that could not
   /// be read - which is never zero.
   final int? repaidMinor;
+
+  /// The payments [repaidMinor] counts, so a repayment this phone still has
+  /// queued is added once and a landed one is not added twice. Null exactly
+  /// where [repaidMinor] is: the two are one read.
+  final Set<String>? repaidPaymentIds;
+}
+
+/// Repayments this phone took into a shift, from its own durable queue.
+///
+/// **Why a close needs this.** A repayment is a callable, so one taken with no
+/// signal is on no server until the queue drains, and the server's count at
+/// close leaves it out - while the cashier counts its cash in the drawer. The
+/// close adds every one of these the server did not count.
+abstract interface class ShiftQueuedRepayments {
+  /// Each repayment's amount by payment ID, for [shiftId]. Refused ones are
+  /// not in it: their money was handed back or never taken.
+  Future<Map<String, int>> forShift({
+    required String uid,
+    required String tenantId,
+    required String shiftId,
+  });
+}
+
+/// [ShiftQueuedRepayments] over the pending-mutation store.
+final class PendingMutationShiftRepayments implements ShiftQueuedRepayments {
+  const PendingMutationShiftRepayments(this._store);
+
+  final TenantPendingMutationStore _store;
+
+  @override
+  Future<Map<String, int>> forShift({
+    required String uid,
+    required String tenantId,
+    required String shiftId,
+  }) async {
+    final repayments = <String, int>{};
+    for (final record in await _store.recordsForSession(
+      uid: uid,
+      tenantId: tenantId,
+    )) {
+      if (record.kind != TenantPendingMutationKind.customerPayment ||
+          record.state == TenantPendingMutationState.rejected ||
+          record.payload['shiftId'] != shiftId) {
+        continue;
+      }
+      final paymentId = record.payload['paymentId'];
+      final amount = record.payload['amountMinor'];
+      if (paymentId is String && amount is int && amount > 0) {
+        repayments[paymentId] = amount;
+      }
+    }
+    return repayments;
+  }
 }
 
 /// Counts one shift's sales on the server, whichever phone rang them up.

@@ -147,6 +147,12 @@ service cloud.firestore {
     // the terms it always did and the Rules budget the largest basket sits
     // under is untouched. The customer's balance is the server's to move, in
     // `processCustomerSale`; nothing here can charge anyone anything.
+    //
+    // **Its customer is the one ID shaped here**, unlike a cash sale's: the
+    // owed part leaves the drawer expectation on the strength of it, and
+    // `processCustomerSale` ignores any ID not shaped `cu_` and forty hex
+    // digits, so a credit sale naming anything else would be cash out of the
+    // drawer on nobody's balance. One term, on the credit branch only.
     function validSaleTender(sale) {
       return sale.payloadSchemaVersion == 2
         && (
@@ -155,6 +161,7 @@ service cloud.firestore {
           || (
             sale.tender == 'credit'
             && sale.customerId is string
+            && sale.customerId.matches('^cu_[0-9a-f]{40}$')
             && sale.creditOwedMinor is int
             && sale.creditOwedMinor > 0
             && sale.creditOwedMinor <= sale.totalMinor
@@ -218,35 +225,30 @@ service cloud.firestore {
         && shift.data.businessDate == sale.businessDate;
     }
 
-    // A non-map line cannot answer these field accesses, so the evaluation
-    // error denies the write without spending an extra type check per line.
-    function validSaleLine(line) {
-      return line.productId is string
-        && line.productId.size() > 0
-        && line.quantity is int
-        && line.quantity > 0;
+    // **A sale's or a return's lines are a list, and no more is checked
+    // here.** Rules cannot loop, so checking each line meant writing every
+    // index out and paying for each - and all that bought was a product ID and
+    // a positive quantity, which every reader checks again (`TenantSale`, and
+    // `normalizeReturnStockLines` before a return restores anything). The
+    // bound is a sale's save: one sale and a stock change per line inside
+    // Firestore's 500 writes; a return may hold as many lines as its sale.
+    function validSaleItems(items) {
+      return items is list
+        && items.size() > 0
+        && items.size() <= 400;
     }
 
-    function validSaleLines(lines) {
-      return lines is list
-        && lines.size() > 0
-        && lines.size() <= 16
-        && (lines.size() <= 0 || validSaleLine(lines[0]))
-        && (lines.size() <= 1 || validSaleLine(lines[1]))
-        && (lines.size() <= 2 || validSaleLine(lines[2]))
-        && (lines.size() <= 3 || validSaleLine(lines[3]))
-        && (lines.size() <= 4 || validSaleLine(lines[4]))
-        && (lines.size() <= 5 || validSaleLine(lines[5]))
-        && (lines.size() <= 6 || validSaleLine(lines[6]))
-        && (lines.size() <= 7 || validSaleLine(lines[7]))
-        && (lines.size() <= 8 || validSaleLine(lines[8]))
-        && (lines.size() <= 9 || validSaleLine(lines[9]))
-        && (lines.size() <= 10 || validSaleLine(lines[10]))
-        && (lines.size() <= 11 || validSaleLine(lines[11]))
-        && (lines.size() <= 12 || validSaleLine(lines[12]))
-        && (lines.size() <= 13 || validSaleLine(lines[13]))
-        && (lines.size() <= 14 || validSaleLine(lines[14]))
-        && (lines.size() <= 15 || validSaleLine(lines[15]));
+    // A sale this person is creating in the save being checked, which is how
+    // a stock change proves it is part of one. `exists` reads the database as
+    // it was, `getAfter` as the save would leave it: absent before and theirs
+    // after is a sale being created now.
+    function saleBeingWritten(tenantId, saleId) {
+      let path = /databases/$(database)/documents/tenants/$(tenantId)/sales/$(saleId);
+      let sale = getAfter(path);
+      return saleId is string
+        && !exists(path)
+        && sale != null
+        && sale.data.soldById == request.auth.uid;
     }
 
     // The business-wide view of every product's stock ledger.
@@ -356,13 +358,31 @@ service cloud.firestore {
         // `if false`.
         allow create: if false;
 
-        allow update: if activeStaff(tenantId)
-          && resource.data.quantity is int
+        // **Two ways to take stock down, cheapest first.** A till that names
+        // the sale it is selling in `lastSaleId` proves who it is through that
+        // sale: one lookup, which every line of the save shares, because the
+        // sale's own create has already asked whether this person is active
+        // staff of a trading business. Asking it again per product is what
+        // used to cap a sale at sixteen lines. The sale has to be created in
+        // this same save by this same person, so an old sale's ID cannot be
+        // reused to take stock down later. A till built before `lastSaleId`
+        // writes neither and keeps the staff check it always had.
+        allow update: if resource.data.quantity is int
           && request.resource.data.quantity is int
           && request.resource.data.quantity < resource.data.quantity
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['quantity', 'updatedAt'])
-          && request.resource.data.updatedAt == request.time;
+          && request.resource.data.updatedAt == request.time
+          && (
+            (
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['quantity', 'updatedAt', 'lastSaleId'])
+              && saleBeingWritten(tenantId, request.resource.data.lastSaleId)
+            )
+            || (
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['quantity', 'updatedAt'])
+              && activeStaff(tenantId)
+            )
+          );
 
         // **Server-only since 2026-09-13, and no longer a delete at all.**
         // "Retire" removed the document: the quantity went with it, no movement
@@ -446,7 +466,7 @@ service cloud.firestore {
           && request.resource.data.shiftId is string
           && request.resource.data.shiftId.size() > 0
           && validSaleShift(tenantId, request.resource.data)
-          && validSaleLines(request.resource.data.items);
+          && validSaleItems(request.resource.data.items);
         allow update, delete: if false;
       }
 
@@ -680,9 +700,9 @@ service cloud.firestore {
       //
       // The key set is frozen by `hasOnly`, so no verification field and no
       // unknown field can be smuggled in beside the request. `itemsReturned`
-      // reuses `validSaleLines`: a return line and a sale line are the same
-      // shape by construction, and a return can never carry more lines than the
-      // sale it reverses, which is capped at the same sixteen.
+      // is bounded as a sale's lines are (`validSaleItems`): a return can never
+      // carry more lines than the sale it reverses, and each line is checked
+      // where it matters, when `verifyReturnAndRestoreStock` restores it.
       //
       // The sale must exist. A return filed against nothing could never be
       // verified, because the callable reads the immutable sale to bound the
@@ -736,7 +756,7 @@ service cloud.firestore {
           && request.resource.data.reason is string
           && request.resource.data.reason.size() >= 3
           && request.resource.data.reason.size() <= 500
-          && validSaleLines(request.resource.data.itemsReturned)
+          && validSaleItems(request.resource.data.itemsReturned)
           && request.resource.data.keys().hasOnly([
             'returnId', 'tenantId', 'saleId', 'businessDate', 'recordedOn',
             'occurredAt', 'createdBy', 'status', 'reason', 'itemsReturned',
@@ -1121,6 +1141,14 @@ service cloud.firestore {
     }
 
     match /platform_user_operations/{documentId} {
+      allow read: if platformAdmin();
+      allow write: if false;
+    }
+
+    // What the platform alert email links to: an owner left unavailable, a
+    // business left without an active administrator, reconciliation that
+    // quarantined itself. Written only by the backend; the console reads it.
+    match /platform_alerts/{documentId} {
       allow read: if platformAdmin();
       allow write: if false;
     }

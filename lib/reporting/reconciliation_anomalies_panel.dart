@@ -311,6 +311,7 @@ final class _TenantReconciliationAnomalyPanelState
       allowedRoles: TenantReconciliationAnomalyRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (page) => page.items.isEmpty,
       denied: const Center(
         key: ValueKey('reconciliation-anomalies-denied'),
         child: Text(

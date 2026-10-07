@@ -28,12 +28,14 @@ import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
+import '../ui/tabs.dart';
 import '../ui/tokens.dart';
 import '../observability/app_telemetry.dart';
 import 'customer.dart';
 import 'customer_card.dart';
 import 'customer_credit.dart';
 import 'customer_form.dart';
+import 'customer_loyalty.dart';
 import 'customer_payment_sheet.dart';
 import 'customer_record_panel.dart';
 
@@ -64,9 +66,19 @@ final class TenantCustomersScreen extends StatefulWidget {
     this.writer,
     this.salesReader,
     this.payments,
+    this.loyalty,
   });
 
   final TenantDataReader reader;
+
+  /// Whether customers earn points and for how much, drawn as this screen's
+  /// second tab.
+  ///
+  /// **Beside the customers who earn them, at the developer's direction on
+  /// 2026-10-04.** It was a tab of *Configs*. Only an owner or administrator
+  /// may publish it, so anybody else who keeps customers here gets the list
+  /// alone with no switch above it. Absent draws the same single page.
+  final WidgetBuilder? loyalty;
 
   /// Where a customer write is queued. Null renders a read-only directory.
   final TenantCustomerWriter? writer;
@@ -116,9 +128,8 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
     final query = _query;
     final standing = _standing;
     TenantGuardedLoader<TenantCustomersView> readWith(
-      TenantDataReader reader, {
-      required bool cachedPass,
-    }) => (session) async {
+      TenantDataReader reader,
+    ) => (session) async {
       int? owedTotal;
       final TenantCustomerPage page;
       if (standing == TenantCustomerStanding.owing) {
@@ -145,13 +156,6 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
           cursor: cursor,
         );
       }
-      // **An empty copy is not an answer.** A device that has never read the
-      // directory holds nothing, and drawing "No customers yet" while the
-      // server is still answering would be a false empty page. The guard drops
-      // a cached failure silently and waits for the server.
-      if (cachedPass && page.customers.isEmpty) {
-        throw const _NothingHeldOnThisDevice();
-      }
       String? currency;
       try {
         currency = (await TenantCheckoutConfigurationRepository(
@@ -171,9 +175,9 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
         owedTotalMinor: owedTotal,
       );
     };
-    _loader = readWith(widget.reader, cachedPass: false);
+    _loader = readWith(widget.reader);
     final cached = widget.reader.cached;
-    _loaderCached = cached == null ? null : readWith(cached, cachedPass: true);
+    _loaderCached = cached == null ? null : readWith(cached);
   }
 
   void _restart() => setState(() {
@@ -294,67 +298,125 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
   @override
   Widget build(BuildContext context) {
     _composeLoaders();
-    return TenantRouteGuard<TenantCustomersView>(
+    // **The toolbar is outside the read**, so the loyalty tab beside the list
+    // neither waits on the list nor goes when the list cannot be read.
+    final directory = TenantRouteGuard<TenantCustomersView>(
       allowedRoles: TenantCustomerRepository.manageRoles,
       load: _loader!,
       loadCached: _loaderCached,
-      loading: const _CustomersFrame(
-        child: LoadingState(message: 'Reading customers'),
+      holdsNothing: (view) => view.page.customers.isEmpty,
+      loading: const LoadingState(message: 'Reading customers'),
+      failure: (context, error) => const ErrorState(
+        key: ValueKey('customers-failure'),
+        badgeLabel: 'Not read',
+        statement: 'The customers could not be read.',
+        stillTrue: 'Nothing has been recorded or changed.',
       ),
-      failure: (context, error) => const _CustomersFrame(
-        child: ErrorState(
-          key: ValueKey('customers-failure'),
-          badgeLabel: 'Not read',
-          statement: 'The customers could not be read.',
-          stillTrue: 'Nothing has been recorded or changed.',
-        ),
+      builder: (context, session, view) => _CustomersContents(
+        view: view,
+        search: _search,
+        standing: _standing,
+        pageIndex: _pageIndex,
+        hasQuery:
+            _query.isNotEmpty || _standing != TenantCustomerStanding.active,
+        canWrite: widget.writer != null,
+        onSearchChanged: _onSearchChanged,
+        onStandingChanged: _setStanding,
+        onAdd: widget.writer == null
+            ? null
+            : () => _openForm(session, view.currency),
+        onView: (customer) => _openRecord(customer, view.currency),
+        onEdit: widget.writer == null
+            ? null
+            : (customer) =>
+                  _openForm(session, view.currency, customer: customer),
+        onSetActive: widget.writer == null
+            ? null
+            : (customer, active) =>
+                  _setActive(session, customer, active: active),
+        onRecordPayment:
+            widget.payments != null &&
+                TenantCustomerCreditRepository.canTakePaymentInSession(session)
+            ? (customer) => _recordPayment(session, customer, view.currency)
+            : null,
+        onPrevious: _pageIndex == 0 ? null : () => setState(() => _pageIndex--),
+        onNext: () => _nextPage(view.page.nextCursor),
       ),
-      builder: (context, session, view) => _CustomersFrame(
-        child: _CustomersContents(
-          view: view,
-          search: _search,
-          standing: _standing,
-          pageIndex: _pageIndex,
-          hasQuery: _query.isNotEmpty || _standing != TenantCustomerStanding.active,
-          canWrite: widget.writer != null,
-          onSearchChanged: _onSearchChanged,
-          onStandingChanged: _setStanding,
-          onAdd: widget.writer == null
-              ? null
-              : () => _openForm(session, view.currency),
-          onView: (customer) => _openRecord(customer, view.currency),
-          onEdit: widget.writer == null
-              ? null
-              : (customer) =>
-                    _openForm(session, view.currency, customer: customer),
-          onSetActive: widget.writer == null
-              ? null
-              : (customer, active) =>
-                    _setActive(session, customer, active: active),
-          onRecordPayment:
-              widget.payments != null &&
-                  TenantCustomerCreditRepository.canTakePaymentInSession(
-                    session,
-                  )
-              ? (customer) => _recordPayment(session, customer, view.currency)
-              : null,
-          onPrevious: _pageIndex == 0
-              ? null
-              : () => setState(() => _pageIndex--),
-          onNext: () => _nextPage(view.page.nextCursor),
-        ),
+    );
+    final loyalty = widget.loyalty;
+    final session = loyalty == null
+        ? null
+        : TenantSessionScope.of(context).session;
+    final tabbed =
+        loyalty != null &&
+        session != null &&
+        session.canAccess(allowedRoles: TenantLoyaltyPublisher.allowedRoles);
+    return AppScaffold(
+      title: 'Customers',
+      subtitle: 'Who buys from you.',
+      contentWidth: AppContentWidth.records,
+      body: tabbed
+          ? _CustomersTabs(directory: directory, loyalty: loyalty)
+          : directory,
+    );
+  }
+}
+
+/// *Customers* and *Loyalty*, as two tabs of one screen.
+final class _CustomersTabs extends StatelessWidget {
+  const _CustomersTabs({required this.directory, required this.loyalty});
+
+  final Widget directory;
+  final WidgetBuilder loyalty;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final inset = _customersInset(context, tokens);
+    // The list's button and fields stand in the focus ring's gutter inside
+    // the inset; the switch carries none of its own, so it takes the gutter
+    // too and lines up with them.
+    final ring = tokens.colors.action.focusRing;
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          AppTabs(
+            key: const ValueKey('customers-tabs'),
+            tabs: const <String>['Customers', 'Loyalty'],
+            inset: inset + ring.width + ring.offset,
+          ),
+          Expanded(
+            child: TabBarView(
+              children: <Widget>[
+                AppKeptTab(child: directory),
+                // The scroll the loyalty panel leaves to its host, as
+                // *Configs* gave it one.
+                AppKeptTab(
+                  child: SingleChildScrollView(
+                    key: const ValueKey('customers-loyalty-tab'),
+                    padding: EdgeInsets.all(inset),
+                    child: Builder(builder: loyalty),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// What the cached pass throws when this device holds no customers to show.
-///
-/// Never shown and never caught by name: the guard drops a cached failure, so
-/// this is how an empty copy waits for the server rather than claiming there
-/// are no customers.
-final class _NothingHeldOnThisDevice implements Exception {
-  const _NothingHeldOnThisDevice();
+/// The page inset the list is laid out in, at the width it has.
+double _customersInset(BuildContext context, AppTokens tokens) {
+  final width = MediaQuery.sizeOf(context).width;
+  return width < AppLayout.contract.mediumFloor
+      ? tokens.spacing.s16
+      : width < AppLayout.contract.expandedFloor
+      ? tokens.spacing.s20
+      : tokens.spacing.s24;
 }
 
 /// Marks [customer] inactive - asking first - or offers them again, and answers
@@ -404,20 +466,6 @@ Future<AppNotice?> setCustomerStanding(
     active
         ? '${customer.name} is offered at the till again.'
         : '${customer.name} is inactive. Their sales stay on record.',
-  );
-}
-
-final class _CustomersFrame extends StatelessWidget {
-  const _CustomersFrame({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: 'Customers',
-    subtitle: 'Who buys from you.',
-    contentWidth: AppContentWidth.records,
-    body: child,
   );
 }
 
@@ -502,13 +550,9 @@ final class _CustomersContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final width = MediaQuery.sizeOf(context).width;
-    final compact = width < AppLayout.contract.mediumFloor;
-    final inset = compact
-        ? tokens.spacing.s16
-        : width < AppLayout.contract.expandedFloor
-        ? tokens.spacing.s20
-        : tokens.spacing.s24;
+    final compact =
+        MediaQuery.sizeOf(context).width < AppLayout.contract.mediumFloor;
+    final inset = _customersInset(context, tokens);
     final shown = view.page.customers;
     final lastPage = !view.page.hasMore;
 

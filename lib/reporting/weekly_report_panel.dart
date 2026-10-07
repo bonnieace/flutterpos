@@ -278,6 +278,7 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
       allowedRoles: TenantSalesTotalsGateway.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (view) => (view.report.totals?.transactions ?? 0) == 0,
       denied: const _ReportsFrame(
         body: Center(
           key: ValueKey('weekly-report-denied'),

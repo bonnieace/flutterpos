@@ -126,7 +126,7 @@ final class CheckoutRefusal {
     // The requested cart.
     'invalid_line_count' => const CheckoutRefusal._(
       'invalid_line_count',
-      'A sale needs between 1 and 16 items.',
+      'A sale needs between 1 and $maximumCheckoutSaleLines items.',
       cashierCanFix: true,
     ),
     'duplicate_product' => const CheckoutRefusal._(

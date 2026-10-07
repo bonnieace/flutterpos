@@ -1,6 +1,6 @@
 import {getFunctions} from "firebase-admin/functions";
 import {getFirestore, Timestamp} from "firebase-admin/firestore";
-import {onDocumentCreated} from "firebase-functions/v2/firestore";
+import {onDocumentCreated, onDocumentWritten} from "firebase-functions/v2/firestore";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import {onTaskDispatched} from "firebase-functions/v2/tasks";
@@ -27,6 +27,7 @@ import {
   registerReturnReceipt,
   registerCustomerPaymentReceipt,
   registerSaleReceipt,
+  registerShiftClose,
 } from "./jobs";
 import {
   discoveryTaskId,
@@ -204,7 +205,7 @@ async function executeReconciliationTask(payload: ReconciliationTaskPayload): Pr
         const result = await processMetricsPage(db, job);
         continuation = await advanceReconciliationJob(db, job, {
           phase: result.hasMore ? "metrics" :
-            job.source === "sale_trigger" ? "shifts" : "stock",
+            (job.source === "sale_trigger" || job.source === "shift_close") ? "shifts" : "stock",
           metricsProcessedDelta: result.processed,
           ...(result.hasMore ? {} : {
             productCursor: null,
@@ -274,6 +275,7 @@ export const mergeSaleReconciliationJob = onDocumentCreated(
       // Imported/legacy malformed dates are reconciled in their server receipt date.
     }
     const registration = await registerSaleReceipt(getFirestore(), {
+      deferReconciliation: true,
       tenantId: event.params.tenantId,
       saleId: event.params.saleId,
       businessDate,
@@ -318,6 +320,7 @@ export const mergeReturnReconciliationJob = onDocumentCreated(
       // Imported/legacy malformed dates are reconciled in their receipt date.
     }
     const registration = await registerReturnReceipt(getFirestore(), {
+      deferReconciliation: true,
       tenantId: event.params.tenantId,
       returnId: event.params.returnId,
       businessDate,
@@ -351,6 +354,7 @@ export const mergeCustomerPaymentReconciliationJob = onDocumentCreated(
       // and would be reconciled in its receipt date like a sale's.
     }
     const registration = await registerCustomerPaymentReceipt(getFirestore(), {
+      deferReconciliation: true,
       tenantId: event.params.tenantId,
       paymentId: event.params.paymentId,
       businessDate,
@@ -401,21 +405,23 @@ export const startNightlyTenantReconciliation = onSchedule({
   timeoutSeconds: 120,
 }, async (event) => beginSweep("nightly", event.scheduleTime));
 
-/** Weekly expected-vs-observed checkpoints are independent of nightly metrics. */
+/** Compatibility exports share the nightly sweep, so existing deployed schedules
+ * cannot create a second catalogue scan. All three fire at the same time. */
 export const startWeeklyStockCheckpoints = onSchedule({
-  schedule: "30 4 * * 0",
-  timeZone: "Africa/Nairobi",
-  retryCount: 3,
-  timeoutSeconds: 120,
-}, async (event) => beginSweep("weekly", event.scheduleTime));
-
-/** Daily discovery selects only the tenant's stable day-of-month shard (1..28). */
+  schedule: "30 5 * * 0", timeZone: "Africa/Nairobi", retryCount: 3,
+}, async (event) => beginSweep("nightly", event.scheduleTime));
 export const startStaggeredMonthlyReconciliation = onSchedule({
-  schedule: "45 4 * * *",
-  timeZone: "Africa/Nairobi",
-  retryCount: 3,
-  timeoutSeconds: 120,
-}, async (event) => beginSweep("monthly", event.scheduleTime));
+  schedule: "30 5 * * *", timeZone: "Africa/Nairobi", retryCount: 3,
+}, async (event) => beginSweep("nightly", event.scheduleTime));
+
+export const reconcileClosedShift = onDocumentWritten({
+  document: "tenants/{tenantId}/shifts/{shiftId}", retry: true,
+}, async (event) => {
+  if (event.data?.after.get("status") !== "closed" || event.data?.before.get("status") === "closed") return;
+  const day = requireIsoDate(event.data.after.get("businessDate"), "businessDate");
+  const task = await registerShiftClose(getFirestore(), event.params.tenantId, event.params.shiftId, day);
+  if (task) await enqueueReconciliationTask(task);
+});
 
 /** Recovers jobs durably committed before enqueue and expired Cloud Task chains. */
 export const retryTenantReconciliationTasks = onSchedule({

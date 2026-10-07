@@ -1,5 +1,6 @@
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import type {DocumentSnapshot} from "firebase-admin/firestore";
+import {CUSTOMER_ID_SHAPE} from "./customerId";
 
 /**
  * What a sale on credit is, and what one does to a customer's balance.
@@ -55,9 +56,19 @@ function safeInteger(value: unknown): number | null {
  * A sale that says `credit` but does not add up - nothing owed, more owed than
  * it cost, a paid part with no tender - is read as null too: it is not
  * evidence of a debt, and nothing should be charged to a customer from it.
+ *
+ * **So is one that names nobody the server can charge.** `processCustomerSale`
+ * acts only on an ID shaped [CUSTOMER_ID_SHAPE], so a credit sale naming
+ * anything else would leave the owed part out of the drawer and on no
+ * customer's balance. Read as null, its whole total is expected of the shift
+ * as unattributed takings, and money missing from the drawer shows in the
+ * total variance rather than vanishing.
  */
 export function readSaleCredit(sale: Record<string, unknown> | undefined): SaleCredit | null {
   if (sale?.tender !== CREDIT_TENDER) return null;
+  if (typeof sale.customerId !== "string" || !CUSTOMER_ID_SHAPE.test(sale.customerId)) {
+    return null;
+  }
   const owed = safeInteger(sale.creditOwedMinor);
   const total = safeInteger(sale.totalMinor);
   if (owed === null || total === null || owed <= 0 || owed > total) return null;

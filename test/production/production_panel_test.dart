@@ -50,19 +50,17 @@ void main() {
       );
       await _chooseProduct(tester, 'prod-bread');
 
-      // The last batch's rows are the start, and it says so.
+      // The last batch is the start, all of it, and it says so: the same
+      // batch again is nothing to type.
       expect(
         find.byKey(const ValueKey('production-started-from')),
         findsOneWidget,
       );
+      expect(_fieldText(tester, 'production-quantity'), '100');
       expect(_fieldText(tester, 'production-row-description-0'), 'Flour');
       expect(_fieldText(tester, 'production-row-amount-0'), '2000');
-
-      await tester.enterText(
-        find.byKey(const ValueKey('production-quantity')),
-        '100',
-      );
-      await tester.pumpAndSettle();
+      expect(_fieldText(tester, 'production-row-description-1'), 'Labour');
+      expect(_fieldText(tester, 'production-row-amount-1'), '1000');
       expect(_text(tester, 'production-total'), 'KES 3000');
       expect(_text(tester, 'production-unit-cost'), 'KES 30');
 
@@ -84,6 +82,39 @@ void main() {
         snackNotice(tester).message,
         contains('100 White bread loaf recorded'),
       );
+    },
+  );
+
+  testWidgets(
+    'the costs follow how many were made, until one is typed over',
+    (tester) async {
+      await _pump(tester, _Reader(batches: _twoBatches()), writer: _Writer());
+
+      await tester.tap(find.byKey(const ValueKey('production-record')));
+      await tester.pumpAndSettle();
+      await _chooseProduct(tester, 'prod-bread');
+
+      await tester.enterText(
+        find.byKey(const ValueKey('production-quantity')),
+        '50',
+      );
+      await tester.pumpAndSettle();
+      expect(_fieldText(tester, 'production-row-amount-0'), '1000');
+      expect(_fieldText(tester, 'production-row-amount-1'), '500');
+
+      // Labour was dearer this time; that figure is now the person's own.
+      await tester.enterText(
+        find.byKey(const ValueKey('production-row-amount-1')),
+        '600',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('production-quantity')),
+        '200',
+      );
+      await tester.pumpAndSettle();
+      expect(_fieldText(tester, 'production-row-amount-0'), '4000');
+      expect(_fieldText(tester, 'production-row-amount-1'), '600');
+      expect(_text(tester, 'production-total'), 'KES 4600');
     },
   );
 

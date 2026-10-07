@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email receipts &#8212; sent</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+/* Profound Verdant tokens, as lib/ui/tokens.dart states them. 411 is the
+   harness's mobile viewport. There is no email-receipts capture yet; the parts
+   this tab shares with WhatsApp's were checked against
+   screenshots/mobile/whatsapp-receipts-sent.png. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, select { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; align-items: flex-start; flex-wrap: wrap; gap: 32px; padding: 20px 24px 48px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.page-stage > figure > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+figcaption { font-size: 13px; color: #869585; max-width: 411px; text-align: center; line-height: 19px; }
+figcaption b { color: #BCCBB9; font-weight: 600; }
+
+/* The phone: 411, the harness's mobile viewport. `.tall` is the whole page,
+   as the harness's mobile-full capture draws it. */
+.phone { position: relative; width: 411px; height: 891px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+.phone.tall { height: auto; overflow: visible; }
+.bar { height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+.bar button { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #D4E7DD; cursor: pointer; }
+.bar span { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+
+/* AppTabs, edge to edge as the screen draws them. */
+.tabs { display: flex; flex-shrink: 0; border-bottom: 1px solid #132A1F; }
+.tab { flex: 1 1 0; height: 48px; border: 0; padding: 0; background: transparent; display: flex; justify-content: center; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; }
+.tab span { position: relative; display: flex; align-items: center; height: 48px; }
+.tab-on { color: #D4E7DD; }
+.tab-on span::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #4BE277; }
+
+/* The tab's list: space.16 in at compact, as the screen already insets it. */
+.content { flex-grow: 1; min-height: 0; padding: 16px; display: flex; flex-direction: column; }
+.content > * { flex-shrink: 0; }
+
+/* ---- The sent list: an inbox ------------------------------------------ */
+/* Gmail's three lines - who and when; the subject; the snippet - beside a
+   round avatar with one letter, set at the top of the row. The subject is
+   the receipt; the snippet is what became of it, then why. The glyph where
+   Gmail keeps its star says how it was sent. */
+.mails { list-style: none; margin: 0; padding: 0; }
+.mr { display: flex; gap: 16px; align-items: flex-start; padding: 12px 0; }
+.mav { width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; background: #132A1F; color: #BCCBB9; display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 24px; font-weight: 700; }
+.mr-body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
+.mr-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mr-who { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mr-time { flex-shrink: 0; font-size: 12px; line-height: 16px; color: #869585; }
+.mr-line { display: flex; align-items: flex-start; gap: 8px; }
+.mr-subj { flex-grow: 1; min-width: 0; font-size: 14px; line-height: 21px; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mr-snip { flex-grow: 1; min-width: 0; margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.mr-snip svg { vertical-align: -3px; margin-right: 4px; }
+.mr-snip b { font-weight: 600; }
+.trig { flex-shrink: 0; height: 21px; display: flex; align-items: center; color: #869585; }
+.st-ok { color: #4BE277; } .st-plain { color: #BCCBB9; } .st-info { color: #B0CDBD; } .st-prob { color: #EF4444; } .st-neu { color: #869585; }
+.list-foot { margin: 0; padding: 16px 0 8px; text-align: center; font-size: 12px; line-height: 16px; color: #869585; }
+
+/* SkeletonLine on surface.raised: each bar centred in the line box it
+   stands for, so nothing moves when the rows land. */
+.sk-av { width: 40px; height: 40px; border-radius: 50%; background: #132A1F; flex-shrink: 0; }
+.skl { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sk { border-radius: 4px; background: #132A1F; }
+
+/* EmptyState(icon:), as WhatsApp's tab uses it: a glyph in a ring, a title,
+   a hint. */
+.empty { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 32px 80px; }
+.empty-ring { width: 72px; height: 72px; border-radius: 50%; background: #0D1F16; border: 1px solid #283831; display: flex; align-items: center; justify-content: center; color: #869585; }
+.empty h3 { margin: 16px 0 8px; font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+.empty p { margin: 0; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All email receipts artboards</a></nav>
+<div class="page-stage">
+
+<!-- Frame 1: the list - the whole page -->
+<figure>
+<div class="phone tall">
+  <div class="bar"><button type="button" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button><span>Email receipts</span></div>
+  <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="false"><span>Settings</span></button><button class="tab tab-on" role="tab" aria-selected="true"><span>Sent receipts</span></button></div>
+  <div class="content" style="padding-top: 4px;">
+    <ul class="mails">
+      <li class="mr"><span class="mav" aria-hidden="true">W</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">Wanjiku Mwangi</span><span class="mr-time">14:32</span></div>
+        <div class="mr-line"><span class="mr-subj">Receipt CT-A7F-20261003-0042</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-ok" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3H4.99C3.88 3 3 3.9 3 5v14c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5v-3h3.56c.69 1.19 1.97 2 3.45 2s2.75-.81 3.45-2H19v3zm0-5h-4.99c0 1.1-.9 2-2 2s-2-.9-2-2H5V5h14v9zm-3-4h-2V7h-4v3H8l4 4 4-4z"></path></svg><b class="st-ok">Delivered</b></p></div>
+      </div></li>
+      <li class="mr"><span class="mav" aria-hidden="true">N</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">n&#8226;&#8226;&#8226;@gmail.com</span><span class="mr-time">14:05</span></div>
+        <div class="mr-line"><span class="mr-subj">Receipt CT-A7F-20261003-0041</span><span class="trig" title="Sent by hand"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.19 12.44l-3.24-1.62c1.29-1 2.12-2.56 2.12-4.32 0-3.03-2.47-5.5-5.5-5.5s-5.5 2.47-5.5 5.5c0 2.13 1.22 3.98 3 4.89v3.26c-2.15-.46-2.02-.44-2.26-.44-.53 0-1.03.21-1.41.59L4 16.22l5.09 5.09c.43.44 1.03.69 1.65.69h6.3c.98 0 1.81-.7 1.97-1.67l.8-4.71c.22-1.3-.43-2.58-1.62-3.18zm-.35 2.85l-.8 4.71h-6.3c-.09 0-.17-.04-.24-.1l-3.68-3.68 4.25.89V6.5c0-.28.22-.5.5-.5s.5.22.5.5v6h1.76l3.46 1.73c.4.2.62.63.55 1.06zM8.07 9.13V6.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5c0 .95-.38 1.81-1 2.44V6.5c0-1.38-1.12-2.5-2.5-2.5s-2.5 1.12-2.5 2.5v2.63z"></path></svg></span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-plain" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.01 6.03l7.51 3.22-7.52-1 .01-2.22m7.5 8.72L4 17.97v-2.22l7.51-1M2.01 3L2 10l15 2-15 2 .01 7L23 12 2.01 3z"></path></svg><b class="st-plain">Sent</b></p></div>
+      </div></li>
+      <li class="mr"><span class="mav" aria-hidden="true">O</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">Otieno Ouma</span><span class="mr-time">13:58</span></div>
+        <div class="mr-line"><span class="mr-subj">Receipt CT-A7F-20261003-0040</span><span class="trig" title="Sent by hand"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.19 12.44l-3.24-1.62c1.29-1 2.12-2.56 2.12-4.32 0-3.03-2.47-5.5-5.5-5.5s-5.5 2.47-5.5 5.5c0 2.13 1.22 3.98 3 4.89v3.26c-2.15-.46-2.02-.44-2.26-.44-.53 0-1.03.21-1.41.59L4 16.22l5.09 5.09c.43.44 1.03.69 1.65.69h6.3c.98 0 1.81-.7 1.97-1.67l.8-4.71c.22-1.3-.43-2.58-1.62-3.18zm-.35 2.85l-.8 4.71h-6.3c-.09 0-.17-.04-.24-.1l-3.68-3.68 4.25.89V6.5c0-.28.22-.5.5-.5s.5.22.5.5v6h1.76l3.46 1.73c.4.2.62.63.55 1.06zM8.07 9.13V6.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5c0 .95-.38 1.81-1 2.44V6.5c0-1.38-1.12-2.5-2.5-2.5s-2.5 1.12-2.5 2.5v2.63z"></path></svg></span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-ok" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3H4.99C3.88 3 3 3.9 3 5v14c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5v-3h3.56c.69 1.19 1.97 2 3.45 2s2.75-.81 3.45-2H19v3zm0-5h-4.99c0 1.1-.9 2-2 2s-2-.9-2-2H5V5h14v9zm-3-4h-2V7h-4v3H8l4 4 4-4z"></path></svg><b class="st-ok">Delivered</b></p></div>
+      </div></li>
+      <li class="mr"><span class="mav" aria-hidden="true">A</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">Achieng Atieno</span><span class="mr-time">13:57</span></div>
+        <div class="mr-line"><span class="mr-subj">Receipt CT-A7F-20261003-0039</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-info" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg><b class="st-info">Sending</b></p></div>
+      </div></li>
+      <li class="mr"><span class="mav" aria-hidden="true">P</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">p&#8226;&#8226;&#8226;@outlook.com</span><span class="mr-time">12:40</span></div>
+        <div class="mr-line"><span class="mr-subj">Receipt CT-A7F-20261003-0035</span><span class="trig" title="Sent by hand"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.19 12.44l-3.24-1.62c1.29-1 2.12-2.56 2.12-4.32 0-3.03-2.47-5.5-5.5-5.5s-5.5 2.47-5.5 5.5c0 2.13 1.22 3.98 3 4.89v3.26c-2.15-.46-2.02-.44-2.26-.44-.53 0-1.03.21-1.41.59L4 16.22l5.09 5.09c.43.44 1.03.69 1.65.69h6.3c.98 0 1.81-.7 1.97-1.67l.8-4.71c.22-1.3-.43-2.58-1.62-3.18zm-.35 2.85l-.8 4.71h-6.3c-.09 0-.17-.04-.24-.1l-3.68-3.68 4.25.89V6.5c0-.28.22-.5.5-.5s.5.22.5.5v6h1.76l3.46 1.73c.4.2.62.63.55 1.06zM8.07 9.13V6.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5c0 .95-.38 1.81-1 2.44V6.5c0-1.38-1.12-2.5-2.5-2.5s-2.5 1.12-2.5 2.5v2.63z"></path></svg></span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-prob" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><b class="st-prob">Not delivered</b> &#183; That email address does not exist.</p></div>
+      </div></li>
+      <li class="mr"><span class="mav" aria-hidden="true">K</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">Kamau Njoroge</span><span class="mr-time">11:02</span></div>
+        <div class="mr-line"><span class="mr-subj">Receipt CT-A7F-20261003-0031</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-neu" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 11v2h10v-2H7zm5-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><b class="st-neu">Not sent</b> &#183; The customer stopped email receipts.</p></div>
+      </div></li>
+      <li class="mr"><span class="mav" aria-hidden="true">M</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">Mary Wambui</span><span class="mr-time">2 Oct</span></div>
+        <div class="mr-line"><span class="mr-subj">Receipt CT-A7F-20261002-0058</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-ok" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3H4.99C3.88 3 3 3.9 3 5v14c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5v-3h3.56c.69 1.19 1.97 2 3.45 2s2.75-.81 3.45-2H19v3zm0-5h-4.99c0 1.1-.9 2-2 2s-2-.9-2-2H5V5h14v9zm-3-4h-2V7h-4v3H8l4 4 4-4z"></path></svg><b class="st-ok">Delivered</b></p></div>
+      </div></li>
+      <li class="mr"><span class="mav" aria-hidden="true">J</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">James Kiprono</span><span class="mr-time">2 Oct</span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-info" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg><b class="st-info">Waiting to send</b> &#183; Waiting for the sale to reach the server.</p><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+      </div></li>
+    </ul>
+    <p class="list-foot">The 20 most recent receipts</p>
+  </div>
+</div>
+<figcaption><b>Sent receipts &#8212; 411, the whole list.</b> Gmail&#8217;s three lines: who and when, the receipt as the subject, and what became of it as the snippet &#8212; a glyph and a word, then the reason after a dot when there is one. A receipt the server has not numbered yet has no subject, so its row is two lines.</figcaption>
+</figure>
+
+<!-- Frame 2: nothing sent yet -->
+<figure>
+<div class="phone">
+  <div class="bar"><button type="button" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button><span>Email receipts</span></div>
+  <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="false"><span>Settings</span></button><button class="tab tab-on" role="tab" aria-selected="true"><span>Sent receipts</span></button></div>
+  <div class="content">
+    <div class="empty">
+      <div class="empty-ring" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z"></path></svg></div>
+      <h3>No receipts sent yet</h3>
+      <p>Each receipt sent by email is listed here with what became of it.</p>
+    </div>
+  </div>
+</div>
+<figcaption><b>Nothing sent yet &#8212; 411.</b> The build&#8217;s own words under the switch&#8217;s mail glyph in a ring, as WhatsApp&#8217;s tab does it with its chat glyph. The file-search illustration goes: nothing here was searched for.</figcaption>
+</figure>
+
+<!-- Frame 3: reading -->
+<figure>
+<div class="phone">
+  <div class="bar"><button type="button" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button><span>Email receipts</span></div>
+  <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="false"><span>Settings</span></button><button class="tab tab-on" role="tab" aria-selected="true"><span>Sent receipts</span></button></div>
+  <div class="content" style="padding-top: 4px;" aria-busy="true" aria-label="Reading the recent receipts.">
+    <ul class="mails">
+      <li class="mr"><span class="sk-av"></span><div class="mr-body">
+        <div class="skl" style="height: 24px;"><span class="sk" style="width: 52%; height: 16px;"></span><span class="sk" style="width: 32px; height: 12px;"></span></div>
+        <div class="skl" style="height: 21px;"><span class="sk" style="width: 74%; height: 12px;"></span></div>
+        <div class="skl" style="height: 21px;"><span class="sk" style="width: 30%; height: 12px;"></span></div>
+      </div></li>
+      <li class="mr"><span class="sk-av"></span><div class="mr-body">
+        <div class="skl" style="height: 24px;"><span class="sk" style="width: 40%; height: 16px;"></span><span class="sk" style="width: 32px; height: 12px;"></span></div>
+        <div class="skl" style="height: 21px;"><span class="sk" style="width: 70%; height: 12px;"></span></div>
+        <div class="skl" style="height: 21px;"><span class="sk" style="width: 24%; height: 12px;"></span></div>
+      </div></li>
+      <li class="mr"><span class="sk-av"></span><div class="mr-body">
+        <div class="skl" style="height: 24px;"><span class="sk" style="width: 48%; height: 16px;"></span><span class="sk" style="width: 32px; height: 12px;"></span></div>
+        <div class="skl" style="height: 21px;"><span class="sk" style="width: 72%; height: 12px;"></span></div>
+        <div class="skl" style="height: 21px;"><span class="sk" style="width: 36%; height: 12px;"></span></div>
+      </div></li>
+    </ul>
+  </div>
+</div>
+<figcaption><b>Reading &#8212; 411.</b> The build&#8217;s three placeholder rows, reshaped to the row they stand for: a circle where the letter lands and a bar in each of the three line boxes. Nothing moves when the real rows arrive.</figcaption>
+</figure>
+
+</div>
+</body>
+</html>

@@ -38,9 +38,11 @@ import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
+import '../ui/tabs.dart';
 import '../ui/tokens.dart';
 import 'stock_take_card.dart';
 import 'stock_take_review.dart';
+import 'stock_take_schedule.dart';
 
 /// The reading route for this business's counts.
 final class TenantStockTakeReviewScreen extends StatelessWidget {
@@ -50,6 +52,7 @@ final class TenantStockTakeReviewScreen extends StatelessWidget {
     this.applyCallable,
     this.onApplied,
     this.countRoute,
+    this.settings,
     this.reportSaver,
     this.imageCache,
     this.clock,
@@ -80,30 +83,55 @@ final class TenantStockTakeReviewScreen extends StatelessWidget {
   /// screen should not assume there never will be.
   final WidgetBuilder? countRoute;
 
+  /// When a count is due and who takes it, drawn as this screen's second tab.
+  ///
+  /// **On the page whose counts it schedules, at the developer's direction on
+  /// 2026-10-04.** It was a tab of *Configs*, a screen away from the counts it
+  /// decides. Only an owner or administrator may publish it, so anybody else
+  /// who reads counts here - a manager, every day - gets the counts alone with
+  /// no switch above them, rather than a tab that says *Not allowed*. Absent
+  /// draws the same single page.
+  final WidgetBuilder? settings;
+
   @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: 'Stock counts',
-    subtitle: 'What was counted, and how it differed from the books.',
-    contentWidth: AppContentWidth.records,
-    // **One toolbar action since 2026-09-24**, and only one. *Count stock*
-    // stays a button the width of the page at the head of the body, with the
-    // two filters under it - the shape expenses and staff open in, and the
-    // developer's direction of 2026-09-22 that took the act off the toolbar.
-    // Taking a copy of a period away is not the act this page exists for, so
-    // it is chrome and it goes here.
-    actions: <Widget>[
-      TenantSessionReportAction(
-        clock: clock ?? DateTime.now,
-        runFor: (session) => _reportRun(session),
-      ),
-    ],
-    body: TenantStockTakeReviewPanel(
+  Widget build(BuildContext context) {
+    final counts = TenantStockTakeReviewPanel(
       reader: reader,
       applyCallable: applyCallable,
       onApplied: onApplied,
       countRoute: countRoute,
-    ),
-  );
+    );
+    final settings = this.settings;
+    final session = settings == null
+        ? null
+        : TenantSessionScope.of(context).session;
+    final tabbed =
+        settings != null &&
+        session != null &&
+        session.canAccess(
+          allowedRoles: TenantStockTakeSchedulePublisher.allowedRoles,
+        );
+    return AppScaffold(
+      title: 'Stock counts',
+      subtitle: 'What was counted, and how it differed from the books.',
+      contentWidth: AppContentWidth.records,
+      // **One toolbar action since 2026-09-24**, and only one. *Count stock*
+      // stays a button the width of the page at the head of the body, with the
+      // two filters under it - the shape expenses and staff open in, and the
+      // developer's direction of 2026-09-22 that took the act off the toolbar.
+      // Taking a copy of a period away is not the act this page exists for, so
+      // it is chrome and it goes here.
+      actions: <Widget>[
+        TenantSessionReportAction(
+          clock: clock ?? DateTime.now,
+          runFor: (session) => _reportRun(session),
+        ),
+      ],
+      body: tabbed
+          ? _StockCountsTabs(counts: counts, settings: settings)
+          : counts,
+    );
+  }
 
   /// Counts over a period, which the review list cannot ask for.
   TenantReportRun? _reportRun(TenantSession session) {
@@ -155,6 +183,59 @@ final class TenantStockTakeReviewScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// *Counts* and *Settings*, as two tabs of one screen.
+///
+/// **Both stay alive**, so an unsaved change to the rota survives a look at the
+/// counts, and going back to the counts never reads them again. The rota is
+/// read the first time its tab is opened, not on the way in.
+final class _StockCountsTabs extends StatelessWidget {
+  const _StockCountsTabs({required this.counts, required this.settings});
+
+  final Widget counts;
+  final WidgetBuilder settings;
+
+  @override
+  Widget build(BuildContext context) {
+    // The counts tab pads its button, its filters and its cards by `space.16`,
+    // and the rota takes the same. What a person sees of each stands in the
+    // focus ring's gutter inside that; the switch carries no gutter of its own,
+    // so it takes the gutter as well and the page keeps one edge whichever tab
+    // is showing.
+    final tokens = AppTokens.componentOf(context);
+    final ring = tokens.colors.action.focusRing;
+    final inset = tokens.spacing.s16;
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          AppTabs(
+            key: const ValueKey('stock-take-review-tabs'),
+            tabs: const <String>['Counts', 'Settings'],
+            inset: inset + ring.width + ring.offset,
+          ),
+          Expanded(
+            child: TabBarView(
+              children: <Widget>[
+                AppKeptTab(child: counts),
+                // The scroll the rota's panel leaves to its host, as *Configs*
+                // gave it one.
+                AppKeptTab(
+                  child: SingleChildScrollView(
+                    key: const ValueKey('stock-take-settings-tab'),
+                    padding: EdgeInsets.all(inset),
+                    child: Builder(builder: settings),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -254,6 +335,7 @@ class _TenantStockTakeReviewPanelState extends State<TenantStockTakeReviewPanel>
             allowedRoles: TenantStockTakeReviewRepository.allowedRoles,
             load: _loader!,
             loadCached: _loaderCached,
+            holdsNothing: (named) => named.page.isEmpty,
             denied: const ErrorState(
               status: AppStatus.problem,
               badgeLabel: 'Not allowed',
@@ -563,6 +645,7 @@ class _TenantStockTakeDetailScreenState
         allowedRoles: TenantStockTakeReviewRepository.allowedRoles,
         load: _loader!,
         loadCached: _loaderCached,
+        holdsNothing: (take) => take.lines.isEmpty,
         builder: _buildLines,
       ),
     );

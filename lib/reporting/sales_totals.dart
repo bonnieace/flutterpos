@@ -530,7 +530,7 @@ final class TenantSalesTotals {
     final data = _strictMap(value, 'response');
     final previous = _strictMap(data['previous'], 'previous');
     final scanned = _requiredCount(data, 'scannedTransactions');
-    if (scanned > maximumTransactions) {
+    if (scanned > maximumTransactions && data['summaryVersion'] != 1) {
       throw const FormatException(
         'getSalesComparison scanned more sales than it may.',
       );
@@ -663,7 +663,7 @@ final class TenantSalesTotals {
   /// The exact request these totals answer.
   final TenantSalesTotalsQuery query;
 
-  /// How many sales the server read to produce this answer.
+  /// How many source sales this answer covers (not the billed read count).
   ///
   /// Equal to [transactions] unless a category was requested, in which case the
   /// difference is the sales in the period that held nothing in it.
@@ -759,7 +759,7 @@ final class TenantSalesTotalsGateway {
   final DateTime Function() _clock;
 
   static bool canReadInSession(TenantSession session) =>
-      session.canAccess(allowedRoles: allowedRoles);
+      session.canAccess(allowedRoles: [...allowedRoles, TenantRole.cashier]);
 
   /// Resolves [period], [soldById], and [categoryId] against the live session
   /// and the clock.
@@ -790,7 +790,7 @@ final class TenantSalesTotalsGateway {
     final startDate = checkoutBusinessDate(
       now.subtract(Duration(days: period.days - 1)),
     );
-    final member = soldById == null ? null : _validatedUid(soldById);
+    final member = _scopedMember(soldById);
     return TenantSalesTotalsQuery._(
       tenantId: _session.tenantId,
       period: period,
@@ -836,7 +836,7 @@ final class TenantSalesTotalsGateway {
         TenantSalesTotalsFailure.invalidRequest,
       );
     }
-    final member = soldById == null ? null : _validatedUid(soldById);
+    final member = _scopedMember(soldById);
     return TenantSalesTotalsQuery._(
       tenantId: _session.tenantId,
       period: TenantSalesPeriod.today,
@@ -889,7 +889,7 @@ final class TenantSalesTotalsGateway {
         TenantSalesTotalsFailure.invalidRequest,
       );
     }
-    final member = soldById == null ? null : _validatedUid(soldById);
+    final member = _scopedMember(soldById);
     return TenantSalesTotalsQuery._(
       tenantId: _session.tenantId,
       // The nearest standing period this span belongs to. Nothing reads it for
@@ -933,7 +933,7 @@ final class TenantSalesTotalsGateway {
     final businessDate = checkoutBusinessDate(
       _clock().toUtc().subtract(const Duration(days: 1)),
     );
-    final member = soldById == null ? null : _validatedUid(soldById);
+    final member = _scopedMember(soldById);
     return TenantSalesTotalsQuery._(
       tenantId: _session.tenantId,
       period: TenantSalesPeriod.today,
@@ -947,6 +947,18 @@ final class TenantSalesTotalsGateway {
       soldById: member,
       categoryId: null,
     );
+  }
+
+  String? _scopedMember(String? soldById) {
+    if (!_session.canAccess(allowedRoles: allowedRoles)) {
+      if (soldById != null && soldById != _session.uid) {
+        throw const TenantSalesTotalsException(
+          TenantSalesTotalsFailure.forbidden,
+        );
+      }
+      return _session.uid;
+    }
+    return soldById == null ? null : _validatedUid(soldById);
   }
 
   /// The signed-in member's own UID, for a caller asking only for its own
@@ -988,6 +1000,13 @@ final class TenantSalesTotalsGateway {
     }
     if (query.tenantId != _session.tenantId) {
       throw StateError('The sales totals query belongs to another tenant.');
+    }
+    _scopedMember(query.soldById);
+    if (!_session.canAccess(allowedRoles: allowedRoles) &&
+        query.soldById != _session.uid) {
+      throw const TenantSalesTotalsException(
+        TenantSalesTotalsFailure.forbidden,
+      );
     }
     final Object? response;
     try {

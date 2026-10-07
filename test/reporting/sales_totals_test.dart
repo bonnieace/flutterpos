@@ -174,14 +174,14 @@ void main() {
       expect(callable.payloads, isEmpty);
     });
 
-    test('a cashier is refused before anything is sent', () {
+    test('a cashier cannot request a colleague', () {
       final callable = _Callable(_response());
       final gateway = _gateway(callable, role: TenantRole.cashier);
 
       expect(
         () => gateway.createQuery(
           period: TenantSalesPeriod.today,
-          soldById: 'manager-a',
+          soldById: 'cashier-b',
         ),
         _failure(TenantSalesTotalsFailure.forbidden),
       );
@@ -220,8 +220,18 @@ void main() {
             role: TenantRole.cashier,
           ),
         ),
-        isFalse,
+        isTrue,
       );
+    });
+
+    test('cashier queries default to the signed-in member', () async {
+      final callable = _Callable(_response());
+      final gateway = _gateway(callable, role: TenantRole.cashier);
+      final query = gateway.createQuery(period: TenantSalesPeriod.today);
+      expect(query.scope, TenantSalesScope.mine);
+      expect(query.soldById, gateway.selfUid);
+      await gateway.load(query);
+      expect(callable.payloads.single['soldById'], gateway.selfUid);
     });
 
     test('a query from another business is never sent', () async {

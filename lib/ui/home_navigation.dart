@@ -36,8 +36,11 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'brand_icon.dart';
 import 'press.dart';
 import 'tokens.dart';
+
+export 'brand_icon.dart' show AppBrandIcon;
 
 /// One place the home can send a person, and what it can say about that place
 /// before they go.
@@ -60,7 +63,17 @@ final class HomeDestination {
     this.group,
     this.description,
     this.accent,
+    this.brandIcon,
   });
+
+  /// Another app's own icon, drawn in place of [icon] and the well around it,
+  /// for a destination that sends through that app - *WhatsApp*, *Email*.
+  ///
+  /// **The well becomes the app icon** rather than holding it: a tinted square
+  /// with a logo inside is not the icon a shopkeeper taps on their phone. A
+  /// disabled destination draws [icon] in grey as every other one does,
+  /// because an app icon has no disabled colour of its own.
+  final AppBrandIcon? brandIcon;
 
   /// The colour this destination's tile wears on wider [HomeModuleGrid] layouts.
   ///
@@ -343,12 +356,19 @@ final class _HomeMenuRow extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          _DestinationGlyph(
-            destination: destination,
-            tokens: tokens,
-            size: tokens.icons.row,
-            color: foreground,
-          ),
+          if (destination.brandIcon case final brand? when enabled)
+            AppBrandIconMark(
+              icon: brand,
+              size: tokens.icons.row,
+              radius: tokens.radius.sm,
+            )
+          else
+            _DestinationGlyph(
+              destination: destination,
+              tokens: tokens,
+              size: tokens.icons.row,
+              color: foreground,
+            ),
           SizedBox(width: tokens.spacing.s12),
           // **Three shares to the label and two to its condition.** An even
           // split is what a bare `Expanded` and `Flexible` give, and in a
@@ -659,28 +679,33 @@ final class _HomeModuleCard extends StatelessWidget {
               // one.
               clipBehavior: Clip.none,
               children: <Widget>[
-                Container(
-                  key: ValueKey('home-module-icon-${destination.label}'),
-                  width: tokens.icons.launcherWell,
-                  height: tokens.icons.launcherWell,
-                  decoration: BoxDecoration(
-                    color: enabled
-                        ? glyph.withValues(alpha: 0.14)
-                        : colors.surface.sunken,
-                    borderRadius: BorderRadius.circular(tokens.radius.lg),
-                    border: Border.all(
-                      color: enabled
-                          ? glyph.withValues(alpha: 0.38)
-                          : colors.surface.borderSubtle,
+                _tile(
+                      key: ValueKey('home-module-icon-${destination.label}'),
+                      size: tokens.icons.launcherWell,
+                      radius: tokens.radius.lg,
+                    ) ??
+                    Container(
+                      key: ValueKey('home-module-icon-${destination.label}'),
+                      width: tokens.icons.launcherWell,
+                      height: tokens.icons.launcherWell,
+                      decoration: BoxDecoration(
+                        color: enabled
+                            ? glyph.withValues(alpha: 0.14)
+                            : colors.surface.sunken,
+                        borderRadius: BorderRadius.circular(tokens.radius.lg),
+                        border: Border.all(
+                          color: enabled
+                              ? glyph.withValues(alpha: 0.38)
+                              : colors.surface.borderSubtle,
+                        ),
+                      ),
+                      child: _DestinationGlyph(
+                        destination: destination,
+                        tokens: tokens,
+                        size: tokens.icons.launcher,
+                        color: enabled ? glyph : colors.text.disabled,
+                      ),
                     ),
-                  ),
-                  child: _DestinationGlyph(
-                    destination: destination,
-                    tokens: tokens,
-                    size: tokens.icons.launcher,
-                    color: enabled ? glyph : colors.text.disabled,
-                  ),
-                ),
                 // **No badge at all when there is nothing waiting.** A
                 // permanent zero trains a person to stop looking at the one
                 // place that tells them something is stuck - the same call
@@ -748,27 +773,32 @@ final class _HomeModuleCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
           // The glyph sits in its own well, which is the old card's shape and
-          // is a surface step rather than the old screen's black wash.
-          Container(
-            padding: EdgeInsets.all(tokens.spacing.s12),
-            decoration: BoxDecoration(
-              color: enabled
-                  ? accent.withValues(alpha: 0.14)
-                  : colors.surface.field,
-              borderRadius: BorderRadius.circular(tokens.radius.md),
-              border: Border.all(
-                color: enabled
-                    ? accent.withValues(alpha: 0.34)
-                    : colors.surface.borderSubtle,
+          // is a surface step rather than the old screen's black wash. An app's
+          // own icon takes the well's place, at the glyph and its padding.
+          _tile(
+                size: tokens.icons.card + 2 * tokens.spacing.s12,
+                radius: tokens.radius.md,
+              ) ??
+              Container(
+                padding: EdgeInsets.all(tokens.spacing.s12),
+                decoration: BoxDecoration(
+                  color: enabled
+                      ? accent.withValues(alpha: 0.14)
+                      : colors.surface.field,
+                  borderRadius: BorderRadius.circular(tokens.radius.md),
+                  border: Border.all(
+                    color: enabled
+                        ? accent.withValues(alpha: 0.34)
+                        : colors.surface.borderSubtle,
+                  ),
+                ),
+                child: _DestinationGlyph(
+                  destination: destination,
+                  tokens: tokens,
+                  size: tokens.icons.card,
+                  color: enabled ? accent : colors.text.disabled,
+                ),
               ),
-            ),
-            child: _DestinationGlyph(
-              destination: destination,
-              tokens: tokens,
-              size: tokens.icons.card,
-              color: enabled ? accent : colors.text.disabled,
-            ),
-          ),
           Padding(
             padding: EdgeInsets.only(top: tokens.spacing.s16),
             child: Column(
@@ -826,6 +856,24 @@ final class _HomeModuleCard extends StatelessWidget {
       fillHeight: true,
       child: card,
     );
+  }
+
+  /// An app's own icon where this destination is that app's channel, and null
+  /// where it draws the glyph's well.
+  ///
+  /// **A disabled destination always draws the well**, because an app icon has
+  /// no disabled colour of its own.
+  Widget? _tile({Key? key, required double size, required double radius}) {
+    if (destination.onPressed == null) return null;
+    if (destination.brandIcon case final brand?) {
+      return AppBrandIconMark(
+        key: key,
+        icon: brand,
+        size: size,
+        radius: radius,
+      );
+    }
+    return null;
   }
 
   Widget _pressable({

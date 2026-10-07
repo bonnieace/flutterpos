@@ -9,8 +9,6 @@ import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:uzapay_pos/checkout/checkout_configuration_writer.dart';
 import 'package:uzapay_pos/customers/customers.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
-import 'package:uzapay_pos/ui/scaffold.dart';
-import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:uzapay_pos/whatsapp/whatsapp.dart';
 
 import 'fakes.dart';
@@ -97,10 +95,15 @@ final Map<String, Map<String, Object?>> _customers =
 /// The seeded business, with customers searchable the way the index answers.
 final class _Business
     implements TenantDataReader, TenantCustomerSearchReader {
-  _Business({this.eReceipts}) : _business = FakeTenantReader.business();
+  _Business({this.eReceipts, this.deliveries})
+    : _business = FakeTenantReader.business();
 
   final FakeTenantReader _business;
   final Map<String, Object?>? eReceipts;
+
+  /// The WhatsApp receipts the sent tab lists, newest first. Null answers the
+  /// two the till and the record captures have always drawn.
+  final List<Map<String, Object?>>? deliveries;
 
   String get _root => 'tenants/$seedTenantId';
 
@@ -129,6 +132,16 @@ final class _Business
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
   ) async {
+    if (query.collectionPath.endsWith('/receipt_deliveries') &&
+        deliveries != null) {
+      return <TenantQueryDocumentSnapshot>[
+        for (final (index, data) in deliveries!.indexed)
+          TenantQueryDocumentSnapshot(
+            path: '${query.collectionPath}/rd_${index + 1}',
+            data: data,
+          ),
+      ];
+    }
     if (query.collectionPath.endsWith('/receipt_deliveries')) {
       return <TenantQueryDocumentSnapshot>[
         TenantQueryDocumentSnapshot(
@@ -222,35 +235,128 @@ Widget _till() => inSession(
   controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
 );
 
-Widget _whatsapp() => inSession(
+Widget _whatsapp({
+  bool enabled = true,
+  String mode = 'automatic',
+  String format = 'pdf',
+  List<Map<String, Object?>>? deliveries,
+}) => inSession(
   TenantWhatsappReceiptsScreen(
     reader: _Business(
-      eReceipts: const <String, Object?>{
-        'whatsappEnabled': true,
-        'mode': 'automatic',
-        'format': 'pdf',
+      eReceipts: <String, Object?>{
+        'whatsappEnabled': enabled,
+        'mode': mode,
+        'format': format,
       },
+      deliveries: deliveries,
     ),
     writer: const _ConfigurationWriter(),
     statusCheck: (_) async => true,
+    clock: () => _sentToday,
   ),
   controller: seedSession(role: TenantRole.owner, uid: ownerUid),
 );
 
+/// The afternoon the sent tab is read on: a Saturday, as on the design's
+/// boards (`docs/design/whatsapp-receipts/`).
+final DateTime _sentToday = DateTime(2026, 10, 3, 14, 40);
+
+/// One WhatsApp receipt as the server records it.
+Map<String, Object?> _delivery(
+  String receipt,
+  String status,
+  DateTime at, {
+  String? name,
+  String phone = '+254•••678',
+  bool automatic = true,
+  String? reason,
+}) => <String, Object?>{
+  'saleId': 'co-$receipt',
+  'receiptNumber': 'CT-A7F-$receipt',
+  'customerName': ?name,
+  'phoneMasked': phone,
+  'trigger': automatic ? 'automatic' : 'manual',
+  'status': status,
+  'reason': ?reason,
+  'createdAt': at,
+};
+
+/// The design's eight: every status, both triggers, names and bare numbers,
+/// reasons, today and yesterday.
+final List<Map<String, Object?>> _sentReceipts = <Map<String, Object?>>[
+  _delivery(
+    '20261003-0042',
+    'read',
+    DateTime(2026, 10, 3, 14, 32),
+    name: 'Wanjiku Mwangi',
+  ),
+  _delivery('20261003-0041', 'delivered', DateTime(2026, 10, 3, 14, 5)),
+  _delivery(
+    '20261003-0040',
+    'sent',
+    DateTime(2026, 10, 3, 13, 58),
+    name: 'Otieno Ouma',
+    automatic: false,
+  ),
+  _delivery(
+    '20261003-0039',
+    'sending',
+    DateTime(2026, 10, 3, 13, 57),
+    name: 'Achieng Atieno',
+  ),
+  _delivery(
+    '20261003-0035',
+    'failed',
+    DateTime(2026, 10, 3, 12, 40),
+    phone: '+254•••219',
+    reason: 'refused_131026',
+  ),
+  _delivery(
+    '20261003-0031',
+    'skipped',
+    DateTime(2026, 10, 3, 11, 2),
+    name: 'Kamau Njoroge',
+    reason: 'opted_out',
+  ),
+  _delivery(
+    '20261002-0058',
+    'read',
+    DateTime(2026, 10, 2, 18, 20),
+    name: 'Mary Wambui',
+    automatic: false,
+  ),
+  _delivery(
+    '20261002-0057',
+    'queued',
+    DateTime(2026, 10, 2, 17, 45),
+    phone: '+254•••530',
+    reason: 'waiting_for_sale',
+  ),
+];
+
+Future<void> _openSentTab(WidgetTester tester) async {
+  await tester.tap(find.text('Sent receipts'));
+  await tester.pumpAndSettle();
+}
+
+/// The Customers screen as an owner opens it, with loyalty as its second tab
+/// since 2026-10-04.
 Widget _loyalty() => inSession(
-  AppScaffold(
-    title: 'Configs',
-    contentWidth: AppContentWidth.reading,
-    body: SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: TenantLoyaltySettingsPanel(
-        reader: _Business(),
-        writer: const _ConfigurationWriter(),
-      ),
+  TenantCustomersScreen(
+    reader: _Business(),
+    writer: const _Writer(),
+    loyalty: (_) => TenantLoyaltySettingsPanel(
+      reader: _Business(),
+      writer: const _ConfigurationWriter(),
     ),
   ),
   controller: seedSession(role: TenantRole.owner, uid: ownerUid),
 );
+
+Future<void> _openLoyaltyTab(WidgetTester tester) async {
+  await tester.tap(find.text('Loyalty'));
+  await tester.pumpAndSettle();
+}
 
 void main() {
   screenshotCase(
@@ -313,9 +419,49 @@ void main() {
     viewports: responsiveViewports,
   );
 
+  // The other two settings the design draws, and the sent tab: phone only,
+  // because the screen is the reading column at every width.
   screenshotCase(
-    'configs-loyalty',
+    'whatsapp-receipts-summary',
+    build: () => _whatsapp(mode: 'manual', format: 'summary'),
+    fullPage: false,
+    viewports: const <ScreenshotViewport>[mobileViewport],
+  );
+
+  screenshotCase(
+    'whatsapp-receipts-off',
+    build: () => _whatsapp(enabled: false),
+    fullPage: false,
+    viewports: const <ScreenshotViewport>[mobileViewport],
+  );
+
+  screenshotCase(
+    'whatsapp-receipts-sent',
+    build: () => _whatsapp(deliveries: _sentReceipts),
+    fullPage: false,
+    afterPump: _openSentTab,
+    viewports: const <ScreenshotViewport>[mobileViewport],
+  );
+
+  screenshotCase(
+    'whatsapp-receipts-sent-empty',
+    build: () => _whatsapp(deliveries: const <Map<String, Object?>>[]),
+    fullPage: false,
+    afterPump: _openSentTab,
+    viewports: const <ScreenshotViewport>[mobileViewport],
+  );
+
+  // The list under the switch an owner gets.
+  screenshotCase(
+    'customers-tabs',
     build: _loyalty,
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    'customers-loyalty',
+    build: _loyalty,
+    afterPump: _openLoyaltyTab,
     viewports: responsiveViewports,
   );
 }

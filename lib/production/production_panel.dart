@@ -216,6 +216,7 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
       allowedRoles: TenantProductionRepository.allowedRoles,
       load: _loader,
       loadCached: _loaderCached,
+      holdsNothing: (view) => view.page.items.isEmpty,
       loading: const _ProductionFrame(
         child: LoadingState(message: 'Reading production'),
       ),

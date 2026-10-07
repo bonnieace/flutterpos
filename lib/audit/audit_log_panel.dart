@@ -312,6 +312,7 @@ final class _TenantAuditLogPanelState extends State<TenantAuditLogPanel> {
       allowedRoles: TenantAuditLogRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (view) => view.page.items.isEmpty,
       denied: const Center(
         key: ValueKey('audit-log-denied'),
         child: Text('The activity log is available to owners and admins.'),

@@ -143,6 +143,7 @@ final class _TenantStockAdjustmentFeedPanelState
       allowedRoles: TenantStockAdjustmentFeedRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (view) => view.page.items.isEmpty,
       denied: const Center(
         key: ValueKey('stock-adjustments-denied'),
         child: Text('Stock adjustments are unavailable for this business.'),

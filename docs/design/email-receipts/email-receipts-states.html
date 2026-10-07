@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email receipts &#8212; states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+/* Profound Verdant tokens, as lib/ui/tokens.dart states them. 379 is the
+   phone column: a 411 screen less two space.16 insets. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, select { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+
+.wrap { max-width: 1232px; margin: 0 auto; padding: 8px 24px 64px; }
+.intro h1 { margin: 16px 0 8px; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px; color: #D4E7DD; }
+.intro p { margin: 0; max-width: 760px; font-size: 15px; line-height: 22px; color: #BCCBB9; }
+section { margin-top: 48px; }
+.sec { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.sec-note { margin: 4px 0 24px; max-width: 760px; font-size: 14px; line-height: 21px; color: #869585; }
+.grid { display: grid; grid-template-columns: repeat(3, 379px); gap: 40px 32px; align-items: start; }
+.spec { display: flex; flex-direction: column; gap: 8px; }
+.spec-label { font-size: 13px; line-height: 19px; color: #869585; }
+.spec-label b { color: #D4E7DD; font-weight: 600; }
+.spec-foot { font-size: 13px; line-height: 19px; color: #869585; }
+code { font-family: ui-monospace, monospace; font-size: 12px; color: #B0CDBD; }
+@media (max-width: 1240px) { .grid { grid-template-columns: repeat(auto-fill, 379px); } }
+
+/* ---- The preview: an inbox -------------------------------------------- */
+.inbox { border-radius: 12px; background: #03110B; padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+.inbox-label { margin: 0; font-size: 12px; line-height: 16px; font-weight: 600; color: #869585; }
+.mail { display: flex; gap: 16px; align-items: flex-start; }
+.mav { width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; background: #132A1F; color: #BCCBB9; display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 24px; font-weight: 700; }
+.mail-body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
+.mail-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mail-from { font-size: 16px; line-height: 24px; font-weight: 700; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mail-time { flex-shrink: 0; font-size: 12px; line-height: 16px; font-weight: 600; color: #BCCBB9; }
+.mail-subj { margin: 0; font-size: 14px; line-height: 21px; font-weight: 700; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mail-snip { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip { align-self: flex-start; max-width: 100%; margin-top: 8px; height: 32px; box-sizing: border-box; padding: 0 12px 0 8px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid #283831; border-radius: 12px; font-size: 14px; line-height: 20px; font-weight: 500; color: #D4E7DD; }
+.chip svg { flex-shrink: 0; color: #BCCBB9; }
+.chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- The sent list: an inbox ------------------------------------------ */
+.mails { list-style: none; margin: 0; padding: 0; }
+.mr { display: flex; gap: 16px; align-items: flex-start; padding: 12px 0; }
+.mr-body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
+.mr-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mr-who { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mr-time { flex-shrink: 0; font-size: 12px; line-height: 16px; color: #869585; }
+.mr-line { display: flex; align-items: flex-start; gap: 8px; }
+.mr-subj { flex-grow: 1; min-width: 0; font-size: 14px; line-height: 21px; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mr-snip { flex-grow: 1; min-width: 0; margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.mr-snip svg { vertical-align: -3px; margin-right: 4px; }
+.mr-snip b { font-weight: 600; }
+.trig { flex-shrink: 0; height: 21px; display: flex; align-items: center; color: #869585; }
+.st-ok { color: #4BE277; } .st-plain { color: #BCCBB9; } .st-info { color: #B0CDBD; } .st-prob { color: #EF4444; } .st-neu { color: #869585; }
+.list-foot { margin: 0; padding: 0 0 8px; text-align: center; font-size: 12px; line-height: 16px; color: #869585; }
+.why { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.ladder { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.ladder span:nth-child(even) { font-size: 12px; color: #869585; text-align: right; }
+
+/* ---- Flat settings rows: WhatsApp receipts' own ----------------------- */
+.srow { display: flex; align-items: center; gap: 16px; min-height: 56px; box-sizing: border-box; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
+.srow .ico { flex-shrink: 0; color: #869585; display: flex; }
+.srow .t { flex-grow: 1; min-width: 0; font-size: 16px; line-height: 24px; color: #D4E7DD; }
+.srow-on .ico { color: #4BE277; }
+.srow-hover { background: rgba(75, 226, 119, 0.08); }
+.srow-focus { box-shadow: inset 0 0 0 2px #4BE277; }
+.srow-off .t, .srow-off .ico { color: #5D7468; cursor: default; }
+.radio { width: 20px; height: 20px; flex-shrink: 0; box-sizing: border-box; border-radius: 50%; border: 2px solid #869585; display: flex; align-items: center; justify-content: center; }
+.radio-on { border-color: #4BE277; }
+.radio-on::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: #4BE277; }
+.switch { width: 52px; height: 32px; flex-shrink: 0; box-sizing: border-box; border-radius: 16px; background: #4BE277; border: 2px solid #4BE277; display: flex; align-items: center; justify-content: flex-end; padding: 0 2px; }
+.switch i { width: 24px; height: 24px; border-radius: 50%; background: #003915; display: flex; align-items: center; justify-content: center; }
+.switch-off { background: #132A1F; border-color: #869585; justify-content: flex-start; padding: 0 6px; }
+.switch-off i { width: 16px; height: 16px; background: #869585; }
+.switch-dis { background: #1E3A2B; border-color: #1E3A2B; }
+.switch-dis i { background: #5D7468; }
+
+/* ---- Shared components ------------------------------------------------- */
+.btn { height: 48px; box-sizing: border-box; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; }
+.btn-pri { background: #4BE277; color: #003915; border: 0; }
+.btn-wide { width: 100%; }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+.callout { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; }
+.callout svg { flex-shrink: 0; margin-top: 3px; }
+.callout p { margin: 0; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.callout .ct { margin: 0 0 4px; font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+.callout > div p { margin: 0; }
+.c-info { background: rgba(176, 205, 189, 0.10); border-color: rgba(176, 205, 189, 0.30); }
+.c-prob { background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); }
+
+.snack { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.snack svg { flex-shrink: 0; margin-top: 3px; }
+.s-ok { background: linear-gradient(rgba(75, 226, 119, 0.10), rgba(75, 226, 119, 0.10)), #132A1F; border-color: rgba(75, 226, 119, 0.30); }
+.s-info { background: linear-gradient(rgba(176, 205, 189, 0.10), rgba(176, 205, 189, 0.10)), #132A1F; border-color: rgba(176, 205, 189, 0.30); }
+.s-att { background: linear-gradient(rgba(242, 193, 78, 0.10), rgba(242, 193, 78, 0.10)), #132A1F; border-color: rgba(242, 193, 78, 0.30); }
+.s-prob { background: linear-gradient(rgba(147, 0, 10, 0.20), rgba(147, 0, 10, 0.20)), #132A1F; border-color: rgba(239, 68, 68, 0.30); }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All email receipts artboards</a></nav>
+<div class="wrap">
+
+<header class="intro">
+  <h1>Email receipts &#8212; states</h1>
+  <p>Every state the two tabs can be in, at the phone column&#8217;s width (379, a 411 screen less two 16 insets). Every sentence is the build&#8217;s own or the server&#8217;s, quoted unchanged; what these boards change is how it is drawn. Under each, the field or answer that produces it.</p>
+</header>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">Every status, as a glyph and a word</h2>
+  <p class="sec-note">Mail&#8217;s own marks: a clock for a message still going out, the paper plane of a Sent folder, and the inbox tray it lands in. The word goes with every one, so a status is never colour alone and never a glyph alone. There is no <em>Read</em>: UzaPay&#8217;s emails carry no tracking pixel, so nobody knows.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>Going out</b> &#8212; <code>info</code></div>
+      <p class="mr-snip"><svg class="st-info" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg><b class="st-info">Waiting to send</b> &#183; <code>queued</code></p>
+      <p class="mr-snip"><svg class="st-info" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg><b class="st-info">Sending</b> &#183; <code>sending</code></p>
+      <div class="spec-foot">The clock WhatsApp&#8217;s tab uses for the same two, so both lists say <em>not gone yet</em> alike.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Arrived</b> &#8212; <code>text.secondary</code>, then <code>ok</code></div>
+      <p class="mr-snip"><svg class="st-plain" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.01 6.03l7.51 3.22-7.52-1 .01-2.22m7.5 8.72L4 17.97v-2.22l7.51-1M2.01 3L2 10l15 2-15 2 .01 7L23 12 2.01 3z"></path></svg><b class="st-plain">Sent</b> &#183; <code>sent</code></p>
+      <p class="mr-snip"><svg class="st-ok" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3H4.99C3.88 3 3 3.9 3 5v14c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5v-3h3.56c.69 1.19 1.97 2 3.45 2s2.75-.81 3.45-2H19v3zm0-5h-4.99c0 1.1-.9 2-2 2s-2-.9-2-2H5V5h14v9zm-3-4h-2V7h-4v3H8l4 4 4-4z"></path></svg><b class="st-ok">Delivered</b> &#183; <code>delivered</code></p>
+      <div class="spec-foot">The build badges both <code>ok</code>. Here only <em>Delivered</em> is lit: Brevo saying the customer&#8217;s mail server took it is as far as an email receipt is ever known to get. On WhatsApp&#8217;s tab <em>Delivered</em> stays plain, because <em>Read</em> comes after it. <b style="color:#BCCBB9">Your call</b> &#8212; see the README.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Stopped</b> &#8212; <code>problem</code>, <code>text.tertiary</code></div>
+      <p class="mr-snip"><svg class="st-prob" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><b class="st-prob">Not delivered</b> &#183; <code>failed</code></p>
+      <p class="mr-snip"><svg class="st-neu" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 11v2h10v-2H7zm5-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><b class="st-neu">Not sent</b> &#183; <code>skipped</code></p>
+      <div class="spec-foot"><em>Not sent</em> takes the quietest ink a person is still expected to read: a customer who stopped receipts, or receipts switched off, is the system working. WhatsApp&#8217;s tab draws it the same.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">A sent receipt</h2>
+  <p class="sec-note">Gmail&#8217;s three lines. Who, with the time at the end; the receipt, with how it was sent at the far edge where Gmail keeps its star; what became of it, then why after a dot. The avatar sits at the top of the row, as Gmail sets it, not centred.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>A named customer, automatically</b><br><code>customerName</code>, <code>trigger: automatic</code></div>
+      <ul class="mails"><li class="mr"><span class="mav" aria-hidden="true">W</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">Wanjiku Mwangi</span><span class="mr-time">14:32</span></div>
+        <div class="mr-line"><span class="mr-subj">Receipt CT-A7F-20261003-0042</span><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-ok" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3H4.99C3.88 3 3 3.9 3 5v14c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5v-3h3.56c.69 1.19 1.97 2 3.45 2s2.75-.81 3.45-2H19v3zm0-5h-4.99c0 1.1-.9 2-2 2s-2-.9-2-2H5V5h14v9zm-3-4h-2V7h-4v3H8l4 4 4-4z"></path></svg><b class="st-ok">Delivered</b></p></div>
+      </div></li></ul>
+      <div class="spec-foot">One letter, the first of the name, as Gmail draws a sender. The bolt and the hand are the timing rows&#8217; own glyphs, so the list and the settings say <em>automatically</em> and <em>by hand</em> the same way; each carries its words for a screen reader.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>An address only, by hand</b><br>no <code>customerName</code>: <code>emailMasked</code></div>
+      <ul class="mails"><li class="mr"><span class="mav" aria-hidden="true">N</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">n&#8226;&#8226;&#8226;@gmail.com</span><span class="mr-time">14:05</span></div>
+        <div class="mr-line"><span class="mr-subj">Receipt CT-A7F-20261003-0041</span><span class="trig" title="Sent by hand"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.19 12.44l-3.24-1.62c1.29-1 2.12-2.56 2.12-4.32 0-3.03-2.47-5.5-5.5-5.5s-5.5 2.47-5.5 5.5c0 2.13 1.22 3.98 3 4.89v3.26c-2.15-.46-2.02-.44-2.26-.44-.53 0-1.03.21-1.41.59L4 16.22l5.09 5.09c.43.44 1.03.69 1.65.69h6.3c.98 0 1.81-.7 1.97-1.67l.8-4.71c.22-1.3-.43-2.58-1.62-3.18zm-.35 2.85l-.8 4.71h-6.3c-.09 0-.17-.04-.24-.1l-3.68-3.68 4.25.89V6.5c0-.28.22-.5.5-.5s.5.22.5.5v6h1.76l3.46 1.73c.4.2.62.63.55 1.06zM8.07 9.13V6.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5c0 .95-.38 1.81-1 2.44V6.5c0-1.38-1.12-2.5-2.5-2.5s-2.5 1.12-2.5 2.5v2.63z"></path></svg></span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-plain" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.01 6.03l7.51 3.22-7.52-1 .01-2.22m7.5 8.72L4 17.97v-2.22l7.51-1M2.01 3L2 10l15 2-15 2 .01 7L23 12 2.01 3z"></path></svg><b class="st-plain">Sent</b></p></div>
+      </div></li></ul>
+      <div class="spec-foot">The server&#8217;s own mask, <code>maskEmail</code>, unchanged: the first letter and the domain. The avatar is that letter, so every row has one &#8212; no person glyph, unlike WhatsApp&#8217;s masked numbers.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Before the sale arrives</b><br>no <code>receiptNumber</code> yet</div>
+      <ul class="mails"><li class="mr"><span class="mav" aria-hidden="true">J</span><div class="mr-body">
+        <div class="mr-top"><span class="mr-who">James Kiprono</span><span class="mr-time">2 Oct</span></div>
+        <div class="mr-line"><p class="mr-snip"><svg class="st-info" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg><b class="st-info">Waiting to send</b> &#183; Waiting for the sale to reach the server.</p><span class="trig" title="Sent automatically"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span></div>
+      </div></li></ul>
+      <div class="spec-foot">The server writes the record before it has read the sale, so there is no number to put in a subject. The row is two lines, and the bolt or hand moves to the end of the second, whichever line that is.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Every reason, after the dot</b><br><code>reasonText</code>, quoted</div>
+      <p class="why">Email receipts are not available yet.</p>
+      <p class="why">Email receipts were switched off.</p>
+      <p class="why">The customer has not agreed to email receipts.</p>
+      <p class="why">The customer stopped email receipts.</p>
+      <p class="why">Mail to this address bounced before, so it was not tried again.</p>
+      <p class="why">Waiting for the sale to reach the server.</p>
+      <p class="why">The mail service did not answer; trying again.</p>
+      <p class="why">No email address was given.</p>
+      <p class="why">The mail service refused it.</p>
+      <p class="why">The mail service could not be reached.</p>
+      <p class="why">The address does not accept mail.</p>
+      <p class="why">That email address does not exist.</p>
+      <p class="why">The customer reported it as spam.</p>
+      <p class="why">Not delivered.</p>
+      <div class="spec-foot">The snippet wraps rather than clipping, unlike Gmail&#8217;s: a reason is the one thing on the row a manager may need to act on. The longest runs to two lines at 379.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>The time</b><br><code>createdAt</code>, Gmail&#8217;s ladder</div>
+      <div class="ladder"><span>Today</span><span>14:32</span><span>Yesterday, or earlier this year</span><span>2 Oct</span><span>Before this year</span><span>30 Dec 2025</span><span>A record caught mid-write</span><span>(nothing)</span></div>
+      <div class="spec-foot">Today&#8217;s time, then the date, with the year once it is not this year&#8217;s. No <em>Yesterday</em> and no weekday: Gmail does without them. WhatsApp&#8217;s <code>receiptDeliveryWhen</code> keeps both; using it here instead is a one-line change. The build reads <code>createdAt</code> and does not show it today.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>The end of the list</b>, and <b>could not be read</b><br><code>loadRecent(pageSize: 20)</code>, <code>deliveriesReadable == false</code></div>
+      <p class="list-foot">The 20 most recent receipts</p>
+      <div class="callout c-info"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><p>The recent receipts could not be read on this device.</p></div>
+      <div class="spec-foot">The foot is WhatsApp&#8217;s tab&#8217;s line, as built there. The tab reads twenty and stops; without it, a twentieth row reads as the last receipt ever sent.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">Settings rows</h2>
+  <p class="sec-note">WhatsApp&#8217;s flat rows, unchanged: <code>AppSwitchRow(flat: true)</code> and <code>ChoiceCardGroup(flat: true)</code>, both in <code>lib/ui/</code> since the WhatsApp build. A row is its glyph, its title and its control, on the page.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>The switch</b> &#8212; on, off, read-only</div>
+      <div class="srow"><span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z"></path></svg></span><span class="t">Email receipts</span><span class="switch"><i><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></i></span></div>
+      <div class="srow"><span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z"></path></svg></span><span class="t">Email receipts</span><span class="switch switch-off"><i></i></span></div>
+      <div class="srow srow-off"><span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z"></path></svg></span><span class="t">Email receipts</span><span class="switch switch-dis"><i><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1E3A2B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></i></span></div>
+      <div class="spec-foot">Read-only and while saving: <code>onChanged</code> is null, as now.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>A choice</b> &#8212; chosen, not, hover, focus-visible</div>
+      <div class="srow srow-on"><span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span><span class="t">Automatically</span><span class="radio radio-on"></span></div>
+      <div class="srow"><span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.19 12.44l-3.24-1.62c1.29-1 2.12-2.56 2.12-4.32 0-3.03-2.47-5.5-5.5-5.5s-5.5 2.47-5.5 5.5c0 2.13 1.22 3.98 3 4.89v3.26c-2.15-.46-2.02-.44-2.26-.44-.53 0-1.03.21-1.41.59L4 16.22l5.09 5.09c.43.44 1.03.69 1.65.69h6.3c.98 0 1.81-.7 1.97-1.67l.8-4.71c.22-1.3-.43-2.58-1.62-3.18zm-.35 2.85l-.8 4.71h-6.3c-.09 0-.17-.04-.24-.1l-3.68-3.68 4.25.89V6.5c0-.28.22-.5.5-.5s.5.22.5.5v6h1.76l3.46 1.73c.4.2.62.63.55 1.06zM8.07 9.13V6.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5c0 .95-.38 1.81-1 2.44V6.5c0-1.38-1.12-2.5-2.5-2.5s-2.5 1.12-2.5 2.5v2.63z"></path></svg></span><span class="t">Only when a cashier sends one</span><span class="radio"></span></div>
+      <div class="srow srow-hover"><span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.19 12.44l-3.24-1.62c1.29-1 2.12-2.56 2.12-4.32 0-3.03-2.47-5.5-5.5-5.5s-5.5 2.47-5.5 5.5c0 2.13 1.22 3.98 3 4.89v3.26c-2.15-.46-2.02-.44-2.26-.44-.53 0-1.03.21-1.41.59L4 16.22l5.09 5.09c.43.44 1.03.69 1.65.69h6.3c.98 0 1.81-.7 1.97-1.67l.8-4.71c.22-1.3-.43-2.58-1.62-3.18zm-.35 2.85l-.8 4.71h-6.3c-.09 0-.17-.04-.24-.1l-3.68-3.68 4.25.89V6.5c0-.28.22-.5.5-.5s.5.22.5.5v6h1.76l3.46 1.73c.4.2.62.63.55 1.06zM8.07 9.13V6.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5c0 .95-.38 1.81-1 2.44V6.5c0-1.38-1.12-2.5-2.5-2.5s-2.5 1.12-2.5 2.5v2.63z"></path></svg></span><span class="t">Hover: the 0.08 wash</span><span class="radio"></span></div>
+      <div class="srow srow-focus"><span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.19 12.44l-3.24-1.62c1.29-1 2.12-2.56 2.12-4.32 0-3.03-2.47-5.5-5.5-5.5s-5.5 2.47-5.5 5.5c0 2.13 1.22 3.98 3 4.89v3.26c-2.15-.46-2.02-.44-2.26-.44-.53 0-1.03.21-1.41.59L4 16.22l5.09 5.09c.43.44 1.03.69 1.65.69h6.3c.98 0 1.81-.7 1.97-1.67l.8-4.71c.22-1.3-.43-2.58-1.62-3.18zm-.35 2.85l-.8 4.71h-6.3c-.09 0-.17-.04-.24-.1l-3.68-3.68 4.25.89V6.5c0-.28.22-.5.5-.5s.5.22.5.5v6h1.76l3.46 1.73c.4.2.62.63.55 1.06zM8.07 9.13V6.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5c0 .95-.38 1.81-1 2.44V6.5c0-1.38-1.12-2.5-2.5-2.5s-2.5 1.12-2.5 2.5v2.63z"></path></svg></span><span class="t">Focus-visible: the 2px ring</span><span class="radio"></span></div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Read-only</b> &#8212; no writer wired</div>
+      <div class="callout c-info"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><div><p class="ct">Read-only on this device</p><p>This build cannot publish settings changes.</p></div></div>
+      <div class="srow srow-off"><span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"></path></svg></span><span class="t">Automatically</span></div>
+      <div class="spec-foot">The chosen row alone, with no radio &#8212; <code>ChoiceCardGroup</code>&#8217;s own read-only rule, kept. No Save.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">The preview</h2>
+  <p class="sec-note">One unread message in an inbox, in the email&#8217;s own words: the sender name and subject from <code>template.ts</code>, the preheader as the snippet, and the PDF as a chip. Subject and snippet are a line each, as an inbox clips them. The <em>Inbox</em> label and the time are drawn, not data.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>A named business</b><br>branding <code>companyName</code>, or the registered name</div>
+      <div class="inbox">
+        <p class="inbox-label">Inbox</p>
+        <div class="mail"><span class="mav">M</span><div class="mail-body">
+          <div class="mail-top"><span class="mail-from">Mwangi Hardware via UzaPay</span><span class="mail-time">14:32</span></div>
+          <p class="mail-subj">Receipt JOHN-CT-7F2-001 from Mwangi Hardware</p>
+          <p class="mail-snip">KES 1,250.00 at Mwangi Hardware, 1 Oct 2026. The receipt is below and attached as a PDF.</p>
+          <span class="chip"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm12 6V9c0-.55-.45-1-1-1h-2v5h2c.55 0 1-.45 1-1zm-2-3h1v3h-1V9zm4 2h1v-1h-1V9h1V8h-2v5h1v-2zm-8 0h1c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1H9v5h1v-2zm0-2h1v1h-1V9z"></path></svg><span>Receipt-JOHN-CT-7F2-001.pdf</span></span>
+        </div></div>
+      </div>
+      <div class="spec-foot">The snippet is the preheader (<code>emailReceiptEmail</code>), which is what an inbox shows first. The build&#8217;s preview shows the title and lead instead &#8212; see the README.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>No name, as the screen draws it</b><br><code>_BusinessName</code>&#8217;s fallback</div>
+      <div class="inbox">
+        <p class="inbox-label">Inbox</p>
+        <div class="mail"><span class="mav">Y</span><div class="mail-body">
+          <div class="mail-top"><span class="mail-from">your business via UzaPay</span><span class="mail-time">14:32</span></div>
+          <p class="mail-subj">Receipt JOHN-CT-7F2-001 from your business</p>
+          <p class="mail-snip">KES 1,250.00 at your business, 1 Oct 2026. The receipt is below and attached as a PDF.</p>
+          <span class="chip"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm12 6V9c0-.55-.45-1-1-1h-2v5h2c.55 0 1-.45 1-1zm-2-3h1v3h-1V9zm4 2h1v-1h-1V9h1V8h-2v5h1v-2zm-8 0h1c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1H9v5h1v-2zm0-2h1v1h-1V9z"></path></svg><span>Receipt-JOHN-CT-7F2-001.pdf</span></span>
+        </div></div>
+      </div>
+      <div class="spec-foot">What the build&#8217;s fallback produces once it is laid out as an inbox. It is not what the customer gets &#8212; that is the next one.</div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>No name, as the server sends it</b><br><code>named(content) == false</code></div>
+      <div class="inbox">
+        <p class="inbox-label">Inbox</p>
+        <div class="mail"><span class="mav">U</span><div class="mail-body">
+          <div class="mail-top"><span class="mail-from">UzaPay</span><span class="mail-time">14:32</span></div>
+          <p class="mail-subj">Receipt JOHN-CT-7F2-001</p>
+          <p class="mail-snip">KES 1,250.00 at the shop, 1 Oct 2026. The receipt is below and attached as a PDF.</p>
+          <span class="chip"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm12 6V9c0-.55-.45-1-1-1h-2v5h2c.55 0 1-.45 1-1zm-2-3h1v3h-1V9zm4 2h1v-1h-1V9h1V8h-2v5h1v-2zm-8 0h1c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1H9v5h1v-2zm0-2h1v1h-1V9z"></path></svg><span>Receipt-JOHN-CT-7F2-001.pdf</span></span>
+        </div></div>
+      </div>
+      <div class="spec-foot">The server&#8217;s fallback reads well; the screen&#8217;s does not, and the two disagree. Rare, because the registered name fills the gap first. <b style="color:#BCCBB9">Your call</b> &#8212; see the README.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">Above the settings</h2>
+  <p class="sec-note">The notices the build puts first, unchanged. There is no availability notice, as now: email goes through the Brevo account every UzaPay account email already uses.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>A damaged setting</b><br><code>TenantEReceiptState.malformed</code></div>
+      <div class="callout c-prob"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><div><p class="ct">This setting could not be read</p><p>No receipt is sent by email while it stays that way. Saving here replaces it.</p></div></div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Read-only</b><br>no <code>writer</code></div>
+      <div class="callout c-info"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><div><p class="ct">Read-only on this device</p><p>This build cannot publish settings changes.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2 class="sec">Save, and every answer</h2>
+  <p class="sec-note">Save stays where it is, full width at the foot, and is never disabled for an unchanged form &#8212; that would be a behaviour change. The answers are the build&#8217;s, one snack bar at a time.</p>
+  <div class="grid">
+    <div class="spec">
+      <div class="spec-label"><b>Save, and saving</b></div>
+      <button type="button" class="btn btn-pri btn-wide">Save</button>
+      <button type="button" class="btn btn-pri btn-wide" aria-label="Saving"><svg class="spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#003915" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 1-9 9"></path></svg></button>
+      <div class="spec-label" style="margin-top: 8px;"><b>Committed</b>, on and off</div>
+      <div class="snack s-ok"><svg width="18" height="18" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>Saved. Tills offer email receipts the next time they open the register.</span></div>
+      <div class="snack s-ok"><svg width="18" height="18" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>Saved. No receipts are sent by email.</span></div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Queued</b>, <b>not settled</b>, <b>offline</b></div>
+      <div class="snack s-ok"><svg width="18" height="18" viewBox="0 0 24 24" fill="#4BE277" aria-hidden="true"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>Saved on this device and on its way to the others.</span></div>
+      <div class="snack s-att"><svg width="18" height="18" viewBox="0 0 24 24" fill="#F2C14E" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg><span>This has not settled yet. Reopen the screen to see what is stored.</span></div>
+      <div class="snack s-info"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><span>This device is offline, so nothing was published.</span></div>
+    </div>
+    <div class="spec">
+      <div class="spec-label"><b>Refused</b>, before and after sending</div>
+      <div class="snack s-info"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><span>That is already what is set, so nothing was sent.</span></div>
+      <div class="snack s-prob"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>You are not allowed to change this, so nothing was sent.</span></div>
+      <div class="snack s-prob"><svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444" aria-hidden="true"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg><span>The server refused this, so nothing changed.</span></div>
+    </div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

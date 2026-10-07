@@ -34,8 +34,9 @@ import 'account_verification.dart';
 import 'onboarding_flow.dart';
 import 'email_delivery_status.dart';
 import 'invitation_link_source.dart';
+import 'platform_console.dart';
+import 'platform_console_data.dart';
 import 'platform_tenant_console.dart';
-import 'platform_tenant_lifecycle.dart';
 import 'platform_global_user_status.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
@@ -118,7 +119,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.accountVerificationRequestIdFactory,
     this.reloadIdentity,
     this.hasPlatformSuperAdminClaim,
-    this.platformLifecycleTenantDataSource,
+    this.platformConsoleDataSource,
+    this.reviewEmailSuppressionCallable,
     this.platformGlobalUserDataSource,
     this.setTenantLifecycleCallable,
     this.setGlobalUserStatusCallable,
@@ -287,7 +289,12 @@ final class TenantRoutingShell extends StatefulWidget {
   final AccountVerificationReload? reloadIdentity;
 
   final Future<bool> Function(String uid)? hasPlatformSuperAdminClaim;
-  final PlatformLifecycleTenantDataSource? platformLifecycleTenantDataSource;
+
+  /// Where the platform console reads; Firestore when null.
+  final PlatformConsoleDataSource? platformConsoleDataSource;
+
+  /// The email suppression lookup the console's Email delivery screen calls.
+  final ReviewEmailSuppressionCallable? reviewEmailSuppressionCallable;
   final PlatformGlobalUserDataSource? platformGlobalUserDataSource;
   final SetTenantLifecycleCallable? setTenantLifecycleCallable;
   final SetGlobalUserStatusCallable? setGlobalUserStatusCallable;
@@ -545,7 +552,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
   TenantInvitationLink? _pendingInvitationLink;
   bool _hasInvalidInvitationLink = false;
   PlatformAdminIdentity? _platformIdentity;
-  PlatformLifecycleTenantDataSource? _defaultPlatformLifecycleDataSource;
+  PlatformConsoleDataSource? _defaultPlatformConsoleDataSource;
+  ReviewEmailSuppressionCallable? _defaultSuppressionCallable;
   PlatformGlobalUserDataSource? _defaultPlatformGlobalUserDataSource;
   SetTenantLifecycleCallable? _defaultTenantLifecycleCallable;
   SetGlobalUserStatusCallable? _defaultGlobalUserStatusCallable;
@@ -1323,17 +1331,17 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
     if (identity == null || !identity.canAdminister) {
       return PlatformRouteUnavailable(onSignOut: _signOut);
     }
-    return PlatformTenantManagementScreen(
+    return PlatformConsoleScreen(
       identity: identity,
-      lifecycleDataSource:
-          widget.platformLifecycleTenantDataSource ??
-          (_defaultPlatformLifecycleDataSource ??=
-              FirebasePlatformLifecycleTenantDataSource()),
+      source:
+          widget.platformConsoleDataSource ??
+          (_defaultPlatformConsoleDataSource ??=
+              FirebasePlatformConsoleDataSource()),
       globalUserDataSource:
           widget.platformGlobalUserDataSource ??
           (_defaultPlatformGlobalUserDataSource ??=
               FirebasePlatformGlobalUserDataSource()),
-      callable:
+      lifecycleCallable:
           widget.setTenantLifecycleCallable ??
           (_defaultTenantLifecycleCallable ??=
               FirebaseSetTenantLifecycleCallable()),
@@ -1341,6 +1349,10 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
           widget.setGlobalUserStatusCallable ??
           (_defaultGlobalUserStatusCallable ??=
               FirebaseSetGlobalUserStatusCallable()),
+      suppressionCallable:
+          widget.reviewEmailSuppressionCallable ??
+          (_defaultSuppressionCallable ??=
+              FirebaseReviewEmailSuppressionCallable()),
       requestIdFactory: widget.platformTenantReviewRequestIdFactory,
       isCurrent: () =>
           mounted &&
@@ -4055,6 +4067,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         description: 'Send receipts to customers on WhatsApp instead of paper.',
         group: 'Business',
         icon: Symbols.chat_rounded,
+        brandIcon: AppBrandIcon.whatsapp,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -4078,6 +4091,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         description: 'Send receipts to customers by email instead of paper.',
         group: 'Business',
         icon: Symbols.mail_rounded,
+        brandIcon: AppBrandIcon.gmail,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -4095,7 +4109,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         destinationKey: const ValueKey('configurations'),
         accent: AppIdentityAccent.teal,
         label: 'Configs',
-        description: 'Choose currency and schedule stock counts.',
+        description: 'Choose currency and who may agree prices.',
         group: 'Business',
         icon: Symbols.tune_rounded,
         onPressed: () {

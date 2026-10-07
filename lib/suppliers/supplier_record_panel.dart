@@ -152,6 +152,7 @@ final class _TenantSupplierRecordScreenState
       allowedRoles: TenantSupplierRepository.allowedRoles,
       load: _loader,
       loadCached: _loaderCached,
+      holdsNothing: (view) => view.supplier == null,
       loading: const _RecordFrame(
         title: 'Supplier',
         child: LoadingState(message: 'Reading this supplier'),

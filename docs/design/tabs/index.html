@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tabs &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) {
+  .board { flex-direction: column; gap: 6px; }
+  .board h2 { width: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Tabs</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Four artboards for <code class="mono">AppTabs</code>, which now draws one of two shapes. <strong>Two tabs get a switch</strong>, after the <em>Live / Demo</em> control in the crypto wallet reference. <strong>Three or more get icon tabs</strong>, after the action dashboard reference. Both are in this app&#8217;s own tokens. Read <a href="README.md">README.md</a> for what each reference lends, what changes, and what is still open.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="tabs-anatomy.html">
+      <h2>Anatomy</h2>
+      <p>Which screens get which shape, today&#8217;s strip against both, the parts of each, the measurements, layout by width, and every contrast ratio.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="tabs-states.html">
+      <h2>States and motion</h2>
+      <p>Both shapes at rest, hovered, focused and pressed. The switch at 200% text and icon tabs mid-scroll. A live switch and live icon tabs, and the underline&#8217;s move frame by frame.</p>
+      <span class="size">1280</span>
+    </a>
+
+    <a class="board" href="tabs-phone.html">
+      <h2>Phone</h2>
+      <p>WhatsApp receipts and Printer with the switch, and Configs with icon tabs, scrolling. Each screen&#8217;s body is drawn as built.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="tabs-desktop.html">
+      <h2>Desktop</h2>
+      <p>Printer with the switch at its own width, and Configs with icon tabs, in the 720 reading column.</p>
+      <span class="size">1280</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

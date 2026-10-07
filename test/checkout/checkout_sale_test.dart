@@ -86,7 +86,7 @@ void main() {
       outbox,
       _payload(
         items: [
-          for (var index = 0; index < 16; index++)
+          for (var index = 0; index < maximumCheckoutSaleLines; index++)
             _line(productId: 'product-$index', quantity: index + 1),
         ],
       ),
@@ -98,7 +98,10 @@ void main() {
     );
 
     expect(payload.lines.length, maximumCheckoutSaleLines);
-    expect(payload.subtotalMinor, 100 * (16 * 17) ~/ 2);
+    expect(
+      payload.subtotalMinor,
+      100 * (maximumCheckoutSaleLines * (maximumCheckoutSaleLines + 1)) ~/ 2,
+    );
   });
 
   test('rejects a payload that claims another identity', () async {
@@ -150,7 +153,7 @@ void main() {
     final cases = <String, List<Object?>>{
       'empty': <Object?>[],
       'overflow': <Object?>[
-        for (var index = 0; index < 17; index++)
+        for (var index = 0; index <= maximumCheckoutSaleLines; index++)
           _line(productId: 'product-$index'),
       ],
       'duplicate': <Object?>[_line(), _line()],

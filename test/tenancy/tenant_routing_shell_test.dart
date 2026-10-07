@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../support/landing_drawer.dart';
+import 'support/platform_console_memory.dart';
 
 void main() {
   testWidgets('opens the UID-local selected business', (tester) async {
@@ -1168,17 +1169,45 @@ void main() {
     await platform.dispose(tester);
   });
 
-  testWidgets('gates the platform queue on both root and superAdmin claim', (
+  testWidgets('gates the platform console on both root and superAdmin claim', (
     tester,
   ) async {
-    final deniedSource = _ShellPlatformDataSource();
+    MemoryPlatformConsoleDataSource console() =>
+        MemoryPlatformConsoleDataSource(<String, Map<String, Object?>>{
+          'users/platform-user': <String, Object?>{
+            'email': 'platform@example.test',
+            'displayName': 'Platform User',
+            'accountType': 'platform_admin',
+            'globalStatus': 'active',
+            'createdAt': DateTime.utc(2026, 7, 1),
+          },
+          'users/routing-target-user': <String, Object?>{
+            'email': 'routing-target-user@example.test',
+            'displayName': 'Routing Target User',
+            'accountType': 'tenant_user',
+            'globalStatus': 'active',
+            'membershipCount': 0,
+            'ownedTenantCount': 0,
+            'createdAt': DateTime.utc(2026, 7, 30),
+          },
+          'tenants/routing-active-tenant': <String, Object?>{
+            'name': 'Routing Active Business',
+            'slug': 'routing-active-tenant',
+            'ownerUid': 'routing-target-user',
+            'status': 'active',
+            'createdAt': DateTime.utc(2026, 7, 30),
+            'updatedAt': DateTime.utc(2026, 7, 30),
+          },
+        });
+    final deniedConsole = console();
     final denied = _ShellFixture(
       memberships: [],
       profile: const RootRoutingProfile(
         accountType: RootAccountType.platformAdmin,
         globalStatus: 'active',
       ),
-      platformDataSource: deniedSource,
+      platformDataSource: _ShellPlatformDataSource(),
+      platformConsoleSource: deniedConsole,
     );
     await denied.pump(tester);
     denied.auth.add('platform-user');
@@ -1187,10 +1216,11 @@ void main() {
       find.text('Platform administrator access is not available.'),
       findsOneWidget,
     );
-    expect(deniedSource.lifecycleCalls, 0);
+    expect(deniedConsole.queries, isEmpty);
+    expect(deniedConsole.counts, 0);
     await denied.dispose(tester);
 
-    final allowedSource = _ShellPlatformDataSource();
+    final allowedConsole = console();
     final allowed = _ShellFixture(
       memberships: [],
       profile: const RootRoutingProfile(
@@ -1198,24 +1228,18 @@ void main() {
         globalStatus: 'active',
       ),
       platformClaim: true,
-      platformDataSource: allowedSource,
+      platformDataSource: _ShellPlatformDataSource(),
+      platformConsoleSource: allowedConsole,
     );
     await allowed.pump(tester);
     allowed.auth.add('platform-user');
     await _pumpRouting(tester);
-    expect(find.text('Active & suspended'), findsOneWidget);
+    expect(find.byKey(const ValueKey('platform-bottom-nav')), findsOneWidget);
+    expect(find.byKey(const ValueKey('platform-tile-trading')), findsOneWidget);
+    expect(allowedConsole.counts, greaterThan(0));
+    await tester.tap(find.byKey(const ValueKey('platform-nav-businesses')));
+    await tester.pumpAndSettle();
     expect(find.text('Routing Active Business'), findsOneWidget);
-    expect(allowedSource.lifecycleCalls, 1);
-    await tester.tap(find.text('Global user status'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('platform-global-user-uid')),
-      'routing-target-user',
-    );
-    await tester.tap(find.byKey(const ValueKey('platform-global-user-lookup')));
-    await tester.pumpAndSettle();
-    expect(find.text('Routing Target User'), findsOneWidget);
-    expect(allowedSource.globalUserStaffCalls, 1);
     await allowed.dispose(tester);
   });
 
@@ -1539,6 +1563,7 @@ final class _ShellFixture {
     this.reloadIdentity,
     this.platformClaim = false,
     this.platformDataSource,
+    this.platformConsoleSource,
     this.tenantSwitchStateSources,
     this.tenantSwitchOnlineCheck,
     this.tenantDataReader,
@@ -1591,6 +1616,7 @@ final class _ShellFixture {
   final AccountVerificationReload? reloadIdentity;
   final bool platformClaim;
   final _ShellPlatformDataSource? platformDataSource;
+  final MemoryPlatformConsoleDataSource? platformConsoleSource;
   final List<TenantSwitchStateSource>? tenantSwitchStateSources;
   final TenantSwitchOnlineCheck? tenantSwitchOnlineCheck;
   final TenantDataReader? tenantDataReader;
@@ -1632,7 +1658,7 @@ final class _ShellFixture {
         accountVerificationRequestIdFactory: () => 'routing-verify-request',
         reloadIdentity: reloadIdentity,
         hasPlatformSuperAdminClaim: (_) async => platformClaim,
-        platformLifecycleTenantDataSource: platformDataSource,
+        platformConsoleDataSource: platformConsoleSource,
         platformGlobalUserDataSource: platformDataSource,
         setTenantLifecycleCallable: _ShellLifecycleCallable(),
         setGlobalUserStatusCallable: _ShellGlobalStatusCallable(),

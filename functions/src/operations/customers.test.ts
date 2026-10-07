@@ -94,6 +94,39 @@ test("a customer is added active, with what was typed and who added them", async
   assert.equal("points" in (stored ?? {}), false);
 });
 
+test("a create that arrives after its credit sale adopts the stand-in", async () => {
+  const id = `cu_${"a".repeat(40)}`;
+  const db = seeded({
+    [id]: {
+      name: "Jane",
+      active: true,
+      createdFromSaleId: "sale-1",
+      balanceMinor: 5000,
+      owing: true,
+      saleCount: 1,
+    },
+  });
+
+  await create(db, id, {name: "Jane Wanjiku", phone: "+254712345678"});
+
+  const stored = db.read(customerPath(id));
+  assert.equal(stored?.name, "Jane Wanjiku");
+  assert.equal(stored?.phone, "+254712345678");
+  assert.equal(stored?.balanceMinor, 5000);
+  assert.equal(stored?.saleCount, 1);
+  assert.equal("createdFromSaleId" in (stored ?? {}), false);
+});
+
+test("a create over a customer that was entered is refused", async () => {
+  const id = `cu_${"a".repeat(40)}`;
+  const db = seeded({[id]: {name: "Jane", active: true}});
+
+  const error = await refusal(() => create(db, id, {name: "Someone else"}));
+
+  assert.equal(error.code, "already-exists");
+  assert.equal(db.read(customerPath(id))?.name, "Jane");
+});
+
 test("two customers may share a name", async () => {
   const db = seeded({cu_one: {name: "John Otieno", active: true}});
 
@@ -114,6 +147,8 @@ test("two customers may not share a phone number", async () => {
 
   assert.equal(error.code, "already-exists");
   assert.match(error.message, /John Otieno/);
+  // Who holds it, so a sale already made to cu_two can be counted there.
+  assert.deepEqual(error.details, {customerId: "cu_one"});
   assert.equal(db.read(customerPath("cu_two")), undefined);
 });
 

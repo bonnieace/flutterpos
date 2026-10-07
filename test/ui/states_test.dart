@@ -73,6 +73,43 @@ void main() {
       expect(find.text('No products yet'), findsOne);
       expect(tester.hasRunningAnimations, isFalse);
     });
+
+    testWidgets('a glyph is drawn in its ring, in place of the mark', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: spiritTheme,
+          home: const Scaffold(
+            body: EmptyState(
+              title: 'No receipts sent yet',
+              icon: Icons.chat_outlined,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final glyph = find.byIcon(Icons.chat_outlined);
+      expect(glyph, findsOne);
+      // The ring, at its token.
+      final ring = find.ancestor(of: glyph, matching: find.byType(Container));
+      expect(
+        tester.getSize(ring.first),
+        Size.square(AppIconography.standard.emptyRing),
+      );
+      // In place of the painted box, not beside it: one mark.
+      expect(
+        find.descendant(
+          of: find.byType(EmptyState),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is CustomPaint && widget.painter != null,
+          ),
+        ),
+        findsNothing,
+      );
+      expect(find.text('No receipts sent yet'), findsOne);
+    });
   });
 
   group('LoadingState', () {

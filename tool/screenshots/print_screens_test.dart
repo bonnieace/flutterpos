@@ -15,12 +15,14 @@
 /// different way because `screenshotCase` owns the pump.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:uzapay_pos/ui/tabs.dart';
 
 import 'fakes.dart';
 import 'harness.dart';
@@ -179,6 +181,126 @@ void main() {
   );
 
   // -------------------------------------------------------------------------
+  // Bluetooth, since 2026-10-03; drawn to docs/design/bluetooth-printer/ on
+  // 2026-10-04. The devices are the boards' own, so a capture and a board can
+  // be laid side by side.
+  // -------------------------------------------------------------------------
+
+  // The first visit: nothing asked of the phone yet, and the card says where
+  // this device's receipts go now - the business's network printer.
+  screenshotCase(
+    '36e-printer-bluetooth-first-visit',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(extraDocuments: _btNetworkPrinter),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        bluetooth: _bluetooth(),
+      ),
+    ),
+    afterPump: _openBluetooth,
+    viewports: responsiveViewports,
+  );
+
+  // This device already prints on a Bluetooth printer, so the page opens on
+  // that tab with the printer in use at the top.
+  screenshotCase(
+    '36f-printer-bluetooth-in-use',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(extraDocuments: _btNetworkPrinter),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        bluetooth: _bluetooth(inUse: true),
+      ),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  // The network tab on that device: the business setting, with this device's
+  // exception stated above it.
+  screenshotCase(
+    '36g-printer-network-with-bluetooth-in-use',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(extraDocuments: _btNetworkPrinter),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        bluetooth: _bluetooth(inUse: true),
+      ),
+    ),
+    afterPump: (tester) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AppTabs),
+          matching: find.text('Network'),
+        ),
+      );
+      await tester.pumpAndSettle();
+    },
+    viewports: responsiveViewports,
+  );
+
+  // A search still running: what the phone already knows, then what it is
+  // hearing, with the devices that broadcast no name folded away.
+  screenshotCase(
+    '36h-printer-bluetooth-found',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(extraDocuments: _btNetworkPrinter),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        bluetooth: _bluetooth(),
+      ),
+    ),
+    afterPump: _search,
+    viewports: responsiveViewports,
+  );
+
+  // One printer opened: its sheet at the half detent, with the paper width,
+  // the cutter and *Connect* - and, never paired, what *Connect* will do.
+  screenshotCase(
+    '36i-printer-bluetooth-sheet',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(extraDocuments: _btNetworkPrinter),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        bluetooth: _bluetooth(),
+      ),
+    ),
+    afterPump: (tester) async {
+      await _search(tester);
+      final row = find.byKey(
+        const ValueKey('printer-bluetooth-device-$_btAddress'),
+      );
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+    },
+    // A sheet is a fraction of the screen, so the screen is the capture.
+    fullPage: false,
+    viewports: responsiveViewports,
+  );
+
+  // No printer anywhere: no Bluetooth printer here and none set up for the
+  // business, which is a step not taken rather than a fault.
+  screenshotCase(
+    '36j-printer-bluetooth-no-printer',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        bluetooth: _bluetooth(),
+      ),
+    ),
+    afterPump: _openBluetooth,
+    viewports: responsiveViewports,
+  );
+
+  // -------------------------------------------------------------------------
   // The queue
   // -------------------------------------------------------------------------
 
@@ -260,6 +382,120 @@ Widget _notifications(
   printQueue: queue,
   onRetryPrint: onRetry,
 );
+
+/// The boards' MPT-II, the common 58mm model, at a made-up address.
+const String _btAddress = 'DC:0D:30:9A:4E:21';
+
+/// Mwangi Hardware's network printer as the boards draw it: 80mm, no cutter.
+final Map<String, Map<String, Object?>> _btNetworkPrinter = _printer(
+  paperWidth: 'columns_48',
+);
+
+Future<void> _openBluetooth(WidgetTester tester) async {
+  await tester.tap(find.text('Bluetooth'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _search(WidgetTester tester) async {
+  await _openBluetooth(tester);
+  await tester.tap(find.byKey(const ValueKey('printer-bluetooth-search')));
+  await tester.pumpAndSettle();
+}
+
+/// A Bluetooth tab over a radio that hears what a shop counter does, and a
+/// device store holding this device's printer when [inUse].
+BluetoothPrinterSetup _bluetooth({bool inUse = false}) => BluetoothPrinterSetup(
+  discovery: const _ShotDiscovery(),
+  store: _ShotStore(
+    inUse
+        ? DeviceBluetoothPrinter(
+            address: _btAddress,
+            name: 'MPT-II',
+            paperWidth: PrinterPaperWidth.columns32,
+            hasCutter: false,
+          )
+        : null,
+  ),
+  probe: (_) async {},
+);
+
+final class _ShotDiscovery implements BluetoothPrinterDiscovery {
+  const _ShotDiscovery();
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<BluetoothReadiness> prepare() async => BluetoothReadiness.ready;
+
+  @override
+  Future<bool> turnOn() async => true;
+
+  @override
+  Future<void> openPermissionSettings() async {}
+
+  /// Somebody's earbuds.
+  @override
+  Future<List<BluetoothPrinterDevice>> paired() async =>
+      const <BluetoothPrinterDevice>[
+        BluetoothPrinterDevice(
+          address: '3C:B0:ED:41:7A:02',
+          name: 'oraimo FreePods lite',
+          paired: true,
+        ),
+      ];
+
+  /// The printer, a second printer, a phone, and two devices that broadcast
+  /// no name - and **still listening**, so the capture is of a search under
+  /// way, as the boards draw it.
+  @override
+  Stream<BluetoothPrinterDevice> search() {
+    // Never closed: discovery is still running when the capture is taken.
+    // ignore: close_sinks
+    final heard = StreamController<BluetoothPrinterDevice>();
+    for (final device in const <BluetoothPrinterDevice>[
+      BluetoothPrinterDevice(
+        address: _btAddress,
+        name: 'MPT-II',
+        paired: false,
+      ),
+      BluetoothPrinterDevice(
+        address: '86:67:7A:0C:53:9E',
+        name: 'XP-P323B',
+        paired: false,
+      ),
+      BluetoothPrinterDevice(
+        address: '5C:F3:70:12:9A:01',
+        name: 'Galaxy A15',
+        paired: false,
+      ),
+      BluetoothPrinterDevice(address: '4F:21:9C:05:BB:10', paired: false),
+      BluetoothPrinterDevice(address: '61:0A:EE:73:1D:58', paired: false),
+    ]) {
+      heard.add(device);
+    }
+    return heard.stream;
+  }
+
+  @override
+  Future<bool> pair(String address) async => true;
+}
+
+final class _ShotStore implements DeviceBluetoothPrinterStore {
+  _ShotStore(this._printer);
+
+  DeviceBluetoothPrinter? _printer;
+
+  @override
+  DeviceBluetoothPrinter? read(String tenantId) => _printer;
+
+  @override
+  Future<void> save(String tenantId, DeviceBluetoothPrinter printer) async =>
+      _printer = printer;
+
+  @override
+  Future<void> forget(String tenantId) async => _printer = null;
+}
 
 /// A *Test this printer* that always refuses.
 ///

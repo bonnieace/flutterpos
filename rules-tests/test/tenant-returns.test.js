@@ -303,10 +303,12 @@ test("a return must be exactly the frozen create contract", async () => {
     "oversized-reason": { reason: "x".repeat(501) },
     "no-lines": { itemsReturned: [] },
     "not-a-list": { itemsReturned: "product-1" },
-    "zero-quantity": { itemsReturned: [{ productId: "product-1", quantity: 0 }] },
-    "no-product": { itemsReturned: [{ quantity: 1 }] },
+    // A line's own shape - a product, a positive quantity - is no longer
+    // checked here, since 2026-10-05: `verifyReturnAndRestoreStock` refuses a
+    // malformed line before it restores anything, and checking each position
+    // in Rules is what capped a return at sixteen lines.
     "too-many-lines": {
-      itemsReturned: Array.from({ length: 17 }, (_unused, index) => ({
+      itemsReturned: Array.from({ length: 401 }, (_unused, index) => ({
         productId: `product-${index}`,
         quantity: 1,
       })),

@@ -210,6 +210,7 @@ final class _TenantStockMovementFeedPanelState
       allowedRoles: TenantStockMovementFeedRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (view) => view.page.items.isEmpty,
       denied: const Center(
         key: ValueKey('stock-movements-feed-denied'),
         child: Text('Stock movements are unavailable for this business.'),

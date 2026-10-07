@@ -336,6 +336,7 @@ final class _TenantProductStockPanelState
       allowedRoles: TenantProductStockRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (view) => view.stock.movements.items.isEmpty,
       // **A shimmer of this product's page rather than a spinner, at the
       // developer's direction on 2026-08-28.** Everything above the ledger is
       // page rather than read - the two headings, both explanations, the three

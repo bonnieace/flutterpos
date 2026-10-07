@@ -1124,6 +1124,7 @@ final class _TenantStaffManagementPanelState
       allowedRoles: TenantStaffDirectoryScreen.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (page) => page.items.isEmpty,
       // **The loading phase wears the page's own chrome, and that is the
       // jitter of 2026-08-28.** The guard's default is a bare centred spinner
       // which is not inside an `AppScaffold` - and on this route the scaffold

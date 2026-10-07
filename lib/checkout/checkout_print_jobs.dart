@@ -83,6 +83,7 @@ final class PrintJobRecord {
     required this.receiptNumber,
     required this.host,
     required this.port,
+    required this.kind,
     required this.bytes,
     required this.state,
     required this.attemptCount,
@@ -101,6 +102,16 @@ final class PrintJobRecord {
   final String host;
   final int port;
 
+  /// Network or Bluetooth, so a retry goes down the link the receipt was
+  /// queued for.
+  ///
+  /// **Written only for Bluetooth, and read as network when absent**, so every
+  /// record queued before Bluetooth existed parses exactly as it did, with no
+  /// migration and no new schema version. The reverse holds as well: a build
+  /// that predates Bluetooth reads a Bluetooth job's address as a host, refuses
+  /// it as `malformed_print_job` and counts it unreadable - it never dials it.
+  final PrinterEndpointKind kind;
+
   /// The finished ESC/POS payload. **This class does not build bytes** —
   /// `flutter_esc_pos_utils`' `Generator` does, and keeping that job out of
   /// here is `docs/printer_transport.md`'s scope line.
@@ -115,7 +126,19 @@ final class PrintJobRecord {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  PrinterEndpoint get endpoint => PrinterEndpoint(host: host, port: port);
+  PrinterEndpoint get endpoint => _endpointOf(host, port, kind);
+
+  static PrinterEndpoint _endpointOf(
+    String host,
+    int port,
+    PrinterEndpointKind kind,
+  ) => switch (kind) {
+    PrinterEndpointKind.network => PrinterEndpoint(host: host, port: port),
+    PrinterEndpointKind.bluetooth =>
+      port == PrinterEndpoint.bluetoothPort
+          ? PrinterEndpoint.bluetooth(host)
+          : throw ArgumentError.value(port, 'port'),
+  };
 
   Map<String, Object?> toMap() => <String, Object?>{
     'schemaVersion': schemaVersion,
@@ -123,6 +146,7 @@ final class PrintJobRecord {
     'receiptNumber': receiptNumber,
     'host': host,
     'port': port,
+    if (kind == PrinterEndpointKind.bluetooth) 'kind': _bluetoothKind,
     'bytes': List<int>.unmodifiable(bytes),
     'state': state.name,
     'attemptCount': attemptCount,
@@ -142,6 +166,11 @@ final class PrintJobRecord {
     final tenantId = map['tenantId'];
     final host = map['host'];
     final port = map['port'];
+    final kind = switch (map['kind']) {
+      null => PrinterEndpointKind.network,
+      _bluetoothKind => PrinterEndpointKind.bluetooth,
+      _ => throw const PrintJobException('malformed_print_job'),
+    };
     final bytes = map['bytes'];
     final state = _stateFromName(map['state']);
     final attemptCount = map['attemptCount'];
@@ -170,7 +199,7 @@ final class PrintJobRecord {
       throw const PrintJobException('malformed_print_job');
     }
     try {
-      PrinterEndpoint(host: host, port: port);
+      _endpointOf(host, port, kind);
     } on ArgumentError {
       throw const PrintJobException('malformed_print_job');
     }
@@ -179,6 +208,7 @@ final class PrintJobRecord {
       receiptNumber: receiptNumber,
       host: host,
       port: port,
+      kind: kind,
       bytes: List<int>.unmodifiable(bytes.cast<int>()),
       state: state,
       attemptCount: attemptCount,
@@ -187,6 +217,8 @@ final class PrintJobRecord {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedAtMs, isUtc: true),
     );
   }
+
+  static const String _bluetoothKind = 'bluetooth';
 
   static PrintJobState? _stateFromName(Object? value) {
     if (value is! String) return null;
@@ -206,6 +238,7 @@ final class PrintJobRecord {
     receiptNumber: receiptNumber,
     host: host,
     port: port,
+    kind: kind,
     bytes: bytes,
     state: next,
     attemptCount: attemptCount ?? this.attemptCount,
@@ -319,6 +352,7 @@ final class HivePrintJobQueue {
         receiptNumber: receiptNumber,
         host: endpoint.host,
         port: endpoint.port,
+        kind: endpoint.kind,
         bytes: List<int>.unmodifiable(bytes),
         state: PrintJobState.queued,
         attemptCount: 0,

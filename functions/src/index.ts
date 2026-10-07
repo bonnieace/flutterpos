@@ -92,6 +92,7 @@ export {
   mergeCustomerPaymentReconciliationJob,
   mergeReturnReconciliationJob,
   mergeSaleReconciliationJob,
+  reconcileClosedShift,
   requestTenantReconciliation,
   retryTenantReconciliationTasks,
   runReconciliationTenantDiscoveryTask,
@@ -128,3 +129,5 @@ export {
   sendEmailReceipt,
   unsubscribeEmailReceipts,
 } from "./emailReceipts/functions";
+
+export {updateSaleDailyTotals, updateReturnDailyTotals} from "./operations/salesSummaries";

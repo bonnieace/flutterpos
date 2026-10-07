@@ -263,6 +263,7 @@ final class _TenantReconciliationStatusPanelState
       allowedRoles: TenantReconciliationStatusRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (view) => view.day.runs.items.isEmpty,
       denied: const Center(
         key: ValueKey('reconciliation-status-denied'),
         child: Text(

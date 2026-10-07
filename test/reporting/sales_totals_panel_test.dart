@@ -1333,10 +1333,13 @@ void main() {
     await tester.pump();
 
     expect(_figure(tester, 'sales-totals-amount'), 'KES 9');
-    // **The badge carries what the removed fold carried.** Whose count this is
-    // is not a footnote on a device answer - it is the difference between the
-    // whole business and this till - so it sits on the figure now.
-    expect(find.byKey(const ValueKey('sales-totals-device-basis')), findsOne);
+    // **No badge while the server is still being asked.** The device read
+    // nearly always lands first, so a badge here went up on every open and
+    // came down a moment later.
+    expect(
+      find.byKey(const ValueKey('sales-totals-device-basis')),
+      findsNothing,
+    );
     expect(callable.pending, hasLength(1));
 
     callable.completeFirst();
@@ -1348,6 +1351,51 @@ void main() {
       find.byKey(const ValueKey('sales-totals-device-basis')),
       findsNothing,
     );
+  });
+
+  testWidgets('a device copy with no sales waits for the server', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[_response()], deferred: true);
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      callable,
+      reader: _EmptyDeviceReader(),
+      settle: false,
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    // A device that has never read these sales holds none of them, which is
+    // not a day that took nothing.
+    expect(find.byKey(const ValueKey('sales-totals-amount')), findsNothing);
+
+    callable.completeFirst();
+    await tester.pump();
+    await tester.pump();
+    expect(_figure(tester, 'sales-totals-amount'), 'KES 4820.75');
+  });
+
+  testWidgets('device totals carry their badge once the server has failed', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[
+      FirebaseFunctionsException(code: 'unavailable', message: 'no'),
+    ]);
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      callable,
+      reader: _DeviceReader(),
+    );
+
+    expect(_figure(tester, 'sales-totals-amount'), 'KES 9');
+    // **The badge carries what the removed fold carried.** Whose count this is
+    // is not a footnote on a device answer - it is the difference between the
+    // whole business and this till - so it sits on the figure.
+    expect(find.byKey(const ValueKey('sales-totals-device-basis')), findsOne);
   });
 }
 
@@ -1592,6 +1640,20 @@ final class _DeviceReader extends _Reader
       },
     ),
   ];
+}
+
+/// A device copy that holds no sales at all.
+final class _EmptyDeviceReader extends _Reader
+    implements TenantCacheReadable, TenantSalesHistoryQueryReader {
+  _EmptyDeviceReader() : super(currency: 'KES');
+
+  @override
+  TenantDataReader get cacheOnly => this;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
+    TenantSalesHistoryQuery query,
+  ) async => const <TenantQueryDocumentSnapshot>[];
 }
 
 const String _deviceId = 'dev-0123456789abcdef0123456789abcdef';

@@ -20,13 +20,21 @@
 /// rather than a risk it introduces.
 library;
 
+import 'checkout_bluetooth_printer.dart';
 import 'checkout_print_transport_base.dart';
 import 'checkout_print_transport_unsupported.dart'
     if (dart.library.io) 'checkout_print_transport_io.dart'
     as implementation;
 
+export 'checkout_bluetooth_printer.dart';
 export 'checkout_print_transport_base.dart';
 
 /// The transport for the platform this binary was compiled for.
 PrinterTransport createPrinterTransport() =>
     implementation.createPrinterTransport();
+
+/// Bluetooth printer search and pairing on Android; an honest "not here"
+/// everywhere else, web included - so the Bluetooth plugin is never compiled
+/// into a web build.
+BluetoothPrinterDiscovery createBluetoothPrinterDiscovery() =>
+    implementation.createBluetoothPrinterDiscovery();

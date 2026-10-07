@@ -740,6 +740,11 @@ final class FirebaseShiftServerSalesTotals implements ShiftServerSalesTotals {
       // Stored as whole minor units, so a sum that is not one is a record
       // this cannot vouch for.
       if (total < 0 || total != total.roundToDouble()) return null;
+      final repaid = await _repaid(
+        tenantId: tenantId,
+        uid: uid,
+        shiftId: shiftId,
+      );
       return ShiftServerTotals(
         transactionCount: transactionCount,
         totalMinor: total.toInt(),
@@ -749,7 +754,8 @@ final class FirebaseShiftServerSalesTotals implements ShiftServerSalesTotals {
           shiftId: shiftId,
           totalMinor: total.toInt(),
         ),
-        repaidMinor: await _repaid(tenantId: tenantId, uid: uid, shiftId: shiftId),
+        repaidMinor: repaid?.$1,
+        repaidPaymentIds: repaid?.$2,
       );
     } catch (error, stackTrace) {
       AppTelemetry.captureHandled(
@@ -761,6 +767,10 @@ final class FirebaseShiftServerSalesTotals implements ShiftServerSalesTotals {
     }
   }
 }
+
+/// The most repayments one close reads to count; past it the figure is unread
+/// rather than a page of it.
+const int _maximumRepaymentsRead = 500;
 
 /// **Each credit figure is its own read, apart from the sales totals.** A
 /// filtered `sum()` needs a composite index that names the summed field, so
@@ -801,10 +811,16 @@ extension on FirebaseShiftServerSalesTotals {
     }
   }
 
-  /// What customers paid back into the shift, counted on the server, or null
-  /// where that could not be read. Rules let a cashier read the payments they
-  /// took, which is exactly what this filters to.
-  Future<int?> _repaid({
+  /// What customers paid back into the shift, counted on the server, and the
+  /// payments that make it up - or null where that could not be read. Rules
+  /// let a cashier read the payments they took, which is exactly what this
+  /// filters to.
+  ///
+  /// **The documents, not a `sum()`**, because the close has to know *which*
+  /// payments landed: one this phone still has queued is added to this, and
+  /// one that has landed must not be added twice. A shift takes a handful of
+  /// repayments, so this is a handful of reads.
+  Future<(int, Set<String>)?> _repaid({
     required String tenantId,
     required String uid,
     required String shiftId,
@@ -816,12 +832,20 @@ extension on FirebaseShiftServerSalesTotals {
           ))
           .where('shiftId', isEqualTo: shiftId)
           .where('recordedBy', isEqualTo: uid)
-          .aggregate(sum('amountMinor'))
-          .get(source: AggregateSource.server)
+          .limit(_maximumRepaymentsRead + 1)
+          .get(const GetOptions(source: Source.server))
           .timeout(_timeout);
-      final repaid = snapshot.getSum('amountMinor') ?? 0;
-      if (repaid < 0 || repaid != repaid.roundToDouble()) return null;
-      return repaid.toInt();
+      // More than this is not a shift a close can vouch for by reading it.
+      if (snapshot.docs.length > _maximumRepaymentsRead) return null;
+      var repaid = 0;
+      final ids = <String>{};
+      for (final document in snapshot.docs) {
+        final amount = document.data()['amountMinor'];
+        if (amount is! int || amount <= 0) return null;
+        repaid += amount;
+        ids.add(document.id);
+      }
+      return (repaid, ids);
     } catch (error, stackTrace) {
       AppTelemetry.captureHandled(
         error,

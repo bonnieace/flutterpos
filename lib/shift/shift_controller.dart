@@ -130,6 +130,7 @@ final class TenantShiftController extends ChangeNotifier {
     required String deviceId,
     required TenantShiftOnlineCheck isOnline,
     ShiftServerSalesTotals? serverTotals,
+    ShiftQueuedRepayments? queuedRepayments,
     TenantShiftIdFactory? shiftIdFactory,
     TenantShiftClock? clock,
     CheckoutBusinessDateResolver? businessDateResolver,
@@ -139,6 +140,7 @@ final class TenantShiftController extends ChangeNotifier {
        _writer = writer,
        _salesLedger = salesLedger,
        _serverTotals = serverTotals,
+       _queuedRepayments = queuedRepayments,
        _deviceId = validateCheckoutDeviceId(deviceId),
        _isOnline = isOnline,
        _shiftIdFactory = shiftIdFactory ?? _generateShiftId,
@@ -155,6 +157,11 @@ final class TenantShiftController extends ChangeNotifier {
   /// this phone's own evidence, which is what a test or a build without the
   /// server wired in gets.
   final ShiftServerSalesTotals? _serverTotals;
+
+  /// The repayments this phone took that may not have reached the server.
+  /// Null counts only what the server holds, which is what a test or a build
+  /// without the queue wired in gets.
+  final ShiftQueuedRepayments? _queuedRepayments;
   final String _deviceId;
   final TenantShiftOnlineCheck _isOnline;
   final TenantShiftIdFactory _shiftIdFactory;
@@ -1195,13 +1202,41 @@ final class TenantShiftController extends ChangeNotifier {
   /// the close states [local] - which is what every close stated before a
   /// shift could span phones, and which reconciliation then reports as sales
   /// the count did not include.
+  ///
+  /// **Repayments still on this phone's queue are added either way.** The
+  /// cashier counts their cash in the drawer, and the server cannot count
+  /// what has not reached it; one that has landed is counted there only.
   Future<ShiftSalesSummary> _closingSummary(
     TenantSession captured,
     String shiftId,
     ShiftSalesSummary local,
   ) async {
+    final queued =
+        await _queuedRepayments?.forShift(
+          uid: captured.uid,
+          tenantId: captured.tenantId,
+          shiftId: shiftId,
+        ) ??
+        const <String, int>{};
+    ShiftSalesSummary withRepaid(
+      ShiftSalesSummary summary,
+      int repaidMinor,
+      Set<String> counted,
+    ) => ShiftSalesSummary(
+      transactionCount: summary.transactionCount,
+      totalMinor: summary.totalMinor,
+      unsettledCount: summary.unsettledCount,
+      tenders: summary.tenders,
+      creditOwedMinor: summary.creditOwedMinor,
+      repaidMinor:
+          repaidMinor +
+          queued.entries
+              .where((entry) => !counted.contains(entry.key))
+              .fold(0, (sum, entry) => sum + entry.value),
+    );
+    final offline = withRepaid(local, local.repaidMinor, const <String>{});
     final totals = _serverTotals;
-    if (totals == null || !await _online()) return local;
+    if (totals == null || !await _online()) return offline;
     final server = await totals.read(
       tenantId: captured.tenantId,
       uid: captured.uid,
@@ -1210,16 +1245,23 @@ final class TenantShiftController extends ChangeNotifier {
     if (server == null ||
         server.transactionCount < local.transactionCount ||
         server.totalMinor < local.totalMinor) {
-      return local;
+      return offline;
     }
-    return ShiftSalesSummary(
+    final serverSummary = ShiftSalesSummary(
       transactionCount: server.transactionCount,
       totalMinor: server.totalMinor,
       unsettledCount: local.unsettledCount,
       // Unreadable is never zero: what this phone holds is the floor.
       creditOwedMinor: server.creditOwedMinor ?? local.creditOwedMinor,
-      repaidMinor: server.repaidMinor ?? local.repaidMinor,
     );
+    // Counted on the server: add what it did not count. Not readable: what
+    // this phone holds is the floor, as for every other figure here.
+    final serverRepaid = server.repaidMinor;
+    final serverPayments = server.repaidPaymentIds;
+    if (serverRepaid == null || serverPayments == null) {
+      return withRepaid(serverSummary, offline.repaidMinor, queued.keys.toSet());
+    }
+    return withRepaid(serverSummary, serverRepaid, serverPayments);
   }
 
   /// The honest offline view: only local facts, and all of them.

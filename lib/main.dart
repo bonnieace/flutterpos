@@ -250,6 +250,17 @@ Future<void> main() async {
               return null;
             },
           );
+      // Which Bluetooth printer this device prints on, per business. A failure
+      // to open it never stops the app starting: a device that never chose
+      // one is on the network printer, and one whose choice cannot be read
+      // refuses to print until it is chosen again on the Bluetooth tab.
+      final bluetoothPrinters = await openDeviceBluetoothPrinterStore(
+        onError: (error, stackTrace) => AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'checkout.bluetooth_printer_open',
+        ),
+      );
       // Receipt counters, shift state, and the outbox share one key: a sale,
       // the receipt numbering it draws from, and the shift it belongs to must
       // share exactly one fate.
@@ -295,8 +306,10 @@ Future<void> main() async {
       final printerCapabilityProfile = await CapabilityProfile.load();
       // The compile-time platform seam: `dart:io` sockets on mobile and
       // desktop, the loud unsupported stub on web. Built once — the transport
-      // holds no mutable state and opens a connection per job.
+      // holds no mutable state and opens a connection per job. On Android it
+      // also carries Bluetooth, chosen per job by the job's own endpoint.
       final printerTransport = createPrinterTransport();
+      final bluetoothPrinterDiscovery = createBluetoothPrinterDiscovery();
 
       // The installation identity is resolved once at startup so every shift
       // and receipt this device records names the same device.
@@ -403,6 +416,8 @@ Future<void> main() async {
               checkoutPrintJobs: checkoutPrintJobs,
               printerCapabilityProfile: printerCapabilityProfile,
               printerTransport: printerTransport,
+              bluetoothPrinters: bluetoothPrinters,
+              bluetoothPrinterDiscovery: bluetoothPrinterDiscovery,
               tenantShiftState: tenantShiftState,
               deviceId: deviceId,
               connectivity: connectivity,
@@ -523,6 +538,8 @@ class SpiritPOSApp extends StatelessWidget {
     required this.checkoutPrintJobs,
     required this.printerCapabilityProfile,
     required this.printerTransport,
+    required this.bluetoothPrinters,
+    required this.bluetoothPrinterDiscovery,
     required this.tenantShiftState,
     required this.deviceId,
     required this.connectivity,
@@ -565,6 +582,12 @@ class SpiritPOSApp extends StatelessWidget {
   final HivePrintJobQueue checkoutPrintJobs;
   final CapabilityProfile printerCapabilityProfile;
   final PrinterTransport printerTransport;
+
+  /// The Bluetooth printer this device prints on, per business. Null where its
+  /// box would not open, which leaves the device on the network printer and
+  /// the printer page without its Bluetooth tab.
+  final DeviceBluetoothPrinterStore? bluetoothPrinters;
+  final BluetoothPrinterDiscovery bluetoothPrinterDiscovery;
   final HiveTenantShiftState tenantShiftState;
   final String deviceId;
   final Connectivity connectivity;
@@ -649,6 +672,20 @@ class SpiritPOSApp extends StatelessWidget {
       transport: printerTransport,
       profile: printerCapabilityProfile,
     );
+    // **Where this device prints for a business**: a Bluetooth printer
+    // connected on this device, or else the business's network printer. Every
+    // path that puts paper on a roll asks this, so a receipt, its reprint and
+    // the branding proof all land on the same printer.
+    Future<TenantConfiguredPrinter> printerOnThisDevice(
+      TenantSession session,
+    ) => devicePrinterLoading(
+      business: () => TenantPrinterConfigurationRepository(
+        session: session,
+        reader: tenantDataReader.cacheOnly,
+      ).load().catchError(_absentPrinter),
+      store: bluetoothPrinters,
+      tenantId: session.tenantId,
+    );
     // **Runs after the sale is durable, and can never un-write one.** §6.3
     // applied to printing: the record is written first, the receipt is produced
     // over committed state, and a printer that is off becomes a stated reason
@@ -660,10 +697,7 @@ class SpiritPOSApp extends StatelessWidget {
     ) async {
       final cacheReader = tenantDataReader.cacheOnly;
       final reads = await Future.wait<Object?>(<Future<Object?>>[
-        TenantPrinterConfigurationRepository(
-          session: session,
-          reader: cacheReader,
-        ).load().catchError(_absentPrinter),
+        printerOnThisDevice(session),
         _receiptBranding(session, cacheReader),
       ]);
       final sale = CheckoutSalePayload.fromOutboxRecord(
@@ -709,10 +743,7 @@ class SpiritPOSApp extends StatelessWidget {
       String? slogan,
       Uint8List? logo,
     }) async {
-      final printer = await TenantPrinterConfigurationRepository(
-        session: session,
-        reader: tenantDataReader.cacheOnly,
-      ).load().catchError(_absentPrinter);
+      final printer = await printerOnThisDevice(session);
       final configuration = printer.require();
       await printerTransport.send(
         configuration.endpoint,
@@ -740,10 +771,7 @@ class SpiritPOSApp extends StatelessWidget {
       readContext: (session) async {
         final cacheReader = tenantDataReader.cacheOnly;
         final reads = await Future.wait<Object?>(<Future<Object?>>[
-          TenantPrinterConfigurationRepository(
-            session: session,
-            reader: cacheReader,
-          ).load().catchError(_absentPrinter),
+          printerOnThisDevice(session),
           _receiptBranding(session, cacheReader),
         ]);
         final printer = reads[0]! as TenantConfiguredPrinter;
@@ -966,6 +994,9 @@ class SpiritPOSApp extends StatelessWidget {
       serverTotals: FirebaseShiftServerSalesTotals(
         firestore: FirebaseFirestore.instance,
       ),
+      // A repayment taken with no signal is in the drawer before the server
+      // hears of it, so the close counts this phone's queue too.
+      queuedRepayments: PendingMutationShiftRepayments(tenantMutationStore),
       deviceId: deviceId,
       isOnline: isOnline,
     );
@@ -1042,6 +1073,9 @@ class SpiritPOSApp extends StatelessWidget {
           kind: TenantSettingKind.printer,
           icon: Icons.print_outlined,
           allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
+          // Its Network and Bluetooth tabs are a `TabBarView`, which scrolls
+          // each tab itself.
+          ownsScroll: true,
           builder: (context) => TenantPrinterConfigurationPanel(
             reader: reader,
             writer: QueuedTenantConfigurationWriter(
@@ -1077,32 +1111,17 @@ class SpiritPOSApp extends StatelessWidget {
                 ),
               );
             },
-          ),
-        ),
-        TenantSettingsDestination(
-          settingKey: 'stock-take',
-          kind: TenantSettingKind.stockCounts,
-          icon: Icons.fact_check_outlined,
-          allowedRoles: TenantStockTakeSchedulePublisher.allowedRoles,
-          // **Not queued, and that is deliberate.** The queued writer
-          // carries `branding` and `printer` and passes everything else
-          // straight at the server, which is what this wants: deciding
-          // a counting rota is an owner sitting down with the business,
-          // not an operational act taken on a shop floor with no
-          // signal. The till reads the published document from cache
-          // and treats an unreadable one as "no count is due", so a
-          // schedule that never reaches a device interrupts nobody.
-          builder: (_) => TenantStockTakeSettingsPanel(
-            reader: reader,
-            writer: QueuedTenantConfigurationWriter(
-              store: tenantMutationStore,
-              cacheReader: reader.cached ?? reader,
-              currentUid: () => FirebaseAuth.instance.currentUser?.uid,
-              remote: FirebaseTenantConfigurationDocumentWriter(
-                firestore: FirebaseFirestore.instance,
-                isOnline: isOnline,
+            // The Bluetooth tab: a printer paired with this device, connected
+            // through the same transport - and tested with the same page -
+            // as a network one.
+            bluetooth: switch (bluetoothPrinters) {
+              final store? => BluetoothPrinterSetup(
+                discovery: bluetoothPrinterDiscovery,
+                store: store,
+                probe: printerTransport.probe,
               ),
-            ),
+              null => null,
+            },
           ),
         ),
         // **Who may sell for a price agreed with the customer**, set per
@@ -1131,8 +1150,7 @@ class SpiritPOSApp extends StatelessWidget {
       ];
       final currency = destinations[0];
       final printer = destinations[1];
-      final stockCounts = destinations[2];
-      final agreedPrices = destinations[3];
+      final agreedPrices = destinations[2];
       return switch (initialSettingKey) {
         'business-details' => TenantConfigurationPage(
           title: 'Business details',
@@ -1164,26 +1182,11 @@ class SpiritPOSApp extends StatelessWidget {
         'printer' => TenantConfigurationPage(
           title: 'Printer',
           builder: printer.builder,
+          ownsScroll: printer.ownsScroll,
         ),
         _ => TenantConfigurationsScreen(
           currencyBuilder: currency.builder,
-          stockCountsBuilder: stockCounts.builder,
           agreedPricesBuilder: agreedPrices.builder,
-          // **Straight at the server, as the agreed prices are**: an owner
-          // deciding how customers earn is not an act taken on a shop floor
-          // with no signal, and a till never reads this to sell.
-          loyaltyBuilder: (_) => TenantLoyaltySettingsPanel(
-            reader: reader,
-            writer: QueuedTenantConfigurationWriter(
-              store: tenantMutationStore,
-              cacheReader: reader.cached ?? reader,
-              currentUid: () => FirebaseAuth.instance.currentUser?.uid,
-              remote: FirebaseTenantConfigurationDocumentWriter(
-                firestore: FirebaseFirestore.instance,
-                isOnline: isOnline,
-              ),
-            ),
-          ),
         ),
       };
     }
@@ -1535,6 +1538,24 @@ class SpiritPOSApp extends StatelessWidget {
               writer: customerWriter,
               salesReader: tenantDataReader,
               payments: customerPayments,
+              // **Loyalty, beside the customers who earn it** since
+              // 2026-10-04 rather than on *Configs*; the screen shows it to an
+              // owner or administrator only. Straight at the server, as the
+              // agreed prices are: an owner deciding how customers earn is not
+              // an act taken on a shop floor with no signal, and a till never
+              // reads this to sell.
+              loyalty: (_) => TenantLoyaltySettingsPanel(
+                reader: reader,
+                writer: QueuedTenantConfigurationWriter(
+                  store: tenantMutationStore,
+                  cacheReader: reader.cached ?? reader,
+                  currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                  remote: FirebaseTenantConfigurationDocumentWriter(
+                    firestore: FirebaseFirestore.instance,
+                    isOnline: isOnline,
+                  ),
+                ),
+              ),
             ),
             customersRoles: TenantCustomerRepository.manageRoles,
             // **Straight at the server, as every owner's setting is**, and the
@@ -1815,6 +1836,30 @@ class SpiritPOSApp extends StatelessWidget {
               // Anybody who can read the record of counts starts one from here
               // instead, which is why the tile is not offered to them.
               countRoute: (_) => buildStockTakeScreen(),
+              // **The counting rota, on the page of the counts it schedules**
+              // since 2026-10-04 rather than on *Configs*; the screen shows it
+              // to an owner or administrator only.
+              //
+              // **Not queued, and that is deliberate.** The queued writer
+              // carries `branding` and `printer` and passes everything else
+              // straight at the server, which is what this wants: deciding a
+              // counting rota is an owner sitting down with the business, not
+              // an operational act taken on a shop floor with no signal. The
+              // till reads the published document from cache and treats an
+              // unreadable one as "no count is due", so a schedule that never
+              // reaches a device interrupts nobody.
+              settings: (_) => TenantStockTakeSettingsPanel(
+                reader: reader,
+                writer: QueuedTenantConfigurationWriter(
+                  store: tenantMutationStore,
+                  cacheReader: reader.cached ?? reader,
+                  currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                  remote: FirebaseTenantConfigurationDocumentWriter(
+                    firestore: FirebaseFirestore.instance,
+                    isOnline: isOnline,
+                  ),
+                ),
+              ),
               applyCallable: FirebaseApplyStockTakeCallable(),
               // Accepting a count writes to `products`, `stock_adjustments` and
               // `stock_movements`, so the till's offline catalog is stale the

@@ -856,6 +856,8 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
       allowedRoles: TenantBulkCatalogRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (view) =>
+          view.categories.items.isEmpty && view.products.items.isEmpty,
       denied: const Center(
         key: ValueKey('bulk-catalog-denied'),
         child: Text(

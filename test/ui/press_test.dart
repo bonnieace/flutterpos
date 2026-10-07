@@ -58,10 +58,7 @@ double _scaleOf(WidgetTester tester) {
 }
 
 bool _hasTransform(WidgetTester tester) => find
-    .descendant(
-      of: find.byType(PressSurface),
-      matching: find.byType(Transform),
-    )
+    .descendant(of: find.byType(PressSurface), matching: find.byType(Transform))
     .evaluate()
     .isNotEmpty;
 
@@ -80,7 +77,8 @@ bool _paints(WidgetTester tester, Color color) =>
     _decorations(tester).any((d) => d.color == color);
 
 bool _hasRing(WidgetTester tester) => _decorations(tester).any(
-  (d) => d.border?.top.color == _ring.color && d.border?.top.width == _ring.width,
+  (d) =>
+      d.border?.top.color == _ring.color && d.border?.top.width == _ring.width,
 );
 
 void main() {
@@ -96,57 +94,59 @@ void main() {
       expect(_hasTransform(tester), isFalse);
     });
 
-    testWidgets('a press drives the scale toward 0.97 and a release returns it', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_surface(onPressed: () {}, pressed: pressed));
+    testWidgets(
+      'a press drives the scale toward 0.97 and a release returns it',
+      (tester) async {
+        await tester.pumpWidget(_surface(onPressed: () {}, pressed: pressed));
 
-      final gesture = await tester.startGesture(
-        tester.getCenter(find.byType(PressSurface)),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(PressSurface)),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
 
-      expect(_scaleOf(tester), closeTo(_tokens.motion.pressScale, 0.002));
-      expect(_tokens.motion.pressScale, 0.97);
+        expect(_scaleOf(tester), closeTo(_tokens.motion.pressScale, 0.002));
+        expect(_tokens.motion.pressScale, 0.97);
 
-      await gesture.up();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
-      expect(_scaleOf(tester), closeTo(1, 0.002));
-    });
+        await gesture.up();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(_scaleOf(tester), closeTo(1, 0.002));
+      },
+    );
 
-    testWidgets('a second press takes over mid-release rather than restarting', (
-      tester,
-    ) async {
-      // §2.4: "If a person taps twice, the second tap takes over mid-flight."
-      // A `forward()`-from-zero implementation would jump the scale back to 1
-      // here, which is the visible symptom of the rule `claude.md` names.
-      await tester.pumpWidget(_surface(onPressed: () {}, pressed: pressed));
-      final centre = tester.getCenter(find.byType(PressSurface));
+    testWidgets(
+      'a second press takes over mid-release rather than restarting',
+      (tester) async {
+        // §2.4: "If a person taps twice, the second tap takes over mid-flight."
+        // A `forward()`-from-zero implementation would jump the scale back to 1
+        // here, which is the visible symptom of the rule `claude.md` names.
+        await tester.pumpWidget(_surface(onPressed: () {}, pressed: pressed));
+        final centre = tester.getCenter(find.byType(PressSurface));
 
-      final first = await tester.startGesture(centre);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
-      await first.up();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 30));
+        final first = await tester.startGesture(centre);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        await first.up();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 30));
 
-      final midRelease = _scaleOf(tester);
-      expect(midRelease, greaterThan(_tokens.motion.pressScale));
-      expect(midRelease, lessThan(1));
+        final midRelease = _scaleOf(tester);
+        expect(midRelease, greaterThan(_tokens.motion.pressScale));
+        expect(midRelease, lessThan(1));
 
-      final second = await tester.startGesture(centre);
-      await tester.pump();
-      expect(
-        _scaleOf(tester),
-        closeTo(midRelease, 0.01),
-        reason: 'the second press begins where the release had got to',
-      );
-      await second.up();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-    });
+        final second = await tester.startGesture(centre);
+        await tester.pump();
+        expect(
+          _scaleOf(tester),
+          closeTo(midRelease, 0.01),
+          reason: 'the second press begins where the release had got to',
+        );
+        await second.up();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+      },
+    );
 
     testWidgets('and under disableAnimations it arrives without a journey', (
       tester,
@@ -305,6 +305,57 @@ void main() {
         tester.getRect(find.byKey(child)),
         childBefore,
         reason: 'a ring appearing must not reflow the row it is in',
+      );
+    });
+
+    testWidgets('a ring inside sits on the surface\'s own edge, with no '
+        'gutter', (tester) async {
+      // A row filling a card has no room outside itself: the ring is drawn on
+      // its edge, and the row keeps the card's whole width.
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+
+      const child = ValueKey('press-child');
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: spiritTheme,
+          home: Scaffold(
+            body: Center(
+              child: PressSurface(
+                borderRadius: BorderRadius.circular(_tokens.radius.lg),
+                onPressed: () {},
+                autofocus: true,
+                ringInside: true,
+                child: const SizedBox(key: child, width: 320, height: 72),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final ring = find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration as BoxDecoration).border?.top.color ==
+                _ring.color,
+      );
+      expect(ring, findsOne);
+      expect(tester.getRect(ring), tester.getRect(find.byKey(child)));
+      expect(
+        tester.getSize(find.byType(PressSurface)),
+        tester.getSize(find.byKey(child)),
+        reason: 'no gutter is reserved round a ring drawn inside',
+      );
+      expect(
+        (tester.widget<DecoratedBox>(ring).decoration as BoxDecoration)
+            .borderRadius,
+        BorderRadius.circular(_tokens.radius.lg),
       );
     });
 

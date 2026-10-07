@@ -7,7 +7,6 @@ import 'package:crypto/crypto.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../observability/app_telemetry.dart';
-import '../checkout/checkout_sale.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
@@ -301,8 +300,8 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
     };
 
     final lines = <TenantReturnRequestLine>[];
-    // A sale carries at most `maximumCheckoutSaleLines` lines and the create
-    // rule checks exactly that many positions, so a return can never exceed it.
+    // As many lines as a sale may hold - [maximumReturnLines], which is the
+    // server's bound too - so any sale can be returned in one return.
     for (final entry in quantities.entries) {
       final quantity = entry.value;
       if (quantity == 0) continue;
@@ -321,7 +320,7 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
         ),
       );
     }
-    if (lines.isEmpty || lines.length > maximumCheckoutSaleLines) {
+    if (lines.isEmpty || lines.length > maximumReturnLines) {
       throw const TenantReturnException('invalid_return_quantities');
     }
     lines.sort((left, right) => left.productId.compareTo(right.productId));

@@ -43,8 +43,42 @@ void main() {
 
       for (final option in _options) {
         expect(find.text(option.title), findsOneWidget);
-        expect(find.text(option.description), findsOneWidget);
+        expect(find.text(option.description!), findsOneWidget);
       }
+    });
+
+    testWidgets('an option with no description is its title alone', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _frame(
+          ChoiceCardGroup<_Pace>(
+            semanticLabel: 'Pace',
+            options: const <ChoiceCardOption<_Pace>>[
+              ChoiceCardOption<_Pace>(
+                key: ValueKey('pace-slow'),
+                value: _Pace.slow,
+                title: 'Slow',
+              ),
+              ChoiceCardOption<_Pace>(
+                key: ValueKey('pace-fast'),
+                value: _Pace.fast,
+                title: 'Fast',
+              ),
+            ],
+            selected: _Pace.slow,
+            onSelected: (_) {},
+          ),
+        ),
+      );
+
+      final card = find.byKey(const ValueKey('pace-fast'));
+      expect(
+        find.descendant(of: card, matching: find.byType(Text)),
+        findsOneWidget,
+      );
+      // Still a choice a screen reader can make, named by its title.
+      expect(_flags(tester, 'pace-fast').isInMutuallyExclusiveGroup, isTrue);
     });
 
     testWidgets('the chosen card is checked in one exclusive group', (
@@ -136,6 +170,74 @@ void main() {
       );
 
       expect(tester.getTopLeft(find.text('Fast')), before);
+    });
+
+    testWidgets('flat, the rows are the same radio group, by tap and by key', (
+      tester,
+    ) async {
+      var selected = _Pace.slow;
+      await tester.pumpWidget(
+        _frame(
+          StatefulBuilder(
+            builder: (context, setState) => ChoiceCardGroup<_Pace>(
+              semanticLabel: 'Pace',
+              options: _options,
+              selected: selected,
+              flat: true,
+              onSelected: (value) => setState(() => selected = value),
+            ),
+          ),
+        ),
+      );
+
+      final slow = _flags(tester, 'pace-slow');
+      expect(slow.isChecked, CheckedState.isTrue);
+      expect(slow.isInMutuallyExclusiveGroup, isTrue);
+      expect(_flags(tester, 'pace-fast').isChecked, CheckedState.isFalse);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(selected, _Pace.steady);
+
+      await tester.tap(find.byKey(const ValueKey('pace-fast')));
+      await tester.pump();
+      expect(selected, _Pace.fast);
+
+      // Rows on the page: nothing between one and the next but the ring's
+      // gutter each already stands in.
+      expect(
+        tester.getRect(find.byKey(const ValueKey('pace-steady'))).top,
+        tester.getRect(find.byKey(const ValueKey('pace-slow'))).bottom,
+      );
+    });
+
+    testWidgets('flat and read-only, the chosen row alone, nothing to press', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _frame(
+          const ChoiceCardGroup<_Pace>(
+            semanticLabel: 'Pace',
+            options: _options,
+            selected: _Pace.steady,
+            flat: true,
+            onSelected: null,
+          ),
+        ),
+      );
+
+      expect(find.text('Steady'), findsOneWidget);
+      expect(find.text('Slow'), findsNothing);
+      expect(_flags(tester, 'pace-steady').isButton, isFalse);
+      // The current setting, in the page's ink: the disabled grey would say
+      // it is not available, and does not meet text contrast.
+      final ink = AppTokens.profoundVerdant.colors.text.primary;
+      expect(
+        tester.widget<Text>(find.text('Steady')).style?.color,
+        ink,
+      );
     });
   });
 
@@ -276,6 +378,108 @@ void main() {
       expect(_flags(tester, 'toggle').isEnabled, Tristate.isFalse);
     });
   });
+
+  group('AppSwitchRow', () {
+    testWidgets('with words, the line under the label says the state', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _frame(
+          AppSwitchRow(
+            label: 'Receipts',
+            value: false,
+            onChanged: (_) {},
+            onText: 'On - sent',
+            offText: 'Off - not sent',
+          ),
+        ),
+      );
+
+      expect(find.text('Off - not sent'), findsOneWidget);
+      // The words carry it, so the thumb is left as Material draws it.
+      expect(_thumbIcons(tester), isNull);
+    });
+
+    testWidgets('without words, the thumb says the state as a glyph', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _frame(
+          AppSwitchRow(label: 'Receipts', value: false, onChanged: (_) {}),
+        ),
+      );
+
+      // The label alone - no line under it - and a check or a cross on the
+      // thumb, so on and off are not the track's hue alone.
+      final tile = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
+      expect(tile.subtitle, isNull);
+      final icons = _thumbIcons(tester)!;
+      expect(
+        icons.resolve(<WidgetState>{WidgetState.selected})?.icon,
+        Icons.check,
+      );
+      expect(icons.resolve(<WidgetState>{})?.icon, Icons.close);
+    });
+
+    testWidgets('flat, the whole row toggles and says so to a screen reader', (
+      tester,
+    ) async {
+      bool? reported;
+      await tester.pumpWidget(
+        _frame(
+          AppSwitchRow(
+            key: const ValueKey('switch'),
+            label: 'Receipts',
+            icon: Icons.chat_outlined,
+            value: false,
+            flat: true,
+            onChanged: (value) => reported = value,
+          ),
+        ),
+      );
+
+      // The label, not the switch: the row is one target.
+      await tester.tap(find.text('Receipts'));
+      await tester.pump();
+      expect(reported, isTrue);
+      expect(_flags(tester, 'switch').isToggled, Tristate.isFalse);
+      // One stop for a keyboard: the switch is a picture of the state.
+      final picture = tester.widget<Switch>(find.byType(Switch));
+      expect(
+        find.ancestor(
+          of: find.byWidget(picture),
+          matching: find.byType(ExcludeFocus),
+        ),
+        findsOneWidget,
+      );
+      // On is a check in the thumb; off is the bare thumb.
+      expect(
+        picture.thumbIcon?.resolve(<WidgetState>{WidgetState.selected})?.icon,
+        Icons.check,
+      );
+      expect(picture.thumbIcon?.resolve(<WidgetState>{}), isNull);
+    });
+
+    testWidgets('flat and without a handler, it is disabled and inert', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _frame(
+          const AppSwitchRow(
+            key: ValueKey('switch'),
+            label: 'Receipts',
+            value: true,
+            flat: true,
+            onChanged: null,
+          ),
+        ),
+      );
+
+      final flags = _flags(tester, 'switch');
+      expect(flags.isToggled, Tristate.isTrue);
+      expect(flags.isEnabled, Tristate.isFalse);
+    });
+  });
 }
 
 Widget _frame(Widget child) => MaterialApp(
@@ -302,6 +506,9 @@ Future<void> _pumpGroup(
     ),
   ),
 );
+
+WidgetStateProperty<Icon?>? _thumbIcons(WidgetTester tester) =>
+    tester.widget<SwitchListTile>(find.byType(SwitchListTile)).thumbIcon;
 
 SemanticsFlags _flags(WidgetTester tester, String key) => tester
     .getSemantics(find.byKey(ValueKey(key)))

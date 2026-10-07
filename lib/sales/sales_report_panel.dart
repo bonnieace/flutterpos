@@ -538,18 +538,17 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   /// colleague still exists. That read is shared, not repeated - see
   /// [_contextFor].
   ///
-  /// Null where there is nothing to read: a cashier does not see the band, and
-  /// no callable means the figures were never on offer.
+  /// Cashiers receive only their own totals; management may select a colleague.
   _TotalsBandController? _totalsBandFor(String key, TenantSession session) {
     final management = session.canAccess(
       allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
     );
     final cache = widget.reader.cached;
-    if (!management || cache == null && widget.totalsCallable == null) {
+    if (cache == null && widget.totalsCallable == null) {
       return null;
     }
     final businessDate = _businessDate;
-    final chosenStaffId = _staffId;
+    final chosenStaffId = management ? _staffId : session.uid;
     return _bands.putIfAbsent(key, () {
       final Future<_TotalsBandData>? local = cache == null
           ? null
@@ -557,7 +556,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
               final context = await _contextFor(
                 session,
                 reader: cache,
-                management: true,
+                management: management,
                 cacheOnly: true,
               );
               final aggregator = TenantDeviceSalesAggregator(
@@ -595,11 +594,12 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
               final context = await _contextFor(
                 session,
                 reader: widget.reader,
-                management: true,
+                management: management,
                 cacheOnly: false,
               );
               final appliedStaffId =
-                  chosenStaffId != null && context.staff.contains(chosenStaffId)
+                  chosenStaffId != null &&
+                      (!management || context.staff.contains(chosenStaffId))
                   ? chosenStaffId
                   : null;
               final gateway = TenantSalesTotalsGateway(
@@ -1043,6 +1043,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
       allowedRoles: TenantSaleHistoryRepository.reportRoles,
       load: _historyLoader!,
       loadCached: _historyLoaderCached,
+      holdsNothing: (view) => view.page.items.isEmpty,
       // **The report itself, with placeholders where the read will land.** It
       // took the guard's default full-page spinner until 2026-08-27, which
       // replaced the receipt search, the date button and the pagination along
@@ -1144,6 +1145,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
                   soldById: view.appliedStaffId,
                 ),
                 loadCached: _receiptLoaderCached,
+                holdsNothing: (result) => result.isMissing,
                 failure: (context, error) => Callout(
                   key: const ValueKey('sales-receipt-failure'),
                   status: AppStatus.problem,
@@ -1398,7 +1400,7 @@ final class _SalesReportContents extends StatelessWidget {
           // are a callable and do not. Both used to hang off one read, so the
           // sales waited for the takings - which offline meant waiting for
           // something that was never going to arrive.
-          if (management && totalsBand != null) ...<Widget>[
+          if (totalsBand != null) ...<Widget>[
             _TotalsBand(band: totalsBand!, businessDate: businessDate),
             SizedBox(height: tokens.spacing.s20),
           ],
@@ -2106,7 +2108,9 @@ final class _ManagementSalesSummary extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     Text(
-                      'Revenue',
+                      totals.query.scope == TenantSalesScope.mine
+                          ? 'Your revenue'
+                          : 'Revenue',
                       style: tokens.typography.labelMedium.copyWith(
                         color: tokens.colors.text.secondary,
                       ),
@@ -3230,6 +3234,15 @@ String _reprintReason(String? code) => switch (code) {
   PrinterTransportCode.writeTimeout =>
     'The printer stopped part-way through; check the paper and the cover.',
   PrinterTransportCode.unsupported => 'This device cannot print.',
+  // The same faults, and the same fixes, the till names for a sale's receipt.
+  PrinterTransportCode.bluetoothOff =>
+    'Bluetooth is off on this device. Turn it on, then reprint it.',
+  PrinterTransportCode.bluetoothPermissionDenied =>
+    'This app is not allowed to use Bluetooth. Allow Nearby devices for '
+        'UzaPay in the phone settings, then reprint it.',
+  PrinterTransportCode.bluetoothUnreachable =>
+    'The Bluetooth printer did not answer. Check it is switched on, close '
+        'to this device and not connected to another phone.',
   PrinterTransportCode.bridgeUnreachable ||
   PrinterTransportCode.bridgeRejected ||
   PrinterTransportCode.bridgeUnauthorized =>

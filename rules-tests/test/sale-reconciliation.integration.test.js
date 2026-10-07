@@ -1,40 +1,7 @@
 /**
- * What a sale actually causes on a real server.
- *
- * Every other reconciliation test in this repository is pure, and that is
- * precisely how `mergeSaleReconciliationJob` came to throw on every single sale
- * without anybody noticing: a `FieldValue.delete()` is an ordinary object until
- * Firestore serializes it, so the create payload that carried one compiled,
- * type-checked, and passed 185 unit tests before failing forever against the real
- * thing. Nothing reconciled anything for as long as that lasted.
- *
- * So these tests assert only things a real Firestore has to agree to, and they
- * exercise **both** halves of `saleTriggerJobFields` in one run: the first sale
- * of a five-minute bucket takes the `create` branch that was broken, and a later
- * sale takes the `update` branch whose sentinels really do have to clear a cursor.
- *
- * A note on what may and may not be asserted here. The task queue **is** emulated,
- * so writing a sale starts the real job pipeline, and it runs while the test is
- * still making assertions. Anything the pipeline also writes - a job's `status`,
- * `generation`, `revision`, or a dirty day's `status` - is therefore a race and is
- * deliberately not asserted *while it is still moving*. What is asserted is either
- * trigger-owned and never rewritten (`revision`, `saleReceiptCount`, `lastSaleId`,
- * the stock movement), or waited for until it reaches a state nothing rewrites
- * (`daily_metrics`, a settled `shift_expectations` record, a completed job).
- *
- * Two later tests carry the chain past the metrics phase into the half that
- * produces the differences a business is asked to correct: a closed shift whose
- * recorded summary disagrees with the immutable sales filed against it, the
- * `shift_variance` the verifier records for it, and the four writes
- * `amendShiftSummary` makes to resolve it. Every link - sale, dirty day, job,
- * metric, shift expectation, verification, difference, correction - is then proved
- * by a test rather than by one manual run.
- *
- * The last test enters the third and final phase, which **no sale can reach**: a
- * sale-trigger job goes metrics then shifts, so the stock phase is only ever
- * started by `requestTenantReconciliation`. It needs two runs rather than one,
- * because a product with no carried state is baselined rather than compared, so
- * the first honest comparison is the second run.
+ * Real Auth/Firestore/Functions coverage for receipt-only sale intake,
+ * shift-close reconciliation, summary authorization, stock checks and amendments.
+ * Fixtures close their shifts only after sale receipts arrive, matching checkout.
  */
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
@@ -166,7 +133,28 @@ after(async () => {
   if (app) await deleteApp(app);
 });
 
-test("a sale creates the dirty day and the bucket job the trigger owns", async (t) => {
+test("cashier summaries are self scoped and deny another member", async (t) => {
+  const fixture = await seedTenant("cashier-summary");
+  const actor = await seedAdministrator(fixture);
+  await firestore.doc(`tenants/${fixture.tenantId}/staff/${actor.uid}`).update({role: "cashier"});
+  const idToken = await signIn(actor.email);
+  for (const [id, uid] of [["mine", actor.uid], ["other", "someone-else"]]) {
+    await firestore.doc(`tenants/${fixture.tenantId}/sales/${id}`).create({
+      ...saleFields(fixture, {checkoutId: id, quantity: 1}), soldById: uid,
+    });
+  }
+  const request = {tenantId: fixture.tenantId, previousStartDate: fixture.businessDate,
+    previousEndDate: fixture.businessDate};
+  const result = await callFunction("getSalesComparison", idToken, request);
+  assert.equal(result.previous.sales, 150);
+  assert.equal(result.previous.transactions, 1);
+  assert.equal(result.previous.profit, 0);
+  assert.equal(result.summaryVersion, 1);
+  await assertCallableError("getSalesComparison", idToken,
+    {...request, soldById: "someone-else"}, "PERMISSION_DENIED");
+});
+
+test("a sale records its dirty day and ledger without queuing reconciliation", async (t) => {
   // The regression for the defect that started this harness. Before the fix,
   // `transaction.create` was handed a payload holding two `FieldValue.delete()`
   // sentinels, Firestore rejected the entire write, and the trigger - which has
@@ -200,23 +188,8 @@ test("a sale creates the dirty day and the bucket job the trigger owns", async (
   assert.equal(dirtyDay.get("lastSaleId"), "sale-first");
   assert.equal(dirtyDay.get("invalidLineCount"), 0);
 
-  // Only the immutable identity the trigger stamps on the job is asserted. Both
-  // branches write these identically and no processor rewrites them, so they hold
-  // whether or not a pass has already claimed the job by the time this reads it.
-  const job = await firestore
-    .doc(`tenants/${fixture.tenantId}/reconciliation_jobs/${jobId}`)
-    .get();
-  assert.equal(job.exists, true, "the bucket job must have been created");
-  assert.equal(job.get("tenantId"), fixture.tenantId);
-  assert.equal(job.get("source"), "sale_trigger");
-  assert.equal(job.get("sourceKey"), jobId.slice("dirty_".length));
-  assert.equal(job.get("mode"), "incremental");
-  assert.equal(job.get("localDate"), fixture.businessDate);
-  assert.equal(job.get("requestedBy"), "system:sale_trigger");
-  assert.equal(job.get("authority"), "canonical_tenant_data");
-  assert.equal(job.get("mutatesStock"), false);
-  assert.equal(job.get("checkpointKind"), "none");
-  assert.equal(job.get("checkpointKey"), jobId.slice("dirty_".length));
+  const jobs = await firestore.collection(`tenants/${fixture.tenantId}/reconciliation_jobs`).get();
+  assert.equal(jobs.empty, true, "sales must not start reconciliation jobs");
 
   // The trigger owns the stock movement, and the deterministic ID is what makes a
   // replay overwrite it rather than double-count.
@@ -231,7 +204,7 @@ test("a sale creates the dirty day and the bucket job the trigger owns", async (
   assert.equal(movement.get("lineCount"), 1);
 });
 
-test("the job a sale enqueues regenerates the day's metric", async (t) => {
+test("closing a shift regenerates the day's metric", async (t) => {
   // The consequence the defect actually had, asserted directly. No dirty day and
   // no job meant `processMetricsPage` never ran, so **no daily metric was ever
   // regenerated from sale activity** - on this project the nightly sweep is a
@@ -243,6 +216,7 @@ test("the job a sale enqueues regenerates the day's metric", async (t) => {
   await firestore.doc(`tenants/${fixture.tenantId}/sales/sale-metric`)
     .create(saleFields(fixture, { checkoutId: "sale-metric", quantity: 2 }));
 
+  await closeFixtureShift(fixture, t);
   const metric = await waitForDocument(
     `tenants/${fixture.tenantId}/daily_metrics/${fixture.businessDate}`,
     "the daily metric the reconciliation job regenerates",
@@ -257,7 +231,7 @@ test("the job a sale enqueues regenerates the day's metric", async (t) => {
   assert.equal(metric.get("transactions"), 1);
   assert.equal(metric.get("transactionCount"), 1);
   assert.equal(metric.get("shiftCount"), 1);
-  assert.equal(metric.get("sourceDirtyRevision"), 1);
+  assert.equal(metric.get("sourceDirtyRevision"), 2);
   assert.equal(typeof metric.get("metricGeneration"), "string");
 
   // The day is settled in the same transaction that wrote the metric, so by now
@@ -266,7 +240,7 @@ test("the job a sale enqueues regenerates the day's metric", async (t) => {
     .doc(`tenants/${fixture.tenantId}/reconciliation_dirty_days/${fixture.businessDate}`)
     .get();
   assert.equal(dirtyDay.get("status"), "clean");
-  assert.equal(dirtyDay.get("processedRevision"), 1);
+  assert.equal(dirtyDay.get("processedRevision"), 2);
 
   // And the shift the sale belonged to now has something to be verified against.
   const expectations = await firestore
@@ -279,68 +253,17 @@ test("the job a sale enqueues regenerates the day's metric", async (t) => {
   assert.equal(expectations.docs[0].get("transactions"), 1);
 });
 
-test("a second sale in the same bucket clears the cursor the last pass left", async (t) => {
-  // The other half of `saleTriggerJobFields`, and the half where a sentinel is
-  // correct: a job returning to `queued` starts its phases again, so a cursor
-  // left by a previous pass describes work this pass has not done and must go.
-  //
-  // The job is put into a settled state by hand rather than by waiting for a real
-  // pass, for two reasons. It makes `mergeDirtyJob` return `queued` - and so the
-  // sentinel-bearing update branch - deterministically; and a real pass would make
-  // this test depend on the entire task pipeline to assert one field.
+test("several sales remain dirty without repeated reconciliation", async (t) => {
   const fixture = await seedTenant("second-sale");
-  await waitForBucketHeadroom(t);
-
-  await firestore.doc(`tenants/${fixture.tenantId}/sales/sale-one`)
-    .create(saleFields(fixture, { checkoutId: "sale-one", quantity: 1 }));
-  const firstReceipt = await waitForDocument(
-    `tenants/${fixture.tenantId}/reconciliation_sale_receipts/sale-one`,
-    "the first sale's receipt",
-    t,
-  );
-  const jobId = firstReceipt.get("jobId");
-  const jobRef = firestore.doc(`tenants/${fixture.tenantId}/reconciliation_jobs/${jobId}`);
-
-  await jobRef.update({
-    status: "completed",
-    phase: "finalize",
-    productCursor: "product-halfway",
-    pendingProductId: fixture.productId,
-    consecutiveFailureCount: 4,
-  });
-  assert.equal((await jobRef.get()).get("productCursor"), "product-halfway");
-
-  await firestore.doc(`tenants/${fixture.tenantId}/sales/sale-two`)
-    .create(saleFields(fixture, { checkoutId: "sale-two", quantity: 3 }));
-  const secondReceipt = await waitForDocument(
-    `tenants/${fixture.tenantId}/reconciliation_sale_receipts/sale-two`,
-    "the second sale's receipt",
-    t,
-  );
-
-  assert.equal(
-    secondReceipt.get("jobId"),
-    jobId,
-    "both sales must share a bucket or this proves nothing about the update branch",
-  );
-
-  // A sale-trigger job goes metrics then shifts and never enters the stock phase,
-  // so nothing downstream can put a cursor back. Absence here is stable.
-  const job = await jobRef.get();
-  assert.equal(
-    job.get("productCursor"),
-    undefined,
-    "the requeue must clear the cursor a previous pass left",
-  );
-  assert.equal(job.get("pendingProductId"), undefined);
-  assert.equal(job.get("consecutiveFailureCount"), 0);
-
-  const dirtyDay = await firestore
-    .doc(`tenants/${fixture.tenantId}/reconciliation_dirty_days/${fixture.businessDate}`)
-    .get();
-  assert.equal(dirtyDay.get("revision"), 2);
-  assert.equal(dirtyDay.get("saleReceiptCount"), 2);
-  assert.equal(dirtyDay.get("lastSaleId"), "sale-two");
+  for (const id of ["sale-one", "sale-two"]) {
+    await firestore.doc(`tenants/${fixture.tenantId}/sales/${id}`)
+      .create(saleFields(fixture, {checkoutId: id, quantity: 1}));
+    await waitForDocument(`tenants/${fixture.tenantId}/reconciliation_sale_receipts/${id}`, "receipt", t);
+  }
+  const dirty = await firestore.doc(`tenants/${fixture.tenantId}/reconciliation_dirty_days/${fixture.businessDate}`).get();
+  assert.equal(dirty.get("revision"), 2);
+  assert.equal(dirty.get("saleReceiptCount"), 2);
+  assert.equal((await firestore.collection(`tenants/${fixture.tenantId}/reconciliation_jobs`).get()).empty, true);
 });
 
 test("a replayed sale is registered once, not twice", async (t) => {
@@ -482,12 +405,12 @@ test("the shifts phase reports a closed shift that its sales disagree with", asy
   assert.equal(anomalies[0].get("salesVariance"), -SHIFT_SALE_TOTAL);
   assert.equal(anomalies[0].get("transactionVariance"), -1);
   assert.equal(anomalies[0].get("mutatesShift"), false);
-  assert.equal(anomalies[0].get("jobId"), receipt.get("jobId"));
+  assert.equal(anomalies[0].get("jobId"), verification.get("jobId"));
 
   // Waited for rather than raced: once the job is `completed` nothing rewrites
   // its counters, and this tenant holds exactly one expectation, so the phase
   // having run once with one difference is a stable fact rather than a snapshot.
-  const job = await waitForCompletedJob(fixture, receipt.get("jobId"), t);
+  const job = await waitForCompletedJob(fixture, verification.get("jobId"), t);
   assert.equal(job.get("phase"), "finalize");
   assert.equal(job.get("shiftsProcessed"), 1);
   assert.equal(job.get("shiftVarianceCount"), 1);
@@ -1191,7 +1114,7 @@ async function seedTenant(suffix, options = {}) {
       staffId: `cashier-${tenantId}`,
       deviceId: `device-${tenantId}`,
       businessDate,
-      status: "closed",
+      status: "open",
       // Both instants are server-owned in `firestore.rules`; the fixture writes
       // them through the Admin SDK, which is the only writer that may.
       startTime: now,
@@ -1429,6 +1352,7 @@ async function waitFor(read, description, t, timeoutMilliseconds) {
  * means the metrics phase has not written it yet.
  */
 async function waitForVerifiedExpectation(fixture, t) {
+  await closeFixtureShift(fixture, t);
   return waitFor(async () => {
     const snapshot = await firestore
       .collection(`tenants/${fixture.tenantId}/shift_expectations`)
@@ -1455,11 +1379,12 @@ async function waitForCompletedJob(
   }, `reconciliation job ${jobId} to complete`, t, timeoutMilliseconds);
 }
 
-/** Every difference currently listed against one shift. */
+/** Sales-summary differences against one shift. Tender declarations are a separate control. */
 async function listShiftAnomalies(fixture) {
   const snapshot = await firestore
     .collection(`tenants/${fixture.tenantId}/reconciliation_anomalies`)
     .where("shiftId", "==", fixture.shiftId)
+    .where("anomalyType", "==", "shift_variance")
     .get();
   return snapshot.docs;
 }
@@ -1505,4 +1430,17 @@ function stockCheckpoint(fixture, checkpointKey, productId) {
 
 async function settle(milliseconds) {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function closeFixtureShift(fixture, t) {
+  const sales = await firestore.collection(`tenants/${fixture.tenantId}/sales`).get();
+  for (const sale of sales.docs) {
+    await waitForDocument(`tenants/${fixture.tenantId}/reconciliation_sale_receipts/${sale.id}`, "sale received before close", t);
+  }
+  const ref = firestore.doc(`tenants/${fixture.tenantId}/shifts/${fixture.shiftId}`);
+  const existing = await ref.get();
+  if (existing.get("status") === "closed") return;
+  await ref.set({shiftId: fixture.shiftId, tenantId: fixture.tenantId,
+    businessDate: fixture.businessDate, status: "closed",
+    ...(!existing.exists ? {totalSales: 0, totalSalesMinor: 0, transactionCount: 0} : {})}, {merge: true});
 }

@@ -157,13 +157,18 @@ final class _ProductionFormFrame extends StatelessWidget {
 
 /// One expense row, with the two fields it is typed into.
 final class _RowState {
-  _RowState({String description = '', String amount = ''})
+  _RowState({String description = '', String amount = '', this.carriedMinor})
     : description = TextEditingController(text: description),
       amount = TextEditingController(text: amount);
 
   final TextEditingController description;
   final TextEditingController amount;
   final Key key = UniqueKey();
+
+  /// The last batch's amount for this row, which the row follows in
+  /// proportion to how many are made. Null for a row added here, and once the
+  /// amount is typed into: a typed figure is the person's, and stays as typed.
+  int? carriedMinor;
 
   void dispose() {
     description.dispose();
@@ -217,6 +222,38 @@ final class _ProductionFormState extends State<_ProductionForm> {
   /// A change to any field, which also retires a refusal about the last
   /// attempt: left up, it went on naming a row that had since been corrected.
   void _edited() => setState(() => _error = null);
+
+  /// How many were made, while it reads as a batch the form could send.
+  int? get _made {
+    final units = int.tryParse(_quantity.text.trim());
+    return units == null || units < 1 || units > maximumProductionQuantity
+        ? null
+        : units;
+  }
+
+  /// A new quantity carries the rows still following the last batch with it.
+  /// Each is worked out from the last batch's own figure, never from the one
+  /// on screen, so typing 1 on the way to 120 loses nothing to rounding.
+  void _quantityEdited() {
+    final from = _startedFrom?.quantity;
+    final to = _made;
+    setState(() {
+      _error = null;
+      if (from == null || from < 1 || to == null) return;
+      for (final row in _rows) {
+        final carried = row.carriedMinor;
+        if (carried == null) continue;
+        row.amount.text = tenantCatalogMajorUnits(
+          productionScaledAmountMinor(carried, from: from, to: to),
+        );
+      }
+    });
+  }
+
+  void _amountEdited(_RowState row) {
+    row.carriedMinor = null;
+    _edited();
+  }
 
   /// One request per batch, held until it is queued.
   String? _requestId;
@@ -277,6 +314,13 @@ final class _ProductionFormState extends State<_ProductionForm> {
     // saves a baker typing the same four rows every morning; overwriting rows
     // somebody already filled in would lose their work.
     if (_rows.any((row) => !row.draft.isBlank)) return;
+    // **The whole batch, so the same batch again is one tap.** How many were
+    // made comes too, unless a figure is already typed; the costs are then
+    // carried to whichever quantity stands, and follow it from there.
+    final from = last.quantity;
+    if (from < 1) return;
+    if (_quantity.text.trim().isEmpty) _quantity.text = '$from';
+    final to = _made ?? from;
     setState(() {
       for (final row in _rows) {
         row.dispose();
@@ -287,7 +331,14 @@ final class _ProductionFormState extends State<_ProductionForm> {
           for (final expense in last!.expenses)
             _RowState(
               description: expense.description,
-              amount: tenantCatalogMajorUnits(expense.amountMinor),
+              amount: tenantCatalogMajorUnits(
+                productionScaledAmountMinor(
+                  expense.amountMinor,
+                  from: from,
+                  to: to,
+                ),
+              ),
+              carriedMinor: expense.amountMinor,
             ),
         ]);
       if (_rows.isEmpty) _rows.add(_RowState());
@@ -522,7 +573,7 @@ final class _ProductionFormState extends State<_ProductionForm> {
           label: 'How many were made',
           leading: Icons.numbers,
           keyboardType: TextInputType.number,
-          onChanged: (_) => _edited(),
+          onChanged: (_) => _quantityEdited(),
         ),
         SizedBox(height: tokens.spacing.s24),
         const SectionHeading('What it cost'),
@@ -541,7 +592,7 @@ final class _ProductionFormState extends State<_ProductionForm> {
             key: const ValueKey('production-started-from'),
             'Started from batch ${startedFrom.batchNumber}'
             '${startedFrom.occurredAt == null ? '' : ' of ${reportShortDate(checkoutBusinessDate(startedFrom.occurredAt!))}'}. '
-            'Change anything that was different this time.',
+            'The costs follow how many were made until you change one.',
             style: tokens.typography.caption.copyWith(
               color: tokens.colors.text.tertiary,
             ),
@@ -580,7 +631,7 @@ final class _ProductionFormState extends State<_ProductionForm> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  onChanged: (_) => _edited(),
+                  onChanged: (_) => _amountEdited(row),
                 ),
               ),
               IconButton(

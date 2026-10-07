@@ -462,7 +462,9 @@ export async function assertCustomerPhoneFree(
       "already-exists",
       `This number already belongs to ${
         typeof existing === "string" ? existing : "another customer"
-      }. One number reaches one person, so it can be on one customer.`
+      }. One number reaches one person, so it can be on one customer.`,
+      // Who holds it, so a refused create can say whose sales are whose.
+      {customerId: document.id}
     );
   }
 }
@@ -498,7 +500,15 @@ export function customerCreateData(
   return data;
 }
 
-/** Writes one new customer after proving their number is free. */
+/**
+ * Writes one new customer after proving their number is free.
+ *
+ * **Or adopts the stand-in a credit sale made for them.** A customer whose
+ * create was still queued when their credit sale ran out of retries was added
+ * by `processCustomerSale` from the name on the sale (`createdFromSaleId`), so
+ * the debt had somewhere to go. The create that arrives afterwards fills that
+ * record in with what the till entered and keeps its balance and history.
+ */
 export async function applyCustomerCreate(
   db: Firestore,
   transaction: Transaction,
@@ -510,6 +520,11 @@ export async function applyCustomerCreate(
   }
 ): Promise<CustomerWriteResponse> {
   const tenantRef = db.collection("tenants").doc(options.tenantId);
+  const customerRef = tenantRef.collection("customers").doc(options.customerId);
+  const standIn = await transaction.get(customerRef);
+  if (standIn.exists && typeof standIn.get("createdFromSaleId") !== "string") {
+    throw new HttpsError("already-exists", "This customer already exists.");
+  }
   if (options.fields.phone) {
     await assertCustomerPhoneFree(
       transaction,
@@ -519,7 +534,7 @@ export async function applyCustomerCreate(
     );
   }
   const data = customerCreateData(options.fields, options.actorUid);
-  transaction.create(tenantRef.collection("customers").doc(options.customerId), {
+  const written = {
     ...data,
     ...(data.whatsappOptIn === true ?
       {whatsappOptInAt: FieldValue.serverTimestamp()} :
@@ -527,9 +542,19 @@ export async function applyCustomerCreate(
     ...(data.emailOptIn === true ?
       {emailOptInAt: FieldValue.serverTimestamp()} :
       {}),
-    createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  };
+  if (standIn.exists) {
+    transaction.update(customerRef, {
+      ...written,
+      createdFromSaleId: FieldValue.delete(),
+    });
+  } else {
+    transaction.create(customerRef, {
+      ...written,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  }
   return {
     customerId: options.customerId,
     name: options.fields.name as string,
@@ -690,29 +715,71 @@ export const createCustomer = onCall<
 
   const actor = await requireTenantMember(db, request, tenantId, CUSTOMER_CREATE_ROLES);
 
-  return runIdempotentFirestoreTransaction(db, {
-    actorUid: actor.uid,
-    operation: "createCustomer",
-    tenantId,
-    requestId: customerId,
-    input: {customerId, ...fields},
-  }, async (transaction) => {
-    const currentActor = await requireTenantMember(
-      db,
-      request,
+  try {
+    return await runIdempotentFirestoreTransaction(db, {
+      actorUid: actor.uid,
+      operation: "createCustomer",
       tenantId,
-      CUSTOMER_CREATE_ROLES,
-      transaction
-    );
-    requireCreditGranter(currentActor.staff.role, fields);
-    return applyCustomerCreate(db, transaction, {
-      tenantId,
-      customerId,
-      actorUid: currentActor.uid,
-      fields,
+      requestId: customerId,
+      input: {customerId, ...fields},
+    }, async (transaction) => {
+      const currentActor = await requireTenantMember(
+        db,
+        request,
+        tenantId,
+        CUSTOMER_CREATE_ROLES,
+        transaction
+      );
+      requireCreditGranter(currentActor.staff.role, fields);
+      return applyCustomerCreate(db, transaction, {
+        tenantId,
+        customerId,
+        actorUid: currentActor.uid,
+        fields,
+      });
     });
-  });
+  } catch (error) {
+    await recordCustomerAlias(db, tenantId, customerId, actor.uid, error);
+    throw error;
+  }
 });
+
+/**
+ * Where a customer refused for a number someone else holds is to be found.
+ *
+ * **A till may already have sold to them**, on credit, before the refusal: it
+ * adds a customer and sells to them with no signal, and the customer and the
+ * sale reach the server separately. One number is one person, so the person
+ * the cashier added is the customer who holds that number, and their sales
+ * count there (`processCustomerSale` reads this). Written apart from the
+ * refused transaction, which writes nothing; the refusal still reaches the
+ * till as it always did.
+ */
+async function recordCustomerAlias(
+  db: Firestore,
+  tenantId: string,
+  customerId: string,
+  actorUid: string,
+  error: unknown
+): Promise<void> {
+  if (!(error instanceof HttpsError) || error.code !== "already-exists") return;
+  const details = error.details as {customerId?: unknown} | undefined;
+  const holder = details?.customerId;
+  if (typeof holder !== "string" || holder === customerId) return;
+  try {
+    await db.collection("tenants").doc(tenantId)
+      .collection("customer_aliases").doc(customerId)
+      .create({
+        customerId: holder,
+        reason: "phone_taken",
+        recordedBy: actorUid,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+  } catch {
+    // Already recorded by an earlier attempt of the same create, or not
+    // recordable; either way the refusal is what the caller needs.
+  }
+}
 
 /**
  * Refuses a customer added with credit by someone who may not give it.

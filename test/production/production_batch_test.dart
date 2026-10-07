@@ -16,6 +16,15 @@ void main() {
       expect(productionUnitCostMinor(99, 8), 12);
     });
 
+    test('a carried cost scales with the batch, half up, never to nothing', () {
+      expect(productionScaledAmountMinor(200000, from: 100, to: 100), 200000);
+      expect(productionScaledAmountMinor(200000, from: 100, to: 50), 100000);
+      expect(productionScaledAmountMinor(200000, from: 100, to: 250), 500000);
+      expect(productionScaledAmountMinor(100, from: 3, to: 1), 33);
+      expect(productionScaledAmountMinor(100, from: 8, to: 1), 13);
+      expect(productionScaledAmountMinor(1, from: 100, to: 1), 1);
+    });
+
     test('the preview counts what is a figure so far, and waits for a quantity', () {
       final early = TenantProductionPreview.of(
         quantity: '',

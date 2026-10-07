@@ -5,11 +5,20 @@ import {
   Timestamp,
   Transaction,
 } from "firebase-admin/firestore";
-import type {DocumentReference, Firestore} from "firebase-admin/firestore";
+import type {
+  DocumentReference,
+  DocumentSnapshot,
+  Firestore,
+} from "firebase-admin/firestore";
 import {getFunctions} from "firebase-admin/functions";
 import {onDocumentCreated} from "firebase-functions/v2/firestore";
 import {onTaskDispatched} from "firebase-functions/v2/tasks";
 import {queueAutomaticEmailReceipt} from "../emailReceipts/deliveries";
+import {
+  customerSearchFields,
+  readCustomerKraPin,
+  readCustomerName,
+} from "../operations/customers";
 import {queueAutomaticReceipt} from "../whatsapp/deliveries";
 import {CUSTOMER_ID_SHAPE} from "./customerId";
 import {
@@ -40,6 +49,19 @@ import {
  * and the sale the outbox, in whichever order the network allows. A sale whose
  * customer is not there yet throws, and Cloud Tasks retries it with backoff for
  * about a day - long enough for any till that comes back online at all.
+ *
+ * **A credit sale does not give up on its debt.** Points that never land are
+ * points; an owed amount that never lands is money that left the drawer
+ * expectation and sits on no balance. On the last attempt a credit sale whose
+ * customer still has not arrived - its create was refused, or its till never
+ * came back - adds that customer itself, from the name the sale froze, so the
+ * debt is on the "who owes" list where someone will see it. A create that
+ * arrives later adopts that record rather than failing on it.
+ *
+ * **A return verified first is not lost either.** A manager can verify a
+ * return before the sale is counted; the count then applies what every
+ * verified return already took back, so the customer is never charged for
+ * goods that came back.
  */
 
 export const CUSTOMER_SALE_TASK_FUNCTION = "processCustomerSale";
@@ -94,6 +116,33 @@ export function saleCustomerId(data: Record<string, unknown> | undefined): strin
   return typeof id === "string" && CUSTOMER_ID_SHAPE.test(id) ? id : null;
 }
 
+/**
+ * The customer a sale's [named] customer is counted against.
+ *
+ * Themselves where they exist; otherwise, where their create was refused for
+ * a number another customer holds, that customer - see `recordCustomerAlias`.
+ * Otherwise still themselves, not there yet.
+ */
+async function resolveSaleCustomer(
+  transaction: Transaction,
+  tenantRef: DocumentReference,
+  named: string
+): Promise<{customerId: string; customerRef: DocumentReference; customer: DocumentSnapshot}> {
+  const customers = tenantRef.collection("customers");
+  const namedRef = customers.doc(named);
+  const [customer, alias] = await transaction.getAll(
+    namedRef,
+    tenantRef.collection("customer_aliases").doc(named)
+  );
+  const holder = alias.get("customerId");
+  if (customer.exists || typeof holder !== "string" ||
+    !CUSTOMER_ID_SHAPE.test(holder) || holder === named) {
+    return {customerId: named, customerRef: namedRef, customer};
+  }
+  const holderRef = customers.doc(holder);
+  return {customerId: holder, customerRef: holderRef, customer: await transaction.get(holderRef)};
+}
+
 /** Thrown when a sale names a customer the server does not hold yet. */
 export class CustomerNotYetArrived extends Error {
   constructor(readonly customerId: string) {
@@ -117,11 +166,13 @@ function wholeMinor(value: unknown): number {
  * **Never throws for a sale that cannot be counted**, only for one that cannot
  * be counted *yet*: a sale that is missing, or that names nobody, answers so
  * and the task ends. A customer who has not arrived throws
- * [CustomerNotYetArrived], which is the retry.
+ * [CustomerNotYetArrived], which is the retry - except on the [lastAttempt]
+ * of a credit sale, which adds the customer from the sale instead.
  */
 export async function applyCustomerSale(
   db: Firestore,
-  task: CustomerSaleTask
+  task: CustomerSaleTask,
+  options: {lastAttempt?: boolean} = {}
 ): Promise<CustomerSaleOutcome> {
   const tenantRef = db.collection("tenants").doc(task.tenantId);
   const saleRef = tenantRef.collection("sales").doc(task.saleId);
@@ -129,18 +180,27 @@ export async function applyCustomerSale(
     const saleSnapshot = await transaction.get(saleRef);
     if (!saleSnapshot.exists) return {outcome: "no_sale"};
     const sale = saleSnapshot.data() ?? {};
-    const customerId = saleCustomerId(sale);
-    if (customerId === null) return {outcome: "walk_in"};
-    const customerRef = tenantRef.collection("customers").doc(customerId);
+    const named = saleCustomerId(sale);
+    if (named === null) return {outcome: "walk_in"};
+    const {customerId, customerRef, customer} =
+      await resolveSaleCustomer(transaction, tenantRef, named);
     const activityRef = customerRef.collection("activity").doc(task.saleId);
     const loyaltyRef = tenantRef.collection("configuration").doc("loyalty");
-    const [customer, activity, loyalty] = await transaction.getAll(
-      customerRef,
-      activityRef,
-      loyaltyRef
-    );
+    const [activity, loyalty] = await transaction.getAll(activityRef, loyaltyRef);
     if (activity.exists) return {outcome: "already_counted", customerId};
-    if (!customer.exists) throw new CustomerNotYetArrived(customerId);
+    // See `credit.ts` for why over the limit is recorded, not refused.
+    const credit = readSaleCredit(sale);
+    if (!customer.exists && !(options.lastAttempt === true && credit !== null)) {
+      throw new CustomerNotYetArrived(customerId);
+    }
+    // Every return verified against this sale before it was counted. They
+    // took nothing back then - there was no entry to take it from - so the
+    // count applies them, and writes their ledger entries, here.
+    const verifications = await transaction.get(
+      tenantRef.collection("return_verifications")
+        .where("saleId", "==", task.saleId)
+        .limit(101)
+    );
 
     const totalMinor = wholeMinor(sale.totalMinor);
     const policy = readLoyaltyPolicy(loyalty.data());
@@ -150,14 +210,55 @@ export async function applyCustomerSale(
     const isLatest = soldAt !== null && (
       !(lastSaleAt instanceof Timestamp) || soldAt.toMillis() > lastSaleAt.toMillis()
     );
-    // **On the same ledger entry, so it is counted exactly as often as the
-    // points are**: once. A credit sale adds what it left owing to the
-    // balance; see `credit.ts` for why over the limit is recorded, not refused.
-    const credit = readSaleCredit(sale);
     const before = storedBalance(customer);
     const limit = storedCreditLimit(customer);
     const after = before + (credit?.owedMinor ?? 0);
 
+    // Each earlier return in the order it was verified, against what the sale
+    // has not given back yet - as each would have applied had the sale been
+    // counted first. Which return takes which part of the debt depends on it.
+    const verified = [...verifications.docs].sort((a, b) => {
+      const at = (snapshot: typeof a) => {
+        const value = snapshot.get("createdAt");
+        return value instanceof Timestamp ? value.toMillis() : 0;
+      };
+      return at(a) - at(b) || a.id.localeCompare(b.id);
+    });
+    const counted: CountedSale = {
+      points,
+      pointsReturned: 0,
+      owedMinor: credit?.owedMinor ?? 0,
+      creditReturnedMinor: 0,
+    };
+    const returns: AppliedReturn[] = [];
+    let balance = after;
+    for (const verification of verified) {
+      const returnId = verification.get("returnId");
+      if (typeof returnId !== "string" || returnId.length === 0) continue;
+      const share = returnedShare(
+        sale,
+        counted,
+        restoredLines(verification.get("restoredProducts"))
+      );
+      if (share.take <= 0 && share.cancel <= 0) continue;
+      counted.pointsReturned += share.take;
+      counted.creditReturnedMinor += share.cancel;
+      balance -= share.cancel;
+      returns.push({returnId, ...share, balanceAfterMinor: balance});
+    }
+
+    // **Stamped in order where returns follow it.** The statement lists by
+    // `createdAt`, and entries written in one commit would share its server
+    // timestamp and read in any order; the sale first, then each return a
+    // millisecond after the last. Alone, the sale keeps the server's time.
+    const countedAt = Timestamp.now();
+    const stamp = (index: number) => returns.length === 0 ?
+      FieldValue.serverTimestamp() :
+      Timestamp.fromMillis(countedAt.toMillis() + index);
+
+    // **On the same ledger entry, so it is counted exactly as often as the
+    // points are**: once. A credit sale adds what it left owing to the
+    // balance.
     transaction.create(activityRef, {
       kind: "sale",
       tenantId: task.tenantId,
@@ -166,7 +267,7 @@ export async function applyCustomerSale(
       receiptNumber: typeof sale.receiptNumber === "string" ? sale.receiptNumber : null,
       totalMinor,
       points,
-      pointsReturned: 0,
+      pointsReturned: counted.pointsReturned,
       minorUnitsPerPoint: policy.enabled ? policy.minorUnitsPerPoint : null,
       saleCreatedAt: soldAt,
       ...(credit === null ? {} : {
@@ -174,27 +275,80 @@ export async function applyCustomerSale(
         creditOwedMinor: credit.owedMinor,
         creditPaidMinor: credit.paidMinor,
         creditPaidTender: credit.paidTender,
-        creditReturnedMinor: 0,
+        creditReturnedMinor: counted.creditReturnedMinor,
         balanceChangeMinor: credit.owedMinor,
         balanceAfterMinor: after,
         creditLimitMinor: limit,
         overLimit: limit !== null && after > limit,
         whileBlocked: customer.get("creditBlocked") === true,
       }),
-      createdAt: FieldValue.serverTimestamp(),
+      createdAt: stamp(0),
     });
-    transaction.update(customerRef, {
+    for (const [index, returned] of returns.entries()) {
+      transaction.create(
+        customerRef.collection("activity").doc(`return-${returned.returnId}`),
+        returnEntry(tenantRef.id, customerId, task.saleId, sale, returned, stamp(index + 1))
+      );
+    }
+    const pointsChange = points - counted.pointsReturned;
+    const tally = {
       saleCount: FieldValue.increment(1),
-      ...(points > 0 ? {points: FieldValue.increment(points)} : {}),
+      ...(pointsChange > 0 ? {points: FieldValue.increment(pointsChange)} : {}),
       ...(isLatest ? {lastSaleAt: soldAt} : {}),
       ...(credit === null ? {} : balanceFields(
         before,
-        credit.owedMinor,
+        credit.owedMinor - counted.creditReturnedMinor,
         soldAt ?? FieldValue.serverTimestamp()
       )),
-    });
+    };
+    if (customer.exists) {
+      transaction.update(customerRef, tally);
+    } else {
+      transaction.create(customerRef, {...customerFromSale(sale, task.saleId), ...tally});
+    }
     return {outcome: "counted", customerId, points, owedMinor: credit?.owedMinor ?? 0};
   });
+}
+
+/**
+ * The customer a credit sale names, from what the sale froze onto itself, for
+ * a sale whose own customer never reached the server.
+ *
+ * **Marked `createdFromSaleId`**, so a create that does arrive later adopts it
+ * (`applyCustomerCreate`) and anyone reading it can tell it was not entered.
+ * No phone: the sale does not carry one, and the commonest reason the real
+ * create never landed is a number another customer already holds.
+ */
+function customerFromSale(
+  sale: Record<string, unknown>,
+  saleId: string
+): Record<string, unknown> {
+  let name: string;
+  try {
+    name = readCustomerName(sale.customerName);
+  } catch {
+    name = typeof sale.receiptNumber === "string" ?
+      `Customer on ${sale.receiptNumber}` :
+      "Customer on a credit sale";
+  }
+  let kraPin: string | null;
+  try {
+    kraPin = readCustomerKraPin(sale.customerKraPin ?? null);
+  } catch {
+    kraPin = null;
+  }
+  const search = customerSearchFields(name, null);
+  return {
+    name,
+    ...(kraPin === null ? {} : {kraPin}),
+    searchName: search.searchName,
+    searchPrefixes: search.searchPrefixes,
+    active: true,
+    createdBy: typeof sale.soldById === "string" ? sale.soldById : "system",
+    createdFromSaleId: saleId,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
 }
 
 /** One returned line: what came back and how many. */
@@ -224,8 +378,9 @@ export interface ReturnedLine {
  * and never more. Anything left over is money the shop hands back, which no
  * return records today and this does not either.
  *
- * Null where there is nothing to do: a walk-in, a sale not counted yet, a sale
- * that earned no points and owes nothing.
+ * Null where there is nothing to do: a walk-in, a sale that earned no points
+ * and owes nothing - or a sale not counted yet, whose count applies this
+ * return itself from the verification the caller writes.
  */
 export async function planReturnedPoints(
   transaction: Transaction,
@@ -237,17 +392,75 @@ export async function planReturnedPoints(
     lines: readonly ReturnedLine[];
   }
 ): Promise<((transaction: Transaction) => void) | null> {
-  const customerId = saleCustomerId(options.sale);
-  if (customerId === null) return null;
-  const customerRef = tenantRef.collection("customers").doc(customerId);
+  const named = saleCustomerId(options.sale);
+  if (named === null) return null;
+  const {customerId, customerRef, customer} =
+    await resolveSaleCustomer(transaction, tenantRef, named);
   const saleActivityRef = customerRef.collection("activity").doc(options.saleId);
-  const [customer, saleActivity] = await transaction.getAll(customerRef, saleActivityRef);
+  const saleActivity = await transaction.get(saleActivityRef);
   if (!customer.exists || !saleActivity.exists) return null;
 
-  const subtotal = wholeMinor(options.sale.subtotalMinor);
-  if (subtotal === 0) return null;
+  const {take, cancel} = returnedShare(options.sale, {
+    points: wholeMinor(saleActivity.get("points")),
+    pointsReturned: wholeMinor(saleActivity.get("pointsReturned")),
+    owedMinor: saleActivity.get("credit") === true ?
+      wholeMinor(saleActivity.get("creditOwedMinor")) : 0,
+    creditReturnedMinor: wholeMinor(saleActivity.get("creditReturnedMinor")),
+  }, options.lines);
+  if (take <= 0 && cancel <= 0) return null;
+
+  const before = storedBalance(customer);
+  return (write: Transaction) => {
+    write.update(saleActivityRef, {
+      ...(take > 0 ? {pointsReturned: FieldValue.increment(take)} : {}),
+      ...(cancel > 0 ? {creditReturnedMinor: FieldValue.increment(cancel)} : {}),
+    });
+    write.create(
+      customerRef.collection("activity").doc(`return-${options.returnId}`),
+      returnEntry(tenantRef.id, customerId, options.saleId, options.sale, {
+        returnId: options.returnId,
+        take,
+        cancel,
+        balanceAfterMinor: before - cancel,
+      })
+    );
+    write.update(customerRef, {
+      ...(take > 0 ? {points: FieldValue.increment(-take)} : {}),
+      ...(cancel > 0 ? balanceFields(before, -cancel, FieldValue.serverTimestamp()) : {}),
+    });
+  };
+}
+
+/** What a counted sale earned and owes, and what returns have taken back. */
+interface CountedSale {
+  points: number;
+  pointsReturned: number;
+  owedMinor: number;
+  creditReturnedMinor: number;
+}
+
+/** One return applied to a counted sale, as its ledger entry records it. */
+interface AppliedReturn {
+  returnId: string;
+  take: number;
+  cancel: number;
+  balanceAfterMinor: number;
+}
+
+/**
+ * What one return takes back from [counted]: points in proportion to the
+ * listed value returned, debt first up to the value returned at the price
+ * charged, and neither beyond what is still outstanding.
+ */
+function returnedShare(
+  sale: Record<string, unknown>,
+  counted: CountedSale,
+  lines: readonly ReturnedLine[]
+): {take: number; cancel: number} {
+  const subtotal = wholeMinor(sale.subtotalMinor);
+  if (subtotal === 0) return {take: 0, cancel: 0};
   const priceOf = new Map<string, number>();
-  const items = Array.isArray(options.sale.items) ? options.sale.items : [];
+  const items = Array.isArray(sale.items) ? sale.items : [];
   for (const item of items) {
     if (!item || typeof item !== "object") continue;
     const record = item as Record<string, unknown>;
@@ -257,54 +470,63 @@ export async function planReturnedPoints(
   }
   const returnedListed = Math.min(
     subtotal,
-    options.lines.reduce(
+    lines.reduce(
       (sum, line) => sum + line.quantity * (priceOf.get(line.productId) ?? 0),
       0
     )
   );
 
-  const earned = wholeMinor(saleActivity.get("points"));
-  const outstandingPoints = earned - wholeMinor(saleActivity.get("pointsReturned"));
+  const outstandingPoints = counted.points - counted.pointsReturned;
   const take = outstandingPoints <= 0 ? 0 : Math.min(
     outstandingPoints,
-    Math.floor(earned * returnedListed / subtotal)
+    Math.floor(counted.points * returnedListed / subtotal)
   );
-
-  const owed = wholeMinor(saleActivity.get("creditOwedMinor"));
-  const outstandingOwed = saleActivity.get("credit") === true ?
-    owed - wholeMinor(saleActivity.get("creditReturnedMinor")) : 0;
+  const outstandingOwed = counted.owedMinor - counted.creditReturnedMinor;
   const returnedCharged = Math.floor(
-    wholeMinor(options.sale.totalMinor) * returnedListed / subtotal
+    wholeMinor(sale.totalMinor) * returnedListed / subtotal
   );
   const cancel = outstandingOwed <= 0 ? 0 : Math.min(outstandingOwed, returnedCharged);
-  if (take <= 0 && cancel <= 0) return null;
+  return {take, cancel};
+}
 
-  const before = storedBalance(customer);
-  return (write: Transaction) => {
-    write.update(saleActivityRef, {
-      ...(take > 0 ? {pointsReturned: FieldValue.increment(take)} : {}),
-      ...(cancel > 0 ? {creditReturnedMinor: FieldValue.increment(cancel)} : {}),
-    });
-    write.create(customerRef.collection("activity").doc(`return-${options.returnId}`), {
-      kind: "return",
-      tenantId: tenantRef.id,
-      customerId,
-      saleId: options.saleId,
-      returnId: options.returnId,
-      points: -take,
-      ...(cancel > 0 ? {
-        credit: true,
-        balanceChangeMinor: -cancel,
-        balanceAfterMinor: before - cancel,
-        receiptNumber: typeof options.sale.receiptNumber === "string" ?
-          options.sale.receiptNumber : null,
-      } : {}),
-      createdAt: FieldValue.serverTimestamp(),
-    });
-    write.update(customerRef, {
-      ...(take > 0 ? {points: FieldValue.increment(-take)} : {}),
-      ...(cancel > 0 ? balanceFields(before, -cancel, FieldValue.serverTimestamp()) : {}),
-    });
+/** The lines a stored return verification restored, as returned lines. */
+function restoredLines(value: unknown): ReturnedLine[] {
+  if (!Array.isArray(value)) return [];
+  const lines: ReturnedLine[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const quantity = wholeMinor(record.quantityRestored);
+    if (typeof record.productId === "string" && quantity > 0) {
+      lines.push({productId: record.productId, quantity});
+    }
+  }
+  return lines;
+}
+
+/** One return's entry in the customer's ledger. */
+function returnEntry(
+  tenantId: string,
+  customerId: string,
+  saleId: string,
+  sale: Record<string, unknown>,
+  returned: AppliedReturn,
+  createdAt: Timestamp | FieldValue = FieldValue.serverTimestamp()
+): Record<string, unknown> {
+  return {
+    kind: "return",
+    tenantId,
+    customerId,
+    saleId,
+    returnId: returned.returnId,
+    points: -returned.take,
+    ...(returned.cancel > 0 ? {
+      credit: true,
+      balanceChangeMinor: -returned.cancel,
+      balanceAfterMinor: returned.balanceAfterMinor,
+      receiptNumber: typeof sale.receiptNumber === "string" ? sale.receiptNumber : null,
+    } : {}),
+    createdAt,
   };
 }
 
@@ -353,12 +575,14 @@ export const onCustomerSale = onDocumentCreated(
   }
 );
 
+const CUSTOMER_SALE_MAX_ATTEMPTS = 30;
+
 export const processCustomerSale = onTaskDispatched<CustomerSaleTask>(
   {
     invoker: "private",
     retryConfig: {
       // About a day of backoff, for a customer still on an offline till.
-      maxAttempts: 30,
+      maxAttempts: CUSTOMER_SALE_MAX_ATTEMPTS,
       minBackoffSeconds: 60,
       maxBackoffSeconds: 3600,
       maxDoublings: 6,
@@ -376,7 +600,10 @@ export const processCustomerSale = onTaskDispatched<CustomerSaleTask>(
       return;
     }
     const db = getFirestore();
-    const outcome = await applyCustomerSale(db, data);
+    // The last attempt Cloud Tasks will make: a credit sale's debt is placed
+    // on a customer then, rather than dropped with the task.
+    const lastAttempt = request.retryCount >= CUSTOMER_SALE_MAX_ATTEMPTS - 1;
+    const outcome = await applyCustomerSale(db, data, {lastAttempt});
     // **After the count, and on a recount too.** A task that counted the sale
     // and then failed before queueing the receipt is retried, finds the sale
     // already counted, and must still queue it - the delivery's ID is the sale

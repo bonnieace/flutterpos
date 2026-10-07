@@ -23,6 +23,7 @@ final class TenantRouteGuard<T> extends StatefulWidget {
     required this.builder,
     this.allowedRoles,
     this.loadCached,
+    this.holdsNothing,
     this.loading,
     this.denied,
     this.failure,
@@ -67,6 +68,28 @@ final class TenantRouteGuard<T> extends StatefulWidget {
   /// **The server always wins, whichever lands first.** A cached value that
   /// arrives after the server's is discarded rather than drawn over it.
   final TenantGuardedLoader<T>? loadCached;
+
+  /// Whether a value [loadCached] produced holds nothing, and so is no answer.
+  ///
+  /// **A cache that has never seen a read does not fail it - it answers
+  /// empty.** `Source.cache` hands back an empty page for a collection this
+  /// device has never downloaded, and `null` for a document it has never seen,
+  /// so a device that has not synced cannot be told apart from a business with
+  /// nothing in it. The disk nearly always wins the race, which put *No
+  /// suppliers yet* or *This customer is not in this business* on screen for
+  /// the moment before the server's answer replaced it.
+  ///
+  /// A cached value this calls empty is held back rather than drawn: the page
+  /// stays on its [loading] frame, or keeps what it was already showing, until
+  /// [load] answers. Only the cached value is asked. An empty answer from the
+  /// server is the truth, and it is drawn.
+  ///
+  /// **Held back, not thrown away.** Offline, an empty copy may well be the
+  /// right answer - a day with no expenses, a shop with no suppliers - so a
+  /// [load] that fails with nothing else to show draws it, marked stale,
+  /// rather than the [failure] page. Stale says the server was not reached,
+  /// which is all that can be said of a device that may never have synced.
+  final bool Function(T value)? holdsNothing;
 
   final Widget? loading;
   final Widget? denied;
@@ -113,6 +136,13 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
   /// slow cache read completing after a fast server read would replace a fresh
   /// figure with an old one.
   bool _hasServerValue = false;
+
+  /// A cached copy [TenantRouteGuard.holdsNothing] called empty, kept for a
+  /// [TenantRouteGuard.load] that fails with nothing else to show.
+  ///
+  /// [_heldEmpty] says whether one is kept, since `T` may itself be nullable.
+  T? _emptyCopy;
+  bool _heldEmpty = false;
 
   @override
   void didChangeDependencies() {
@@ -190,6 +220,8 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
     if (!keeping) _value = null;
     _error = null;
     _fromCache = keeping && _fromCache;
+    _emptyCopy = null;
+    _heldEmpty = false;
     _stale = false;
     _rereading = keeping;
     // **`_hasServerValue` is cleared either way**, which is what lets the new
@@ -248,7 +280,13 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
         // A retained value that the new read could not replace is stale in
         // exactly the sense this flag means, so the re-read ends here too.
         _rereading = false;
-        if (_value != null) {
+        if (_heldEmpty) {
+          // The empty copy was held back for the server, which cannot answer:
+          // it is this device's answer to what was asked, and may well be
+          // right - ahead of a retained value, which answered the question
+          // before this one.
+          _adoptCopy(_emptyCopy as T);
+        } else if (_value != null) {
           _stale = true;
         } else {
           _phase = _TenantGuardPhase.failure;
@@ -276,18 +314,29 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
     }
     if (!_isCurrent(captured, generation)) return;
     if (_hasServerValue) return;
-    setState(() {
-      _value = value;
-      _fromCache = true;
-      _rereading = false;
-      // **Adopted even after the server has already refused**, which is the
-      // case worth spelling out: the two reads race, and a network that fails
-      // fast can lose to a disk that is busy. Landing on a failure page is not
-      // a reason to keep holding a copy back - it is the strongest reason to
-      // show one.
-      _stale = _error != null;
-      _phase = _TenantGuardPhase.ready;
-    });
+    // An empty copy waits for the server; see [TenantRouteGuard.holdsNothing].
+    // One that lands after the server already failed is all there is - over a
+    // failure page, or over the answer to the previous question.
+    if ((widget.holdsNothing?.call(value) ?? false) && _error == null) {
+      _emptyCopy = value;
+      _heldEmpty = true;
+      return;
+    }
+    // **Adopted even after the server has already refused**, which is the
+    // case worth spelling out: the two reads race, and a network that fails
+    // fast can lose to a disk that is busy. Landing on a failure page is not
+    // a reason to keep holding a copy back - it is the strongest reason to
+    // show one.
+    setState(() => _adoptCopy(value));
+  }
+
+  /// Shows [value] from this device's copy, stale if the server has refused.
+  void _adoptCopy(T value) {
+    _value = value;
+    _fromCache = true;
+    _rereading = false;
+    _stale = _error != null;
+    _phase = _TenantGuardPhase.ready;
   }
 
   bool _isCurrent(TenantSession captured, int generation) {

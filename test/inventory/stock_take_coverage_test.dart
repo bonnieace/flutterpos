@@ -74,11 +74,8 @@ void main() {
     expect(coverage.kind, StockTakeCoverageKind.gaps);
     expect(coverage.status, AppStatus.info);
     expect(coverage.title, 'Nobody is down for Fasteners or Plumbing');
-    expect(
-      coverage.message,
-      'They are not counted on any day. The other four categories each have '
-      'somebody.',
-    );
+    // The rest is the count beside the heading, so the sentence stops here.
+    expect(coverage.message, 'They are not counted on any day.');
   });
 
   test('past two gaps the title counts them and the message names five', () {
@@ -149,10 +146,9 @@ void main() {
     expect(coverage.kind, StockTakeCoverageKind.everyCategory);
     expect(coverage.status, AppStatus.ok);
     expect(coverage.title, 'Every category has somebody counting it');
-    expect(
-      coverage.message,
-      'Each of the 6 categories is down to somebody who can sign in.',
-    );
+    // The title says it all; the count beside the heading says how many.
+    expect(coverage.message, isNull);
+    expect(coverage.countLabel, '6 of 6 categories counted');
   });
 
   test('nobody on the rota is a working state, not a warning', () {
@@ -202,11 +198,7 @@ void main() {
 
     expect(coverage.kind, StockTakeCoverageKind.gaps);
     expect(coverage.uncovered, <String>['Electrical']);
-    expect(
-      coverage.message,
-      'It is not counted on any day. The other five categories each have '
-      'somebody.',
-    );
+    expect(coverage.message, 'It is not counted on any day.');
   });
 }
 

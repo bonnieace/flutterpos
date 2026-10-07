@@ -90,7 +90,19 @@ final class SpringDrive {
   /// instant" under [MediaQueryData.disableAnimations] - expressed as a
   /// parameter rather than as a [MediaQuery] read, because this class has no
   /// [BuildContext] and the widget that owns it does.
-  void animateTo(double target, {bool immediately = false}) {
+  ///
+  /// [physics] swaps the spring for this one retarget, still from the live
+  /// position and velocity. **For a value whose role changes between moves**:
+  /// `AppTabs`' underline has two ends, and which one leads depends on which
+  /// way it is going, so the same end is `spring.snappy` on one move and
+  /// `spring.smooth` on the next. Two drives handing a value across would drop
+  /// its velocity at the hand-over, which is the thing this class exists to
+  /// prevent.
+  void animateTo(
+    double target, {
+    bool immediately = false,
+    SpringDescription? physics,
+  }) {
     _target = target;
     if (immediately) {
       _controller
@@ -102,7 +114,7 @@ final class SpringDrive {
     // for one frame to discover the same thing.
     if (value == target && velocity == 0) return;
     _controller.animateWith(
-      SpringSimulation(spring, value, target, velocity),
+      SpringSimulation(physics ?? spring, value, target, velocity),
     );
   }
 

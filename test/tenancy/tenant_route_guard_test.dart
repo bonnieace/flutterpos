@@ -262,6 +262,117 @@ void main() {
     expect(find.text('fresh from-server'), findsOneWidget);
   });
 
+  testWidgets('an empty copy waits for the server, which may say empty', (
+    tester,
+  ) async {
+    final controller = _openController();
+    final server = Completer<String>();
+
+    await tester.pumpWidget(
+      _guardedApp(
+        controller: controller,
+        guard: TenantRouteGuard<String>(
+          load: (_) => server.future,
+          loadCached: (_) async => '',
+          holdsNothing: (value) => value.isEmpty,
+          loading: const Text('reading'),
+          builder: (context, _, value) => _Freshness(value: value),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // A device that has never synced answers empty rather than failing, and
+    // that is not the same as a business with nothing in it.
+    expect(find.text('reading'), findsOneWidget);
+    expect(find.text(' from-cache'), findsNothing);
+
+    // Only the copy is asked. The server saying empty is the truth.
+    server.complete('');
+    await tester.pump();
+    await tester.pump();
+    expect(find.text(' from-server'), findsOneWidget);
+  });
+
+  testWidgets('a copy that holds something is drawn as before', (tester) async {
+    final controller = _openController();
+    final server = Completer<String>();
+
+    await tester.pumpWidget(
+      _guardedApp(
+        controller: controller,
+        guard: TenantRouteGuard<String>(
+          load: (_) => server.future,
+          loadCached: (_) async => 'held',
+          holdsNothing: (value) => value.isEmpty,
+          loading: const Text('reading'),
+          builder: (context, _, value) => _Freshness(value: value),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('held from-cache'), findsOneWidget);
+  });
+
+  // **Offline, empty may be the answer** - a day with no expenses, a shop
+  // with no suppliers. It is drawn, marked stale, rather than a failure page
+  // over a correct empty screen; stale says the server was not reached.
+  testWidgets('an empty copy after a server refusal is drawn, stale', (
+    tester,
+  ) async {
+    final controller = _openController();
+    final cache = Completer<String>();
+
+    await tester.pumpWidget(
+      _guardedApp(
+        controller: controller,
+        guard: TenantRouteGuard<String>(
+          load: (_) async => throw StateError('offline'),
+          loadCached: (_) => cache.future,
+          holdsNothing: (value) => value.isEmpty,
+          failure: (_, _) => const Text('could not be read'),
+          builder: (context, _, value) => _Freshness(value: value),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('could not be read'), findsOneWidget);
+
+    cache.complete('');
+    await tester.pump();
+    expect(find.text(' from-cache stale'), findsOneWidget);
+  });
+
+  testWidgets('an empty copy held for the server is drawn when it fails', (
+    tester,
+  ) async {
+    final controller = _openController();
+    final server = Completer<String>();
+
+    await tester.pumpWidget(
+      _guardedApp(
+        controller: controller,
+        guard: TenantRouteGuard<String>(
+          load: (_) => server.future,
+          loadCached: (_) async => '',
+          holdsNothing: (value) => value.isEmpty,
+          loading: const Text('reading'),
+          failure: (_, _) => const Text('could not be read'),
+          builder: (context, _, value) => _Freshness(value: value),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('reading'), findsOneWidget);
+
+    server.completeError(StateError('offline'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text(' from-cache stale'), findsOneWidget);
+    expect(find.text('could not be read'), findsNothing);
+  });
+
   testWidgets('a held copy is adopted even after the server has refused', (
     tester,
   ) async {
@@ -368,6 +479,71 @@ void main() {
     expect(_freshness(tester).rereading, isFalse);
   });
 
+  // The previous question's answer is not this one's. An empty copy that lands
+  // after the re-read has already failed is the device's answer to what was
+  // asked - the last expense deleted, a filter that matches nothing.
+  testWidgets('an empty copy replaces a retained answer the server could not', (
+    tester,
+  ) async {
+    final controller = TenantSessionController()
+      ..open(uid: 'user-a', membership: _membership('tenant-a'));
+    final cache = Completer<String>();
+
+    await tester.pumpWidget(
+      _guardedApp(
+        controller: controller,
+        guard: _Requery(
+          controller: controller,
+          first: (_) async => 'page one',
+          second: (_) async => throw StateError('offline'),
+          secondCached: (_) => cache.future,
+          holdsNothing: (value) => value == 'nothing',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('requery')));
+    await tester.pump();
+    expect(find.text('page one'), findsOneWidget);
+
+    cache.complete('nothing');
+    await tester.pump();
+    expect(find.text('nothing'), findsOneWidget);
+    expect(_freshness(tester).stale, isTrue);
+  });
+
+  testWidgets('an empty copy held before the failure replaces a retained answer', (
+    tester,
+  ) async {
+    final controller = TenantSessionController()
+      ..open(uid: 'user-a', membership: _membership('tenant-a'));
+    final server = Completer<String>();
+
+    await tester.pumpWidget(
+      _guardedApp(
+        controller: controller,
+        guard: _Requery(
+          controller: controller,
+          first: (_) async => 'page one',
+          second: (_) => server.future,
+          secondCached: (_) async => 'nothing',
+          holdsNothing: (value) => value == 'nothing',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('requery')));
+    await tester.pump();
+    // Held for the server, so page one stays while it is asked.
+    expect(find.text('page one'), findsOneWidget);
+
+    server.completeError(StateError('offline'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('nothing'), findsOneWidget);
+    expect(_freshness(tester).stale, isTrue);
+  });
+
   testWidgets('a different business blanks, whatever was on screen', (
     tester,
   ) async {
@@ -430,11 +606,15 @@ final class _Requery extends StatefulWidget {
     required this.controller,
     required this.first,
     required this.second,
+    this.secondCached,
+    this.holdsNothing,
   });
 
   final TenantSessionController controller;
   final TenantGuardedLoader<String> first;
   final TenantGuardedLoader<String> second;
+  final TenantGuardedLoader<String>? secondCached;
+  final bool Function(String value)? holdsNothing;
 
   @override
   State<_Requery> createState() => _RequeryState();
@@ -454,6 +634,8 @@ final class _RequeryState extends State<_Requery> {
       Expanded(
         child: TenantRouteGuard<String>(
           load: _requeried ? widget.second : widget.first,
+          loadCached: _requeried ? widget.secondCached : null,
+          holdsNothing: widget.holdsNothing,
           builder: (_, _, value) => Text(value),
         ),
       ),

@@ -54,6 +54,18 @@ final class TenantProductionException implements Exception {
 int productionUnitCostMinor(int totalCostMinor, int quantity) =>
     (2 * totalCostMinor + quantity) ~/ (2 * quantity);
 
+/// A cost from a batch of [from] units carried to a batch of [to], in
+/// proportion and rounded half up. **Never below the smallest unit**: a cost
+/// the last batch had does not round away to a row the form then refuses.
+int productionScaledAmountMinor(
+  int amountMinor, {
+  required int from,
+  required int to,
+}) {
+  final scaled = (2 * amountMinor * to + from) ~/ (2 * from);
+  return scaled < 1 ? 1 : scaled;
+}
+
 /// One expense row as the form holds it, typed.
 final class TenantProductionRowDraft {
   const TenantProductionRowDraft({this.description = '', this.amount = ''});

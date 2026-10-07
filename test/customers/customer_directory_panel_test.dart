@@ -192,6 +192,50 @@ void main() {
 
     expect(find.byKey(const ValueKey('customers')), findsNothing);
   });
+
+  testWidgets('an owner gets the customers and loyalty as two tabs', (
+    tester,
+  ) async {
+    // Loyalty moved here from *Configs* on 2026-10-04. Both tabs stay alive,
+    // so a half-made change to the rate survives a look at the list.
+    await _pump(
+      tester,
+      _Reader.seeded(),
+      role: TenantRole.owner,
+      loyalty: (_) => const TextField(key: ValueKey('loyalty-edit')),
+    );
+
+    expect(find.byKey(const ValueKey('customers-tabs')), findsOneWidget);
+    expect(find.byKey(const ValueKey('customers')), findsOneWidget);
+
+    await tester.tap(find.text('Loyalty'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('loyalty-edit')), '100');
+
+    await tester.tap(find.text('Customers').first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('customers')), findsOneWidget);
+
+    await tester.tap(find.text('Loyalty'));
+    await tester.pumpAndSettle();
+    expect(find.text('100'), findsOneWidget);
+  });
+
+  testWidgets('a manager keeps customers with no loyalty tab above them', (
+    tester,
+  ) async {
+    // Only an owner or administrator may publish loyalty, and a tab that only
+    // says *Not allowed* is not one worth offering.
+    await _pump(
+      tester,
+      _Reader.seeded(),
+      loyalty: (_) => const TextField(key: ValueKey('loyalty-edit')),
+    );
+
+    expect(find.byKey(const ValueKey('customers-tabs')), findsNothing);
+    expect(find.byKey(const ValueKey('loyalty-edit')), findsNothing);
+    expect(find.byKey(const ValueKey('customers')), findsOneWidget);
+  });
 }
 
 List<String> _names(WidgetTester tester) => tester
@@ -219,6 +263,7 @@ Future<void> _pump(
   TenantCustomerWriter? writer,
   TenantRole role = TenantRole.manager,
   CustomerPaymentServices? payments,
+  WidgetBuilder? loyalty,
 }) async {
   tester.view.physicalSize = const Size(1200, 2400);
   tester.view.devicePixelRatio = 1;
@@ -235,6 +280,7 @@ Future<void> _pump(
           reader: reader,
           writer: writer ?? _Writer(),
           payments: payments,
+          loyalty: loyalty,
         ),
       ),
     ),

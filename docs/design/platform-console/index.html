@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform console &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+@media (max-width: 640px) { .board { flex-direction: column; gap: 6px; } .board h2 { width: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Platform console</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Five boards for what a platform administrator signs in to. Today that is one screen with two tabs. This is a dashboard overview and four more destinations on a floating bottom bar: Businesses, People, Alerts and Activity, plus Email delivery. Every overview tile is the same component, in this app&#8217;s tokens. Read <a href="README.md">README.md</a> for what each part reads, what already exists, and what has to be built before it can ship.</p>
+  </header>
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+    <a class="board" href="platform-home.html"><h2>Overview</h2><p>One dashboard of uniform tiles: trading, suspended, new businesses, accounts, what needs you, growth, activity, operations in flight, the platform. The bottom bar.</p><span class="size">1280 &#183; 411</span></a>
+    <a class="board" href="platform-businesses.html"><h2>Businesses</h2><p>Every business in every status, and one business: owner, administrators, staff, status history with reasons, and its audit log.</p><span class="size">1280 &#183; 411</span></a>
+    <a class="board" href="platform-people.html"><h2>People</h2><p>A searchable directory of every account, and one person: standing, why, what it does to each business, history.</p><span class="size">1280 &#183; 411</span></a>
+    <a class="board" href="platform-alerts-activity.html"><h2>Alerts, activity, email</h2><p>The alerts the email already links to, the platform audit log by day, and an email suppression lookup.</p><span class="size">1280</span></a>
+    <a class="board" href="platform-states.html"><h2>States</h2><p>The bottom bar in every state and two alternatives, every standing, button states, loading, empty, failure, each dialog in each state, and no access.</p><span class="size">1280</span></a>
+  </nav>
+</div>
+</body>
+</html>

@@ -718,6 +718,41 @@ void main() {
     );
   });
 
+  testWidgets('a past day missing from the device copy waits for the server', (
+    tester,
+  ) async {
+    final server = _Reader(<String, Map<String, Object?>>{
+      'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
+        businessDate: '2026-07-30',
+      ),
+      'tenants/tenant-a/reconciliation_dirty_days/2026-07-30': _intake(
+        businessDate: '2026-07-30',
+      ),
+    }, deferred: true);
+
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      _ServerWithEmptyCopy(server),
+      settle: false,
+    );
+    await tester.pump();
+    await tester.pump();
+
+    // Yesterday was published after this device last read it. Drawing the copy
+    // would call it unreconciled and then take that back.
+    expect(
+      find.byKey(const ValueKey('daily-summary-pending-2026-07-30')),
+      findsNothing,
+    );
+
+    await _drain(tester, server, 'tenants/tenant-a/');
+    expect(
+      find.byKey(const ValueKey('daily-summary-reconciled-2026-07-30')),
+      findsOne,
+    );
+  });
+
   testWidgets('a tenant switch discards the outstanding load', (tester) async {
     final controller = _controller(TenantRole.manager);
     final reader = _Reader(<String, Map<String, Object?>>{
@@ -993,6 +1028,28 @@ TenantQueryDocumentSnapshot _cachedSale({
       'createdAt': DateTime.utc(2026, 7, 31, 9),
     },
   );
+}
+
+/// The server's answer through [_server], over a device copy that holds
+/// nothing at all - a device that has not read these days since they were
+/// published.
+final class _ServerWithEmptyCopy implements TenantCacheReadable {
+  _ServerWithEmptyCopy(this._server);
+
+  final _Reader _server;
+
+  @override
+  TenantDataReader get cacheOnly =>
+      _CachedSalesReader(const <TenantQueryDocumentSnapshot>[]);
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) =>
+      _server.getDocument(path);
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async => const <TenantQueryDocumentSnapshot>[];
 }
 
 final class _Reader implements TenantDocumentReader {

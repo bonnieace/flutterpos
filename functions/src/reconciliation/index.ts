@@ -4,6 +4,7 @@ export {
   mergeCustomerPaymentReconciliationJob,
   mergeReturnReconciliationJob,
   mergeSaleReconciliationJob,
+  reconcileClosedShift,
   requestTenantReconciliation,
   retryTenantReconciliationTasks,
   runReconciliationTenantDiscoveryTask,

@@ -208,11 +208,12 @@ void main() {
   });
 
   group('the failure vocabulary', () {
-    test('§8s eight codes each map to a sentence and a status', () {
+    test('every code maps to a sentence and a status', () {
       // "Mapping happens at the UI edge. The transport never builds a
       // sentence." Asserted by code, never by message — which is why the codes
       // are enumerable in the first place.
-      expect(PrinterTransportCode.all, hasLength(8));
+      // §8's eight, and the three Bluetooth added on 2026-10-03.
+      expect(PrinterTransportCode.all, hasLength(11));
       for (final code in PrinterTransportCode.all) {
         final notice = PrinterFailureNotice.of(code);
         expect(notice.message, isNotEmpty, reason: code);

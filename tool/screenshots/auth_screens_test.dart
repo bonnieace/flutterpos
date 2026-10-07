@@ -13,6 +13,8 @@ import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/widgets/pos_keyboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../test/tenancy/support/platform_console_memory.dart';
+import '../../test/tenancy/support/platform_console_world.dart';
 import 'fakes.dart';
 import 'harness.dart';
 
@@ -64,7 +66,12 @@ Widget _shell({
     setDefaultTenantCallable: callable,
     emailDeliveryStatusCallable: FakeEmailDeliveryStatusCallable(),
     hasPlatformSuperAdminClaim: (_) async => platformClaim,
-    platformLifecycleTenantDataSource: FakePlatformDataSource(),
+    platformConsoleDataSource: MemoryPlatformConsoleDataSource(
+      platformConsoleWorld(),
+    ),
+    reviewEmailSuppressionCallable: MemoryReviewEmailSuppressionCallable(
+      suppressed: platformConsoleSuppressed,
+    ),
     platformGlobalUserDataSource: FakePlatformDataSource(),
     setTenantLifecycleCallable: callable,
     setGlobalUserStatusCallable: callable,
@@ -255,19 +262,12 @@ void main() {
     uid: 'platform-admin',
   );
 
+  // The console as the routing shell opens it for a platform administrator.
+  // Every console screen, at the sample world's fixed clock, is in
+  // `platform_console_test.dart`; this one proves the route reaches it.
   screenshotCase(
-    '09b-platform-active-and-suspended',
+    '09b-platform-console',
     build: platform,
-    viewports: responsiveViewports,
-  );
-
-  // The other tab, reached the way an operator reaches it. A tab is a screen
-  // here: they have different data sources, different callables, and different
-  // roles behind them.
-  screenshotCase(
-    '09d-platform-global-user-status',
-    build: platform,
-    afterPump: (tester) async => tester.tap(find.text('Global user status')),
     viewports: responsiveViewports,
   );
 }

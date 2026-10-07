@@ -24,6 +24,7 @@ if (getApps().length === 0) initializeApp();
 // of the runner is unreachable from this harness.
 const {
   mergeSaleReconciliationJob,
+  reconcileClosedShift,
   requestTenantReconciliation,
   runTenantReconciliationTask,
 } = require("./lib/reconciliation/handlers");
@@ -33,3 +34,9 @@ exports.mergeSaleReconciliationJob = mergeSaleReconciliationJob;
 exports.requestTenantReconciliation = requestTenantReconciliation;
 exports.runTenantReconciliationTask = runTenantReconciliationTask;
 exports.amendShiftSummary = amendShiftSummary;
+
+exports.reconcileClosedShift = reconcileClosedShift;
+const {updateSaleDailyTotals, updateReturnDailyTotals} = require("./lib/operations/salesSummaries");
+exports.updateSaleDailyTotals = updateSaleDailyTotals;
+exports.updateReturnDailyTotals = updateReturnDailyTotals;
+exports.getSalesComparison = require("./lib/operations/reports").getSalesComparison;

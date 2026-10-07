@@ -3,6 +3,7 @@ import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import type {DocumentReference, DocumentSnapshot, Firestore} from "firebase-admin/firestore";
 import {getFunctions} from "firebase-admin/functions";
 import {HttpsError} from "firebase-functions/v2/https";
+import {logAbsorbedFailure} from "../core/absorbedFailure";
 import {CUSTOMER_ID_SHAPE} from "../customers/customerId";
 import {EmailProviderError} from "../email/contracts";
 import {allRecipientHashes, hashRecipient, normalizeEmail} from "../email/recipientHash";
@@ -452,12 +453,17 @@ export async function executeEmailReceiptDelivery(
     await ref.update({
       status: "queued",
       reason: "waiting_for_sale",
+      // Waiting for the sale is not a try at Brevo: the claim's attempt is
+      // given back, so a sale from a till offline for hours does not spend
+      // the retries a provider outage needs.
+      attempts: FieldValue.increment(-1),
       leaseUntil: FieldValue.delete(),
       updatedAt: FieldValue.serverTimestamp(),
     });
     throw new WaitingForEmailSale(saleId);
   }
 
+  let providerMessageId: string;
   try {
     const unsubscribeUrl = emailReceiptUnsubscribeUrl(
       dependencies.unsubscribeBaseUrl,
@@ -469,7 +475,7 @@ export async function executeEmailReceiptDelivery(
       unsubscribeUrl,
     });
     const pdf = await (dependencies.renderPdf ?? renderReceiptPdf)(content);
-    const providerMessageId = await send({
+    providerMessageId = await send({
       deliveryId: task.deliveryId,
       to: email,
       senderName: emailReceiptSenderName(content, dependencies.senderNameFallback),
@@ -479,31 +485,6 @@ export async function executeEmailReceiptDelivery(
       attachment: {name: receiptFilename(content), content: pdf},
       unsubscribeUrl,
     });
-    const recipient = hashRecipient(email, keyring);
-    // Together or not at all: a sent receipt the webhook could not find would
-    // stay "sent" for ever, whatever became of it.
-    await db.runTransaction(async (transaction) => {
-      transaction.update(ref, {
-        status: "sent",
-        reason: null,
-        receiptNumber: content.receiptNumber,
-        providerMessageId,
-        recipientHash: recipient.recipientHash,
-        recipientHashKeyVersion: recipient.keyVersion,
-        leaseUntil: FieldValue.delete(),
-        sentAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-      transaction.set(
-        db.collection(EMAIL_RECEIPT_MESSAGES).doc(emailReceiptMessageKey(providerMessageId)),
-        {
-          tenantId: task.tenantId,
-          deliveryId: task.deliveryId,
-          createdAt: FieldValue.serverTimestamp(),
-        }
-      );
-    });
-    return "sent";
   } catch (error) {
     if (error instanceof EmailProviderError) {
       if (error.safeCode === "provider_not_configured") {
@@ -538,6 +519,49 @@ export async function executeEmailReceiptDelivery(
     });
     throw error;
   }
+
+  // **Brevo has the message, so nothing from here re-queues it**: a retry
+  // would email the customer the same receipt again. Written together where
+  // it can be - a sent receipt the webhook could not find would stay "sent"
+  // for ever, whatever became of it - and as plainly "sent" where it cannot,
+  // with the failure logged rather than retried.
+  const recipient = hashRecipient(email, keyring);
+  const sent = {
+    status: "sent",
+    reason: null,
+    receiptNumber: content.receiptNumber,
+    providerMessageId,
+    recipientHash: recipient.recipientHash,
+    recipientHashKeyVersion: recipient.keyVersion,
+    leaseUntil: FieldValue.delete(),
+    sentAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  try {
+    await db.runTransaction(async (transaction) => {
+      transaction.update(ref, sent);
+      transaction.set(
+        db.collection(EMAIL_RECEIPT_MESSAGES).doc(emailReceiptMessageKey(providerMessageId)),
+        {
+          tenantId: task.tenantId,
+          deliveryId: task.deliveryId,
+          createdAt: FieldValue.serverTimestamp(),
+        }
+      );
+    });
+  } catch (error) {
+    logAbsorbedFailure("email_receipt_sent_unrecorded", error, {
+      tenantId: task.tenantId,
+      deliveryId: task.deliveryId,
+    });
+    await ref.update(sent).catch((fallback: unknown) => {
+      logAbsorbedFailure("email_receipt_sent_unmarked", fallback, {
+        tenantId: task.tenantId,
+        deliveryId: task.deliveryId,
+      });
+    });
+  }
+  return "sent";
 }
 
 /** One Brevo event about a message, as the webhook classified it. */

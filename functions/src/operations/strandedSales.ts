@@ -58,6 +58,9 @@ export const STRANDED_SALE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 /** The most sales one call may carry, matching the checkout line bound. */
 export const MAXIMUM_STRANDED_SALES = 50;
 
+/** The most lines one sale may hold, as the till's `maximumCheckoutSaleLines`. */
+export const MAXIMUM_SALE_LINES = 400;
+
 /** The `audit_logs` ID one drain writes at. */
 export function strandedDrainAuditId(requestId: string): string {
   return `sd_${requestId}`;
@@ -132,9 +135,9 @@ export function validateStrandedSale(options: {
     hasTender &&
     !(SALE_TENDERS as readonly unknown[]).includes(sale.tender) &&
     // A credit sale is the one tender outside the money methods, and only
-    // with a customer and an owed part that adds up - as Rules require.
-    !(sale.tender === CREDIT_TENDER && readSaleCredit(sale) !== null &&
-      typeof sale.customerId === "string")
+    // with a customer ID shaped as the server charges and an owed part that
+    // adds up - `readSaleCredit` checks both, as Rules do.
+    !(sale.tender === CREDIT_TENDER && readSaleCredit(sale) !== null)
   ) {
     throw new HttpsError(
       "invalid-argument",
@@ -172,8 +175,13 @@ export function validateStrandedSale(options: {
   }
 
   const items = sale.items;
-  if (!Array.isArray(items) || items.length === 0 || items.length > 16) {
-    throw new HttpsError("invalid-argument", "items must hold 1 to 16 lines.");
+  // The till's own bound (`maximumCheckoutSaleLines`): the sale and a stock
+  // change per line within one transaction's writes.
+  if (!Array.isArray(items) || items.length === 0 || items.length > MAXIMUM_SALE_LINES) {
+    throw new HttpsError(
+      "invalid-argument",
+      `items must hold 1 to ${MAXIMUM_SALE_LINES} lines.`
+    );
   }
   const lines: StrandedSaleLine[] = [];
   for (const line of items) {

@@ -264,6 +264,7 @@ final class AppSurfaceRoles {
     required this.borderSubtle,
     required this.cardEdge,
     required this.borderStrong,
+    required this.selected,
   });
 
   /// Page background.
@@ -315,6 +316,21 @@ final class AppSurfaceRoles {
   /// Inputs, secondary buttons, focus targets.
   final Color borderStrong;
 
+  /// The chosen one of a set of options drawn side by side: the thumb of
+  /// `AppTabs`' two-tab switch. **Added 2026-10-04.**
+  ///
+  /// **A step above [raised], because it sits on it.** The switch's track is
+  /// [raised], and the thumb has to read as lifted off it the way the
+  /// reference design's does. [overlay] and [field] are one step up in
+  /// [dark] and none in [profoundVerdant], where they share [raised]'s
+  /// neighbour; this is the next one.
+  ///
+  /// **No new hex.** Under Profound Verdant it is `surfaceContainerHighest`,
+  /// which [cardEdge] and the neutral status already paint. Neither of those
+  /// roles means *selected*, so borrowing either would tie a switch to a card
+  /// edge for no reason a person could name.
+  final Color selected;
+
   static const AppSurfaceRoles dark = AppSurfaceRoles(
     base: _Primitive.green900,
     raised: _Primitive.green850,
@@ -325,6 +341,7 @@ final class AppSurfaceRoles {
     borderSubtle: _Primitive.green700,
     cardEdge: _Primitive.green600,
     borderStrong: _Primitive.green600,
+    selected: _Primitive.green700,
   );
 
   /// The same eight roles under Profound Verdant.
@@ -362,6 +379,7 @@ final class AppSurfaceRoles {
     borderSubtle: _ProfoundVerdant.surfaceElevated,
     cardEdge: _ProfoundVerdant.surfaceContainerHighest,
     borderStrong: _ProfoundVerdant.outlineVariant,
+    selected: _ProfoundVerdant.surfaceContainerHighest,
   );
 
   static AppSurfaceRoles lerp(AppSurfaceRoles a, AppSurfaceRoles b, double t) =>
@@ -375,6 +393,7 @@ final class AppSurfaceRoles {
         borderSubtle: Color.lerp(a.borderSubtle, b.borderSubtle, t)!,
         cardEdge: Color.lerp(a.cardEdge, b.cardEdge, t)!,
         borderStrong: Color.lerp(a.borderStrong, b.borderStrong, t)!,
+        selected: Color.lerp(a.selected, b.selected, t)!,
       );
 }
 
@@ -1958,6 +1977,16 @@ final class AppEffects {
   /// `ImageFilter.blur`'s sigma on both axes. 12, the sign-in pane's own
   /// figure before the token layer existed.
   double get glassBlurSigma => 12;
+
+  /// The one other place depth is drawn rather than stepped: the floating
+  /// bottom bar (`AppBottomNav`), which sits over scrolling content and has
+  /// no surface beneath it to step from. A drop of 16 and a blur of 40 in
+  /// `surface.sunken` at 70%, as the platform console design draws it.
+  double get floatingShadowDrop => 16;
+
+  double get floatingShadowBlur => 40;
+
+  double get floatingShadowOpacity => 0.7;
 }
 
 // ---------------------------------------------------------------------------
@@ -1993,6 +2022,13 @@ final class AppIconography {
 
   /// The square well the launcher glyph sits centred in.
   double get launcherWell => 56;
+
+  /// An empty list's glyph, the subject of the page it sits on.
+  double get empty => 32;
+
+  /// The ring an [empty] glyph sits centred in: one and a half of the 48 tap
+  /// target, so it reads as the page's subject without looking pressable.
+  double get emptyRing => 72;
 
   /// `wght`. 400 is Symbols' regular, the weight the static Material font was
   /// drawn at.
@@ -2442,6 +2478,29 @@ final class AppLayout {
   /// on a phone; 720 is the measure for a page of prose, and a two-field form
   /// laid out at it reads as a form that lost its container.
   double get credential => 448;
+
+  /// The visual band of a small dashboard tile (`AppDashTile`): a sparkline, a
+  /// segmented bar, two short lines. Fixed so every tile in a row is the same
+  /// height without anyone placing them. The platform console's figure.
+  double get dashVisualCompact => 56;
+
+  /// The visual band of a tall dashboard tile: a chart, or four list lines of
+  /// 46. The platform console's figure.
+  double get dashVisualTall => 184;
+
+  /// One line of a dashboard tile's list visual: a 32 glyph well with seven
+  /// on either side. Four of them fill [dashVisualTall].
+  double get dashListLine => 46;
+
+  /// Chart geometry the dashboard tiles draw with: a gridline, the stub that
+  /// stands for an empty week, the businesses line and its dots.
+  double get chartHairline => 1;
+
+  double get chartStub => 2;
+
+  double get chartLine => 2;
+
+  double get chartDot => 4;
 
   /// The fixed width of the sale's cart pane. §4.2's third row.
   ///

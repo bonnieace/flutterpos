@@ -61,6 +61,7 @@ import '../tenancy/tenant_session_controller.dart';
 import '../whatsapp/e_receipt_settings.dart';
 import '../whatsapp/receipt_delivery.dart';
 import '../whatsapp/send_receipt_sheet.dart';
+import '../ui/brand_icon.dart';
 import '../ui/buttons.dart';
 import '../ui/chips.dart';
 import '../ui/dialogs.dart';
@@ -1028,6 +1029,13 @@ final class _CartEditorState extends State<_CartEditor> {
             !customer.allowsCredit)) {
       _credit = null;
     }
+    // A catalog re-read that moved a price moved the total, and what is owed
+    // is the total less what was paid: the customer agreed to the old figure,
+    // so the cashier asks again rather than the debt changing under them.
+    if (_credit case final credit?
+        when credit.totalMinor != _payable(_totalMinor)) {
+      _credit = null;
+    }
   }
 
   /// Whether this sale may be put on the chosen customer's account.
@@ -1978,7 +1986,9 @@ final class _CartEditorState extends State<_CartEditor> {
                 key: const ValueKey('checkout-change-agreed-price'),
                 label: 'Change agreed price',
                 tier: AppButtonTier.secondary,
-                onPressed: _saving ? null : () => _agreePrice(context, currency),
+                onPressed: _saving
+                    ? null
+                    : () => _agreePrice(context, currency),
               ),
             if (creditOffered)
               AppButton(
@@ -2103,11 +2113,13 @@ final class _CartEditorState extends State<_CartEditor> {
   /// receipts on WhatsApp or by email - what happens to its receipt.
   ///
   /// **Automatic, for a customer who agreed**: the sentence says the receipt is
-  /// coming, and how, and needs no button. **Anyone else**: the sentence is the
-  /// usual one and carries the send button - *Send on WhatsApp* or *Send by
-  /// email* where the business uses one channel, *Send receipt* asking which
-  /// where it uses both. Either way the sale is already written; nothing here
-  /// stands between the cashier and the next customer.
+  /// coming, and how. **Anyone else**: the receipt is asked for straight away,
+  /// at the developer's direction on 2026-10-05 - that channel's sheet, or
+  /// *Send receipt*'s choice of the two where the business uses both - and in
+  /// either mode, because an automatic business's walk-in is sent nothing
+  /// otherwise. The snack bar carries no send button any more. Either way the
+  /// sale is already written; the sheet opens over committed state and asks
+  /// nothing of the sale.
   void _reportSaved(
     BuildContext context,
     String receipt, [
@@ -2146,40 +2158,34 @@ final class _CartEditorState extends State<_CartEditor> {
       );
       return;
     }
+    unawaited(_askForReceipt(context, receipt, checkoutId, customer));
+  }
+
+  /// The sheet a receipt is asked for on, and - where it closes with nothing
+  /// sent - the usual sentence, so the sale is still reported saved.
+  Future<void> _askForReceipt(
+    BuildContext context,
+    String receipt,
+    String checkoutId,
+    TenantCustomer? customer,
+  ) async {
+    final sent = _offersWhatsapp && _offersEmail
+        ? await _chooseChannel(context, receipt, checkoutId, customer)
+        : _offersWhatsapp
+        ? await _sendOnWhatsapp(context, receipt, checkoutId, customer)
+        : await _sendByEmail(context, receipt, checkoutId, customer);
+    if (!context.mounted || sent) return;
     showAppSnackBar(
       context,
       AppNotice.confirmed('Saved as $receipt. It syncs on its own.'),
-      action: whatsapp && email
-          ? AppButton(
-              key: const ValueKey('checkout-send-receipt'),
-              label: 'Send receipt',
-              icon: Icons.send_outlined,
-              tier: AppButtonTier.tertiary,
-              onPressed: () =>
-                  _chooseChannel(context, receipt, checkoutId, customer),
-            )
-          : whatsapp
-          ? AppButton(
-              key: const ValueKey('checkout-send-whatsapp'),
-              label: 'Send on WhatsApp',
-              icon: Icons.send_outlined,
-              tier: AppButtonTier.tertiary,
-              onPressed: () =>
-                  _sendOnWhatsapp(context, receipt, checkoutId, customer),
-            )
-          : AppButton(
-              key: const ValueKey('checkout-send-email'),
-              label: 'Send by email',
-              icon: Icons.mail_outline,
-              tier: AppButtonTier.tertiary,
-              onPressed: () =>
-                  _sendByEmail(context, receipt, checkoutId, customer),
-            ),
     );
   }
 
   /// *Send receipt* where both channels are on: which one, then its sheet.
-  Future<void> _chooseChannel(
+  ///
+  /// Each of the three answers whether a receipt was queued, so a sheet closed
+  /// with nothing sent still leaves the sale reported saved.
+  Future<bool> _chooseChannel(
     BuildContext context,
     String receipt,
     String checkoutId,
@@ -2190,20 +2196,30 @@ final class _CartEditorState extends State<_CartEditor> {
       context,
       builder: (sheetContext, scrollController) => _ReceiptChannelSheet(
         receipt: receipt,
+        customer: customer,
         scrollController: scrollController,
         onChosen: (channel) => Navigator.of(sheetContext).pop(channel),
+        onCancel: () => Navigator.of(sheetContext).pop(),
       ),
     );
-    if (!context.mounted || channel == null) return;
-    switch (channel) {
-      case _ReceiptChannel.whatsapp:
-        await _sendOnWhatsapp(context, receipt, checkoutId, customer);
-      case _ReceiptChannel.email:
-        await _sendByEmail(context, receipt, checkoutId, customer);
-    }
+    if (!context.mounted || channel == null) return false;
+    return switch (channel) {
+      _ReceiptChannel.whatsapp => _sendOnWhatsapp(
+        context,
+        receipt,
+        checkoutId,
+        customer,
+      ),
+      _ReceiptChannel.email => _sendByEmail(
+        context,
+        receipt,
+        checkoutId,
+        customer,
+      ),
+    };
   }
 
-  Future<void> _sendByEmail(
+  Future<bool> _sendByEmail(
     BuildContext context,
     String receipt,
     String checkoutId,
@@ -2211,7 +2227,7 @@ final class _CartEditorState extends State<_CartEditor> {
   ) async {
     final writer = widget.emailReceiptWriter;
     final session = TenantSessionScope.of(context).session;
-    if (writer == null || session == null) return;
+    if (writer == null || session == null) return false;
     ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     final notice = await showSendEmailReceiptSheet(
       context,
@@ -2222,11 +2238,12 @@ final class _CartEditorState extends State<_CartEditor> {
       customerName: customer?.name,
       customerEmail: customer?.email,
     );
-    if (!context.mounted || notice == null) return;
+    if (!context.mounted || notice == null) return false;
     showAppSnackBar(context, notice);
+    return true;
   }
 
-  Future<void> _sendOnWhatsapp(
+  Future<bool> _sendOnWhatsapp(
     BuildContext context,
     String receipt,
     String checkoutId,
@@ -2234,7 +2251,7 @@ final class _CartEditorState extends State<_CartEditor> {
   ) async {
     final writer = widget.receiptWriter;
     final session = TenantSessionScope.of(context).session;
-    if (writer == null || session == null) return;
+    if (writer == null || session == null) return false;
     ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     final notice = await showSendWhatsappReceiptSheet(
       context,
@@ -2246,8 +2263,9 @@ final class _CartEditorState extends State<_CartEditor> {
       customerName: customer?.name,
       customerPhone: customer?.phone,
     );
-    if (!context.mounted || notice == null) return;
+    if (!context.mounted || notice == null) return false;
     showAppSnackBar(context, notice);
+    return true;
   }
 
   /// The modal for a sale that saved and a receipt that did not print, and
@@ -2712,20 +2730,32 @@ typedef _EmailReceiptRead =
 enum _ReceiptChannel { whatsapp, email }
 
 /// *Send receipt*, where the business sends both ways: one tap each.
+///
+/// **Each way is a row with that app's own icon**, at the developer's
+/// direction on 2026-10-05: the cashier is looking for the icon the customer
+/// named, not for a word. The row's second line is where it goes - the
+/// customer's number or address when the sale named one who has it - so the
+/// choice says what follows before it is made.
 final class _ReceiptChannelSheet extends StatelessWidget {
   const _ReceiptChannelSheet({
     required this.receipt,
+    required this.customer,
     required this.scrollController,
     required this.onChosen,
+    required this.onCancel,
   });
 
   final String receipt;
+  final TenantCustomer? customer;
   final ScrollController scrollController;
   final ValueChanged<_ReceiptChannel> onChosen;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final phone = customer?.phone;
+    final email = customer?.email;
     return ListView(
       key: const ValueKey('checkout-receipt-channel'),
       controller: scrollController,
@@ -2737,25 +2767,135 @@ final class _ReceiptChannelSheet extends StatelessWidget {
             color: tokens.colors.text.primary,
           ),
         ),
-        SizedBox(height: tokens.spacing.s24),
-        AppButton(
+        SizedBox(height: tokens.spacing.s8),
+        Text(
+          customer == null
+              ? 'The sale is saved. Send it only if the customer asked for it.'
+              : 'The sale is saved. Send it only if ${customer!.name} asked '
+                    'for it.',
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        _ReceiptChannelRow(
           key: const ValueKey('checkout-receipt-channel-whatsapp'),
-          label: 'On WhatsApp',
-          icon: Icons.chat_outlined,
-          tier: AppButtonTier.secondary,
-          expand: true,
+          icon: AppBrandIcon.whatsapp,
+          title: 'WhatsApp',
+          destination: phone == null || phone.isEmpty
+              ? 'To the number they give you'
+              : 'To $phone',
           onPressed: () => onChosen(_ReceiptChannel.whatsapp),
         ),
-        SizedBox(height: tokens.spacing.s12),
-        AppButton(
+        _ReceiptChannelRow(
           key: const ValueKey('checkout-receipt-channel-email'),
-          label: 'By email',
-          icon: Icons.mail_outline,
-          tier: AppButtonTier.secondary,
-          expand: true,
+          icon: AppBrandIcon.gmail,
+          title: 'Email',
+          destination: email == null || email.isEmpty
+              ? 'To the address they give you'
+              : 'To $email',
           onPressed: () => onChosen(_ReceiptChannel.email),
         ),
+        SizedBox(height: tokens.spacing.s24),
+        AppButton(
+          key: const ValueKey('checkout-receipt-channel-skip'),
+          label: 'Not now',
+          expand: true,
+          onPressed: onCancel,
+        ),
       ],
+    );
+  }
+}
+
+/// One way out of [_ReceiptChannelSheet]: the app's icon, its name, where the
+/// receipt goes, and a chevron saying a sheet of its own follows.
+///
+/// **States:** enabled, hover, pressed and focus-visible, all [PressSurface]'s.
+/// It is never disabled or loading - the sheet only lists a channel the till
+/// can queue on, and choosing one opens that channel's sheet, which owns the
+/// sending.
+final class _ReceiptChannelRow extends StatelessWidget {
+  const _ReceiptChannelRow({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.destination,
+    required this.onPressed,
+  });
+
+  final AppBrandIcon icon;
+  final String title;
+  final String destination;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    return Semantics(
+      container: true,
+      button: true,
+      label: title,
+      hint: destination,
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: PressSurface(
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+        onPressed: onPressed,
+        fillWidth: true,
+        excludeSemantics: true,
+        hoverOverlay: colors.action.tertiary.hoverWash(),
+        pressedOverlay: colors.action.tertiary.pressedWash(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: tokens.density.minimumTapTarget.height,
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: tokens.spacing.s8,
+              vertical: tokens.spacing.s8,
+            ),
+            child: Row(
+              children: <Widget>[
+                AppBrandIconMark(
+                  icon: icon,
+                  size: tokens.icons.card + 2 * tokens.spacing.s8,
+                  radius: tokens.radius.md,
+                ),
+                SizedBox(width: tokens.spacing.s16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        title,
+                        style: tokens.typography.bodyLarge.copyWith(
+                          color: colors.text.primary,
+                        ),
+                      ),
+                      Text(
+                        destination,
+                        overflow: TextOverflow.ellipsis,
+                        style: tokens.typography.bodyMedium.copyWith(
+                          color: colors.text.secondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s16),
+                Icon(
+                  Icons.chevron_right,
+                  size: tokens.spacing.s24,
+                  color: colors.text.tertiary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2891,8 +3031,7 @@ class _AgreePriceDialogState extends State<_AgreePriceDialog> {
     final typed = _typedTotal;
     // What comes off, while the cashier types - only once it is a figure the
     // till would accept, so it never states a discount it would then refuse.
-    final difference =
-        _totalProblem() == null && typed != null
+    final difference = _totalProblem() == null && typed != null
         ? '${widget.currency} ${_money(widget.listTotalMinor - typed)} off '
               'the listed price'
         : null;
@@ -2944,22 +3083,22 @@ class _AgreePriceDialogState extends State<_AgreePriceDialog> {
           ),
           // In the dialog rather than on the till, so the row there holds two
           // buttons on a phone whatever has been agreed.
-          if (widget.initial != null && widget.onUseListedPrice != null)
-            ...<Widget>[
-              SizedBox(height: tokens.spacing.s8),
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: AppButton(
-                  key: const ValueKey('checkout-remove-agreed-price'),
-                  label: 'Use listed price',
-                  tier: AppButtonTier.tertiary,
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    widget.onUseListedPrice!();
-                  },
-                ),
+          if (widget.initial != null &&
+              widget.onUseListedPrice != null) ...<Widget>[
+            SizedBox(height: tokens.spacing.s8),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: AppButton(
+                key: const ValueKey('checkout-remove-agreed-price'),
+                label: 'Use listed price',
+                tier: AppButtonTier.tertiary,
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  widget.onUseListedPrice!();
+                },
               ),
-            ],
+            ),
+          ],
         ],
       ),
       actions: <Widget>[
@@ -2983,9 +3122,7 @@ class _AgreePriceDialogState extends State<_AgreePriceDialog> {
   static String _typedAmount(int minorUnits) {
     final major = minorUnits ~/ 100;
     final minor = minorUnits % 100;
-    return minor == 0
-        ? '$major'
-        : '$major.${minor.toString().padLeft(2, '0')}';
+    return minor == 0 ? '$major' : '$major.${minor.toString().padLeft(2, '0')}';
   }
 }
 

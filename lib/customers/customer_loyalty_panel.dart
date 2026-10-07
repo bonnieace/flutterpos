@@ -1,4 +1,7 @@
-/// Configs → Loyalty: whether customers earn points, and for how much.
+/// Customers → Loyalty: whether customers earn points, and for how much.
+///
+/// **On the Customers screen's own tab since 2026-10-04**; it was a tab of
+/// Configs.
 ///
 /// **Two questions, each answered as a sentence.** On or off is the agreed
 /// prices tab's select rather than a toggle, for the reason that tab gives: a

@@ -23,6 +23,7 @@ export 'checkout_print_configuration.dart';
 export 'checkout_print_dispatch.dart';
 export 'checkout_print_failures.dart';
 export 'checkout_print_configuration_panel.dart';
+export 'checkout_bluetooth_printer_panel.dart';
 export 'checkout_print_jobs.dart';
 export 'checkout_print_queue_panel.dart';
 export 'checkout_printer_setup_reminder.dart';

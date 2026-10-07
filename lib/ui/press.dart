@@ -58,6 +58,7 @@ final class PressSurface extends StatefulWidget {
     this.fillWidth = false,
     this.fillHeight = false,
     this.reservesRingGutter = true,
+    this.ringInside = false,
   });
 
   /// The surface itself, drawing its own container, border and label.
@@ -136,6 +137,18 @@ final class PressSurface extends StatefulWidget {
   /// segments. The ring is the same ring, at the same place against the
   /// surface; only where its room comes from moves.
   final bool reservesRingGutter;
+
+  /// Whether the focus ring is painted just inside the surface's own edge,
+  /// with no gutter reserved round it.
+  ///
+  /// **For a row that fills a card**, which is the Bluetooth printer tab's
+  /// device list. A gutter round each row would pull it in from the card's
+  /// edges, and a ring outside it would land on the card's own edge and on the
+  /// rows above and below. Inside, it is the same ring - the same width, the
+  /// same colour - drawn where the row has room for it, following
+  /// [borderRadius] itself rather than that radius plus the offset.
+  /// [reservesRingGutter] does not apply.
+  final bool ringInside;
 
   @override
   State<PressSurface> createState() => _PressSurfaceState();
@@ -272,14 +285,18 @@ class _PressSurfaceState extends State<PressSurface>
 
     // The ring is drawn outside the surface, in a gutter reserved whether it is
     // visible or not, so tabbing into a row cannot reflow it.
-    Widget framed = widget.reservesRingGutter
+    final reserves = widget.reservesRingGutter && !widget.ringInside;
+    Widget framed = reserves
         ? Padding(padding: EdgeInsets.all(gutter), child: surface)
         : surface;
     if (_focusVisible) {
       // Where the ring's box sits against [framed]: inside the reserved
       // gutter, or - with no gutter of its own - the same distance outside the
       // surface, in room the caller reserved. Both put the ring in one place.
-      final inset = widget.reservesRingGutter
+      // [PressSurface.ringInside] puts it on the surface's own edge instead.
+      final inset = widget.ringInside
+          ? 0.0
+          : reserves
           ? ring.offset
           : ring.offset - gutter;
       framed = Stack(
@@ -300,8 +317,10 @@ class _PressSurfaceState extends State<PressSurface>
                   // any real dimension and it makes no difference; on a chip
                   // at `radius.sm` it is the difference between a ring that
                   // follows the corner and one that cuts across it.
-                  borderRadius:
-                      widget.borderRadius + BorderRadius.circular(ring.offset),
+                  borderRadius: widget.ringInside
+                      ? widget.borderRadius
+                      : widget.borderRadius +
+                            BorderRadius.circular(ring.offset),
                 ),
               ),
             ),

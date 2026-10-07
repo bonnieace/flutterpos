@@ -433,6 +433,7 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
       allowedRoles: TenantExpenseRepository.allowedRoles,
       load: _loader!,
       loadCached: _cachedLoader,
+      holdsNothing: (view) => view.period.records.isEmpty,
       // **The chooser stays on screen through every phase**, the way the sales
       // totals page keeps its own: the control that would take a person to a
       // different period must not be behind the read of this one.
@@ -1310,11 +1311,11 @@ class _VoidExpenseFormState extends State<_VoidExpenseForm> {
     if (!mounted) return;
     setState(() => _busy = false);
     switch (result.kind) {
-      case TenantExpenseWriteKind.queued:
-        widget.onCompleted(
-          const AppNotice.offline('Saved on this device; waiting to sync.'),
-        );
-      case TenantExpenseWriteKind.committed:
+      // **Queued is every save, online or not**: the writer stores the void
+      // here and the worker carries it on. Saying *waiting to sync* announced
+      // an outage on a connected phone; the sync badge is what says when
+      // something is genuinely stuck.
+      case TenantExpenseWriteKind.queued || TenantExpenseWriteKind.committed:
         widget.onCompleted(
           const AppNotice(message: 'Expense voided.', status: AppStatus.ok),
         );
@@ -1547,11 +1548,8 @@ class _RecordExpenseFormState extends State<_RecordExpenseForm> {
     if (!mounted) return;
     setState(() => _busy = false);
     switch (result.kind) {
-      case TenantExpenseWriteKind.queued:
-        widget.onCompleted(
-          const AppNotice.offline('Saved on this device; waiting to sync.'),
-        );
-      case TenantExpenseWriteKind.committed:
+      // Queued is every save, online or not - see the void above.
+      case TenantExpenseWriteKind.queued || TenantExpenseWriteKind.committed:
         widget.onCompleted(
           const AppNotice(message: 'Expense recorded.', status: AppStatus.ok),
         );

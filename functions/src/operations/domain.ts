@@ -101,7 +101,12 @@ export interface TenderTotals {
 export type TenderBreakdown = Record<SaleTenderBucket, TenderTotals>;
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const MAX_RETURN_LINES = 50;
+/**
+ * The most lines a sale or a return may hold: the till's
+ * `maximumCheckoutSaleLines`. A sale's lines are read through the same bound
+ * when a return against it is verified, so the two cannot differ.
+ */
+export const MAX_RETURN_LINES = 400;
 const MAX_QUANTITY_DELTA = 1_000_000;
 const MAX_MONETARY_VALUE = 1_000_000_000_000;
 
@@ -672,13 +677,20 @@ export function aggregateSalesByTender(
       // **A credit sale is split, not moved.** What was paid at the counter is
       // paid-by money like any other sale's; what was left owing is in
       // `other`, the bucket for takings no payment method accounts for, which
-      // keeps the bucket set every installed build decodes. The split follows
-      // the sale's own owed share, so a partly returned sale splits what is
-      // left of it the same way.
+      // keeps the bucket set every installed build decodes.
+      //
+      // **A return comes off the owed part first**, as it does on the
+      // customer's ledger (`planReturnedPoints`): goods that come back pay
+      // for themselves, so what was paid stays paid until the debt is gone.
+      // A category's lines cannot be told apart that way - nobody paid for
+      // one category rather than another - so a filtered split follows the
+      // sale's own owed share instead.
       const revenueMinor = moneyToMinorUnits(contribution.revenue);
-      const owedShare = Math.round(
-        revenueMinor * credit.owedMinor / (credit.owedMinor + credit.paidMinor)
-      );
+      const owedShare = categoryId ?
+        Math.round(
+          revenueMinor * credit.owedMinor / (credit.owedMinor + credit.paidMinor)
+        ) :
+        Math.max(0, revenueMinor - credit.paidMinor);
       const owedTotals = breakdown.other;
       owedTotals.sales = addMonetaryValue(owedTotals.sales, minorUnitsToMoney(owedShare));
       owedTotals.transactions += 1;

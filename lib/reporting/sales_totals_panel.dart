@@ -335,6 +335,7 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
       allowedRoles: TenantSalesTotalsGateway.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (view) => view.totals.transactions == 0,
       denied: const Center(
         key: ValueKey('sales-totals-denied'),
         child: Text('Sales totals are available to managers and owners.'),
@@ -529,7 +530,14 @@ final class _SalesTotalsContents extends StatelessWidget {
                 // is not a footnote - it is the difference between the whole
                 // business and this till. A badge states it where the figure
                 // is, which is the shape the artboards used.
-                if (answer.basis == TenantSalesTotalsBasis.device) ...[
+                //
+                // **Once the server has failed, not while it is being asked.**
+                // The device read runs beside the server's and nearly always
+                // lands first, so this badge went up on every open and came
+                // down a moment later - the weekly report's mistake, fixed
+                // there the same way (`serverCouldNotBeReached`).
+                if (answer.basis == TenantSalesTotalsBasis.device &&
+                    (TenantReadFreshness.maybeOf(context)?.stale ?? true)) ...[
                   SizedBox(height: tokens.spacing.s8),
                   StatusBadge(
                     key: const ValueKey('sales-totals-device-basis'),

@@ -302,6 +302,7 @@ test("platform control-plane collections are admin-readable and server-write-onl
     "platform_config",
     "platform_audit_logs",
     "platform_user_operations",
+    "platform_alerts",
     "platform_membership_repair_runs",
     "owner_recovery_cases",
   ];

@@ -39,7 +39,7 @@ const RETRY_PAGE_SIZE = 100;
 export interface StoredReconciliationJob {
   tenantId: string;
   jobId: string;
-  source: "manual" | "sale_trigger" | ReconciliationSweepKind;
+  source: "manual" | "sale_trigger" | "shift_close" | ReconciliationSweepKind;
   sourceKey: string;
   mode: ReconciliationMode;
   checkpointKind: ReconciliationCheckpointKind;
@@ -122,7 +122,7 @@ function requireStringField(value: unknown, field: string): string {
 function parseJob(tenantId: string, jobId: string, data: DocumentData): StoredReconciliationJob {
   const source = data.source;
   if (
-    source !== "manual" && source !== "sale_trigger" && source !== "nightly" &&
+    source !== "manual" && source !== "sale_trigger" && source !== "shift_close" && source !== "nightly" &&
     source !== "weekly" && source !== "monthly"
   ) {
     throw new HttpsError("data-loss", `Reconciliation job ${jobId} has an invalid source.`);
@@ -398,6 +398,7 @@ export async function registerReturnReceipt(
     returnId: string;
     businessDate: string;
     receivedAt: Timestamp;
+    deferReconciliation?: boolean;
   }
 ): Promise<{task?: ReconciliationTaskPayload}> {
   return registerDayReceipt(db, {
@@ -405,6 +406,7 @@ export async function registerReturnReceipt(
     documentId: input.returnId,
     businessDate: input.businessDate,
     receivedAt: input.receivedAt,
+    deferReconciliation: input.deferReconciliation,
     receipts: "reconciliation_return_receipts",
     idField: "returnId",
     dirtyReason: "return_filed",
@@ -427,6 +429,7 @@ export async function registerCustomerPaymentReceipt(
     paymentId: string;
     businessDate: string;
     receivedAt: Timestamp;
+    deferReconciliation?: boolean;
   }
 ): Promise<{task?: ReconciliationTaskPayload}> {
   return registerDayReceipt(db, {
@@ -434,6 +437,7 @@ export async function registerCustomerPaymentReceipt(
     documentId: input.paymentId,
     businessDate: input.businessDate,
     receivedAt: input.receivedAt,
+    deferReconciliation: input.deferReconciliation,
     receipts: "reconciliation_payment_receipts",
     idField: "paymentId",
     dirtyReason: "customer_payment",
@@ -448,6 +452,7 @@ async function registerDayReceipt(
     documentId: string;
     businessDate: string;
     receivedAt: Timestamp;
+    deferReconciliation?: boolean;
     receipts: string;
     idField: string;
     dirtyReason: string;
@@ -462,11 +467,8 @@ async function registerDayReceipt(
   const receiptRef = tenantRef.collection(input.receipts).doc(input.documentId);
 
   return db.runTransaction(async (transaction) => {
-    const [jobSnapshot, dirtySnapshot, receiptSnapshot] = await transaction.getAll(
-      ref,
-      dirtyRef,
-      receiptRef
-    );
+    const [dirtySnapshot, receiptSnapshot] = await transaction.getAll(dirtyRef, receiptRef);
+    const jobSnapshot = input.deferReconciliation ? undefined : await transaction.get(ref);
     // Already counted. Returning nothing leaves the day exactly as the first
     // delivery left it.
     if (receiptSnapshot.exists) return {};
@@ -474,7 +476,7 @@ async function registerDayReceipt(
     // The same bucket a sale in this five minutes would have joined, and the
     // same refusal if something else already owns it.
     let existing: DirtyJobInput | undefined;
-    if (jobSnapshot.exists) {
+    if (jobSnapshot?.exists) {
       const job = parseJob(input.tenantId, jobId, jobSnapshot.data() ?? {});
       if (job.source !== "sale_trigger" || job.sourceKey !== `${bucket}`) {
         throw new HttpsError("already-exists", "The dirty bucket belongs to another source.");
@@ -506,9 +508,9 @@ async function registerDayReceipt(
       businessDate: input.businessDate,
       decision,
     });
-    if (jobSnapshot.exists) {
+    if (jobSnapshot?.exists) {
       transaction.update(ref, jobFields.update);
-    } else {
+    } else if (!input.deferReconciliation) {
       transaction.create(ref, jobFields.create);
     }
 
@@ -523,7 +525,7 @@ async function registerDayReceipt(
       createdAt: FieldValue.serverTimestamp(),
     });
 
-    return decision.enqueue ? {
+    return !input.deferReconciliation && decision.enqueue ? {
       task: {
         tenantId: input.tenantId,
         jobId,
@@ -541,6 +543,7 @@ export async function registerSaleReceipt(
     saleId: string;
     businessDate: string;
     receivedAt: Timestamp;
+    deferReconciliation?: boolean;
     saleData: DocumentData;
   }
 ): Promise<SaleReceiptRegistration> {
@@ -558,19 +561,17 @@ export async function registerSaleReceipt(
   const rungAt = deviceInstantOrNow(input.saleData.clientCreatedAtMs, input.receivedAt.toDate());
 
   return db.runTransaction(async (transaction) => {
-    const [jobSnapshot, dirtySnapshot, receiptSnapshot] = await transaction.getAll(
-      ref,
-      dirtyRef,
-      receiptRef
-    );
+    const [dirtySnapshot, receiptSnapshot] = await transaction.getAll(dirtyRef, receiptRef);
+    const jobSnapshot = input.deferReconciliation ? undefined : await transaction.get(ref);
     if (receiptSnapshot.exists) {
       if (
         receiptSnapshot.get("tenantId") !== input.tenantId ||
         receiptSnapshot.get("businessDate") !== input.businessDate ||
-        receiptSnapshot.get("jobId") !== jobId
+        (!input.deferReconciliation && receiptSnapshot.get("jobId") !== jobId)
       ) {
         throw new HttpsError("already-exists", "The sale receipt identity is inconsistent.");
       }
+      if (input.deferReconciliation) return {invalidLineCount: nonNegativeInteger(receiptSnapshot.get("invalidLineCount"))};
       const generation = nonNegativeInteger(receiptSnapshot.get("generation"));
       const revision = nonNegativeInteger(receiptSnapshot.get("revision"));
       return {
@@ -579,7 +580,7 @@ export async function registerSaleReceipt(
       };
     }
     let existing: DirtyJobInput | undefined;
-    if (jobSnapshot.exists) {
+    if (jobSnapshot?.exists) {
       const job = parseJob(input.tenantId, jobId, jobSnapshot.data() ?? {});
       if (job.source !== "sale_trigger" || job.sourceKey !== `${bucket}`) {
         throw new HttpsError("already-exists", "The dirty bucket belongs to another source.");
@@ -614,9 +615,9 @@ export async function registerSaleReceipt(
       businessDate: input.businessDate,
       decision,
     });
-    if (jobSnapshot.exists) {
+    if (jobSnapshot?.exists) {
       transaction.update(ref, jobFields.update);
-    } else {
+    } else if (!input.deferReconciliation) {
       transaction.create(ref, jobFields.create);
     }
 
@@ -666,7 +667,7 @@ export async function registerSaleReceipt(
     });
 
     return {
-      ...(decision.enqueue ? {
+      ...(!input.deferReconciliation && decision.enqueue ? {
         task: {
           tenantId: input.tenantId,
           jobId,
@@ -954,6 +955,10 @@ function scheduledJobDefinition(
   jobId: string;
   data: DocumentData;
 } {
+  if (kind === "nightly") {
+    if (monthlyShardDay(tenantId) === Number(localDate.slice(8, 10))) kind = "monthly";
+    else if (new Date(`${localDate}T00:00:00Z`).getUTCDay() === 0) kind = "weekly";
+  }
   const sourceKey = `${kind}:${localDate}`;
   const jobId = reconciliationJobId(kind, sourceKey);
   const mode: ReconciliationMode = kind === "monthly" ? "full" : "incremental";
@@ -1167,4 +1172,22 @@ export function reconciliationJobDocument(
   jobId: string
 ): DocumentReference<DocumentData> {
   return jobRef(db, tenantId, jobId);
+}
+
+/** Re-delivery of one close reuses its job. Late sales remain dirty for nightly catch-up. */
+export async function registerShiftClose(db: Firestore, tenantId: string, shiftId: string,
+  businessDate: string): Promise<ReconciliationTaskPayload | undefined> {
+  const jobId = reconciliationJobId("shift_close", shiftId);
+  const ref = jobRef(db, tenantId, jobId);
+  const dirty = db.collection("tenants").doc(tenantId).collection("reconciliation_dirty_days").doc(businessDate);
+  return db.runTransaction(async (tx) => {
+    const existing = await tx.get(ref);
+    if (existing.exists) return undefined;
+    tx.set(dirty, {tenantId, businessDate, status: "dirty", revision: FieldValue.increment(1),
+      dirtyReason: "shift_close", updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+    tx.create(ref, initialJobData({tenantId, source: "shift_close", sourceKey: shiftId,
+      mode: "incremental", checkpointKind: "none", checkpointKey: businessDate,
+      localDate: businessDate, requestedBy: "system:shift_close"}));
+    return {tenantId, jobId, generation: 0, revision: 0};
+  });
 }

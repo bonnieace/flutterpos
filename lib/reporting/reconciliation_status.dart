@@ -54,6 +54,7 @@ enum TenantReconciliationIntakeStatus {
 enum TenantReconciliationRunSource {
   manual('manual', 'Requested by a person'),
   saleTrigger('sale_trigger', 'Triggered by a sale'),
+  shiftClose('shift_close', 'Shift closed'),
   nightly('nightly', 'Nightly sweep'),
   weekly('weekly', 'Weekly sweep'),
   monthly('monthly', 'Monthly full check'),

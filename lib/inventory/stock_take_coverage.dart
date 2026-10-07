@@ -230,23 +230,22 @@ final class StockTakeCoverage {
           'will not be counted',
   };
 
-  String get message => switch (kind) {
+  /// The sentence under [title], or null where the title says it all.
+  ///
+  /// **Shorter since 2026-10-03, at the developer's direction.** The good
+  /// states said everything twice - *Every category has somebody counting it*,
+  /// then *Each of the 6 categories is down to somebody who can sign in* - and
+  /// the count beside the heading already gives the figure. What still has a
+  /// sentence is what the title cannot carry: which categories, and who.
+  String? get message => switch (kind) {
     StockTakeCoverageKind.nobodyOnRota =>
-      'Choose what each person counts below. Until then nobody is asked, and '
-          'the till is never held.',
+      'Choose what each person counts below.',
     StockTakeCoverageKind.recordedOnly =>
-      'While this is set to Nothing, the rota below is kept and the register '
-          'ignores it.',
+      'The register ignores the rota while this is Nothing.',
     StockTakeCoverageKind.noCategories =>
-      'So a count is of everything or of nothing. Each person’s choice below '
-          'offers just those two.',
-    StockTakeCoverageKind.wholeList =>
-      'So every category is covered, whatever else is chosen below.',
-    StockTakeCoverageKind.everyCategory =>
-      total == 1
-          ? 'The one category is down to somebody who can sign in.'
-          : 'Each of the $total categories is down to somebody who can sign '
-                'in.',
+      'Each person counts everything or nothing.',
+    StockTakeCoverageKind.wholeList ||
+    StockTakeCoverageKind.everyCategory => null,
     StockTakeCoverageKind.gaps => _gapsMessage(),
     StockTakeCoverageKind.unreachable => _unreachableMessage(),
   };
@@ -268,13 +267,9 @@ final class StockTakeCoverage {
       return '$list ${uncovered.length == 1 ? 'is' : 'are'} not counted on '
           'any day.';
     }
+    // The rest is the count beside the heading, so it is not said again here.
     final pronoun = uncovered.length == 1 ? 'It is' : 'They are';
-    if (counted == 0) return '$pronoun not counted on any day.';
-    final rest = counted == 1
-        ? 'The other category has somebody.'
-        : 'The other ${_count(counted).toLowerCase()} categories each have '
-              'somebody.';
-    return '$pronoun not counted on any day. $rest';
+    return '$pronoun not counted on any day.';
   }
 
   String _unreachableMessage() {

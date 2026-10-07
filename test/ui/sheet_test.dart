@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uzapay_pos/theme.dart';
+import 'package:uzapay_pos/ui/buttons.dart';
 import 'package:uzapay_pos/ui/fields.dart';
 import 'package:uzapay_pos/ui/sheet.dart';
 import 'package:uzapay_pos/ui/tokens.dart';
@@ -104,6 +105,31 @@ void main() {
       expect(find.byType(ListView), findsOne);
     });
 
+    testWidgets('closes from the cross at its top right, scrim or none', (
+      tester,
+    ) async {
+      // A sheet whose scrim is inert still has a way out that is not at the
+      // end of its content.
+      await _pump(tester, dismissible: false);
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      final close = find.byKey(const ValueKey('app-sheet-close'));
+      expect(find.bySemanticsLabel('Close'), findsOne);
+      final sheet = tester.getRect(find.byType(DraggableScrollableSheet));
+      expect(tester.getCenter(close).dx, greaterThan(sheet.center.dx));
+      expect(tester.getSize(close).height, greaterThanOrEqualTo(48));
+      // The headings' ink, not an action's green.
+      expect(
+        tester.widget<AppIconButton>(close).glyphColor,
+        AppTokens.componentOf(tester.element(close)).colors.text.primary,
+      );
+
+      await tester.tap(close);
+      await tester.pumpAndSettle();
+      expect(find.text('Inside the sheet'), findsNothing);
+    });
+
     testWidgets('a sheet that may not be dismissed keeps its scrim inert', (
       tester,
     ) async {
@@ -195,7 +221,8 @@ void main() {
       final before = tester.state(find.byType(DraggableScrollableSheet));
       await tester.tap(find.byType(EditableText));
       await tester.pumpAndSettle();
-      final focus = tester.widget<EditableText>(find.byType(EditableText))
+      final focus = tester
+          .widget<EditableText>(find.byType(EditableText))
           .focusNode;
       expect(focus.hasFocus, isTrue);
 

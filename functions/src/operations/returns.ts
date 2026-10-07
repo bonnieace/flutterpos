@@ -14,6 +14,7 @@ import {
 import {
   addStockQuantity,
   assertReturnWithinSale,
+  MAX_RETURN_LINES,
   normalizeReturnStockLines,
   requireStoredQuantity,
 } from "./domain";
@@ -123,7 +124,7 @@ export const verifyReturnAndRestoreStock = onCall<
     const previousByProduct = new Map<string, number>();
     for (const document of priorVerifications.docs) {
       const products = document.get("restoredProducts");
-      if (!Array.isArray(products) || products.length > 50) {
+      if (!Array.isArray(products) || products.length > MAX_RETURN_LINES) {
         throw new HttpsError("data-loss", "A prior return verification is malformed.");
       }
       products.forEach((item, index) => {

@@ -264,35 +264,36 @@ test("a tenant's scheduled job carries the shape its checkpoint needs", async ()
 
     const result = await processTenantDiscoveryPage(db.asFirestore(), payload);
 
+    const effective = kind === "nightly" ? "monthly" : kind;
     assert.deepEqual(result.tenantTasks, [{
       tenantId,
-      jobId: reconciliationJobId(kind, `${kind}:${localDate}`),
+      jobId: reconciliationJobId(effective, `${effective}:${localDate}`),
       generation: 0,
       revision: 0,
     }], kind);
-    const job = stored(db, jobPath(tenantId, kind, localDate));
-    assert.equal(job.source, kind, kind);
-    assert.equal(job.sourceKey, `${kind}:${localDate}`, kind);
-    assert.equal(job.requestedBy, `system:${kind}`, kind);
+    const job = stored(db, jobPath(tenantId, effective, localDate));
+    assert.equal(job.source, effective, kind);
+    assert.equal(job.sourceKey, `${effective}:${localDate}`, kind);
+    assert.equal(job.requestedBy, `system:${effective}`, kind);
     assert.equal(job.status, "queued", kind);
     assert.equal(job.localDate, localDate, kind);
-    assert.equal(job.mode, kind === "monthly" ? "full" : "incremental", kind);
+    assert.equal(job.mode, effective === "monthly" ? "full" : "incremental", kind);
     assert.equal(
       job.checkpointKind,
-      kind === "nightly" ? "none" : kind,
+      effective,
       kind
     );
     // Weekly checkpoints chain by ISO week and monthly ones by calendar month, so
     // seven nightly-shaped keys would each start their own chain and verify none.
     assert.equal(
       job.checkpointKey,
-      kind === "weekly" ? isoWeekKey(localDate) :
-        kind === "monthly" ? localDate.slice(0, 7) : localDate,
+      effective === "weekly" ? isoWeekKey(localDate) :
+        effective === "monthly" ? localDate.slice(0, 7) : localDate,
       kind
     );
     // A full pass has a window to build before it may compare anything, and
     // `fullInitialized` is the flag the metrics phase reads to decide that.
-    assert.equal(job.fullInitialized, kind !== "monthly", kind);
+    assert.equal(job.fullInitialized, effective !== "monthly", kind);
   }
 });
 

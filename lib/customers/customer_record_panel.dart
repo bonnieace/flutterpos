@@ -141,6 +141,7 @@ final class _TenantCustomerRecordScreenState
       allowedRoles: TenantCustomerRepository.manageRoles,
       load: _loader,
       loadCached: _loaderCached,
+      holdsNothing: (customer) => customer == null,
       loading: const _RecordFrame(
         title: 'Customer',
         child: LoadingState(message: 'Reading this customer'),
@@ -250,7 +251,8 @@ final class _RecordContents extends StatelessWidget {
         ? tokens.spacing.s16
         : tokens.spacing.s24;
     final facts = <(String, String, IconData)>[
-      if (customer.phone case final phone?) ('Phone', phone, Icons.phone_outlined),
+      if (customer.phone case final phone?)
+        ('Phone', phone, Icons.phone_outlined),
       if (customer.phone != null)
         (
           'Receipts on WhatsApp',
@@ -259,129 +261,155 @@ final class _RecordContents extends StatelessWidget {
               : 'Not agreed. No receipt is sent to them on WhatsApp.',
           Icons.chat_outlined,
         ),
-      if (customer.kraPin case final pin?) ('KRA PIN', pin, Icons.badge_outlined),
-      if (customer.email case final email?) ('Email', email, Icons.mail_outline),
-      if (customer.notes case final notes?) ('Notes', notes, Icons.notes_outlined),
+      if (customer.kraPin case final pin?)
+        ('KRA PIN', pin, Icons.badge_outlined),
+      if (customer.email case final email?)
+        ('Email', email, Icons.mail_outline),
+      if (customer.notes case final notes?)
+        ('Notes', notes, Icons.notes_outlined),
     ];
-    return ListView(
-      key: const ValueKey('customer-record'),
-      padding: EdgeInsets.all(inset),
-      children: <Widget>[
-        if (!customer.active) ...<Widget>[
-          const Callout(
-            key: ValueKey('customer-record-inactive'),
-            status: AppStatus.neutral,
-            title: 'Inactive',
-            message:
-                'Not offered at the till, and sent no receipts. Their sales '
-                'and points stay on record, and they can be offered again '
-                'below.',
+    // **A `NestedScrollView`, so the tabs can be a `TabBarView`**, at the
+    // developer's direction on 2026-10-05: a swipe moved nothing while the two
+    // were shown one at a time at the foot of one list. The cards are the
+    // header and scroll away as before; under them each tab scrolls by itself
+    // and follows the finger sideways, as every other tabbed page does.
+    return DefaultTabController(
+      length: 2,
+      child: NestedScrollView(
+        key: const ValueKey('customer-record'),
+        headerSliverBuilder: (context, _) => <Widget>[
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(inset, inset, inset, 0),
+            sliver: SliverList.list(children: _header(tokens, facts)),
           ),
-          SizedBox(height: tokens.spacing.s16),
         ],
-        if (onEdit != null || onSetActive != null) ...<Widget>[
-          AppActionRow(
-            alignment: MainAxisAlignment.start,
-            expandActions: true,
-            actions: <Widget>[
-              if (onEdit case final edit?)
-                AppButton(
-                  key: const ValueKey('customer-record-edit'),
-                  label: 'Edit',
-                  icon: Icons.edit_outlined,
-                  expand: true,
-                  onPressed: edit,
-                ),
-              if (onSetActive case final setActive?)
-                customer.active
-                    ? AppButton(
-                        key: const ValueKey('customer-record-inactive-action'),
-                        label: 'Mark inactive',
-                        icon: Icons.block_outlined,
-                        tier: AppButtonTier.destructive,
-                        expand: true,
-                        onPressed: () => setActive(false),
-                      )
-                    : AppButton(
-                        key: const ValueKey('customer-record-reactivate'),
-                        label: 'Reactivate',
-                        icon: Icons.replay_outlined,
-                        expand: true,
-                        onPressed: () => setActive(true),
-                      ),
-            ],
-          ),
-          SizedBox(height: tokens.spacing.s16),
-        ],
-        AppCard(
-          key: const ValueKey('customer-record-summary'),
-          padding: EdgeInsets.all(tokens.spacing.s20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  SupplierMonogram(name: customer.name),
-                  SizedBox(width: tokens.spacing.s12),
-                  Expanded(
-                    child: _Headline(
-                      caption: 'Points',
-                      value: '${customer.points}',
-                      valueKey: const ValueKey('customer-record-points'),
-                      figure: true,
-                    ),
-                  ),
-                  SizedBox(width: tokens.spacing.s12),
-                  Expanded(
-                    child: _Headline(
-                      caption: 'Last bought',
-                      value: customerLastBoughtLabel(customer),
-                      valueKey: const ValueKey('customer-record-last-bought'),
-                      figure: customer.lastSaleAt != null,
-                      end: true,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: tokens.spacing.s16),
-              Divider(height: 1, color: tokens.colors.surface.borderSubtle),
-              SizedBox(height: tokens.spacing.s12),
-              Text(
-                'How to reach them',
-                style: tokens.typography.titleMedium.copyWith(
-                  color: tokens.colors.text.primary,
-                ),
-              ),
-              SizedBox(height: tokens.spacing.s12),
-              if (facts.isEmpty)
-                Text(
-                  'No contact details are recorded for this customer.',
-                  key: const ValueKey('customer-record-no-contact'),
-                  style: tokens.typography.bodyMedium.copyWith(
-                    color: tokens.colors.text.tertiary,
-                  ),
-                )
-              else
-                for (final (index, fact) in facts.indexed) ...<Widget>[
-                  if (index > 0) SizedBox(height: tokens.spacing.s12),
-                  _Fact(label: fact.$1, value: fact.$2, icon: fact.$3),
-                ],
-            ],
-          ),
+        body: _RecordTabs(
+          inset: inset,
+          statement: statement,
+          purchases: purchases,
         ),
-        ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          _AccountCard(
-            customer: customer,
-            currency: currency,
-            onRecordPayment: onRecordPayment,
-          ),
-        ],
-        SizedBox(height: tokens.spacing.s24),
-        _RecordTabs(statement: statement, purchases: purchases),
-      ],
+      ),
     );
   }
+
+  /// The cards above the tabs, and the tab strip itself.
+  List<Widget> _header(
+    AppTokens tokens,
+    List<(String, String, IconData)> facts,
+  ) => <Widget>[
+    if (!customer.active) ...<Widget>[
+      const Callout(
+        key: ValueKey('customer-record-inactive'),
+        status: AppStatus.neutral,
+        title: 'Inactive',
+        message:
+            'Not offered at the till, and sent no receipts. Their sales '
+            'and points stay on record, and they can be offered again '
+            'below.',
+      ),
+      SizedBox(height: tokens.spacing.s16),
+    ],
+    if (onEdit != null || onSetActive != null) ...<Widget>[
+      AppActionRow(
+        alignment: MainAxisAlignment.start,
+        expandActions: true,
+        actions: <Widget>[
+          if (onEdit case final edit?)
+            AppButton(
+              key: const ValueKey('customer-record-edit'),
+              label: 'Edit',
+              icon: Icons.edit_outlined,
+              expand: true,
+              onPressed: edit,
+            ),
+          if (onSetActive case final setActive?)
+            customer.active
+                ? AppButton(
+                    key: const ValueKey('customer-record-inactive-action'),
+                    label: 'Mark inactive',
+                    icon: Icons.block_outlined,
+                    tier: AppButtonTier.destructive,
+                    expand: true,
+                    onPressed: () => setActive(false),
+                  )
+                : AppButton(
+                    key: const ValueKey('customer-record-reactivate'),
+                    label: 'Reactivate',
+                    icon: Icons.replay_outlined,
+                    expand: true,
+                    onPressed: () => setActive(true),
+                  ),
+        ],
+      ),
+      SizedBox(height: tokens.spacing.s16),
+    ],
+    AppCard(
+      key: const ValueKey('customer-record-summary'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              SupplierMonogram(name: customer.name),
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(
+                child: _Headline(
+                  caption: 'Points',
+                  value: '${customer.points}',
+                  valueKey: const ValueKey('customer-record-points'),
+                  figure: true,
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(
+                child: _Headline(
+                  caption: 'Last bought',
+                  value: customerLastBoughtLabel(customer),
+                  valueKey: const ValueKey('customer-record-last-bought'),
+                  figure: customer.lastSaleAt != null,
+                  end: true,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s16),
+          Divider(height: 1, color: tokens.colors.surface.borderSubtle),
+          SizedBox(height: tokens.spacing.s12),
+          Text(
+            'How to reach them',
+            style: tokens.typography.titleMedium.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          if (facts.isEmpty)
+            Text(
+              'No contact details are recorded for this customer.',
+              key: const ValueKey('customer-record-no-contact'),
+              style: tokens.typography.bodyMedium.copyWith(
+                color: tokens.colors.text.tertiary,
+              ),
+            )
+          else
+            for (final (index, fact) in facts.indexed) ...<Widget>[
+              if (index > 0) SizedBox(height: tokens.spacing.s12),
+              _Fact(label: fact.$1, value: fact.$2, icon: fact.$3),
+            ],
+        ],
+      ),
+    ),
+    ...<Widget>[
+      SizedBox(height: tokens.spacing.s16),
+      _AccountCard(
+        customer: customer,
+        currency: currency,
+        onRecordPayment: onRecordPayment,
+      ),
+    ],
+    SizedBox(height: tokens.spacing.s24),
+    const AppTabs(tabs: <String>['Statement', 'Purchases']),
+  ];
 }
 
 /// *Statement* and *Purchases*, as two tabs of one record.
@@ -389,48 +417,39 @@ final class _RecordContents extends StatelessWidget {
 /// **Tabs rather than two sections, at the developer's direction on
 /// 2026-10-02.** They answer different questions - how the account got to its
 /// balance, and what the customer bought - and stacked, the second was below a
-/// fold on every phone. Both stay alive, so moving between them never reads
-/// either again; only the chosen one is laid out.
+/// fold on every phone. Both stay alive once opened, so moving between them
+/// never reads either again.
+///
+/// The strip is the last thing in the record's header; this is the pages under
+/// it. Each is the inner scroll of the record's `NestedScrollView`, so it must
+/// be `primary` - that is how the header and the tab scroll as one.
 final class _RecordTabs extends StatelessWidget {
-  const _RecordTabs({required this.statement, required this.purchases});
+  const _RecordTabs({
+    required this.inset,
+    required this.statement,
+    required this.purchases,
+  });
 
+  final double inset;
   final Widget? statement;
   final Widget purchases;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return DefaultTabController(
-      length: 2,
-      child: Builder(
-        builder: (context) {
-          final tabs = DefaultTabController.of(context);
-          return AnimatedBuilder(
-            animation: tabs,
-            builder: (context, _) => Column(
-              key: const ValueKey('customer-record-tabs'),
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                const AppTabs(
-                  tabs: <String>['Statement', 'Purchases'],
-                  isScrollable: false,
-                ),
-                SizedBox(height: tokens.spacing.s16),
-                Visibility(
-                  visible: tabs.index == 0,
-                  maintainState: true,
-                  child: statement ?? const SizedBox.shrink(),
-                ),
-                Visibility(
-                  visible: tabs.index == 1,
-                  maintainState: true,
-                  child: purchases,
-                ),
-              ],
-            ),
-          );
-        },
+    Widget tab(Widget child) => AppKeptTab(
+      child: SingleChildScrollView(
+        primary: true,
+        padding: EdgeInsets.fromLTRB(inset, tokens.spacing.s16, inset, inset),
+        child: child,
       ),
+    );
+    return TabBarView(
+      key: const ValueKey('customer-record-tabs'),
+      children: <Widget>[
+        tab(statement ?? const SizedBox.shrink()),
+        tab(purchases),
+      ],
     );
   }
 }
@@ -572,14 +591,15 @@ final class _TenantCustomerStatementState
           reader: widget.reader,
         );
       }
-      final page = await TenantCustomerCreditRepository(
-        session: widget.session,
-        reader: widget.reader,
-      ).loadStatement(
-        widget.customer.id,
-        pageSize: TenantCustomerStatement.pageSize,
-        cursor: first ? null : _cursor,
-      );
+      final page =
+          await TenantCustomerCreditRepository(
+            session: widget.session,
+            reader: widget.reader,
+          ).loadStatement(
+            widget.customer.id,
+            pageSize: TenantCustomerStatement.pageSize,
+            cursor: first ? null : _cursor,
+          );
       if (!mounted) return;
       setState(() {
         if (first) _entries.clear();
@@ -893,15 +913,16 @@ final class _TenantCustomerPurchasesState
       _failed = false;
     });
     try {
-      final page = await TenantSaleHistoryRepository(
-        session: widget.session,
-        reader: widget.reader,
-        reportReader: widget.salesReader,
-      ).loadCustomerSales(
-        customerId: widget.customer.id,
-        pageSize: TenantCustomerPurchases.pageSize,
-        cursor: first ? null : _cursor,
-      );
+      final page =
+          await TenantSaleHistoryRepository(
+            session: widget.session,
+            reader: widget.reader,
+            reportReader: widget.salesReader,
+          ).loadCustomerSales(
+            customerId: widget.customer.id,
+            pageSize: TenantCustomerPurchases.pageSize,
+            cursor: first ? null : _cursor,
+          );
       final names = await TenantStaffNameResolver(
         session: widget.session,
         reader: widget.reader,
@@ -991,4 +1012,3 @@ final class _TenantCustomerPurchasesState
     );
   }
 }
-

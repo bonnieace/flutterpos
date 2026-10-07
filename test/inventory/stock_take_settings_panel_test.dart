@@ -62,8 +62,8 @@ void main() {
     expect(_toggled(tester, 'stock-take-weekday-${DateTime.tuesday}'), isFalse);
 
     // Every consequence is on screen at once, not only the selected one's.
-    expect(find.textContaining('cannot sell until'), findsOneWidget);
-    expect(find.textContaining('may carry on selling'), findsOneWidget);
+    expect(find.textContaining('No selling until'), findsOneWidget);
+    expect(find.textContaining('can carry on selling'), findsOneWidget);
 
     expect(_selected(tester, 'st-peter'), 'Hand tools');
     expect(_selected(tester, _owner), 'Not counting');
@@ -154,10 +154,12 @@ void main() {
     await _choose(tester, 'st-david', 'none');
     await _choose(tester, 'st-peter', 'all');
 
+    // A title that says it all is the whole callout, as its one line.
     expect(
-      noticeAt(tester, 'stock-take-coverage').title,
+      noticeAt(tester, 'stock-take-coverage').message,
       'Peter Kamau counts the whole list',
     );
+    expect(noticeAt(tester, 'stock-take-coverage').title, isNull);
     expect(
       find.byKey(const ValueKey('stock-take-note-st-david')),
       findsNothing,

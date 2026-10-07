@@ -439,12 +439,20 @@ final class TenantDeviceSalesAggregator {
         transactions += 1;
         // **A credit sale is split as the server splits it**: the part paid
         // at the counter by how it was paid, the part left owing in the
-        // bucket no payment method accounts for, counted as the one sale.
+        // bucket no payment method accounts for, counted as the one sale. A
+        // return comes off the owed part first, as on the customer's ledger;
+        // a category's share follows the sale's owed share instead.
         if (sale.credit case final credit?) {
-          final owedShare = sale.totalMinor == 0
-              ? 0
-              : (contribution.revenueMinor * credit.owedMinor / sale.totalMinor)
-                    .round();
+          final unpaid =
+              contribution.revenueMinor - credit.paidMinor(sale.totalMinor);
+          final int owedShare = query.categoryId != null
+              ? (sale.totalMinor == 0
+                    ? 0
+                    : (contribution.revenueMinor *
+                              credit.owedMinor /
+                              sale.totalMinor)
+                          .round())
+              : (unpaid > 0 ? unpaid : 0);
           const owedBucket = TenantSalesTenderBreakdown.unrecognisedBucket;
           tenderSales[owedBucket] = tenderSales[owedBucket]! + owedShare;
           tenderTransactions[owedBucket] = tenderTransactions[owedBucket]! + 1;

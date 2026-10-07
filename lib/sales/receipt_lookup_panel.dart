@@ -200,6 +200,7 @@ final class _TenantReceiptLookupPanelState
             allowedRoles: TenantReceiptLookupRepository.allowedRoles,
             load: _loaderFor(receipt),
             loadCached: _cachedLoaderFor(receipt),
+            holdsNothing: (result) => result.isMissing,
             denied: const Text(
               key: ValueKey('receipt-lookup-denied'),
               'Receipt lookup is unavailable for this business.',

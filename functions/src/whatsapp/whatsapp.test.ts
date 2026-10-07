@@ -21,6 +21,7 @@ import {
   queueAutomaticReceipt,
   receiptDeliveryId,
   requestManualReceipt,
+  whatsappMessageKey,
 } from "./deliveries";
 import {readEReceiptSettings} from "./eReceiptSettings";
 import {
@@ -195,6 +196,69 @@ test("a summary receipt is sent, indexed for the webhook, and counted", async ()
   assert.equal(db.read(`${ROOT}/whatsapp_usage/2026-09`)?.sent, 1);
 });
 
+test("a receipt Meta took is not sent again when recording it fails", async () => {
+  const db = business();
+  const deliveryId = (await queueAutomaticReceipt(
+    db.asFirestore(),
+    {tenantId: TENANT, saleId: "sale-1"},
+    enqueue
+  ))!;
+  const {fetch, calls} = meta([SENT]);
+  // The claim commits; the transaction that records the send does not.
+  const runTransaction = db.runTransaction.bind(db);
+  let transactions = 0;
+  db.runTransaction = (async (body: Parameters<typeof runTransaction>[0]) => {
+    transactions += 1;
+    if (transactions === 2) throw new Error("contention");
+    return runTransaction(body);
+  }) as typeof db.runTransaction;
+
+  const outcome = await executeReceiptDelivery(
+    db.asFirestore(),
+    {tenantId: TENANT, deliveryId},
+    {config: CONFIG, fetchImpl: fetch, now: () => NOW}
+  );
+
+  assert.equal(outcome, "sent");
+  assert.equal(calls.length, 1);
+  assert.equal(db.read(`${ROOT}/receipt_deliveries/${deliveryId}`)?.status, "sent");
+});
+
+test("a message ID with a slash is indexed and found by the webhook", async () => {
+  const db = business();
+  const deliveryId = (await queueAutomaticReceipt(
+    db.asFirestore(),
+    {tenantId: TENANT, saleId: "sale-1"},
+    enqueue
+  ))!;
+  const {fetch} = meta([{status: 200, body: {messages: [{id: "wamid.a/b"}]}}]);
+
+  const outcome = await executeReceiptDelivery(
+    db.asFirestore(),
+    {tenantId: TENANT, deliveryId},
+    {config: CONFIG, fetchImpl: fetch, now: () => NOW}
+  );
+
+  assert.equal(outcome, "sent");
+  assert.equal(
+    await applyDeliveryStatus(db.asFirestore(), {providerMessageId: "wamid.a/b", status: "delivered"}),
+    true
+  );
+  assert.equal(db.read(`${ROOT}/receipt_deliveries/${deliveryId}`)?.status, "delivered");
+});
+
+test("every message ID has a usable key, and a usable one keeps its own", () => {
+  // Keys already written must still be found by the webhook.
+  assert.equal(whatsappMessageKey("wamid.HBgM1234"), "wamid.HBgM1234");
+  assert.equal(whatsappMessageKey("wamid.a/b"), "wamid.a%2Fb");
+  for (const id of [".", "..", "__reserved__", "x".repeat(1501)]) {
+    const key = whatsappMessageKey(id);
+    assert.match(key, /^h_[0-9a-f]{64}$/, id.slice(0, 20));
+    // The same ID always lands on the same key.
+    assert.equal(whatsappMessageKey(id), key);
+  }
+});
+
 test("a PDF receipt is uploaded first and named in the header", async () => {
   const db = business({format: "pdf"});
   const deliveryId = (await queueAutomaticReceipt(
@@ -309,6 +373,8 @@ test("a manual receipt waits for a sale still on an offline till", async () => {
   const delivery = db.read(`${ROOT}/receipt_deliveries/${deliveryId}`);
   assert.equal(delivery?.status, "queued");
   assert.equal(delivery?.reason, "waiting_for_sale");
+  // Waiting is not a try at Meta, so it spends none of the provider retries.
+  assert.equal(delivery?.attempts, 0);
 
   db.seed(`${ROOT}/sales/sale-1`, sale());
   const outcome = await executeReceiptDelivery(

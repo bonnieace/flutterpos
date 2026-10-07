@@ -282,9 +282,13 @@ final class _TenantReportSheetState extends State<_TenantReportSheet> {
 
         _label(tokens, 'Format'),
         SizedBox(height: tokens.spacing.s8),
+        // **Rows with a radio, not cards**, at the developer's direction on
+        // 2026-10-05 - the receipt and stock count settings' choice, so one
+        // thing is chosen the same way everywhere.
         ChoiceCardGroup<TenantReportFormat>(
           key: const ValueKey('report-sheet-formats'),
           semanticLabel: 'Format',
+          flat: true,
           selected: _format,
           options: <ChoiceCardOption<TenantReportFormat>>[
             for (final format in TenantReportFormat.values)

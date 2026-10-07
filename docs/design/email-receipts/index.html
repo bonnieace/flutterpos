@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email receipts screen &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) {
+  .board { flex-direction: column; gap: 6px; }
+  .board h2 { width: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Email receipts screen</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Three artboards for both tabs of <code class="mono">TenantEmailReceiptsScreen</code>. Sent receipts is laid out the way Gmail lays out an inbox, with a letter avatar and three lines per message: who and when, the subject, then the snippet. Settings follows the WhatsApp receipts screen as built. Both use this app&#8217;s own tokens, not Gmail&#8217;s colours. Read <a href="README.md">README.md</a> for what changes, what was left out, and what is still open.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="email-receipts-settings.html">
+      <h2>Settings &#8212; phone</h2>
+      <p>The preview first, as the unread message the customer sees in their inbox, with the PDF as a chip. Then WhatsApp&#8217;s switch and flat timing rows, with no format to choose. Drawn on, read-only, and off.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="email-receipts-sent.html">
+      <h2>Sent receipts &#8212; phone</h2>
+      <p>An inbox: who and when, the receipt as the subject, and what became of it as the snippet, with the reason after a dot. Also drawn: nothing sent yet, and reading.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="email-receipts-states.html">
+      <h2>States</h2>
+      <p>All six statuses as a glyph and a word, every row variant and reason, the time ladder, the switch and choice rows in each state, the preview with and without a business name, the notices, and every answer Save can come back with.</p>
+      <span class="size">1280</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

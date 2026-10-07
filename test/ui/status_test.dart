@@ -502,6 +502,42 @@ void main() {
       expect(heightOf(tester), lessThan(open));
     });
 
+    testWidgets('unindented, the explanation spans the whole width', (
+      tester,
+    ) async {
+      // A folded block - a card of rows - rather than prose: it lines up with
+      // the cards above it, not with the summary's words.
+      const block = ValueKey('disclosure-block');
+      await _pump(
+        tester,
+        const Disclosure(
+          summary: summary,
+          initiallyExpanded: true,
+          indentChild: false,
+          child: SizedBox(key: block, height: 48, width: double.infinity),
+        ),
+      );
+      final whole = tester.getRect(find.byType(Disclosure));
+      final child = tester.getRect(find.byKey(block));
+      expect(child.left, whole.left);
+      expect(child.right, whole.right);
+      expect(child.bottom, whole.bottom);
+
+      await _pump(
+        tester,
+        const Disclosure(
+          summary: summary,
+          initiallyExpanded: true,
+          child: SizedBox(key: block, height: 48, width: double.infinity),
+        ),
+      );
+      expect(
+        tester.getRect(find.byKey(block)).left,
+        greaterThan(tester.getRect(find.byType(Disclosure)).left),
+        reason: 'indented by default, under the summary\'s words',
+      );
+    });
+
     testWidgets('it reports the change to its caller', (tester) async {
       final reported = <bool>[];
       await _pump(

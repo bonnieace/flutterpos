@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!--
       **Declared here, not only in the debug source set.** `src/debug` has
       carried this since the Flutter template, for hot reload - so every debug
@@ -12,6 +13,36 @@
       ships rather than inherited by luck from a transitive AAR.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!--
+      **Bluetooth receipt printers**, since 2026-10-03: the printer page's
+      Bluetooth tab finds, pairs and connects one, and receipts are sent to it
+      over Bluetooth Classic serial (`checkout_print_transport_bluetooth.dart`).
+
+      Android 12 and later ask once for *Nearby devices* (SCAN and CONNECT).
+      `neverForLocation` is a promise that a search is never used to locate the
+      phone, and it is what keeps location out of the request.
+
+      Before Android 12 the old pair is granted at install, and a search needs
+      location - capped by `maxSdkVersion`, so a current phone is never asked
+      for it.
+    -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30"/>
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30"/>
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30"/>
+    <uses-permission
+        android:name="android.permission.ACCESS_COARSE_LOCATION"
+        android:maxSdkVersion="30"/>
     <application
         android:label="UzaPay"
         android:name="${applicationName}"

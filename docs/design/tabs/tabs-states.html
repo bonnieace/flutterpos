@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tabs &#8212; states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+/* Every app value on this board is the token the build would read, named beside it.
+   Magenta (#FF6BD6) is annotation only - it is not an app colour. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; padding: 20px 24px 48px; }
+.page-stage > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+
+/* ---- The switch (same rules as the anatomy board) ---- */
+.sw { position: relative; display: flex; min-height: 48px; border-radius: 999px; background: #0D1F16; box-shadow: inset 0 0 0 1px #132A1F; }
+.seg { position: relative; flex: 1 1 0; min-width: 0; min-height: 48px; box-sizing: border-box; margin: 0; padding: 0 20px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; color: #BCCBB9; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; cursor: pointer; outline: none; text-align: center; }
+.seg::before { content: ''; position: absolute; inset: 4px; border-radius: 999px; background: transparent; }
+.seg.is-on { color: #D4E7DD; }
+.static .seg.is-on::before { background: #283831; box-shadow: inset 0 0 0 1px #3D4A3D; }
+.seg:not(.is-on):hover::before, .seg.is-hover:not(.is-on)::before { background: rgba(212, 231, 221, 0.08); }
+.seg:not(.is-on):active::before, .seg.is-pressed:not(.is-on)::before { background: rgba(212, 231, 221, 0.12); }
+.static .seg.is-on.is-hover::before { background: linear-gradient(rgba(212, 231, 221, 0.08), rgba(212, 231, 221, 0.08)), #283831; }
+.static .seg.is-on.is-pressed::before { background: linear-gradient(rgba(212, 231, 221, 0.12), rgba(212, 231, 221, 0.12)), #283831; }
+.seg:focus-visible::after, .seg.is-focus::after { content: ''; position: absolute; inset: 0; border: 2px solid #4BE277; border-radius: 999px; z-index: 2; }
+.seg .lbl { position: relative; z-index: 1; display: block; }
+.thumb { position: absolute; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: 999px; background: #283831; box-shadow: inset 0 0 0 1px #3D4A3D; pointer-events: none; will-change: transform; }
+.live .seg { transition: color 300ms ease; }
+
+/* ---- Icon tabs (same rules as the anatomy board) ---- */
+.it { position: relative; display: flex; height: 48px; box-shadow: inset 0 -1px 0 #132A1F; }
+.it.page { padding: 0 8px; }
+.itab { position: relative; flex: 0 0 auto; height: 48px; box-sizing: border-box; margin: 0; padding: 0 12px; border: 0; background: transparent; display: flex; align-items: center; color: #869585; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; cursor: pointer; outline: none; }
+.itab::before { content: ''; position: absolute; inset: 4px; border-radius: 8px; background: transparent; }
+.itab:hover, .itab.is-hover, .itab:active, .itab.is-pressed { color: #BCCBB9; }
+.itab:hover::before, .itab.is-hover::before { background: rgba(212, 231, 221, 0.08); }
+.itab:active::before, .itab.is-pressed::before { background: rgba(212, 231, 221, 0.12); }
+.itab.is-on, .itab.is-on:hover, .itab.is-on.is-hover, .itab.is-on.is-pressed { color: #4BE277; }
+.itab:focus-visible::after, .itab.is-focus::after { content: ''; position: absolute; inset: 0; border: 2px solid #4BE277; border-radius: 12px; z-index: 2; }
+.itab .c { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; }
+.itab .c svg { width: 18px; height: 18px; fill: currentColor; flex-shrink: 0; }
+.static .itab.is-on .c::after { content: ''; position: absolute; left: 0; right: 0; bottom: -14px; height: 2px; border-radius: 2px 2px 0 0; background: #4BE277; }
+.ind { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; border-radius: 2px 2px 0 0; background: #4BE277; pointer-events: none; will-change: transform, width; }
+.live .itab { transition: color 300ms ease; }
+.scroll-wrap { position: relative; box-shadow: inset 0 -1px 0 #132A1F; overflow: hidden; }
+.scroll { overflow: hidden; }
+.scroll .it { box-shadow: none; width: max-content; }
+.fade-end { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+.fade-both { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+.fade-start { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px); mask-image: linear-gradient(to right, transparent, #000 32px); }
+
+/* 200% text: font, line box, and the track grows with them. */
+.x2 .seg, .x2 .itab, .x2 .otab { font-size: 28px; line-height: 40px; }
+.x2 .seg { white-space: normal; padding-top: 12px; padding-bottom: 12px; }
+.x2 .itab .c svg { width: 36px; height: 36px; }
+
+/* ---- Today's strip, for the before rows ---- */
+.old { position: relative; display: flex; height: 50px; box-shadow: inset 0 -1px 0 #132A1F; }
+.old.fill .otab { flex: 1 1 0; min-width: 0; }
+.otab { flex: 0 0 auto; height: 50px; padding: 0 16px 2px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; overflow: hidden; }
+.x2 .otab { letter-spacing: 1.4px; }
+.otab.on { color: #D4E7DD; }
+.otab .lbl { position: relative; }
+.otab.on .lbl::after { content: ''; position: absolute; left: 0; right: 0; bottom: -5px; height: 3px; border-radius: 3px 3px 0 0; background: #4BE277; }
+.otab .cut { display: block; overflow: hidden; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+
+/* ---- Board furniture ---- */
+.board { width: 1280px; box-sizing: border-box; padding: 40px; background: #071610; display: flex; flex-direction: column; gap: 48px; }
+h1 { margin: 0; font-size: 32px; line-height: 38.4px; font-weight: 700; letter-spacing: -0.64px; }
+h2 { margin: 0 0 4px; font-size: 22px; line-height: 30.8px; font-weight: 600; }
+.lede { margin: 8px 0 0; max-width: 880px; font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.sub { margin: 0 0 20px; max-width: 880px; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.eyebrow { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #869585; }
+.tag { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; align-self: flex-start; }
+.tag.before { background: #28321D; border: 1px solid #5A4C24; color: #F2C14E; }
+.tag.after { background: rgba(75, 226, 119, 0.10); border: 1px solid rgba(75, 226, 119, 0.30); color: #4BE277; }
+.facts { margin: 16px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 21px; color: #BCCBB9; max-width: 1060px; }
+.facts li::before { content: '\2014\00a0'; color: #869585; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #D4E7DD; }
+.cap { font-size: 13px; line-height: 19px; color: #869585; }
+.cap code { font-size: 11px; color: #BCCBB9; }
+
+.matrix { display: grid; grid-template-columns: 140px repeat(4, 1fr); gap: 16px 20px; align-items: start; }
+.matrix .rowhead { padding-top: 22px; font-size: 14px; line-height: 20px; font-weight: 600; color: #D4E7DD; }
+.matrix.big .rowhead { padding-top: 44px; }
+.cell { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cell .well { padding: 16px 12px; background: #03110B; border: 1px solid #132A1F; border-radius: 12px; display: flex; justify-content: center; }
+.zoom { zoom: 2; }
+
+.phones { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
+.phones figure { margin: 0; display: flex; flex-direction: column; gap: 10px; width: min-content; }
+.strip { box-sizing: border-box; border-top: 1px dashed #283831; border-bottom: 1px dashed #283831; padding: 12px 0; background: #071610; }
+.w411 { width: 411px; } .w320 { width: 320px; }
+.pad16 { padding-left: 16px; padding-right: 16px; }
+
+.motion { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.panel { padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.panel h3 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.panel p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.stage { padding: 16px; background: #071610; border: 1px dashed #283831; border-radius: 4px; }
+.check { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; font-size: 14px; color: #BCCBB9; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: #4BE277; margin: 0; }
+.film-row { display: grid; grid-template-columns: 64px 1fr; align-items: center; height: 22px; }
+.film-row .t { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #869585; text-align: right; padding-right: 12px; }
+.film-row .track { position: relative; height: 22px; box-shadow: inset 0 -1px 0 #132A1F; }
+.film-row .bar { position: absolute; bottom: 0; height: 2px; border-radius: 2px 2px 0 0; background: #4BE277; }
+.film-row .ghost { position: absolute; bottom: 0; height: 2px; background: rgba(255, 107, 214, 0.55); }
+.film-labels { display: grid; grid-template-columns: 64px 1fr; }
+.film-labels .it { box-shadow: none; }
+.film-labels .itab { cursor: default; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position: absolute;" aria-hidden="true">
+  <symbol id="i-pay" viewBox="0 0 24 24"><path d="M19,14V6c0-1.1-0.9-2-2-2H3C1.9,4,1,4.9,1,6v8c0,1.1,0.9,2,2,2h14C18.1,16,19,15.1,19,14z M17,14H3V6h14V14z M10,7c-1.66,0-3,1.34-3,3s1.34,3,3,3s3-1.34,3-3S11.66,7,10,7z M23,7v11c0,1.1-0.9,2-2,2H4c0-1,0-0.9,0-2h17V7C22.1,7,22,7,23,7z"/></symbol>
+  <symbol id="i-asg" viewBox="0 0 24 24"><path d="M7 15h7v2H7zm0-4h10v2H7zm0-4h10v2H7zm12-4h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-.14 0-.27.01-.4.04-.39.08-.74.28-1.01.55-.18.18-.33.4-.43.64-.1.23-.16.49-.16.77v14c0 .27.06.54.16.78s.25.45.43.64c.27.27.62.47 1.01.55.13.02.26.03.4.03h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7-.25c.41 0 .75.34.75.75s-.34.75-.75.75-.75-.34-.75-.75.34-.75.75-.75zM19 19H5V5h14v14z"/></symbol>
+  <symbol id="i-hand" viewBox="0 0 24 24"><path d="M12.22,19.85c-0.18,0.18-0.5,0.21-0.71,0c-0.18-0.18-0.21-0.5,0-0.71l3.39-3.39l-1.41-1.41l-3.39,3.39c-0.19,0.2-0.51,0.19-0.71,0c-0.21-0.21-0.18-0.53,0-0.71l3.39-3.39l-1.41-1.41l-3.39,3.39c-0.18,0.18-0.5,0.21-0.71,0c-0.19-0.19-0.19-0.51,0-0.71l3.39-3.39L9.24,10.1l-3.39,3.39c-0.18,0.18-0.5,0.21-0.71,0c-0.19-0.2-0.19-0.51,0-0.71L9.52,8.4l1.87,1.86c0.95,0.95,2.59,0.94,3.54,0c0.98-0.98,0.98-2.56,0-3.54l-1.86-1.86l0.28-0.28c0.78-0.78,2.05-0.78,2.83,0l4.24,4.24c0.78,0.78,0.78,2.05,0,2.83L12.22,19.85z M21.83,13.07c1.56-1.56,1.56-4.09,0-5.66l-4.24-4.24c-1.56-1.56-4.09-1.56-5.66,0l-0.28,0.28l-0.28-0.28c-1.56-1.56-4.09-1.56-5.66,0L2.17,6.71c-1.42,1.42-1.55,3.63-0.4,5.19l1.45-1.45C2.83,9.7,2.96,8.75,3.59,8.12l3.54-3.54c0.78-0.78,2.05-0.78,2.83,0l3.56,3.56c0.18,0.18,0.21,0.5,0,0.71c-0.21,0.21-0.53,0.18-0.71,0L9.52,5.57l-5.8,5.79c-0.98,0.97-0.98,2.56,0,3.54c0.39,0.39,0.89,0.63,1.42,0.7c0.07,0.52,0.3,1.02,0.7,1.42c0.4,0.4,0.9,0.63,1.42,0.7c0.07,0.52,0.3,1.02,0.7,1.42c0.4,0.4,0.9,0.63,1.42,0.7c0.07,0.54,0.31,1.03,0.7,1.42c0.47,0.47,1.1,0.73,1.77,0.73c0.67,0,1.3-0.26,1.77-0.73L21.83,13.07z"/></symbol>
+  <symbol id="i-loy" viewBox="0 0 24 24"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58s1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41s-.23-1.06-.59-1.42zM13 20.01L4 11V4h7v-.01l9 9-7 7.02z"/><circle cx="6.5" cy="6.5" r="1.5"/><path d="M8.9 12.55c0 .57.23 1.07.6 1.45l3.5 3.5 3.5-3.5c.37-.37.6-.89.6-1.45 0-1.13-.92-2.05-2.05-2.05-.57 0-1.08.23-1.45.6l-.6.6-.6-.59c-.37-.38-.89-.61-1.45-.61-1.13 0-2.05.92-2.05 2.05z"/></symbol>
+</svg>
+<nav class="page-nav"><a href="index.html">&#8592; All Tabs artboards</a></nav>
+<div class="page-stage">
+<div class="board">
+
+  <header>
+    <h1>Tabs &#8212; states</h1>
+    <p class="lede">Every state of both shapes, large text, scrolling, and motion. The motion is live on this page: press the switch and the tabs under <em>Motion</em>.</p>
+  </header>
+
+  <!-- ===================================================== Switch states -->
+  <section>
+    <h2>The switch, in every state</h2>
+    <p class="sub">Printer&#8217;s two tabs at their own size. <em>Network</em> is selected throughout. The first row puts each state on <em>Bluetooth</em>; the second puts it on <em>Network</em>.</p>
+    <div class="matrix">
+      <span></span>
+      <span class="eyebrow">At rest</span>
+      <span class="eyebrow">Hovered</span>
+      <span class="eyebrow">Focused (keyboard)</span>
+      <span class="eyebrow">Pressed</span>
+
+      <span class="rowhead">The other half</span>
+      <div class="cell"><div class="well"><div class="sw static" style="width: 230px;"><span class="seg is-on"><span class="lbl">Network</span></span><span class="seg"><span class="lbl">Bluetooth</span></span></div></div><span class="cap"><code>text.secondary</code> on the track</span></div>
+      <div class="cell"><div class="well"><div class="sw static" style="width: 230px;"><span class="seg is-on"><span class="lbl">Network</span></span><span class="seg is-hover"><span class="lbl">Bluetooth</span></span></div></div><span class="cap">A thumb-shaped wash, <code>text.primary</code> at 8%</span></div>
+      <div class="cell"><div class="well"><div class="sw static" style="width: 230px;"><span class="seg is-on"><span class="lbl">Network</span></span><span class="seg is-focus"><span class="lbl">Bluetooth</span></span></div></div><span class="cap">Ring, 2 at 2 round the thumb&#8217;s shape; its outside is the track&#8217;s edge</span></div>
+      <div class="cell"><div class="well"><div class="sw static" style="width: 230px;"><span class="seg is-on"><span class="lbl">Network</span></span><span class="seg is-pressed"><span class="lbl">Bluetooth</span></span></div></div><span class="cap">Wash at 12%. On release, the thumb slides over</span></div>
+
+      <span class="rowhead">The selected half</span>
+      <div class="cell"><div class="well"><div class="sw static" style="width: 230px;"><span class="seg is-on"><span class="lbl">Network</span></span><span class="seg"><span class="lbl">Bluetooth</span></span></div></div><span class="cap">Thumb <code>surface.selected</code>, edge <code>borderStrong</code>; <code>text.primary</code></span></div>
+      <div class="cell"><div class="well"><div class="sw static" style="width: 230px;"><span class="seg is-on is-hover"><span class="lbl">Network</span></span><span class="seg"><span class="lbl">Bluetooth</span></span></div></div><span class="cap">8% laid over the thumb</span></div>
+      <div class="cell"><div class="well"><div class="sw static" style="width: 230px;"><span class="seg is-on is-focus"><span class="lbl">Network</span></span><span class="seg"><span class="lbl">Bluetooth</span></span></div></div><span class="cap">Same ring, round the thumb itself</span></div>
+      <div class="cell"><div class="well"><div class="sw static" style="width: 230px;"><span class="seg is-on is-pressed"><span class="lbl">Network</span></span><span class="seg"><span class="lbl">Bluetooth</span></span></div></div><span class="cap">12% over the thumb; nothing else changes</span></div>
+    </div>
+  </section>
+
+  <!-- ===================================================== Icon tab states -->
+  <section>
+    <h2>An icon tab, in every state</h2>
+    <p class="sub">Twice size. <code>TabBar</code> has no disabled tab, and the app removes a tab it cannot open (Configs drops <em>Loyalty</em> when loyalty is not wired), so there is no disabled state for either shape.</p>
+    <div class="matrix big">
+      <span></span>
+      <span class="eyebrow">At rest</span>
+      <span class="eyebrow">Hovered</span>
+      <span class="eyebrow">Focused (keyboard)</span>
+      <span class="eyebrow">Pressed</span>
+
+      <span class="rowhead">Not selected</span>
+      <div class="cell"><div class="well"><div class="zoom static"><div class="it" style="width: 100px;"><span class="itab" style="flex: 1;"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div><span class="cap">Glyph and label <code>text.tertiary</code></span></div>
+      <div class="cell"><div class="well"><div class="zoom static"><div class="it" style="width: 100px;"><span class="itab is-hover" style="flex: 1;"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div><span class="cap"><code>text.secondary</code>; wash 8%</span></div>
+      <div class="cell"><div class="well"><div class="zoom static"><div class="it" style="width: 100px;"><span class="itab is-focus" style="flex: 1;"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div><span class="cap">Ring, 2 at 2 round the wash shape</span></div>
+      <div class="cell"><div class="well"><div class="zoom static"><div class="it" style="width: 100px;"><span class="itab is-pressed" style="flex: 1;"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div><span class="cap"><code>text.secondary</code>; wash 12%. No ripple, no scale</span></div>
+
+      <span class="rowhead">Selected</span>
+      <div class="cell"><div class="well"><div class="zoom static"><div class="it" style="width: 100px;"><span class="itab is-on" style="flex: 1;"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div><span class="cap">Glyph, label and underline in <code>action.primary.container</code></span></div>
+      <div class="cell"><div class="well"><div class="zoom static"><div class="it" style="width: 100px;"><span class="itab is-on is-hover" style="flex: 1;"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div><span class="cap">Accent holds; wash 8%</span></div>
+      <div class="cell"><div class="well"><div class="zoom static"><div class="it" style="width: 100px;"><span class="itab is-on is-focus" style="flex: 1;"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div><span class="cap">The ring&#8217;s bottom edge meets the underline: one green, one weight</span></div>
+      <div class="cell"><div class="well"><div class="zoom static"><div class="it" style="width: 100px;"><span class="itab is-on is-pressed" style="flex: 1;"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div><span class="cap">Accent holds; wash 12%</span></div>
+    </div>
+    <ul class="facts">
+      <li><strong>Focus is the app&#8217;s ring on both shapes</strong>, not Material&#8217;s focus overlay, which on this ground looks the same as hover.</li>
+      <li>Hover and press colours take <code>motion.short</code> (160ms, ease-out), like every hover in the app. The selected colour follows the controller (see <em>Motion</em>).</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== Large text -->
+  <section>
+    <h2>At 200% text</h2>
+    <p class="sub">WhatsApp receipts on a 411 phone, inside its 16 inset. At this size <em>Sent receipts</em> needs 207, with 20 either side, and half of the switch is 189.</p>
+    <div class="phones x2">
+      <figure>
+        <span class="tag before">Before</span>
+        <div class="strip w411"><div class="old fill"><span class="otab"><span class="lbl">Settings</span></span><span class="otab on"><span class="lbl" style="max-width: 100%;"><span class="cut">Sent receipts</span></span></span></div></div>
+        <span class="cap">Today: the label is cut and faded at its share&#8217;s edge.</span>
+      </figure>
+      <figure>
+        <span class="tag after">After</span>
+        <div class="strip w411 pad16"><div class="sw static"><span class="seg"><span class="lbl">Settings</span></span><span class="seg is-on"><span class="lbl">Sent receipts</span></span></div></div>
+        <span class="cap">The label wraps onto a second line and the track grows to fit, with the thumb still inset 4. Nothing is cut. Only a single word too long for its half would push the switch back to a scrolling underline strip.</span>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ===================================================== Scrolling -->
+  <section>
+    <h2>Icon tabs, scrolling</h2>
+    <p class="sub">Configs on a 320 phone. With their glyphs, the four tabs need 494. Each end with more tabs past it fades over 32 (<code>space.32</code>). The fade is a mask, so it works on any ground.</p>
+    <div class="phones">
+      <figure>
+        <span class="eyebrow">At the start</span>
+        <div class="strip w320"><div class="scroll-wrap"><div class="scroll fade-end"><div class="it page static"><span class="itab is-on"><span class="c"><svg aria-hidden="true"><use href="#i-pay"/></svg>Currency</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-asg"/></svg>Stock counts</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-hand"/></svg>Agreed prices</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div></div>
+        <span class="cap">The first glyph at 20, the page inset. No 52px gap.</span>
+      </figure>
+      <figure>
+        <span class="eyebrow">Under a finger</span>
+        <div class="strip w320"><div class="scroll-wrap"><div class="scroll fade-both"><div class="it page static" style="transform: translateX(-88px);"><span class="itab is-on"><span class="c"><svg aria-hidden="true"><use href="#i-pay"/></svg>Currency</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-asg"/></svg>Stock counts</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-hand"/></svg>Agreed prices</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div></div>
+        <span class="cap">Both ends fade while there is more both ways.</span>
+      </figure>
+      <figure>
+        <span class="eyebrow">At the end</span>
+        <div class="strip w320"><div class="scroll-wrap"><div class="scroll fade-start"><div class="it page static" style="transform: translateX(-174px);"><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-pay"/></svg>Currency</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-asg"/></svg>Stock counts</span></span><span class="itab is-on"><span class="c"><svg aria-hidden="true"><use href="#i-hand"/></svg>Agreed prices</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div></div></div>
+        <span class="cap"><em>Agreed prices</em> selected and scrolled into view, as <code>TabBar</code> does now.</span>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ===================================================== Motion -->
+  <section>
+    <h2>Motion</h2>
+    <p class="sub">Each shape has one moving part. <strong>The switch&#8217;s thumb slides as one piece</strong> on <code>spring.snappy</code> (380 / 32), because both halves are the same width. <strong>The icon tabs&#8217; underline stretches</strong>: the end it is travelling towards leads on <code>spring.snappy</code>, and the other end follows on <code>spring.smooth</code> (220 / 30), because the tabs are different widths. Pressing again mid-move retargets from where the part is, at the speed it is going.</p>
+    <div class="motion">
+      <div class="panel">
+        <span class="eyebrow">Live &#183; the switch &#183; 411</span>
+        <h3>Press either half</h3>
+        <div class="stage" style="width: 411px; max-width: 100%; box-sizing: border-box;">
+          <div class="sw live" id="live-sw" role="tablist" aria-label="WhatsApp receipts">
+            <span class="thumb" aria-hidden="true"></span>
+            <button class="seg" role="tab" type="button"><span class="lbl">Settings</span></button>
+            <button class="seg" role="tab" type="button"><span class="lbl">Sent receipts</span></button>
+          </div>
+        </div>
+        <p>With a keyboard: Tab or the arrow keys move focus, and Enter or Space selects.</p>
+      </div>
+      <div class="panel">
+        <span class="eyebrow">Live &#183; icon tabs &#183; 768 and up</span>
+        <h3>Press a far tab, then another before it lands</h3>
+        <div class="stage" style="padding: 16px 0;">
+          <div class="it live" id="live-it" role="tablist" aria-label="Configs">
+            <button class="itab" role="tab" type="button"><span class="c"><svg aria-hidden="true"><use href="#i-pay"/></svg>Currency</span></button>
+            <button class="itab" role="tab" type="button"><span class="c"><svg aria-hidden="true"><use href="#i-asg"/></svg>Stock counts</span></button>
+            <button class="itab" role="tab" type="button"><span class="c"><svg aria-hidden="true"><use href="#i-hand"/></svg>Agreed prices</span></button>
+            <button class="itab" role="tab" type="button"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></button>
+            <span class="ind" aria-hidden="true"></span>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="slow"> Quarter speed, both</label>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top: 24px;">
+      <span class="eyebrow">Frame by frame &#183; the underline, Currency to Agreed prices</span>
+      <p>Green is the underline and magenta is where it is going. The leading end reaches the new tab at about 200ms, passes it by under 3px, and settles by about 380ms. The trailing end settles by about 530ms, though most of the stretch is gone by 300. The switch&#8217;s thumb moves like the leading end alone: there by about 200ms, settled in under 400ms.</p>
+      <div id="film">
+        <div class="film-labels"><span></span><div class="it" id="film-ref"><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-pay"/></svg>Currency</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-asg"/></svg>Stock counts</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-hand"/></svg>Agreed prices</span></span><span class="itab"><span class="c"><svg aria-hidden="true"><use href="#i-loy"/></svg>Loyalty</span></span></div></div>
+      </div>
+    </div>
+
+    <ul class="facts">
+      <li><strong>A swipe on a page still drives the moving part directly.</strong> While a finger drags <code>TabBarView</code>, the thumb or underline follows the controller&#8217;s offset with no spring, so it never lags the finger. The springs take over on a tap, and on release they start from the speed the drag left them with.</li>
+      <li><strong>Labels keep following the controller.</strong> Their colour cross-fades with <code>TabController</code>&#8217;s own animation, as it does now.</li>
+      <li>Neither spring visibly overshoots. <code>spring.bouncy</code> is not used: an operational control that wobbled would read as unstable.</li>
+      <li>Under <code>disableAnimations</code> both parts jump to their new place in one frame, which <code>SpringDrive</code> already does.</li>
+    </ul>
+  </section>
+
+</div>
+</div>
+
+<script>
+(function () {
+  // design.md 2.4's springs, mass 1. Semi-implicit Euler at 1/480 s substeps.
+  var SNAPPY = { k: 380, c: 32 }, SMOOTH = { k: 220, c: 30 };
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function Edge(x) { this.x = x; this.v = 0; this.to = x; this.s = SNAPPY; }
+  Edge.prototype.step = function (dt) { var a = -this.s.k * (this.x - this.to) - this.s.c * this.v; this.v += a * dt; this.x += this.v * dt; };
+  Edge.prototype.rest = function () { return Math.abs(this.x - this.to) < 0.05 && Math.abs(this.v) < 0.5; };
+
+  // stretch: the edge on the side of travel leads on snappy, the other follows on smooth.
+  function aim(L, R, l, r, stretch) {
+    var right = (l + r) / 2 >= (L.x + R.x) / 2;
+    L.to = l; R.to = r;
+    L.s = stretch && right ? SMOOTH : SNAPPY;
+    R.s = stretch && !right ? SMOOTH : SNAPPY;
+  }
+
+  function contentSpan(tab) {           // the glyph and label together
+    var c = tab.querySelector('.c');
+    return [tab.offsetLeft + c.offsetLeft, tab.offsetLeft + c.offsetLeft + c.offsetWidth];
+  }
+  function thumbSpan(seg) {             // the segment inset 4
+    return [seg.offsetLeft + 4, seg.offsetLeft + seg.offsetWidth - 4];
+  }
+
+  function live(root, items, mover, span, stretch, paintFn) {
+    var slow = document.getElementById('slow');
+    var sel = 0, L, R, raf = 0, last = 0;
+    function paint() { paintFn(mover, L.x, R.x); }
+    function frame(now) {
+      var dt = Math.min(0.05, (now - last) / 1000); last = now;
+      if (slow && slow.checked) dt *= 0.25;
+      for (var t = 0; t < dt; t += 1 / 480) { var h = Math.min(1 / 480, dt - t); L.step(h); R.step(h); }
+      paint();
+      if (L.rest() && R.rest()) { L.x = L.to; R.x = R.to; L.v = R.v = 0; paint(); raf = 0; return; }
+      raf = requestAnimationFrame(frame);
+    }
+    function select(i, animate) {
+      sel = i;
+      items.forEach(function (t, j) { t.classList.toggle('is-on', j === i); t.setAttribute('aria-selected', j === i ? 'true' : 'false'); });
+      var s = span(items[i]);
+      if (!L || !animate || reduce) { L = new Edge(s[0]); R = new Edge(s[1]); paint(); return; }
+      aim(L, R, s[0], s[1], stretch);
+      if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
+    }
+    items.forEach(function (t, i) {
+      t.addEventListener('click', function () { select(i, true); });
+      t.addEventListener('keydown', function (e) {
+        var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        items[(i + d + items.length) % items.length].focus();
+      });
+    });
+    select(0, false);
+    window.addEventListener('resize', function () { select(sel, false); });
+  }
+
+  function film() {
+    var ref = document.getElementById('film-ref');
+    var tabs = ref.querySelectorAll('.itab');
+    var from = contentSpan(tabs[0]), to = contentSpan(tabs[2]);
+    var L = new Edge(from[0]), R = new Edge(from[1]);
+    aim(L, R, to[0], to[1], true);
+    var marks = [0, 16, 33, 50, 83, 117, 167, 233, 300, 400, 530], out = document.getElementById('film');
+    var t = 0, h = 1 / 4800;
+    marks.forEach(function (ms) {
+      while (t < ms / 1000 - 1e-9) { L.step(h); R.step(h); t += h; }
+      var row = document.createElement('div'); row.className = 'film-row';
+      row.innerHTML = '<span class="t">' + ms + ' ms</span><div class="track"><span class="ghost"></span><span class="bar"></span></div>';
+      var g = row.querySelector('.ghost'), b = row.querySelector('.bar');
+      g.style.left = to[0] + 'px'; g.style.width = (to[1] - to[0]) + 'px';
+      b.style.left = L.x + 'px'; b.style.width = Math.max(0, R.x - L.x) + 'px';
+      out.appendChild(row);
+    });
+  }
+
+  function bar(el, l, r) { el.style.transform = 'translateX(' + l + 'px)'; el.style.width = Math.max(0, r - l) + 'px'; }
+
+  (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(function () {
+    var sw = document.getElementById('live-sw');
+    live(sw, Array.prototype.slice.call(sw.querySelectorAll('.seg')), sw.querySelector('.thumb'), thumbSpan, false, bar);
+    var it = document.getElementById('live-it');
+    live(it, Array.prototype.slice.call(it.querySelectorAll('.itab')), it.querySelector('.ind'), contentSpan, true, bar);
+    film();
+  });
+})();
+</script>
+</body>
+</html>

@@ -173,6 +173,29 @@ void main() {
     });
   });
 
+  testWidgets(
+    'cashier sees full-day own totals independently of the visible page',
+    (tester) async {
+      final reader = _SalesReader([_sale('co-1')]);
+      final callable = _OwnTotalsCallable();
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.cashier,
+        totalsCallable: callable,
+      );
+      expect(
+        find.byKey(const ValueKey('sales-report-summary')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('sales-staff-filter')), findsNothing);
+      expect(find.text('Your revenue'), findsOneWidget);
+      expect(callable.payloads.single['soldById'], 'user-a');
+      expect(reader.salesQueries.single.soldById, 'user-a');
+    },
+  );
+
   group('unified sales presentation', () {
     testWidgets('cashier sees only own mobile cards and no payment mutation', (
       tester,
@@ -1875,3 +1898,12 @@ Map<String, Object?> _staffData(
   'status': 'active',
   'invitationStatus': 'accepted',
 };
+
+final class _OwnTotalsCallable implements SalesTotalsCallable {
+  final payloads = <Map<String, Object?>>[];
+  @override
+  Future<Object?> call(Map<String, Object?> payload) {
+    payloads.add(payload);
+    return const _TotalsCallable().call(payload);
+  }
+}

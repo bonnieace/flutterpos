@@ -176,6 +176,7 @@ class _TenantStockTakeSettingsPanelState
       allowedRoles: TenantStockTakeSchedulePublisher.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (data) => data.staff.isEmpty,
       denied: const ErrorState(
         status: AppStatus.problem,
         badgeLabel: 'Not allowed',
@@ -366,72 +367,51 @@ class _TenantStockTakeSettingsPanelState
   }) => <Widget>[
     _aligned(tokens, const SectionHeading('What happens when a count is due')),
     SizedBox(height: tokens.spacing.s12),
-    _aligned(
-      tokens,
-      enabled: readOnly,
-      ChoiceCardGroup<TenantStockTakeEnforcement>(
-        key: const ValueKey('stock-take-enforcement'),
-        semanticLabel: 'What happens when a count is due',
-        selected: enforcement,
-        onSelected: readOnly
-            ? null
-            : (value) => setState(() {
-                _edited = true;
-                _enforcement = value;
-              }),
-        options: const <ChoiceCardOption<TenantStockTakeEnforcement>>[
-          ChoiceCardOption<TenantStockTakeEnforcement>(
-            key: ValueKey('stock-take-enforcement-off'),
-            value: TenantStockTakeEnforcement.off,
-            title: 'Nothing',
-            description:
-                'The rota below is recorded and nobody is interrupted.',
-            detailIcon: Icons.point_of_sale_outlined,
-            detail: <ChoiceDetailRun>[
-              ChoiceDetailRun(
-                'At the register: the till opens as it always does.',
-              ),
-            ],
-          ),
-          // The two register lines quote `stock_take_gate.dart`: what a person
-          // who owes a count actually meets, in the words they meet it in.
-          ChoiceCardOption<TenantStockTakeEnforcement>(
-            key: ValueKey('stock-take-enforcement-prompt'),
-            value: TenantStockTakeEnforcement.prompt,
-            title: 'Ask at the register',
-            description:
-                'Whoever owes a count is asked once when they open the '
-                'register, and may carry on selling.',
-            detailIcon: Icons.point_of_sale_outlined,
-            detail: <ChoiceDetailRun>[
-              ChoiceDetailRun('At the register: '),
-              ChoiceDetailRun('A stock count is due', emphasis: true),
-              ChoiceDetailRun(', with '),
-              ChoiceDetailRun('Not now', emphasis: true),
-              ChoiceDetailRun(' and '),
-              ChoiceDetailRun('Start counting', emphasis: true),
-              ChoiceDetailRun('.'),
-            ],
-          ),
-          // The sentence that matters, because this is the setting that can
-          // stop a shop trading.
-          ChoiceCardOption<TenantStockTakeEnforcement>(
-            key: ValueKey('stock-take-enforcement-block'),
-            value: TenantStockTakeEnforcement.block,
-            title: 'Hold the register',
-            description:
-                'Whoever owes a count cannot sell until they have handed it in. '
-                'Handing it in is enough - they do not wait for anybody to '
-                'approve it, and it works with no connection.',
-            detailIcon: Icons.point_of_sale_outlined,
-            detail: <ChoiceDetailRun>[
-              ChoiceDetailRun('At the register: '),
-              ChoiceDetailRun('Count first, then sell', emphasis: true),
-              ChoiceDetailRun(', in place of the till.'),
-            ],
-          ),
-        ],
-      ),
+    // **Rows with a radio, not cards**, at the developer's direction on
+    // 2026-10-05 - the WhatsApp and email receipt screens' choice, so the
+    // settings pages choose one thing the same way. A flat row stands in the
+    // ring's gutter read-only or not, so it needs no `_aligned` of its own.
+    ChoiceCardGroup<TenantStockTakeEnforcement>(
+      key: const ValueKey('stock-take-enforcement'),
+      semanticLabel: 'What happens when a count is due',
+      flat: true,
+      selected: enforcement,
+      onSelected: readOnly
+          ? null
+          : (value) => setState(() {
+              _edited = true;
+              _enforcement = value;
+            }),
+      // **One line each, at the developer's direction on 2026-10-03.** The
+      // cards quoted the register's own screens under every option as well;
+      // the consequence is what an owner chooses on, so that is what stays.
+      options: const <ChoiceCardOption<TenantStockTakeEnforcement>>[
+        ChoiceCardOption<TenantStockTakeEnforcement>(
+          key: ValueKey('stock-take-enforcement-off'),
+          value: TenantStockTakeEnforcement.off,
+          icon: Icons.notifications_off_outlined,
+          title: 'Nothing',
+          description: 'Nobody is interrupted.',
+        ),
+        ChoiceCardOption<TenantStockTakeEnforcement>(
+          key: ValueKey('stock-take-enforcement-prompt'),
+          value: TenantStockTakeEnforcement.prompt,
+          icon: Icons.notifications_active_outlined,
+          title: 'Ask at the register',
+          description: 'Asked once, and can carry on selling.',
+        ),
+        // The line that matters, because this is the setting that can stop a
+        // shop trading - and what makes it safe: no approval, no connection.
+        ChoiceCardOption<TenantStockTakeEnforcement>(
+          key: ValueKey('stock-take-enforcement-block'),
+          value: TenantStockTakeEnforcement.block,
+          icon: Icons.lock_outline,
+          title: 'Hold the register',
+          description:
+              'No selling until the count is handed in. Needs no approval '
+              'and no connection.',
+        ),
+      ],
     ),
   ];
 
@@ -560,8 +540,9 @@ class _TenantStockTakeSettingsPanelState
           icon: coverage.kind == StockTakeCoverageKind.unreachable
               ? Icons.warning_amber_rounded
               : null,
-          title: coverage.title,
-          message: coverage.message,
+          // Where the title says it all, it is the whole callout.
+          title: coverage.message == null ? null : coverage.title,
+          message: coverage.message ?? coverage.title,
         ),
       ),
       SizedBox(height: tokens.spacing.s12),
@@ -604,9 +585,8 @@ class _TenantStockTakeSettingsPanelState
             status: AppStatus.info,
             message:
                 'The first ${TenantStockTakeSettingsPanel.staffPageSize} '
-                'people are listed. Anybody after them cannot be put on the '
-                'rota from here, and whatever they are down for now is kept '
-                'when you save.',
+                'people are listed. Saving keeps what everyone else is down '
+                'for.',
           ),
         ),
       ],
@@ -793,7 +773,7 @@ class _TenantStockTakeSettingsPanelState
     // The committed notice's own second half, stated before the tap: a change
     // made now does not free somebody the register is already holding.
     final when = Text(
-      'Devices pick this up the next time they open the register.',
+      'Applies the next time a register opens.',
       style: tokens.typography.caption.copyWith(
         color: tokens.colors.text.tertiary,
       ),

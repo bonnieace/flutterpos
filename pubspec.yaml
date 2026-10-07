@@ -101,6 +101,7 @@ dependencies:
   flutter_typeahead: 6.0.0
   in_app_update: ^5.0.0
   material_symbols_icons: ^4.2960.0
+  flutter_blue_classic: ^0.1.1
   
   
 
@@ -143,6 +144,12 @@ flutter:
     # unDraw's five palette slots to a token role at render time, so the file on
     # disk is a shape and the palette is still `AppTokens`.
     - assets/illustrations/
+    # Other apps' own icons, for the home tiles that send through them -
+    # WhatsApp and Gmail - at the developer's direction on 2026-10-04. The one
+    # place this app draws colours that are not its tokens: an app icon in
+    # anybody else's palette is not that app's icon. WhatsApp's glyph is Simple
+    # Icons' (CC0); Gmail's is the 2020 mark from Wikimedia Commons.
+    - assets/app_icons/
 
   # Profound Verdant §typography, and `docs/stitch/OPEN_QUESTIONS.md` decision 20.
   # **The families changed on 2026-08-22**, from Roboto/Roboto Mono to Hanken

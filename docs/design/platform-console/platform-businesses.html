@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform console &#8212; businesses</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@500&amp;display=swap">
+<style>
+/* Profound Verdant tokens, as lib/ui/tokens.dart states them. Sample world: Tue 20 Oct 2026, 09:40. */
+
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, input, select, textarea { font: inherit; }
+p { margin: 0; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 48px 32px; padding: 20px 24px 64px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.frame { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; overflow: hidden; }
+figcaption { font-size: 13px; line-height: 19px; color: #869585; max-width: 760px; text-align: center; }
+figcaption b { color: #BCCBB9; font-weight: 600; }
+
+/* Frames. 1280 is the harness's desktop viewport, 411 its mobile one. */
+.desk { width: 1280px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; }
+.phone { width: 411px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; }
+.bar { height: 72px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 32px; }
+.phone .bar { height: 56px; padding: 0 4px; gap: 4px; }
+.bar-title { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .bar-title { padding-left: 12px; }
+.phone .bar .ibtn + .bar-title { padding-left: 0; }
+.grow { flex-grow: 1; min-width: 0; }
+.ibtn { width: 48px; height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: transparent; color: #D4E7DD; position: relative; cursor: pointer; }
+.ibtn.muted { color: #869585; }
+.ibtn.go { color: #4BE277; }
+.count { position: absolute; top: 4px; right: 4px; min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box; border-radius: 999px; background: #EF4444; color: #071610; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 500; display: flex; align-items: center; justify-content: center; }
+.body { padding: 8px 32px 40px; display: flex; flex-direction: column; gap: 24px; }
+.phone .body { padding: 4px 16px 24px; gap: 16px; }
+
+.card { background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.pad { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.phone .pad { padding: 16px; }
+.h-sec { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #D4E7DD; }
+.overline { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #BCCBB9; }
+.body-m { font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.body-l { font-size: 16px; line-height: 24px; color: #BCCBB9; }
+.cap { font-size: 12px; line-height: 16px; color: #869585; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.name { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; }
+.row { display: flex; align-items: center; gap: 16px; }
+.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; }
+.stack { display: flex; flex-direction: column; }
+.divider { height: 1px; background: #283831; border: 0; margin: 0; }
+
+/* StatusBadge: a container, a glyph and a word. */
+.bdg { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; box-sizing: border-box; border-radius: 8px; border: 1px solid; font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.t-ok { background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30); color: #4BE277; }
+.t-att { background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30); color: #F2C14E; }
+.t-prob { background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); color: #EF4444; }
+.t-info { background: rgba(176, 205, 189, 0.10); border-color: rgba(176, 205, 189, 0.30); color: #B0CDBD; }
+.t-neu { background: #283831; border-color: #3D4A3D; color: #BCCBB9; }
+.t-priv { background: rgba(167, 139, 250, 0.16); border-color: rgba(167, 139, 250, 0.30); color: #A78BFA; }
+.pill { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; box-sizing: border-box; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.you { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 999px; background: #283831; color: #D4E7DD; font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; }
+
+/* AppButton: 48 tall (40 at md), radius.md, labelLarge. */
+.btn { height: 48px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-sizing: border-box; border-radius: 8px; border: 1px solid #3D4A3D; background: #132A1F; color: #D4E7DD; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+.btn.md { height: 40px; padding: 0 16px; }
+.btn.pri { background: #4BE277; border-color: #4BE277; color: #003915; }
+.btn.danger, .btn.danger-fill { background: transparent; border-color: #EF4444; color: #EF4444; }
+.btn.ghost { background: transparent; border-color: transparent; color: #4BE277; padding: 0 12px; }
+.btn.full { width: 100%; }
+.btn:disabled { background: #1E3A2B; border-color: #1E3A2B; color: #5D7468; cursor: not-allowed; }
+.btn.hov { background: #6BFF8F; border-color: #6BFF8F; }
+.btn.foc { outline: 2px solid #4BE277; outline-offset: 2px; }
+
+/* FilterChipBar: 32 tall, radius.lg, the count in the label. */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.phone .chips { flex-wrap: nowrap; overflow: hidden; margin-right: -16px; }
+.chip { height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; border-radius: 12px; border: 1px solid #3D4A3D; background: transparent; color: #BCCBB9; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+.chip .n { color: inherit; font-weight: 600; }
+.chip.on { background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30); color: #4BE277; }
+.chip.on .n { color: #4BE277; }
+
+/* Fields. */
+.field { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #869585; font-size: 16px; line-height: 24px; }
+.field.val { color: #D4E7DD; }
+.field.err { border-color: #EF4444; }
+.field.foc { border-color: #4BE277; box-shadow: 0 0 0 1px #4BE277; }
+.field.area { height: auto; min-height: 96px; align-items: flex-start; padding: 12px 16px; }
+.field .sel { margin-left: auto; color: #BCCBB9; display: flex; }
+.lbl { font-size: 14px; line-height: 20px; font-weight: 600; color: #D4E7DD; }
+.help { font-size: 12px; line-height: 16px; color: #869585; }
+.help.err { color: #EF4444; }
+.fgroup { display: flex; flex-direction: column; gap: 8px; }
+
+/* The identity ring from the staff design: surface.field behind the
+   initials, the hue only on the ring. */
+.av { width: 48px; height: 48px; flex-shrink: 0; box-sizing: border-box; border-radius: 12px; background: #132A1F; border: 2px solid; display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 24px; font-weight: 700; color: #D4E7DD; }
+.av.sm { width: 40px; height: 40px; font-size: 14px; }
+.av.muted { color: #869585; }
+
+/* List rows: one card per record, as Staff draws them. */
+.rows { display: flex; flex-direction: column; gap: 8px; }
+.lrow { display: flex; align-items: center; gap: 16px; padding: 16px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.lrow.prob { border-color: rgba(239, 68, 68, 0.30); }
+.lrow.top { align-items: flex-start; }
+.phone .lrow { gap: 12px; padding: 12px; }
+.lmain { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.lline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lsub { font-size: 14px; line-height: 21px; color: #BCCBB9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lside { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; text-align: right; }
+.lnote { font-size: 12px; line-height: 16px; color: #869585; }
+.lnote.prob { color: #EF4444; }
+.lnote.att { color: #F2C14E; }
+
+/* Callouts. */
+.callout { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border-radius: 12px; border: 1px solid; }
+.callout.prob { background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); }
+.callout.info { background: rgba(176, 205, 189, 0.10); border-color: rgba(176, 205, 189, 0.30); }
+.callout.ok { background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30); }
+.callout.att { background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30); }
+.callout > svg { flex-shrink: 0; margin-top: 2px; }
+.ct { font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; }
+.cb { font-size: 14px; line-height: 21px; color: #BCCBB9; }
+
+/* Module tiles: the tenant home's tile, a glyph well in a module hue. */
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.tile { display: flex; gap: 16px; align-items: flex-start; padding: 20px; background: #132A1F; border: 1px solid #283831; border-radius: 12px; text-align: left; cursor: pointer; color: inherit; }
+.tile:hover { border-color: #3D4A3D; }
+.well { width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; position: relative; box-sizing: border-box; }
+.well .count { top: -6px; right: -6px; }
+.tile-t { font-size: 18px; line-height: 28px; font-weight: 600; color: #D4E7DD; }
+.tile-d { font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.ptiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 4px; }
+.ptile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0; background: transparent; border: 0; color: #D4E7DD; font-size: 14px; line-height: 20px; font-weight: 600; cursor: pointer; }
+.ptile .well { width: 56px; height: 56px; border-radius: 16px; }
+
+/* The figures band. */
+.figs { display: flex; padding: 20px 8px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.fig { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 0 16px; min-width: 0; }
+.fig + .fig { border-left: 1px solid #283831; }
+.fig-head { display: flex; align-items: center; gap: 10px; }
+.fig-chip { width: 32px; height: 32px; flex-shrink: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.fig-v { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 30px; line-height: 36px; font-weight: 500; color: #D4E7DD; }
+.fig-v.prob { color: #EF4444; }
+.fig-d { font-size: 12px; line-height: 16px; color: #869585; }
+.pfigs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pfig { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+
+/* Facts strip: label over value, no chips. */
+.facts { display: grid; grid-template-columns: repeat(4, 1fr); }
+.facts > div { padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.facts > div + div { border-left: 1px solid #283831; }
+.fact-v { font-size: 16px; line-height: 24px; color: #D4E7DD; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pfacts { display: flex; flex-direction: column; }
+.pfacts > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; min-height: 48px; box-sizing: border-box; }
+.pfacts > div + div { border-top: 1px solid #283831; }
+
+/* History timeline. */
+.tl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.tl li { display: flex; gap: 12px; position: relative; padding-bottom: 20px; }
+.tl li:last-child { padding-bottom: 0; }
+.tl li:not(:last-child)::before { content: ''; position: absolute; left: 15.5px; top: 32px; bottom: 0; width: 1px; background: #283831; }
+.tl .dot { width: 32px; height: 32px; box-sizing: border-box; border-radius: 999px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid; }
+.tl .tx { display: flex; flex-direction: column; gap: 4px; padding-top: 5px; min-width: 0; }
+
+/* Activity lines. */
+.acts { display: flex; flex-direction: column; }
+.act { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; }
+.act + .act { border-top: 1px solid #1C3328; }
+.act-i { width: 36px; height: 36px; box-sizing: border-box; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #132A1F; border: 1px solid #283831; color: #BCCBB9; }
+.act-m { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.act-s { font-size: 14px; line-height: 21px; color: #D4E7DD; }
+.act-s b { font-weight: 600; }
+.act-r { font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.act-t { font-size: 12px; line-height: 21px; color: #869585; flex-shrink: 0; white-space: nowrap; }
+.day { padding: 16px 0 4px; }
+
+/* Dialog. */
+.backdrop { background: rgba(3, 17, 11, 0.72); padding: 32px; display: flex; justify-content: center; align-items: flex-start; }
+.dlg { width: 480px; box-sizing: border-box; background: #132A1F; border: 1px solid #283831; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); }
+.dlg h3 { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.dlg .acts-row { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; }
+.dlg .field { background: #0D1F16; }
+.sheet { width: 411px; box-sizing: border-box; background: #132A1F; border-top: 1px solid #283831; border-radius: 12px 12px 0 0; padding: 8px 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+.grab { width: 32px; height: 4px; border-radius: 2px; background: #3D4A3D; align-self: center; margin: 4px 0 4px; }
+
+/* Skeletons: surface.raised bars centred in the line they stand for. */
+.sk { background: #132A1F; border-radius: 4px; }
+
+/* Charts. */
+.legend { display: flex; flex-direction: column; gap: 8px; }
+.legend > div { display: flex; align-items: center; gap: 12px; }
+.legend .v { margin-left: auto; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; font-weight: 500; color: #D4E7DD; }
+.stackbar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; gap: 2px; }
+
+/* States board. */
+.spec { display: flex; flex-direction: column; gap: 12px; }
+.spec-t { font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: #869585; }
+.board { width: 1280px; box-sizing: border-box; padding: 40px; background: #071610; display: flex; flex-direction: column; gap: 48px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.wrap8 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* ---- Bottom navigation: a floating stadium. Inactive destinations are a
+   56 circle with a glyph; the current one grows into a pill holding a
+   primary-filled circle and its name. One bar for desktop and phone. */
+.has-nav { position: relative; }
+.has-nav .body { padding-bottom: 128px; }
+.phone.has-nav .body { padding-bottom: 104px; }
+.nav { position: absolute; left: 50%; transform: translateX(-50%); bottom: 24px; display: flex; align-items: center; gap: 8px; padding: 8px; background: #0D1F16; border: 1px solid #283831; border-radius: 999px; box-shadow: 0 16px 40px rgba(3, 17, 11, 0.7); z-index: 2; }
+.nav.static { position: static; transform: none; box-shadow: none; }
+.nv-i { display: flex; align-items: center; gap: 12px; height: 56px; border-radius: 999px; background: #132A1F; color: #BCCBB9; text-decoration: none; position: relative; flex-shrink: 0; }
+.nv-c { width: 56px; height: 56px; box-sizing: border-box; border-radius: 999px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.nv-i.on { padding-right: 24px; }
+.nv-i.on .nv-c { background: #4BE277; color: #003915; }
+.nv-l { font-size: 14px; line-height: 20px; font-weight: 600; color: #D4E7DD; white-space: nowrap; }
+.nv-i .count { top: 0; right: 0; }
+.nv-i.on .count { right: auto; left: 36px; }
+.nv-i.hov { background: #283831; color: #D4E7DD; }
+.nv-i.foc { outline: 2px solid #4BE277; outline-offset: 2px; }
+.nv-i.prs { background: #3D4A3D; color: #D4E7DD; }
+.phone .nav { bottom: 16px; gap: 6px; padding: 6px; }
+.phone .nv-i { height: 48px; gap: 8px; }
+.phone .nv-c { width: 48px; height: 48px; }
+.phone .nv-i.on { padding-right: 16px; }
+.phone .nv-l { font-size: 14px; line-height: 20px; }
+.phone .nv-i.on .count { left: 32px; }
+.scrim-b { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; background: linear-gradient(to bottom, rgba(7, 22, 16, 0), #071610 70%); z-index: 1; pointer-events: none; }
+.viewport { height: 891px; overflow: hidden; }
+
+/* Alternatives from the references, for comparison only. */
+.navb { display: flex; align-items: center; justify-content: space-around; height: 72px; padding: 0 12px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; }
+.navb a { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px; border-radius: 999px; color: #BCCBB9; text-decoration: none; box-sizing: border-box; }
+.navb a.on { background: rgba(75, 226, 119, 0.10); border: 1px solid rgba(75, 226, 119, 0.30); color: #4BE277; padding: 0 16px; font-size: 14px; font-weight: 600; }
+.navc { position: relative; display: flex; align-items: center; justify-content: space-around; height: 64px; padding: 0 12px; background: #132A1F; border-radius: 999px; margin-top: 28px; }
+.navc a { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; color: #BCCBB9; }
+.navc a.on { width: 64px; height: 64px; margin-top: -40px; border-radius: 999px; background: #4BE277; color: #003915; box-shadow: 0 0 0 8px #071610; }
+
+/* ---- Dashboard tile: the one component the overview is made of. Header
+   (glyph chip, overline, go), value line (figure + context), a visual of
+   fixed height, footer. Every tile, every size. */
+.dash { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.dt { display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; color: inherit; min-width: 0; }
+.dt:hover { border-color: #3D4A3D; }
+.dt.s2 { grid-column: span 2; }
+.dt-h { display: flex; align-items: center; gap: 10px; height: 32px; }
+.dt-h .go { margin-left: auto; color: #869585; display: flex; }
+.dt-vrow { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.dt-v { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 30px; line-height: 36px; font-weight: 500; color: #D4E7DD; flex-shrink: 0; }
+.dt-v.prob { color: #EF4444; }
+.dt-c { font-size: 14px; line-height: 21px; color: #BCCBB9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dt-vis { height: 56px; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
+.dt-vis.tall { height: 184px; justify-content: flex-start; }
+.dt-f { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 16px; font-size: 12px; line-height: 16px; color: #869585; }
+.dt-f .sw { display: inline-flex; align-items: center; gap: 6px; }
+.mini { display: flex; align-items: center; gap: 12px; height: 46px; border-top: 1px solid #1C3328; min-width: 0; }
+.mini:first-child { border-top: 0; }
+.mini .mt { font-size: 14px; line-height: 21px; color: #D4E7DD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-grow: 1; }
+.mini .mt b { font-weight: 600; }
+.mini .mm { font-size: 12px; line-height: 16px; color: #869585; flex-shrink: 0; }
+.phone .dash { grid-template-columns: 1fr 1fr; gap: 8px; }
+.phone .dt { padding: 16px; gap: 10px; }
+.phone .dt.s2 { grid-column: span 2; }
+.phone .dt-v { font-size: 22px; line-height: 30.8px; }
+.phone .dt-c { font-size: 12px; line-height: 16px; }
+
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All platform console artboards</a></nav>
+<div class="page-stage">
+<figure>
+<div class="frame desk has-nav">
+<div class="bar"><span class="bar-title">Businesses</span><span class="grow"></span></div>
+<div class="body">
+  <div class="callout prob"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg><div class="grow stack" style="gap: 8px;"><span class="ct">2 businesses have an open alert.</span><span class="cb">Raised in the last seven days, and emailed to every platform administrator.</span><div><button type="button" class="btn ">Show the 2</button></div></div></div>
+  <div class="row" style="gap: 12px;"><span class="field grow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Search by name or slug</span></div>
+  <div class="chips"><button type="button" class="chip on" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>All <span class="n">17</span></button><button type="button" class="chip" aria-pressed="false">Trading <span class="n">14</span></button><button type="button" class="chip" aria-pressed="false">Suspended <span class="n">2</span></button><button type="button" class="chip" aria-pressed="false">Archived <span class="n">1</span></button><button type="button" class="chip" aria-pressed="false">Needs attention <span class="n">2</span></button></div>
+  <div class="rows"><div class="lrow">
+  <span class="av" style="border-color: #EC407A;" aria-hidden="true">RB</span>
+  <div class="lmain">
+    <div class="lline"><span class="name">Ruth&#8217;s Boutique</span><span class="cap mono">ruths-boutique</span></div>
+    <span class="lsub">Owner Ruth Achieng &#183; ruth.achieng@gmail.com</span>
+  </div>
+  <div class="lside"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span><span class="lnote">Created today, 09:12 &#183; 1 person</span></div>
+  
+  <button type="button" class="ibtn muted" aria-label="More for Ruth&#8217;s Boutique"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button>
+</div><div class="lrow">
+  <span class="av" style="border-color: #FFA726;" aria-hidden="true">DN</span>
+  <div class="lmain">
+    <div class="lline"><span class="name">Duka la Mama Njeri</span><span class="cap mono">duka-la-mama-njeri</span></div>
+    <span class="lsub">Owner Njeri Wambui &#183; njeri.wambui@gmail.com</span>
+  </div>
+  <div class="lside"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span><span class="lnote">Created 14 Oct &#183; 3 people</span></div>
+  
+  <button type="button" class="ibtn muted" aria-label="More for Duka la Mama Njeri"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button>
+</div><div class="lrow">
+  <span class="av muted" style="border-color: #66BB6A;" aria-hidden="true">NA</span>
+  <div class="lmain">
+    <div class="lline"><span class="name">Nyeri Agrovet</span><span class="cap mono">nyeri-agrovet</span></div>
+    <span class="lsub">Owner Paul Maina &#183; paul.maina@nyeriagrovet.co.ke</span>
+  </div>
+  <div class="lside"><span class="bdg t-neu"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M10 12h4"/></svg>Archived</span><span class="lnote">Archived 13 Oct by Bonnie Master</span></div>
+  
+  <button type="button" class="ibtn muted" aria-label="More for Nyeri Agrovet"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button>
+</div><div class="lrow prob">
+  <span class="av" style="border-color: #26A69A;" aria-hidden="true">KG</span>
+  <div class="lmain">
+    <div class="lline"><span class="name">Kilimani Grocers</span><span class="cap mono">kilimani-grocers</span></div>
+    <span class="lsub">Owner Joseph Kiprono &#183; joseph@kilimanigrocers.co.ke</span>
+  </div>
+  <div class="lside"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span><span class="lnote prob">Reconciliation stopped retrying</span></div>
+  <button type="button" class="btn md">View alert</button>
+  <button type="button" class="ibtn muted" aria-label="More for Kilimani Grocers"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button>
+</div><div class="lrow">
+  <span class="av" style="border-color: #42A5F5;" aria-hidden="true">CF</span>
+  <div class="lmain">
+    <div class="lline"><span class="name">Coast Fresh Juices</span><span class="cap mono">coast-fresh-juices</span></div>
+    <span class="lsub">Owner Omar Said &#183; omar.said@gmail.com</span>
+  </div>
+  <div class="lside"><span class="bdg t-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg>Suspended</span><span class="lnote">Since 11 Oct &#183; &#8220;Closed for renovation until November.&#8221;</span></div>
+  
+  <button type="button" class="ibtn muted" aria-label="More for Coast Fresh Juices"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button>
+</div><div class="lrow">
+  <span class="av" style="border-color: #AB47BC;" aria-hidden="true">LP</span>
+  <div class="lmain">
+    <div class="lline"><span class="name">Lake View Pharmacy</span><span class="cap mono">lake-view-pharmacy</span></div>
+    <span class="lsub">Owner Halima Abdi &#183; halima@lakeviewpharmacy.co.ke</span>
+  </div>
+  <div class="lside"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span><span class="lnote">Created 26 Aug &#183; 11 people</span></div>
+  
+  <button type="button" class="ibtn muted" aria-label="More for Lake View Pharmacy"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button>
+</div><div class="lrow prob">
+  <span class="av" style="border-color: #EC407A;" aria-hidden="true">WS</span>
+  <div class="lmain">
+    <div class="lline"><span class="name">Wairimu Salon &amp; Spa</span><span class="cap mono">wairimu-salon</span></div>
+    <span class="lsub">Owner Esther Wairimu &#183; <span style="color: #EF4444;">disabled</span> &#183; esther@wairimusalon.co.ke</span>
+  </div>
+  <div class="lside"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span><span class="lnote prob">Owner can&#8217;t sign in &#183; no other administrator</span></div>
+  <button type="button" class="btn md">View alert</button>
+  <button type="button" class="ibtn muted" aria-label="More for Wairimu Salon &amp; Spa"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button>
+</div><div class="lrow">
+  <span class="av" style="border-color: #FFA726;" aria-hidden="true">KB</span>
+  <div class="lmain">
+    <div class="lline"><span class="name">Kamau Butchery</span><span class="cap mono">kamau-butchery</span></div>
+    <span class="lsub">Owner Daniel Kamau &#183; daniel.kamau@gmail.com</span>
+  </div>
+  <div class="lside"><span class="bdg t-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg>Suspended</span><span class="lnote">Since 7 Oct &#183; &#8220;Chargebacks under review with the bank.&#8221;</span></div>
+  
+  <button type="button" class="ibtn muted" aria-label="More for Kamau Butchery"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button>
+</div></div>
+  <div class="row" style="justify-content: space-between;"><span class="cap" style="font-size: 14px;">Showing 1&#8211;8 of 17</span><div class="row" style="gap: 8px;"><button type="button" class="btn " disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Previous</button><button type="button" class="btn ">Next<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div></div>
+</div><nav class="nav " aria-label="Platform"><a href="#" class="nv-i " aria-label="Overview" title="Overview"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></span></a><a href="#" class="nv-i on " aria-current="page"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span><span class="nv-l">Businesses</span></a><a href="#" class="nv-i " aria-label="People" title="People"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></span></a><a href="#" class="nv-i " aria-label="Alerts, 2 open" title="Alerts"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></span><span class="count" aria-hidden="true">2</span></a><a href="#" class="nv-i " aria-label="Activity" title="Activity"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span></a></nav>
+</div>
+<figcaption><b>Businesses.</b> A top-level destination: no back arrow, the bar at the bottom. Every status, not only active and suspended.</figcaption>
+</figure>
+<figure>
+<div class="frame desk">
+<div class="bar"><button type="button" class="ibtn " aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg></button><span class="bar-title">Mwangi Hardware</span><span class="grow"></span><button type="button" class="btn danger"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg>Suspend</button><button type="button" class="ibtn " aria-label="More actions: archive"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button></div>
+<div class="body">
+  <div class="card facts">
+  <div><span class="overline">Status</span><span class="fact-v"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span><span class="cap">since 10 Oct</span></span></div>
+  <div><span class="overline">Created</span><span class="fact-v">12 Aug 2026</span></div>
+  <div><span class="overline">Slug</span><span class="fact-v"><span class="mono" style="font-size: 14px;">mwangi-hardware</span></span></div>
+  <div><span class="overline">Business ID</span><span class="fact-v"><span class="mono" style="font-size: 14px;">t_8Kq2Vb1xRz</span><button type="button" class="ibtn muted" aria-label="Copy business ID"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/></svg></button></span></div>
+</div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start;">
+    <div class="stack" style="gap: 16px;"><div class="card pad">
+  <div class="sec-head" style="min-height: 0;"><span class="overline">Owner &amp; administrators</span><span class="cap">2 can manage it</span></div>
+  <div class="row" style="gap: 12px;"><span class="av sm" style="border-color: #EC407A;" aria-hidden="true">AM</span><div class="lmain"><div class="lline"><span class="name">Asha Mwangi</span><span class="bdg t-priv"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>Owner</span></div><span class="lsub">asha@mwangihardware.co.ke &#183; +254 712 004 118</span></div><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Active</span></div>
+  <div class="row" style="gap: 12px;"><span class="av sm" style="border-color: #42A5F5;" aria-hidden="true">BO</span><div class="lmain"><div class="lline"><span class="name">Boniface Otieno</span><span class="bdg t-priv"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/></svg>Administrator</span></div><span class="lsub">boniface@mwangihardware.co.ke</span></div><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Active</span></div>
+</div><div class="card pad">
+  <div class="sec-head" style="min-height: 0;"><span class="overline">Staff</span><span class="cap">23 people</span></div>
+  <div class="wrap8"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>17 active</span><span class="bdg t-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>3 invited</span><span class="bdg t-prob"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg>2 need attention</span><span class="bdg t-neu"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M10 12h4"/></svg>1 deactivated</span></div>
+  <div class="row" style="gap: 12px;"><span class="av sm" style="border-color: #FFA726;" aria-hidden="true">GW</span><div class="lmain"><div class="lline"><span class="name">Grace Wanjiru</span><span class="pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg>Manager</span></div><span class="lsub">grace@mwangihardware.co.ke</span></div><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Active</span></div>
+  <div class="row" style="gap: 12px;"><span class="av sm" style="border-color: #26A69A;" aria-hidden="true">LA</span><div class="lmain"><div class="lline"><span class="name">Lydia Achieng</span><span class="pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>Cashier</span></div><span class="lsub">lydia.achieng@gmail.com</span></div><span class="bdg t-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Invited</span></div>
+  <div class="row" style="gap: 12px;"><span class="av sm" style="border-color: #AB47BC;" aria-hidden="true">NK</span><div class="lmain"><div class="lline"><span class="name">Njeri Kariuki</span><span class="pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>Cashier</span></div><span class="lsub">njeri.kariuki@gmail.com</span></div><span class="bdg t-prob"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg>Link expired</span></div>
+  <div class="row" style="gap: 12px;"><span class="av sm" style="border-color: #66BB6A;" aria-hidden="true">SO</span><div class="lmain"><div class="lline"><span class="name">Samuel Ochieng</span><span class="pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>Cashier</span></div><span class="lsub">samuel.ochieng@yahoo.com</span></div><span class="bdg t-prob"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6.5 8.5-6.5"/><path d="M2.5 2.5l19 19"/></svg>Email rejected</span></div>
+</div></div>
+    <div class="stack" style="gap: 16px;"><div class="card pad">
+  <div class="sec-head" style="min-height: 0;"><span class="overline">History</span><span class="cap">Who changed its status, and why</span></div>
+  <ul class="tl"><li><span class="dot" style="background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg></span><div class="tx"><span class="name" style="font-size: 14px; line-height: 21px;">Reactivated</span><span class="cap">Sat 10 Oct, 08:15 &#183; Bonnie Master</span><span class="body-m">&#8220;Stock-take finished; owner asked to resume.&#8221;</span></div></li><li><span class="dot" style="background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F2C14E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg></span><div class="tx"><span class="name" style="font-size: 14px; line-height: 21px;">Suspended</span><span class="cap">Fri 9 Oct, 17:40 &#183; Bonnie Master</span><span class="body-m">&#8220;Owner asked to pause trading during the stock-take.&#8221;</span></div></li><li><span class="dot" style="background: #283831; border-color: #3D4A3D;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BCCBB9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span><div class="tx"><span class="name" style="font-size: 14px; line-height: 21px;">Created</span><span class="cap">Wed 12 Aug, 10:02 &#183; by Asha Mwangi, trading in KES</span></div></li></ul>
+</div><div class="card pad" style="gap: 8px;">
+  <div class="sec-head" style="min-height: 0;"><span class="overline">Business audit log</span><button type="button" class="btn ghost">Open log<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
+  <div class="acts"><div class="act"><span class="act-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg></span><div class="act-m"><span class="act-s"><b>Grace Wanjiru</b> changed a product&#8217;s price</span><span class="act-r">Price KES 820 &#8594; KES 850</span></div><span class="act-t">09:31</span></div><div class="act"><span class="act-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4"/><path d="M12 11v10"/></svg></span><div class="act-m"><span class="act-s"><b>Peter Kamau</b> adjusted stock</span><span class="act-r">&#8722;3 &#183; Damage</span></div><span class="act-t">08:58</span></div><div class="act"><span class="act-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16"/><path d="M8 20h8"/><path d="M5 8h14"/><path d="M5 8l-3 6.5a3.2 3.2 0 006 0z"/><path d="M19 8l-3 6.5a3.2 3.2 0 006 0z"/></svg></span><div class="act-m"><span class="act-s"><b>Boniface Otieno</b> amended a shift summary</span><span class="act-r">Sales variance KES &#8722;150.00</span></div><span class="act-t">Mon 18:20</span></div><div class="act"><span class="act-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></span><div class="act-m"><span class="act-s"><b>Grace Wanjiru</b> reprinted a receipt</span><span class="act-r"><span class="mono" style="font-size: 12px;">MH-20261019-0031</span></span></div><span class="act-t">Mon 12:04</span></div><div class="act"><span class="act-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></span><div class="act-m"><span class="act-s"><b>Asha Mwangi</b> received a delivery</span><span class="act-r">240 units &#183; 4 cost prices changed</span></div><span class="act-t">Sat 14:00</span></div><div class="act"><span class="act-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M19 8v6"/><path d="M16 11h6"/></svg></span><div class="act-m"><span class="act-s"><b>Boniface Otieno</b> invited <b>Lydia Achieng</b> as a cashier</span></div><span class="act-t">Fri 10:00</span></div></div>
+  <div class="callout info" style="margin-top: 8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B0CDBD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg><span class="cb">Platform administrators read this log, not the business&#8217;s sales, stock or reports. A figure here is the one a change recorded.</span></div>
+</div></div>
+  </div>
+</div>
+</div>
+<figcaption><b>One business.</b> Pushed over the bar, so it has a back arrow and no bar. No sales.</figcaption>
+</figure>
+<figure>
+<div class="frame phone has-nav">
+<div class="bar"><span class="bar-title">Businesses</span><span class="grow"></span></div>
+<div class="body">
+  <span class="field grow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#869585" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Search businesses</span>
+  <div class="chips"><button type="button" class="chip on" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>All <span class="n">17</span></button><button type="button" class="chip" aria-pressed="false">Trading <span class="n">14</span></button><button type="button" class="chip" aria-pressed="false">Suspended <span class="n">2</span></button><button type="button" class="chip" aria-pressed="false">Archived <span class="n">1</span></button></div>
+  <div class="callout prob"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg><div class="grow stack" style="gap: 2px;"><span class="ct">Two have an open alert</span><span class="cb">Wairimu Salon &amp; Spa and Kilimani Grocers.</span></div></div>
+  <div class="rows"><div class="lrow top">
+  <span class="av sm" style="border-color: #EC407A;" aria-hidden="true">RB</span>
+  <div class="lmain">
+    <span class="name">Ruth&#8217;s Boutique</span>
+    <span class="lsub">Ruth Achieng</span>
+    <div class="lline" style="padding-top: 4px;"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span></div>
+    <span class="lnote">Created today, 09:12 &#183; 1 person</span>
+  </div>
+</div><div class="lrow top">
+  <span class="av sm" style="border-color: #FFA726;" aria-hidden="true">DN</span>
+  <div class="lmain">
+    <span class="name">Duka la Mama Njeri</span>
+    <span class="lsub">Njeri Wambui</span>
+    <div class="lline" style="padding-top: 4px;"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span></div>
+    <span class="lnote">Created 14 Oct &#183; 3 people</span>
+  </div>
+</div><div class="lrow top">
+  <span class="av sm muted" style="border-color: #66BB6A;" aria-hidden="true">NA</span>
+  <div class="lmain">
+    <span class="name">Nyeri Agrovet</span>
+    <span class="lsub">Paul Maina</span>
+    <div class="lline" style="padding-top: 4px;"><span class="bdg t-neu"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M10 12h4"/></svg>Archived</span></div>
+    <span class="lnote">Archived 13 Oct by Bonnie Master</span>
+  </div>
+</div><div class="lrow prob top">
+  <span class="av sm" style="border-color: #26A69A;" aria-hidden="true">KG</span>
+  <div class="lmain">
+    <span class="name">Kilimani Grocers</span>
+    <span class="lsub">Joseph Kiprono</span>
+    <div class="lline" style="padding-top: 4px;"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span></div>
+    <span class="lnote prob">Reconciliation stopped retrying</span>
+  </div>
+</div><div class="lrow top">
+  <span class="av sm" style="border-color: #42A5F5;" aria-hidden="true">CF</span>
+  <div class="lmain">
+    <span class="name">Coast Fresh Juices</span>
+    <span class="lsub">Omar Said</span>
+    <div class="lline" style="padding-top: 4px;"><span class="bdg t-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg>Suspended</span></div>
+    <span class="lnote">Since 11 Oct &#183; &#8220;Closed for renovation until November.&#8221;</span>
+  </div>
+</div><div class="lrow top">
+  <span class="av sm" style="border-color: #AB47BC;" aria-hidden="true">LP</span>
+  <div class="lmain">
+    <span class="name">Lake View Pharmacy</span>
+    <span class="lsub">Halima Abdi</span>
+    <div class="lline" style="padding-top: 4px;"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span></div>
+    <span class="lnote">Created 26 Aug &#183; 11 people</span>
+  </div>
+</div><div class="lrow prob top">
+  <span class="av sm" style="border-color: #EC407A;" aria-hidden="true">WS</span>
+  <div class="lmain">
+    <span class="name">Wairimu Salon &amp; Spa</span>
+    <span class="lsub">Esther Wairimu &#183; <span style="color: #EF4444;">disabled</span></span>
+    <div class="lline" style="padding-top: 4px;"><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span></div>
+    <span class="lnote prob">Owner can&#8217;t sign in &#183; no other administrator</span>
+  </div>
+</div><div class="lrow top">
+  <span class="av sm" style="border-color: #FFA726;" aria-hidden="true">KB</span>
+  <div class="lmain">
+    <span class="name">Kamau Butchery</span>
+    <span class="lsub">Daniel Kamau</span>
+    <div class="lline" style="padding-top: 4px;"><span class="bdg t-att"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg>Suspended</span></div>
+    <span class="lnote">Since 7 Oct &#183; &#8220;Chargebacks under review with the bank.&#8221;</span>
+  </div>
+</div></div>
+</div><nav class="nav " aria-label="Platform"><a href="#" class="nv-i " aria-label="Overview" title="Overview"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></span></a><a href="#" class="nv-i on " aria-current="page"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span><span class="nv-l">Businesses</span></a><a href="#" class="nv-i " aria-label="People" title="People"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0121.5 20"/></svg></span></a><a href="#" class="nv-i " aria-label="Alerts, 2 open" title="Alerts"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-2 8-2 8h16s-2-1-2-8"/><path d="M10.5 20a2 2 0 003 0"/></svg></span><span class="count" aria-hidden="true">2</span></a><a href="#" class="nv-i " aria-label="Activity" title="Activity"><span class="nv-c"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span></a></nav>
+</div>
+<figcaption><b>Businesses, phone.</b></figcaption>
+</figure>
+<figure>
+<div class="frame phone">
+<div class="bar"><button type="button" class="ibtn " aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg></button><span class="bar-title">Mwangi Hardware</span><span class="grow"></span><button type="button" class="ibtn " aria-label="More actions"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button></div>
+<div class="body">
+  <div class="card pfacts">
+    <div><span class="body-m">Status</span><span class="bdg t-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg>Trading</span></div>
+    <div><span class="body-m">Created</span><span class="body-m" style="color: #D4E7DD;">12 Aug 2026</span></div>
+    <div><span class="body-m">Slug</span><span class="body-m" style="color: #D4E7DD;"><span class="mono" style="font-size: 12px;">mwangi-hardware</span></span></div>
+    <div><span class="body-m">Business ID</span><span class="row" style="gap: 0;"><span class="mono" style="font-size: 12px; color: #D4E7DD;">t_8Kq2Vb1xRz</span><button type="button" class="ibtn muted" aria-label="Copy business ID"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/></svg></button></span></div>
+  </div>
+  <div class="card pad">
+    <div class="sec-head" style="min-height: 0;"><span class="overline">Owner &amp; administrators</span></div>
+    <div class="row" style="gap: 12px;"><span class="av sm" style="border-color: #EC407A;" aria-hidden="true">AM</span><div class="lmain"><div class="lline"><span class="name">Asha Mwangi</span><span class="bdg t-priv"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>Owner</span></div><span class="lsub">asha@mwangihardware.co.ke</span></div></div>
+    <div class="row" style="gap: 12px;"><span class="av sm" style="border-color: #42A5F5;" aria-hidden="true">BO</span><div class="lmain"><div class="lline"><span class="name">Boniface Otieno</span><span class="bdg t-priv"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/></svg>Administrator</span></div><span class="lsub">boniface@mwangihardware.co.ke</span></div></div>
+  </div>
+  <div class="card pad">
+    <span class="overline">History</span>
+    <ul class="tl"><li><span class="dot" style="background: rgba(75, 226, 119, 0.10); border-color: rgba(75, 226, 119, 0.30);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4BE277" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/></svg></span><div class="tx"><span class="name" style="font-size: 14px; line-height: 21px;">Reactivated</span><span class="cap">Sat 10 Oct, 08:15 &#183; Bonnie Master</span><span class="body-m">&#8220;Stock-take finished; owner asked to resume.&#8221;</span></div></li><li><span class="dot" style="background: rgba(242, 193, 78, 0.10); border-color: rgba(242, 193, 78, 0.30);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F2C14E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg></span><div class="tx"><span class="name" style="font-size: 14px; line-height: 21px;">Suspended</span><span class="cap">Fri 9 Oct, 17:40 &#183; Bonnie Master</span><span class="body-m">&#8220;Owner asked to pause trading during the stock-take.&#8221;</span></div></li><li><span class="dot" style="background: #283831; border-color: #3D4A3D;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BCCBB9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M2.5 10L5 4h14l2.5 6z"/><path d="M9.5 20v-5h5v5"/></svg></span><div class="tx"><span class="name" style="font-size: 14px; line-height: 21px;">Created</span><span class="cap">Wed 12 Aug, 10:02 &#183; by Asha Mwangi, trading in KES</span></div></li></ul>
+  </div>
+  <div class="card pad" style="gap: 8px;">
+    <div class="sec-head" style="min-height: 0;"><span class="overline">Business audit log</span><button type="button" class="btn ghost">Open<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
+    <div class="acts"><div class="act"><span class="act-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg></span><div class="act-m"><span class="act-s"><b>Grace Wanjiru</b> changed a product&#8217;s price</span><span class="act-r">Price KES 820 &#8594; KES 850</span></div><span class="act-t">09:31</span></div><div class="act"><span class="act-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4"/><path d="M12 11v10"/></svg></span><div class="act-m"><span class="act-s"><b>Peter Kamau</b> adjusted stock</span><span class="act-r">&#8722;3 &#183; Damage</span></div><span class="act-t">08:58</span></div><div class="act"><span class="act-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16"/><path d="M8 20h8"/><path d="M5 8h14"/><path d="M5 8l-3 6.5a3.2 3.2 0 006 0z"/><path d="M19 8l-3 6.5a3.2 3.2 0 006 0z"/></svg></span><div class="act-m"><span class="act-s"><b>Boniface Otieno</b> amended a shift summary</span><span class="act-r">Sales variance KES &#8722;150.00</span></div><span class="act-t">Mon 18:20</span></div></div>
+  </div>
+  <button type="button" class="btn danger full"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/></svg>Suspend Mwangi Hardware</button>
+</div>
+</div>
+<figcaption><b>One business, phone.</b> The actions move to the bottom, and Archive to the overflow.</figcaption>
+</figure>
+
+</div>
+</body>
+</html>

@@ -1,63 +1,156 @@
-/// `AppTabs`'s matrix, per `claude.md` hard rule 5 and §10.
+/// `AppTabs`'s matrix, per `claude.md` hard rule 5 and §10, in both of its
+/// shapes. `docs/design/tabs/` is the design these are measured against.
 ///
-/// **Two rows: the selected tab and the rest.** That is the whole matrix a tab
-/// strip has — `loading`, `error`, `read-only` and `empty` mean nothing for it,
-/// and `hover`, `focus-visible` and `pressed` are `TabBar`'s own and cannot be
-/// photographed here any more than a ripple could.
+/// **Two tabs are the switch and three or more are icon tabs**, so each shape
+/// gets its own rows: a selection either side, then hover, press and the
+/// keyboard's focus ring, which the cells now draw themselves and a capture
+/// can photograph. `loading`, `error`, `read-only` and `empty` mean nothing for
+/// a tab strip, and `TabBar` has no disabled tab.
 ///
-/// **The phone capture is the one worth reading.** Four labels of two and three
-/// words are far wider than 411 logical pixels, so the strip scrolls; this is
-/// the picture of what a person actually sees first, which is two and a half
-/// tabs.
+/// **The phone capture is the one worth reading for icon tabs.** Four tabs
+/// with glyphs are wider than 411, so the strip scrolls and its far end fades;
+/// this is the picture of what a person actually sees first.
 library;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:uzapay_pos/ui/tabs.dart';
 import 'package:uzapay_pos/ui/tokens.dart';
 
 import 'harness.dart';
 
+/// The platform route's own two, verbatim.
+const List<String> _two = <String>['Active & suspended', 'Global user status'];
+
+/// Configs' four, with the glyphs its panels lead with.
+const List<String> _four = <String>[
+  'Currency',
+  'Stock counts',
+  'Agreed prices',
+  'Loyalty',
+];
+const List<IconData> _glyphs = <IconData>[
+  Icons.payments_outlined,
+  Icons.assignment_outlined,
+  Icons.handshake_outlined,
+  Icons.loyalty_outlined,
+];
+
 void main() {
   screenshotCase(
-    '95-apptabs-first-selected',
-    // The platform route's own two, verbatim.
-    build: () => const _Host(),
+    '95-apptabs-switch-first-selected',
+    build: () => const _Host(tabs: _two),
     fullPage: false,
   );
 
   screenshotCase(
-    '95-apptabs-second-selected',
-    build: () => const _Host(initialIndex: 1),
+    '95-apptabs-switch-second-selected',
+    build: () => const _Host(tabs: _two, initialIndex: 1),
     fullPage: false,
+  );
+
+  screenshotCase(
+    '95-apptabs-switch-hover',
+    build: () => const _Host(tabs: _two),
+    fullPage: false,
+    afterPump: (tester) => _hover(tester, _two[1]),
+  );
+
+  screenshotCase(
+    '95-apptabs-switch-pressed',
+    build: () => const _Host(tabs: _two),
+    fullPage: false,
+    afterPump: (tester) => _press(tester, _two[1]),
+  );
+
+  screenshotCase(
+    '95-apptabs-switch-focus',
+    build: () => const _Host(tabs: _two),
+    fullPage: false,
+    afterPump: (tester) => _focus(tester, presses: 2),
+  );
+
+  screenshotCase(
+    '95-apptabs-icons-first-selected',
+    build: () => const _Host(tabs: _four, icons: _glyphs),
+    fullPage: false,
+  );
+
+  screenshotCase(
+    '95-apptabs-icons-third-selected',
+    build: () => const _Host(tabs: _four, icons: _glyphs, initialIndex: 2),
+    fullPage: false,
+  );
+
+  screenshotCase(
+    '95-apptabs-icons-hover',
+    build: () => const _Host(tabs: _four, icons: _glyphs),
+    fullPage: false,
+    afterPump: (tester) => _hover(tester, _four[1]),
+  );
+
+  screenshotCase(
+    '95-apptabs-icons-focus',
+    build: () => const _Host(tabs: _four, icons: _glyphs),
+    fullPage: false,
+    afterPump: (tester) => _focus(tester, presses: 1),
   );
 }
 
-final class _Host extends StatelessWidget {
-  const _Host({this.initialIndex = 0});
+Future<void> _hover(WidgetTester tester, String label) async {
+  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  await mouse.addPointer(location: Offset.zero);
+  addTearDown(mouse.removePointer);
+  await mouse.moveTo(tester.getCenter(find.text(label)));
+  await tester.pumpAndSettle();
+}
 
+Future<void> _press(WidgetTester tester, String label) async {
+  final press = await tester.startGesture(tester.getCenter(find.text(label)));
+  await tester.pump(const Duration(milliseconds: 400));
+  addTearDown(press.up);
+}
+
+Future<void> _focus(WidgetTester tester, {required int presses}) async {
+  // A test binding reports a touch platform, where the ring is correctly
+  // suppressed; the keyboard is what this capture is of.
+  FocusManager.instance.highlightStrategy =
+      FocusHighlightStrategy.alwaysTraditional;
+  addTearDown(
+    () => FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.automatic,
+  );
+  for (var i = 0; i < presses; i++) {
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+  }
+  await tester.pumpAndSettle();
+}
+
+/// One strip under where a toolbar would be, at a page's inset.
+final class _Host extends StatelessWidget {
+  const _Host({required this.tabs, this.icons, this.initialIndex = 0});
+
+  final List<String> tabs;
+  final List<IconData>? icons;
   final int initialIndex;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     return DefaultTabController(
-      // Two, because two is what `AppTabs` below is given. This said four, and
-      // `TabBar` asserts the controller's length against the tabs it is handed:
-      // "Controller's length property (4) does not match the number of tabs
-      // (2)". The comment above has always said two.
-      length: 2,
+      length: tabs.length,
       initialIndex: initialIndex,
       child: Scaffold(
         backgroundColor: tokens.colors.surface.base,
-        body: const Column(
-          children: <Widget>[
-            AppTabs(
-              tabs: <String>[
-                'Active & suspended',
-                'Global user status',
-              ],
-            ),
-          ],
+        body: Padding(
+          padding: EdgeInsets.only(top: tokens.spacing.s8),
+          child: Column(
+            children: <Widget>[
+              AppTabs(tabs: tabs, icons: icons, inset: tokens.spacing.s20),
+            ],
+          ),
         ),
       ),
     );

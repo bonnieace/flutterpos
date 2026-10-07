@@ -26,6 +26,18 @@ import {
  */
 const REVIEWED_PAYLOAD_BUILDERS: readonly {key: string; because: string}[] = [
   {
+    key: "emailReceipts/deliveries.ts#sent",
+    because: "Clears the existing delivery's lease after sending. Both the " +
+      "primary transaction.update(ref, sent) and fallback ref.update(sent) " +
+      "support delete sentinels; neither creates or replaces a document.",
+  },
+  {
+    key: "whatsapp/deliveries.ts#sent",
+    because: "Clears the existing delivery's lease after sending. Both the " +
+      "primary transaction.update(ref, sent) and fallback ref.update(sent) " +
+      "support delete sentinels; neither creates or replaces a document.",
+  },
+  {
     key: "customers/credit.ts#balanceFields",
     because: "Moves an existing customer's balance, so every caller spreads it " +
       "into `transaction.update` on a customer the transaction just read. A " +

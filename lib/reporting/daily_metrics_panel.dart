@@ -321,6 +321,14 @@ final class _TenantDailySummaryPanelState
       allowedRoles: TenantDailyMetricsRepository.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      // **A past day with no figures in the copy is usually one this device
+      // has not downloaded**, not one the server has not reconciled: it was
+      // published after this device last read it. Drawn, it said *Not
+      // reconciled yet* and *Counted on this device*, then flipped to
+      // Reconciled. Today is left out: it is often genuinely unpublished, and
+      // counting it would keep this page off the device copy almost always.
+      holdsNothing: (view) =>
+          view.days.skip(1).any((day) => day.metrics == null),
       denied: const Center(
         key: ValueKey('daily-summary-denied'),
         child: Text('The daily summary is available to managers and owners.'),

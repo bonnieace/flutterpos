@@ -203,6 +203,7 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
     return TenantRouteGuard<TenantNamedPage<TenantSalePage>>(
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (named) => named.page.items.isEmpty,
       // **The page itself, with placeholders where the sales will be.** It used
       // to take the guard's default full-page spinner, which replaced the
       // heading and the pagination along with the records - so a person waiting

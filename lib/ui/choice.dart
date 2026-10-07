@@ -53,7 +53,7 @@ final class ChoiceCardOption<T> {
   const ChoiceCardOption({
     required this.value,
     required this.title,
-    required this.description,
+    this.description,
     this.detail = const <ChoiceDetailRun>[],
     this.detailIcon,
     this.icon,
@@ -75,9 +75,12 @@ final class ChoiceCardOption<T> {
   /// The option's name, in the words the rest of the app uses for it.
   final String title;
 
-  /// What choosing it does. Always shown, selected or not - that is the reason
-  /// this component exists.
-  final String description;
+  /// What choosing it does, shown selected or not.
+  ///
+  /// **Optional since 2026-10-03**, at the developer's direction: where the
+  /// titles say enough on their own - a PDF or the totals, automatically or by
+  /// hand - the card is its title alone.
+  final String? description;
 
   /// A quieter line under [description], for where the consequence shows up.
   final List<ChoiceDetailRun> detail;
@@ -103,6 +106,11 @@ final class ChoiceCardOption<T> {
 /// **Arrow keys move the selection**, as in any radio group, and focus follows
 /// it. Tab moves into and out of the group through each card, which is what
 /// [PressSurface] already does.
+///
+/// **[flat] draws the same group as rows on the page** - glyph, title, radio -
+/// with no card around any of them, as a phone's own settings list does. The
+/// semantics, the arrow keys and the read-only rule are this class's in both,
+/// because the state is: only the drawing of one option differs.
 final class ChoiceCardGroup<T> extends StatefulWidget {
   const ChoiceCardGroup({
     super.key,
@@ -110,6 +118,7 @@ final class ChoiceCardGroup<T> extends StatefulWidget {
     required this.selected,
     required this.onSelected,
     required this.semanticLabel,
+    this.flat = false,
   });
 
   final List<ChoiceCardOption<T>> options;
@@ -120,6 +129,17 @@ final class ChoiceCardGroup<T> extends StatefulWidget {
 
   /// What the group is a choice about, for a screen reader.
   final String semanticLabel;
+
+  /// Rows on the page rather than cards, for a choice whose options are said
+  /// by their titles alone - the WhatsApp receipts screen's, on 2026-10-04.
+  ///
+  /// **The chosen row's glyph takes the action green beside its filled
+  /// radio**, and the row takes no wash of its own: with no card there is no
+  /// container to fill, and the radio is what keeps the choice from being
+  /// colour alone. A row stands in [PressSurface]'s ring gutter like every
+  /// pressable here, so a stack of them is `density.minimumTapTarget` plus the
+  /// gutter apart, with nothing between.
+  final bool flat;
 
   /// The radio's outer diameter.
   ///
@@ -213,6 +233,15 @@ class _ChoiceCardGroupState<T> extends State<ChoiceCardGroup<T>> {
         label: widget.semanticLabel,
         child: chosen == null
             ? const SizedBox.shrink()
+            : widget.flat
+            ? _ChoiceRow<T>(
+                key: chosen.key,
+                option: chosen,
+                selected: true,
+                readOnly: true,
+                onPressed: null,
+                focusNode: null,
+              )
             : _ChoiceCard<T>(
                 key: chosen.key,
                 option: chosen,
@@ -235,15 +264,26 @@ class _ChoiceCardGroupState<T> extends State<ChoiceCardGroup<T>> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             for (final (index, option) in widget.options.indexed) ...<Widget>[
-              if (index > 0) SizedBox(height: tokens.spacing.s4),
-              _ChoiceCard<T>(
-                key: option.key,
-                option: option,
-                selected: option.value == widget.selected,
-                readOnly: false,
-                focusNode: _nodes[index],
-                onPressed: () => onSelected(option.value),
-              ),
+              if (widget.flat)
+                _ChoiceRow<T>(
+                  key: option.key,
+                  option: option,
+                  selected: option.value == widget.selected,
+                  readOnly: false,
+                  focusNode: _nodes[index],
+                  onPressed: () => onSelected(option.value),
+                )
+              else ...<Widget>[
+                if (index > 0) SizedBox(height: tokens.spacing.s4),
+                _ChoiceCard<T>(
+                  key: option.key,
+                  option: option,
+                  selected: option.value == widget.selected,
+                  readOnly: false,
+                  focusNode: _nodes[index],
+                  onPressed: () => onSelected(option.value),
+                ),
+              ],
             ],
           ],
         ),
@@ -309,13 +349,15 @@ final class _ChoiceCard<T> extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        SizedBox(height: tokens.spacing.s4),
-        Text(
-          option.description,
-          style: tokens.typography.bodyMedium.copyWith(
-            color: colors.text.secondary,
+        if (option.description case final description?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s4),
+          Text(
+            description,
+            style: tokens.typography.bodyMedium.copyWith(
+              color: colors.text.secondary,
+            ),
           ),
-        ),
+        ],
         if (option.detail.isNotEmpty) ...<Widget>[
           SizedBox(height: tokens.spacing.s8),
           _Detail(runs: option.detail, icon: option.detailIcon),
@@ -399,6 +441,135 @@ final class _ChoiceCard<T> extends StatelessWidget {
   static double _titleLineHeight(AppTokens tokens) {
     final style = tokens.typography.bodyLarge;
     return (style.fontSize ?? 0) * (style.height ?? 1);
+  }
+}
+
+/// One option of a [ChoiceCardGroup.flat] group: its glyph, its title and its
+/// radio, on the page.
+///
+/// **States:** enabled, hover and pressed as the action green's 8% and 12%
+/// wash over the row - [Disclosure]'s, so every flat row on a page answers a
+/// pointer alike - focus-visible as [PressSurface]'s ring, selected as the lit
+/// glyph and the filled radio, and read-only in the page's own ink with no
+/// radio - a setting this person may not change is still the setting, and the
+/// disabled ink would say it is not available.
+final class _ChoiceRow<T> extends StatelessWidget {
+  const _ChoiceRow({
+    super.key,
+    required this.option,
+    required this.selected,
+    required this.readOnly,
+    required this.onPressed,
+    required this.focusNode,
+  });
+
+  final ChoiceCardOption<T> option;
+  final bool selected;
+  final bool readOnly;
+  final VoidCallback? onPressed;
+  final FocusNode? focusNode;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    final actions = colors.action;
+    final radius = BorderRadius.circular(tokens.radius.md);
+    final glyphColor = readOnly
+        ? colors.text.secondary
+        : selected
+        ? actions.primary.container
+        : colors.text.tertiary;
+
+    final words = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          option.title,
+          style: tokens.typography.bodyLarge.copyWith(
+            color: colors.text.primary,
+          ),
+        ),
+        if (option.description case final description?)
+          Text(
+            description,
+            style: tokens.typography.bodyMedium.copyWith(
+              color: colors.text.secondary,
+            ),
+          ),
+        if (option.detail.isNotEmpty) ...<Widget>[
+          SizedBox(height: tokens.spacing.s4),
+          _Detail(runs: option.detail, icon: option.detailIcon),
+        ],
+      ],
+    );
+
+    // At least a tap target high, so a row with one line of title is the same
+    // height as a card's control and a row whose title wraps grows instead.
+    final row = ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: tokens.density.minimumTapTarget.height,
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: tokens.spacing.s8,
+          vertical: tokens.spacing.s4,
+        ),
+        child: Row(
+          children: <Widget>[
+            if (option.icon case final icon?) ...<Widget>[
+              ExcludeSemantics(
+                child: Icon(icon, size: tokens.spacing.s24, color: glyphColor),
+              ),
+              SizedBox(width: tokens.spacing.s16),
+            ],
+            Expanded(child: words),
+            if (!readOnly) ...<Widget>[
+              SizedBox(width: tokens.spacing.s16),
+              _Radio(selected: selected),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    if (readOnly) {
+      // Not pressable, so it takes the ring's gutter itself: its glyph and
+      // title then sit exactly where a pressable row's would.
+      final ring = actions.focusRing;
+      return Semantics(
+        container: true,
+        label: option.title,
+        value: option.description,
+        child: ExcludeSemantics(
+          child: Padding(
+            padding: EdgeInsets.all(ring.width + ring.offset),
+            child: row,
+          ),
+        ),
+      );
+    }
+    return Semantics(
+      container: true,
+      inMutuallyExclusiveGroup: true,
+      checked: selected,
+      button: true,
+      label: option.title,
+      hint: option.description,
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: PressSurface(
+        borderRadius: radius,
+        onPressed: onPressed,
+        focusNode: focusNode,
+        fillWidth: true,
+        excludeSemantics: true,
+        hoverOverlay: actions.tertiary.hoverWash(),
+        pressedOverlay: actions.tertiary.pressedWash(),
+        child: row,
+      ),
+    );
   }
 }
 
@@ -670,27 +841,39 @@ final class AppToggleButton extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 /// One setting that is either on or off, said as a row: what it is, what it
-/// is set to in words, and a switch.
+/// is set to, and a switch.
 ///
-/// **Words beside the switch, never the switch alone**, because a thumb's side
-/// and a track's fill are position and hue, and hard rule 4 says status is
-/// never conveyed by colour alone: [onText] or [offText] is the line under the
-/// label. The row is one tap target of at least `density.minimumTapTarget`, so
-/// the whole row toggles, not only the switch.
+/// **Never the switch's hue alone**, because a thumb's side and a track's fill
+/// are position and hue, and hard rule 4 says status is never conveyed by
+/// colour alone. With [onText] and [offText] the words say it, as the line
+/// under the label. Without them - a row that is its label alone, at the
+/// developer's direction on 2026-10-03 - the thumb carries a check or a cross,
+/// so the state is a glyph as well as a colour. The row is one tap target of
+/// at least `density.minimumTapTarget`, so the whole row toggles, not only the
+/// switch.
 ///
 /// **States:** on, off, hover, pressed and focus-visible from Material's own
 /// switch and list tile, and disabled in both positions when [onChanged] is
 /// null.
+///
+/// **[flat] draws it as one of [ChoiceCardGroup.flat]'s rows**, so a switch
+/// and the choices under it read as one list. Hover, pressed and focus-visible
+/// are then the row's, from [PressSurface], and the switch itself is only the
+/// picture of the state.
 final class AppSwitchRow extends StatelessWidget {
   const AppSwitchRow({
     super.key,
     required this.label,
     required this.value,
     required this.onChanged,
-    required this.onText,
-    required this.offText,
+    this.onText,
+    this.offText,
     this.icon,
-  });
+    this.flat = false,
+  }) : assert(
+         (onText == null) == (offText == null),
+         'Both words or neither: one alone says only half the state.',
+       );
 
   final String label;
   final bool value;
@@ -698,17 +881,28 @@ final class AppSwitchRow extends StatelessWidget {
   /// Called with the new value. Null disables the row.
   final ValueChanged<bool>? onChanged;
 
-  /// What the setting means when on, and when off, in a short sentence.
-  final String onText;
-  final String offText;
+  /// What the setting means when on, and when off, in a short sentence. Both
+  /// or neither; without them the thumb carries the state as a glyph.
+  final String? onText;
+  final String? offText;
 
   final IconData? icon;
+
+  /// A flat row on the page, beside [ChoiceCardGroup.flat]'s. See the class
+  /// note.
+  ///
+  /// **On is a check in the thumb, and off is the bare thumb at the start of
+  /// the track**, as the WhatsApp receipts design draws it on 2026-10-03: the
+  /// check and the thumb's side and size say it, so it is never the track's hue
+  /// alone, and a cross on the off thumb was one mark more than it needed.
+  final bool flat;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final actions = tokens.colors.action;
     final disabled = onChanged == null;
+    if (flat) return _flat(tokens);
     return SwitchListTile(
       value: value,
       onChanged: onChanged,
@@ -729,18 +923,158 @@ final class AppSwitchRow extends StatelessWidget {
           color: disabled ? actions.disabledLabel : tokens.colors.text.primary,
         ),
       ),
-      subtitle: Text(
-        value ? onText : offText,
-        style: tokens.density
-            .body(tokens.typography)
-            .copyWith(color: tokens.colors.text.secondary),
-      ),
+      subtitle: switch (value ? onText : offText) {
+        final words? => Text(
+          words,
+          style: tokens.density
+              .body(tokens.typography)
+              .copyWith(color: tokens.colors.text.secondary),
+        ),
+        null => null,
+      },
+      // Each glyph in the colour of the track beside it, so it reads against
+      // the thumb it sits on in both positions.
+      thumbIcon: onText == null
+          ? WidgetStateProperty.resolveWith<Icon?>(
+              (states) => states.contains(WidgetState.selected)
+                  ? Icon(Icons.check, color: actions.primary.container)
+                  : Icon(Icons.close, color: tokens.colors.surface.raised),
+            )
+          : null,
       activeThumbColor: actions.primary.label,
       activeTrackColor: actions.primary.container,
       inactiveThumbColor: tokens.colors.text.secondary,
       inactiveTrackColor: tokens.colors.surface.raised,
       trackOutlineColor: WidgetStatePropertyAll<Color>(
         tokens.colors.surface.borderStrong,
+      ),
+    );
+  }
+
+  Widget _flat(AppTokens tokens) {
+    final colors = tokens.colors;
+    final actions = colors.action;
+    final onChanged = this.onChanged;
+    final toggle = onChanged == null ? null : () => onChanged(!value);
+    final disabled = toggle == null;
+    final words = value ? onText : offText;
+
+    // Material's switch, drawn and never touched: the row takes the tap, the
+    // keys and the focus, so a pointer gets one wash and a keyboard one stop.
+    // It keeps a handler so it draws enabled, and ignores the pointer so the
+    // handler is never reached by any way but the row's.
+    final picture = IgnorePointer(
+      child: ExcludeFocus(
+        child: Switch(
+          value: value,
+          onChanged: disabled ? null : (_) {},
+          // The row's own inset is the margin, so the track ends where a
+          // radio would.
+          padding: EdgeInsets.zero,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          thumbColor: WidgetStateProperty.resolveWith<Color>(
+            (states) => states.contains(WidgetState.disabled)
+                ? actions.disabledLabel
+                : states.contains(WidgetState.selected)
+                ? actions.primary.label
+                : colors.text.tertiary,
+          ),
+          trackColor: WidgetStateProperty.resolveWith<Color>(
+            (states) => states.contains(WidgetState.disabled)
+                ? actions.disabledContainer
+                : states.contains(WidgetState.selected)
+                ? actions.primary.container
+                : actions.secondary.container,
+          ),
+          // The off edge is `text.tertiary`, the radio ring's colour: the
+          // boundary of a control, at 3:1 or better on the page.
+          trackOutlineColor: WidgetStateProperty.resolveWith<Color>(
+            (states) => states.contains(WidgetState.disabled)
+                ? actions.disabledBorder
+                : states.contains(WidgetState.selected)
+                ? actions.primary.container
+                : colors.text.tertiary,
+          ),
+          thumbIcon: WidgetStateProperty.resolveWith<Icon?>(
+            (states) => states.contains(WidgetState.selected)
+                ? Icon(
+                    Icons.check,
+                    color: states.contains(WidgetState.disabled)
+                        ? actions.disabledContainer
+                        : actions.primary.container,
+                  )
+                : null,
+          ),
+          overlayColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
+        ),
+      ),
+    );
+
+    final row = ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: tokens.density.minimumTapTarget.height,
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: tokens.spacing.s8,
+          vertical: tokens.spacing.s4,
+        ),
+        child: Row(
+          children: <Widget>[
+            if (icon case final glyph?) ...<Widget>[
+              Icon(
+                glyph,
+                size: tokens.spacing.s24,
+                color: disabled ? actions.disabledLabel : colors.text.tertiary,
+              ),
+              SizedBox(width: tokens.spacing.s16),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    label,
+                    style: tokens.typography.bodyLarge.copyWith(
+                      color: disabled
+                          ? actions.disabledLabel
+                          : colors.text.primary,
+                    ),
+                  ),
+                  if (words != null)
+                    Text(
+                      words,
+                      style: tokens.typography.bodyMedium.copyWith(
+                        color: colors.text.secondary,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            SizedBox(width: tokens.spacing.s16),
+            picture,
+          ],
+        ),
+      ),
+    );
+
+    return Semantics(
+      container: true,
+      toggled: value,
+      enabled: !disabled,
+      label: label,
+      value: words,
+      onTap: toggle,
+      excludeSemantics: true,
+      child: PressSurface(
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+        onPressed: toggle,
+        fillWidth: true,
+        excludeSemantics: true,
+        hoverOverlay: actions.tertiary.hoverWash(),
+        pressedOverlay: actions.tertiary.pressedWash(),
+        child: row,
       ),
     );
   }

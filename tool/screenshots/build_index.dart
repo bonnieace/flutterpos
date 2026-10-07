@@ -34,11 +34,29 @@ const Map<String, String> captions = <String, String>{
   '07-invalid-invitation-link': 'A malformed or incomplete invitation link.',
   '08-cannot-open-your-account':
       'Bootstrap failed. Retry and sign out are the only two ways out.',
-  '09b-platform-active-and-suspended':
-      'Platform administration: suspending or reactivating a live business.',
-  '09d-platform-global-user-status':
-      'Platform administration: one exact UID at a time. There is deliberately '
-      'no user search and no bulk action.',
+  '09b-platform-console':
+      'The platform console as the routing shell opens it for a platform '
+      'administrator, at the real clock.',
+  'p01-platform-overview':
+      'Platform console overview: one dashboard of uniform tiles over a '
+      'floating bottom bar.',
+  'p02-platform-businesses':
+      'Every business in every status, with the open alerts called out.',
+  'p03-platform-business':
+      'One business: owner and administrators, staff standings, status '
+      'history with reasons, and its own audit log. No sales.',
+  'p04-platform-people': 'Every account, searchable by email and filterable.',
+  'p05-platform-person':
+      'One person: why they are disabled, what that does to each business, '
+      'and their history.',
+  'p06-platform-alerts': 'What the platform alert email links to.',
+  'p07-platform-activity': 'The platform audit log, by day, with reasons.',
+  'p08-platform-email-delivery':
+      'One address looked up, why the provider stopped, and how to clear it.',
+  'p09-platform-suspend': 'Suspending a business: a reason is required.',
+  'p10-platform-disable':
+      'Disabling a person: the business it leaves without an owner is named, '
+      'and the user ID is typed to confirm.',
   '10-business-home-owner':
       'The landing route as an owner: branding, the shift panel, what this '
       'device still holds, and every route the role is offered.',

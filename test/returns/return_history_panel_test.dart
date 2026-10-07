@@ -447,13 +447,14 @@ void main() {
 
     expect(writer.intents, hasLength(1));
     expect(find.byKey(const ValueKey('sale-returns-form')), findsNothing);
-    // The sentence is unchanged and stays honest: the sheet closing is not a
-    // claim that anything reached the server.
+    // Recorded, and not restored: nothing here claims the server has it, and
+    // nothing announces an outage either - `queued` is every return on a
+    // connected phone too.
     expect(
       snackNotice(tester).message,
-      startsWith('Saved on this device; waiting to sync.'),
+      startsWith('Return recorded. No stock has been restored yet'),
     );
-    expect(snackNotice(tester).status, AppStatus.info);
+    expect(snackNotice(tester).status, AppStatus.ok);
   });
 
   testWidgets('the quantity can never exceed what is available', (

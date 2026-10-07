@@ -39,9 +39,34 @@ void main() {
     await _openPurchases(tester);
 
     expect(find.byType(TenantSaleCard), findsOneWidget);
-    expect(find.byKey(const ValueKey('customer-purchase-co-1')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('customer-purchase-co-1')),
+      findsOneWidget,
+    );
     // A card with no actions draws no menu.
     expect(find.byKey(const ValueKey('sales-actions-co-1')), findsNothing);
+  });
+
+  testWidgets('a sideways swipe moves between the statement and purchases', (
+    tester,
+  ) async {
+    await _pump(tester, const _Reader());
+    final statement = find.byKey(const ValueKey('customer-statement'));
+    final empty = find.byKey(const ValueKey('customer-purchases-empty'));
+
+    // A short drag springs back; a fling turns the page, either way.
+    await tester.drag(statement, const Offset(-40, 0));
+    await tester.pumpAndSettle();
+    expect(empty, findsNothing);
+
+    await tester.fling(statement, const Offset(-400, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(empty, findsOneWidget);
+    expect(statement, findsNothing);
+
+    await tester.fling(empty, const Offset(400, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(statement, findsOneWidget);
   });
 
   testWidgets('a history that cannot be read costs that section only', (

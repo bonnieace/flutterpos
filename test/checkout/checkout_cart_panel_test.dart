@@ -171,7 +171,9 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('screen-title-action')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('checkout-customer-$_janeId')));
+      await tester.tap(
+        find.byKey(const ValueKey('checkout-customer-$_janeId')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('screen-title-action')));
       await tester.pumpAndSettle();
@@ -197,7 +199,7 @@ void main() {
       'format': 'summary',
     };
 
-    testWidgets('a business sending by hand is offered Send on WhatsApp', (
+    testWidgets('a business sending by hand opens Send on WhatsApp on save', (
       tester,
     ) async {
       final receipts = _ReceiptWriter();
@@ -214,10 +216,13 @@ void main() {
 
       await _tap(tester, 'checkout-product-product-b');
       await _tap(tester, 'checkout-save');
-      // The snack bar slides in before its button can be pressed.
-      await tester.pump(const Duration(seconds: 1));
-      await tester.tap(find.byKey(const ValueKey('checkout-send-whatsapp')));
       await tester.pumpAndSettle();
+      // Straight to the sheet, with no snack bar button to find first.
+      expect(find.byKey(const ValueKey('send-receipt-sheet')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('checkout-send-whatsapp')),
+        findsNothing,
+      );
       await tester.enterText(
         find.byKey(const ValueKey('phone-local-number')),
         '0722 111 222',
@@ -231,6 +236,67 @@ void main() {
       expect(intent.phone, '+254722111222');
       expect(snackNotice(tester).message, contains('on its way'));
     });
+
+    testWidgets(
+      'a sheet closed with nothing sent leaves the sentence, with no button',
+      (tester) async {
+        final receipts = _ReceiptWriter();
+        await _pump(
+          tester,
+          sessions,
+          catalog,
+          drafts,
+          customers: CheckoutCustomerServices(
+            reader: _Customers(eReceipts: manual),
+            receiptWriter: receipts,
+          ),
+        );
+
+        await _tap(tester, 'checkout-product-product-b');
+        await _tap(tester, 'checkout-save');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('send-receipt-cancel')));
+        await tester.pumpAndSettle();
+
+        expect(receipts.sent, isEmpty);
+        expect(find.byKey(const ValueKey('send-receipt-sheet')), findsNothing);
+        expect(snackNotice(tester).message, contains('It syncs on its own'));
+        expect(
+          find.byKey(const ValueKey('checkout-send-whatsapp')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'an automatic business opens the sheet for a walk-in, who is sent '
+      'nothing otherwise',
+      (tester) async {
+        await _pump(
+          tester,
+          sessions,
+          catalog,
+          drafts,
+          customers: CheckoutCustomerServices(
+            reader: _Customers(eReceipts: automatic),
+            receiptWriter: _ReceiptWriter(),
+          ),
+        );
+
+        await _tap(tester, 'checkout-product-product-b');
+        await _tap(tester, 'checkout-save');
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('send-receipt-sheet')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('checkout-send-whatsapp')),
+          findsNothing,
+        );
+      },
+    );
 
     testWidgets(
       'an automatic business tells the cashier the customer gets it, and '
@@ -249,7 +315,9 @@ void main() {
 
         await tester.tap(find.byKey(const ValueKey('screen-title-action')));
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const ValueKey('checkout-customer-$_janeId')));
+        await tester.tap(
+          find.byKey(const ValueKey('checkout-customer-$_janeId')),
+        );
         await tester.pumpAndSettle();
         await _tap(tester, 'checkout-product-product-b');
         await _tap(tester, 'checkout-save');
@@ -258,32 +326,41 @@ void main() {
           snackNotice(tester).message,
           contains('Jane Wanjiku gets the receipt on WhatsApp'),
         );
-        expect(find.byKey(const ValueKey('checkout-send-whatsapp')), findsNothing);
+        expect(
+          find.byKey(const ValueKey('checkout-send-whatsapp')),
+          findsNothing,
+        );
       },
     );
 
-    testWidgets('a business that sends on WhatsApp is not told it has no printer', (
-      tester,
-    ) async {
-      drafts.printFailure = PrinterTransportCode.notConfigured;
-      await _pump(
-        tester,
-        sessions,
-        catalog,
-        drafts,
-        printerSetupReminder: _Reminder(),
-        customers: CheckoutCustomerServices(
-          reader: _Customers(eReceipts: manual),
-          receiptWriter: _ReceiptWriter(),
-        ),
-      );
+    testWidgets(
+      'a business that sends on WhatsApp is not told it has no printer',
+      (tester) async {
+        drafts.printFailure = PrinterTransportCode.notConfigured;
+        await _pump(
+          tester,
+          sessions,
+          catalog,
+          drafts,
+          printerSetupReminder: _Reminder(),
+          customers: CheckoutCustomerServices(
+            reader: _Customers(eReceipts: manual),
+            receiptWriter: _ReceiptWriter(),
+          ),
+        );
 
-      await _tap(tester, 'checkout-product-product-b');
-      await _tap(tester, 'checkout-save');
+        await _tap(tester, 'checkout-product-product-b');
+        await _tap(tester, 'checkout-save');
 
-      expect(find.byType(NoticeDialog), findsNothing);
-      expect(find.byKey(const ValueKey('checkout-send-whatsapp')), findsOneWidget);
-    });
+        await tester.pumpAndSettle();
+
+        expect(find.byType(NoticeDialog), findsNothing);
+        expect(
+          find.byKey(const ValueKey('send-receipt-sheet')),
+          findsOneWidget,
+        );
+      },
+    );
 
     testWidgets('a business with receipts off reports a sale as before', (
       tester,
@@ -302,7 +379,10 @@ void main() {
       await _tap(tester, 'checkout-product-product-b');
       await _tap(tester, 'checkout-save');
 
-      expect(find.byKey(const ValueKey('checkout-send-whatsapp')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('checkout-send-whatsapp')),
+        findsNothing,
+      );
       expect(snackNotice(tester).message, contains('It syncs on its own'));
     });
   });
@@ -333,7 +413,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('a business emailing by hand is offered Send by email', (
+    testWidgets('a business emailing by hand opens Send by email on save', (
       tester,
     ) async {
       final receipts = _EmailReceiptWriter();
@@ -350,13 +430,15 @@ void main() {
 
       await _tap(tester, 'checkout-product-product-b');
       await _tap(tester, 'checkout-save');
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
       expect(
-        find.byKey(const ValueKey('checkout-send-whatsapp')),
+        find.byKey(const ValueKey('send-email-receipt-sheet')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('checkout-receipt-channel')),
         findsNothing,
       );
-      await tester.tap(find.byKey(const ValueKey('checkout-send-email')));
-      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const ValueKey('send-email-receipt-address')),
         'Walk.In@Example.com',
@@ -393,9 +475,10 @@ void main() {
         await chooseJane(tester);
         await _tap(tester, 'checkout-product-product-b');
         await _tap(tester, 'checkout-save');
-        await tester.pump(const Duration(seconds: 1));
-        await tester.tap(find.byKey(const ValueKey('checkout-send-receipt')));
         await tester.pumpAndSettle();
+        // The choice opens by itself, each way saying where it goes.
+        expect(find.text('To +254712345678'), findsOneWidget);
+        expect(find.text('To jane@example.com'), findsOneWidget);
         await tester.tap(
           find.byKey(const ValueKey('checkout-receipt-channel-email')),
         );
@@ -653,33 +736,14 @@ void main() {
     expect(drafts.requests, isEmpty);
   });
 
-  testWidgets('refuses a seventeenth product in the cart itself', (
-    tester,
-  ) async {
-    catalog.put(
-      uid: 'user-a',
-      tenantId: 'tenant-a',
-      products: <TenantProduct>[
-        for (var index = 0; index < 17; index++)
-          _product('tenant-a', 'product-$index', price: 5),
-      ],
-    );
-    await _pump(tester, sessions, catalog, drafts);
-
-    for (var index = 0; index < 16; index++) {
-      await _tap(tester, 'checkout-product-product-$index');
-    }
-    expect(find.byKey(const ValueKey('checkout-refusal')), findsNothing);
-
-    await _tap(tester, 'checkout-product-product-16');
-
+  // **Not tapped up to the limit any more.** It was sixteen until 2026-10-05
+  // and is four hundred now, past the sixty tiles the till draws at once; the
+  // bound itself is held by the draft and payload tests, and this says what
+  // the cashier is told when they reach it.
+  test('the line limit is said in the number it is', () {
     expect(
-      _notice(tester, 'checkout-refusal'),
-      'A sale needs between 1 and 16 items.',
-    );
-    expect(
-      find.byKey(const ValueKey('checkout-line-product-16')),
-      findsNothing,
+      CheckoutRefusal.forCode('invalid_line_count').message,
+      'A sale needs between 1 and $maximumCheckoutSaleLines items.',
     );
   });
 
@@ -2171,7 +2235,9 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('screen-title-action')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('checkout-customer-$_janeId')));
+      await tester.tap(
+        find.byKey(const ValueKey('checkout-customer-$_janeId')),
+      );
       await tester.pumpAndSettle();
       await _tap(tester, 'checkout-product-product-b');
       await _tap(tester, 'checkout-open-cart');
@@ -2196,7 +2262,9 @@ void main() {
       );
       expect(
         change.top,
-        tester.getRect(find.byKey(const ValueKey('checkout-put-on-credit'))).top,
+        tester
+            .getRect(find.byKey(const ValueKey('checkout-put-on-credit')))
+            .top,
       );
       expect(
         find.byKey(const ValueKey('checkout-remove-agreed-price')),
@@ -2943,8 +3011,10 @@ final class _EmailReceiptWriter implements TenantEmailReceiptWriter {
 }
 
 final class _ReceiptWriter implements TenantWhatsappReceiptWriter {
-  final List<TenantWhatsappReceiptIntent> sent = <TenantWhatsappReceiptIntent>[];
+  final List<TenantWhatsappReceiptIntent> sent =
+      <TenantWhatsappReceiptIntent>[];
 
   @override
-  Future<void> send(TenantWhatsappReceiptIntent intent) async => sent.add(intent);
+  Future<void> send(TenantWhatsappReceiptIntent intent) async =>
+      sent.add(intent);
 }

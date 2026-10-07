@@ -696,6 +696,10 @@ final class TenantCatalogPanel extends StatelessWidget {
       final cached? => _readWith(cached),
       null => null,
     },
+    // Both lists, as the manage-catalog page decides it: categories with no
+    // products yet is a real state worth drawing at once.
+    holdsNothing: (snapshot) =>
+        snapshot.categories.items.isEmpty && snapshot.products.items.isEmpty,
     builder: (context, session, snapshot) => _CatalogContents(
       tenantId: session.tenantId,
       snapshot: snapshot,

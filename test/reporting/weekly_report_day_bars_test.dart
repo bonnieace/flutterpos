@@ -90,6 +90,16 @@ void main() {
     tester,
   ) async {
     await _pump(tester, size: const Size(390, 844));
+    // **Below the fold on a phone, and the page is a lazy list.** Without the
+    // scroll the rows are never built: the badge below is not found, and the
+    // absence above it proves nothing. By its heading, because the
+    // Transactions figure card carries the same key as this one.
+    await tester.scrollUntilVisible(
+      find.text('Recent transactions'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Tusker'), findsNWidgets(2));
 
     expect(find.text('Not recorded'), findsNothing);
     // The sale that did name one still says so.

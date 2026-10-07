@@ -154,6 +154,7 @@ void main() {
               kind: TenantSettingKind.printer,
               icon: Icons.print_outlined,
               allowedRoles: TenantPrinterConfigurationPublisher.allowedRoles,
+              ownsScroll: true,
               builder: (_) => TenantPrinterConfigurationPanel(reader: reader),
             ),
           ],
@@ -216,9 +217,7 @@ void main() {
           _openShiftDocument(uid: cashierUid, age: age);
     },
     afterPump: (tester) async {
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('home-shift-card')),
-      );
+      await tester.ensureVisible(find.byKey(const ValueKey('home-shift-card')));
       await tester.pumpAndSettle();
     },
   );

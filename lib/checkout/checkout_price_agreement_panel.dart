@@ -99,6 +99,7 @@ class _TenantPriceAgreementSettingsPanelState
       allowedRoles: TenantPriceAgreementPublisher.allowedRoles,
       load: _loader!,
       loadCached: _loaderCached,
+      holdsNothing: (data) => data.staff.isEmpty,
       denied: const ErrorState(
         status: AppStatus.problem,
         badgeLabel: 'Not allowed',
