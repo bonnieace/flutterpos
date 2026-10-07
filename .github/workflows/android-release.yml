@@ -1,0 +1,133 @@
+# Builds a signed release App Bundle and uploads it to a Play testing track.
+#
+# Push a tag that matches pubspec.yaml's version, prefixed with "v":
+#
+#   version: 1.0.10+5   ->   git tag v1.0.10+5 && git push origin v1.0.10+5
+#
+# The build takes no --dart-define, so it is the same SIT build as a local
+# `flutter build appbundle --release`. The version code is pubspec's build
+# number; Play refuses one it has already seen, so bump it before tagging.
+#
+# Secrets (repository, or the play-closed-test environment):
+#   ANDROID_KEYSTORE_BASE64     base64 of the upload keystore (.jks)
+#   ANDROID_KEYSTORE_PASSWORD   storePassword from android/key.properties
+#   ANDROID_KEY_PASSWORD        keyPassword
+#   ANDROID_KEY_ALIAS           keyAlias
+#   PLAY_SERVICE_ACCOUNT_JSON   JSON key of a service account invited in Play
+#                               Console with "Release to testing tracks"
+
+name: Android release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      track:
+        description: Play track. Closed testing is "alpha" unless you created a custom closed track.
+        default: alpha
+        required: true
+      status:
+        description: completed sends it to testers once Play reviews it; draft waits for you in Play Console.
+        type: choice
+        options: [completed, draft]
+        default: completed
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: play-closed-test
+    timeout-minutes: 45
+    env:
+      PACKAGE_NAME: ke.co.uzapay.pos
+      TRACK: ${{ inputs.track || 'alpha' }}
+      STATUS: ${{ inputs.status || 'completed' }}
+      AAB: build/app/outputs/bundle/release/app-release.aab
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: |
+          version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | tr -d '[:space:]')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pubspec.yaml version $version (expected v$version)."
+            exit 1
+          fi
+          echo "Releasing $PACKAGE_NAME $version to $TRACK ($STATUS)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      - name: Write signing config
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD ANDROID_KEY_ALIAS; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Secret $name is not set."
+              exit 1
+            fi
+          done
+          keystore="$RUNNER_TEMP/upload.jks"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          {
+            printf 'storeFile=%s\n' "$keystore"
+            printf 'storePassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+          } > android/key.properties
+
+      - run: flutter pub get
+
+      - name: Build App Bundle
+        run: flutter build appbundle --release
+
+      - name: Find R8 mapping
+        id: mapping
+        run: |
+          path=build/app/outputs/mapping/release/mapping.txt
+          if [[ -f "$path" ]]; then echo "path=$path" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-${{ steps.version.outputs.version }}
+          path: |
+            ${{ env.AAB }}
+            build/app/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload to Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.PACKAGE_NAME }}
+          releaseFiles: ${{ env.AAB }}
+          releaseName: ${{ steps.version.outputs.version }}
+          track: ${{ env.TRACK }}
+          status: ${{ env.STATUS }}
+          mappingFile: ${{ steps.mapping.outputs.path }}
+
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.jks" android/key.properties

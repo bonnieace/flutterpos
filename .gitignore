@@ -91,3 +91,6 @@ chilltent-lan-debug-*.apk
 # `screenshots.zip` above catches only that exact name, and a browser download
 # of a second copy is "screenshots (3).zip".
 screenshots*.zip
+
+# JVM heap dumps from crashed Gradle daemons (gigabytes)
+*.hprof
