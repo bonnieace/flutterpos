@@ -2232,7 +2232,6 @@ final class _HomeOverview {
     this.expenses,
     this.deviceToday,
     this.shiftsOpened,
-    this.openShiftStaffIds,
     this.showProfit = false,
   });
 
@@ -2293,13 +2292,6 @@ final class _HomeOverview {
   /// closed, up to [_shiftsOpenedPageSize]. Null where this member may not
   /// read every cashier's shifts or the read failed.
   final int? shiftsOpened;
-
-  /// Who holds a shift that is still open today, by staff UID, in opening
-  /// order. Read in the same query as [shiftsOpened] and null wherever it is.
-  ///
-  /// **UIDs, not names.** Resolving a name is a staff read per person, and the
-  /// home never prints one; *My businesses* resolves them when it is opened.
-  final List<String>? openShiftStaffIds;
 
   /// Whether this member may be shown the margin at all.
   ///
@@ -3391,12 +3383,6 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       expenses: await expenses,
       deviceToday: deviceToday,
       shiftsOpened: shifts?.length,
-      openShiftStaffIds: shifts == null
-          ? null
-          : List<String>.unmodifiable(<String>[
-              for (final slice in shifts)
-                if (slice.isOpen) slice.staffId,
-            ]),
       showProfit: TenantProfitReport.canSeeInSession(session),
     );
   }
@@ -4376,7 +4362,6 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           : (sales == null ? '—' : currency.format(sales)),
       sales: today == null ? null : (count == null ? '—' : '$count'),
       currencyCode: overview.currency?.code,
-      openShiftStaffIds: overview.openShiftStaffIds,
     );
   }
 

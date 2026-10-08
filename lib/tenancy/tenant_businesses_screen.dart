@@ -24,6 +24,8 @@ import '../inventory/product_image_provider.dart';
 import '../observability/app_telemetry.dart';
 import '../reporting/daily_metrics.dart';
 import '../reporting/reporting_currency.dart';
+import '../shift/abandoned_shift.dart';
+import '../shift/tenant_shift.dart';
 import '../ui/buttons.dart';
 import '../ui/press.dart';
 import '../ui/scaffold.dart';
@@ -33,6 +35,7 @@ import '../ui/tokens.dart';
 import 'tenant_branding.dart';
 import 'tenant_membership.dart';
 import 'tenant_membership_labels.dart';
+import 'tenant_paths.dart';
 import 'tenant_repository.dart';
 import 'tenant_request.dart';
 import 'tenant_session.dart';
@@ -51,7 +54,6 @@ final class TenantOpenBusinessReceipt {
     this.today,
     this.sales,
     this.currencyCode,
-    this.openShiftStaffIds,
   });
 
   final String name;
@@ -67,10 +69,6 @@ final class TenantOpenBusinessReceipt {
 
   /// The open business's currency, which the add sheet opens on.
   final String? currencyCode;
-
-  /// Who holds a shift that is still open today. Null where this member may
-  /// not read every cashier's shifts, which leaves the till line off.
-  final List<String>? openShiftStaffIds;
 }
 
 /// The page itself.
@@ -158,16 +156,26 @@ final class _TenantBusinessesScreenState extends State<TenantBusinessesScreen> {
   /// **One name, or a count.** Two tills open is a fact about the shop, and a
   /// list of names on a receipt line is not one; a single till is a person,
   /// and naming them is what the developer asked for on 2026-10-08.
+  ///
+  /// **Every open shift, whatever day it was opened on.** A till opened last
+  /// night and still running is open now, and a query for today's shifts
+  /// would call it closed - which is what the first build did.
   Future<String?> _readTill() async {
-    final ids = widget.openReceipt.openShiftStaffIds;
-    if (ids == null) return null;
-    final open = <String>{...ids};
-    if (open.isEmpty) return 'Closed';
-    if (open.length > 1) return '${open.length} tills open';
     final session = TenantSession.fromMembership(
       uid: widget.uid,
       membership: widget.membership,
     );
+    if (!_OpenTills.mayRead(session)) return null;
+    final ids = await _quiet(
+      () => _OpenTills(
+        session: session,
+        reader: widget.reader,
+      ).staffIds(widget.reader),
+    );
+    if (ids == null) return null;
+    final open = <String>{...ids};
+    if (open.isEmpty) return 'Closed';
+    if (open.length > 1) return '${open.length} tills open';
     final names = await _quiet(
       () => TenantStaffNameResolver(
         session: session,
@@ -390,6 +398,42 @@ final class _TenantBusinessesScreenState extends State<TenantBusinessesScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Who holds a shift that is open in a business now.
+///
+/// **The query `TenantAbandonedShiftRepository` already makes** - every shift
+/// whose status is open - and the same roles, which are the ones the rules
+/// let read another cashier's shift.
+final class _OpenTills extends TenantReadRepository {
+  _OpenTills({required super.session, required super.reader});
+
+  static bool mayRead(TenantSession session) =>
+      TenantAbandonedShiftRepository.isVisibleTo(session);
+
+  Future<List<String>> staffIds(TenantCollectionReader collectionReader) async {
+    final page = await readCollectionPage(
+      TenantCollection.shifts,
+      collectionReader: collectionReader,
+      pageSize: 10,
+      equalityFilters: <String, Object?>{
+        'status': TenantShiftStatus.open.wireValue,
+      },
+    );
+    return <String>[
+      for (final item in page.items)
+        if (_staffOf(item) case final staff?) staff,
+    ];
+  }
+
+  String? _staffOf(TenantQueryDocumentSnapshot item) {
+    try {
+      final shift = TenantShift.fromDocument(path: item.path, data: item.data);
+      return shift.tenantId == session.tenantId ? shift.staffId : null;
+    } on TenantShiftException {
+      return null;
+    }
   }
 }
 
@@ -801,16 +845,17 @@ final class BusinessReceipt extends StatelessWidget {
           // **As a masthead the paper is the sheet's whole top**, torn at its
           // bottom edge, and what it prints shrinks to fit rather than being
           // cut off on a short screen.
+          //
+          // **The sheet's width, not the screen's.** A sheet is narrower than
+          // the screen on a tablet, and a body laid out at the screen's width
+          // would be scaled down to fit it - small print for no reason.
           child: masthead
-              ? SizedBox.expand(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      width:
-                          MediaQuery.sizeOf(context).width -
-                          tokens.spacing.s20 * 2,
-                      child: body,
+              ? LayoutBuilder(
+                  builder: (context, constraints) => SizedBox.expand(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(width: constraints.maxWidth, child: body),
                     ),
                   ),
                 )
@@ -832,11 +877,20 @@ final class BusinessReceipt extends StatelessWidget {
             ],
           );
 
+    // **What a screen reader hears is the receipt, not only its name.** The
+    // figures are excluded from the tree below so the receipt is one stop, so
+    // they are read here instead; the till line resolves later and is left
+    // to the page.
+    final spoken = <String>[
+      semanticLabel,
+      for (final figure in figures) '${figure.label} ${figure.value}.',
+      if (role case final member?) 'You are ${tenantRoleLabel(member)}.',
+    ].join(' ');
     final press = onPressed;
     if (press == null) {
       return Semantics(
         container: true,
-        label: semanticLabel,
+        label: spoken,
         excludeSemantics: true,
         child: stamped,
       );
@@ -844,7 +898,7 @@ final class BusinessReceipt extends StatelessWidget {
     return PressSurface(
       onPressed: press,
       borderRadius: BorderRadius.circular(tokens.radius.md),
-      semanticLabel: semanticLabel,
+      semanticLabel: spoken,
       excludeSemantics: true,
       fillWidth: true,
       child: stamped,

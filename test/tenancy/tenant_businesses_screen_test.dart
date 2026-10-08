@@ -44,7 +44,22 @@ void main() {
   });
 
   testWidgets('the till names the one person who has it open', (tester) async {
-    await _pump(tester, reader: _Reader(), openShiftStaffIds: ['user-amina']);
+    await _pump(
+      tester,
+      reader: _Reader(openShifts: {'user-amina': '2026-10-08'}),
+    );
+
+    expect(find.text('Open · Amina'), findsOneWidget);
+  });
+
+  testWidgets('a till opened yesterday and still running is open', (
+    tester,
+  ) async {
+    // The first build read today's shifts and called a night shift closed.
+    await _pump(
+      tester,
+      reader: _Reader(openShifts: {'user-amina': '2026-10-07'}),
+    );
 
     expect(find.text('Open · Amina'), findsOneWidget);
   });
@@ -52,15 +67,16 @@ void main() {
   testWidgets('two open tills are counted, not listed', (tester) async {
     await _pump(
       tester,
-      reader: _Reader(),
-      openShiftStaffIds: ['user-amina', 'user-juma'],
+      reader: _Reader(
+        openShifts: {'user-amina': '2026-10-08', 'user-juma': '2026-10-08'},
+      ),
     );
 
     expect(find.text('2 tills open'), findsOneWidget);
   });
 
   testWidgets('no open shift reads as a closed till', (tester) async {
-    await _pump(tester, reader: _Reader(), openShiftStaffIds: const []);
+    await _pump(tester, reader: _Reader());
 
     expect(find.text('Closed'), findsOneWidget);
   });
@@ -255,7 +271,6 @@ Future<void> _pump(
   WidgetTester tester, {
   required _Reader reader,
   List<TenantMembership> others = const [],
-  List<String>? openShiftStaffIds,
   Future<TenantSwitchResult> Function(TenantMembership)? onSwitch,
   bool emailVerified = true,
   RequestTenantCallable? callable,
@@ -278,7 +293,6 @@ Future<void> _pump(
           today: 'KES 910',
           sales: '3',
           currencyCode: 'KES',
-          openShiftStaffIds: openShiftStaffIds,
         ),
         onEditDetails: () {},
         onSwitchTenant:
@@ -325,40 +339,43 @@ TenantMembership _membership(
 
 /// Answers the reads *My businesses* makes, and records them.
 final class _Reader implements TenantDataReader {
+  _Reader({this.openShifts = const <String, String>{}});
+
+  /// Open shifts by cashier UID, each with the business date it was opened on.
+  final Map<String, String> openShifts;
+
   final List<String> requested = <String>[];
 
-  static final Map<String, Map<String, Object?>> _documents =
-      <String, Map<String, Object?>>{
-        'tenants/tenant-a/staff/user-amina': {
-          'uid': 'user-amina',
-          'name': 'Amina',
-        },
-        'tenants/tenant-b/configuration/branding': {
-          'companyName': 'Westlands Mart',
-          'slogan': 'Your neighbourhood store',
-        },
-        'tenants/tenant-b/configuration/checkout': {'currency': 'KES'},
-        'tenants/tenant-b/daily_metrics/2026-10-07': {
-          'tenantId': 'tenant-b',
-          'businessDate': '2026-10-07',
-          'sales': 12400,
-          'profit': 3100,
-          'transactions': 38,
-          'transactionCount': 38,
-          'shiftCount': 2,
-          'incompleteCostLineCount': 0,
-          'metricGeneration': 'gen-1',
-          'sourceDirtyRevision': 1,
-          'regeneratedAt': Timestamp.fromDate(DateTime.utc(2026, 10, 8, 0, 30)),
-          'netSales': 12400,
-          'netProfit': 3100,
-          'netTransactions': 38,
-          'netIncompleteCostLineCount': 0,
-          'returnedSales': 0,
-          'returnCount': 0,
-          'netMetricsVersion': 1,
-        },
-      };
+  static final Map<String, Map<String, Object?>>
+  _documents = <String, Map<String, Object?>>{
+    'tenants/tenant-a/staff/user-amina': {'uid': 'user-amina', 'name': 'Amina'},
+    'tenants/tenant-a/staff/user-juma': {'uid': 'user-juma', 'name': 'Juma'},
+    'tenants/tenant-b/configuration/branding': {
+      'companyName': 'Westlands Mart',
+      'slogan': 'Your neighbourhood store',
+    },
+    'tenants/tenant-b/configuration/checkout': {'currency': 'KES'},
+    'tenants/tenant-b/daily_metrics/2026-10-07': {
+      'tenantId': 'tenant-b',
+      'businessDate': '2026-10-07',
+      'sales': 12400,
+      'profit': 3100,
+      'transactions': 38,
+      'transactionCount': 38,
+      'shiftCount': 2,
+      'incompleteCostLineCount': 0,
+      'metricGeneration': 'gen-1',
+      'sourceDirtyRevision': 1,
+      'regeneratedAt': Timestamp.fromDate(DateTime.utc(2026, 10, 8, 0, 30)),
+      'netSales': 12400,
+      'netProfit': 3100,
+      'netTransactions': 38,
+      'netIncompleteCostLineCount': 0,
+      'returnedSales': 0,
+      'returnCount': 0,
+      'netMetricsVersion': 1,
+    },
+  };
 
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
@@ -370,7 +387,36 @@ final class _Reader implements TenantDataReader {
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
-  ) async => const <TenantQueryDocumentSnapshot>[];
+  ) async {
+    if (query.collectionPath != 'tenants/tenant-a/shifts' ||
+        query.equalityFilters['status'] != 'open') {
+      return const <TenantQueryDocumentSnapshot>[];
+    }
+    var index = 0;
+    return <TenantQueryDocumentSnapshot>[
+      for (final entry in openShifts.entries)
+        _openShift(entry.key, entry.value, index++),
+    ];
+  }
+
+  static TenantQueryDocumentSnapshot _openShift(
+    String staffId,
+    String businessDate,
+    int index,
+  ) {
+    final shiftId = 'shift-$index';
+    return TenantQueryDocumentSnapshot(
+      path: 'tenants/tenant-a/shifts/$shiftId',
+      data: <String, Object?>{
+        'shiftId': shiftId,
+        'tenantId': 'tenant-a',
+        'staffId': staffId,
+        'deviceId': 'dev-0123456789abcdef0123456789abcde$index',
+        'businessDate': businessDate,
+        'status': 'open',
+      },
+    );
+  }
 }
 
 final class _RecordingCallable implements RequestTenantCallable {

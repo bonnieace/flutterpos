@@ -62,10 +62,25 @@ final class _Reader implements TenantDataReader {
     return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
   }
 
+  /// Amina's till, opened this morning and still running.
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
-  ) async => const <TenantQueryDocumentSnapshot>[];
+  ) async => query.collectionPath == 'tenants/$seedTenantId/shifts'
+      ? <TenantQueryDocumentSnapshot>[
+          TenantQueryDocumentSnapshot(
+            path: 'tenants/$seedTenantId/shifts/shift-amina',
+            data: <String, Object?>{
+              'shiftId': 'shift-amina',
+              'tenantId': seedTenantId,
+              'staffId': 'cashier-amina',
+              'deviceId': 'dev-0123456789abcdef0123456789abcdef',
+              'businessDate': '2026-10-08',
+              'status': 'open',
+            },
+          ),
+        ]
+      : const <TenantQueryDocumentSnapshot>[];
 }
 
 final class _Callable implements RequestTenantCallable {
@@ -97,7 +112,6 @@ Widget _businesses({bool second = true}) {
         today: 'KES 910',
         sales: '3',
         currencyCode: 'KES',
-        openShiftStaffIds: <String>['cashier-amina'],
       ),
       onEditDetails: () {},
       onSwitchTenant: (membership) async =>
