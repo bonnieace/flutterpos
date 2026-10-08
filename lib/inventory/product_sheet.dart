@@ -96,13 +96,14 @@ final class TenantProductSheetFormatException implements Exception {
 
 /// The columns a downloaded template carries, in the order it writes them.
 ///
-/// **The three the server requires, then the three it accepts.** These are the
+/// **The name, the size, and the price, then the three the server also
+/// accepts.** These are the
 /// `_SheetColumn` labels the import parser matches against; a template naming a
 /// column the parser does not read would be refused by the import that produced
 /// it, which is the one refusal this feature must never produce.
 const List<String> productImportTemplateColumns = <String>[
   'name',
-  'sku',
+  'size',
   'price',
   'cost',
   'quantity',
@@ -133,7 +134,7 @@ String productImportTemplateCsv({
   ];
   final example = <String, String>{
     'name': 'White bread loaf',
-    'sku': 'BR-001',
+    'size': '400g',
     'price': '65',
     'cost': '48',
     'quantity': '40',

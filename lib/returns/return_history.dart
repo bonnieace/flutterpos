@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../checkout/checkout_receipt.dart';
+import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
@@ -47,6 +48,7 @@ final class TenantReturnLine {
     required this.productId,
     required this.quantity,
     required this.productName,
+    this.productSize,
   });
 
   final String productId;
@@ -55,6 +57,17 @@ final class TenantReturnLine {
   /// The name the returning device recorded, when it recorded one. Stock is
   /// restored by product ID; a name is only ever a label here.
   final String? productName;
+
+  /// The size the sale recorded, written onto returns since 2026-10-08. Null
+  /// on an older return and on a product with no size.
+  final String? productSize;
+
+  /// The name with its size, or null where no name was recorded. See
+  /// [tenantProductLabel].
+  String? get label => switch (productName) {
+    final name? => tenantProductLabel(name, productSize),
+    null => null,
+  };
 }
 
 /// The server-written evidence a verified return carries.
@@ -597,6 +610,7 @@ List<TenantReturnLine> _parseLines(Object? raw) {
         productId: productId,
         quantity: quantity,
         productName: _optionalName(line['productName']),
+        productSize: _optionalName(line['productSize']),
       ),
     );
   }

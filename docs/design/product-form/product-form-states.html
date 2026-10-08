@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product form states</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+/* 411 x 891, the harness's mobile viewport. Drawn against
+   screenshots/mobile-full/18h-add-a-product.png. Non-pressable boxes sit at
+   the 20 inset; buttons and fields 4 further in, in PressSurface's focus-ring
+   gutter, as the build draws them. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, select, input { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; flex-wrap: wrap; gap: 32px; padding: 20px 24px 48px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.page-stage > figure > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+figcaption { font-size: 13px; color: #869585; max-width: 411px; text-align: center; line-height: 19px; }
+figcaption b { color: #BCCBB9; font-weight: 600; }
+figcaption em { font-style: normal; color: #4BE277; }
+
+.phone { position: relative; width: 411px; height: 891px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+.bar { height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+.bar button { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #D4E7DD; cursor: pointer; }
+.bar span { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.body { flex-grow: 1; min-height: 0; padding: 8px 20px 24px; display: flex; flex-direction: column; overflow: hidden; }
+.body > * { flex-shrink: 0; }
+.gap4 { height: 4px; } .gap8 { height: 8px; } .gap12 { height: 12px; } .gap16 { height: 16px; } .gap20 { height: 20px; } .gap24 { height: 24px; }
+
+/* The photo row: a 128 tile and its actions. New token: layout.productImageThumb. */
+.photo { display: flex; gap: 16px; align-items: stretch; }
+.tile { position: relative; width: 128px; height: 128px; flex-shrink: 0; border-radius: 8px; overflow: hidden; box-sizing: border-box; margin: 0; padding: 0; border: 0; cursor: pointer; background: #132A1F; }
+.tile-empty { border: 1px solid #3D4A3D; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 600; }
+.tile-empty svg { color: #869585; }
+.tile .zoom { position: absolute; right: 4px; bottom: 4px; width: 24px; height: 24px; border-radius: 8px; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; color: #D4E7DD; }
+.photo-side { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.photo-title { margin: 0 4px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; }
+.photo-title span { font-weight: 600; color: #BCCBB9; }
+.photo-hint { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #869585; }
+.photo-file { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #869585; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* AppTextField and AppSelect. */
+.f { margin: 0 4px; }
+.f-label { display: block; margin: 0 0 8px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; }
+.f-label span { font-weight: 600; color: #BCCBB9; }
+.input { height: 48px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.input .ph { color: #869585; }
+.input .grow { flex-grow: 1; }
+.input svg { flex-shrink: 0; color: #BCCBB9; }
+.help { margin: 8px 0 0; font-size: 12px; line-height: 16px; color: #869585; }
+.pair { display: flex; gap: 8px; }
+.pair > .f { flex: 1 1 0; min-width: 0; }
+
+/* AppButton. */
+.btn { height: 48px; box-sizing: border-box; padding: 0 16px; margin: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; white-space: nowrap; }
+.btn-pri { background: #4BE277; color: #003915; border: 0; }
+.btn-sec { background: #132A1F; color: #D4E7DD; border: 1px solid #3D4A3D; }
+.btn-ter { background: transparent; color: #4BE277; border: 0; }
+.btn-off { background: #1E3A2B; color: #5D7468; border: 0; cursor: default; }
+.btn-wide { flex: 1 1 0; }
+.icon-btn { width: 48px; height: 48px; flex-shrink: 0; box-sizing: border-box; margin: 4px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; cursor: pointer; }
+.row { display: flex; align-items: center; }
+
+/* The pinned footer: surface.base over a borderSubtle hairline. */
+.foot { flex-shrink: 0; border-top: 1px solid #132A1F; padding: 8px 16px 8px; background: #071610; }
+.foot-note { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #869585; text-align: center; }
+.foot .row { gap: 12px; }
+
+/* AppSheet over surface.scrim. */
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 3; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; box-sizing: border-box; background: #132A1F; border-radius: 12px 12px 0 0; padding: 12px 20px 20px; display: flex; flex-direction: column; }
+.handle { width: 32px; height: 4px; border-radius: 999px; background: #3D4A3D; align-self: center; }
+.sheet-title { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.preview { width: 280px; height: 280px; align-self: center; border-radius: 8px; overflow: hidden; }
+.menu { margin: 0; padding: 0; list-style: none; border: 1px solid #3D4A3D; border-radius: 12px; }
+.menu li + li { border-top: 1px solid #283831; }
+.mrow { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 16px; box-sizing: border-box; color: #D4E7DD; font-size: 16px; line-height: 24px; cursor: pointer; }
+.mrow small { display: block; font-size: 12px; line-height: 16px; color: #869585; }
+.mrow svg { flex-shrink: 0; }
+.mrow-des { color: #EF4444; }
+
+/* The states board: 1280, specimens at the phone's 371 content width. */
+.board { width: 1280px; box-sizing: border-box; margin: 0 auto; padding: 24px 48px 64px; }
+.board h1 { margin: 0 0 8px; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px; color: #D4E7DD; }
+.board .lede { margin: 0 0 32px; max-width: 820px; font-size: 15px; line-height: 22px; color: #BCCBB9; }
+.board h2 { margin: 40px 0 6px; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.board .sec { margin: 0 0 20px; max-width: 820px; font-size: 14px; line-height: 21px; color: #869585; }
+.grid { display: grid; grid-template-columns: repeat(3, 371px); gap: 32px 40px; }
+.spec { display: flex; flex-direction: column; gap: 10px; }
+.spec-name { font-size: 13px; line-height: 19px; color: #869585; }
+.spec-name b { color: #BCCBB9; font-weight: 600; }
+.spec-name em { font-style: normal; color: #4BE277; }
+.spec-name i { font-style: normal; color: #F2C14E; }
+.pane { background: #071610; border: 1px solid #132A1F; border-radius: 4px; padding: 16px 0; }
+.pane-sheet { background: #132A1F; border: 0; border-radius: 12px; padding: 16px 0; }
+.pane-sheet .menu { margin: 0 0; }
+.pending { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #F2C14E; display: flex; gap: 4px; align-items: center; }
+.link { display: inline-flex; align-items: center; height: 32px; margin: 4px; padding: 0 20px; border: 0; border-radius: 8px; background: transparent; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; color: #4BE277; cursor: pointer; }
+.spin { width: 20px; height: 20px; border-radius: 50%; border: 2px solid rgba(111, 183, 242, 0.25); border-top-color: #6FB7F2; box-sizing: border-box; flex-shrink: 0; }
+.mrow-off { color: #5D7468; cursor: default; }
+.mrow-off small { color: #5D7468; }
+/* Callout: radius.md, 16 in, 18 glyph. */
+.callout { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; }
+.callout svg { flex-shrink: 0; margin-top: 3px; }
+.callout p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.c-prob { background: rgba(147, 0, 10, 0.20); border-color: rgba(239, 68, 68, 0.30); }
+.input-off { background: #132A1F; border-color: #1E3A2B; color: #5D7468; }
+.f-off .f-label, .f-off .f-label span { color: #5D7468; }
+.input-err { border-color: #EF4444; }
+.err { margin: 4px 0 0; font-size: 12px; line-height: 16px; color: #FF5C6C; display: flex; gap: 4px; align-items: center; }
+.focus { border: 2px solid #4BE277; padding: 0 15px; }
+/* Wider screens: the reading column, 720. */
+.wide { width: 720px; background: #071610; border: 1px solid #132A1F; border-radius: 4px; padding: 24px 20px; box-sizing: border-box; }
+.wide .pair3 { display: flex; gap: 8px; }
+.wide .pair3 > .f { flex: 1 1 0; min-width: 0; }
+.disc { display: flex; align-items: center; gap: 8px; padding: 8px; margin: 0 4px; border-radius: 4px; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.disc .grow { flex-grow: 1; }
+.disc-body { margin: 4px 12px 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.disc-body p { margin: 0 0 12px; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All product form artboards</a></nav>
+<div class="board">
+  <h1>Product form &#8212; states</h1>
+  <p class="lede">Every state the photo row, the photo sheet and the fields can be in, at the phone's content width. Sentences already in the build are quoted unchanged. <em style="font-style:normal;color:#4BE277;">Green</em> marks new copy or a new state, and <i style="font-style:normal;color:#F2C14E;">amber</i> marks something waiting on a save.</p>
+
+  <h2>The photo row</h2>
+  <p class="sec">A 128 tile and the words beside it. When the business has no image store, or the person may not change a photo, the row is not drawn at all and the form starts at the product name, as today.</p>
+  <div class="grid">
+
+    <div class="spec">
+      <div class="pane"><div style="padding:0 20px;"><div class="photo">
+        <button type="button" class="tile tile-empty" aria-label="Add a photo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 20H4V6h9V4H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-9h-2v9zm-7.79-3.17l-1.96-2.36L5.5 18h11l-3.54-4.71zM20 4V1h-2v3h-3c.01.01 0 2 0 2h3v2.99c.01.01 2 0 2 0V6h3V4h-3z"></path></svg>Add photo</button>
+        <div class="photo-side"><p class="photo-title">Photo <span>(optional)</span></p><p class="photo-hint">Cashiers find a product faster on the till when it has a picture.</p><div class="gap8"></div><div class="row"><button type="button" class="btn btn-sec btn-wide">Choose photo</button></div></div>
+      </div></div></div>
+      <p class="spec-name"><b>No photo.</b> The tile and the button both open the picker. The hint is <em>new</em>.</p>
+    </div>
+
+    <div class="spec">
+      <div class="pane"><div style="padding:0 20px;"><div class="photo">
+        <button type="button" class="tile" aria-label="Open the photo"><svg width="128" height="128" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="s1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3E3C3"></stop><stop offset="1" stop-color="#E2C48F"></stop></linearGradient></defs><rect width="100" height="100" fill="url(#s1)"></rect><ellipse cx="50" cy="56" rx="34" ry="20" fill="#B9773A"></ellipse><ellipse cx="50" cy="52" rx="30" ry="16" fill="#D49450"></ellipse></svg><span class="zoom" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"></path></svg></span></button>
+        <div class="photo-side"><p class="photo-title">Photo</p><p class="photo-file">mandazi-tray.jpg</p><div class="gap8"></div><div class="row"><button type="button" class="btn btn-sec btn-wide">Replace</button><button type="button" class="icon-btn" aria-label="Photo options"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button></div></div>
+      </div></div></div>
+      <p class="spec-name"><b>A photo chosen here.</b> The file name is the candidate's own <code>fileName</code>, which the build already holds. Not saved until the form is.</p>
+    </div>
+
+    <div class="spec">
+      <div class="pane"><div style="padding:0 20px;"><div class="photo">
+        <button type="button" class="tile" aria-label="Open the photo"><svg width="128" height="128" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="s2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E4EFEA"></stop><stop offset="1" stop-color="#A9CEC8"></stop></linearGradient></defs><rect width="100" height="100" fill="url(#s2)"></rect><rect x="17" y="24" width="66" height="52" rx="20" fill="#1F4F5F"></rect><rect x="21" y="27" width="58" height="44" rx="16" fill="#3C8EA4"></rect></svg><span class="zoom" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"></path></svg></span></button>
+        <div class="photo-side"><p class="photo-title">Photo</p><p class="photo-file">The saved photo</p><div class="gap8"></div><div class="row"><button type="button" class="btn btn-sec btn-wide">Replace</button><button type="button" class="icon-btn" aria-label="Photo options"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button></div></div>
+      </div></div></div>
+      <p class="spec-name"><b>The saved photo</b>, editing a product. Drawn by <code>TenantProductVisual</code> with the same crop as the till.</p>
+    </div>
+
+    <div class="spec">
+      <div class="pane"><div style="padding:0 20px;"><div class="photo">
+        <button type="button" class="tile tile-empty" aria-label="Add a photo"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 20H4V6h9V4H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-9h-2v9zm-7.79-3.17l-1.96-2.36L5.5 18h11l-3.54-4.71zM20 4V1h-2v3h-3c.01.01 0 2 0 2h3v2.99c.01.01 2 0 2 0V6h3V4h-3z"></path></svg>Add photo</button>
+        <div class="photo-side"><p class="photo-title">Photo</p><p class="pending"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"></path></svg>Removed when you save</p><button type="button" class="link">Keep the saved photo</button></div>
+      </div></div></div>
+      <p class="spec-name"><b>The saved photo, removed.</b> Today this is a grey line under the well: "The saved image will be removed when this correction commits." <em>New:</em> the shorter words and <em>Keep the saved photo</em>, which clears the form's own removal flag. Nothing is sent.</p>
+    </div>
+
+    <div class="spec">
+      <div class="pane"><div style="padding:0 24px;">
+        <div class="f"><label class="f-label">Product name</label><div class="input">White bread loaf</div></div>
+      </div></div>
+      <p class="spec-name"><b>No image store, or no right to change it.</b> No photo row at all, as today. The form starts at the name.</p>
+    </div>
+
+  </div>
+
+  <h2>The photo sheet</h2>
+  <p class="sec">Opened by ⋯ or by tapping the tile. The picture fills the top of the sheet, as wide as the sheet and as tall as it is wide, under its rounded corners and with no heading; then the actions with their names. <em style="font-style:normal;color:#4BE277;">Position and zoom</em> closes the sheet and opens the framing editor. <em style="font-style:normal;color:#4BE277;">Remove photo</em> closes it. A cut-out keeps it open so the result is seen where it was asked for.</p>
+  <div class="grid">
+
+    <div class="spec">
+      <div class="pane-sheet"><div style="padding:0 20px;">
+        <ul class="menu">
+          <li><div class="mrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"></path></svg><span>Position and zoom</span></div></li>
+          <li><div class="mrow"><span class="spin" aria-hidden="true"></span><span>Removing the background&#8230;<small>This can take a few seconds.</small></span></div></li>
+          <li><div class="mrow mrow-off"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5l-1-1h-5l-1 1H5v2h14V4z"></path></svg><span>Remove photo</span></div></li>
+        </ul>
+      </div></div>
+      <p class="spec-name"><b>Cutting out.</b> Today a spinner on the wand. Here the row says what is happening. <em>New:</em> both lines. The other rows wait, as the well's busy flag makes them wait today.</p>
+    </div>
+
+    <div class="spec">
+      <div class="pane-sheet"><div style="padding:0 20px;">
+        <div class="callout c-prob"><svg width="18" height="18" viewBox="0 0 24 24" fill="#FF5C6C" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path></svg><p>This business has used up its background removals. The image you chose is unchanged.</p></div>
+        <div class="gap12"></div>
+        <ul class="menu">
+          <li><div class="mrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="#6FB7F2" aria-hidden="true"><path d="M7.5 5.6L10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5zm-7.63 5.29c-.39-.39-1.02-.39-1.41 0L1.29 18.96c-.39.39-.39 1.02 0 1.41l2.34 2.34c.39.39 1.02.39 1.41 0L16.7 11.05c.39-.39.39-1.02 0-1.41l-2.33-2.35zm-1.03 5.49l-2.12-2.12 2.44-2.44 2.12 2.12-2.44 2.44z"></path></svg><span>Remove background</span></div></li>
+        </ul>
+      </div></div>
+      <p class="spec-name"><b>A cut-out refused.</b> Every <code>backgroundRemovalMessage</code> sentence is quoted unchanged, in the sheet rather than under the well. A failed download for <em>Position and zoom</em> uses the same slot and its built sentences.</p>
+    </div>
+
+    <div class="spec">
+      <div class="pane-sheet"><div style="padding:0 20px;">
+        <ul class="menu">
+          <li><div class="mrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"></path></svg><span>Position and zoom</span></div></li>
+          <li><div class="mrow mrow-off"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.5 5.6L10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5zm-7.63 5.29c-.39-.39-1.02-.39-1.41 0L1.29 18.96c-.39.39-.39 1.02 0 1.41l2.34 2.34c.39.39 1.02.39 1.41 0L16.7 11.05c.39-.39.39-1.02 0-1.41l-2.33-2.35zm-1.03 5.49l-2.12-2.12 2.44-2.44 2.12 2.12-2.44 2.44z"></path></svg><span>Remove background<small>Choose a new photo first. A saved photo cannot be cut out.</small></span></div></li>
+          <li><div class="mrow mrow-des"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5l-1-1h-5l-1 1H5v2h14V4z"></path></svg><span>Remove photo</span></div></li>
+        </ul>
+      </div></div>
+      <p class="spec-name"><b>The saved photo.</b> Today the wand is simply greyed out with no reason given. <em>New:</em> the reason, under the disabled row. Disabled, not hidden, for the reason the build already gives.</p>
+    </div>
+
+  </div>
+
+  <h2>Fields</h2>
+  <p class="sec">The app's own <code>AppTextField</code> and <code>AppSelect</code>, unchanged. What changes is the order and the words. The leading glyphs (#, cash, box) go: every field already has a label, and three glyphs that look alike were noise.</p>
+  <div class="grid">
+
+    <div class="spec">
+      <div class="pane"><div style="padding:0 20px;">
+        <div class="pair">
+          <div class="f"><label class="f-label">Selling price</label><div class="input focus">2O</div><p class="err"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path></svg>Not a price</p></div>
+          <div class="f"><label class="f-label">Buying price <span>(optional)</span></label><div class="input"></div></div>
+        </div>
+      </div></div>
+      <p class="spec-name"><b>Focused, and refused.</b> Today an unusable price is answered after <em>Add product</em>, in the snack bar. Showing it under the field would need the form to run the same check the repository runs, and that is a logic change, not a restyle. <i>Drawn for completeness, not proposed.</i></p>
+    </div>
+
+    <div class="spec">
+      <div class="pane"><div style="padding:0 20px;">
+        <div class="f"><label class="f-label">Category</label><div class="input"><span class="grow">Bakery</span><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5z"></path></svg></div><p class="help">This business has more categories than any screen here reads, so some are not listed.</p></div>
+      </div></div>
+      <p class="spec-name"><b>Category, everywhere.</b> One dropdown in both forms. The add form keeps <em>Add new category</em> as its last item. The edit form's two notes about unlisted categories become this helper slot, with their own sentences.</p>
+    </div>
+
+    <div class="spec">
+      <div class="pane"><div style="padding:0 20px;">
+        <div class="disc"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><span class="grow">How editing works</span><svg width="24" height="24" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true" style="transform: rotate(90deg);"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></div>
+        <div class="disc-body"><p>Change what is wrong and save. Every change is recorded with who made it.</p><p>New prices and sizes apply from the next sale. Sales already recorded keep theirs.</p><p>To remove the buying price, clear its field.</p><p style="margin:0;">Stock is not changed here. Use Adjust stock on the product.</p></div>
+      </div></div>
+      <p class="spec-name"><b>How editing works, open</b>, at the bottom of the edit form. <em>New:</em> four short sentences in place of four paragraphs, and the stock note that sat under the fields.</p>
+    </div>
+
+  </div>
+
+  <h2>Wider screens</h2>
+  <p class="sec">From 768 the build puts the photo in a column beside the fields, 2 to 3, with the picture up to 350 tall. The proposal keeps one column at the 720 reading width, with the same photo row on top, and lets the prices and the code share a line.</p>
+  <div class="wide">
+    <div class="photo">
+      <button type="button" class="tile" aria-label="Open the photo"><svg width="128" height="128" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="w1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3E3C3"></stop><stop offset="1" stop-color="#E2C48F"></stop></linearGradient></defs><rect width="100" height="100" fill="url(#w1)"></rect><ellipse cx="50" cy="56" rx="34" ry="20" fill="#B9773A"></ellipse><ellipse cx="50" cy="52" rx="30" ry="16" fill="#D49450"></ellipse></svg><span class="zoom" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"></path></svg></span></button>
+      <div class="photo-side" style="max-width: 320px;"><p class="photo-title">Photo</p><p class="photo-file">mandazi-tray.jpg</p><div class="gap8"></div><div class="row"><button type="button" class="btn btn-sec btn-wide">Replace</button><button type="button" class="icon-btn" aria-label="Photo options"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button></div></div>
+    </div>
+    <div class="gap24"></div>
+    <div class="pair3">
+      <div class="f"><label class="f-label">Product name</label><div class="input">Mandazi</div></div>
+      <div class="f"><label class="f-label">Category</label><div class="input"><span class="grow">Bakery</span><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5z"></path></svg></div></div>
+    </div>
+    <div class="gap16"></div>
+    <div class="pair3">
+      <div class="f"><label class="f-label">Selling price</label><div class="input">20</div></div>
+      <div class="f"><label class="f-label">Buying price <span>(optional)</span></label><div class="input">12</div></div>
+      <div class="f"><label class="f-label">Size or volume <span>(optional)</span></label><div class="input"><span class="ph">e.g. 30ml</span></div></div>
+    </div>
+    <div class="gap16"></div>
+    <div class="pair3">
+      <div class="f"><label class="f-label">Stock on hand <span>(optional)</span></label><div class="input">24</div><p class="help">How many you have now. Leave it blank if you have none yet.</p></div>
+      <div class="f"></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -288,7 +288,7 @@ TenantReportSection _batches(
         <TenantReportCell>[
           TenantReportDateCell(row.businessDate),
           TenantReportTextCell(row.batch.batchNumber),
-          TenantReportTextCell(row.batch.productName),
+          TenantReportTextCell(row.productLabel),
           TenantReportCountCell(row.batch.quantity),
           TenantReportMoneyCell(
             minor: row.batch.totalCostMinor,

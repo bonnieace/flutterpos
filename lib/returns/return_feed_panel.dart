@@ -13,6 +13,7 @@ import '../reports/report_people.dart';
 import '../reports/report_period.dart';
 import '../reports/report_run.dart';
 import '../reports/ui/report_action.dart';
+import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -416,7 +417,8 @@ final class _TenantReturnFeedPanelState extends State<TenantReturnFeedPanel> {
       }
       facts[record.id] = _ReturnFacts(
         productNames: <String, String>{
-          for (final line in sale.lines) line.productId: line.name,
+          for (final line in sale.lines)
+            line.productId: tenantProductLabel(line.name, line.sku),
         },
         receipt:
             '#'
@@ -761,7 +763,7 @@ String _lineLabel(
   Map<String, String> fromSale = const <String, String>{},
 ]) =>
     '${line.quantity} x '
-    '${line.productName ?? fromSale[line.productId] ?? line.productId}';
+    '${line.label ?? fromSale[line.productId] ?? line.productId}';
 
 /// One return, as the old till drew one.
 ///

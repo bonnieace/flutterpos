@@ -19,6 +19,7 @@
 library;
 
 import '../checkout/checkout_draft.dart';
+import '../tenancy/tenant_catalog.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_session.dart';
 import '../expenses/expense.dart';
@@ -781,7 +782,7 @@ final class TenantWeeklyReportLoader {
                 (quantities[line.productId] ?? 0) + line.quantity;
             revenue[line.productId] =
                 (revenue[line.productId] ?? 0) + line.lineTotalMinor;
-            names[line.productId] = line.name;
+            names[line.productId] = tenantProductLabel(line.name, line.sku);
             itemsSold += line.quantity;
           }
         }

@@ -192,7 +192,8 @@ TenantReportSection _whereTheMoneyIs(
     );
   } else {
     summary.write(
-      '${analysis.largest.first.name} holds the most value, at '
+      '${tenantProductLabel(analysis.largest.first.name, analysis.largest.first.sku)} '
+      'holds the most value, at '
       '${money(analysis.largest.first.costMinor ?? analysis.largest.first.retailMinor)}.',
     );
     if (few != null) {
@@ -224,7 +225,7 @@ TenantReportSection _whereTheMoneyIs(
       data: <TenantReportDatum>[
         for (final line in listed.take(8))
           TenantReportDatum(
-            label: line.name,
+            label: tenantProductLabel(line.name, line.sku),
             value: (line.costMinor ?? line.retailMinor) / 100,
             formatted: money(line.costMinor ?? line.retailMinor),
           ),
@@ -233,7 +234,7 @@ TenantReportSection _whereTheMoneyIs(
     table: TenantReportTable(
       columns: const <TenantReportColumn>[
         TenantReportColumn(heading: 'Product', kind: TenantReportColumnKind.text),
-        TenantReportColumn(heading: 'SKU', kind: TenantReportColumnKind.text),
+        TenantReportColumn(heading: 'Size', kind: TenantReportColumnKind.text),
         TenantReportColumn(heading: 'Units', kind: TenantReportColumnKind.count),
         TenantReportColumn(heading: 'At cost', kind: TenantReportColumnKind.money),
         TenantReportColumn(heading: 'At price', kind: TenantReportColumnKind.money),

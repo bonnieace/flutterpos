@@ -48,7 +48,13 @@ import {requireDocumentId} from "../core/validation";
  */
 export const MAXIMUM_PRODUCT_NAME_LENGTH = 120;
 
-/** The longest SKU this callable will write, bounded for the same reason. */
+/**
+ * The longest size this callable will write, bounded for the same reason.
+ *
+ * The stored key is still `SKU`. Since 2026-10-08 it holds a product's size or
+ * volume - *30ml*, *500 ml*, *1.5 L* - which is what every shop already used it
+ * for, and it is optional.
+ */
 export const MAXIMUM_PRODUCT_SKU_LENGTH = 64;
 
 /**
@@ -331,25 +337,28 @@ function normalizeProductName(value: unknown): string {
 }
 
 /**
- * Bounds a stock-keeping unit and refuses whitespace anywhere inside it.
+ * Normalizes a product's size: trimmed, one space between words, and empty
+ * when the product has none.
  *
- * A SKU is what the till matches a scan against, exactly and case-folded. A
- * scanner cannot emit a space, so a code containing one could be typed but never
- * scanned, which is the one job the field has.
+ * **Spaces are allowed since 2026-10-08.** They were refused while the field
+ * was meant for a scanner's code; a size is written *500 ml* as often as
+ * *500ml*. The app's `tenantCatalogNormalizedSku` is this function's twin, and
+ * the two must agree: both sides check that what was written is what was asked
+ * for.
  */
-function normalizeProductSku(value: unknown): string {
+export function normalizeProductSku(value: unknown): string {
   if (typeof value !== "string") {
     throw new HttpsError("invalid-argument", "sku must be a string.");
   }
-  const sku = value.trim();
-  if (sku.length === 0 || sku.length > MAXIMUM_PRODUCT_SKU_LENGTH) {
+  const sku = value.trim().replace(/\s+/g, " ");
+  if (sku.length > MAXIMUM_PRODUCT_SKU_LENGTH) {
     throw new HttpsError(
       "invalid-argument",
-      `sku must be between 1 and ${MAXIMUM_PRODUCT_SKU_LENGTH} characters.`
+      `sku must be at most ${MAXIMUM_PRODUCT_SKU_LENGTH} characters.`
     );
   }
-  if (/\s/.test(sku) || /\p{Cc}/u.test(sku)) {
-    throw new HttpsError("invalid-argument", "sku cannot contain whitespace.");
+  if (/\p{Cc}/u.test(sku)) {
+    throw new HttpsError("invalid-argument", "sku contains unsupported characters.");
   }
   return sku;
 }
@@ -364,9 +373,11 @@ export function productSearchFields(
   name: string,
   sku: string
 ): {searchName: string; searchPrefixes: string[]} {
+  // The size word by word, like the name, so *500 ml* is found by *ml* as well
+  // as by *500*.
   const words = new Set<string>([
     ...normalizeProductSearchText(name).split(" "),
-    normalizeProductSearchText(sku),
+    ...normalizeProductSearchText(sku).split(" "),
   ]);
   const prefixes = new Set<string>();
   for (const word of words) {
@@ -588,7 +599,11 @@ function requireReadableString(value: unknown, field: string): string {
  */
 export function readSellableProduct(fields: StoredProductFields): SellableProduct {
   const name = requireReadableString(fields.name, "name");
-  const sku = requireReadableString(fields.SKU, "SKU");
+  // Absent, or empty, is a product with no size - the one descriptive field a
+  // product may go without.
+  const sku = fields.SKU === undefined || fields.SKU === null || fields.SKU === "" ?
+    "" :
+    requireReadableString(fields.SKU, "SKU");
   if (
     typeof fields.price !== "number" || !Number.isFinite(fields.price) ||
     fields.price < 0

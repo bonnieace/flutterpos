@@ -223,7 +223,7 @@ List<HomeDestination> _modules() {
       Symbols.inventory_2_rounded,
       AppIdentityAccent.purple,
       group: 'Inventory',
-      description: 'View all products, manage SKUs, pricing, and categories.',
+      description: 'View all products, sizes, pricing, and categories.',
     ),
     tile(
       'Stock counts',

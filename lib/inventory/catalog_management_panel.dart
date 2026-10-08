@@ -18,7 +18,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_types.dart';
 import '../ui/buttons.dart';
-import '../ui/chips.dart';
+
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/pagination.dart';
@@ -112,7 +112,7 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
   /// product list is the same list this route shows.
   final WidgetBuilder? bulkRoute;
 
-  /// Corrects one product's name, code, price, cost, or category. Injected for
+  /// Corrects one product's name, size, price, cost, or category. Injected for
   /// the same reason and with the same consequence: while it is absent, nothing
   /// on this route offers to correct anything.
   final UpdateProductCallable? updateCallable;
@@ -347,10 +347,6 @@ final class _TenantCatalogManagementPanelState
   final TextEditingController _search = TextEditingController();
 
   String? _selectedCategoryId;
-
-  /// Bought in unless somebody says otherwise, which is what every product
-  /// added before the choice existed was.
-  TenantProductCostType _productCostType = TenantProductCostType.purchased;
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
   int _generation = 0;
@@ -692,13 +688,10 @@ final class _TenantCatalogManagementPanelState
   /// comes up: the fields at the foot of the form were under the keys at the
   /// moment they were being typed into.
   ///
-  /// **What the masthead did, `_FormWithImageWell` already does.** Its narrow
-  /// arrangement is the picture above the fields in one column, which is what
-  /// the masthead was for; the difference was only that a sheet's top band
-  /// bleeds into the sheet's own corners. A route has no such corners to fill,
-  /// so the well draws its own preview again and `_ProductImagePreviewModel` -
-  /// which existed solely to carry the picture up out of the form's state and
-  /// into the sheet's chrome - is gone with it.
+  /// **The masthead came back on 2026-10-08, in the photo sheet.** The form
+  /// keeps a 128 tile at the top of its route, and the photo itself, at the
+  /// sheet's full width, is the masthead of the sheet the tile opens - which
+  /// holds no field, so the keyboard has nothing there to cover.
   Future<T?> _openProductFormRoute<T>({required Widget Function() form}) {
     final controller = TenantSessionScope.of(context);
     return Navigator.of(context).push<T>(
@@ -738,8 +731,6 @@ final class _TenantCatalogManagementPanelState
                 if (category != null) added.add(category);
                 return category;
               },
-        costType: _productCostType,
-        onCostTypeSelected: (costType) => _productCostType = costType,
         onChooseImage: widget.imageStore == null ? null : _chooseProductImage,
         onImageChanged: (image) => _productImage = image,
         session: session,
@@ -827,7 +818,6 @@ final class _TenantCatalogManagementPanelState
         categoryId: _selectedCategoryId ?? '',
         categories: categories,
         requestId: _productRequestId ??= _newRequestId(),
-        costType: _productCostType,
       );
     } on TenantCatalogManagementException catch (error) {
       _productRequestId = null;
@@ -882,7 +872,6 @@ final class _TenantCatalogManagementPanelState
           categories: categories,
           requestId: _productRequestId!,
           imageUrl: upload.url,
-          costType: _productCostType,
         );
       }
       final result = await writer.createProduct(intent);
@@ -1155,7 +1144,6 @@ final class _TenantCatalogManagementPanelState
         requestId: _editRequestIdFor(draft.fingerprint(product.id)),
         imageUrl: stagedImage?.url,
         clearImage: draft.removeImage,
-        costType: draft.costType,
       );
     } on TenantCatalogManagementException catch (error) {
       // **A new photograph on its own is not an unchanged correction.** With
@@ -1305,7 +1293,6 @@ final class _TenantCatalogManagementPanelState
     _productCost.clear();
     _productQuantity.clear();
     _selectedCategoryId = null;
-    _productCostType = TenantProductCostType.purchased;
     _productImage = null;
   }
 
@@ -1625,7 +1612,7 @@ final class _UnifiedInventoryContents extends StatelessWidget {
   /// height, so a placeholder that left it out would draw the whole filter row
   /// one line short and move everything under it when the catalog landed.
   static const String searchHelper =
-      'Type at least 2 characters from a name word or product code.';
+      'Type at least 2 characters from a name or a size.';
 
   bool get _hasActiveQuery =>
       searchPrefix.isNotEmpty ||
@@ -1786,7 +1773,7 @@ final class _UnifiedInventoryContents extends StatelessWidget {
               color: tokens.colors.text.primary,
             ),
             decoration: InputDecoration(
-              hintText: 'Search SKU / Name...',
+              hintText: 'Search name or size...',
               hintStyle: tokens.typography.bodyMedium.copyWith(
                 color: tokens.colors.text.tertiary,
               ),
@@ -2162,7 +2149,7 @@ final class _InventoryProductCardSkeleton extends StatelessWidget {
                     SizedBox(height: tokens.spacing.s4),
                     SkeletonLine(
                       widthFactor: 0.42,
-                      style: tokens.typography.mono,
+                      style: tokens.typography.bodyMedium,
                       tone: tone,
                     ),
                   ],
@@ -2460,13 +2447,13 @@ final class _InventoryProductCard extends StatelessWidget {
                     ),
                     SizedBox(height: tokens.spacing.s4),
                     Text(
-                      'SKU: ${product.sku}',
+                      product.sku,
                       key: ValueKey(
                         'catalog-management-product-code-${product.id}',
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: tokens.typography.mono.copyWith(
+                      style: tokens.typography.bodyMedium.copyWith(
                         color: tokens.colors.text.secondary,
                       ),
                     ),
@@ -2864,38 +2851,42 @@ final class _InventoryProductTableRow extends StatelessWidget {
                   SizedBox(height: tokens.spacing.s4),
                   if (showCategory)
                     Text(
-                      'SKU: ${product.sku}',
+                      product.sku,
                       key: ValueKey(
                         'catalog-management-product-code-${product.id}',
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: tokens.typography.mono.copyWith(
+                      style: tokens.typography.bodyMedium.copyWith(
                         color: tokens.colors.text.secondary,
                       ),
                     )
                   else
                     Row(
                       children: <Widget>[
-                        Flexible(
-                          child: Text(
-                            'SKU: ${product.sku}',
-                            key: ValueKey(
-                              'catalog-management-product-code-${product.id}',
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: tokens.typography.mono.copyWith(
-                              color: tokens.colors.text.secondary,
+                        // A product with no size starts at its category,
+                        // rather than at a separator.
+                        if (product.sku.isNotEmpty) ...<Widget>[
+                          Flexible(
+                            child: Text(
+                              product.sku,
+                              key: ValueKey(
+                                'catalog-management-product-code-${product.id}',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tokens.typography.bodyMedium.copyWith(
+                                color: tokens.colors.text.secondary,
+                              ),
                             ),
                           ),
-                        ),
-                        Text(
-                          ' • ',
-                          style: tokens.typography.caption.copyWith(
-                            color: tokens.colors.text.tertiary,
+                          Text(
+                            ' • ',
+                            style: tokens.typography.caption.copyWith(
+                              color: tokens.colors.text.tertiary,
+                            ),
                           ),
-                        ),
+                        ],
                         Flexible(
                           child: Text(
                             categoryName,
@@ -3237,8 +3228,7 @@ String _refusalMessage(String code) => switch (code) {
   'invalid_product_name' =>
     'Enter a product name of at most $maximumCatalogNameLength characters.',
   'invalid_sku' =>
-    'Enter a code of at most $maximumCatalogSkuLength characters, with no '
-        'spaces - it is what the register matches a scan against.',
+    'Enter a size of at most $maximumCatalogSkuLength characters.',
   'invalid_price' =>
     'Enter the selling price as a plain amount with at most two decimal '
         'places, such as 65 or 19.99.',
@@ -3299,6 +3289,8 @@ final class _CatalogProductFormScreen extends StatelessWidget {
     this.subtitle,
     required this.form,
     required this.actions,
+    this.note,
+    this.noteKey,
   });
 
   final Key screenKey;
@@ -3307,6 +3299,10 @@ final class _CatalogProductFormScreen extends StatelessWidget {
   final String? subtitle;
   final Widget form;
   final List<Widget> actions;
+
+  /// One line under the actions, for what the primary one is waiting for.
+  final String? note;
+  final Key? noteKey;
 
   @override
   Widget build(BuildContext context) {
@@ -3351,7 +3347,30 @@ final class _CatalogProductFormScreen extends StatelessWidget {
                 tokens.spacing.s20,
                 tokens.spacing.s12,
               ),
-              child: AppActionRow(expandActions: true, actions: actions),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  AppActionRow(expandActions: true, actions: actions),
+                  if (note case final line?)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        tokens.spacing.s4,
+                        tokens.spacing.s4,
+                        tokens.spacing.s4,
+                        0,
+                      ),
+                      child: Text(
+                        line,
+                        key: noteKey,
+                        textAlign: TextAlign.center,
+                        style: tokens.typography.caption.copyWith(
+                          color: tokens.colors.text.tertiary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ],
@@ -3359,6 +3378,13 @@ final class _CatalogProductFormScreen extends StatelessWidget {
     );
   }
 }
+
+/// What the size field is for, in both forms.
+///
+/// **A size since 2026-10-08**, and optional. It was a required *code* meant
+/// for a scanner, which nothing ever read; every shop put sizes in it instead.
+const String _sizeHelper =
+    'Shown beside the name, so two sizes of one product can be told apart.';
 
 final class _AddProductScreen extends StatefulWidget {
   const _AddProductScreen({
@@ -3375,8 +3401,6 @@ final class _AddProductScreen extends StatefulWidget {
     required this.busy,
     required this.onCategorySelected,
     required this.onAddCategory,
-    required this.costType,
-    required this.onCostTypeSelected,
     required this.onChooseImage,
     required this.onImageChanged,
     required this.session,
@@ -3406,8 +3430,6 @@ final class _AddProductScreen extends StatefulWidget {
   /// added. Null offers no *Add new category*, as the delivery form offers no
   /// *Add new supplier* without a writer.
   final Future<TenantCategory?> Function(BuildContext context)? onAddCategory;
-  final TenantProductCostType costType;
-  final ValueChanged<TenantProductCostType> onCostTypeSelected;
   final Future<TenantProductImageCandidate?> Function()? onChooseImage;
   final ValueChanged<TenantProductImageCandidate?> onImageChanged;
 
@@ -3435,12 +3457,10 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
       ? widget.selectedCategoryId!
       : '';
   late TenantProductImageCandidate? _image = widget.image;
-  late TenantProductCostType _costType = widget.costType;
 
   bool get _canSubmit =>
       !widget.busy &&
       widget.name.text.trim().isNotEmpty &&
-      widget.sku.text.trim().isNotEmpty &&
       widget.price.text.trim().isNotEmpty &&
       _categoryId.isNotEmpty;
 
@@ -3472,11 +3492,102 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final choose = widget.onChooseImage;
+    final wide = _ProductFormLayout.wide(context);
+    final name = AppTextField(
+      key: const ValueKey('catalog-management-product-name'),
+      controller: widget.name,
+      enabled: !widget.busy,
+      maxLength: maximumCatalogNameLength,
+      onChanged: (_) => setState(() {}),
+      label: 'Product name',
+      placeholder: 'e.g. White bread loaf',
+    );
+    final category = AppSelect<String>(
+      key: const ValueKey('catalog-management-product-category'),
+      label: 'Category',
+      value: _categoryId,
+      helper: widget.moreCategories
+          // Reachable only past `maximumCatalogCategoryScan`, which is the
+          // figure the server refuses a name-resolving import at. It used to
+          // mean "there is a second page" and meant it often.
+          ? 'This business has more categories than any screen here '
+                'reads, so some are not listed.'
+          : null,
+      items: <AppSelectItem<String>>[
+        const AppSelectItem<String>(value: '', label: 'Choose category'),
+        for (final category in _categories)
+          AppSelectItem<String>(
+            value: category.id,
+            label: category.name,
+            key: ValueKey('catalog-management-category-${category.id}'),
+          ),
+        if (widget.onAddCategory != null)
+          const AppSelectItem<String>(
+            key: ValueKey('catalog-management-category-new'),
+            value: _newCategory,
+            label: 'Add new category',
+          ),
+      ],
+      onChanged: (value) {
+        if (value == null) return;
+        if (value == _newCategory) {
+          _addCategory();
+          return;
+        }
+        setState(() => _categoryId = value);
+        if (value.isNotEmpty) widget.onCategorySelected(value);
+      },
+    );
+    final price = AppTextField(
+      key: const ValueKey('catalog-management-product-price'),
+      controller: widget.price,
+      enabled: !widget.busy,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onChanged: (_) => setState(() {}),
+      label: 'Selling price',
+    );
+    final cost = widget.canRecordCost
+        ? AppTextField(
+            key: const ValueKey('catalog-management-product-cost'),
+            controller: widget.cost,
+            enabled: !widget.busy,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            label: 'Buying price (optional)',
+          )
+        : null;
+    final size = AppTextField(
+      key: const ValueKey('catalog-management-product-sku'),
+      controller: widget.sku,
+      enabled: !widget.busy,
+      maxLength: maximumCatalogSkuLength,
+      onChanged: (_) => setState(() {}),
+      label: 'Size or volume (optional)',
+      placeholder: 'e.g. 30ml',
+      helper: _sizeHelper,
+    );
+    // **Optional, and blank is the ordinary case.** A product being added for
+    // the first time usually holds nothing yet; one being brought across from a
+    // shelf that already exists usually does. Deliberately not part of
+    // `_canSubmit`, so nobody has to type a zero to add a product, and whole
+    // units only - stock is counted, not measured.
+    final stock = AppTextField(
+      key: const ValueKey('catalog-management-product-quantity'),
+      controller: widget.openingQuantity,
+      enabled: !widget.busy,
+      keyboardType: const TextInputType.numberWithOptions(decimal: false),
+      label: 'Stock on hand (optional)',
+      placeholder: '0',
+      helper: 'How many you have now. Leave it blank if you have none yet.',
+    );
+    // A field's well ends in its ring gutter, so `s12` after one is the same
+    // 16 to the next label that `s16` is after a helper line.
+    final afterField = SizedBox(height: tokens.spacing.s12);
+    final afterHelper = SizedBox(height: tokens.spacing.s16);
     return _CatalogProductFormScreen(
       screenKey: const ValueKey('catalog-management-add-screen'),
       scrollKey: const ValueKey('catalog-management-add-scroll'),
       title: 'Add product',
-      form: _FormWithImageWell(
+      form: _ProductFormLayout(
         well: choose == null
             ? null
             : _ProductImageWell(
@@ -3488,112 +3599,33 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
                 onImageChanged: _acceptImage,
                 onRemoveImage: _image == null ? null : _removeImage,
               ),
-        fields: <Widget>[
-          AppTextField(
-            key: const ValueKey('catalog-management-product-name'),
-            controller: widget.name,
-            enabled: !widget.busy,
-            maxLength: maximumCatalogNameLength,
-            onChanged: (_) => setState(() {}),
-            label: 'Product name',
-          ),
-          SizedBox(height: tokens.spacing.s8),
-          AppTextField(
-            key: const ValueKey('catalog-management-product-sku'),
-            controller: widget.sku,
-            enabled: !widget.busy,
-            maxLength: maximumCatalogSkuLength,
-            onChanged: (_) => setState(() {}),
-            label: 'SKU',
-            leading: Icons.tag,
-            placeholder: 'e.g. 30ml',
-          ),
-          SizedBox(height: tokens.spacing.s8),
-          AppTextField(
-            key: const ValueKey('catalog-management-product-price'),
-            controller: widget.price,
-            enabled: !widget.busy,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => setState(() {}),
-            label: 'Selling price',
-            leading: Icons.payments_outlined,
-          ),
-          if (widget.canRecordCost) ...<Widget>[
-            SizedBox(height: tokens.spacing.s8),
-            AppTextField(
-              key: const ValueKey('catalog-management-product-cost'),
-              controller: widget.cost,
-              enabled: !widget.busy,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              label: 'Buying price (optional)',
-              leading: Icons.payments_outlined,
-            ),
-          ],
-          SizedBox(height: tokens.spacing.s12),
-          _ProductCostTypeChoice(
-            choiceKey: const ValueKey('catalog-management-product-cost-type'),
-            value: _costType,
-            enabled: !widget.busy,
-            onChanged: (costType) {
-              setState(() => _costType = costType);
-              widget.onCostTypeSelected(costType);
-            },
-          ),
-          SizedBox(height: tokens.spacing.s12),
-          // **Optional, and blank is the ordinary case.** A product being added
-          // for the first time usually holds nothing yet; one being brought
-          // across from a shelf that already exists usually does. Deliberately
-          // not part of `_canSubmit`, so nobody has to type a zero to add a
-          // product, and whole units only - stock is counted, not measured.
-          AppTextField(
-            key: const ValueKey('catalog-management-product-quantity'),
-            controller: widget.openingQuantity,
-            enabled: !widget.busy,
-            keyboardType: const TextInputType.numberWithOptions(decimal: false),
-            label: 'Opening stock (optional)',
-            leading: Icons.inventory_2_outlined,
-          ),
-          SizedBox(height: tokens.spacing.s8),
-          AppSelect<String>(
-            key: const ValueKey('catalog-management-product-category'),
-            label: 'Category',
-            value: _categoryId,
-            helper: widget.moreCategories
-                // Reachable only past `maximumCatalogCategoryScan`, which is
-                // the figure the server refuses a name-resolving import at. It
-                // used to mean "there is a second page" and meant it often.
-                ? 'This business has more categories than any screen here '
-                      'reads, so some are not listed.'
-                : null,
-            items: <AppSelectItem<String>>[
-              const AppSelectItem<String>(value: '', label: 'Choose category'),
-              for (final category in _categories)
-                AppSelectItem<String>(
-                  value: category.id,
-                  label: category.name,
-                  key: ValueKey('catalog-management-category-${category.id}'),
-                ),
-              if (widget.onAddCategory != null)
-                const AppSelectItem<String>(
-                  key: ValueKey('catalog-management-category-new'),
-                  value: _newCategory,
-                  label: 'Add new category',
-                ),
-            ],
-            onChanged: (value) {
-              if (value == null) return;
-              if (value == _newCategory) {
-                _addCategory();
-                return;
-              }
-              setState(() => _categoryId = value);
-              if (value.isNotEmpty) widget.onCategorySelected(value);
-            },
-          ),
-        ],
+        fields: wide
+            ? <Widget>[
+                _FormRow(children: <Widget>[name, category]),
+                widget.moreCategories ? afterHelper : afterField,
+                _FormRow(children: <Widget?>[price, cost, size]),
+                afterHelper,
+                _FormRow(children: <Widget?>[stock, null]),
+              ]
+            : <Widget>[
+                name,
+                afterField,
+                category,
+                widget.moreCategories ? afterHelper : afterField,
+                if (cost == null) price else _FormRow(children: [price, cost]),
+                afterField,
+                size,
+                afterHelper,
+                stock,
+              ],
       ),
+      // Says what the disabled button is waiting for, rather than leaving a
+      // grey button to be puzzled over. The same four fields `_canSubmit`
+      // reads, in the order the form asks for them.
+      note: _canSubmit || widget.busy
+          ? null
+          : 'Add a name, category and selling price to save it.',
+      noteKey: const ValueKey('catalog-management-add-note'),
       actions: <Widget>[
         AppButton(
           key: const ValueKey('catalog-management-add-cancel'),
@@ -4102,20 +4134,16 @@ final class _ProductEditDraft {
     required this.clearCost,
     required this.image,
     required this.removeImage,
-    required this.costType,
   });
 
   final String name;
   final String sku;
   final String categoryId;
-
-  /// Bought in or made here, as the form leaves it.
-  final TenantProductCostType costType;
   final String? price;
   final String? cost;
 
-  /// Clearing a recorded cost is its own act, never an empty cost field. An
-  /// omitted cost leaves the stored figure alone; this removes it.
+  /// Whether the recorded cost is removed: the form's cost field was emptied
+  /// on a product that had one. An omitted cost leaves the stored figure alone.
   final bool clearCost;
   final TenantProductImageCandidate? image;
   final bool removeImage;
@@ -4133,7 +4161,6 @@ final class _ProductEditDraft {
     image?.fileName ?? '',
     '${image?.bytes.length ?? 0}',
     '$removeImage',
-    costType.wireValue,
     // NUL-separated, matching every other identity digest in this codebase.
     // Written as an escape rather than typed: it reached this file as a
     // literal NUL byte, which made `grep` report the whole module as binary
@@ -4193,8 +4220,6 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
     text: widget.product.cost == null ? '' : moneyText(widget.product.cost!),
   );
   late String _categoryId = widget.product.categoryId;
-  late TenantProductCostType _costType = widget.product.costType;
-  bool _clearCost = false;
   TenantProductImageCandidate? _image;
   bool _removeImage = false;
 
@@ -4204,6 +4229,11 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
       _removeImage = false;
     });
   }
+
+  /// Whether saving removes the recorded buying price: there is one, and its
+  /// field has been emptied.
+  bool get _clearsCost =>
+      widget.product.cost != null && _cost.text.trim().isEmpty;
 
   /// Whether there is anything for *Remove image* to act on: a photograph
   /// chosen here, or a saved one this correction has not already dropped.
@@ -4228,9 +4258,117 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    // The form is one continuous page surface; its image section is not a
-    // raised card nested inside a modal card.
-    final form = _FormWithImageWell(
+    final colors = tokens.colors;
+    final wide = _ProductFormLayout.wide(context);
+    final afterField = SizedBox(height: tokens.spacing.s12);
+    final afterHelper = SizedBox(height: tokens.spacing.s16);
+    final name = AppTextField(
+      key: const ValueKey('catalog-management-edit-name'),
+      controller: _name,
+      maxLength: maximumCatalogNameLength,
+      label: 'Product name',
+    );
+    // The product's own category is offered even when this page did not read
+    // it, so the dropdown can show where the product is filed now. Leaving it
+    // there needs no proof; choosing another moves it.
+    final listed = widget.categories.any(
+      (category) => category.id == widget.product.categoryId,
+    );
+    final categoryHelper = !_categoryOffered
+        ? 'This product is filed under $unlistedTenantCategoryPhrase. '
+              'Leaving it there is fine; choosing another moves it.'
+        : widget.moreCategories
+        ? 'More categories exist than are shown here. A product can only be '
+              'moved into one of those listed.'
+        : null;
+    final category = AppSelect<String>(
+      key: const ValueKey('catalog-management-edit-category'),
+      label: 'Category',
+      value: _categoryId,
+      helper: categoryHelper,
+      items: <AppSelectItem<String>>[
+        if (!listed)
+          AppSelectItem<String>(
+            key: const ValueKey('catalog-management-edit-category-unlisted'),
+            value: widget.product.categoryId,
+            label:
+                '${unlistedTenantCategoryPhrase[0].toUpperCase()}'
+                '${unlistedTenantCategoryPhrase.substring(1)}',
+          ),
+        for (final category in widget.categories)
+          AppSelectItem<String>(
+            key: ValueKey('catalog-management-edit-category-${category.id}'),
+            value: category.id,
+            label: category.name,
+          ),
+      ],
+      onChanged: (value) => setState(() => _categoryId = value ?? _categoryId),
+    );
+    final Widget prices;
+    if (widget.canChangeMoney) {
+      final price = AppTextField(
+        key: const ValueKey('catalog-management-edit-price'),
+        controller: _price,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        label: 'Selling price',
+      );
+      // **Blank removes a recorded buying price**, since 2026-10-08: deleting
+      // the figure is the act, with no separate control for it. The helper
+      // says what saving will do, so an emptied field is never a surprise.
+      final cost = AppTextField(
+        key: const ValueKey('catalog-management-edit-cost'),
+        controller: _cost,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        onChanged: (_) => setState(() {}),
+        label: 'Buying price (optional)',
+        helper: _clearsCost ? 'Removed when you save.' : null,
+      );
+      prices = _FormRow(children: <Widget>[price, cost]);
+    } else {
+      // **Shown, and not offered.** A manager may correct the rest of the
+      // product, and the price it sells at is part of reading it right; the
+      // buying price stays unshown, as it always has been to this role.
+      prices = AppTextField(
+        key: const ValueKey('catalog-management-edit-price-locked'),
+        controller: _price,
+        enabled: false,
+        label: 'Selling price',
+        helper: 'Only an owner or administrator can change prices.',
+        trailing: Icon(
+          Icons.lock_outline,
+          size: AppButton.iconSize,
+          color: colors.action.disabledLabel,
+        ),
+      );
+    }
+    final size = AppTextField(
+      key: const ValueKey('catalog-management-edit-sku'),
+      controller: _sku,
+      maxLength: maximumCatalogSkuLength,
+      label: 'Size or volume (optional)',
+      placeholder: 'e.g. 30ml',
+      helper: _sizeHelper,
+    );
+    // **What editing does, folded**, and sitting last: what a person came here
+    // to do is change a field, and this is read once and then never again.
+    // Four short sentences since 2026-10-08, the stock note among them; they
+    // were four paragraphs and a separate line under the fields.
+    const scope = Disclosure(
+      key: ValueKey('catalog-management-edit-scope-disclosure'),
+      summary: 'How editing works',
+      child: Text(
+        key: ValueKey('catalog-management-edit-scope'),
+        'Change what is wrong and save. Every change is recorded with who '
+        'made it.\n\n'
+        'New prices and sizes apply from the next sale. Sales already '
+        'recorded keep theirs.\n\n'
+        'To remove the buying price, clear its field.\n\n'
+        'Stock is not changed here. Use Adjust stock on the product.',
+      ),
+    );
+    final afterCategory = categoryHelper == null ? afterField : afterHelper;
+    final afterPrices = widget.canChangeMoney ? afterField : afterHelper;
+    final form = _ProductFormLayout(
       well: widget.canChangeImage
           ? _ProductImageWell(
               product: widget.product,
@@ -4248,161 +4386,32 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
                       });
                     }
                   : null,
+              onKeepSavedImage: () => setState(() => _removeImage = false),
             )
           : null,
-      fields: [
-        // A permanent helper paragraph, true of every correction this
-        // dialog will ever make, so it folds. A dialog is the place where
-        // the height it costs is worth most: what a person came here to do
-        // is edit five fields, and the explanation of how they are checked
-        // is read once and then never again.
-        //
-        // **The summary is short because a dialog is not a page.** This
-        // shipped as `How a correction is checked` - 27 characters, inside
-        // `Disclosure.summaryCharacterBudget` - and truncated the first time
-        // anything photographed this dialog on a phone. See
-        // `Disclosure.dialogSummaryCharacterBudget`.
-        const Disclosure(
-          key: ValueKey('catalog-management-edit-scope-disclosure'),
-          summary: 'How this is checked',
-          child: Text(
-            key: ValueKey('catalog-management-edit-scope'),
-            // **These four paragraphs were a confirmation dialog until
-            // 2026-09-04.** They are the same sentences, moved to where they
-            // can be read *while* the fields are being changed rather than on
-            // a second screen after the decision was made. A consequence read
-            // after the fact is a consequence answered by reflex.
-            'Every field is filled in with what the product holds now. '
-            'Change the ones that are wrong and save them together: a '
-            'correction is checked against the whole product, so one that '
-            'leaves a different field unreadable is refused outright.\n\n'
-            'Every correction is recorded permanently against the product, '
-            'with who made it and what each field held before. Nothing else '
-            'about the product changes: its stock is untouched, its identity '
-            'stays the same, and every sale, return, and reported figure '
-            'already recorded still names it.\n\n'
-            'A new selling price applies to the next sale, and sales already '
-            'recorded keep the price they were sold at. A buying price works '
-            'the same way: every sale records the buying price at the moment '
-            'of that sale, so correcting it prices the next sale and never '
-            'changes a profit already reported.\n\n'
-            'The register matches a scan against the code, so changing it stops '
-            'the old one finding this product. Nothing makes a code unique '
-            'either - if another product already scans as the new one, the '
-            'register refuses that scan rather than picking one.',
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s12),
-        AppTextField(
-          key: const ValueKey('catalog-management-edit-name'),
-          controller: _name,
-          maxLength: maximumCatalogNameLength,
-          label: 'Product name',
-        ),
-        SizedBox(height: tokens.spacing.s8),
-        AppTextField(
-          key: const ValueKey('catalog-management-edit-sku'),
-          controller: _sku,
-          maxLength: maximumCatalogSkuLength,
-          label: 'SKU',
-          leading: Icons.tag,
-        ),
-        SizedBox(height: tokens.spacing.s12),
-        _ProductCostTypeChoice(
-          choiceKey: const ValueKey('catalog-management-edit-cost-type'),
-          value: _costType,
-          enabled: true,
-          onChanged: (costType) => setState(() => _costType = costType),
-        ),
-        if (widget.canChangeMoney) ...[
-          SizedBox(height: tokens.spacing.s8),
-          AppTextField(
-            key: const ValueKey('catalog-management-edit-price'),
-            controller: _price,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            label: 'Selling price',
-            leading: Icons.payments_outlined,
-          ),
-          SizedBox(height: tokens.spacing.s8),
-          AppTextField(
-            key: const ValueKey('catalog-management-edit-cost'),
-            controller: _cost,
-            enabled: !_clearCost,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            label: 'Buying price (optional)',
-            leading: Icons.payments_outlined,
-          ),
-          if (widget.product.cost != null)
-            CheckboxListTile(
-              key: const ValueKey('catalog-management-edit-clear-cost'),
-              value: _clearCost,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Remove the recorded buying price'),
-              onChanged: (value) => setState(() => _clearCost = value ?? false),
-            ),
-        ] else ...[
-          SizedBox(height: tokens.spacing.s12),
-          // A role notice, at `info` for the reason every other one on this
-          // route is: two of the five fields are not offered, and the other
-          // three are - nothing has failed and nothing is hidden.
-          const Callout(
-            key: ValueKey('catalog-management-edit-money-hidden'),
-            status: AppStatus.info,
-            message:
-                'Only an owner or administrator may change what this '
-                'product is priced at or what it costs, so neither is '
-                'offered here.',
-          ),
+      fields: <Widget>[
+        if (wide) ...<Widget>[
+          _FormRow(children: <Widget>[name, category]),
+          afterCategory,
+          _FormRow(children: <Widget>[prices, size]),
+          afterHelper,
+        ] else ...<Widget>[
+          name,
+          afterField,
+          category,
+          afterCategory,
+          prices,
+          afterPrices,
+          size,
+          afterHelper,
         ],
-        SizedBox(height: tokens.spacing.s12),
-        SectionHeading('Category'),
-        SizedBox(height: tokens.spacing.s8),
-        FilterChipBar<String>(
-          semanticLabel: 'The category this product is filed under',
-          selected: _categoryId,
-          onSelected: (value) =>
-              setState(() => _categoryId = value ?? _categoryId),
-          options: <FilterChipOption<String>>[
-            for (final category in widget.categories)
-              FilterChipOption<String>(
-                key: ValueKey(
-                  'catalog-management-edit-category-${category.id}',
-                ),
-                value: category.id,
-                label: category.name,
-              ),
-          ],
-        ),
-        if (!_categoryOffered)
-          Padding(
-            padding: EdgeInsets.only(top: tokens.spacing.s8),
-            child: Text(
-              key: const ValueKey('catalog-management-edit-category-off'),
-              'This product is filed under $unlistedTenantCategoryPhrase. '
-              'Leaving it there is fine; choosing one above moves it.',
-              style: tokens.typography.caption.copyWith(
-                color: tokens.colors.text.tertiary,
-              ),
-            ),
-          )
-        else if (widget.moreCategories)
-          Padding(
-            padding: EdgeInsets.only(top: tokens.spacing.s8),
-            child: Text(
-              key: const ValueKey('catalog-management-edit-more-categories'),
-              'More categories exist than are shown here. A product can '
-              'only be moved into one of those above.',
-              style: tokens.typography.caption.copyWith(
-                color: tokens.colors.text.tertiary,
-              ),
-            ),
-          ),
+        scope,
       ],
     );
     return _CatalogProductFormScreen(
       screenKey: const ValueKey('catalog-management-edit-screen'),
       scrollKey: const ValueKey('catalog-management-edit-scroll'),
-      title: 'Edit item',
+      title: 'Edit product',
       subtitle: widget.product.name,
       form: form,
       actions: <Widget>[
@@ -4412,9 +4421,11 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
           tier: AppButtonTier.tertiary,
           onPressed: () => Navigator.of(context).pop(),
         ),
+        // **"Save changes", and not "Review correction"**: the press saves.
+        // The review step it once led to was taken out on 2026-09-04.
         AppButton(
-          key: const ValueKey('catalog-management-edit-review'),
-          label: 'Review correction',
+          key: const ValueKey('catalog-management-edit-save'),
+          label: 'Save changes',
           tier: AppButtonTier.primary,
           onPressed: () => Navigator.of(context).pop(
             _ProductEditDraft(
@@ -4422,11 +4433,10 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
               sku: _sku.text,
               categoryId: _categoryId,
               price: widget.canChangeMoney ? _price.text : null,
-              cost: widget.canChangeMoney && !_clearCost ? _cost.text : null,
-              clearCost: widget.canChangeMoney && _clearCost,
+              cost: widget.canChangeMoney && !_clearsCost ? _cost.text : null,
+              clearCost: widget.canChangeMoney && _clearsCost,
               image: _image,
               removeImage: _removeImage,
-              costType: _costType,
             ),
           ),
         ),
@@ -4435,82 +4445,19 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
   }
 }
 
-/// Bought in or made here, as one two-way choice beside the product's other
-/// descriptive fields.
+/// The product's photo in the add and edit forms: a tile and what goes with it.
 ///
-/// **Not money, so it is offered to everybody who may edit the product.** The
-/// sentence under it states what each answer changes - which actions the app
-/// offers for the product - because a choice whose consequence is not written
-/// down is a choice answered by reflex.
-final class _ProductCostTypeChoice extends StatelessWidget {
-  const _ProductCostTypeChoice({
-    required this.choiceKey,
-    required this.value,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final ValueKey<String> choiceKey;
-  final TenantProductCostType value;
-  final bool enabled;
-  final ValueChanged<TenantProductCostType> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        const SectionHeading('Where it comes from'),
-        SizedBox(height: tokens.spacing.s8),
-        SegmentedButton<TenantProductCostType>(
-          key: choiceKey,
-          segments: <ButtonSegment<TenantProductCostType>>[
-            for (final costType in TenantProductCostType.values)
-              ButtonSegment<TenantProductCostType>(
-                value: costType,
-                label: Text(
-                  key: ValueKey('${choiceKey.value}-${costType.wireValue}'),
-                  costType.label,
-                ),
-              ),
-          ],
-          selected: <TenantProductCostType>{value},
-          onSelectionChanged: enabled
-              ? (selection) => onChanged(selection.single)
-              : null,
-        ),
-        SizedBox(height: tokens.spacing.s8),
-        Text(
-          key: ValueKey('${choiceKey.value}-consequence'),
-          value == TenantProductCostType.produced
-              ? 'Production batches are recorded against it, and each '
-                    'completed batch sets its buying price.'
-              : 'It is restocked from suppliers, and a delivery that names a '
-                    'buying price sets its buying price.',
-          style: tokens.typography.caption.copyWith(
-            color: tokens.colors.text.secondary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The framed panel a product photograph is chosen in.
+/// **A 128 tile beside its own words since 2026-10-08**, at the developer's
+/// direction - see `docs/design/product-form/`. The 350 well this replaced
+/// (the old catalog form's, restored on 2026-08-25) put the first field past
+/// the middle of a phone, and did so even with no photo. Looking at the photo
+/// closely is what the photo sheet is for, where it is drawn the full width of
+/// the sheet; the actions that are used now and then live there too, named.
 ///
-/// **The old catalog form's presentation, restored on 2026-08-25.**
-/// `lib/pos/goods.dart` drew a bordered box headed *Product Image*, the picture
-/// 350 high across the full width of it, and the actions stacked underneath -
-/// and the same box served both the add form and the correct form. The Stitch
-/// pass had replaced it with a 64px thumbnail in a row, which is a size at
-/// which the wrong photograph and the right one are the same picture.
-///
-/// **It owns only the removal it performs.** Which image is selected stays with
-/// the form - the form is what submits it, and a well holding its own copy is
-/// how the two come to disagree. What is local here is the state of the one
-/// asynchronous act this panel makes: whether a cut-out is in flight and what
-/// the last one said.
+/// **It owns no selection.** Which photo is chosen stays with the form - the
+/// form is what submits it, and a well holding its own copy is how the two
+/// come to disagree. What happens in the sheet is reported back through
+/// [onImageChanged] and [onRemoveImage] as it happens.
 final class _ProductImageWell extends StatefulWidget {
   const _ProductImageWell({
     this.product,
@@ -4521,6 +4468,7 @@ final class _ProductImageWell extends StatefulWidget {
     required this.onChoose,
     required this.onImageChanged,
     required this.onRemoveImage,
+    this.onKeepSavedImage,
   });
 
   /// The product being corrected, whose saved photograph is shown until a new
@@ -4544,35 +4492,28 @@ final class _ProductImageWell extends StatefulWidget {
   final Future<TenantProductImageCandidate?> Function() onChoose;
   final ValueChanged<TenantProductImageCandidate> onImageChanged;
 
-  /// Null where there is nothing to remove - neither a chosen photograph nor a
-  /// saved one - which disables the control rather than hiding it, for the
-  /// reason `Pagination` states.
+  /// Null where there is nothing to remove, which disables the sheet's row
+  /// rather than hiding it, for the reason `Pagination` states.
   final VoidCallback? onRemoveImage;
+
+  /// Takes back a removal of the saved photograph. Null in the add form, which
+  /// has no saved photograph to keep.
+  final VoidCallback? onKeepSavedImage;
 
   @override
   State<_ProductImageWell> createState() => _ProductImageWellState();
 }
 
 final class _ProductImageWellState extends State<_ProductImageWell> {
-  bool _busy = false;
-
-  /// Separate from [_busy] so the framing button can carry its own spinner:
-  /// the two actions take different amounts of time for different reasons, and
-  /// one shared flag would put the wand's spinner on a download.
-  bool _fetching = false;
-  TenantBackgroundRemovalFailure? _failure;
-  String? _fetchFailure;
-
   /// Whether the product's saved photograph is still what would be shown.
   bool get _showsSavedImage =>
       widget.image == null &&
       !widget.savedImageRemoved &&
       widget.product?.imageUrl != null;
 
-  /// Whether anything at all is on display.
   bool get _hasImage => widget.image != null || _showsSavedImage;
 
-  /// Whether the cut-out action is drawn.
+  /// Whether the cut-out row is drawn.
   ///
   /// Hidden rather than disabled when there is no service or no role for it: a
   /// disabled control says *this is available and not right now*, and neither
@@ -4588,122 +4529,78 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
   Future<void> _choose() async {
     final candidate = await widget.onChoose();
     if (!mounted || candidate == null) return;
-    setState(() => _failure = null);
     widget.onImageChanged(candidate);
   }
 
-  /// Whether there is a photograph to frame - chosen here or already saved.
-  bool get _canFrame => widget.image != null || _savedImageUrl != null;
-
-  Uri? get _savedImageUrl => _showsSavedImage ? widget.product?.imageUrl : null;
-
-  /// Opens the framing editor, downloading the saved photograph first if that
-  /// is the one on display.
-  ///
-  /// **The cut-out button's rule does not apply here**, and the difference is
-  /// worth naming because the two controls sit side by side. A cut-out is a
-  /// paid call against a photograph somebody just chose; framing is a local
-  /// redraw, and refusing to do it to a saved picture would mean re-picking a
-  /// file off the phone to move a bottle two centimetres left. So this one
-  /// fetches. The download is the same request that drew the picture on the
-  /// page behind this form, and it is the only network call in the well - the
-  /// two states it can fail in are reported in place.
-  Future<void> _frame() async {
-    if (_busy || _fetching) return;
-    final chosen = widget.image;
-    final TenantProductImageCandidate candidate;
-    if (chosen != null) {
-      candidate = chosen;
-    } else {
-      final url = _savedImageUrl;
-      if (url == null) return;
-      setState(() {
-        _fetching = true;
-        _fetchFailure = null;
-      });
-      try {
-        candidate = await fetchProductImage(url);
-      } on TenantProductImageException catch (error) {
-        if (!mounted) return;
-        setState(() {
-          _fetching = false;
-          _fetchFailure = error.code == 'image_unreachable'
-              ? 'That photograph could not be downloaded. Check the '
-                    'connection and try again.'
-              : 'That photograph could not be read well enough to move it. '
-                    'Replace the image instead.';
-        });
-        return;
-      }
-      if (!mounted) return;
-      setState(() => _fetching = false);
-    }
-    final framed = await showProductFramingEditor(context, image: candidate);
-    if (!mounted || framed == null) return;
-    setState(() {
-      _failure = null;
-      _fetchFailure = null;
-    });
-    widget.onImageChanged(framed);
-  }
-
-  Future<void> _removeBackground() async {
-    final remover = widget.remover;
-    final session = widget.session;
-    final candidate = widget.image;
-    if (_busy || remover == null || session == null || candidate == null) {
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _failure = null;
-    });
-    try {
-      final cutOut = await remover.remove(
-        session: session,
-        candidate: candidate,
-      );
-      if (!mounted) return;
-      setState(() => _busy = false);
-      widget.onImageChanged(cutOut);
-    } on TenantBackgroundRemovalException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _failure = error.failure;
-      });
+  Future<void> _openSheet() async {
+    final picture = ValueNotifier<TenantProductImageCandidate?>(widget.image);
+    final saved = _showsSavedImage ? widget.product : null;
+    final result = await showAppSheet<_PhotoSheetResult>(
+      context,
+      mastheadSquare: true,
+      mastheadFraction: AppSheetMasthead.squareCeiling,
+      masthead: (context) =>
+          ValueListenableBuilder<TenantProductImageCandidate?>(
+            valueListenable: picture,
+            builder: (context, chosen, _) => _PhotoPicture(
+              key: const ValueKey('inventory-photo-sheet-image'),
+              image: chosen,
+              product: chosen == null ? saved : null,
+              borderRadius: BorderRadius.zero,
+            ),
+          ),
+      builder: (context, controller) => _PhotoSheet(
+        controller: controller,
+        picture: picture,
+        savedImageUrl: saved?.imageUrl,
+        remover: _offersRemoval ? widget.remover : null,
+        session: widget.session,
+        canRemove: widget.onRemoveImage != null,
+        onImageChanged: widget.onImageChanged,
+      ),
+    );
+    picture.dispose();
+    if (!mounted || result == null) return;
+    switch (result) {
+      case _FramePhoto(:final candidate):
+        final framed = await showProductFramingEditor(
+          context,
+          image: candidate,
+        );
+        if (!mounted || framed == null) return;
+        widget.onImageChanged(framed);
+      case _RemovePhoto():
+        widget.onRemoveImage?.call();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        // **No `SectionHeading('Product image')` here since 2026-08-26.** The
-        // column is plainly a picture and its controls - above the fields on a
-        // phone, beside them on a wider screen - and the heading was naming
-        // what the reader could already see, which is §7's own complaint about
-        // it.
-        //
-        // The lesser of the old form's 350 and a square of whatever width this
-        // well was given, so a phone draws a square rather than a letterbox and
-        // a desktop draws the figure the old form drew.
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: tokens.layout.productImagePreview,
+    final caption = tokens.typography.caption.copyWith(
+      color: tokens.colors.text.tertiary,
+    );
+    final chosen = widget.image;
+    final List<Widget> side;
+    if (_hasImage) {
+      side = <Widget>[
+        _PhotoTitle(optional: false),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            tokens.spacing.s4,
+            tokens.spacing.s4,
+            tokens.spacing.s4,
+            0,
           ),
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: _ProductImagePreview(
-              image: widget.image,
-              product: _showsSavedImage ? widget.product : null,
-            ),
+          child: Text(
+            chosen?.fileName ?? 'The saved photo',
+            key: const ValueKey('inventory-photo-file'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: caption,
           ),
         ),
-        SizedBox(height: tokens.spacing.s12),
+        SizedBox(height: tokens.spacing.s4),
         Row(
           children: <Widget>[
             Expanded(
@@ -4713,108 +4610,256 @@ final class _ProductImageWellState extends State<_ProductImageWell> {
                       ? 'inventory-choose-product-image'
                       : 'inventory-replace-image',
                 ),
-                label: _hasImage ? 'Replace image' : 'Choose image',
-                icon: Icons.add_photo_alternate_outlined,
+                label: 'Replace',
                 expand: true,
-                onPressed: _busy ? null : _choose,
+                onPressed: _choose,
               ),
             ),
-            // Framing needs no service and no particular role, so it is
-            // always drawn, and disabled until there is a photograph to frame.
-            SizedBox(width: tokens.spacing.s8),
             AppIconButton(
-              key: const ValueKey('inventory-frame-image'),
-              icon: Icons.edit_outlined,
-              semanticLabel: 'Position and zoom',
-              loading: _fetching,
-              onPressed: _busy || _fetching || !_canFrame ? null : _frame,
-            ),
-            if (_offersRemoval) ...<Widget>[
-              SizedBox(width: tokens.spacing.s8),
-              AppIconButton(
-                key: const ValueKey('inventory-remove-background'),
-                icon: Icons.auto_fix_high,
-                semanticLabel: 'Remove image background',
-                tier: AppButtonTier.primary,
-                glyphColor: tokens.colors.accent.identityAt(
-                  AppIdentityAccent.blue,
-                ),
-                loading: _busy,
-                // Only a photograph chosen in this form can be cut out: the
-                // bytes are what goes to the service, and a saved photograph
-                // is a URL this form never downloads.
-                onPressed: widget.image == null ? null : _removeBackground,
-              ),
-            ],
-            SizedBox(width: tokens.spacing.s8),
-            AppIconButton(
-              key: const ValueKey('inventory-remove-image'),
-              icon: Icons.delete_outline,
-              semanticLabel: 'Remove image',
-              tier: AppButtonTier.destructive,
-              onPressed: _busy ? null : widget.onRemoveImage,
+              key: const ValueKey('inventory-photo-options'),
+              icon: Icons.more_horiz,
+              semanticLabel: 'Photo options',
+              onPressed: _openSheet,
             ),
           ],
         ),
-        if (_fetchFailure case final failure?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('inventory-frame-image-failed'),
-            status: AppStatus.problem,
-            message: failure,
-          ),
-        ],
-        if (_failure case final failure?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('inventory-remove-background-failed'),
-            status: AppStatus.problem,
-            message: backgroundRemovalMessage(failure),
-          ),
-        ],
-        if (widget.savedImageRemoved) ...<Widget>[
-          SizedBox(height: tokens.spacing.s8),
-          Text(
-            key: const ValueKey('inventory-image-removal-pending'),
-            'The saved image will be removed when this correction commits.',
-            style: tokens.typography.caption.copyWith(
-              color: tokens.colors.text.tertiary,
+      ];
+    } else if (widget.savedImageRemoved) {
+      side = <Widget>[
+        _PhotoTitle(optional: false),
+        SizedBox(height: tokens.spacing.s4),
+        const _PendingLine(
+          key: ValueKey('inventory-image-removal-pending'),
+          message: 'Removed when you save',
+        ),
+        if (widget.onKeepSavedImage case final keep?)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: AppButton(
+              key: const ValueKey('inventory-keep-saved-image'),
+              label: 'Keep the saved photo',
+              tier: AppButtonTier.tertiary,
+              size: AppButtonSize.sm,
+              onPressed: keep,
             ),
           ),
-        ],
+      ];
+    } else {
+      side = <Widget>[
+        _PhotoTitle(optional: true),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            tokens.spacing.s4,
+            tokens.spacing.s4,
+            tokens.spacing.s4,
+            0,
+          ),
+          child: Text(
+            'Cashiers find a product faster on the till when it has a '
+            'picture.',
+            style: caption,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s4),
+        AppButton(
+          key: ValueKey(
+            widget.product == null
+                ? 'inventory-choose-product-image'
+                : 'inventory-replace-image',
+          ),
+          label: 'Choose photo',
+          expand: true,
+          onPressed: _choose,
+        ),
+      ];
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        _PhotoTile(
+          image: chosen,
+          product: _showsSavedImage ? widget.product : null,
+          onPressed: _hasImage ? _openSheet : _choose,
+        ),
+        SizedBox(width: tokens.spacing.s16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: side,
+          ),
+        ),
       ],
     );
   }
 }
 
-/// What the well shows: the photograph chosen here, the one already saved, or
-/// the fact that there is neither.
+/// *Photo*, the photo row's heading, in a field label's role and ink so it
+/// reads as one more field of the form.
+final class _PhotoTitle extends StatelessWidget {
+  const _PhotoTitle({required this.optional});
+
+  final bool optional;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s4),
+      child: Text(
+        optional ? 'Photo (optional)' : 'Photo',
+        style: tokens.typography.labelMedium.copyWith(
+          color: tokens.colors.text.secondary,
+        ),
+      ),
+    );
+  }
+}
+
+/// The 128 tile: the photo, or an invitation to add one.
 ///
-/// **The first two must be framed identically.** A person chooses a picture,
-/// sees it here, and saves; if the saved branch drew it differently the act of
-/// saving would appear to have changed their photograph. So the `cover` below
-/// and `TenantProductVisual`'s are one decision in two places - change either
-/// and change both.
-final class _ProductImagePreview extends StatelessWidget {
-  const _ProductImagePreview({required this.image, required this.product});
+/// **One press target for both**, because both are the same question - *what
+/// is this product's picture?* With a photo it opens the sheet, where the
+/// picture is drawn large; without one it opens the picker.
+///
+/// **States:** enabled; hover and pressed as the tertiary wash and
+/// [PressSurface]'s spring; focus-visible as the ring, inside the tile, since a
+/// photo has no edge of its own to put it outside of.
+final class _PhotoTile extends StatelessWidget {
+  const _PhotoTile({
+    required this.image,
+    required this.product,
+    required this.onPressed,
+  });
 
   final TenantProductImageCandidate? image;
 
   /// Non-null only where the saved photograph is what should be shown.
   final TenantProduct? product;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
     final radius = BorderRadius.circular(tokens.radius.md);
+    final hasImage = image != null || product != null;
+    final Widget content;
+    if (hasImage) {
+      content = Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          _PhotoPicture(
+            key: const ValueKey('inventory-product-image-preview'),
+            image: image,
+            product: product,
+            borderRadius: radius,
+          ),
+          // Says the tile opens something larger, on the scrim's ink so it holds
+          // over a photograph of any brightness.
+          Positioned(
+            right: tokens.spacing.s4,
+            bottom: tokens.spacing.s4,
+            child: Container(
+              width: tokens.spacing.s24,
+              height: tokens.spacing.s24,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: colors.surface.scrim,
+                borderRadius: BorderRadius.circular(tokens.radius.md),
+              ),
+              child: Icon(
+                Icons.open_in_full,
+                size: tokens.spacing.s16,
+                color: colors.text.primary,
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      content = DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface.field,
+          borderRadius: radius,
+          border: Border.all(color: colors.surface.borderStrong),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Icon(
+              Icons.add_photo_alternate_outlined,
+              size: tokens.icons.empty,
+              color: colors.text.tertiary,
+            ),
+            SizedBox(height: tokens.spacing.s8),
+            Text(
+              'Add photo',
+              key: const ValueKey('inventory-product-image-empty'),
+              style: tokens.typography.labelMedium.copyWith(
+                color: colors.text.secondary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return SizedBox.square(
+      dimension: tokens.layout.productImageThumb,
+      child: Semantics(
+        button: true,
+        label: hasImage ? 'Open the photo' : 'Add a photo',
+        excludeSemantics: true,
+        onTap: onPressed,
+        child: PressSurface(
+          key: const ValueKey('inventory-photo-tile'),
+          borderRadius: radius,
+          onPressed: onPressed,
+          fillWidth: true,
+          fillHeight: true,
+          excludeSemantics: true,
+          ringInside: true,
+          hoverOverlay: colors.action.tertiary.hoverWash(),
+          pressedOverlay: colors.action.tertiary.pressedWash(),
+          // **Expanded to the tile, not sized by what is in it.** The surface
+          // loosens what it is given, so the empty state's column - a glyph
+          // and two words - drew a tile as narrow as *Add photo*.
+          child: SizedBox.expand(child: content),
+        ),
+      ),
+    );
+  }
+}
+
+/// The photograph itself: the one chosen here, or the one already saved.
+///
+/// **The two must be framed identically.** A person chooses a picture, sees
+/// it, and saves; if the saved branch drew it differently the act of saving
+/// would appear to have changed their photograph. So the `cover` below and
+/// `TenantProductVisual`'s are one decision in two places - change either and
+/// change both.
+final class _PhotoPicture extends StatelessWidget {
+  const _PhotoPicture({
+    super.key,
+    required this.image,
+    required this.product,
+    required this.borderRadius,
+  });
+
+  final TenantProductImageCandidate? image;
+  final TenantProduct? product;
+  final BorderRadius borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     if (image case final chosen?) {
       return ClipRRect(
-        borderRadius: radius,
+        borderRadius: borderRadius,
         child: DecoratedBox(
           decoration: BoxDecoration(color: tokens.colors.surface.overlay),
           child: Image.memory(
             chosen.bytes,
-            key: const ValueKey('inventory-product-image-preview'),
             fit: BoxFit.cover,
             filterQuality: FilterQuality.high,
             semanticLabel: 'The product image you chose, ${chosen.fileName}',
@@ -4823,91 +4868,465 @@ final class _ProductImagePreview extends StatelessWidget {
       );
     }
     if (product case final saved?) {
-      return TenantProductVisual(product: saved);
+      return TenantProductVisual(product: saved, borderRadius: borderRadius);
     }
-    return ClipRRect(
-      borderRadius: radius,
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: tokens.colors.surface.overlay),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(
-                Icons.image_outlined,
-                // §9's no-colour-alone rule is answered by the sentence under
-                // it rather than by the glyph.
-                color: tokens.colors.text.tertiary,
-              ),
-              SizedBox(height: tokens.spacing.s8),
-              Text(
-                'No image',
-                key: const ValueKey('inventory-product-image-empty'),
-                style: tokens.typography.caption.copyWith(
-                  color: tokens.colors.text.tertiary,
+    return const SizedBox.shrink();
+  }
+}
+
+/// What the photo sheet closed with, for the well to act on once it has gone.
+sealed class _PhotoSheetResult {
+  const _PhotoSheetResult();
+}
+
+/// Open the framing editor on [candidate], downloaded first if it was saved.
+final class _FramePhoto extends _PhotoSheetResult {
+  const _FramePhoto(this.candidate);
+
+  final TenantProductImageCandidate candidate;
+}
+
+final class _RemovePhoto extends _PhotoSheetResult {
+  const _RemovePhoto();
+}
+
+/// The photo sheet's rows: *Position and zoom*, *Remove background* and
+/// *Remove photo*, each with its name.
+///
+/// **The picture is the sheet's masthead**, drawn by [showAppSheet] into the
+/// sheet's own top corners. It listens to [picture], so a cut-out shows in the
+/// masthead the moment it lands.
+///
+/// **It cannot be closed while a cut-out or a download is running**, by the
+/// close control, the scrim or the back key: the answer would have nowhere to
+/// go. The rows go quiet instead, and the running one says what it is doing.
+final class _PhotoSheet extends StatefulWidget {
+  const _PhotoSheet({
+    required this.controller,
+    required this.picture,
+    required this.savedImageUrl,
+    required this.remover,
+    required this.session,
+    required this.canRemove,
+    required this.onImageChanged,
+  });
+
+  final ScrollController controller;
+  final ValueNotifier<TenantProductImageCandidate?> picture;
+
+  /// The saved photograph's address, when that is what the sheet shows.
+  final Uri? savedImageUrl;
+
+  /// Null where the cut-out is not offered at all.
+  final TenantProductBackgroundRemover? remover;
+  final TenantSession? session;
+  final bool canRemove;
+  final ValueChanged<TenantProductImageCandidate> onImageChanged;
+
+  @override
+  State<_PhotoSheet> createState() => _PhotoSheetState();
+}
+
+final class _PhotoSheetState extends State<_PhotoSheet> {
+  bool _cuttingOut = false;
+
+  /// Separate from [_cuttingOut] so each row carries its own spinner: the two
+  /// take different amounts of time for different reasons.
+  bool _fetching = false;
+  String? _failure;
+
+  bool get _busy => _cuttingOut || _fetching;
+
+  /// Opens the framing editor, downloading the saved photograph first if that
+  /// is the one on display.
+  ///
+  /// **The cut-out's rule does not apply here.** A cut-out is a paid call
+  /// against a photograph somebody just chose; framing is a local redraw, and
+  /// refusing to do it to a saved picture would mean re-picking a file off the
+  /// phone to move a bottle two centimetres left. So this one fetches.
+  Future<void> _frame() async {
+    if (_busy) return;
+    final chosen = widget.picture.value;
+    if (chosen != null) {
+      Navigator.of(context).pop(_FramePhoto(chosen));
+      return;
+    }
+    final url = widget.savedImageUrl;
+    if (url == null) return;
+    setState(() {
+      _fetching = true;
+      _failure = null;
+    });
+    try {
+      final candidate = await fetchProductImage(url);
+      if (!mounted) return;
+      setState(() => _fetching = false);
+      Navigator.of(context).pop(_FramePhoto(candidate));
+    } on TenantProductImageException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _fetching = false;
+        _failure = error.code == 'image_unreachable'
+            ? 'That photograph could not be downloaded. Check the '
+                  'connection and try again.'
+            : 'That photograph could not be read well enough to move it. '
+                  'Replace the image instead.';
+      });
+    }
+  }
+
+  Future<void> _removeBackground() async {
+    final remover = widget.remover;
+    final session = widget.session;
+    final candidate = widget.picture.value;
+    if (_busy || remover == null || session == null || candidate == null) {
+      return;
+    }
+    setState(() {
+      _cuttingOut = true;
+      _failure = null;
+    });
+    try {
+      final cutOut = await remover.remove(
+        session: session,
+        candidate: candidate,
+      );
+      if (!mounted) return;
+      widget.picture.value = cutOut;
+      widget.onImageChanged(cutOut);
+      setState(() => _cuttingOut = false);
+    } on TenantBackgroundRemovalException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _cuttingOut = false;
+        _failure = backgroundRemovalMessage(error.failure);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    final canCutOut = widget.picture.value != null;
+    final rows = <Widget>[
+      _PhotoActionRow(
+        key: const ValueKey('inventory-frame-image'),
+        icon: Icons.crop,
+        label: _fetching ? 'Getting the photo…' : 'Position and zoom',
+        loading: _fetching,
+        onPressed: _busy ? null : _frame,
+      ),
+      if (widget.remover != null)
+        _PhotoActionRow(
+          key: const ValueKey('inventory-remove-background'),
+          icon: Icons.auto_fix_high,
+          glyphColor: colors.accent.identityAt(AppIdentityAccent.blue),
+          label: _cuttingOut ? 'Removing the background…' : 'Remove background',
+          detail: _cuttingOut
+              ? 'This can take a few seconds.'
+              : canCutOut
+              ? 'Leaves the product on a plain background.'
+              : 'Choose a new photo first. A saved photo cannot be cut out.',
+          loading: _cuttingOut,
+          // Only a photograph chosen in this form can be cut out: the bytes
+          // are what goes to the service, and a saved photograph is a URL.
+          onPressed: _busy || !canCutOut ? null : _removeBackground,
+        ),
+      _PhotoActionRow(
+        key: const ValueKey('inventory-remove-image'),
+        icon: Icons.delete_outline,
+        label: 'Remove photo',
+        destructive: true,
+        onPressed: _busy || !widget.canRemove
+            ? null
+            : () => Navigator.of(context).pop(const _RemovePhoto()),
+      ),
+    ];
+    return PopScope(
+      canPop: !_busy,
+      child: ListView(
+        controller: widget.controller,
+        padding: EdgeInsets.fromLTRB(
+          tokens.spacing.s20,
+          tokens.spacing.s16,
+          tokens.spacing.s20,
+          tokens.spacing.s20,
+        ),
+        children: <Widget>[
+          if (_failure case final failure?) ...<Widget>[
+            Callout(
+              key: const ValueKey('inventory-photo-failed'),
+              status: AppStatus.problem,
+              message: failure,
+            ),
+            SizedBox(height: tokens.spacing.s12),
+          ],
+          _PhotoActionList(rows: rows),
+        ],
+      ),
+    );
+  }
+}
+
+/// A card of rows, a hairline between each - the Bluetooth printer list's
+/// arrangement, on the sheet's own surface rather than a raised one.
+final class _PhotoActionList extends StatelessWidget {
+  const _PhotoActionList({required this.rows});
+
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    final edge = BorderSide(color: colors.surface.borderStrong);
+    final hairline = BorderSide(color: colors.surface.cardEdge);
+    final outer = Radius.circular(tokens.radius.lg - edge.width);
+    final inner = Radius.circular(tokens.radius.sm);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(tokens.radius.lg),
+        border: Border.fromBorderSide(edge),
+      ),
+      // Laid out, not only painted, so a row's wash and its ring sit inside
+      // the card's edge rather than over it.
+      child: Padding(
+        padding: EdgeInsets.all(edge.width),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            for (final (index, row) in rows.indexed) ...<Widget>[
+              if (index > 0)
+                SizedBox(
+                  height: hairline.width,
+                  child: ColoredBox(color: hairline.color),
                 ),
+              _RowCorners(
+                radius: BorderRadius.vertical(
+                  top: index == 0 ? outer : inner,
+                  bottom: index == rows.length - 1 ? outer : inner,
+                ),
+                child: row,
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// The old catalog form's arrangement: the photograph beside the fields on a
-/// tablet or a desktop, above them on a phone.
+/// Hands a row the corners it meets the card with.
+final class _RowCorners extends InheritedWidget {
+  const _RowCorners({required this.radius, required super.child});
+
+  final BorderRadius radius;
+
+  static BorderRadius of(BuildContext context, AppTokens tokens) =>
+      context.dependOnInheritedWidgetOfExactType<_RowCorners>()?.radius ??
+      BorderRadius.circular(tokens.radius.sm);
+
+  @override
+  bool updateShouldNotify(_RowCorners oldWidget) => radius != oldWidget.radius;
+}
+
+/// One photo action: a glyph, its name, and a line on what it does.
 ///
-/// `lib/pos/goods.dart` drew exactly this - a `Row` of `flex: 2` image and
-/// `flex: 3` fields with 24 between them, and a single stacked column below its
-/// mobile breakpoint. Both catalog forms use it, because the old app used one
-/// image section for both and two different arrangements for one job is how
-/// they drift apart.
-final class _FormWithImageWell extends StatelessWidget {
-  const _FormWithImageWell({required this.well, required this.fields});
+/// **States:** enabled; hover and pressed as the tertiary wash and
+/// [PressSurface]'s spring; focus-visible as the ring, inside the card;
+/// loading as a spinner where the glyph was and the words saying what is
+/// running; disabled in the disabled ink, with [detail] saying why where there
+/// is a reason to give.
+final class _PhotoActionRow extends StatelessWidget {
+  const _PhotoActionRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.detail,
+    this.glyphColor,
+    this.loading = false,
+    this.destructive = false,
+  });
 
-  /// Null where the form offers no image at all - no store is configured, or
-  /// this session may not change one - in which case the fields are the whole
-  /// form and there is no second column to make.
-  final Widget? well;
-
-  final List<Widget> fields;
+  final IconData icon;
+  final String label;
+  final String? detail;
+  final Color? glyphColor;
+  final bool loading;
+  final bool destructive;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final column = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: fields,
-    );
-    final image = well;
-    if (image == null) return column;
-    // **`MediaQuery`, not a `LayoutBuilder`.** `AppDialog` is an `AlertDialog`
-    // underneath, which sizes its content by intrinsic height, and a
-    // `LayoutBuilder` refuses to answer an intrinsic query - the defect
-    // `Pagination` records by name after three dialogs threw it.
-    final wide = AppLayout.contract.isAtLeast(
-      MediaQuery.sizeOf(context).width,
-      AppBreakpoint.medium,
-    );
-    if (!wide) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+    final colors = tokens.colors;
+    final enabled = onPressed != null;
+    final ink = !enabled && !loading
+        ? colors.action.disabledLabel
+        : destructive
+        ? colors.status.problem.fg
+        : colors.text.primary;
+    final glyph = !enabled && !loading
+        ? colors.action.disabledLabel
+        : destructive
+        ? colors.status.problem.fg
+        : glyphColor ?? colors.text.secondary;
+    final size = tokens.spacing.s24;
+    final row = Padding(
+      padding: EdgeInsets.all(tokens.spacing.s16),
+      child: Row(
         children: <Widget>[
-          image,
-          SizedBox(height: tokens.spacing.s16),
-          column,
+          SizedBox.square(
+            dimension: size,
+            child: loading
+                ? Padding(
+                    padding: EdgeInsets.all(tokens.spacing.s4),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(glyph),
+                    ),
+                  )
+                : Icon(icon, size: size, color: glyph),
+          ),
+          SizedBox(width: tokens.spacing.s16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: tokens.typography.bodyLarge.copyWith(color: ink),
+                ),
+                if (detail case final line?)
+                  Text(
+                    line,
+                    style: tokens.typography.caption.copyWith(
+                      color: enabled || loading
+                          ? colors.text.tertiary
+                          : colors.action.disabledLabel,
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
-      );
-    }
+      ),
+    );
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: enabled,
+      label: label,
+      value: detail,
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: PressSurface(
+        borderRadius: _RowCorners.of(context, tokens),
+        onPressed: onPressed,
+        fillWidth: true,
+        excludeSemantics: true,
+        ringInside: true,
+        hoverOverlay: colors.action.tertiary.hoverWash(),
+        pressedOverlay: colors.action.tertiary.pressedWash(),
+        child: row,
+      ),
+    );
+  }
+}
+
+/// Something the form will do when it is saved, said in words beside the
+/// warning glyph - never in the amber alone.
+final class _PendingLine extends StatelessWidget {
+  const _PendingLine({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final ink = tokens.colors.status.attention.fg;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s4),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.warning, size: StatusBadge.iconSize, color: ink),
+          SizedBox(width: tokens.spacing.s4),
+          Flexible(
+            child: Text(
+              message,
+              style: tokens.typography.caption.copyWith(color: ink),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The product form's layout: the photo row on top, then the fields.
+///
+/// **One column at every width since 2026-10-08.** A wider screen lets fields
+/// share a line - see [_FormRow] - rather than giving the photo a column of its
+/// own, which is what made it the largest thing on the form.
+final class _ProductFormLayout extends StatelessWidget {
+  const _ProductFormLayout({required this.well, required this.fields});
+
+  /// Null where the form offers no photo at all - no store is configured, or
+  /// this session may not change one - in which case the fields are the form.
+  final Widget? well;
+
+  final List<Widget> fields;
+
+  /// Whether fields share a line. `MediaQuery` rather than a `LayoutBuilder`,
+  /// for the reason `Pagination` records: a `LayoutBuilder` refuses an
+  /// intrinsic query.
+  static bool wide(BuildContext context) => AppLayout.contract.isAtLeast(
+    MediaQuery.sizeOf(context).width,
+    AppBreakpoint.medium,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final photo = well;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      // No space of its own above the photo: the route's list and the
+      // scaffold above it already put the tile `s16` under the toolbar.
+      children: <Widget>[
+        if (photo != null) ...<Widget>[
+          photo,
+          SizedBox(height: tokens.spacing.s24),
+        ],
+        ...fields,
+      ],
+    );
+  }
+}
+
+/// Fields side by side, top-aligned, with the gap two fields' ring gutters
+/// already make wider by eight.
+final class _FormRow extends StatelessWidget {
+  const _FormRow({required this.children});
+
+  /// Null leaves its share of the line empty, so a lone field on a wide
+  /// screen is as wide as its neighbours above it.
+  final List<Widget?> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Expanded(flex: 2, child: image),
-        SizedBox(width: tokens.spacing.s24),
-        Expanded(flex: 3, child: column),
+        for (final (index, child) in children.indexed) ...<Widget>[
+          if (index > 0) SizedBox(width: tokens.spacing.s8),
+          Expanded(child: child ?? const SizedBox.shrink()),
+        ],
       ],
     );
   }

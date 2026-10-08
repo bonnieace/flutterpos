@@ -1,4 +1,5 @@
 import '../ui/money_text.dart';
+import '../tenancy/tenant_catalog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -431,7 +432,10 @@ final class _SaleHistoryContents extends StatelessWidget {
       RecordAttribute(
         label: 'Sold',
         value: sale.lines
-            .map((line) => '${line.quantity} x ${line.name}')
+            .map(
+              (line) =>
+                  '${line.quantity} x ${tenantProductLabel(line.name, line.sku)}',
+            )
             .join(', '),
         valueKey: ValueKey('sale-history-lines-${sale.id}'),
         flex: 2,

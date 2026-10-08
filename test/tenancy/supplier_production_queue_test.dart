@@ -448,7 +448,6 @@ void main() {
               'price': 50,
               'quantity': 12,
               'categoryId': 'cat-a',
-              'costType': 'produced',
             },
           ),
           quantity: '100',

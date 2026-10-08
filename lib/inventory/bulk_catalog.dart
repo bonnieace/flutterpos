@@ -1336,9 +1336,6 @@ final class TenantBulkCatalogRepository {
       case TenantProductField.name:
       case TenantProductField.sku:
       case TenantProductField.image:
-      // Set one product at a time: `updateProducts` refuses it in a row, so a
-      // bulk page naming it could only ever fail.
-      case TenantProductField.costType:
         // Unreachable through [TenantBulkCatalogEdit], whose four constructors
         // are the only way to name a field. Refused rather than asserted,
         // because a name or a code shared across many products is a state the
@@ -1613,7 +1610,6 @@ String _describePrevious(
     case TenantProductField.sku:
       return product.sku;
     case TenantProductField.image:
-    case TenantProductField.costType:
       throw const TenantBulkCatalogException('field_not_bulk_editable');
   }
 }
@@ -1645,7 +1641,16 @@ enum _SheetColumn {
     'product',
     'product name',
   ], required: true),
-  sku('sku', <String>['sku', 'code', 'barcode'], required: true),
+  // *Size* since 2026-10-08, and optional. The older spellings stay accepted
+  // so a sheet downloaded before then still imports.
+  sku('size', <String>[
+    'size',
+    'volume',
+    'size or volume',
+    'sku',
+    'code',
+    'barcode',
+  ]),
   price('price', <String>[
     'price',
     'unit price',
@@ -1664,7 +1669,7 @@ enum _SheetColumn {
   final List<String> headers;
 
   /// Whether a sheet without this column can describe a product at all. The
-  /// three that are required are the three the server requires of every row.
+  /// two that are required are the two the server requires of every row.
   final bool required;
 
   static _SheetColumn? fromHeader(String value) {
@@ -2036,7 +2041,7 @@ String bulkCatalogRefusalMessage(
     'One product is named twice, and two corrections for one product have '
         'no order. Nothing was sent.',
   'field_not_bulk_editable' =>
-    'A name and a code belong to one product each and cannot be corrected '
+    'A name and a size belong to one product each and cannot be corrected '
         'across many.',
   'unknown_category' => 'Choose one of the categories read from this business.',
   'edit_forbidden' =>
@@ -2066,9 +2071,7 @@ String bulkCatalogRefusalMessage(
     'The category name must not be blank and must be at most '
         '$maximumCatalogNameLength characters.',
   'invalid_sku' =>
-    'The code must not be blank, must have no spaces, and must be at most '
-        '$maximumCatalogSkuLength characters - it is what the register matches '
-        'a scan against.',
+    'The size must be at most $maximumCatalogSkuLength characters.',
   'invalid_quantity' =>
     'The opening quantity must be a whole number of units between 0 and '
         '$maximumBulkOpeningQuantity, or blank.',
@@ -2211,7 +2214,8 @@ TenantBulkCatalogRowProduct _requireProduct(
   }
   return TenantBulkCatalogRowProduct._(
     name: _requiredString(product, 'name', source),
-    sku: _requiredString(product, 'sku', source),
+    // A product with no size answers an empty string.
+    sku: product['sku'] == '' ? '' : _requiredString(product, 'sku', source),
     price: price.toDouble(),
     priceMinor: priceMinor,
     cost: cost,
@@ -2244,8 +2248,7 @@ void _requireBatchValueApplied(
                 checkoutMinorUnitsFromMajor(page.wireValue as num),
     TenantProductField.name ||
     TenantProductField.sku ||
-    TenantProductField.image ||
-    TenantProductField.costType => false,
+    TenantProductField.image => false,
   };
   if (!applied) {
     throw const FormatException(

@@ -18,6 +18,7 @@ import {
   readProductCreateInput,
 } from "./productCreate";
 import {MAXIMUM_IMPORT_OPENING_STOCK} from "./productImport";
+import {productSearchFields} from "./productUpdate";
 
 /**
  * The decisions behind `createProduct`, as units.
@@ -163,6 +164,18 @@ test("the fields only a server may decide are taken from the actor", () => {
   );
 });
 
+test("a document naming no size creates a product with none", () => {
+  // The size is the one descriptive field a product may go without, since
+  // 2026-10-08. It is stored as an empty string, so every product still has
+  // the key.
+  const plan = planFor({SKU: undefined});
+  assert.equal(plan.documentData.SKU, "");
+  assert.deepEqual(
+    plan.documentData.searchPrefixes,
+    productSearchFields("Cola 500ml", "").searchPrefixes
+  );
+});
+
 test("a key that is not part of a product is refused", () => {
   const error = refusal(() => readProductCreateInput(document({soldById: "x"})));
 
@@ -170,7 +183,7 @@ test("a key that is not part of a product is refused", () => {
   assert.match(error.message, /soldById is not part of a product/);
 });
 
-for (const field of ["name", "SKU", "price", "categoryId"]) {
+for (const field of ["name", "price", "categoryId"]) {
   test(`a document naming no ${field} is refused`, () => {
     const error = refusal(() =>
       readProductCreateInput(document({[field]: undefined}))

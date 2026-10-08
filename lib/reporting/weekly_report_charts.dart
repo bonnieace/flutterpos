@@ -8,6 +8,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../checkout/checkout_tender.dart';
+import '../tenancy/tenant_catalog.dart';
 import '../sales/sale_history.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
@@ -549,7 +550,7 @@ final class _SaleRow extends StatelessWidget {
   /// heading.
   String get _preview {
     if (row.lines.isEmpty) return 'No items';
-    final first = row.lines.first.name;
+    final first = tenantProductLabel(row.lines.first.name, row.lines.first.sku);
     final rest = row.lines.length - 1;
     return rest > 0 ? '$first +$rest more' : first;
   }

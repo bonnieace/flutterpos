@@ -21,7 +21,7 @@
 /// full weight with the box beside it, because the name is what a person reads
 /// off the label and the number is the only thing they write. Each row says
 /// where it stands - not counted yet, looked and found none, or the product's
-/// SKU once it has a number - and *Hand in this count* is pinned at the foot
+/// size once it has a number - and *Hand in this count* is pinned at the foot
 /// of the screen rather than at the end of a list that can run to hundreds of
 /// products. Nothing here reads, writes or decides anything the screen did not
 /// before: the draft, the refusals and the hand-in are unchanged.
@@ -790,7 +790,7 @@ final class _CountLine extends StatelessWidget {
 
   static Widget _sku(AppTokens tokens, String sku) => Text(
     sku,
-    style: tokens.typography.monoCaption.copyWith(
+    style: tokens.typography.caption.copyWith(
       color: tokens.colors.text.tertiary,
     ),
   );

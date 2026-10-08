@@ -88,37 +88,6 @@ const int maximumCatalogCategoryScan = 500;
 /// the bound rather than twenty-five.
 const int _categoryScanPageSize = 50;
 
-/// Where a product's cost comes from, as the catalog labels it.
-///
-/// **Display only, and not money.** A *Made here* product is the one a
-/// production batch can be recorded against; a *Bought in* one is the one a
-/// supplier delivery restocks. Neither changes how a sale is priced or costed -
-/// every route that states a cost writes the one [TenantProduct.cost] - so a
-/// manager may set it, and it sits beside the descriptive fields rather than
-/// beside the money.
-enum TenantProductCostType {
-  purchased('purchased', 'Purchased'),
-  produced('produced', 'Produced');
-
-  const TenantProductCostType(this.wireValue, this.label);
-
-  /// The value stored in Firestore. Frozen: renaming a constant here must never
-  /// silently re-label every product already written.
-  final String wireValue;
-
-  /// What a person reads on screen.
-  final String label;
-
-  /// The cost type a stored value means.
-  ///
-  /// **Permissive on purpose**, like `retired`: only the exact `produced` marks
-  /// a product as made here. Absent, null, or a value this build does not model
-  /// reads as bought in, because one product the strict model refuses empties
-  /// the whole cached catalog - and a display flag is not worth that.
-  static TenantProductCostType fromStored(Object? value) =>
-      value == produced.wireValue ? produced : purchased;
-}
-
 /// Strict read model for `tenants/{tenantId}/products/{productId}`.
 ///
 /// New documents use `categoryId`. The legacy `category` alias is accepted
@@ -138,7 +107,7 @@ final class TenantProduct {
   }) : id = _documentId(path, TenantCollection.products),
        tenantId = _pathTenantId(path, TenantCollection.products),
        name = _requiredTrimmedString(data, 'name'),
-       sku = _requiredTrimmedString(data, 'SKU'),
+       sku = _optionalSize(data),
        price = _nonNegativeFiniteNumber(data, 'price'),
        cost = _optionalNonNegativeFiniteNumber(data, 'cost'),
        quantity = _signedSafeInteger(data, 'quantity'),
@@ -148,8 +117,7 @@ final class TenantProduct {
        // became a flag carries no such field, and this model is strict enough
        // that one product it refuses makes the whole cached catalog a miss.
        // Absent therefore means "in the catalog", which is what it always was.
-       retired = data['retired'] == true,
-       costType = TenantProductCostType.fromStored(data['costType']);
+       retired = data['retired'] == true;
 
   final String id;
 
@@ -159,6 +127,14 @@ final class TenantProduct {
   final String tenantId;
 
   final String name;
+
+  /// The product's size or volume - *30ml*, *500 ml* - and empty when it has
+  /// none.
+  ///
+  /// **Stored as `SKU`, and a size since 2026-10-08.** Every shop already used
+  /// the field for sizes, so it was renamed on screen rather than in the data,
+  /// and made optional. It is shown beside the name wherever two sizes of one
+  /// product would otherwise read the same.
   final String sku;
   final double price;
 
@@ -185,9 +161,49 @@ final class TenantProduct {
   /// it and the catalog marks it - the document stays, so every past sale line
   /// and every ledger entry below it still names something that answers.
   final bool retired;
+}
 
-  /// Bought in or made here. See [TenantProductCostType].
-  final TenantProductCostType costType;
+/// A product's name with its size beside it - *Perfume X · 30ml* - and the name
+/// alone when it has none.
+///
+/// **The one spelling every list that names a product uses**, since sizes
+/// became what tells two products apart on 2026-10-08: a shop selling one
+/// perfume in two sizes would otherwise read two identical rows.
+String tenantProductLabel(String name, String? size) =>
+    size == null || size.isEmpty ? name : '$name · $size';
+
+/// Reads the sizes of products that a record names by ID.
+///
+/// **For records that saved a product's name but not its size** - supplier
+/// deliveries and production batches. The size is the product's as it is now,
+/// which is what it was when the record was made unless it has been corrected
+/// since.
+///
+/// **Never a reason for the screen to fail.** A product that cannot be read is
+/// left out, and its record shows the name alone, exactly as it did before this
+/// existed.
+final class TenantProductSizes extends TenantReadRepository {
+  TenantProductSizes({required super.session, required super.reader});
+
+  Future<Map<String, String>> read(Iterable<String> productIds) async {
+    final sizes = <String, String>{};
+    await Future.wait(<Future<void>>[
+      for (final productId in productIds.toSet())
+        _readOne(productId).then((size) {
+          if (size != null && size.isNotEmpty) sizes[productId] = size;
+        }),
+    ]);
+    return sizes;
+  }
+
+  Future<String?> _readOne(String productId) async {
+    try {
+      final data = await readDocument(TenantCollection.products, productId);
+      return data == null ? null : _optionalSize(data);
+    } on Object {
+      return null;
+    }
+  }
 }
 
 /// A product's standing, as one of §2.1's five - or nothing at all.
@@ -951,6 +967,15 @@ List<String> _pathSegments(String path, TenantCollection collection) {
   }
   validateTenantId(segments[1]);
   return segments;
+}
+
+/// A product's size, empty when it has none. Absent and an empty string both
+/// mean no size; anything present must still be a trimmed string, because a
+/// malformed one is a defect worth refusing rather than a size worth showing.
+String _optionalSize(Map<String, Object?> map) {
+  final value = map['SKU'];
+  if (value == null || value == '') return '';
+  return _requiredTrimmedString(map, 'SKU');
 }
 
 String _requiredTrimmedString(Map<String, Object?> map, String field) {

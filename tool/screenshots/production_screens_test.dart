@@ -18,18 +18,10 @@ final class _Writer implements TenantProductionWriter {
   ) async => TenantProductionWriteResult.queued(intent.operationId);
 }
 
-/// The seeded business with its bread made here, searchable by a word of a
-/// product's name - only here, for the reason the supplier captures give.
+/// The seeded business, searchable by a word of a product's name - only here,
+/// for the reason the supplier captures give.
 final class _Bakery implements TenantDataReader, TenantProductSearchReader {
-  _Bakery() : _business = FakeTenantReader.business() {
-    const root = 'tenants/$seedTenantId';
-    final bread = <String, Object?>{
-      ...seedProducts['pd-bread-white']!,
-      'costType': 'produced',
-    };
-    _business.collections['$root/products']!['pd-bread-white'] = bread;
-    _business.documents['$root/products/pd-bread-white'] = bread;
-  }
+  _Bakery() : _business = FakeTenantReader.business();
 
   final FakeTenantReader _business;
 

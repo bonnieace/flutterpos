@@ -161,7 +161,7 @@ final class TenantReturnsAnalysis {
 
       for (final line in record.lines) {
         units[line.productId] = (units[line.productId] ?? 0) + line.quantity;
-        if (line.productName case final recorded?) {
+        if (line.label case final recorded?) {
           names[line.productId] = recorded;
         }
       }

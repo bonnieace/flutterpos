@@ -163,7 +163,7 @@ test("more rows than the bound is refused for the whole request", () => {
   );
 });
 
-test("a row must name a name, a code, and a price", () => {
+test("a row must name a name and a price, and may leave out the size", () => {
   const input = importRequest([
     row({name: undefined}),
     row({sku: null}),
@@ -171,11 +171,12 @@ test("a row must name a name, a code, and a price", () => {
     row(),
   ]);
 
-  assert.deepEqual(input.rows.map((entry) => entry.index), [3]);
+  assert.deepEqual(input.rows.map((entry) => entry.index), [1, 3]);
   assert.deepEqual(
     input.refusals.map((entry) => entry.index),
-    [0, 1, 2]
+    [0, 2]
   );
+  assert.equal(plan(input).outcomes[1].product?.sku, "");
   assert.match(input.refusals[0].message, /name is required to create a product/);
 });
 
@@ -460,9 +461,9 @@ test("a preview plans the same rows and names none of the documents", () => {
 test("outcomes come back in request order, refusals among them", () => {
   const result = plan(importRequest([
     row({price: 19.999}),
-    row({sku: "CL501"}),
-    row({categoryId: "ct_missing", sku: "CL502"}),
-    row({sku: "CL503"}),
+    row({sku: "500ml"}),
+    row({categoryId: "ct_missing", sku: "1 L"}),
+    row({sku: "1.5 L"}),
   ]));
 
   assert.deepEqual(result.outcomes.map((entry) => entry.index), [0, 1, 2, 3]);

@@ -375,8 +375,6 @@ final class _ProductionFormState extends State<_ProductionForm> {
         'The cost per unit rounds to nothing. Check the costs and how many '
             'were made.',
       'cost_too_large' => 'The cost per unit is larger than a sale can record.',
-      'not_made_here' =>
-        'That product is purchased. Mark it as Produced in Inventory first.',
       'retired_product' => 'That product has been retired.',
       'production_forbidden' =>
         'Only an owner, administrator or manager may record production.',
@@ -541,11 +539,6 @@ final class _ProductionFormState extends State<_ProductionForm> {
             // Focused only when *Edit* opened it: on arrival the form's first
             // question is read before the keyboard covers it.
             autofocus: _choosingProduct,
-            admits: (item) => item.costType == TenantProductCostType.produced,
-            refusedHint:
-                'Some products that match are purchased. Mark a product as '
-                'Produced when you edit it in Inventory to record production '
-                'for it.',
             onSelected: _selectProduct,
             onEdited: () => setState(() {
               _product = null;

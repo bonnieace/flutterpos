@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edit product &#8212; phone</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+/* 411 x 891, the harness's mobile viewport. Drawn against
+   screenshots/mobile-full/18h-add-a-product.png. Non-pressable boxes sit at
+   the 20 inset; buttons and fields 4 further in, in PressSurface's focus-ring
+   gutter, as the build draws them. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, select, input { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; flex-wrap: wrap; gap: 32px; padding: 20px 24px 48px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.page-stage > figure > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+figcaption { font-size: 13px; color: #869585; max-width: 411px; text-align: center; line-height: 19px; }
+figcaption b { color: #BCCBB9; font-weight: 600; }
+figcaption em { font-style: normal; color: #4BE277; }
+
+.phone { position: relative; width: 411px; height: 891px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+.bar { height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+.bar button { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #D4E7DD; cursor: pointer; }
+.bar span { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.body { flex-grow: 1; min-height: 0; padding: 8px 20px 24px; display: flex; flex-direction: column; overflow: hidden; }
+.body > * { flex-shrink: 0; }
+.gap4 { height: 4px; } .gap8 { height: 8px; } .gap12 { height: 12px; } .gap16 { height: 16px; } .gap20 { height: 20px; } .gap24 { height: 24px; }
+
+/* The photo row: a 128 tile and its actions. New token: layout.productImageThumb. */
+.photo { display: flex; gap: 16px; align-items: stretch; }
+.tile { position: relative; width: 128px; height: 128px; flex-shrink: 0; border-radius: 8px; overflow: hidden; box-sizing: border-box; margin: 0; padding: 0; border: 0; cursor: pointer; background: #132A1F; }
+.tile-empty { border: 1px solid #3D4A3D; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 600; }
+.tile-empty svg { color: #869585; }
+.tile .zoom { position: absolute; right: 4px; bottom: 4px; width: 24px; height: 24px; border-radius: 8px; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; color: #D4E7DD; }
+.photo-side { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.photo-title { margin: 0 4px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; }
+.photo-title span { font-weight: 600; color: #BCCBB9; }
+.photo-hint { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #869585; }
+.photo-file { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #869585; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* AppTextField and AppSelect. */
+.f { margin: 0 4px; }
+.f-label { display: block; margin: 0 0 8px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; }
+.f-label span { font-weight: 600; color: #BCCBB9; }
+.input { height: 48px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.input .ph { color: #869585; }
+.input .grow { flex-grow: 1; }
+.input svg { flex-shrink: 0; color: #BCCBB9; }
+.help { margin: 8px 0 0; font-size: 12px; line-height: 16px; color: #869585; }
+.pair { display: flex; gap: 8px; }
+.pair > .f { flex: 1 1 0; min-width: 0; }
+
+/* AppButton. */
+.btn { height: 48px; box-sizing: border-box; padding: 0 16px; margin: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; white-space: nowrap; }
+.btn-pri { background: #4BE277; color: #003915; border: 0; }
+.btn-sec { background: #132A1F; color: #D4E7DD; border: 1px solid #3D4A3D; }
+.btn-ter { background: transparent; color: #4BE277; border: 0; }
+.btn-off { background: #1E3A2B; color: #5D7468; border: 0; cursor: default; }
+.btn-wide { flex: 1 1 0; }
+.icon-btn { width: 48px; height: 48px; flex-shrink: 0; box-sizing: border-box; margin: 4px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; cursor: pointer; }
+.row { display: flex; align-items: center; }
+
+/* The pinned footer: surface.base over a borderSubtle hairline. */
+.foot { flex-shrink: 0; border-top: 1px solid #132A1F; padding: 8px 16px 8px; background: #071610; }
+.foot-note { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #869585; text-align: center; }
+.foot .row { gap: 12px; }
+
+/* AppSheet over surface.scrim. */
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 3; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; box-sizing: border-box; background: #132A1F; border-radius: 12px 12px 0 0; padding: 12px 20px 20px; display: flex; flex-direction: column; }
+.handle { width: 32px; height: 4px; border-radius: 999px; background: #3D4A3D; align-self: center; }
+.sheet-title { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.preview { width: 280px; height: 280px; align-self: center; border-radius: 8px; overflow: hidden; }
+.menu { margin: 0; padding: 0; list-style: none; border: 1px solid #3D4A3D; border-radius: 12px; }
+.menu li + li { border-top: 1px solid #283831; }
+.mrow { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 8px 16px; box-sizing: border-box; color: #D4E7DD; font-size: 16px; line-height: 24px; cursor: pointer; }
+.mrow small { display: block; font-size: 12px; line-height: 16px; color: #869585; }
+.mrow svg { flex-shrink: 0; }
+.mrow-des { color: #EF4444; }
+
+/* Toolbar with the product's name under the title, as AppScaffold draws it. */
+.bar-sub { height: 68px; }
+.bar-sub .t { display: flex; flex-direction: column; }
+.bar-sub .t b { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.bar-sub .t i { font-style: normal; font-size: 14px; line-height: 20px; color: #BCCBB9; }
+/* A field that is shown and not offered: action.disabledLabel on a quieter edge. */
+.input-off { background: #132A1F; border-color: #1E3A2B; color: #5D7468; }
+.f-off .f-label, .f-off .f-label span { color: #5D7468; }
+.input-off svg { color: #5D7468; }
+.link { display: inline-flex; align-items: center; height: 32px; margin: 4px; padding: 0 20px; border: 0; border-radius: 8px; background: transparent; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; color: #4BE277; cursor: pointer; }
+.pending { margin: 4px 0 0; font-size: 12px; line-height: 16px; color: #F2C14E; display: flex; gap: 4px; align-items: center; }
+/* Disclosure: info glyph, body 16/24, chevron. */
+.disc { display: flex; align-items: center; gap: 8px; padding: 8px; margin: 0 4px; border-radius: 4px; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.disc .grow { flex-grow: 1; }
+.disc-body { margin: 4px 12px 0 38px; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.disc-body p { margin: 0 0 12px; }
+.note { margin: 0 4px; display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 16px; color: #869585; }
+.note svg { flex-shrink: 0; }
+.scrolled { justify-content: flex-end; padding-top: 0; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All product form artboards</a></nav>
+<div class="page-stage">
+
+<!-- Frame 1: an owner opens a product -->
+<figure>
+<div class="phone">
+  <div class="bar bar-sub">
+    <button type="button" aria-label="Back to inventory"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button>
+    <span class="t"><b>Edit product</b><i>White bread loaf</i></span>
+  </div>
+  <div class="body">
+    <div class="gap8"></div>
+    <div class="photo">
+      <button type="button" class="tile" aria-label="Open the photo">
+        <svg width="128" height="128" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="b1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E4EFEA"></stop><stop offset="1" stop-color="#A9CEC8"></stop></linearGradient><linearGradient id="b2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4BA8B8"></stop><stop offset="1" stop-color="#2F6F8A"></stop></linearGradient></defs><rect width="100" height="100" fill="url(#b1)"></rect><rect x="17" y="24" width="66" height="52" rx="20" fill="#1F4F5F"></rect><rect x="21" y="27" width="58" height="44" rx="16" fill="url(#b2)"></rect><g stroke="#A6D3DA" stroke-width="4" stroke-linecap="round"><path d="M32 36l8 13"></path><path d="M44 36l8 13"></path><path d="M56 36l8 13"></path></g></svg>
+        <span class="zoom" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"></path></svg></span>
+      </button>
+      <div class="photo-side">
+        <p class="photo-title">Photo</p>
+        <p class="photo-file">The saved photo</p>
+        <div class="gap8"></div>
+        <div class="row">
+          <button type="button" class="btn btn-sec btn-wide">Replace</button>
+          <button type="button" class="icon-btn" aria-label="Photo options"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="gap24"></div>
+    <div class="f"><label class="f-label">Product name</label><div class="input">White bread loaf</div></div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Category</label><div class="input"><span class="grow">Bakery</span><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5z"></path></svg></div></div>
+    <div class="gap16"></div>
+    <div class="pair">
+      <div class="f"><label class="f-label">Selling price</label><div class="input">65</div></div>
+      <div class="f"><label class="f-label">Buying price <span>(optional)</span></label><div class="input">48</div></div>
+    </div>
+    <div class="gap12"></div>
+    <div class="f"><label class="f-label">Size or volume <span>(optional)</span></label><div class="input">400g</div><p class="help">Shown beside the name, so two sizes of one product can be told apart.</p></div>
+    <div class="gap16"></div>
+    <div class="disc"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><span class="grow">How editing works</span><svg width="24" height="24" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></div>
+  </div>
+  <div class="foot">
+    <div class="row">
+      <button type="button" class="btn btn-ter btn-wide">Cancel</button>
+      <button type="button" class="btn btn-pri btn-wide">Save changes</button>
+    </div>
+  </div>
+</div>
+<figcaption><b>An owner opens a product.</b> It is the add form with the values filled in: same order, same photo row, and a dropdown for the category instead of chips. <em>Save changes</em> replaces <em>Review correction</em>, because the button saves straight away. <em>How editing works</em> is four short sentences at the bottom, the stock note among them.</figcaption>
+</figure>
+
+<!-- Frame 2: removing the buying price -->
+<figure>
+<div class="phone">
+  <div class="bar bar-sub">
+    <button type="button" aria-label="Back to inventory"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button>
+    <span class="t"><b>Edit product</b><i>White bread loaf</i></span>
+  </div>
+  <div class="body">
+    <div class="gap8"></div>
+    <div class="photo">
+      <button type="button" class="tile" aria-label="Open the photo">
+        <svg width="128" height="128" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="d1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E4EFEA"></stop><stop offset="1" stop-color="#A9CEC8"></stop></linearGradient><linearGradient id="d2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4BA8B8"></stop><stop offset="1" stop-color="#2F6F8A"></stop></linearGradient></defs><rect width="100" height="100" fill="url(#d1)"></rect><rect x="17" y="24" width="66" height="52" rx="20" fill="#1F4F5F"></rect><rect x="21" y="27" width="58" height="44" rx="16" fill="url(#d2)"></rect><g stroke="#A6D3DA" stroke-width="4" stroke-linecap="round"><path d="M32 36l8 13"></path><path d="M44 36l8 13"></path><path d="M56 36l8 13"></path></g></svg>
+        <span class="zoom" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"></path></svg></span>
+      </button>
+      <div class="photo-side">
+        <p class="photo-title">Photo</p>
+        <p class="photo-file">The saved photo</p>
+        <div class="gap8"></div>
+        <div class="row">
+          <button type="button" class="btn btn-sec btn-wide">Replace</button>
+          <button type="button" class="icon-btn" aria-label="Photo options"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="gap24"></div>
+    <div class="f"><label class="f-label">Product name</label><div class="input">White bread loaf</div></div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Category</label><div class="input"><span class="grow">Bakery</span><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5z"></path></svg></div></div>
+    <div class="gap16"></div>
+    <div class="pair">
+      <div class="f"><label class="f-label">Selling price</label><div class="input">70</div></div>
+      <div class="f"><label class="f-label">Buying price <span>(optional)</span></label><div class="input" style="border: 1px solid #4BE277;"></div><p class="help">Removed when you save.</p></div>
+    </div>
+    <div class="gap12"></div>
+    <div class="f"><label class="f-label">Size or volume <span>(optional)</span></label><div class="input">400g</div><p class="help">Shown beside the name, so two sizes of one product can be told apart.</p></div>
+    <div class="gap16"></div>
+    <div class="disc"><svg width="18" height="18" viewBox="0 0 24 24" fill="#B0CDBD" aria-hidden="true"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path></svg><span class="grow">How editing works</span><svg width="24" height="24" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></svg></div>
+  </div>
+  <div class="foot">
+    <div class="row">
+      <button type="button" class="btn btn-ter btn-wide">Cancel</button>
+      <button type="button" class="btn btn-pri btn-wide">Save changes</button>
+    </div>
+  </div>
+</div>
+<figcaption><b>Removing the buying price.</b> The figure is deleted from its field, as any other value is changed, and the helper says what saving will do. Typing a figure back in keeps it. <em>Remove it</em> and <em>Keep it</em> were taken out on 2026-10-08.</figcaption>
+</figure>
+
+<!-- Frame 3: a manager -->
+<figure>
+<div class="phone">
+  <div class="bar bar-sub">
+    <button type="button" aria-label="Back to inventory"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button>
+    <span class="t"><b>Edit product</b><i>White bread loaf</i></span>
+  </div>
+  <div class="body">
+    <div class="gap8"></div>
+    <div class="photo">
+      <button type="button" class="tile" aria-label="Open the photo">
+        <svg width="128" height="128" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="c1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E4EFEA"></stop><stop offset="1" stop-color="#A9CEC8"></stop></linearGradient><linearGradient id="c2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4BA8B8"></stop><stop offset="1" stop-color="#2F6F8A"></stop></linearGradient></defs><rect width="100" height="100" fill="url(#c1)"></rect><rect x="17" y="24" width="66" height="52" rx="20" fill="#1F4F5F"></rect><rect x="21" y="27" width="58" height="44" rx="16" fill="url(#c2)"></rect><g stroke="#A6D3DA" stroke-width="4" stroke-linecap="round"><path d="M32 36l8 13"></path><path d="M44 36l8 13"></path><path d="M56 36l8 13"></path></g></svg>
+        <span class="zoom" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"></path></svg></span>
+      </button>
+      <div class="photo-side">
+        <p class="photo-title">Photo</p>
+        <p class="photo-file">The saved photo</p>
+        <div class="gap8"></div>
+        <div class="row">
+          <button type="button" class="btn btn-sec btn-wide">Replace</button>
+          <button type="button" class="icon-btn" aria-label="Photo options"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="gap24"></div>
+    <div class="f"><label class="f-label">Product name</label><div class="input">White bread loaf</div></div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Category</label><div class="input"><span class="grow">Bakery</span><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5z"></path></svg></div></div>
+    <div class="gap16"></div>
+    <div class="f f-off"><label class="f-label">Selling price</label><div class="input input-off"><span class="grow">65</span><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"></path></svg></div><p class="help">Only an owner or administrator can change prices.</p></div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Size or volume <span>(optional)</span></label><div class="input">400g</div><p class="help">Shown beside the name, so two sizes of one product can be told apart.</p></div>
+  </div>
+  <div class="foot">
+    <div class="row">
+      <button type="button" class="btn btn-ter btn-wide">Cancel</button>
+      <button type="button" class="btn btn-pri btn-wide">Save changes</button>
+    </div>
+  </div>
+</div>
+<figcaption><b>A manager.</b> The selling price is shown, locked, with one line saying who can change it. That replaces today's boxed notice about two fields the manager cannot see. The buying price is still not shown to a manager.</figcaption>
+</figure>
+
+</div>
+</body>
+</html>

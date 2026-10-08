@@ -4,6 +4,7 @@ library;
 
 import '../../checkout/checkout_draft.dart';
 import '../../suppliers/supplier_delivery.dart';
+import '../../tenancy/tenant_catalog.dart';
 import '../report_period.dart';
 import '../report_run.dart';
 
@@ -76,9 +77,13 @@ final class TenantSupplierAnalysis {
   ///
   /// [reachedTo] is the last business day the read reached when it was
   /// [truncated]; the report states that day rather than the period asked for.
+  ///
+  /// [sizes] is each product's size by ID, which a delivery does not save; a
+  /// product missing from it is named alone. See `TenantProductSizes`.
   factory TenantSupplierAnalysis.from({
     required TenantReportPeriod period,
     required List<TenantSupplierDelivery> deliveries,
+    Map<String, String> sizes = const <String, String>{},
     TenantReportSubjectOption? subject,
     int? restocksWithoutSupplier,
     bool restocksTruncated = false,
@@ -110,8 +115,12 @@ final class TenantSupplierAnalysis {
       totals.deliveries++;
       for (final line in delivery.lines) {
         lines++;
+        final label = tenantProductLabel(
+          line.productName,
+          sizes[line.productId],
+        );
         totals.units += line.quantity;
-        totals.products.add(line.productName);
+        totals.products.add(label);
         final cost = line.unitCostMinor;
         if (cost == null) {
           costless++;
@@ -122,7 +131,7 @@ final class TenantSupplierAnalysis {
             minor: cost,
             on: on,
             supplier: name,
-            name: line.productName,
+            name: label,
           ));
         }
       }

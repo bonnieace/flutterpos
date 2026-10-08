@@ -126,14 +126,10 @@ void main() {
       );
     });
 
-    test('only a product made here, and not retired, can be produced', () {
+    test('a retired product cannot be produced', () {
       const rows = <TenantProductionRowDraft>[
         TenantProductionRowDraft(description: 'Flour', amount: '10'),
       ];
-      expect(
-        () => _intent(rows, product: _product(costType: null)),
-        throwsA(_code('not_made_here')),
-      );
       expect(
         () => _intent(rows, product: _product(retired: true)),
         throwsA(_code('retired_product')),
@@ -188,10 +184,7 @@ void main() {
   });
 }
 
-TenantProduct _product({
-  String? costType = 'produced',
-  bool retired = false,
-}) => TenantProduct.fromDocument(
+TenantProduct _product({bool retired = false}) => TenantProduct.fromDocument(
   path: 'tenants/tenant-a/products/prod-bread',
   data: <String, Object?>{
     'name': 'White bread loaf',
@@ -200,7 +193,6 @@ TenantProduct _product({
     'cost': 28,
     'quantity': 12,
     'categoryId': 'ct_bakery',
-    if (costType != null) 'costType': costType,
     if (retired) 'retired': true,
   },
 );

@@ -148,13 +148,13 @@ const double _compactProductTileHeight = 246;
 
 /// How tall a phone tile is now that it carries the product's code.
 ///
-/// **[_compactProductTileHeight] plus one [AppTypeRoles.monoCaption] line**,
-/// asked for on 2026-09-29: the code under the name, as the wide tile has
+/// **[_compactProductTileHeight] plus one [AppTypeRoles.caption] line**,
+/// asked for on 2026-09-29: the size under the name, as the wide tile has
 /// always had. The floor above was measured with a two-line name, so the tile
 /// grows by exactly the line it gained and a two-line name still fits.
 double _compactTileHeight(AppTokens tokens) {
-  final code = tokens.typography.monoCaption;
-  return _compactProductTileHeight + code.fontSize! * (code.height ?? 1);
+  final size = tokens.typography.caption;
+  return _compactProductTileHeight + size.fontSize! * (size.height ?? 1);
 }
 
 /// The height of the picture band across the top of a compact tile.
@@ -346,14 +346,10 @@ final class _TenantCheckoutScreenState extends State<TenantCheckoutScreen> {
 /// - **Search and filtering read only the cached snapshot.** The till issues no
 ///   Firestore read of its own; a sale must be buildable with no network at
 ///   all, which is the entire reason the offline catalog exists.
-/// - **Submitting the search adds a product by its code, and refuses to
-///   guess.** A retail barcode scanner presents itself as a keyboard, so a scan
-///   arrives here as typed text followed by a submit. Nothing is added unless
-///   the query resolves to exactly one product, because a till that picks one
-///   of two candidates sells the wrong thing silently. Nothing in Firestore
-///   Rules or in [HiveCheckoutCatalogCache] makes a SKU unique - only the
-///   product ID is checked for duplicates - so two products really can carry
-///   one code, and that case is refused rather than resolved.
+/// - **Searching filters and adds nothing.** The query matches a product's
+///   name or its size; a product enters the sale only by its own tap. There is
+///   no scan-to-add yet - when a scanner is supported it will need a barcode
+///   field of its own, because the stored `SKU` holds a size.
 /// - **Only a bounded number of products is drawn.** A `Wrap` builds every
 ///   child eagerly even inside a `ListView`, and the cache admits up to two
 ///   thousand products, so the list is capped at
@@ -780,7 +776,7 @@ final class _ProductTileSkeleton extends StatelessWidget {
                   name,
                   SkeletonLine(
                     widthFactor: 0.4,
-                    style: tokens.typography.monoCaption,
+                    style: tokens.typography.caption,
                     tone: tone,
                   ),
                   const Spacer(),
@@ -2483,8 +2479,7 @@ final class _CartEditorState extends State<_CartEditor> {
             Text(
               key: const ValueKey('checkout-catalog-truncated'),
               'Showing ${visible.length} of ${matches.length} matching '
-              'products. Narrow the search, or enter a code to add one '
-              'directly.',
+              'products. Narrow the search to find the rest.',
               style: quiet,
             ),
             SizedBox(height: tokens.spacing.s8),
@@ -3452,11 +3447,10 @@ final class _ProductTile extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _name(tokens),
-        // **§2.2's `mono` row - "record IDs and SKUs, strings a person compares
-        // character by character".** ST-035 puts the product's code under its
-        // name in `data-mono`, and this is the one surface where a cashier
-        // reads a code off the screen to check it against the one in their
-        // hand.
+        // **The size, under the name**, which is how a cashier tells the
+        // 30ml from the 50ml. Still `mono` on this tile, unlike the phone's:
+        // [_wideProductTileHeight] was measured with its 14-pixel line, and
+        // `caption`'s 16 overflows a two-line name by two pixels.
         if (product.sku.isNotEmpty)
           Text(
             key: ValueKey('checkout-product-code-${product.id}'),
@@ -3515,18 +3509,16 @@ final class _ProductTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _name(tokens),
-              // **The code, on the phone too, since 2026-09-29.** The wide
+              // **The size, on the phone too, since 2026-09-29.** The wide
               // tile has always carried it; the phone's did not, and it is
-              // what a cashier checks against the label in their hand.
-              // `monoCaption` rather than the wide tile's `mono`, because
-              // here it sits under a name over a picture and is read second.
+              // what tells two sizes of one product apart.
               if (product.sku.isNotEmpty)
                 Text(
                   key: ValueKey('checkout-product-code-${product.id}'),
                   product.sku,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: tokens.typography.monoCaption.copyWith(
+                  style: tokens.typography.caption.copyWith(
                     color: tokens.colors.text.tertiary,
                   ),
                 ),
@@ -3855,7 +3847,7 @@ final class _CartLine extends StatelessWidget {
                             color: tokens.colors.text.primary,
                           ),
                         ),
-                        // The code the sale will record against this line,
+                        // The size the sale will record against this line,
                         // under its name as on the tile it was picked from.
                         if (resolved != null && resolved.sku.isNotEmpty)
                           Text(
@@ -3863,7 +3855,7 @@ final class _CartLine extends StatelessWidget {
                             resolved.sku,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: tokens.typography.monoCaption.copyWith(
+                            style: tokens.typography.caption.copyWith(
                               color: tokens.colors.text.tertiary,
                             ),
                           ),

@@ -56,10 +56,16 @@ final class TenantProductVisual extends StatelessWidget {
     required this.product,
     this.semanticLabel,
     this.imageProvider,
+    this.borderRadius,
   });
 
   final TenantProduct product;
   final String? semanticLabel;
+
+  /// The corners, `radius.md` when null. [BorderRadius.zero] where something
+  /// else already clips the picture - the photo sheet's masthead, whose corners
+  /// are the sheet's own.
+  final BorderRadius? borderRadius;
 
   /// Supplied by a test, or by a form previewing bytes that are not uploaded
   /// yet. A provider given here is drawn as it is - the caller has already
@@ -70,7 +76,7 @@ final class TenantProductVisual extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(tokens.radius.md),
+      borderRadius: borderRadius ?? BorderRadius.circular(tokens.radius.md),
       child: DecoratedBox(
         decoration: BoxDecoration(color: tokens.colors.surface.overlay),
         // **The box is measured before the decode is asked for**, which is the

@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:uzapay_pos/inventory/inventory.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/theme.dart';
-import 'package:uzapay_pos/ui/buttons.dart';
 import 'package:uzapay_pos/ui/fields.dart';
 import 'package:uzapay_pos/ui/tokens.dart';
 import 'package:uzapay_pos/ui/status.dart';
@@ -1121,33 +1120,6 @@ void main() {
     expect(snackNotice(tester).status, AppStatus.ok);
   });
 
-  testWidgets('a product can be added as made here, and says what that means', (
-    tester,
-  ) async {
-    final writer = _Writer();
-    await _pump(tester, _controller(), _Reader.seeded(), writer: writer);
-
-    await _fillProduct(tester, name: 'Bread', sku: 'BR-1', price: '50');
-    final madeHere = find.byKey(
-      const ValueKey('catalog-management-product-cost-type-produced'),
-    );
-    await tester.ensureVisible(madeHere);
-    await tester.tap(madeHere);
-    await tester.pumpAndSettle();
-    // The consequence is written beside the choice, not left to be guessed.
-    expect(
-      find.text(
-        'Production batches are recorded against it, and each completed '
-        'batch sets its buying price.',
-      ),
-      findsOneWidget,
-    );
-    await _confirmProduct(tester);
-
-    expect(writer.products.single.costType, TenantProductCostType.produced);
-    expect(writer.products.single.documentData()['costType'], 'produced');
-  });
-
   testWidgets('leaving the opening stock blank still adds the product', (
     tester,
   ) async {
@@ -1651,16 +1623,13 @@ void main() {
       find.byKey(const ValueKey('catalog-management-edit-cost')),
       findsNothing,
     );
-    // A role notice at `info` rather than a caption in `bodySmall`: three of
-    // the five fields are offered and two are not, which is not a failure.
-    expect(
-      tester
-          .widget<Callout>(
-            find.byKey(const ValueKey('catalog-management-edit-money-hidden')),
-          )
-          .status,
-      AppStatus.info,
+    // **Shown, and not offered**, since 2026-10-08: the selling price stays in
+    // front of a manager, locked, with the one line saying who may change it.
+    final locked = tester.widget<AppTextField>(
+      find.byKey(const ValueKey('catalog-management-edit-price-locked')),
     );
+    expect(locked.enabled, isFalse);
+    expect(locked.helper, 'Only an owner or administrator can change prices.');
     await tester.enterText(
       find.byKey(const ValueKey('catalog-management-edit-name')),
       'Brown bread loaf',
@@ -1710,7 +1679,7 @@ void main() {
     await _open(tester, 'catalog-management-edit-scope-disclosure');
     expect(
       _text(tester, 'catalog-management-edit-scope'),
-      startsWith('Every field is filled in with what the product holds now.'),
+      startsWith('Change what is wrong and save.'),
     );
     // Opening an explanation reads nothing and writes nothing, and the fields
     // it sits above are untouched by it.
@@ -1730,20 +1699,17 @@ void main() {
     await _openCorrection(tester, 'pd-1');
     await _open(tester, 'catalog-management-edit-scope-disclosure');
 
-    // **The confirmation dialog's sentences, where they can be acted on.**
-    // Until 2026-09-04 each of these was read on a second screen after the
-    // fields had been filled in, which is to say after the decision. They are
-    // beside the fields now, and this is what keeps them from being deleted
-    // along with the dialog.
+    // **Four short sentences since 2026-10-08**, the stock note among them:
+    // what a person needs to know about an edit, beside the fields rather
+    // than after the decision.
     final scope = _text(tester, 'catalog-management-edit-scope');
-    expect(scope, contains('recorded permanently against the product'));
-    expect(scope, contains('what each field held before'));
-    expect(scope, contains('keep the price they were sold at'));
-    expect(scope, contains('never changes a profit already reported'));
-    expect(scope, contains('the old one finding this product'));
+    expect(scope, contains('recorded with who made it'));
+    expect(scope, contains('Sales already recorded keep theirs'));
+    expect(scope, contains('clear its field'));
+    expect(scope, contains('Stock is not changed here. Use Adjust stock'));
   });
 
-  testWidgets('clearing a recorded cost is its own act, and sends null', (
+  testWidgets('emptying a recorded cost removes it, and sends null', (
     tester,
   ) async {
     final callable = _Callable(
@@ -1762,10 +1728,14 @@ void main() {
     await _openCorrection(tester, 'pd-1');
 
     expect(_field(tester, 'catalog-management-edit-cost'), '40');
-    await tester.tap(
-      find.byKey(const ValueKey('catalog-management-edit-clear-cost')),
+    // **Deleting the figure is the act** since 2026-10-08, and the field says
+    // what saving will do with it.
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-edit-cost')),
+      '',
     );
     await tester.pump();
+    expect(find.text('Removed when you save.'), findsOne);
     await _review(tester);
 
     // The before-and-after used to be restated in a confirmation dialog. The
@@ -1800,27 +1770,37 @@ void main() {
     await _openCorrection(tester, 'pd-1');
 
     expect(
-      _text(tester, 'catalog-management-edit-category-off'),
-      startsWith('This product is filed under $unlistedTenantCategoryPhrase.'),
+      find.textContaining(
+        'This product is filed under $unlistedTenantCategoryPhrase.',
+      ),
+      findsOne,
     );
     expect(_documentIdsOnScreen(tester), isEmpty);
   });
 
-  testWidgets('a product with no cost is not offered a clear', (tester) async {
+  testWidgets('a product with no cost sends none when its field stays empty', (
+    tester,
+  ) async {
+    final callable = _Callable();
     await _pump(
       tester,
       _controller(),
       _Reader.seeded(),
       writer: _Writer(),
-      callable: _Callable(),
+      callable: callable,
     );
     await _openCorrection(tester, 'pd-1');
 
     expect(_field(tester, 'catalog-management-edit-cost'), '');
-    expect(
-      find.byKey(const ValueKey('catalog-management-edit-clear-cost')),
-      findsNothing,
+    expect(find.text('Removed when you save.'), findsNothing);
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-edit-name')),
+      'Brown bread loaf',
     );
+    await _review(tester);
+    await tester.pumpAndSettle();
+
+    expect(callable.payloads.single.containsKey('cost'), isFalse);
   });
 
   testWidgets('an untouched product is never sent', (tester) async {
@@ -2032,12 +2012,11 @@ void main() {
   });
 
   testWidgets(
-    'the correction form draws the photograph, not a thumbnail of it',
+    'the photo is a tile on the form and full width in its sheet',
     (tester) async {
-      // **The 2026-08-25 reversal.** The old catalog form drew the picture 350
-      // high in a bordered well headed *Product image*; the Stitch pass had
-      // replaced it with a 64px square, which is a size at which the wrong
-      // photograph and the right one are the same picture.
+      // **A 128 tile since 2026-10-08.** The 350 well put the first field past
+      // the middle of a phone, and did so even with no photo. The large view
+      // the 2026-08-25 reversal asked for is the photo sheet's.
       FilePicker.platform = _FilePicker(_onePixelPng);
       await _pump(
         tester,
@@ -2050,35 +2029,70 @@ void main() {
 
       await _openCorrection(tester, 'pd-1');
 
-      // **No `Product image` heading since 2026-08-26.** It named what the
-      // reader could already see - a picture, or the words below saying there
-      // is none - which is §7's own complaint about a heading. On the compact
-      // sheet the picture is the masthead and needs no label either.
       expect(find.text('Product image'), findsNothing);
-      // Nothing chosen and nothing saved, and the well says so in words rather
-      // than by drawing an empty box.
+      // Nothing chosen and nothing saved, and the tile says so in words.
       expect(
         find.byKey(const ValueKey('inventory-product-image-empty')),
         findsOne,
+      );
+      final tokens = spiritTheme.extension<AppTokens>()!;
+      expect(
+        tester.getSize(find.byKey(const ValueKey('inventory-photo-tile'))),
+        Size.square(tokens.layout.productImageThumb),
       );
 
       await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
       await tester.pumpAndSettle();
 
-      final preview = tester.widget<Image>(
-        find.byKey(const ValueKey('inventory-product-image-preview')),
+      expect(_tileImage(tester), _onePixelPng);
+      expect(find.text('product.png'), findsOne);
+
+      await _openPhotoSheet(tester);
+      final sheetImage = find.byKey(
+        const ValueKey('inventory-photo-sheet-image'),
       );
-      expect((preview.image as MemoryImage).bytes, _onePixelPng);
-      // 350 is the old form's own figure, and it reaches the widget through the
-      // token layer rather than as a literal here.
+      expect(sheetImage, findsOne);
       expect(
-        tester.getSize(find.byType(AspectRatio)).height,
-        lessThanOrEqualTo(
-          spiritTheme.extension<AppTokens>()!.layout.productImagePreview,
-        ),
+        tester.getSize(sheetImage).width,
+        greaterThan(tokens.layout.productImageThumb),
       );
+      expect(find.byKey(const ValueKey('inventory-frame-image')), findsOne);
+      expect(find.byKey(const ValueKey('inventory-remove-image')), findsOne);
     },
   );
+
+  testWidgets('removing a saved photo can be taken back before saving', (
+    tester,
+  ) async {
+    final callable = _Callable();
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(image: 'https://storage.test/pd-1/bread.png'),
+      writer: _Writer(),
+      callable: callable,
+      imageStore: _ImageStore(),
+    );
+    await _openCorrection(tester, 'pd-1');
+    expect(find.text('The saved photo'), findsOne);
+
+    await _openPhotoSheet(tester);
+    await tester.tap(find.byKey(const ValueKey('inventory-remove-image')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('inventory-image-removal-pending')),
+      findsOne,
+    );
+    await tester.tap(find.byKey(const ValueKey('inventory-keep-saved-image')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('inventory-image-removal-pending')),
+      findsNothing,
+    );
+    expect(find.text('The saved photo'), findsOne);
+  });
 
   testWidgets('a build with no cut-out service offers no cut-out', (
     tester,
@@ -2097,6 +2111,9 @@ void main() {
     );
 
     await _openCorrection(tester, 'pd-1');
+    await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
+    await tester.pumpAndSettle();
+    await _openPhotoSheet(tester);
 
     expect(
       find.byKey(const ValueKey('inventory-remove-background')),
@@ -2104,17 +2121,16 @@ void main() {
     );
   });
 
-  testWidgets('the cut-out waits for a photograph, disabled rather than gone', (
+  testWidgets('a saved photo cannot be cut out, and the row says why', (
     tester,
   ) async {
-    // §5's matrix has a `disabled` row, and the reason `Pagination` states
-    // applies here too: a control that vanishes moves everything under it, so
-    // the button a person is reaching for slides as they reach.
+    // §5's matrix has a `disabled` row: the action is drawn and says what it
+    // is waiting for, rather than vanishing and leaving nothing to read.
     FilePicker.platform = _FilePicker(_onePixelPng);
     await _pump(
       tester,
       _controller(),
-      _Reader.seeded(),
+      _Reader.seeded(image: 'https://storage.test/pd-1/bread.png'),
       writer: _Writer(),
       callable: _Callable(),
       imageStore: _ImageStore(),
@@ -2122,15 +2138,19 @@ void main() {
     );
 
     await _openCorrection(tester, 'pd-1');
+    await _openPhotoSheet(tester);
 
-    final removal = find.byKey(const ValueKey('inventory-remove-background'));
-    expect(removal, findsOne);
-    expect(tester.widget<AppIconButton>(removal).onPressed, isNull);
-
-    await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
+    expect(
+      find.text('Choose a new photo first. A saved photo cannot be cut out.'),
+      findsOne,
+    );
+    await tester.tap(find.byKey(const ValueKey('inventory-remove-background')));
     await tester.pumpAndSettle();
-
-    expect(tester.widget<AppIconButton>(removal).onPressed, isNotNull);
+    // Nothing ran: the row is disabled, so the sheet is still open.
+    expect(
+      find.byKey(const ValueKey('inventory-photo-sheet-image')),
+      findsOne,
+    );
   });
 
   testWidgets('a cut-out replaces the photograph the form will save', (
@@ -2152,16 +2172,16 @@ void main() {
     await _openCorrection(tester, 'pd-1');
     await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
     await tester.pumpAndSettle();
+    await _openPhotoSheet(tester);
     await tester.tap(find.byKey(const ValueKey('inventory-remove-background')));
     await tester.pumpAndSettle();
 
     expect(remover.calls, 1);
-    // What the well shows and what the correction would upload are the cut-out,
-    // not the photograph that went into it.
-    final preview = tester.widget<Image>(
-      find.byKey(const ValueKey('inventory-product-image-preview')),
-    );
-    expect((preview.image as MemoryImage).bytes, _twoPixelPng);
+    // The sheet shows the cut-out where it was asked for, and the form now
+    // holds it - the tile under the sheet and the upload both.
+    await tester.tap(find.byKey(const ValueKey('app-sheet-close')));
+    await tester.pumpAndSettle();
+    expect(_tileImage(tester), _twoPixelPng);
 
     await _review(tester);
     await tester.pumpAndSettle();
@@ -2192,19 +2212,19 @@ void main() {
     await _openCorrection(tester, 'pd-1');
     await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
     await tester.pumpAndSettle();
+    await _openPhotoSheet(tester);
     await tester.tap(find.byKey(const ValueKey('inventory-remove-background')));
     await tester.pumpAndSettle();
 
     final callout = tester.widget<Callout>(
-      find.byKey(const ValueKey('inventory-remove-background-failed')),
+      find.byKey(const ValueKey('inventory-photo-failed')),
     );
     expect(callout.status, AppStatus.problem);
     expect(callout.message, contains('used up its background removals'));
     expect(callout.message, contains('unchanged'));
-    final preview = tester.widget<Image>(
-      find.byKey(const ValueKey('inventory-product-image-preview')),
-    );
-    expect((preview.image as MemoryImage).bytes, _onePixelPng);
+    await tester.tap(find.byKey(const ValueKey('app-sheet-close')));
+    await tester.pumpAndSettle();
+    expect(_tileImage(tester), _onePixelPng);
   });
 
   testWidgets('a session that may not correct products is offered no cut-out', (
@@ -2227,12 +2247,83 @@ void main() {
     );
 
     await _openCorrection(tester, 'pd-1');
+    await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
+    await tester.pumpAndSettle();
+    await _openPhotoSheet(tester);
 
     expect(
       find.byKey(const ValueKey('inventory-remove-background')),
       findsNothing,
     );
   });
+
+  testWidgets('a product can be added with no size', (tester) async {
+    // The size is optional since 2026-10-08, and the button says what it is
+    // waiting for while it is disabled - the name, the category and the price.
+    final writer = _Writer();
+    await _pump(tester, _controller(), _Reader.seeded(), writer: writer);
+
+    await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+    await tester.pumpAndSettle();
+    expect(
+      _text(tester, 'catalog-management-add-note'),
+      'Add a name, category and selling price to save it.',
+    );
+
+    await _fillProduct(tester, name: 'Mandazi', sku: '', price: '20');
+    expect(
+      find.byKey(const ValueKey('catalog-management-add-note')),
+      findsNothing,
+    );
+    await _confirmProduct(tester);
+
+    expect(writer.products.single.sku, '');
+    expect(writer.products.single.documentData()['SKU'], '');
+  });
+
+  testWidgets('an emptied buying price typed back in is kept', (tester) async {
+    final callable = _Callable();
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(cost: 40),
+      writer: _Writer(),
+      callable: callable,
+    );
+    await _openCorrection(tester, 'pd-1');
+
+    final cost = find.byKey(const ValueKey('catalog-management-edit-cost'));
+    await tester.enterText(cost, '');
+    await tester.pump();
+    await tester.enterText(cost, '40');
+    await tester.pump();
+
+    expect(find.text('Removed when you save.'), findsNothing);
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-edit-name')),
+      'Brown bread loaf',
+    );
+    await _review(tester);
+    await tester.pumpAndSettle();
+    expect(callable.payloads.single.containsKey('cost'), isFalse);
+  });
+}
+
+/// Opens the photo sheet from the form's photo row.
+Future<void> _openPhotoSheet(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('inventory-photo-options')));
+  await tester.pumpAndSettle();
+}
+
+/// The bytes the photo tile is drawing.
+Uint8List _tileImage(WidgetTester tester) {
+  final image = tester.widget<Image>(
+    find.descendant(
+      of: find.byKey(const ValueKey('inventory-product-image-preview')),
+      matching: find.byType(Image),
+    ),
+  );
+  return (image.image as MemoryImage).bytes;
 }
 
 Future<void> _pump(
@@ -2321,7 +2412,7 @@ Future<void> _tapProductAction(
 
 Future<void> _review(WidgetTester tester) async {
   await tester.tap(
-    find.byKey(const ValueKey('catalog-management-edit-review')),
+    find.byKey(const ValueKey('catalog-management-edit-save')),
   );
   await tester.pumpAndSettle();
 }
@@ -2674,6 +2765,7 @@ final class _Reader implements TenantDataReader {
     int productCount = 2,
     double? cost,
     int quantity = 40,
+    String? image,
   }) => _Reader(<String, Map<String, Map<String, Object?>>>{
     _categoriesPath: <String, Map<String, Object?>>{
       'cat-bakery': <String, Object?>{'name': 'Bakery'},
@@ -2686,6 +2778,7 @@ final class _Reader implements TenantDataReader {
           'SKU': '616110000001$index',
           'price': 65,
           if (cost != null && index == 1) 'cost': cost,
+          if (image != null && index == 1) 'image': image,
           'quantity': index == 1 ? quantity : index,
           'categoryId': 'cat-bakery',
         },

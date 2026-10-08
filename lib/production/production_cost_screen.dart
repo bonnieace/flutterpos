@@ -20,6 +20,7 @@ import '../ui/scaffold.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../tenancy/tenant_catalog.dart';
 import 'production_batch.dart';
 
 /// Opens [batch]'s cost of production over the current route.
@@ -27,9 +28,11 @@ Future<void> openProductionCostScreen(
   BuildContext context, {
   required TenantProductionBatch batch,
   required String Function(int minor) money,
+  String? size,
 }) => Navigator.of(context).push(
   AppPageRoute<void>(
-    builder: (_) => TenantProductionCostScreen(batch: batch, money: money),
+    builder: (_) =>
+        TenantProductionCostScreen(batch: batch, money: money, size: size),
   ),
 );
 
@@ -38,10 +41,14 @@ final class TenantProductionCostScreen extends StatelessWidget {
     super.key,
     required this.batch,
     required this.money,
+    this.size,
   });
 
   final TenantProductionBatch batch;
   final String Function(int minor) money;
+
+  /// The product's size, as the batch card shows it.
+  final String? size;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +62,9 @@ final class TenantProductionCostScreen extends StatelessWidget {
     return AppScaffold(
       key: const ValueKey('production-cost-screen'),
       title: 'Cost of production',
-      subtitle: '${batch.productName} · ${batch.batchNumber}',
+      subtitle:
+          '${tenantProductLabel(batch.productName, size)} '
+          '· ${batch.batchNumber}',
       contentWidth: AppContentWidth.reading,
       body: ListView(
         padding: EdgeInsets.all(tokens.spacing.s16),

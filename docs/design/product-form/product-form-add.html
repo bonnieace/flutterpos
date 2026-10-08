@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add product &#8212; phone</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+/* 411 x 891, the harness's mobile viewport. Drawn against
+   screenshots/mobile-full/18h-add-a-product.png. Non-pressable boxes sit at
+   the 20 inset; buttons and fields 4 further in, in PressSurface's focus-ring
+   gutter, as the build draws them. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, select, input { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; flex-wrap: wrap; gap: 32px; padding: 20px 24px 48px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.page-stage > figure > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+figcaption { font-size: 13px; color: #869585; max-width: 411px; text-align: center; line-height: 19px; }
+figcaption b { color: #BCCBB9; font-weight: 600; }
+figcaption em { font-style: normal; color: #4BE277; }
+
+.phone { position: relative; width: 411px; height: 891px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+.bar { height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+.bar button { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #D4E7DD; cursor: pointer; }
+.bar span { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.body { flex-grow: 1; min-height: 0; padding: 8px 20px 24px; display: flex; flex-direction: column; overflow: hidden; }
+.body > * { flex-shrink: 0; }
+.gap4 { height: 4px; } .gap8 { height: 8px; } .gap12 { height: 12px; } .gap16 { height: 16px; } .gap20 { height: 20px; } .gap24 { height: 24px; }
+
+/* The photo row: a 128 tile and its actions. New token: layout.productImageThumb. */
+.photo { display: flex; gap: 16px; align-items: stretch; }
+.tile { position: relative; width: 128px; height: 128px; flex-shrink: 0; border-radius: 8px; overflow: hidden; box-sizing: border-box; margin: 0; padding: 0; border: 0; cursor: pointer; background: #132A1F; }
+.tile-empty { border: 1px solid #3D4A3D; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #BCCBB9; font-size: 14px; line-height: 20px; font-weight: 600; }
+.tile-empty svg { color: #869585; }
+.tile .zoom { position: absolute; right: 4px; bottom: 4px; width: 24px; height: 24px; border-radius: 8px; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; color: #D4E7DD; }
+.photo-side { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.photo-title { margin: 0 4px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; }
+.photo-title span { font-weight: 600; color: #BCCBB9; }
+.photo-hint { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #869585; }
+.photo-file { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #869585; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* AppTextField and AppSelect. */
+.f { margin: 0 4px; }
+.f-label { display: block; margin: 0 0 8px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; }
+.f-label span { font-weight: 600; color: #BCCBB9; }
+.input { height: 48px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.input .ph { color: #869585; }
+.input .grow { flex-grow: 1; }
+.input svg { flex-shrink: 0; color: #BCCBB9; }
+.help { margin: 8px 0 0; font-size: 12px; line-height: 16px; color: #869585; }
+.pair { display: flex; gap: 8px; }
+.pair > .f { flex: 1 1 0; min-width: 0; }
+
+/* AppButton. */
+.btn { height: 48px; box-sizing: border-box; padding: 0 16px; margin: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; white-space: nowrap; }
+.btn-pri { background: #4BE277; color: #003915; border: 0; }
+.btn-sec { background: #132A1F; color: #D4E7DD; border: 1px solid #3D4A3D; }
+.btn-ter { background: transparent; color: #4BE277; border: 0; }
+.btn-off { background: #1E3A2B; color: #5D7468; border: 0; cursor: default; }
+.btn-wide { flex: 1 1 0; }
+.icon-btn { width: 48px; height: 48px; flex-shrink: 0; box-sizing: border-box; margin: 4px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: #132A1F; border: 1px solid #3D4A3D; color: #D4E7DD; cursor: pointer; }
+.row { display: flex; align-items: center; }
+
+/* The pinned footer: surface.base over a borderSubtle hairline. */
+.foot { flex-shrink: 0; border-top: 1px solid #132A1F; padding: 8px 16px 8px; background: #071610; }
+.foot-note { margin: 4px 4px 0; font-size: 12px; line-height: 16px; color: #869585; text-align: center; }
+.foot .row { gap: 12px; }
+
+/* AppSheet over surface.scrim. */
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 3; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 624px; z-index: 4; box-sizing: border-box; background: #132A1F; border-radius: 12px 12px 0 0; overflow: hidden; display: flex; flex-direction: column; }
+/* AppSheet's masthead: square, the sheet's width, under its corners. */
+.mast { position: relative; width: 411px; height: 411px; flex-shrink: 0; }
+.mast-handle { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); padding: 4px; border-radius: 999px; background: rgba(0, 0, 0, 0.12); }
+.mast-handle span { display: block; width: 32px; height: 4px; border-radius: 999px; background: #3D4A3D; }
+.mast-close { position: absolute; top: 4px; right: 8px; width: 48px; height: 48px; border-radius: 8px; background: #132A1F; border: 0; display: flex; align-items: center; justify-content: center; color: #D4E7DD; }
+.sheet-rows { padding: 16px 20px 20px; }
+.handle { width: 32px; height: 4px; border-radius: 999px; background: #3D4A3D; align-self: center; }
+.sheet-title { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.preview { width: 280px; height: 280px; align-self: center; border-radius: 8px; overflow: hidden; }
+.menu { margin: 0; padding: 0; list-style: none; border: 1px solid #3D4A3D; border-radius: 12px; }
+.menu li + li { border-top: 1px solid #283831; }
+.mrow { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 16px; box-sizing: border-box; color: #D4E7DD; font-size: 16px; line-height: 24px; cursor: pointer; }
+.mrow small { display: block; font-size: 12px; line-height: 16px; color: #869585; }
+.mrow svg { flex-shrink: 0; }
+.mrow-des { color: #EF4444; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All product form artboards</a></nav>
+<div class="page-stage">
+
+<!-- Frame 1: opening the form -->
+<figure>
+<div class="phone">
+  <div class="bar">
+    <button type="button" aria-label="Back to inventory"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button>
+    <span>Add product</span>
+  </div>
+  <div class="body">
+    <div class="gap8"></div>
+    <div class="photo">
+      <button type="button" class="tile tile-empty" aria-label="Add a photo">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 20H4V6h9V4H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-9h-2v9zm-7.79-3.17l-1.96-2.36L5.5 18h11l-3.54-4.71zM20 4V1h-2v3h-3c.01.01 0 2 0 2h3v2.99c.01.01 2 0 2 0V6h3V4h-3z"></path></svg>
+        Add photo
+      </button>
+      <div class="photo-side">
+        <p class="photo-title">Photo <span>(optional)</span></p>
+        <p class="photo-hint">Cashiers find a product faster on the till when it has a picture.</p>
+        <div class="gap8"></div>
+        <div class="row"><button type="button" class="btn btn-sec btn-wide">Choose photo</button></div>
+      </div>
+    </div>
+    <div class="gap24"></div>
+    <div class="f"><label class="f-label">Product name</label><div class="input"><span class="ph">e.g. White bread loaf</span></div></div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Category</label><div class="input"><span class="grow ph">Choose category</span><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5z"></path></svg></div></div>
+    <div class="gap16"></div>
+    <div class="pair">
+      <div class="f"><label class="f-label">Selling price</label><div class="input"></div></div>
+      <div class="f"><label class="f-label">Buying price <span>(optional)</span></label><div class="input"></div></div>
+    </div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Size or volume <span>(optional)</span></label><div class="input"><span class="ph">e.g. 30ml</span></div><p class="help">Shown beside the name, so two sizes of one product can be told apart.</p></div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Stock on hand <span>(optional)</span></label><div class="input"><span class="ph">0</span></div><p class="help">How many you have now. Leave it blank if you have none yet.</p></div>
+  </div>
+  <div class="foot">
+    <div class="row">
+      <button type="button" class="btn btn-ter btn-wide">Cancel</button>
+      <button type="button" class="btn btn-off btn-wide" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-8-2h2v-4h4v-2h-4V7h-2v4H7v2h4z"></path></svg>Add product</button>
+    </div>
+    <p class="foot-note">Add a name, category and selling price to save it.</p>
+  </div>
+</div>
+<figcaption><b>Opening the form.</b> The photo is a 128 tile beside its own words, not a 350 box above everything else, so the name field starts at 232 instead of 516. The three things it needs come first, the optional ones after, and the disabled button says what it is waiting for. <em>New:</em> the footer note.</figcaption>
+</figure>
+
+<!-- Frame 2: filled in, photo chosen -->
+<figure>
+<div class="phone">
+  <div class="bar">
+    <button type="button" aria-label="Back to inventory"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button>
+    <span>Add product</span>
+  </div>
+  <div class="body">
+    <div class="gap8"></div>
+    <div class="photo">
+      <button type="button" class="tile" aria-label="Open the photo">
+        <svg width="128" height="128" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3E3C3"></stop><stop offset="1" stop-color="#E2C48F"></stop></linearGradient></defs><rect width="100" height="100" fill="url(#g1)"></rect><ellipse cx="50" cy="56" rx="34" ry="20" fill="#B9773A"></ellipse><ellipse cx="50" cy="52" rx="30" ry="16" fill="#D49450"></ellipse><circle cx="38" cy="49" r="2" fill="#F1D19A"></circle><circle cx="52" cy="46" r="2" fill="#F1D19A"></circle><circle cx="62" cy="52" r="2" fill="#F1D19A"></circle></svg>
+        <span class="zoom" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"></path></svg></span>
+      </button>
+      <div class="photo-side">
+        <p class="photo-title">Photo</p>
+        <p class="photo-file">mandazi-tray.jpg</p>
+        <div class="gap8"></div>
+        <div class="row">
+          <button type="button" class="btn btn-sec btn-wide">Replace</button>
+          <button type="button" class="icon-btn" aria-label="Photo options"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="gap24"></div>
+    <div class="f"><label class="f-label">Product name</label><div class="input">Mandazi</div></div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Category</label><div class="input"><span class="grow">Bakery</span><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5z"></path></svg></div></div>
+    <div class="gap16"></div>
+    <div class="pair">
+      <div class="f"><label class="f-label">Selling price</label><div class="input">20</div></div>
+      <div class="f"><label class="f-label">Buying price <span>(optional)</span></label><div class="input">12</div></div>
+    </div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Size or volume <span>(optional)</span></label><div class="input"><span class="ph">e.g. 30ml</span></div><p class="help">Shown beside the name, so two sizes of one product can be told apart.</p></div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Stock on hand <span>(optional)</span></label><div class="input">24</div><p class="help">How many you have now. Leave it blank if you have none yet.</p></div>
+  </div>
+  <div class="foot">
+    <div class="row">
+      <button type="button" class="btn btn-ter btn-wide">Cancel</button>
+      <button type="button" class="btn btn-pri btn-wide"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-8-2h2v-4h4v-2h-4V7h-2v4H7v2h4z"></path></svg>Add product</button>
+    </div>
+  </div>
+</div>
+<figcaption><b>Filled in, a photo chosen.</b> The whole form fits on one phone screen. <em>Replace</em> is the one photo action most people want. The rest are behind the ⋯ button, with their names. Tapping the tile opens the same sheet with the photo at full size.</figcaption>
+</figure>
+
+<!-- Frame 3: photo options -->
+<figure>
+<div class="phone">
+  <div class="bar">
+    <button type="button" aria-label="Back to inventory"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button>
+    <span>Add product</span>
+  </div>
+  <div class="body">
+    <div class="gap8"></div>
+    <div class="photo">
+      <div class="tile" style="background: #E2C48F;"></div>
+      <div class="photo-side"><p class="photo-title">Photo</p></div>
+    </div>
+  </div>
+  <div class="scrim"></div>
+  <div class="sheet" role="dialog" aria-label="Photo">
+    <div class="mast">
+      <svg width="411" height="411" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" aria-label="The product photo you chose, mandazi-tray.jpg" role="img"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3E3C3"></stop><stop offset="1" stop-color="#E2C48F"></stop></linearGradient></defs><rect width="100" height="100" fill="url(#g2)"></rect><ellipse cx="50" cy="56" rx="34" ry="20" fill="#B9773A"></ellipse><ellipse cx="50" cy="52" rx="30" ry="16" fill="#D49450"></ellipse><circle cx="38" cy="49" r="2" fill="#F1D19A"></circle><circle cx="52" cy="46" r="2" fill="#F1D19A"></circle><circle cx="62" cy="52" r="2" fill="#F1D19A"></circle></svg>
+      <div class="mast-handle" aria-label="Drag to resize"><span></span></div>
+      <button type="button" class="mast-close" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg></button>
+    </div>
+    <div class="sheet-rows">
+    <ul class="menu">
+      <li><div class="mrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="#BCCBB9" aria-hidden="true"><path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"></path></svg><span>Position and zoom</span></div></li>
+      <li><div class="mrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="#6FB7F2" aria-hidden="true"><path d="M7.5 5.6L10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5zm-7.63 5.29c-.39-.39-1.02-.39-1.41 0L1.29 18.96c-.39.39-.39 1.02 0 1.41l2.34 2.34c.39.39 1.02.39 1.41 0L16.7 11.05c.39-.39.39-1.02 0-1.41l-2.33-2.35zm-1.03 5.49l-2.12-2.12 2.44-2.44 2.12 2.12-2.44 2.44z"></path></svg><span>Remove background<small>Leaves the product on a plain background.</small></span></div></li>
+      <li><div class="mrow mrow-des"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5l-1-1h-5l-1 1H5v2h14V4z"></path></svg><span>Remove photo</span></div></li>
+    </ul>
+    </div>
+  </div>
+</div>
+<figcaption><b>Photo options.</b> The photo fills the top of the sheet, edge to edge under its rounded corners, with no heading above it: the picture is what the sheet is about. The large view still exists, because judging a photo needs it, but you only see it when you ask to. <em>Position and zoom</em> opens the framing editor the pencil opens today. <em>Remove background</em> appears only where the cut-out service and role allow it, as today.</figcaption>
+</figure>
+
+</div>
+</body>
+</html>

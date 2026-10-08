@@ -675,7 +675,7 @@ void main() {
       _text(tester, 'bulk-catalog-sheet-help'),
       allOf(
         contains('whether they were read out of a file or pasted in'),
-        contains('The header must name name, sku, and price.'),
+        contains('The header must name name and price.'),
         contains('An opening quantity is recorded as an opening balance'),
       ),
     );
@@ -838,7 +838,7 @@ void _sheetJourney() {
     expect(saver.filename, 'product_import_template_2026-09-14.csv');
     expect(
       saver.contents!.split('\r\n').first,
-      'name,sku,price,cost,quantity,category',
+      'name,size,price,cost,quantity,category',
     );
     // The example names a category this business has, so the template it hands
     // over is one the import that produced it would accept.
@@ -861,7 +861,7 @@ void _sheetJourney() {
     );
     await _tap(tester, 'bulk-catalog-template');
 
-    expect(saver.contents!, startsWith('name,sku,price,quantity,category'));
+    expect(saver.contents!, startsWith('name,size,price,quantity,category'));
   });
 
   testWidgets('a chosen file fills the rows and says which file it was', (

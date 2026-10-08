@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../sales/sale_history.dart';
+import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -955,7 +956,8 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
                 Expanded(
                   child: Text(
                     key: ValueKey('sale-returns-remaining-${line.productId}'),
-                    '${line.name}: ${line.remainingQuantity} of '
+                    '${tenantProductLabel(line.name, line.size)}: '
+                    '${line.remainingQuantity} of '
                     '${line.soldQuantity} available',
                   ),
                 ),
@@ -1064,7 +1066,7 @@ String _countsLabel(TenantReturnPage page) {
 }
 
 String _lineLabel(TenantReturnLine line) =>
-    '${line.quantity} x ${line.productName ?? line.productId}';
+    '${line.quantity} x ${line.label ?? line.productId}';
 
 String _recordedLabel(TenantReturn record, String createdByLabel) {
   final recordedAt = record.recordedAt;

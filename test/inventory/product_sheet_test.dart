@@ -15,7 +15,7 @@ void main() {
     test('names only columns the import reads, in a fixed order', () {
       final csv = productImportTemplateCsv(includeCost: true);
 
-      expect(csv.split('\r\n').first, 'name,sku,price,cost,quantity,category');
+      expect(csv.split('\r\n').first, 'name,size,price,cost,quantity,category');
     });
 
     test('carries one example row, so the shape of a value is shown', () {
@@ -25,7 +25,7 @@ void main() {
       ).split('\r\n');
 
       expect(lines, hasLength(2));
-      expect(lines.last, 'White bread loaf,BR-001,65,48,40,Bakery');
+      expect(lines.last, 'White bread loaf,400g,65,48,40,Bakery');
     });
 
     test('omits cost where the person may not record one', () {
@@ -33,7 +33,7 @@ void main() {
       // it, so a template carrying one would be a template they cannot use.
       final csv = productImportTemplateCsv(includeCost: false);
 
-      expect(csv.split('\r\n').first, 'name,sku,price,quantity,category');
+      expect(csv.split('\r\n').first, 'name,size,price,quantity,category');
       expect(csv, isNot(contains('48')));
     });
 

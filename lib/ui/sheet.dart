@@ -30,6 +30,8 @@
 /// content happened to end on, sometimes a scroll away.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'buttons.dart';
@@ -97,6 +99,7 @@ Future<T?> showAppSheet<T>(
   builder,
   WidgetBuilder? masthead,
   double mastheadFraction = AppSheetMasthead.fraction,
+  bool mastheadSquare = false,
   AppSheetDetent initialDetent = AppSheetDetent.half,
   bool dismissible = true,
 }) {
@@ -147,6 +150,7 @@ Future<T?> showAppSheet<T>(
           controller: controller,
           masthead: masthead,
           mastheadFraction: mastheadFraction,
+          mastheadSquare: mastheadSquare,
           child: builder(context, controller),
         ),
       ),
@@ -247,6 +251,15 @@ abstract final class AppSheetMasthead {
   /// token. It is the surface scrim at a third of its strength — enough to
   /// separate a 4px bar from a photograph, not enough to read as a band.
   static const double handleScrimOpacity = 0.2;
+
+  /// The most of the sheet a square masthead may take, so the rows under a
+  /// photograph keep a third of it on a short or a wide screen.
+  ///
+  /// **For a sheet whose subject is the photograph itself**, the product photo
+  /// sheet, where the picture is drawn as wide as the sheet and as tall as it is
+  /// wide. On a phone at [AppSheetDetent.half] that is the whole width, square;
+  /// on a tablet, where the sheet is wider than it is tall, this caps it.
+  static const double squareCeiling = 2 / 3;
 }
 
 /// The sheet's own chrome: the surface, the corners and the handle.
@@ -256,6 +269,7 @@ final class _Surface extends StatelessWidget {
     required this.child,
     this.masthead,
     this.mastheadFraction = AppSheetMasthead.fraction,
+    this.mastheadSquare = false,
   });
 
   final ScrollController controller;
@@ -266,6 +280,10 @@ final class _Surface extends StatelessWidget {
   final WidgetBuilder? masthead;
 
   final double mastheadFraction;
+
+  /// Whether the masthead is as tall as the sheet is wide, with
+  /// [mastheadFraction] as its ceiling rather than its height.
+  final bool mastheadSquare;
 
   /// §2.3's row for "dialogs, bottom sheets", on the top corners only — a sheet
   /// is anchored to the bottom edge and rounding the corners it is anchored by
@@ -393,7 +411,12 @@ final class _Surface extends StatelessWidget {
           builder: (context, constraints) => Column(
             children: <Widget>[
               SizedBox(
-                height: constraints.maxHeight * mastheadFraction,
+                height: mastheadSquare
+                    ? math.min(
+                        constraints.maxWidth,
+                        constraints.maxHeight * mastheadFraction,
+                      )
+                    : constraints.maxHeight * mastheadFraction,
                 width: double.infinity,
                 child: Stack(
                   fit: StackFit.expand,

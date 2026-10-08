@@ -2523,6 +2523,16 @@ final class AppLayout {
   /// a square rather than a letterbox.
   double get productImagePreview => 350;
 
+  /// How large a product photo is drawn in the add and edit forms, beside the
+  /// words and buttons that go with it.
+  ///
+  /// **Twice the 64 the 2026-08-25 reversal undid**, at the developer's
+  /// direction on 2026-10-08: [productImagePreview] above the fields put the
+  /// first one past the middle of a phone, and it did so even with no photo.
+  /// 128 is still large enough to tell a right photo from a wrong one, and the
+  /// photo sheet draws it at full width for a closer look.
+  double get productImageThumb => 128;
+
   /// Which band [width] falls in.
   ///
   /// [width] is a **screen** width in logical pixels. §4.1's ranges describe the

@@ -80,33 +80,8 @@ void main() {
           name: 'White bread loaf',
           sku: '6161100000019',
         ),
-        'costType': 'purchased',
         'createdBy': 'user-a',
       });
-    });
-
-    test('a product made here says so, and reads back as made here', () {
-      final intent = _productIntent(
-        price: '50',
-        costType: TenantProductCostType.produced,
-      );
-
-      expect(intent.documentData()['costType'], 'produced');
-      final decoded = TenantProduct.fromDocument(
-        path: intent.path,
-        data: <String, Object?>{...intent.documentData(), 'createdAt': 1},
-      );
-      expect(decoded.costType, TenantProductCostType.produced);
-    });
-
-    test('a manager may add a product made here, because it is not money', () {
-      final intent = _productIntent(
-        price: '50',
-        role: TenantRole.manager,
-        costType: TenantProductCostType.produced,
-      );
-
-      expect(intent.costType, TenantProductCostType.produced);
     });
 
     test('the document it writes decodes back through TenantProduct', () {
@@ -271,33 +246,30 @@ void main() {
     });
   });
 
-  group('code', () {
-    test('a code is trimmed and bounded', () {
-      expect(_productIntent(price: '1', sku: '  ABC-1  ').sku, 'ABC-1');
+  group('size', () {
+    test('a size is trimmed, one space between words, and bounded', () {
+      expect(_productIntent(price: '1', sku: '  30ml  ').sku, '30ml');
+      // A size is written *500 ml* as often as *500ml*, so spaces are kept -
+      // one between words, the way the server stores it. A no-break space, which
+      // a paste from a spreadsheet produces, is a space like any other.
+      expect(_productIntent(price: '1', sku: '500   ml').sku, '500 ml');
+      expect(_productIntent(price: '1', sku: '1.5\tL').sku, '1.5 L');
+      expect(_productIntent(price: '1', sku: '1.5\u00a0L').sku, '1.5 L');
       expect(
         _productIntent(price: '1', sku: 'x' * maximumCatalogSkuLength).sku,
         'x' * maximumCatalogSkuLength,
       );
     });
 
-    test('an empty, over-long, or spaced code is refused', () {
-      // A scanner cannot emit a space, and an exact match against the scanned
-      // code is the only job the field has.
-      for (final sku in <String>[
-        '',
-        '   ',
-        'ABC 1',
-        'ABC\t1',
-        // A literal no-break space, which a paste from a spreadsheet produces
-        // and `trim` leaves alone in the middle of a value.
-        'ABC 1',
-      ]) {
-        expect(
-          () => _productIntent(price: '1', sku: sku),
-          _code('invalid_sku'),
-          reason: sku,
-        );
+    test('a product may have no size', () {
+      for (final sku in <String>['', '   ']) {
+        final intent = _productIntent(price: '1', sku: sku);
+        expect(intent.sku, '', reason: sku);
+        expect(intent.documentData()['SKU'], '');
       }
+    });
+
+    test('an over-long size, or one with a control character, is refused', () {
       expect(
         () => _productIntent(
           price: '1',
@@ -305,6 +277,15 @@ void main() {
         ),
         _code('invalid_sku'),
       );
+      expect(
+        () => _productIntent(price: '1', sku: '30${String.fromCharCode(1)}ml'),
+        _code('invalid_sku'),
+      );
+    });
+
+    test('a size is searchable word by word', () {
+      final prefixes = tenantProductSearchPrefixes(name: 'Cola', sku: '500 ml');
+      expect(prefixes, containsAll(<String>['50', '500', 'ml']));
     });
   });
 
@@ -543,42 +524,6 @@ void main() {
   });
 
   group('update intent', () {
-    test('marking a product made here is a descriptive change', () {
-      final intent = _updateIntent(
-        role: TenantRole.manager,
-        price: null,
-        costType: TenantProductCostType.produced,
-      );
-
-      expect(intent.payload(), <String, Object?>{
-        'tenantId': 'tenant-a',
-        'productId': 'prod-bread',
-        'requestId': _requestId,
-        'costType': 'produced',
-      });
-      expect(intent.fields, <TenantProductField>[TenantProductField.costType]);
-      // Not money, so a manager's correction carrying it is not refused.
-      expect(intent.changesMoney, isFalse);
-      expect(intent.changes.single.previous, 'Purchased');
-      expect(intent.changes.single.next, 'Produced');
-    });
-
-    test('a cost type the product already holds is not a correction', () {
-      expect(
-        () => _updateIntent(
-          price: null,
-          costType: TenantProductCostType.purchased,
-        ),
-        throwsA(
-          isA<TenantCatalogManagementException>().having(
-            (error) => error.code,
-            'code',
-            'product_unchanged',
-          ),
-        ),
-      );
-    });
-
     test('carries only the fields that move, and its own identity', () {
       // The callable reads its permission tier from the fields a payload names
       // rather than from the resulting diff, so resending an unchanged price
@@ -673,11 +618,17 @@ void main() {
       );
     });
 
-    test('a name and a code are held to the shape the till can read', () {
+    test('a name and a size are held to the shape the till can read', () {
       expect(_updateIntent(name: '  Brown  bread ').name, 'Brown bread');
-      expect(_updateIntent(sku: '  BB-1 ').sku, 'BB-1');
+      expect(_updateIntent(sku: '  500  ml ').sku, '500 ml');
       expect(() => _updateIntent(name: '   '), _code('invalid_product_name'));
-      expect(() => _updateIntent(sku: 'BB 1'), _code('invalid_sku'));
+    });
+
+    test('a size can be cleared', () {
+      final intent = _updateIntent(sku: '', price: null);
+      expect(intent.sku, '');
+      expect(intent.payload()['sku'], '');
+      expect(intent.changes.single.next, '');
     });
 
     test('money needs an owner or administrator, the rest does not', () {
@@ -1135,7 +1086,6 @@ TenantProductCreateIntent _productIntent({
   String tenantId = 'tenant-a',
   String uid = 'user-a',
   String requestId = _requestId,
-  TenantProductCostType costType = TenantProductCostType.purchased,
 }) => _repository(role: role, tenantId: tenantId, uid: uid).buildProductIntent(
   name: name,
   sku: sku,
@@ -1145,7 +1095,6 @@ TenantProductCreateIntent _productIntent({
   categoryId: categoryId,
   categories: _categories(tenantId),
   requestId: requestId,
-  costType: costType,
 );
 
 /// A rename of the Bakery category, which is the one document write this
@@ -1213,7 +1162,6 @@ TenantProductUpdateIntent _updateIntent({
   TenantRole role = TenantRole.owner,
   String productTenantId = 'tenant-a',
   String requestId = _requestId,
-  TenantProductCostType? costType,
 }) => _repository(role: role).buildUpdateIntent(
   product: _storedProduct(
     tenantId: productTenantId,
@@ -1228,7 +1176,6 @@ TenantProductUpdateIntent _updateIntent({
   categoryId: categoryId,
   categories: _categories('tenant-a'),
   requestId: requestId,
-  costType: costType,
 );
 
 /// A well-formed `updateProduct` answer, with any field replaced.

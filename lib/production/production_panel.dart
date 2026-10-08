@@ -16,6 +16,7 @@ import '../reports/report_run.dart';
 import '../reports/ui/report_action.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
 import '../ui/scaffold.dart';
@@ -29,13 +30,20 @@ import 'production_form_panel.dart';
 import '../observability/app_telemetry.dart';
 import 'production_cost_screen.dart';
 
-/// What the Production route reads first: the newest batches, and the
-/// currency their costs are stated in.
+/// What the Production route reads first: the newest batches, the currency
+/// their costs are stated in, and the sizes of the products they made.
 final class TenantProductionView {
-  const TenantProductionView({required this.page, required this.currency});
+  const TenantProductionView({
+    required this.page,
+    required this.currency,
+    this.sizes = const <String, String>{},
+  });
 
   final TenantProductionPage page;
   final TenantReportingCurrency currency;
+
+  /// Each product's size, by ID. See [TenantProductSizes].
+  final Map<String, String> sizes;
 }
 
 /// The Production route, as the home tile opens it.
@@ -77,6 +85,7 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
 
   /// Older batches, read on request below the first page.
   final List<TenantProductionBatch> _older = <TenantProductionBatch>[];
+  final Map<String, String> _olderSizes = <String, String>{};
   String? _olderCursor;
   bool? _olderHasMore;
   bool _readingOlder = false;
@@ -86,17 +95,23 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
     _loadersFor = _generation;
     TenantGuardedLoader<TenantProductionView> readWith(
       TenantDataReader reader,
-    ) =>
-        (session) async => TenantProductionView(
-          page: await TenantProductionRepository(
-            session: session,
-            reader: reader,
-          ).loadBatches(pageSize: TenantProductionScreen.pageSize),
-          currency: await TenantReportingCurrency.read(
-            session: session,
-            reader: reader,
-          ),
-        );
+    ) => (session) async {
+      final page = await TenantProductionRepository(
+        session: session,
+        reader: reader,
+      ).loadBatches(pageSize: TenantProductionScreen.pageSize);
+      return TenantProductionView(
+        page: page,
+        currency: await TenantReportingCurrency.read(
+          session: session,
+          reader: reader,
+        ),
+        sizes: await TenantProductSizes(
+          session: session,
+          reader: reader,
+        ).read(page.items.map((batch) => batch.productId)),
+      );
+    };
     _loader = readWith(widget.reader);
     final cached = widget.reader.cached;
     _loaderCached = cached == null ? null : readWith(cached);
@@ -105,6 +120,7 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
   void _reload() => setState(() {
     _generation++;
     _older.clear();
+    _olderSizes.clear();
     _olderCursor = null;
     _olderHasMore = null;
   });
@@ -130,9 +146,14 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
         session: session,
         reader: widget.reader,
       ).loadBatches(pageSize: TenantProductionScreen.pageSize, cursor: cursor);
+      final sizes = await TenantProductSizes(
+        session: session,
+        reader: widget.reader,
+      ).read(page.items.map((batch) => batch.productId));
       if (!mounted) return;
       setState(() {
         _older.addAll(page.items);
+        _olderSizes.addAll(sizes);
         _olderCursor = page.nextCursor;
         _olderHasMore = page.hasMore;
         _readingOlder = false;
@@ -156,8 +177,7 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
 
   DateTime _now() => (widget.clock ?? () => DateTime.now().toUtc())();
 
-  /// The production report, narrowed to one product made here or covering all
-  /// of them.
+  /// The production report, narrowed to one product or covering all of them.
   Widget? _reportAction(TenantSession session) {
     final saver = widget.reportSaver;
     if (saver == null) return null;
@@ -174,14 +194,20 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
         subject: TenantReportSubject(
           label: 'Product',
           allLabel: 'All products',
-          loadOptions: () async => <TenantReportSubjectOption>[
-            for (final product in await repository.loadMadeHereProducts())
-              TenantReportSubjectOption(
-                id: product.id,
-                label: product.name,
-                note: product.retired ? 'retired' : null,
-              ),
-          ],
+          loadOptions: () async {
+            final made = await repository.loadMadeProducts();
+            final sizes = await TenantProductSizes(
+              session: session,
+              reader: widget.reader,
+            ).read(made.map((product) => product.id));
+            return <TenantReportSubjectOption>[
+              for (final product in made)
+                TenantReportSubjectOption(
+                  id: product.id,
+                  label: tenantProductLabel(product.name, sizes[product.id]),
+                ),
+            ];
+          },
         ),
         buildForSubject: (period, subject) async {
           final read = await TenantProductionReportSource(
@@ -198,6 +224,10 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
             analysis: TenantProductionAnalysis.from(
               period: period,
               batches: read.batches,
+              sizes: await TenantProductSizes(
+                session: session,
+                reader: widget.reader,
+              ).read(read.batches.map((batch) => batch.productId)),
               subject: subject,
               truncated: read.truncated,
               reachedTo: read.reachedTo,
@@ -238,6 +268,7 @@ final class _TenantProductionScreenState extends State<TenantProductionScreen> {
           reportAction: _reportAction(session),
           child: _ProductionContents(
             batches: batches,
+            sizes: <String, String>{...view.sizes, ..._olderSizes},
             currency: view.currency,
             hasMore: hasMore,
             readingOlder: _readingOlder,
@@ -269,6 +300,7 @@ final class _ProductionFrame extends StatelessWidget {
 final class _ProductionContents extends StatelessWidget {
   const _ProductionContents({
     required this.batches,
+    required this.sizes,
     required this.currency,
     required this.hasMore,
     required this.readingOlder,
@@ -277,6 +309,7 @@ final class _ProductionContents extends StatelessWidget {
   });
 
   final List<TenantProductionBatch> batches;
+  final Map<String, String> sizes;
   final TenantReportingCurrency currency;
   final bool hasMore;
   final bool readingOlder;
@@ -315,7 +348,7 @@ final class _ProductionContents extends StatelessWidget {
             title: 'No batches yet',
             hint:
                 'Record what was made and what it cost, and its stock and its '
-                'cost follow. Mark a product as Produced in Inventory first.',
+                'cost follow.',
             illustration: 'approve.svg',
           )
         else
@@ -324,11 +357,13 @@ final class _ProductionContents extends StatelessWidget {
             TenantProductionBatchCard(
               key: ValueKey('production-row-${batch.id}'),
               batch: batch,
+              size: sizes[batch.productId],
               money: _money,
               onOpenCosts: () => openProductionCostScreen(
                 context,
                 batch: batch,
                 money: _money,
+                size: sizes[batch.productId],
               ),
             ),
           ],

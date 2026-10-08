@@ -4,6 +4,7 @@ library;
 
 import '../../checkout/checkout_draft.dart';
 import '../../production/production_batch.dart';
+import '../../tenancy/tenant_catalog.dart';
 import '../report_period.dart';
 import '../report_run.dart';
 
@@ -38,10 +39,14 @@ final class TenantProductionBatchRow {
   const TenantProductionBatchRow({
     required this.businessDate,
     required this.batch,
+    required this.productLabel,
   });
 
   final String businessDate;
   final TenantProductionBatch batch;
+
+  /// The product's name with its size. See [tenantProductLabel].
+  final String productLabel;
 }
 
 /// Everything the production report says about one period.
@@ -57,9 +62,13 @@ final class TenantProductionAnalysis {
   });
 
   /// Reads [batches] - already narrowed to [subject] when there is one.
+  ///
+  /// [sizes] is each product's size by ID, which a batch does not save; a
+  /// product missing from it is named alone. See `TenantProductSizes`.
   factory TenantProductionAnalysis.from({
     required TenantReportPeriod period,
     required List<TenantProductionBatch> batches,
+    Map<String, String> sizes = const <String, String>{},
     TenantReportSubjectOption? subject,
     bool truncated = false,
     String? reachedTo,
@@ -75,9 +84,13 @@ final class TenantProductionAnalysis {
     final byProduct = <String, TenantProductionProductTotals>{};
     final rows = <TenantProductionBatchRow>[];
     for (final batch in ordered) {
+      final label = tenantProductLabel(
+        batch.productName,
+        sizes[batch.productId],
+      );
       final totals = byProduct.putIfAbsent(
         batch.productId,
-        () => TenantProductionProductTotals._(batch.productId, batch.productName),
+        () => TenantProductionProductTotals._(batch.productId, label),
       );
       totals.batches++;
       totals.units += batch.quantity;
@@ -90,6 +103,7 @@ final class TenantProductionAnalysis {
               ? period.startDate
               : checkoutBusinessDate(batch.occurredAt!.toUtc()),
           batch: batch,
+          productLabel: label,
         ),
       );
     }

@@ -1111,7 +1111,7 @@ void main() {
         _text(tester, 'checkout-catalog-truncated'),
         'Showing $maximumRenderedCheckoutProducts of '
         '${maximumRenderedCheckoutProducts + 5} matching products. Narrow the '
-        'search, or enter a code to add one directly.',
+        'search to find the rest.',
       );
     });
 

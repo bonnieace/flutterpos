@@ -3824,7 +3824,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         destinationKey: const ValueKey('inventory'),
         accent: AppIdentityAccent.purple,
         label: 'Inventory',
-        description: 'View all products, manage SKUs, pricing, and categories.',
+        description: 'View all products, sizes, pricing, and categories.',
         group: 'Inventory',
         icon: Symbols.inventory_2_rounded,
         onPressed: () {

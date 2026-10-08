@@ -184,21 +184,35 @@ test("a name or SKU that would make the whole catalog unreadable is refused", ()
     "invalid-argument"
   );
   assert.equal(refusalCode(() => input({name: 42})), "invalid-argument");
-  assert.equal(refusalCode(() => input({sku: ""})), "invalid-argument");
   assert.equal(
     refusalCode(() => input({sku: "x".repeat(MAXIMUM_PRODUCT_SKU_LENGTH + 1)})),
     "invalid-argument"
   );
+  assert.equal(refusalCode(() => input({sku: `5${control}00ml`})), "invalid-argument");
+  assert.equal(refusalCode(() => input({sku: 500})), "invalid-argument");
 });
 
-test("a SKU with a space in it is refused, because a scanner cannot emit one", () => {
-  assert.equal(refusalCode(() => input({sku: "CL 500"})), "invalid-argument");
-  // Surrounding whitespace is a typo rather than an unscannable code, so it is
-  // trimmed the way the create surface trims it.
-  assert.deepEqual(plan(storedProduct(), {sku: "  CL501  "}).documentUpdate, {
-    SKU: "CL501",
-    ...productSearchFields("Cola 500ml", "CL501"),
+test("a size may hold spaces, trimmed and one between words", () => {
+  // A size is written *500 ml* as often as *500ml*, so the space a scanner's
+  // code could not hold is allowed since 2026-10-08.
+  assert.deepEqual(plan(storedProduct(), {sku: "  1.5   L  "}).documentUpdate, {
+    SKU: "1.5 L",
+    ...productSearchFields("Cola 500ml", "1.5 L"),
   });
+});
+
+test("a size can be cleared, and a product with none still parses", () => {
+  const cleared = plan(storedProduct(), {sku: ""});
+  assert.deepEqual(cleared.changedFields, ["sku"]);
+  assert.equal(cleared.documentUpdate.SKU, "");
+  assert.equal(readSellableProduct(storedProduct({SKU: undefined})).sku, "");
+  assert.equal(readSellableProduct(storedProduct({SKU: ""})).sku, "");
+});
+
+test("a size is searchable word by word", () => {
+  const prefixes = productSearchFields("Cola", "500 ml").searchPrefixes;
+  assert.ok(prefixes.includes("50"));
+  assert.ok(prefixes.includes("ml"));
 });
 
 test("a request that changes nothing is refused rather than audited", () => {
@@ -230,13 +244,13 @@ test("a product that does not exist is not found", () => {
 test("a field this request does not name and cannot parse refuses the whole request", () => {
   // Quietly making an already-broken product less broken would report success
   // while the cached catalog stayed a miss for every product in the business.
-  const broken = storedProduct({SKU: undefined});
+  const broken = storedProduct({SKU: " 500ml"});
   assert.equal(refusalCode(() => plan(broken, {name: "Cola 500 ml"})), "failed-precondition");
 
   // Naming the broken field in the same request is the way through.
-  const fixed = plan(broken, {name: "Cola 500 ml", sku: "CL500"});
+  const fixed = plan(broken, {name: "Cola 500 ml", sku: "500ml"});
   assert.deepEqual(fixed.changedFields, ["name", "sku"]);
-  assert.deepEqual(fixed.changes[1], {field: "sku", previous: null, next: "CL500"});
+  assert.deepEqual(fixed.changes[1], {field: "sku", previous: " 500ml", next: "500ml"});
 });
 
 test("a stored price the till cannot sell blocks a name fix until it is corrected", () => {

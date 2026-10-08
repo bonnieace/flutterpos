@@ -90,6 +90,33 @@ void main() {
       }
     });
 
+    test('a product may have no size, absent or empty', () {
+      // Optional since 2026-10-08, when the stored `SKU` became a size.
+      for (final data in <Map<String, Object?>>[
+        _productData()..remove('SKU'),
+        _productData()..['SKU'] = '',
+      ]) {
+        final product = TenantProduct.fromDocument(
+          path: 'tenants/tenant-a/products/product-a',
+          data: data,
+        );
+        expect(product.sku, '');
+      }
+      expect(
+        () => TenantProduct.fromDocument(
+          path: 'tenants/tenant-a/products/product-a',
+          data: _productData()..['SKU'] = ' 30ml',
+        ),
+        throwsFormatException,
+      );
+    });
+
+    test('a name reads with its size beside it, or alone', () {
+      expect(tenantProductLabel('Perfume X', '30ml'), 'Perfume X · 30ml');
+      expect(tenantProductLabel('Mandazi', ''), 'Mandazi');
+      expect(tenantProductLabel('Mandazi', null), 'Mandazi');
+    });
+
     test('a product carries the business its own path names', () {
       final product = TenantProduct.fromDocument(
         path: 'tenants/tenant-a/products/product-a',

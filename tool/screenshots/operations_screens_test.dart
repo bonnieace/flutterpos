@@ -131,12 +131,24 @@ Future<void> _chooseCorrectionImage(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Presses *Remove background* on a form that already holds a photograph.
-Future<void> _pressCutOut(WidgetTester tester) async {
-  final cutOut = find.byKey(const ValueKey('inventory-remove-background'));
-  await tester.ensureVisible(cutOut);
+/// Opens the photo sheet on a form that already holds a photograph.
+///
+/// **The sheet since 2026-10-08.** *Position and zoom*, *Remove background*
+/// and *Remove photo* moved off the form into it, under the photo drawn at the
+/// sheet's full width.
+Future<void> _openPhotoSheet(WidgetTester tester) async {
+  final options = find.byKey(const ValueKey('inventory-photo-options'));
+  await tester.ensureVisible(options);
   await tester.pumpAndSettle();
-  await tester.tap(cutOut);
+  await tester.tap(options);
+  await tester.pumpAndSettle();
+  await _settleProductImages(tester);
+}
+
+/// Presses *Remove background* in the photo sheet.
+Future<void> _pressCutOut(WidgetTester tester) async {
+  await _openPhotoSheet(tester);
+  await tester.tap(find.byKey(const ValueKey('inventory-remove-background')));
 }
 
 /// One canonical sale, decoded the way every sales surface decodes one.
@@ -941,6 +953,47 @@ void main() {
     viewports: responsiveViewports,
   );
 
+  // **The add form, which had no capture until 2026-10-08.** With an image
+  // store, so the well it opens on is the one a phone actually shows.
+  screenshotCase(
+    '18h-add-a-product',
+    build: () => inSession(
+      TenantCatalogManagementScreen(
+        reader: FakeTenantReader.business(),
+        writer: FakeCatalogWriter(),
+        updateCallable: FakeCallable(),
+        imageStore: const FakeProductImageStore(),
+        backgroundRemover: FakeBackgroundRemover(_screenshotProductImage),
+      ),
+    ),
+    afterPump: (tester) async {
+      await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+      await tester.pumpAndSettle();
+    },
+    viewports: responsiveViewports,
+  );
+
+  // **The photo sheet**, over the form it was opened from: the photo the
+  // sheet's full width under its corners, and the three actions named.
+  screenshotCase(
+    '19g-photo-sheet',
+    build: () => inSession(
+      TenantCatalogManagementScreen(
+        reader: FakeTenantReader.business(),
+        writer: FakeCatalogWriter(),
+        updateCallable: FakeCallable(),
+        imageStore: const FakeProductImageStore(),
+        backgroundRemover: FakeBackgroundRemover(_screenshotProductImage),
+      ),
+    ),
+    fullPage: false,
+    afterPump: (tester) async {
+      await _chooseCorrectionImage(tester);
+      await _openPhotoSheet(tester);
+    },
+    viewports: const <ScreenshotViewport>[mobileViewport, webViewport],
+  );
+
   // The loading row. `settle: false` because a spinner never reaches a quiet
   // frame, which is the escape hatch `captureScreen` documents.
   screenshotCase(
@@ -956,7 +1009,7 @@ void main() {
     ),
     settle: false,
     // The full-page pass re-renders and settles whatever `settle` said, so a
-    // frame that never quietens cannot have one. The dialog is an overlay and
+    // frame that never quietens cannot have one. The sheet is an overlay and
     // is wholly inside the viewport either way.
     fullPage: false,
     afterPump: (tester) async {

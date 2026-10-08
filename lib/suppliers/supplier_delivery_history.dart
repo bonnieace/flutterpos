@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../checkout/checkout_draft.dart';
 import '../reporting/reporting_currency.dart';
 import '../reports/analysis/report_prose.dart';
+import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
@@ -45,6 +46,10 @@ final class TenantSupplierDeliveryHistory extends StatefulWidget {
 final class _TenantSupplierDeliveryHistoryState
     extends State<TenantSupplierDeliveryHistory> {
   final List<TenantSupplierDelivery> _deliveries = <TenantSupplierDelivery>[];
+
+  /// Each delivered product's size, read from the product: a delivery saves
+  /// the name it was received under and not the size. See [TenantProductSizes].
+  final Map<String, String> _sizes = <String, String>{};
   TenantReportingCurrency _currency = TenantReportingCurrency.unknown;
   String? _cursor;
   bool _hasMore = false;
@@ -78,8 +83,18 @@ final class _TenantSupplierDeliveryHistoryState
             pageSize: TenantSupplierDeliveryHistory.pageSize,
             cursor: first ? null : _cursor,
           );
+      final sizes =
+          await TenantProductSizes(
+            session: widget.session,
+            reader: widget.reader,
+          ).read(<String>{
+            for (final delivery in page.items)
+              for (final line in delivery.lines)
+                if (!_sizes.containsKey(line.productId)) line.productId,
+          });
       if (!mounted) return;
       setState(() {
+        _sizes.addAll(sizes);
         if (first) _deliveries.clear();
         _deliveries.addAll(page.items);
         _cursor = page.nextCursor;
@@ -141,6 +156,7 @@ final class _TenantSupplierDeliveryHistoryState
               _DeliveryCard(
                 key: ValueKey('delivery-row-${delivery.id}'),
                 delivery: delivery,
+                sizes: _sizes,
                 money: _money,
               ),
             ],
@@ -169,9 +185,15 @@ final class _TenantSupplierDeliveryHistoryState
 /// delivery. The rows are compact instead - name and quantity over cost, no
 /// icon tile - so a delivery of several products stays a readable height.
 final class _DeliveryCard extends StatelessWidget {
-  const _DeliveryCard({super.key, required this.delivery, required this.money});
+  const _DeliveryCard({
+    super.key,
+    required this.delivery,
+    required this.sizes,
+    required this.money,
+  });
 
   final TenantSupplierDelivery delivery;
+  final Map<String, String> sizes;
   final String Function(int minor) money;
 
   @override
@@ -286,6 +308,7 @@ final class _DeliveryCard extends StatelessWidget {
                     _DeliveryLineRow(
                       key: ValueKey('delivery-line-${delivery.id}-$index'),
                       line: line,
+                      size: sizes[line.productId],
                       money: money,
                     ),
                   ],
@@ -341,9 +364,15 @@ final class _DeliveryCard extends StatelessWidget {
 
 /// One product line of a delivery, as a sale card draws one of its lines.
 final class _DeliveryLineRow extends StatelessWidget {
-  const _DeliveryLineRow({super.key, required this.line, required this.money});
+  const _DeliveryLineRow({
+    super.key,
+    required this.line,
+    required this.size,
+    required this.money,
+  });
 
   final TenantSupplierDeliveryRecordLine line;
+  final String? size;
   final String Function(int minor) money;
 
   @override
@@ -363,7 +392,7 @@ final class _DeliveryLineRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Text(
-                  line.productName,
+                  tenantProductLabel(line.productName, size),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: tokens.typography.labelMedium.copyWith(

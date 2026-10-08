@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {optionsOf, productSearchUpdateOf} from "./backfillProductSearch";
+import {productSearchFields} from "../operations/productUpdate";
 
 test("migration defaults to dry-run and validates its bounded options", () => {
   assert.deepEqual(optionsOf([]), {apply: false, tenantId: undefined, pageSize: 200});
@@ -45,6 +46,13 @@ test("dry-run finds a change, apply produces it, and repeat is idempotent", () =
 });
 
 test("unreadable legacy products are explicitly invalid", () => {
-  assert.throws(() => productSearchUpdateOf({name: "Bread"}));
-  assert.throws(() => productSearchUpdateOf({SKU: "BR-1"}));
+  assert.throws(() => productSearchUpdateOf({SKU: "500ml"}));
+  assert.throws(() => productSearchUpdateOf({name: "Bread", SKU: 7}));
+});
+
+test("a product with no size is indexed by its name alone", () => {
+  assert.deepEqual(
+    productSearchUpdateOf({name: "Bread"}),
+    productSearchFields("Bread", "")
+  );
 });

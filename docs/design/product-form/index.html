@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product form &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #D4E7DD; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; font-weight: 600; color: #D4E7DD; flex-shrink: 0; width: 210px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #BCCBB9; }
+.size { font-size: 13px; color: #869585; flex-shrink: 0; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) {
+  .board { flex-direction: column; gap: 6px; }
+  .board h2 { width: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.64px;">Product form</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #BCCBB9; max-width: 640px;">Three artboards for the <em>Add product</em> and <em>Edit product</em> screens in Inventory, <code class="mono">_AddProductScreen</code> and <code class="mono">_EditProductScreen</code>. Drawn on 2026-10-08 against the harness captures <code class="mono">18h</code> and <code class="mono">19</code> to <code class="mono">19f</code>. They make the photo a 128 tile with a sheet behind it, give both forms one field order, and take out what made the forms look harder than they are. Read <a href="README.md">README.md</a> for what changes, what stays, and what is your call.</p>
+  </header>
+
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+
+    <a class="board" href="product-form-add.html">
+      <h2>Add product &#8212; phone</h2>
+      <p>The form as it opens, with the four things it needs first; the same form filled in with a photo chosen, all on one screen; and the photo sheet, where the full-size picture and the occasional photo actions now live.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="product-form-edit.html">
+      <h2>Edit product &#8212; phone</h2>
+      <p>An owner opening a product, which is the add form filled in; removing a buying price without a checkbox; and a manager, who sees the selling price locked instead of a notice.</p>
+      <span class="size">411</span>
+    </a>
+
+    <a class="board" href="product-form-states.html">
+      <h2>States</h2>
+      <p>The photo row in each of its five states, the photo sheet while cutting out, refused and for a saved photo, the field states, the explanation open, and the form on a wider screen.</p>
+      <span class="size">1280</span>
+    </a>
+
+  </nav>
+
+</div>
+</body>
+</html>

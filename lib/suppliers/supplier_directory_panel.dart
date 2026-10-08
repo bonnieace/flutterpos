@@ -21,6 +21,7 @@ import '../reports/report_identity_source.dart';
 import '../reports/report_period.dart';
 import '../reports/report_run.dart';
 import '../reports/ui/report_action.dart';
+import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -254,6 +255,14 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
             analysis: TenantSupplierAnalysis.from(
               period: period,
               deliveries: read.deliveries,
+              sizes:
+                  await TenantProductSizes(
+                    session: session,
+                    reader: widget.reader,
+                  ).read(<String>{
+                    for (final delivery in read.deliveries)
+                      for (final line in delivery.lines) line.productId,
+                  }),
               subject: subject,
               restocksWithoutSupplier: read.restocks,
               restocksTruncated: read.restocksTruncated,

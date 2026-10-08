@@ -383,7 +383,7 @@ void main() {
         'name,sku,price,cost,quantity,category,categoryId\n'
         'Good,G-1,10,,1,Bakery,\n' // fine
         ',B-1,10,,,Bakery,\n' // no name
-        'Spaced,B 2,10,,,Bakery,\n' // a code a scanner cannot emit
+        'Long,${'x' * (maximumCatalogSkuLength + 1)},10,,,Bakery,\n' // too long
         'Priced,B-3,19.999,,,Bakery,\n' // not representable
         'Costly,B-4,10,1.005,,Bakery,\n' // cost not representable
         'Counted,B-5,10,,-4,Bakery,\n' // a negative opening balance
@@ -415,8 +415,29 @@ void main() {
         isTrue,
       );
       expect(plan.refused.first.subject, 'This row');
-      expect(plan.refused[1].subject, 'Spaced');
+      expect(plan.refused[1].subject, 'Long');
       expect(plan.refused.last.detail, contains('cells the header names'));
+    });
+
+    test('a sheet may leave the size out, or head it Size', () {
+      // Optional since 2026-10-08, when the stored `SKU` became a size. A
+      // template downloaded before then still says `sku`, and still imports.
+      for (final sheet in <String>[
+        'name,price,category\nMandazi,20,Bakery',
+        'name,size,price,category\nMilk,500 ml,70,Bakery',
+        'name,volume,price,category\nMilk,500ml,70,Bakery',
+        'name,sku,price,category\nMilk,500ml,70,Bakery',
+      ]) {
+        final plan = _importPlan(sheet);
+        expect(plan.refused, isEmpty, reason: sheet);
+        expect(plan.rowCount, 1, reason: sheet);
+      }
+      expect(
+        _importPlan(
+          'name,price,category\nMandazi,20,Bakery',
+        ).pages.single.rows.single.sku,
+        '',
+      );
     });
 
     test('a refused row consumes no row index and no page', () {

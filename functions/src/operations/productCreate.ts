@@ -98,7 +98,6 @@ const ACCEPTED_PRODUCT_DOCUMENT_KEYS = new Set<string>([
 /** What a document must name, because a product cannot exist without it. */
 const REQUIRED_PRODUCT_DOCUMENT_FIELDS = [
   "name",
-  "SKU",
   "price",
   "categoryId",
 ] as const;

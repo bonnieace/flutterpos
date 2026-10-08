@@ -249,7 +249,7 @@ void main() {
   );
 
   testWidgets(
-    'only products made here are offered, and the rest are explained',
+    'every product is offered, bought in or not',
     (tester) async {
       await _pump(tester, _Reader(), writer: _Writer());
 
@@ -264,11 +264,7 @@ void main() {
 
       expect(
         find.byKey(const ValueKey('product-typeahead-prod-milk')),
-        findsNothing,
-      );
-      expect(
-        find.textContaining('Some products that match are purchased'),
-        findsWidgets,
+        findsOneWidget,
       );
     },
   );
@@ -426,7 +422,6 @@ final class _Reader implements TenantDataReader, TenantProductSearchReader {
           'cost': 28,
           'quantity': 12,
           'categoryId': 'ct_bakery',
-          'costType': 'produced',
           'searchName': 'white bread loaf',
           'searchPrefixes': <String>['br', 'bre', 'bread', 'wh'],
         },
@@ -436,7 +431,6 @@ final class _Reader implements TenantDataReader, TenantProductSearchReader {
           'price': 50,
           'quantity': 5,
           'categoryId': 'ct_dairy',
-          'costType': 'purchased',
           'searchName': 'milk 500ml',
           'searchPrefixes': <String>['mi', 'mil', 'milk'],
         },

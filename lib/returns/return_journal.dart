@@ -177,9 +177,7 @@ final class _ReturnJournal extends StatelessWidget {
               SizedBox(width: tokens.spacing.s8),
               Expanded(
                 child: Text(
-                  line.productName ??
-                      productNames[line.productId] ??
-                      line.productId,
+                  line.label ?? productNames[line.productId] ?? line.productId,
                   style: tokens.typography.bodyLarge.copyWith(
                     color: tokens.colors.text.primary,
                     fontWeight: FontWeight.w700,

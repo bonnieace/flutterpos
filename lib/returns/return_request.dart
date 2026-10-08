@@ -19,12 +19,16 @@ final class TenantReturnableLine {
   const TenantReturnableLine._({
     required this.productId,
     required this.name,
+    required this.size,
     required this.soldQuantity,
     required this.alreadyReturnedQuantity,
   });
 
   final String productId;
   final String name;
+
+  /// The size the sale recorded, or null where it recorded none.
+  final String? size;
   final int soldQuantity;
 
   /// Units already covered by a recorded return, verified **or** pending.
@@ -69,6 +73,7 @@ final class TenantReturnRequestLine {
   const TenantReturnRequestLine._({
     required this.productId,
     required this.name,
+    required this.size,
     required this.quantity,
   });
 
@@ -84,6 +89,11 @@ final class TenantReturnRequestLine {
   /// the reason the receipt is: it is what the customer was sold, whatever the
   /// catalog has been renamed to since.
   final String name;
+
+  /// The product's size as the sale recorded it, for the same reason as
+  /// [name]: it is what tells *Perfume X* 30ml from 50ml on every returns
+  /// screen. Null where the sale recorded none.
+  final String? size;
 
   final int quantity;
 }
@@ -160,6 +170,8 @@ final class TenantReturnCreateIntent {
           // `validSaleLine` checks `productId` and `quantity` and forbids no
           // other key, so this needs no rule change and none was made.
           'productName': line.name,
+          if (line.size case final size? when size.isNotEmpty)
+            'productSize': size,
           'quantity': line.quantity,
         },
     ],
@@ -261,6 +273,7 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
           TenantReturnableLine._(
             productId: line.productId,
             name: line.name,
+            size: line.sku,
             soldQuantity: line.quantity,
             alreadyReturnedQuantity: returned[line.productId] ?? 0,
           ),
@@ -298,6 +311,9 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
     final names = <String, String>{
       for (final line in returnable.lines) line.productId: line.name,
     };
+    final sizes = <String, String?>{
+      for (final line in returnable.lines) line.productId: line.size,
+    };
 
     final lines = <TenantReturnRequestLine>[];
     // As many lines as a sale may hold - [maximumReturnLines], which is the
@@ -316,6 +332,7 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
         TenantReturnRequestLine._(
           productId: entry.key,
           name: names[entry.key]!,
+          size: sizes[entry.key],
           quantity: quantity,
         ),
       );

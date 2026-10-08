@@ -121,7 +121,12 @@ final class _TenantProductTypeAheadState extends State<TenantProductTypeAhead> {
             return ListTile(
               key: ValueKey('product-typeahead-${product.id}'),
               title: Text(product.name),
-              subtitle: Text('${product.sku} · ${product.quantity} in stock'),
+              subtitle: Text(
+                <String>[
+                  if (product.sku.isNotEmpty) product.sku,
+                  '${product.quantity} in stock',
+                ].join(' · '),
+              ),
               trailing: added
                   ? Text(
                       'Added',

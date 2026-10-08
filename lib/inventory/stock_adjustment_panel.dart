@@ -693,7 +693,7 @@ AppNotice _adjustmentNotice(
 /// One product's stock page while it is still being read.
 ///
 /// **Almost all of this screen is chrome, and that is why it is worth drawing.**
-/// The SKU line, the two figure tiles, *Why stock can be negative*, *Stock
+/// The size line, the two figure tiles, *Why stock can be negative*, *Stock
 /// ledger*, *What the ledger holds* - only the two numbers and the ledger rows
 /// change when the read returns. A person waiting on this page can read both
 /// explanations while they wait, which is the whole of decision 35's argument
@@ -732,7 +732,7 @@ final class _ProductStockReading extends StatelessWidget {
               Expanded(
                 child: SkeletonLine(
                   widthFactor: 0.42,
-                  style: tokens.typography.mono,
+                  style: tokens.typography.bodyMedium,
                 ),
               ),
             ],
@@ -826,8 +826,8 @@ final class _ProductStockContents extends StatelessWidget {
             SizedBox(width: tokens.spacing.s12),
             Expanded(
               child: Text(
-                'SKU ${product.sku}',
-                style: tokens.typography.mono.copyWith(
+                product.sku,
+                style: tokens.typography.bodyMedium.copyWith(
                   color: tokens.colors.text.secondary,
                 ),
               ),

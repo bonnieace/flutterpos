@@ -423,11 +423,10 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
           ? const TenantBulkCatalogEdit.clearCost()
           : TenantBulkCatalogEdit.cost(_value.text),
     // Unreachable: none is offered. A name and a code belong to one product
-    // each, and where a cost comes from is set one product at a time.
+    // each.
     TenantProductField.name ||
     TenantProductField.sku ||
-    TenantProductField.image ||
-    TenantProductField.costType => TenantBulkCatalogEdit.cost(_value.text),
+    TenantProductField.image => TenantBulkCatalogEdit.cost(_value.text),
   };
 
   /// Builds the plan, then asks the server what it would do, writing nothing.
@@ -1371,7 +1370,8 @@ final class _BulkCatalogContents extends StatelessWidget {
             title: Text(product.name),
             subtitle: Text(
               '${tenantCategoryLabel(product.categoryId, names: categoryNames)} '
-              '• ${product.sku} • ${moneyText(product.price)}'
+              '${product.sku.isEmpty ? '' : '• ${product.sku} '}'
+              '• ${moneyText(product.price)}'
               '${product.cost == null ? '' : ' • costs ${moneyText(product.cost!)}'}',
             ),
           ),
@@ -1450,8 +1450,9 @@ final class _BulkCatalogContents extends StatelessWidget {
           'tabs, or semicolons, and a cell holding one of those can be '
           'wrapped in '
           'double quotes.\n\n'
-          'The header must name name, sku, and price. It may also name cost, '
-          'quantity, and either category — the category\'s own name, matched '
+          'The header must name name and price. It may also name size, '
+          'cost, quantity, and either category — the category\'s own name, '
+          'matched '
           'against this business — or categoryId. A column this import does '
           'not read is refused rather than ignored, so nothing you supplied is '
           'dropped without being mentioned.\n\n'
@@ -1470,7 +1471,7 @@ final class _BulkCatalogContents extends StatelessWidget {
         maxLines: 14,
         onChanged: (_) => onFormChanged(),
         label: 'Header line, then one line per product',
-        placeholder: 'name,sku,price,quantity,category',
+        placeholder: 'name,size,price,quantity,category',
       ),
       if (!canChangeMoney) ...[
         SizedBox(height: tokens.spacing.s8),
@@ -1583,8 +1584,8 @@ final class _BulkCatalogContents extends StatelessWidget {
                     're-reads its own copy of the catalog on the next sync.'
               : 'This is what was created. Re-running the same sheet would '
                     'create these products again, because nothing in this app '
-                    'makes a code unique - correct what was refused and import '
-                    'only those rows.',
+                    'stops two products sharing a name - correct what was '
+                    'refused and import only those rows.',
         ),
     ];
   }
@@ -1832,7 +1833,6 @@ String _batchConfirmation(
     case TenantProductField.name:
     case TenantProductField.sku:
     case TenantProductField.image:
-    case TenantProductField.costType:
       break;
   }
   if (plan.pages.length > 1) {
@@ -1861,8 +1861,9 @@ String _importConfirmation(
     'those units are recorded in the stock ledger as an opening balance, so '
     'the ledger says where they came from.\n\n'
     'Running this sheet again creates these products a second time. Nothing '
-    'in this app makes a code unique, and retiring a product is not an undo - '
-    'so correct the rows that were refused and import only those.',
+    'in this app stops two products sharing a name, and retiring a product is '
+    'not an undo - so correct the rows that were refused and import only '
+    'those.',
   );
   if (plan.pages.length > 1) {
     buffer.write(

@@ -1,4 +1,5 @@
 import '../ui/money_text.dart';
+import '../tenancy/tenant_catalog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -2909,7 +2910,7 @@ final class _SaleItemRow extends StatelessWidget {
                 // One line, as the design draws it: a basket reads as a column
                 // of names, and a name that wraps breaks the column.
                 Text(
-                  line.name,
+                  tenantProductLabel(line.name, line.sku),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: tokens.typography.labelMedium.copyWith(

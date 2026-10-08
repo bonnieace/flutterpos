@@ -38,10 +38,11 @@ function sameStrings(left: unknown, right: readonly string[]): boolean {
 export function productSearchUpdateOf(data: DocumentData): ReturnType<
   typeof productSearchFields
 > | null {
-  if (typeof data.name !== "string" || typeof data.SKU !== "string") {
-    throw new Error("Product name and SKU must be strings.");
+  const sku = data.SKU === undefined || data.SKU === null ? "" : data.SKU;
+  if (typeof data.name !== "string" || typeof sku !== "string") {
+    throw new Error("Product name and size must be strings.");
   }
-  const search = productSearchFields(data.name, data.SKU);
+  const search = productSearchFields(data.name, sku);
   return data.searchName === search.searchName &&
     sameStrings(data.searchPrefixes, search.searchPrefixes) ? null : search;
 }

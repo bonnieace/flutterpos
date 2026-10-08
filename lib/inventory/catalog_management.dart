@@ -27,6 +27,8 @@ const int maximumCatalogNameLength = 120;
 
 /// The longest stock-keeping unit this surface writes, bounded for the same
 /// reason.
+/// The longest size a product may have. The server's
+/// `MAXIMUM_PRODUCT_SKU_LENGTH`.
 const int maximumCatalogSkuLength = 64;
 
 /// The stock a product is created holding when the form was left blank.
@@ -75,7 +77,7 @@ String tenantProductSearchTerm(String value) =>
 /// The deterministic sort value stored beside every product.
 String tenantProductSearchName(String name) => tenantProductSearchTerm(name);
 
-/// Every searchable word/SKU prefix stored on one product.
+/// Every searchable prefix of a product's name and size, word by word.
 ///
 /// Prefixes begin at two characters because the UI never searches sooner and
 /// a one-character array value creates a very broad, expensive index entry.
@@ -86,7 +88,7 @@ List<String> tenantProductSearchPrefixes({
   final prefixes = <String>{};
   final words = <String>{
     ...tenantProductSearchTerm(name).split(' '),
-    tenantProductSearchTerm(sku),
+    ...tenantProductSearchTerm(sku).split(' '),
   }..removeWhere((word) => word.length < 2);
   for (final word in words) {
     for (var length = 2; length <= word.length; length++) {
@@ -187,7 +189,6 @@ final class TenantProductCreateIntent {
     required this.createdBy,
     required this.quantity,
     this.imageUrl,
-    this.costType = TenantProductCostType.purchased,
   });
 
   final String path;
@@ -195,10 +196,6 @@ final class TenantProductCreateIntent {
   final String productId;
   final String name;
   final String sku;
-
-  /// Bought in or made here. Not money, so every role that may create a
-  /// product may set it.
-  final TenantProductCostType costType;
 
   /// The units the business already holds, and zero for the ordinary case.
   ///
@@ -252,7 +249,6 @@ final class TenantProductCreateIntent {
     'searchName': tenantProductSearchName(name),
     'searchPrefixes': tenantProductSearchPrefixes(name: name, sku: sku),
     if (imageUrl != null) 'image': imageUrl.toString(),
-    'costType': costType.wireValue,
     'createdBy': createdBy,
   };
 }
@@ -318,19 +314,11 @@ final class TenantProductRetireIntent {
 /// refuses a payload that so much as mentions it.
 enum TenantProductField {
   name('name', 'Name'),
-  sku('sku', 'Code'),
+  sku('sku', 'Size'),
   price('price', 'Selling price'),
   cost('cost', 'Buying price'),
   categoryId('categoryId', 'Category'),
-  image('image', 'Image'),
-
-  /// Bought in or made here. Descriptive, not money: see
-  /// [TenantProductCostType].
-  ///
-  /// A noun like the others, and the form's own heading for it: the banner
-  /// after a correction lists these, and *Corrected: bought in or made here*
-  /// read as a question rather than as what changed.
-  costType('costType', 'Where it comes from');
+  image('image', 'Image');
 
   const TenantProductField(this.wireKey, this.label);
 
@@ -395,14 +383,10 @@ final class TenantProductUpdateIntent {
     required this.categoryName,
     required this.imageUrl,
     required this.clearsImage,
-    this.costType,
   });
 
   final String tenantId;
   final String productId;
-
-  /// The new cost type, or null when it is not being changed.
-  final TenantProductCostType? costType;
 
   /// The idempotency key. One correction keeps one request ID across a retry,
   /// so a genuine retry answers off the server's own record instead of reaching
@@ -462,7 +446,6 @@ final class TenantProductUpdateIntent {
     if (categoryId != null) 'categoryId': categoryId,
     if (imageUrl != null) 'image': imageUrl.toString(),
     if (clearsImage) 'image': null,
-    if (costType != null) 'costType': costType!.wireValue,
   };
 }
 
@@ -602,7 +585,6 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     String cost = '',
     String openingQuantity = '',
     Uri? imageUrl,
-    TenantProductCostType costType = TenantProductCostType.purchased,
   }) {
     _requireCreateRole();
     _requireRequestId(requestId);
@@ -656,7 +638,6 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       createdBy: session.uid,
       quantity: quantity,
       imageUrl: _validatedProductImage(imageUrl),
-      costType: costType,
     );
   }
 
@@ -719,7 +700,6 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     bool clearCost = false,
     Uri? imageUrl,
     bool clearImage = false,
-    TenantProductCostType? costType,
   }) {
     // The server's PRODUCT_UPDATE_ROLES are the same operational three that may
     // create, which is why the route guard's own list is reused here.
@@ -880,18 +860,6 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       }
     }
 
-    TenantProductCostType? nextCostType;
-    if (costType != null && costType != product.costType) {
-      nextCostType = costType;
-      changes.add(
-        TenantProductFieldChange._(
-          field: TenantProductField.costType,
-          previous: product.costType.label,
-          next: costType.label,
-        ),
-      );
-    }
-
     if (changes.isEmpty) {
       throw const TenantCatalogManagementException('product_unchanged');
     }
@@ -909,7 +877,6 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       categoryName: nextCategoryName,
       imageUrl: nextImageUrl,
       clearsImage: clearsImage,
-      costType: nextCostType,
     );
   }
 
@@ -1272,7 +1239,8 @@ final class TenantProductUpdateResult {
       changedFields.add(field);
     }
     final name = _requiredString(data, 'name');
-    final sku = _requiredString(data, 'sku');
+    // A product with no size answers an empty string.
+    final sku = data['sku'] == '' ? '' : _requiredString(data, 'sku');
     final categoryId = _requiredCategoryId(data);
     final imageUrl = _optionalCallableImage(data['image']);
     final price = data['price'];
@@ -1322,12 +1290,6 @@ final class TenantProductUpdateResult {
     }
     if (intent.clearsImage && imageUrl != null) {
       throw const FormatException('updateProduct did not clear the image.');
-    }
-    if (intent.costType != null &&
-        data['costType'] != intent.costType!.wireValue) {
-      throw const FormatException(
-        'updateProduct did not apply where the cost comes from.',
-      );
     }
     return TenantProductUpdateResult._(
       updateId: _requiredString(data, 'updateId'),
@@ -1605,13 +1567,12 @@ String secureTenantCatalogRequestId() {
 
 /// Derives a catalog document ID from the identity the create is scoped by.
 ///
-/// The ID is **not** a slug of the SKU, and that is a decision rather than a
-/// convenience. It is permanent: `stock_movements` hangs below it, every past
-/// sale line names it, and `daily_metrics` aggregates by it. A SKU is neither
-/// unique - two products may legitimately carry one, which the till refuses to
-/// resolve - nor correctable, because no client rule and no callable can change
-/// a product's descriptive fields. Deriving the permanent identity from the one
-/// field this app cannot fix would make a typo permanent in the ledger key too.
+/// The ID is **not** a slug of the name or the size, and that is a decision
+/// rather than a convenience. It is permanent: `stock_movements` hangs below
+/// it, every past sale line names it, and `daily_metrics` aggregates by it.
+/// Neither is unique - two products may share a name and a size - and both
+/// can be corrected, so deriving the permanent identity from either would put
+/// a correctable typo into the ledger key.
 ///
 /// Scoping it by request ID mirrors the server's
 /// `actorUid + operation + tenantId + requestId` idempotency, so a double
@@ -1647,23 +1608,22 @@ String tenantCatalogNormalizedName(String value, String code) {
   return name;
 }
 
-/// Bounds a stock-keeping unit and refuses whitespace anywhere inside it.
+/// A product's size as it is stored: trimmed, one space between words, and
+/// empty when it has none.
 ///
-/// A SKU is what the till matches a scan against, exactly and case-folded. A
-/// scanner cannot emit a space, so a code containing one could be typed but
-/// never scanned - which is the one job the field has.
+/// **The server's `normalizeProductSku`, character for character**, because
+/// each side checks that what was written is what was asked for. Spaces are
+/// allowed since 2026-10-08, when the field became a size - *500 ml* is
+/// written as often as *500ml*.
 String tenantCatalogNormalizedSku(String value) {
-  final sku = value.trim();
-  if (sku.isEmpty || sku.length > maximumCatalogSkuLength) {
+  final sku = value.trim().replaceAll(_whitespaceRun, ' ');
+  if (sku.length > maximumCatalogSkuLength) {
     throw const TenantCatalogManagementException('invalid_sku');
   }
   for (final codeUnit in sku.codeUnits) {
     if (codeUnit < 0x20 || codeUnit == 0x7f) {
       throw const TenantCatalogManagementException('invalid_sku');
     }
-  }
-  if (_whitespaceRun.hasMatch(sku)) {
-    throw const TenantCatalogManagementException('invalid_sku');
   }
   return sku;
 }

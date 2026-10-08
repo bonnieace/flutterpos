@@ -346,28 +346,30 @@ final class TenantProductionRepository extends TenantReadRepository {
     );
   }
 
-  /// The products marked made here, which a production report may be narrowed
-  /// to - one equality read against the stored flag, up to [maximumPages].
-  Future<List<TenantProduct>> loadMadeHereProducts({
+  /// The products a production report may be narrowed to: every product named
+  /// by the newest batches, up to [maximumPages] of them, under the name its
+  /// most recent batch recorded.
+  ///
+  /// Read from the batches rather than the catalog because any product may be
+  /// made, so the catalog no longer says which ones have been. A product last
+  /// made before the newest pages is not offered; *All products* still counts it.
+  Future<List<({String id, String name})>> loadMadeProducts({
     int maximumPages = 10,
   }) async {
     _requireRole();
-    final products = <TenantProduct>[];
+    final names = <String, String>{};
     String? cursor;
     for (var page = 0; page < maximumPages; page++) {
-      final read = await readCollectionPage(
-        TenantCollection.products,
-        collectionReader: _collectionReader,
-        pageSize: 50,
-        cursor: cursor,
-        equalityFilters: <String, Object?>{
-          'costType': TenantProductCostType.produced.wireValue,
-        },
-      );
-      products.addAll(read.items.map(TenantProduct.fromSnapshot));
+      final read = await loadBatches(pageSize: 50, cursor: cursor);
+      for (final batch in read.items) {
+        names.putIfAbsent(batch.productId, () => batch.productName);
+      }
       if (!read.hasMore || read.nextCursor == null) break;
       cursor = read.nextCursor;
     }
+    final products = <({String id, String name})>[
+      for (final entry in names.entries) (id: entry.key, name: entry.value),
+    ];
     products.sort(
       (left, right) =>
           left.name.toLowerCase().compareTo(right.name.toLowerCase()),
@@ -406,9 +408,6 @@ final class TenantProductionRepository extends TenantReadRepository {
     }
     if (product.retired) {
       throw const TenantProductionException('retired_product');
-    }
-    if (product.costType != TenantProductCostType.produced) {
-      throw const TenantProductionException('not_made_here');
     }
     if (!_requestIdPattern.hasMatch(requestId)) {
       throw const TenantProductionException('invalid_request_id');

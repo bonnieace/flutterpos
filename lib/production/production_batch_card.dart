@@ -14,6 +14,7 @@ import '../checkout/checkout_draft.dart';
 import '../reports/analysis/report_prose.dart';
 import '../ui/buttons.dart';
 import '../ui/tokens.dart';
+import '../tenancy/tenant_catalog.dart';
 import 'production_batch.dart';
 
 final class TenantProductionBatchCard extends StatelessWidget {
@@ -22,10 +23,15 @@ final class TenantProductionBatchCard extends StatelessWidget {
     required this.batch,
     required this.money,
     required this.onOpenCosts,
+    this.size,
   });
 
   final TenantProductionBatch batch;
   final String Function(int minor) money;
+
+  /// The product's size, read from the product: a batch saves the name it was
+  /// made under and not the size. See `TenantProductSizes`.
+  final String? size;
 
   /// Opens the batch's cost of production.
   final VoidCallback onOpenCosts;
@@ -65,7 +71,8 @@ final class TenantProductionBatchCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
                             Text(
-                              '${batch.productName} · ${batch.quantity} made',
+                              '${tenantProductLabel(batch.productName, size)} '
+                              '· ${batch.quantity} made',
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: tokens.typography.titleMedium.copyWith(

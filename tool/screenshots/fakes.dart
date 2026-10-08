@@ -126,11 +126,14 @@ const Map<String, Map<String, Object?>> seedCategories =
 
 /// The seed script's catalog, with unit costs added to the products that have
 /// one so the profit surfaces have something complete to show.
+///
+/// **Sizes, not barcodes, since 2026-10-08**: the stored `SKU` is a product's
+/// size, and *Mandazi* has none so the captures show both.
 const Map<String, Map<String, Object?>> seedProducts =
     <String, Map<String, Object?>>{
       'pd-bar-soap-blue': <String, Object?>{
         'name': 'Bar soap - blue',
-        'SKU': '5901234123457',
+        'SKU': '150g',
         'price': 145,
         'cost': 112,
         'quantity': 24,
@@ -139,7 +142,7 @@ const Map<String, Map<String, Object?>> seedProducts =
       },
       'pd-bread-white': <String, Object?>{
         'name': 'White bread loaf',
-        'SKU': '6161100000019',
+        'SKU': '400g',
         'price': 65,
         'cost': 48,
         'quantity': 40,
@@ -147,39 +150,39 @@ const Map<String, Map<String, Object?>> seedProducts =
         'image': 'https://inventory.test/products/white-bread.png',
       },
       'pd-charcoal-2kg': <String, Object?>{
-        'name': 'Charcoal 2kg',
-        'SKU': '6161100000071',
+        'name': 'Charcoal',
+        'SKU': '2kg',
         'price': 260,
         'quantity': 12,
         'categoryId': 'cat-household',
       },
       'pd-mandazi': <String, Object?>{
         'name': 'Mandazi',
-        'SKU': '6161100000026',
+        'SKU': '',
         'price': 20,
         'cost': 11,
         'quantity': 120,
         'categoryId': 'cat-bakery',
       },
       'pd-milk-500': <String, Object?>{
-        'name': 'Milk 500ml',
-        'SKU': '6161100000057',
+        'name': 'Milk',
+        'SKU': '500ml',
         'price': 70,
         'cost': 55,
         'quantity': -3,
         'categoryId': 'cat-drinks',
       },
       'pd-soda-300': <String, Object?>{
-        'name': 'Soda 300ml',
-        'SKU': '6161100000033',
+        'name': 'Soda',
+        'SKU': '300ml',
         'price': 50,
         'cost': 34,
         'quantity': 96,
         'categoryId': 'cat-drinks',
       },
       'pd-water-1l': <String, Object?>{
-        'name': 'Water 1L',
-        'SKU': '6161100000040',
+        'name': 'Water',
+        'SKU': '1L',
         'price': 80,
         'cost': 62,
         'quantity': 0,
@@ -370,9 +373,11 @@ Map<String, Map<String, Object?>> seedSales() {
     required int quantity,
     required int unitPriceMinor,
     int? unitCostMinor,
+    String? sku,
   }) => <String, Object?>{
     'productId': productId,
     'name': name,
+    if (sku != null) 'sku': sku,
     'quantity': quantity,
     'unitPriceMinor': unitPriceMinor,
     if (unitCostMinor != null) 'unitCostMinor': unitCostMinor,
@@ -397,6 +402,7 @@ Map<String, Map<String, Object?>> seedSales() {
         line(
           productId: 'pd-bread-white',
           name: 'White bread loaf',
+          sku: '400g',
           quantity: 2,
           unitPriceMinor: 6500,
           unitCostMinor: 4800,
@@ -419,6 +425,7 @@ Map<String, Map<String, Object?>> seedSales() {
         line(
           productId: 'pd-bar-soap-blue',
           name: 'Bar soap - blue',
+          sku: '150g',
           quantity: 2,
           unitPriceMinor: 14500,
           unitCostMinor: 11200,
@@ -436,14 +443,16 @@ Map<String, Map<String, Object?>> seedSales() {
       items: <Map<String, Object?>>[
         line(
           productId: 'pd-soda-300',
-          name: 'Soda 300ml',
+          name: 'Soda',
+          sku: '300ml',
           quantity: 2,
           unitPriceMinor: 5000,
           unitCostMinor: 3400,
         ),
         line(
           productId: 'pd-water-1l',
-          name: 'Water 1L',
+          name: 'Water',
+          sku: '1L',
           quantity: 1,
           unitPriceMinor: 8000,
           unitCostMinor: 6200,

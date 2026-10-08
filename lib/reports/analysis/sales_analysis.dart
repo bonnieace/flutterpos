@@ -19,6 +19,7 @@ library;
 import '../../checkout/checkout_tender.dart';
 import '../../returns/return_offsets.dart';
 import '../../sales/sale_history.dart';
+import '../../tenancy/tenant_catalog.dart';
 import '../report_period.dart';
 
 /// One product's contribution over the period.
@@ -197,7 +198,7 @@ final class TenantSalesAnalysis {
         final held = byProduct[line.productId];
         byProduct[line.productId] = TenantSalesItem(
           productId: line.productId,
-          name: line.name,
+          name: tenantProductLabel(line.name, line.sku),
           quantity: (held?.quantity ?? 0) + quantity,
           revenueMinor:
               (held?.revenueMinor ?? 0) +

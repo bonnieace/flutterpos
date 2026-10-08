@@ -253,10 +253,6 @@ final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
         'quantity': product.quantity,
         'categoryId': product.categoryId,
         if (product.imageUrl != null) 'image': product.imageUrl.toString(),
-        // Only the non-default value is written, so a cache written before the
-        // field existed reads back exactly as it did.
-        if (product.costType == TenantProductCostType.produced)
-          'costType': product.costType.wireValue,
       });
     }
 
@@ -345,7 +341,6 @@ final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
             'SKU': entry['SKU'],
             'price': entry['price'],
             if (entry['cost'] != null) 'cost': entry['cost'],
-            if (entry['costType'] != null) 'costType': entry['costType'],
             'quantity': _quantityOnHand(
               uid: uid,
               tenantId: tenantId,

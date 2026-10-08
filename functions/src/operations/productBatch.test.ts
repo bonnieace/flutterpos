@@ -331,7 +331,7 @@ test("outcomes come back in request order, refusals among them", () => {
     batch([
       {productId: "pd_0", price: 19.999},
       {productId: "pd_1", name: "Fanta 500 ml"},
-      {productId: "pd_2", sku: "CL 2"},
+      {productId: "pd_2", price: -1},
       {productId: "pd_3", name: "Sprite 500 ml"},
     ]),
     {products: catalog(4)}

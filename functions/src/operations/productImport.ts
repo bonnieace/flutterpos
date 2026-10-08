@@ -120,7 +120,7 @@ const ACCEPTED_IMPORT_ROW_KEYS = new Set<string>([
 ]);
 
 /** What a row must name, because a product cannot be created without it. */
-const REQUIRED_IMPORT_ROW_FIELDS = ["name", "sku", "price"] as const;
+const REQUIRED_IMPORT_ROW_FIELDS = ["name", "price"] as const;
 
 /** The keys a row hands to the correction path's own reader, unchanged. */
 const DESCRIBED_IMPORT_ROW_KEYS = new Set<string>(["name", "sku", "price", "cost"]);
@@ -378,11 +378,10 @@ function readImportRow(value: unknown, index: number): ProductImportRow {
  * correction refuses a product named twice, because two rows addressing one
  * document are two conflicting intents with no honest outcome to report for
  * either. Two import rows describing the same thing are not that: each creates
- * its own document, under its own ID, and a shop legitimately stocking two
- * products with one name and one code is a state this app already permits and
- * the till already refuses to resolve by scan. SKU uniqueness is stated rather
- * than enforced everywhere else in this system, and an import is not the place
- * to invent it - a check against fifty rows would not see the four hundred
+ * its own document, under its own ID, and two products with one name and one
+ * size is a state this app already permits. Nothing else in this system makes
+ * a product unique by what it is called, and an import is not the place to
+ * invent it - a check against fifty rows would not see the four hundred
  * already in the catalog, which is a guarantee the next request breaks.
  */
 export function readProductImportInput(
