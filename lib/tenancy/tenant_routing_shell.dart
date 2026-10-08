@@ -40,6 +40,7 @@ import 'platform_tenant_console.dart';
 import 'platform_global_user_status.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
+import 'tenant_businesses_screen.dart';
 import 'tenant_catalog.dart';
 import 'tenant_default_tenant.dart';
 import 'tenant_directory.dart';
@@ -1078,6 +1079,25 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
 
   void _refreshAfterTenantRequest(TenantRequestResult _) => _retry();
 
+  /// Re-reads the account's memberships **without leaving the open business**,
+  /// for a business added from *My businesses*.
+  ///
+  /// **Not [_retry].** That clears the session and bootstraps from nothing,
+  /// which is right on the selector and wrong over a live till: this is the
+  /// background refresh the shell already runs on resume, and an unchanged
+  /// access decision keeps its epoch, so nothing open on screen is disturbed.
+  /// A refresh already in flight may have started before the business
+  /// existed, so it is waited out and a fresh one asked for.
+  Future<void> _refreshMembershipsInSession() async {
+    final uid = _uid;
+    if (uid == null || _phase != _RoutingPhase.tenant) return;
+    final inFlight = _bootstrapRefresh;
+    if (inFlight != null) await inFlight;
+    if (!mounted || _uid != uid || _phase != _RoutingPhase.tenant) return;
+    _startBootstrapRefresh(uid, _flowToken);
+    await _bootstrapRefresh;
+  }
+
   void _completeTokenInvitationAcceptance() {
     setState(() => _pendingInvitationLink = null);
     widget.onInvitationLinkSettled?.call();
@@ -1515,6 +1535,16 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       auditLogRoute: widget.auditLogRoute,
       shiftHistoryRoute: widget.shiftHistoryRoute,
       auditLogRoles: widget.auditLogRoles,
+      uid: _uid,
+      accountEmail: widget.readEmail?.call(),
+      readMemberships: () => _bootstrapResult?.selection.visible ?? const [],
+      requestIdentity: _tenantRequestIdentity(),
+      // **Not defaulted here.** The Firebase callable touches the default app
+      // when it is built, and the home is built far more often than a business
+      // is added; *My businesses* falls back to it on the tap that needs it.
+      requestTenantCallable: widget.requestTenantCallable,
+      tenantRequestIdFactory: widget.tenantRequestIdFactory,
+      onRefreshMemberships: _refreshMembershipsInSession,
     );
   }
 }
@@ -2202,6 +2232,7 @@ final class _HomeOverview {
     this.expenses,
     this.deviceToday,
     this.shiftsOpened,
+    this.openShiftStaffIds,
     this.showProfit = false,
   });
 
@@ -2263,6 +2294,13 @@ final class _HomeOverview {
   /// read every cashier's shifts or the read failed.
   final int? shiftsOpened;
 
+  /// Who holds a shift that is still open today, by staff UID, in opening
+  /// order. Read in the same query as [shiftsOpened] and null wherever it is.
+  ///
+  /// **UIDs, not names.** Resolving a name is a staff read per person, and the
+  /// home never prints one; *My businesses* resolves them when it is opened.
+  final List<String>? openShiftStaffIds;
+
   /// Whether this member may be shown the margin at all.
   ///
   /// **The home was the one surface that never asked.** `daily_metrics` is
@@ -2273,6 +2311,112 @@ final class _HomeOverview {
   /// shown the margin. `daily_metrics_panel.dart` and `sales_totals_panel.dart`
   /// both gate on `canSeeInSession`; this now does too.
   final bool showProfit;
+}
+
+/// Today's sales and their count as the home states them, decided once.
+///
+/// **Extracted from `_figures` on 2026-10-08** so the open business's receipt
+/// on *My businesses* and the home's first two tiles cannot come to print two
+/// different numbers for the same day. Every rule and every reason below is
+/// the home's, moved rather than restated.
+final class _TodayFigures {
+  const _TodayFigures._({
+    required this.metrics,
+    required this.device,
+    required this.counted,
+    required this.deviceKnowsMore,
+    required this.deviceCount,
+    required this.deviceSales,
+  });
+
+  factory _TodayFigures.of(_HomeOverview overview) {
+    final metrics = overview.today?.metrics;
+    // **What this device can state about an unreconciled day.** Null once
+    // reconciliation has published, because the server's figures are better
+    // and the loader does not even read this for a reconciled day.
+    //
+    // **A partial day is not a day.** A truncated read has scanned only the
+    // first pages of the day's sales and a refused one nothing at all; either
+    // drawn as *Today's sales* would be a plausible wrong figure, which is the
+    // one kind this tile has always refused to print. Both fall back to the em
+    // dash, exactly as before.
+    final device = overview.deviceToday;
+    // **A day this device counted nothing for is still an em dash**, for the
+    // reasons `TenantDeviceSalesTotals.displayable` records. The rule lives
+    // there rather than here so this tile and the daily summary cannot come to
+    // disagree about the same cache.
+    final counted = device?.displayable;
+    // Net of returns where the cache held them, gross where it did not -
+    // `TenantSalesTotals.net` is null rather than zero when returns could not
+    // be read, so this falls back to the figure every surface showed before
+    // returns were netted at all.
+    final countedNet = counted?.net;
+    // **Whether this device knows of sales the published figure cannot hold.**
+    // A sale rung here and not yet synced is in the cache and not in
+    // `daily_metrics`, so the till shows more than the home does - and a
+    // shopkeeper who rings a sale and watches the total refuse to move
+    // concludes the app is broken, which is the more expensive failure.
+    //
+    // **Counted in transactions, not in money**, because that is the question:
+    // does this device hold a sale the server has not counted. Comparing
+    // takings would also fire on a rounding difference.
+    //
+    // **The published figure still wins where it is ahead**, which is the
+    // ordinary case of a second till trading: its sales are in `daily_metrics`
+    // and were never on this device, so the device total is the smaller and
+    // less complete of the two.
+    //
+    // **And comparing counts is the right test, not a weaker stand-in for
+    // one.** Write what each figure knows: the cache holds some subset `C` of
+    // the sales the server has, the outbox holds `U` sales the server has
+    // none of, and the day truly took `S + U`. The published figure is `S`;
+    // this device can say `C + U`. Since `C <= S`, both are under the truth,
+    // and whichever is larger is the nearer of the two - every time. So the
+    // larger wins, and preferring this device merely because it holds unsent
+    // work would print `C + U` on a day when a busier till had already pushed
+    // `S` far above it.
+    //
+    // What that leaves is a published figure that is ahead and still short by
+    // the sales in `U`. The number is the best available; it is the silence
+    // about `U` that misleads, and [unsentTransactions] is what the tiles say
+    // instead of nothing.
+    //
+    // **Gross against gross, because the question is about sales.** A return
+    // does not unsell anything, and until 2026-09-29 this compared the
+    // device's net count with the published gross one: a day with a sale
+    // returned in full came out one short on this side, and the published
+    // figure won even where this device held a sale the server had not seen.
+    final deviceReceipts = counted?.transactions;
+    final deviceKnowsMore =
+        deviceReceipts != null &&
+        (metrics == null || deviceReceipts > metrics.transactions);
+    final deviceCount = countedNet?.transactions ?? counted?.transactions;
+    final deviceSales = countedNet?.sales ?? counted?.sales;
+    return _TodayFigures._(
+      metrics: metrics,
+      device: device,
+      counted: counted,
+      deviceKnowsMore: deviceKnowsMore,
+      deviceCount: deviceCount,
+      deviceSales: deviceSales,
+    );
+  }
+
+  final TenantDailyMetrics? metrics;
+  final TenantDeviceSalesTotals? device;
+  final TenantSalesTotals? counted;
+  final bool deviceKnowsMore;
+  final int? deviceCount;
+  final double? deviceSales;
+
+  /// Today's takings as the *Today's sales* tile prints them, or null where
+  /// nothing honest can be said - an em dash on the home.
+  double? get sales =>
+      deviceKnowsMore && deviceSales != null ? deviceSales : metrics?.netSales;
+
+  /// Today's sale count as the *Transactions* tile prints it, or null.
+  int? get transactions =>
+      deviceKnowsMore ? deviceCount : metrics?.netTransactions;
 }
 
 /// The most shifts the home counts in one read, which is the most one page of
@@ -2866,7 +3010,35 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.auditLogRoles = const <TenantRole>[],
     this.checkoutOutbox,
     this.clock,
+    this.uid,
+    this.accountEmail,
+    this.readMemberships,
+    this.requestIdentity,
+    this.requestTenantCallable,
+    this.tenantRequestIdFactory,
+    this.onRefreshMemberships,
   });
+
+  /// The signed-in person, whose memberships *My businesses* lists. Null
+  /// leaves that page unreachable.
+  final String? uid;
+
+  /// The signed-in account's email, which *My businesses* names its list by.
+  final String? accountEmail;
+
+  /// Every membership on the account as the shell holds it now. See
+  /// `TenantBusinessesScreen.readMemberships` for why it is a function.
+  final List<TenantMembership> Function()? readMemberships;
+
+  /// Who would be asking for a new business from *My businesses*, and how.
+  /// Either null leaves *Add business* off that page.
+  final TenantRequestIdentity? requestIdentity;
+  final RequestTenantCallable? requestTenantCallable;
+  final TenantRequestIdFactory? tenantRequestIdFactory;
+
+  /// Re-reads the account's memberships without leaving this business, so a
+  /// business added from *My businesses* can be switched to straight away.
+  final Future<void> Function()? onRefreshMemberships;
 
   /// The sales this device has rung and not yet sent.
   ///
@@ -3159,23 +3331,18 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         : Future<TenantExpensePeriod?>.value();
     // Every cashier's shifts opened today, running or closed. Management
     // only, which is the same set of roles the takings above are read for.
-    final shiftsOpened =
-        TenantShiftHistoryRepository.canReadEveryCashier(session)
-        ? _quiet(() async {
-            final shifts =
-                await TenantShiftHistoryRepository(
-                  session: session,
-                  reader: reader,
-                ).loadDayShifts(
+    final dayShifts = TenantShiftHistoryRepository.canReadEveryCashier(session)
+        ? _quiet(
+            () => TenantShiftHistoryRepository(session: session, reader: reader)
+                .loadDayShifts(
                   businessDate: checkoutBusinessDate(
                     (clock ?? DateTime.now)().toUtc(),
                   ),
                   scope: TenantShiftHistoryScope.everyCashier,
                   pageSize: _shiftsOpenedPageSize,
-                );
-            return shifts.length;
-          })
-        : Future<int?>.value();
+                ),
+          )
+        : Future<List<TenantShiftDaySlice>?>.value();
     final days = await recentDays ?? const <TenantDailyMetricsDay>[];
     final today = days.isEmpty ? null : days.first;
     // **Read only for a day reconciliation has not published.** A reconciled
@@ -3215,6 +3382,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // **The trend is handed on rather than awaited**, for the reason
     // `_HomeOverview.trend` gives. It is already in flight; what changes is
     // that the rest of the home no longer waits on it.
+    final shifts = await dayShifts;
     return _HomeOverview(
       branding: await branding,
       today: today,
@@ -3222,7 +3390,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       currency: await currency,
       expenses: await expenses,
       deviceToday: deviceToday,
-      shiftsOpened: await shiftsOpened,
+      shiftsOpened: shifts?.length,
+      openShiftStaffIds: shifts == null
+          ? null
+          : List<String>.unmodifiable(<String>[
+              for (final slice in shifts)
+                if (slice.isOpen) slice.staffId,
+            ]),
       showProfit: TenantProfitReport.canSeeInSession(session),
     );
   }
@@ -3258,16 +3432,24 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // test. The old app navigated by its grid alone, so the frame's menu is
     // withdrawn here; `AppScaffold` still offers it to any other screen that
     // wants one.
-    final destinations = _destinations(context);
+    final destinations = _destinations(context, overview);
     return AppScaffold(
       title: branding?.companyName ?? membership.tenantName,
       // The name of the business is what says which business this is, so it is
       // also the way to a different one. Null where there is nowhere to go,
       // which draws the ordinary title with no affordance on it.
-      onTitlePressed: _canSwitchBusiness
+      //
+      // **It opens *My businesses* since 2026-10-08**, at the developer's
+      // direction, and it does so with one business too: that page is where a
+      // second one is added. A member who may not open it keeps the switcher.
+      onTitlePressed: _canOpenBusinesses
+          ? () => _openBusinesses(context, overview)
+          : _canSwitchBusiness
           ? () => _showBusinessSwitcher(context)
           : null,
-      titleActionLabel: 'Change business',
+      titleActionLabel: _canOpenBusinesses
+          ? 'My businesses'
+          : 'Change business',
       // §4.2's record row rather than its reading row: the grid wants the
       // wider measure, and 720 would narrow the page under the shift panel it
       // sits below.
@@ -3372,67 +3554,16 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final day = overview.today;
     final metrics = day?.metrics;
-    // **What this device can state about an unreconciled day.** Null once
-    // reconciliation has published, because the server's figures are better
-    // and the loader does not even read this for a reconciled day.
-    //
-    // **A partial day is not a day.** A truncated read has scanned only the
-    // first pages of the day's sales and a refused one nothing at all; either
-    // drawn as *Today's sales* would be a plausible wrong figure, which is the
-    // one kind this tile has always refused to print. Both fall back to the em
-    // dash, exactly as before.
-    final device = overview.deviceToday;
-    // **A day this device counted nothing for is still an em dash**, for the
-    // reasons `TenantDeviceSalesTotals.displayable` records. The rule lives
-    // there rather than here so this tile and the daily summary cannot come to
-    // disagree about the same cache.
-    final counted = device?.displayable;
-    // Net of returns where the cache held them, gross where it did not -
-    // `TenantSalesTotals.net` is null rather than zero when returns could not
-    // be read, so this falls back to the figure every surface showed before
-    // returns were netted at all.
+    // **Which of the two figures for today wins** - this device's or the
+    // published one - is decided once, in `_TodayFigures`, so the receipt on
+    // *My businesses* prints the number these tiles print.
+    final today = _TodayFigures.of(overview);
+    final device = today.device;
+    final counted = today.counted;
     final countedNet = counted?.net;
-    // **Whether this device knows of sales the published figure cannot hold.**
-    // A sale rung here and not yet synced is in the cache and not in
-    // `daily_metrics`, so the till shows more than the home does - and a
-    // shopkeeper who rings a sale and watches the total refuse to move
-    // concludes the app is broken, which is the more expensive failure.
-    //
-    // **Counted in transactions, not in money**, because that is the question:
-    // does this device hold a sale the server has not counted. Comparing
-    // takings would also fire on a rounding difference.
-    //
-    // **The published figure still wins where it is ahead**, which is the
-    // ordinary case of a second till trading: its sales are in `daily_metrics`
-    // and were never on this device, so the device total is the smaller and
-    // less complete of the two.
-    //
-    // **And comparing counts is the right test, not a weaker stand-in for
-    // one.** Write what each figure knows: the cache holds some subset `C` of
-    // the sales the server has, the outbox holds `U` sales the server has
-    // none of, and the day truly took `S + U`. The published figure is `S`;
-    // this device can say `C + U`. Since `C <= S`, both are under the truth,
-    // and whichever is larger is the nearer of the two - every time. So the
-    // larger wins, and preferring this device merely because it holds unsent
-    // work would print `C + U` on a day when a busier till had already pushed
-    // `S` far above it.
-    //
-    // What that leaves is a published figure that is ahead and still short by
-    // the sales in `U`. The number is the best available; it is the silence
-    // about `U` that misleads, and [unsentTransactions] is what the tiles say
-    // instead of nothing.
-    //
-    // **Gross against gross, because the question is about sales.** A return
-    // does not unsell anything, and until 2026-09-29 this compared the
-    // device's net count with the published gross one: a day with a sale
-    // returned in full came out one short on this side, and the published
-    // figure won even where this device held a sale the server had not seen.
-    final deviceReceipts = counted?.transactions;
-    final deviceKnowsMore =
-        deviceReceipts != null &&
-        (metrics == null || deviceReceipts > metrics.transactions);
-    final deviceCount = countedNet?.transactions ?? counted?.transactions;
-    final deviceSales = countedNet?.sales ?? counted?.sales;
+    final deviceKnowsMore = today.deviceKnowsMore;
+    final deviceCount = today.deviceCount;
+    final deviceSales = today.deviceSales;
     // Sales this device is still carrying, said out loud on a published figure
     // that cannot include them. Zero whenever the device figure won, because
     // that one already counts them.
@@ -3708,6 +3839,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   List<HomeDestination> _destinations(
     BuildContext context,
+    _HomeOverview overview,
   ) => <HomeDestination>[
     // The till. It is the only write-capable operational route on this
     // screen, and it opens under the same session scope as every other one,
@@ -4014,7 +4146,21 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           );
         },
       ),
-    if (settingsRoute != null && membership.role.canAccess(settingsRoles))
+    // **My businesses, since 2026-10-08.** The tile that opened Business
+    // details now opens the list of every business on the account, with the
+    // open one's receipt leading to Business details - one tap further, and
+    // the only place a second business can be added from inside the app.
+    if (_canOpenBusinesses)
+      HomeDestination(
+        destinationKey: const ValueKey('business-details'),
+        accent: AppIdentityAccent.teal,
+        label: 'My businesses',
+        description: 'Your businesses, their receipts, and a new one.',
+        group: 'Business',
+        icon: Symbols.storefront_rounded,
+        onPressed: () => _openBusinesses(context, overview),
+      )
+    else if (settingsRoute != null && membership.role.canAccess(settingsRoles))
       HomeDestination(
         destinationKey: const ValueKey('business-details'),
         accent: AppIdentityAccent.teal,
@@ -4204,6 +4350,72 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // Neither is where a shop goes to trade; they are where a person goes once.
     // See `_canSwitchBusiness` and `AppScaffold.onTitlePressed`.
   ];
+
+  /// Whether *My businesses* can be offered: the composition root supplied
+  /// what it needs, and this member may open Business details from it.
+  bool get _canOpenBusinesses =>
+      uid != null &&
+      readMemberships != null &&
+      settingsRoute != null &&
+      membership.role.canAccess(settingsRoles);
+
+  /// What the open business's receipt prints, from the figures this page has
+  /// already read - the same `_TodayFigures` the first two tiles print.
+  TenantOpenBusinessReceipt _openReceipt(_HomeOverview overview) {
+    final branding = overview.branding;
+    final currency = overview.currency ?? TenantReportingCurrency.unknown;
+    final today = overview.today == null ? null : _TodayFigures.of(overview);
+    final sales = today?.sales;
+    final count = today?.transactions;
+    return TenantOpenBusinessReceipt(
+      name: branding?.companyName ?? membership.tenantName,
+      slogan: branding?.slogan,
+      logoUrl: branding?.logoUrl,
+      today: today == null
+          ? null
+          : (sales == null ? '—' : currency.format(sales)),
+      sales: today == null ? null : (count == null ? '—' : '$count'),
+      currencyCode: overview.currency?.code,
+      openShiftStaffIds: overview.openShiftStaffIds,
+    );
+  }
+
+  void _openBusinesses(BuildContext context, _HomeOverview overview) {
+    final signedIn = uid;
+    final memberships = readMemberships;
+    if (signedIn == null || memberships == null) return;
+    final controller = TenantSessionScope.of(context);
+    final navigator = Navigator.of(context);
+    navigator.push(
+      AppPageRoute<void>(
+        builder: (_) => TenantSessionScope(
+          controller: controller,
+          child: TenantBusinessesScreen(
+            uid: signedIn,
+            membership: membership,
+            readMemberships: memberships,
+            reader: reader,
+            openReceipt: _openReceipt(overview),
+            accountEmail: accountEmail,
+            onEditDetails: () => navigator.push(
+              AppPageRoute<void>(
+                builder: (_) => TenantSessionScope(
+                  controller: controller,
+                  child: settingsRoute!(reader, 'business-details'),
+                ),
+              ),
+            ),
+            onSwitchTenant: onSwitchTenant,
+            requestIdentity: requestIdentity,
+            requestTenantCallable: requestTenantCallable,
+            tenantRequestIdFactory: tenantRequestIdFactory,
+            onRefreshMemberships: onRefreshMemberships,
+            clock: clock,
+          ),
+        ),
+      ),
+    );
+  }
 
   /// Whether this person has another business to open.
   ///

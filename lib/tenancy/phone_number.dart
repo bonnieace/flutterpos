@@ -36,8 +36,8 @@ final class DialCode {
 /// list is short on purpose; it is not a world atlas, and a country missing from
 /// it is a line to add here rather than a defect in the control.
 const List<DialCode> dialCodes = <DialCode>[
-  DialCode(country: 'Tanzania', code: '+255'),
   DialCode(country: 'Kenya', code: '+254'),
+  DialCode(country: 'Tanzania', code: '+255'),
   DialCode(country: 'Uganda', code: '+256'),
   DialCode(country: 'Rwanda', code: '+250'),
   DialCode(country: 'Burundi', code: '+257'),
@@ -56,7 +56,10 @@ const List<DialCode> dialCodes = <DialCode>[
 ];
 
 /// The one offered by default.
-const DialCode defaultDialCode = DialCode(country: 'Tanzania', code: '+255');
+///
+/// **Kenya since 2026-10-08**, at the developer's direction: signing up opened
+/// on Tanzania, and the people signing up are in Kenya.
+const DialCode defaultDialCode = DialCode(country: 'Kenya', code: '+254');
 
 final _nonDigits = RegExp(r'[^0-9]');
 final _leadingZeroes = RegExp(r'^0+');

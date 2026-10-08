@@ -260,6 +260,15 @@ abstract final class AppSheetMasthead {
   /// wide. On a phone at [AppSheetDetent.half] that is the whole width, square;
   /// on a tablet, where the sheet is wider than it is tall, this caps it.
   static const double squareCeiling = 2 / 3;
+
+  /// The share of the sheet a printed receipt takes as its masthead.
+  ///
+  /// **For the *Add business* sheet, new on 2026-10-08**, where the receipt the
+  /// new business will print is the sheet's subject the way a product photo is
+  /// on the photo sheet. [fraction]'s 0.3 cannot hold a receipt's name, rule
+  /// and three lines under the handle; this can, and still leaves the form the
+  /// larger part of the sheet at [AppSheetDetent.half].
+  static const double receiptFraction = 0.45;
 }
 
 /// The sheet's own chrome: the surface, the corners and the handle.

@@ -246,11 +246,14 @@ final class TenantRequestForm extends StatefulWidget {
     required this.onSuccess,
     this.onCancel,
     this.heading = 'Request a business',
-    this.description = 'New businesses remain pending until platform review.',
+    this.description = 'A new business opens ready to trade.',
     this.pillSubmit = false,
     this.submitLabel = 'Request business',
     this.requestIdFactory,
     this.isCurrent,
+    this.initialCurrency,
+    this.onDraftChanged,
+    this.expandActions = false,
   });
 
   final TenantRequestIdentity identity;
@@ -289,6 +292,28 @@ final class TenantRequestForm extends StatefulWidget {
   final TenantRequestIdFactory? requestIdFactory;
   final TenantRequestCurrentCheck? isCurrent;
 
+  /// The currency the form opens on, where the host knows a better first guess
+  /// than the head of [tenantRequestCurrencies].
+  ///
+  /// **The open business's, on *My businesses*, at the developer's direction
+  /// on 2026-10-08:** a second shop is usually in the same country as the
+  /// first. Onboarding has no open business and passes nothing. A code outside
+  /// the offered list opens on *Something else* with the code already typed.
+  final String? initialCurrency;
+
+  /// Told the name and currency as they stand after every edit, so a host can
+  /// draw what they will print - the receipt over the *Add business* sheet.
+  final void Function(String name, String currency)? onDraftChanged;
+
+  /// Splits the row between Cancel and the submit rather than setting the
+  /// pair at the trailing edge.
+  ///
+  /// **For a host as narrow as a phone sheet.** At the trailing edge the pair
+  /// is its natural width, and *Cancel* beside *Add business* with its glyph
+  /// is wider than a 411 sheet's content. The selector's card keeps the
+  /// dialog convention.
+  final bool expandActions;
+
   @override
   State<TenantRequestForm> createState() => _TenantRequestFormState();
 }
@@ -301,6 +326,28 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
   TenantRequestIntent? _intent;
   bool _submitting = false;
   String? _safeError;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialCurrency;
+    if (initial == null) return;
+    String code;
+    try {
+      code = normalizeTenantRequestCurrency(initial);
+    } on ArgumentError {
+      return;
+    }
+    if (tenantRequestCurrencies.contains(code)) {
+      _currencySelection = code;
+    } else {
+      _currencySelection = tenantRequestOtherCurrency;
+      _otherCurrencyController.text = code;
+    }
+  }
+
+  void _reportDraft() =>
+      widget.onDraftChanged?.call(_nameController.text, _currency);
 
   @override
   void didUpdateWidget(covariant TenantRequestForm oldWidget) {
@@ -341,6 +388,7 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
   }
 
   void _fieldChanged(String _) {
+    _reportDraft();
     if (_intent == null && _safeError == null) return;
     setState(_resetIntent);
   }
@@ -417,7 +465,9 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
     setState(() => _submitting = false);
     showAppSnackBar(
       context,
-      AppNotice.confirmed('${result.name} was submitted for review.'),
+      // **Not "submitted for review" since 2026-10-08.** `requestTenant`
+      // creates the business `active`; there is no review to wait for.
+      AppNotice.confirmed('${result.name} was added.'),
     );
     widget.onSuccess(result);
   }
@@ -484,10 +534,13 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
             ],
             onChanged: _submitting
                 ? null
-                : (value) => setState(() {
-                    _currencySelection = value ?? _currencySelection;
-                    _resetIntent();
-                  }),
+                : (value) {
+                    setState(() {
+                      _currencySelection = value ?? _currencySelection;
+                      _resetIntent();
+                    });
+                    _reportDraft();
+                  },
           ),
           if (_currencySelection == tenantRequestOtherCurrency) ...[
             SizedBox(height: tokens.spacing.s12),
@@ -526,6 +579,22 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
           // step of that flow had a full-width primary.
           if (widget.onCancel == null)
             _submitButton(expand: true)
+          else if (widget.expandActions)
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton(
+                    key: const ValueKey('tenant-request-cancel'),
+                    label: 'Cancel',
+                    tier: AppButtonTier.tertiary,
+                    expand: true,
+                    onPressed: _submitting ? null : widget.onCancel,
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s8),
+                Expanded(child: _submitButton(expand: true)),
+              ],
+            )
           else
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -565,9 +634,12 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
 /// is a worse question than a text field. [tenantRequestOtherCurrency] is the
 /// escape hatch for everybody else and it validates identically - so the list is
 /// a convenience over the field, never a restriction on it.
+///
+/// **KES first since 2026-10-08**, at the developer's direction: the first
+/// entry is what signup opens on, and it opened on Tanzania.
 const List<String> tenantRequestCurrencies = <String>[
-  'TZS',
   'KES',
+  'TZS',
   'UGX',
   'RWF',
 ];

@@ -280,11 +280,11 @@ List<HomeDestination> _modules() {
           'What each drawer was counted at, against the sales it took.',
     ),
     tile(
-      'Business details',
+      'My businesses',
       Symbols.storefront_rounded,
       AppIdentityAccent.teal,
       group: 'Business',
-      description: 'Manage your business name, slogan and logo on receipts.',
+      description: 'Your businesses, their receipts, and a new one.',
     ),
     tile(
       'Printer',

@@ -8,6 +8,7 @@ export 'tenant_branding_panel.dart';
 export 'tenant_branding_writer.dart';
 export 'tenant_bootstrap.dart';
 export 'tenant_bootstrap_refresh_signals.dart';
+export 'tenant_businesses_screen.dart';
 export 'tenant_catalog.dart';
 export 'tenant_directory.dart';
 export 'tenant_directory_cache.dart';

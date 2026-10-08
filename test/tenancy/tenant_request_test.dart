@@ -203,7 +203,7 @@ void main() {
       // shape above rather than by value, because it is random by design.
       'slug': callable.payloads.single['slug'],
       // The select's default, which is the first offered currency.
-      'currency': 'TZS',
+      'currency': 'KES',
       'requestId': 'tenant-widget-request',
     });
     expect(fixture.successes.single.tenantId, 'tenant-generated');
@@ -224,7 +224,10 @@ void main() {
     // The response must echo the *derived* slug, or the strict decoder
     // rejects it as another business - which is what it is there to do.
     completion.complete(
-      _success(slug: callable.payloads.single['slug']! as String),
+      _success(
+        slug: callable.payloads.single['slug']! as String,
+        currency: callable.payloads.single['currency']! as String,
+      ),
     );
     await tester.pumpAndSettle();
     expect(fixture.successes, hasLength(1));
@@ -285,7 +288,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(successes, isEmpty);
-    expect(find.textContaining('submitted for review'), findsNothing);
+    expect(find.textContaining('was added'), findsNothing);
   });
 
   test('safe limit and generic errors never expose backend details', () {
@@ -389,6 +392,7 @@ final class _FailOnceCallable implements RequestTenantCallable {
     return _success(
       name: payload['name']! as String,
       slug: payload['slug']! as String,
+      currency: payload['currency']! as String,
     );
   }
 }

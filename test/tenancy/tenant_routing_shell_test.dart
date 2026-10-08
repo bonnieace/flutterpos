@@ -1113,7 +1113,7 @@ void main() {
     // `configuration/checkout` by the same transaction that creates the
     // business - so a new till can price a sale before anybody opens
     // Settings.
-    expect(payload['currency'], 'TZS');
+    expect(payload['currency'], 'KES');
     // The slug is the name plus a random suffix, so its shape is what can be
     // asserted, not its value. The exact derivation is pinned in
     // `tenant_request_test.dart`.

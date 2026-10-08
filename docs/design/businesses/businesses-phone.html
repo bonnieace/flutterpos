@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My businesses &#8212; phone</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap">
+<style>
+/* 411 x 891, the harness's mobile viewport. Screen colours are
+   AppTokens.profoundVerdant; the receipts use the paper tokens
+   (paperWhite, paperInk, paperMutedInk, paperRule, paperGreen) that
+   generated documents already sit on. */
+body { margin: 0; background: #071610; font-family: 'Hanken Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #4BE277; } a:hover { color: #6BFF8F; }
+button, select, input { font: inherit; }
+:focus-visible { outline: 2px solid #4BE277; outline-offset: 2px; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; }
+.page-nav a { color: #869585; text-decoration: none; }
+.page-nav a:hover { color: #4BE277; text-decoration: underline; }
+.page-stage { display: flex; justify-content: center; flex-wrap: wrap; gap: 32px; padding: 20px 24px 48px; }
+.page-stage > figure { margin: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.page-stage > figure > div { box-shadow: 0 24px 60px rgba(3, 17, 11, 0.6); border-radius: 4px; }
+figcaption { font-size: 13px; color: #869585; max-width: 411px; text-align: center; line-height: 19px; }
+figcaption b { color: #BCCBB9; font-weight: 600; }
+figcaption em { font-style: normal; color: #4BE277; }
+
+.phone { position: relative; width: 411px; height: 891px; box-sizing: border-box; background: #071610; display: flex; flex-direction: column; overflow: hidden; }
+.bar { height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+.bar button { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #D4E7DD; cursor: pointer; }
+.bar span { font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.body { flex-grow: 1; min-height: 0; padding: 8px 20px 24px; display: flex; flex-direction: column; overflow: hidden; }
+.body > * { flex-shrink: 0; }
+.gap4 { height: 4px; } .gap8 { height: 8px; } .gap12 { height: 12px; } .gap16 { height: 16px; } .gap20 { height: 20px; } .gap24 { height: 24px; }
+
+/* The list's own header: what is here, and the one way to add to it. */
+.head { display: flex; align-items: center; gap: 8px; min-height: 56px; }
+.head-text { flex-grow: 1; min-width: 0; padding-left: 4px; }
+.head-title { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; color: #D4E7DD; }
+.head-sub { margin: 0; font-size: 12px; line-height: 16px; color: #869585; }
+
+/* AppButton. */
+.btn { height: 48px; box-sizing: border-box; padding: 0 16px; margin: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; cursor: pointer; white-space: nowrap; }
+.btn-pri { background: #4BE277; color: #003915; border: 0; }
+.btn-sec { background: #132A1F; color: #D4E7DD; border: 1px solid #3D4A3D; }
+.btn-ter { background: transparent; color: #4BE277; border: 0; }
+.btn-off { background: #1E3A2B; color: #5D7468; border: 0; cursor: default; }
+.btn-wide { flex: 1 1 0; }
+.row { display: flex; align-items: center; }
+
+/* A business, drawn as the receipt it prints. The whole slip is one
+   PressSurface, so it sits 4 in from the 20 inset. */
+.slip { position: relative; display: block; width: calc(100% - 8px); margin: 0 4px; padding: 0; border: 0; text-align: left; background: transparent; cursor: pointer; filter: drop-shadow(0 4px 12px rgba(3, 17, 11, 0.55)); }
+.paper { position: relative; background: #FFFFFF; color: #141A16; border-radius: 8px 8px 0 0; padding: 20px 20px 24px; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  /* The torn edge: 8 deep, 16 apart. */
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 16px 100%;
+          mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 16px 100%; }
+.r-logo { display: flex; justify-content: center; color: #141A16; }
+.r-name { margin: 0; text-align: center; font-size: 16px; line-height: 24px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
+.r-slogan { margin: 0; text-align: center; font-size: 12px; line-height: 16px; color: #4A554E; }
+.r-rule { margin: 12px 0; height: 0; border: 0; border-top: 1px dashed #D4DCD7; }
+.r-line { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; line-height: 20px; color: #4A554E; }
+.r-line b { font-weight: 700; color: #141A16; white-space: nowrap; }
+.r-total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12px; line-height: 16px; color: #4A554E; }
+.r-total b { font-size: 22px; line-height: 30.8px; font-weight: 800; color: #141A16; }
+.r-foot { margin: 0; text-align: center; font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 1px; color: #141A16; text-transform: uppercase; }
+.r-foot span { color: #4A554E; font-weight: 500; letter-spacing: 0; text-transform: none; }
+
+/* The stamp: status in a word, as a receipt carries PAID. paperGreen ink. */
+.stamp { position: absolute; top: 16px; right: 16px; transform: rotate(8deg); padding: 2px 8px; border: 2px solid #25AB2E; border-radius: 4px; color: #25AB2E; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 800; letter-spacing: 1px; display: flex; align-items: center; gap: 4px; }
+
+/* AppSheet over surface.scrim. */
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 3; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; box-sizing: border-box; background: #132A1F; border-radius: 12px 12px 0 0; padding: 12px 20px 16px; display: flex; flex-direction: column; }
+.handle { width: 32px; height: 4px; border-radius: 999px; background: #3D4A3D; align-self: center; }
+.sheet-head { display: flex; align-items: center; min-height: 48px; }
+.sheet-title { flex-grow: 1; margin: 0 0 0 4px; font-size: 22px; line-height: 30.8px; font-weight: 600; color: #D4E7DD; }
+.close { width: 48px; height: 48px; border: 0; border-radius: 8px; background: transparent; color: #D4E7DD; display: flex; align-items: center; justify-content: center; }
+.f { margin: 0 4px; }
+.f-label { display: block; margin: 0 0 8px; font-size: 14px; line-height: 20px; font-weight: 600; color: #BCCBB9; }
+.input { height: 48px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-radius: 8px; background: #071610; border: 1px solid #3D4A3D; color: #D4E7DD; font-size: 16px; line-height: 24px; }
+.input-focus { border: 2px solid #4BE277; padding: 0 15px; }
+.input .grow { flex-grow: 1; }
+.input svg { flex-shrink: 0; color: #BCCBB9; }
+.caret { display: inline-block; width: 2px; height: 20px; background: #4BE277; margin-left: 1px; vertical-align: -4px; }
+.help { margin: 8px 0 0; font-size: 12px; line-height: 16px; color: #869585; }
+/* The preview is a slip at 0.8, on the sheet's own ground. */
+/* AppSheet's masthead, as the product photo sheet uses it: the receipt fills
+   the top of the sheet edge to edge under its rounded corners, with the
+   handle and close laid over it and no heading. Its torn edge is the
+   masthead's bottom, so the sheet's own ground shows through the teeth. */
+.sheet-mast { padding: 0; overflow: hidden; }
+.mast { position: relative; flex-shrink: 0; }
+.mast .paper { border-radius: 0; padding: 56px 24px 32px; }
+.mast .r-name { font-size: 22px; line-height: 30.8px; }
+.mast-handle { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); padding: 4px; border-radius: 999px; background: rgba(0, 0, 0, 0.12); z-index: 1; }
+.mast-handle span { display: block; width: 32px; height: 4px; border-radius: 999px; background: #3D4A3D; }
+.mast-close { position: absolute; top: 4px; right: 8px; z-index: 1; width: 48px; height: 48px; border-radius: 8px; background: #132A1F; border: 0; display: flex; align-items: center; justify-content: center; color: #D4E7DD; }
+.sheet-rows { padding: 16px 20px 16px; display: flex; flex-direction: column; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Businesses artboards</a></nav>
+<div class="page-stage">
+
+<!-- Frame 1: an owner with two businesses -->
+<figure>
+<div class="phone">
+  <div class="bar">
+    <button type="button" aria-label="Back to home"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button>
+    <span>My businesses</span>
+  </div>
+  <div class="body">
+    <div class="head">
+      <div class="head-text">
+        <p class="head-title">2 businesses</p>
+        <p class="head-sub">On amina@devcorner.co.ke</p>
+      </div>
+      <button type="button" class="btn btn-sec"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 17h2v-3h1v-2l-1-5H2l-1 5v2h1v6h9v-6h4v3zm-6 1H4v-4h5v4zM2 5h15V3H2v2zm18 13v-3h-2v3h-3v2h3v3h2v-3h3v-2h-3z"></path></svg>Add business</button>
+    </div>
+    <div class="gap8"></div>
+
+    <button type="button" class="slip" aria-label="Dev Corner Shop, open now. Edit its details.">
+      <div class="paper">
+        <span class="stamp"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>OPEN NOW</span>
+        <div class="r-logo"><svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 8.89l-1.05-4.37c-.22-.9-1-1.52-1.91-1.52H5.05c-.9 0-1.69.63-1.9 1.52L2.1 8.89c-.24 1.02-.02 2.06.62 2.88.08.11.19.19.28.29V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6.94c.09-.09.2-.18.28-.28.64-.82.87-1.87.62-2.89zm-2.99-3.9l1.05 4.37c.1.42.01.84-.25 1.17-.14.18-.44.47-.94.47-.61 0-1.14-.49-1.21-1.14L16.98 5l1.93-.01zM13 5h1.96l.54 4.52c.05.39-.07.78-.33 1.07-.22.26-.54.41-.95.41-.67 0-1.22-.59-1.22-1.31V5zM8.49 9.52L9.04 5H11v4.69c0 .72-.55 1.31-1.29 1.31-.34 0-.65-.15-.89-.41-.25-.29-.37-.68-.33-1.07zm-4.45-.16L5.05 5h1.97l-.58 4.86c-.08.65-.6 1.14-1.21 1.14-.49 0-.8-.29-.93-.47-.27-.32-.36-.75-.26-1.17zM5 19v-6.03c.08.01.15.03.23.03.87 0 1.66-.36 2.24-.95.6.6 1.4.95 2.31.95.87 0 1.65-.36 2.23-.93.59.57 1.39.93 2.29.93.84 0 1.64-.35 2.24-.95.58.59 1.37.95 2.24.95.08 0 .15-.02.23-.03V19H5z"></path></svg></div>
+        <div class="gap4"></div>
+        <p class="r-name">Dev Corner Shop</p>
+        <p class="r-slogan">Fresh every morning</p>
+        <hr class="r-rule">
+        <div class="r-total"><span>TODAY</span><b>KES 910</b></div>
+        <div class="gap4"></div>
+        <div class="r-line"><span>Sales</span><b>3</b></div>
+        <div class="r-line"><span>Till</span><b>Open &#183; Amina</b></div>
+        <div class="r-line"><span>You</span><b>Owner</b></div>
+        <hr class="r-rule">
+        <p class="r-foot">Edit details &#8250;<br><span>Name, slogan and logo on this receipt</span></p>
+      </div>
+    </button>
+    <div class="gap16"></div>
+
+    <button type="button" class="slip" aria-label="Westlands Mart. Switch to it.">
+      <div class="paper">
+        <p class="r-name">Westlands Mart</p>
+        <p class="r-slogan">Your neighbourhood store</p>
+        <hr class="r-rule">
+        <div class="r-total"><span>7 OCT</span><b>KES 12,400</b></div>
+        <div class="gap4"></div>
+        <div class="r-line"><span>Sales</span><b>38</b></div>
+        <div class="r-line"><span>You</span><b>Manager</b></div>
+        <hr class="r-rule">
+        <p class="r-foot">Switch to this shop &#8250;</p>
+      </div>
+    </button>
+  </div>
+</div>
+<figcaption><b>Two businesses.</b> <em>My businesses</em> opens from its home tile and from the business name in the top bar. Each business is drawn as the receipt it prints: its logo, name and slogan, then its figures. The open one is stamped <em>OPEN NOW</em> and shows today, including who has the till open. Any other business shows its last counted day, with the date printed, because only the open business has live totals. <em>Add business</em> sits next to the count it adds to.</figcaption>
+</figure>
+
+<!-- Frame 2: one business, the case with no way in today -->
+<figure>
+<div class="phone">
+  <div class="bar">
+    <button type="button" aria-label="Back to home"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button>
+    <span>My businesses</span>
+  </div>
+  <div class="body">
+    <div class="head">
+      <div class="head-text">
+        <p class="head-title">1 business</p>
+        <p class="head-sub">On amina@devcorner.co.ke</p>
+      </div>
+      <button type="button" class="btn btn-sec"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 17h2v-3h1v-2l-1-5H2l-1 5v2h1v6h9v-6h4v3zm-6 1H4v-4h5v4zM2 5h15V3H2v2zm18 13v-3h-2v3h-3v2h3v3h2v-3h3v-2h-3z"></path></svg>Add business</button>
+    </div>
+    <div class="gap8"></div>
+
+    <button type="button" class="slip" aria-label="Dev Corner Shop, open now. Edit its details.">
+      <div class="paper">
+        <span class="stamp"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>OPEN NOW</span>
+        <div class="r-logo"><svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 8.89l-1.05-4.37c-.22-.9-1-1.520-1.91-1.52H5.05c-.9 0-1.69.63-1.9 1.52L2.1 8.89c-.24 1.02-.02 2.06.62 2.88.08.11.19.19.28.29V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6.94c.09-.09.2-.18.28-.28.64-.82.87-1.870.62-2.89zm-2.99-3.9l1.05 4.37c.1.42.01.84-.25 1.17-.14.18-.44.47-.94.47-.61 0-1.14-.49-1.21-1.14L16.98 5l1.93-.01zM13 5h1.96l.54 4.52c.05.39-.07.78-.33 1.07-.22.26-.54.41-.95.41-.67 0-1.22-.59-1.22-1.31V5zM8.49 9.52L9.04 5H11v4.69c0 .72-.55 1.31-1.29 1.31-.34 0-.65-.15-.89-.41-.25-.29-.37-.68-.33-1.07zm-4.45-.16L5.05 5h1.97l-.58 4.86c-.08.65-.6 1.14-1.21 1.14-.49 0-.8-.29-.93-.47-.27-.32-.36-.75-.26-1.17zM5 19v-6.03c.08.01.15.03.23.03.87 0 1.66-.36 2.24-.95.6.6 1.4.95 2.31.95.87 0 1.65-.36 2.230-.93.59.57 1.39.93 2.29.93.84 0 1.64-.35 2.24-.95.58.59 1.37.95 2.24.95.08 0 .15-.02.23-.03V19H5z"></path></svg></div>
+        <div class="gap4"></div>
+        <p class="r-name">Dev Corner Shop</p>
+        <p class="r-slogan">Fresh every morning</p>
+        <hr class="r-rule">
+        <div class="r-total"><span>TODAY</span><b>KES 910</b></div>
+        <div class="gap4"></div>
+        <div class="r-line"><span>Sales</span><b>3</b></div>
+        <div class="r-line"><span>Till</span><b>Open &#183; Amina</b></div>
+        <div class="r-line"><span>You</span><b>Owner</b></div>
+        <hr class="r-rule">
+        <p class="r-foot">Edit details &#8250;<br><span>Name, slogan and logo on this receipt</span></p>
+      </div>
+    </button>
+  </div>
+</div>
+<figcaption><b>One business.</b> Today an owner with one business can't add another. Now <em>Add business</em> is at the top of the page, two taps from the home. Nothing else is added to fill the space: one receipt and one button are the whole answer.</figcaption>
+</figure>
+
+<!-- Frame 3: Add business, as a sheet with the receipt it will print -->
+<figure>
+<div class="phone">
+  <div class="bar">
+    <button type="button" aria-label="Back to home"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></button>
+    <span>My businesses</span>
+  </div>
+  <div class="body">
+    <div class="head">
+      <div class="head-text"><p class="head-title">1 business</p></div>
+    </div>
+  </div>
+  <div class="scrim"></div>
+  <div class="sheet sheet-mast" role="dialog" aria-label="Add business">
+    <div class="mast">
+      <div class="paper" role="img" aria-label="The receipt this business will print: Mama Mboga Kilimani">
+        <p class="r-name">Mama Mboga Kilimani</p>
+        <hr class="r-rule">
+        <div class="r-total"><span>TODAY</span><b>KES 0</b></div>
+        <div class="gap4"></div>
+        <div class="r-line"><span>Sales</span><b>0</b></div>
+        <div class="r-line"><span>Till</span><b>Closed</b></div>
+        <div class="r-line"><span>You</span><b>Owner</b></div>
+      </div>
+      <div class="mast-handle" aria-label="Drag to resize"><span></span></div>
+      <button type="button" class="mast-close" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg></button>
+    </div>
+    <div class="sheet-rows">
+    <div class="f"><label class="f-label">Business name</label><div class="input input-focus"><span>Mama Mboga Kilimani<span class="caret"></span></span></div><p class="help">This names your register and every receipt it prints.</p></div>
+    <div class="gap16"></div>
+    <div class="f"><label class="f-label">Currency</label><div class="input"><span class="grow">KES - Kenyan shilling</span><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5z"></path></svg></div><p class="help">Every sale is recorded in this currency.</p></div>
+    <div class="gap20"></div>
+    <div class="row">
+      <button type="button" class="btn btn-ter btn-wide">Cancel</button>
+      <button type="button" class="btn btn-pri btn-wide"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 17h2v-3h1v-2l-1-5H2l-1 5v2h1v6h9v-6h4v3zm-6 1H4v-4h5v4zM2 5h15V3H2v2zm18 13v-3h-2v3h-3v2h3v3h2v-3h3v-2h-3z"></path></svg>Add business</button>
+    </div>
+    </div>
+  </div>
+</div>
+</div>
+<figcaption><b>Adding one.</b> It's the same two questions the onboarding form asks, in a sheet, so the list stays underneath. The receipt is the sheet's masthead, as the photo is on the product sheet. It fills the top edge to edge under the rounded corners, with no heading, and fills in as you type. The <em>Add business</em> button names the action. The currency starts on the open business's, so a Nairobi owner starts on KES. The new business opens ready to trade, and you stay in this one until you switch.</figcaption>
+</figure>
+
+</div>
+</body>
+</html>

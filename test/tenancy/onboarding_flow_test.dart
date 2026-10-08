@@ -104,7 +104,8 @@ void main() {
       await _fillAccount(tester, phone: '0712 345 678');
       await _tap(tester, 'onboarding-account-submit');
 
-      expect(fixture.complete.payloads.single['phone'], '+255712345678');
+      // Kenya is the code offered by default since 2026-10-08.
+      expect(fixture.complete.payloads.single['phone'], '+254712345678');
       expect(fixture.complete.payloads.single['displayName'], 'Boniface Masota');
     });
 
@@ -1171,7 +1172,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('Chill Tent Bar is ready'), findsOneWidget);
-      expect(find.text('TZS'), findsOneWidget);
+      expect(find.text('KES'), findsOneWidget);
       expect(fixture.opened, isEmpty);
 
       // **Wait the submission snack bar out before pressing anything.** The
