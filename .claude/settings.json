@@ -32,11 +32,13 @@
       "Bash(mkdir:*)",
       "Read(//d/flutterpos/**)"
     ],
-    "deny": [
+    "ask": [
       "Bash(git push:*)",
+      "Bash(firebase deploy:*)"
+    ],
+    "deny": [
       "Bash(git reset --hard:*)",
       "Bash(git clean:*)",
-      "Bash(firebase deploy:*)",
       "Bash(npm publish:*)"
     ]
   }
