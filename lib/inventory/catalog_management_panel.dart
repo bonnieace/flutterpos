@@ -2445,18 +2445,21 @@ final class _InventoryProductCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    SizedBox(height: tokens.spacing.s4),
-                    Text(
-                      product.sku,
-                      key: ValueKey(
-                        'catalog-management-product-code-${product.id}',
+                    // A product with no size has no line for one.
+                    if (product.sku.isNotEmpty) ...<Widget>[
+                      SizedBox(height: tokens.spacing.s4),
+                      Text(
+                        product.sku,
+                        key: ValueKey(
+                          'catalog-management-product-code-${product.id}',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: tokens.typography.bodyMedium.copyWith(
+                          color: tokens.colors.text.secondary,
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: tokens.typography.bodyMedium.copyWith(
-                        color: tokens.colors.text.secondary,
-                      ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -2849,7 +2852,7 @@ final class _InventoryProductTableRow extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: tokens.spacing.s4),
-                  if (showCategory)
+                  if (showCategory && product.sku.isNotEmpty)
                     Text(
                       product.sku,
                       key: ValueKey(
@@ -2861,7 +2864,7 @@ final class _InventoryProductTableRow extends StatelessWidget {
                         color: tokens.colors.text.secondary,
                       ),
                     )
-                  else
+                  else if (!showCategory)
                     Row(
                       children: <Widget>[
                         // A product with no size starts at its category,

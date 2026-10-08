@@ -2005,7 +2005,9 @@ String _describeImportedProduct(
   Map<String, String> names,
 ) {
   final cost = product.costMinor;
-  return '${product.sku} • ${tenantCatalogMajorUnits(product.priceMinor)} '
+  // A product with no size starts at its price, rather than at a separator.
+  return '${product.sku.isEmpty ? '' : '${product.sku} • '}'
+      '${tenantCatalogMajorUnits(product.priceMinor)} '
       '• ${cost == null ? 'no buying price' : 'costs ${tenantCatalogMajorUnits(cost)}'} '
       '• opens holding ${product.quantity ?? 0} '
       '• filed under ${_importedCategory(product.categoryId, row, names)}';
