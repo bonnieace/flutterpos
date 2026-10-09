@@ -13,6 +13,8 @@ import {HttpsError} from "firebase-functions/v2/https";
 import {
   aggregateDailySales,
   digest,
+  readReturnRefund,
+  ReturnRefund,
   shiftAnomalyId,
   shiftExpectationId,
   shiftTenderAnomalyId,
@@ -38,6 +40,8 @@ const DAILY_RETURNS_LIMIT = 1_000;
 
 /** As many repayments as a day may hold before its metrics refuse to guess. */
 const DAILY_PAYMENTS_LIMIT = 5000;
+/** The most refunds one trading day may hold before the day refuses to settle. */
+const DAILY_REFUNDS_LIMIT = 5000;
 /**
  * How many shift expectations one business date may already hold.
  *
@@ -211,6 +215,23 @@ async function regenerateDailyMetric(
       `Business date ${businessDate} exceeds the bounded daily repayment limit.`
     );
   }
+  // **The day's refunds, by the day their drawer was trading.** Not the
+  // returns above, which are by the sale's day: a refund for last week's sale
+  // left this day's till. `refundBusinessDate` is one field, so Firestore's
+  // automatic index serves it.
+  const refundsSnapshot = await tenantRef.collection("returns")
+    .where("refundBusinessDate", "==", businessDate)
+    .limit(DAILY_REFUNDS_LIMIT + 1)
+    .get();
+  if (refundsSnapshot.size > DAILY_REFUNDS_LIMIT) {
+    throw new HttpsError(
+      "resource-exhausted",
+      `Business date ${businessDate} exceeds the bounded daily refund limit.`
+    );
+  }
+  const refunds = refundsSnapshot.docs
+    .map((document) => readReturnRefund(document.data()))
+    .filter((refund): refund is ReturnRefund => refund !== null);
   const result = aggregateDailySales(
     businessDate,
     // The document id is carried through because it is what a return names.
@@ -220,7 +241,8 @@ async function regenerateDailyMetric(
     undefined,
     returns,
     returnCount,
-    paymentsSnapshot.docs.map((document) => document.data())
+    paymentsSnapshot.docs.map((document) => document.data()),
+    refunds
   );
   const previousExpectationSnapshot = await tenantRef.collection("shift_expectations")
     .where("businessDate", "==", businessDate)

@@ -20,6 +20,7 @@ final class ShiftClosingSummary {
     required this.transactionCount,
     this.creditOwedMinor = 0,
     this.repaidMinor = 0,
+    this.refundedMinor = 0,
   });
 
   final int totalSalesMinor;
@@ -32,6 +33,11 @@ final class ShiftClosingSummary {
 
   /// What it saw customers pay back into the drawer, which is not a sale.
   final int repaidMinor;
+
+  /// What it saw the drawer hand back over the counter for returns, which
+  /// left it and is not a sale. Zero on every shift closed before refunds were
+  /// recorded, which is how those shifts were always judged.
+  final int refundedMinor;
 
   /// The major-unit mirror stored beside the authoritative minor units.
   double get totalSales => totalSalesMinor / 100;
@@ -104,13 +110,15 @@ int? _cashVarianceMinor(TenantShift shift, ShiftClosingSummary? summary) {
   if (summary == null || declared == null) return null;
   final declaredTotalMinor =
       declared.cashMinor + declared.mpesaMinor + declared.cardMinor;
-  // What was lent left in the customer's pocket, and what was paid back went
-  // into the drawer: neither is a difference in the count.
+  // What was lent left in the customer's pocket, what was paid back went into
+  // the drawer, and what was handed back for a return came out of it: none of
+  // them is a difference in the count.
   return declaredTotalMinor -
       shift.openingFloatMinor -
       (summary.totalSalesMinor -
           summary.creditOwedMinor +
-          summary.repaidMinor);
+          summary.repaidMinor -
+          summary.refundedMinor);
 }
 
 final class TenantShiftDaySlice {
@@ -304,6 +312,7 @@ final class TenantShiftHistoryEntry {
     // reconciliation counts both again from the sales and the payments.
     final owed = data['creditOwedMinor'];
     final repaid = data['repaidMinor'];
+    final refunded = data['refundedMinor'];
     return ShiftClosingSummary._(
       totalSalesMinor: totalSalesMinor,
       transactionCount: transactionCount,
@@ -311,6 +320,7 @@ final class TenantShiftHistoryEntry {
           ? owed
           : 0,
       repaidMinor: repaid is int && repaid > 0 ? repaid : 0,
+      refundedMinor: refunded is int && refunded > 0 ? refunded : 0,
     );
   }
 

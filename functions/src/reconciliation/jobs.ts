@@ -415,6 +415,38 @@ export async function registerReturnReceipt(
 }
 
 /**
+ * A return handed money back over the counter, so the day of the drawer that
+ * paid it is no longer settled: that shift's drawer should now hold less.
+ *
+ * **Its own receipt, apart from [registerReturnReceipt].** That one marks the
+ * sale's day, which a return nets; this marks the day the refund's drawer was
+ * trading, which is usually today and may be a week after the sale. Under its
+ * own receipt collection, so marking one day never stands in for the other.
+ */
+export async function registerReturnRefundReceipt(
+  db: Firestore,
+  input: {
+    tenantId: string;
+    returnId: string;
+    businessDate: string;
+    receivedAt: Timestamp;
+    deferReconciliation?: boolean;
+  }
+): Promise<{task?: ReconciliationTaskPayload}> {
+  return registerDayReceipt(db, {
+    tenantId: input.tenantId,
+    documentId: input.returnId,
+    businessDate: input.businessDate,
+    receivedAt: input.receivedAt,
+    deferReconciliation: input.deferReconciliation,
+    receipts: "reconciliation_refund_receipts",
+    idField: "returnId",
+    dirtyReason: "return_refund",
+    lastField: "lastRefundReturnId",
+  });
+}
+
+/**
  * A customer paid back money they owed, so the day of the shift that took it
  * is no longer settled: that shift's drawer should now hold more.
  *

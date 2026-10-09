@@ -411,3 +411,64 @@ test("the server-only restoration ledger stays unreadable", async () => {
     );
   }
 });
+
+/** What was handed back over the counter, from the recorder's open shift. */
+const REFUND = {
+  refundMinor: 1000,
+  refundTender: "cash",
+  refundShiftId: "shift-a",
+  refundBusinessDate: BUSINESS_DATE,
+};
+
+test("a return may say what was handed back, from the recorder's own shift", async () => {
+  await seedReturns();
+  await seedDocuments(testEnvironment, {
+    "tenants/tenant-a/sales/co-paid": { ...saleDocument("co-paid"), totalMinor: 2500 },
+  });
+  const firestore = authenticatedFirestore(testEnvironment, "user-a");
+  const write = (returnId, fields) =>
+    setDoc(
+      doc(firestore, `tenants/tenant-a/returns/${returnId}`),
+      newReturn(returnId, { saleId: "co-paid", ...fields }),
+    );
+
+  // All four or none: a refund that names no drawer is money that left none.
+  for (const key of Object.keys(REFUND)) {
+    await assertFails(write(`rt_missing_${key}`, { ...REFUND, [key]: undefined, drop: [key] }));
+  }
+  for (const [name, broken] of [
+    ["nothing", { refundMinor: 0 }],
+    ["negative", { refundMinor: -100 }],
+    ["fraction", { refundMinor: 100.5 }],
+    ["more than the sale", { refundMinor: 2501 }],
+    ["credit", { refundTender: "credit" }],
+    ["unknown method", { refundTender: "cheque" }],
+    ["no such shift", { refundShiftId: "shift-missing" }],
+    ["another day", { refundBusinessDate: "2026-08-01" }],
+  ]) {
+    await assertFails(write(`rt_${name.replaceAll(" ", "_")}`, { ...REFUND, ...broken }));
+  }
+
+  await assertSucceeds(write("rt_refunded", REFUND));
+  // The whole sale back, the most a single return may hand over.
+  await assertSucceeds(write("rt_whole", { ...REFUND, refundMinor: 2500 }));
+  // No refund at all - an exchange, or a credit sale that only cancels debt -
+  // is the same return every build before this wrote.
+  await assertSucceeds(write("rt_exchange", {}));
+});
+
+test("a refund can only come out of the recorder's own drawer", async () => {
+  await seedReturns();
+  await seedDocuments(testEnvironment, {
+    "tenants/tenant-a/sales/co-paid": { ...saleDocument("co-paid"), totalMinor: 2500 },
+  });
+  // `shift-a` is user-a's. A colleague may record the return, but may not
+  // say the money left user-a's till.
+  const colleague = authenticatedFirestore(testEnvironment, "user-b");
+  await assertFails(
+    setDoc(
+      doc(colleague, "tenants/tenant-a/returns/rt_colleague"),
+      newReturn("rt_colleague", { saleId: "co-paid", createdBy: "user-b", ...REFUND }),
+    ),
+  );
+});

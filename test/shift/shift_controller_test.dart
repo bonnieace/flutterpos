@@ -222,6 +222,68 @@ void main() {
     });
   });
 
+  // **Money handed back has to leave a drawer that is still open.** The phone's
+  // own record of the open shift is only refreshed when something asks the
+  // server, and a shift closed on another phone stays "open" here until then.
+  // A refund bound to it would land on a shift already counted, and nightly
+  // reconciliation would call that drawer over by the refund. Found on the
+  // device run of 2026-10-09: the owner's shift, closed elsewhere at 08:22,
+  // was still offered as the till for a return.
+  group('binding the till a refund comes out of', () {
+    TenantShiftCheckoutBinder local() => TenantShiftCheckoutBinder(
+      state,
+      clock: () => DateTime.utc(2026, 7, 31, 10),
+    );
+
+    test('a shift the server has closed binds nothing', () async {
+      await state.save(_record());
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document(
+        overrides: <String, Object?>{'status': 'closed'},
+      );
+      final binder = ServerCheckedShiftBinder(
+        _controller(sessions, state, server),
+        local(),
+      );
+
+      final binding = await binder.bindCheckoutShift(sessions.requireSession());
+
+      expect(binding.attribution, isNull);
+      expect(binding.refusalCode, 'no_open_shift');
+      expect(server.reads, contains('tenants/tenant-a/shifts/shift-a'));
+    });
+
+    test('a shift the server still holds open binds', () async {
+      await state.save(_record());
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      final binder = ServerCheckedShiftBinder(
+        _controller(sessions, state, server),
+        local(),
+      );
+
+      final binding = await binder.bindCheckoutShift(sessions.requireSession());
+
+      expect(binding.attribution?.shiftId, 'shift-a');
+      expect(server.reads, contains('tenants/tenant-a/shifts/shift-a'));
+    });
+
+    test('offline it binds what this phone holds', () async {
+      // Nothing better is known with no signal, and a refund handed over
+      // offline still has to come out of the drawer the cashier is holding.
+      await state.save(_record());
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document(
+        overrides: <String, Object?>{'status': 'closed'},
+      );
+      final binder = ServerCheckedShiftBinder(
+        _controller(sessions, state, server, online: false),
+        local(),
+      );
+
+      final binding = await binder.bindCheckoutShift(sessions.requireSession());
+
+      expect(binding.attribution?.shiftId, 'shift-a');
+    });
+  });
+
   group('restoring a shift', () {
     test(
       're-reads the canonical shift instead of trusting local state',
@@ -707,6 +769,72 @@ void main() {
       ).restore(sessions.requireSession());
 
       expect(server.updated.single.$2['repaidMinor'], 2000);
+    });
+
+    // **Money handed back for a return left this drawer.** The refunds the
+    // server holds against this shift, and the ones still on this phone's
+    // queue, are stated once each - exactly as repayments are, the other way.
+    test(
+      'states what the drawer handed back, landed and queued, once',
+      () async {
+        final controller = _controller(
+          sessions,
+          state,
+          server,
+          serverTotals: _Totals(
+            const ShiftServerTotals(
+              transactionCount: 0,
+              totalMinor: 0,
+              refundedMinor: 1000,
+              refundedReturnIds: <String>{'rt_landed'},
+            ),
+          ),
+          queuedRefunds: _QueuedRefunds(<String, int>{
+            'rt_landed': 1000,
+            'rt_queued': 500,
+          }),
+        );
+        await controller.openShift();
+        await controller.startCashCount();
+
+        await controller.closeShift(declaration: _declared(0));
+
+        expect(server.updated.single.$2['refundedMinor'], 1500);
+      },
+    );
+
+    test("a close with no server count states this phone's refunds", () async {
+      await state.save(
+        _record(closeInProgress: true, declaration: _declared(0)),
+      );
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      final queued = _QueuedRefunds(<String, int>{'rt_queued': 700});
+      await _controller(
+        sessions,
+        state,
+        server,
+        online: false,
+        queuedRefunds: queued,
+      ).closeShift(declaration: _declared(0));
+
+      await _controller(
+        sessions,
+        state,
+        server,
+        queuedRefunds: queued,
+      ).restore(sessions.requireSession());
+
+      expect(server.updated.single.$2['refundedMinor'], 700);
+    });
+
+    test('a shift that handed nothing back writes no refund figure', () async {
+      final controller = _controller(sessions, state, server);
+      await controller.openShift();
+      await controller.startCashCount();
+
+      await controller.closeShift(declaration: _declared(0));
+
+      expect(server.updated.single.$2.containsKey('refundedMinor'), isFalse);
     });
 
     // **A credit figure the server cannot count is not zero.** On SIT the
@@ -1478,6 +1606,7 @@ TenantShiftController _controller(
   ShiftSalesLedger? salesLedger,
   ShiftServerSalesTotals? serverTotals,
   ShiftQueuedRepayments? queuedRepayments,
+  ShiftQueuedRefunds? queuedRefunds,
   TenantDataReader? reader,
 }) {
   var nextShift = 0;
@@ -1487,6 +1616,7 @@ TenantShiftController _controller(
     salesLedger: salesLedger ?? _Ledger(),
     serverTotals: serverTotals,
     queuedRepayments: queuedRepayments,
+    queuedRefunds: queuedRefunds,
     reader: reader ?? _Reader(server, beforeRead: beforeRead),
     writer: FirebaseTenantShiftWriter.forTesting(
       isOnline: () async => online,
@@ -1708,6 +1838,19 @@ final class _Queued implements ShiftQueuedRepayments {
     required String tenantId,
     required String shiftId,
   }) async => repayments;
+}
+
+final class _QueuedRefunds implements ShiftQueuedRefunds {
+  _QueuedRefunds(this.refunds);
+
+  final Map<String, int> refunds;
+
+  @override
+  Future<Map<String, int>> forShift({
+    required String uid,
+    required String tenantId,
+    required String shiftId,
+  }) async => refunds;
 }
 
 final class _Totals implements ShiftServerSalesTotals {

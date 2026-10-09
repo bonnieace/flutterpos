@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 
 import '../checkout/checkout_draft.dart';
+import '../checkout/checkout_tender.dart';
 import '../observability/app_telemetry.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_id.dart';
@@ -13,6 +14,8 @@ import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_types.dart';
 import 'return_history.dart';
+import 'return_offsets.dart';
+import 'return_refund.dart';
 
 /// One sale line and how much of it may still be returned.
 final class TenantReturnableLine {
@@ -51,7 +54,80 @@ final class TenantReturnableSale {
     required this.receiptNumber,
     required this.businessDate,
     required List<TenantReturnableLine> lines,
-  }) : lines = List<TenantReturnableLine>.unmodifiable(lines);
+    required TenantSale sale,
+    required Map<String, int> priorUnits,
+    required this.refundedMinor,
+  }) : lines = List<TenantReturnableLine>.unmodifiable(lines),
+       _sale = sale,
+       _priorUnits = Map<String, int>.unmodifiable(priorUnits);
+
+  final TenantSale _sale;
+
+  /// Units every earlier return took back, by product.
+  final Map<String, int> _priorUnits;
+
+  /// What earlier returns against this sale already handed back.
+  final int refundedMinor;
+
+  /// The sale's currency, which any amount handed back is in.
+  String get currency => _sale.currency;
+
+  /// How the sale was paid for at the counter, which is how its money goes
+  /// back by default. On a credit sale, how the part paid at the counter was
+  /// paid; null where nothing was paid, or nobody said how.
+  CheckoutTender? get refundTender => _sale.tender;
+
+  /// The most this sale can still hand back: what was paid at the counter,
+  /// less what earlier returns handed back. What was left owing on a credit
+  /// sale was never paid, so it is never handed back - a return cancels it.
+  int get refundableMinor {
+    final paid = _sale.totalMinor - (_sale.credit?.owedMinor ?? 0);
+    final left = paid - refundedMinor;
+    return left < 0 ? 0 : left;
+  }
+
+  /// What returning [quantities] should hand back over the counter.
+  ///
+  /// **The goods at what was charged for them**, discount and all, exactly as
+  /// [describeReturnOffset] values them for the takings - priced as the
+  /// difference this return makes on top of every earlier one, so two partial
+  /// returns add up to the whole and no more.
+  ///
+  /// **Debt first, on a credit sale.** The server cancels what is still owed
+  /// before anything else when the return is verified (`planReturnedPoints`),
+  /// so the goods pay off the debt before the shop hands over money. Measured
+  /// cumulatively, so the order returns arrive in cannot move a shilling.
+  ///
+  /// A suggestion the cashier may lower - an exchange hands back nothing -
+  /// and never more than [refundableMinor].
+  int suggestedRefundMinor(Map<String, int> quantities) {
+    final these = <String, int>{
+      for (final entry in quantities.entries)
+        if (entry.value > 0) entry.key: entry.value,
+    };
+    if (these.isEmpty) return 0;
+    final combined = <String, int>{..._priorUnits};
+    for (final entry in these.entries) {
+      combined[entry.key] = (combined[entry.key] ?? 0) + entry.value;
+    }
+    final int before;
+    final int after;
+    try {
+      before = _valueOf(_priorUnits);
+      after = _valueOf(combined);
+    } on TenantReturnException {
+      return 0;
+    }
+    final owed = _sale.credit?.owedMinor ?? 0;
+    final cancelled =
+        (after < owed ? after : owed) - (before < owed ? before : owed);
+    final suggested = after - before - cancelled;
+    if (suggested <= 0) return 0;
+    return suggested > refundableMinor ? refundableMinor : suggested;
+  }
+
+  int _valueOf(Map<String, int> units) =>
+      units.isEmpty ? 0 : describeReturnOffset(_sale, units).returnedMinor;
 
   final String saleId;
   final String receiptNumber;
@@ -115,6 +191,7 @@ final class TenantReturnCreateIntent {
     required this.createdBy,
     required this.reason,
     required this.lines,
+    this.refund,
   });
 
   final String path;
@@ -148,6 +225,9 @@ final class TenantReturnCreateIntent {
   final String reason;
   final List<TenantReturnRequestLine> lines;
 
+  /// What was handed back over the counter, or null where nothing was.
+  final TenantReturnRefund? refund;
+
   int get requestedUnits =>
       lines.fold(0, (total, line) => total + line.quantity);
 
@@ -175,6 +255,8 @@ final class TenantReturnCreateIntent {
           'quantity': line.quantity,
         },
     ],
+    // All four or none, as the create rule accepts them.
+    ...?refund?.documentFields(),
   };
 }
 
@@ -247,7 +329,9 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
     }
 
     final returned = <String, int>{};
+    var refundedMinor = 0;
     for (final record in recorded.items) {
+      refundedMinor += record.refund?.amountMinor ?? 0;
       if (record.saleId != sale.id) {
         throw const TenantReturnException('return_sale_mismatch');
       }
@@ -278,6 +362,9 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
             alreadyReturnedQuantity: returned[line.productId] ?? 0,
           ),
       ],
+      sale: sale,
+      priorUnits: returned,
+      refundedMinor: refundedMinor,
     );
   }
 
@@ -296,10 +383,28 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
     /// The instant the recording day is taken from. Absent, the wall clock,
     /// which is what every production caller wants.
     DateTime? now,
+
+    /// What was handed back over the counter. Zero, the default, records no
+    /// refund at all - every return before 2026-10-09 was one of these.
+    int refundMinor = 0,
+
+    /// How it was handed back. Required when [refundMinor] is above zero.
+    CheckoutTender? refundTender,
+
+    /// The recorder's own open shift: the drawer the money left. Required
+    /// when [refundMinor] is above zero, because a refund that left no
+    /// drawer is not one a close can count.
+    CheckoutShiftAttribution? refundShift,
   }) {
     if (!session.canAccess(allowedRoles: allowedRoles)) {
       throw const TenantReturnException('return_forbidden');
     }
+    final refund = _refund(
+      returnable: returnable,
+      amountMinor: refundMinor,
+      tender: refundTender,
+      shift: refundShift,
+    );
     if (!_requestIdPattern.hasMatch(requestId)) {
       throw const TenantReturnException('invalid_return_request_id');
     }
@@ -358,6 +463,39 @@ final class TenantReturnRequestRepository extends TenantReadRepository {
       createdBy: session.uid,
       reason: safeReason,
       lines: lines,
+      refund: refund,
+    );
+  }
+
+  TenantReturnRefund? _refund({
+    required TenantReturnableSale returnable,
+    required int amountMinor,
+    required CheckoutTender? tender,
+    required CheckoutShiftAttribution? shift,
+  }) {
+    if (amountMinor < 0) {
+      throw const TenantReturnException('invalid_return_refund');
+    }
+    if (amountMinor == 0) return null;
+    if (shift == null) {
+      throw const TenantReturnException('refund_needs_shift');
+    }
+    // The money leaves the recorder's own drawer, which the create rule
+    // checks again against the shift document itself.
+    if (shift.uid != session.uid || shift.tenantId != session.tenantId) {
+      throw const TenantReturnException('return_forbidden');
+    }
+    if (tender == null) {
+      throw const TenantReturnException('refund_needs_tender');
+    }
+    if (amountMinor > returnable.refundableMinor) {
+      throw const TenantReturnException('refund_exceeds_paid');
+    }
+    return TenantReturnRefund(
+      amountMinor: amountMinor,
+      tender: tender,
+      shiftId: shift.shiftId,
+      businessDate: shift.businessDate,
     );
   }
 }

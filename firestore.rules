@@ -666,13 +666,23 @@ service cloud.firestore {
               && request.resource.data.repaidMinor >= 0
             )
           )
+          // What the drawer handed back for returns, which left it and is not
+          // a sale. The closing phone's view, for the history row, like the
+          // two above; reconciliation reads the returns themselves.
+          && (
+            !('refundedMinor' in request.resource.data)
+            || (
+              request.resource.data.refundedMinor is int
+              && request.resource.data.refundedMinor >= 0
+            )
+          )
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly([
               'status', 'endTime', 'closedAt', 'closingCashMinor', 'closingCash',
               'totalSales', 'totalSalesMinor', 'transactionCount',
               'declaredCashMinor', 'declaredMpesaMinor', 'declaredCardMinor',
               'closedWithoutEvidence', 'settlementId',
-              'creditOwedMinor', 'repaidMinor'
+              'creditOwedMinor', 'repaidMinor', 'refundedMinor'
             ]);
         allow delete: if false;
       }
@@ -757,10 +767,48 @@ service cloud.firestore {
           && request.resource.data.reason.size() >= 3
           && request.resource.data.reason.size() <= 500
           && validSaleItems(request.resource.data.itemsReturned)
+          // **What was handed back over the counter, since 2026-10-09.** All
+          // four or none: an amount that names no drawer is money that left
+          // none, and a drawer that names no method cannot be counted. None
+          // is an exchange, a credit sale that only cancels debt, or a return
+          // recorded away from any till - and every return before this.
+          //
+          // **Out of the recorder's own shift, on that shift's day.** A
+          // colleague may record a return against anyone's sale, but may not
+          // say the money left somebody else's till. Not bound to an *open*
+          // shift: a refund queued offline arrives after its shift closed,
+          // exactly as a sale does. Bounded by the sale's own total, which is
+          // the most one return can owe; what several returns hand back
+          // between them is reconciliation's to compare, not a rule's.
+          && (
+            (
+              !('refundMinor' in request.resource.data)
+              && !('refundTender' in request.resource.data)
+              && !('refundShiftId' in request.resource.data)
+              && !('refundBusinessDate' in request.resource.data)
+            ) || (
+              request.resource.data.refundMinor is int
+              && request.resource.data.refundMinor > 0
+              && request.resource.data.refundMinor <= get(
+                /databases/$(database)/documents/tenants/$(tenantId)/sales/$(request.resource.data.saleId)
+              ).data.get('totalMinor', 0)
+              && request.resource.data.refundTender in ['cash', 'mpesa', 'card']
+              && request.resource.data.refundShiftId is string
+              && request.resource.data.refundShiftId.size() > 0
+              && request.resource.data.refundBusinessDate is string
+              && get(
+                /databases/$(database)/documents/tenants/$(tenantId)/shifts/$(request.resource.data.refundShiftId)
+              ).data.staffId == request.auth.uid
+              && get(
+                /databases/$(database)/documents/tenants/$(tenantId)/shifts/$(request.resource.data.refundShiftId)
+              ).data.businessDate == request.resource.data.refundBusinessDate
+            )
+          )
           && request.resource.data.keys().hasOnly([
             'returnId', 'tenantId', 'saleId', 'businessDate', 'recordedOn',
             'occurredAt', 'createdBy', 'status', 'reason', 'itemsReturned',
-            'createdAt'
+            'createdAt', 'refundMinor', 'refundTender', 'refundShiftId',
+            'refundBusinessDate'
           ]);
         allow update, delete: if false;
       }

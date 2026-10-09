@@ -113,12 +113,18 @@ export interface DailyAggregateResult {
   /** How many return documents the day held. */
   returnCount: number;
   /**
-   * Per-shift figures, deliberately **gross**.
+   * Per-shift figures, deliberately **gross** of returns.
    *
    * A cashier counts the drawer at close. Money that came back a week later
    * did not leave that drawer, so netting it into a shift's expected cash
    * would mark a correct count short - and `tenderFiguresMoved` would reopen
    * every difference a manager had already acknowledged.
+   *
+   * **What a return handed back is a different matter, since 2026-10-09.**
+   * That money did leave a drawer - the one open where the customer stood -
+   * and until a return recorded it, that drawer was counted short by every
+   * refund it paid. A refund comes off its own shift's bucket instead; see
+   * `ReturnRefund`. A return that records none moves nothing, as before.
    */
   shifts: ShiftAggregate[];
 }
@@ -339,6 +345,49 @@ function addShiftSale(tenders: ShiftTenderAggregate, sale: SaleLike, totalMinor:
   }
 }
 
+/**
+ * Money handed back over the counter for a return, as the drawer that paid it
+ * sees it.
+ *
+ * **A different fact from the return itself.** A return is valued against
+ * its sale and nets the sale's day, whatever shift it lands on - see
+ * `DailyAggregateResult.shifts` for why that never touches a drawer. A refund
+ * is cash, M-Pesa or card that left one particular drawer, on the day that
+ * drawer was trading, so it is read by `refundBusinessDate` and comes off
+ * `refundShiftId`'s bucket for `refundTender`.
+ */
+export interface ReturnRefund {
+  amountMinor: number;
+  tender: "cash" | "mpesa" | "card";
+  shiftId: string;
+  businessDate: string;
+}
+
+/**
+ * The refund a stored return records, or null when it records none.
+ *
+ * **All four fields or no refund.** Rules refuse a return that names part of
+ * one, so a partial set is not evidence of money leaving any drawer, and is
+ * read as none rather than guessed at. Every return written before refunds
+ * existed has none of them, and is exactly what it always was.
+ */
+export function readReturnRefund(
+  data: Record<string, unknown> | undefined
+): ReturnRefund | null {
+  if (!data) return null;
+  const amountMinor = data.refundMinor;
+  const tender = data.refundTender;
+  const shiftId = data.refundShiftId;
+  const businessDate = data.refundBusinessDate;
+  if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) return null;
+  if (!isMoneyTender(tender)) return null;
+  if (typeof shiftId !== "string" || !DOCUMENT_SEGMENT.test(shiftId)) return null;
+  if (typeof businessDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {
+    return null;
+  }
+  return {amountMinor: amountMinor as number, tender, shiftId, businessDate};
+}
+
 /** A customer paying back what they owed, as the shift that took it sees it. */
 export interface CustomerPaymentLike {
   shiftId?: unknown;
@@ -384,7 +433,8 @@ export function aggregateDailySales(
   maximumShifts = 200,
   returns?: PeriodReturns,
   returnCount = 0,
-  payments: readonly CustomerPaymentLike[] = []
+  payments: readonly CustomerPaymentLike[] = [],
+  refunds: readonly ReturnRefund[] = []
 ): DailyAggregateResult {
   requireIsoDate(businessDate, "businessDate");
   const shifts = new Map<string, ShiftAggregate>();
@@ -443,6 +493,32 @@ export function aggregateDailySales(
     };
     addShiftTender(current.tenders, payment.tender, amountMinor as number);
     shifts.set(shiftId, current);
+    if (shifts.size > maximumShifts) {
+      throw new HttpsError(
+        "resource-exhausted",
+        `Business date ${businessDate} exceeds the bounded shift aggregation limit.`
+      );
+    }
+  }
+  // **Refunds are drawer money going the other way.** What was handed back
+  // over the counter comes out of the bucket it was paid from, on the shift
+  // that paid it, and leaves `sales` and `transactions` alone for the reason
+  // repayments do. A bucket may go below zero - a refund paid out of the float
+  // on a shift that took no cash - and the verifier adds the float back.
+  for (const refund of refunds) {
+    if (refund.businessDate !== businessDate) continue;
+    if (!DOCUMENT_SEGMENT.test(refund.shiftId)) continue;
+    if (!Number.isSafeInteger(refund.amountMinor) || refund.amountMinor <= 0) continue;
+    if (!isMoneyTender(refund.tender)) continue;
+    const current = shifts.get(refund.shiftId) ?? {
+      shiftId: refund.shiftId,
+      businessDate,
+      sales: 0,
+      transactions: 0,
+      tenders: {cashMinor: 0, mpesaMinor: 0, cardMinor: 0, unattributedMinor: 0},
+    };
+    addShiftTender(current.tenders, refund.tender, -refund.amountMinor);
+    shifts.set(refund.shiftId, current);
     if (shifts.size > maximumShifts) {
       throw new HttpsError(
         "resource-exhausted",

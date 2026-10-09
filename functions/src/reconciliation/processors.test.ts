@@ -2180,6 +2180,65 @@ test("a day's returns do not move any shift's expected drawer", async () => {
   }
 });
 
+test("money handed back comes off the drawer that paid it", async () => {
+  // The other half of the test above. The return is still not netted into
+  // the sale's shift - but the refund left a drawer, and that drawer's
+  // expectation is lower by it, in the method it was paid by.
+  const db = firestoreWithClaimedJob();
+  seedDirtyDay(db, LOCAL_DATE);
+  seedReturnableSale(db, "co-1", LOCAL_DATE);
+  db.seed(`tenants/${TENANT}/returns/rt-1`, {
+    tenantId: TENANT,
+    saleId: "co-1",
+    businessDate: LOCAL_DATE,
+    status: "pending",
+    itemsReturned: [{productId: "prod-a", quantity: 1}],
+    refundMinor: 500,
+    refundTender: "cash",
+    refundShiftId: "shift-a",
+    refundBusinessDate: LOCAL_DATE,
+  });
+
+  await processMetricsPage(db.asFirestore(), claimedJob());
+  const id = shiftExpectationId(LOCAL_DATE, "shift-a");
+  const expectation = stored(db, `tenants/${TENANT}/shift_expectations/${id}`);
+
+  assert.equal(expectation.sales, 10);
+  assert.equal(expectation.expectedCashMinor, 500);
+});
+
+test("a refund for last week's sale comes off today's drawer", async () => {
+  // The return nets last week's takings - `businessDate` is the sale's - but
+  // the cash left today's till, so today's expectation is the one it moves.
+  const lastWeek = "2026-07-29";
+  const db = firestoreWithClaimedJob();
+  seedDirtyDay(db, LOCAL_DATE);
+  seedReturnableSale(db, "co-old", lastWeek, {shiftId: "shift-old"});
+  seedReturnableSale(db, "co-1", LOCAL_DATE, {shiftId: "shift-today", tender: "card"});
+  db.seed(`tenants/${TENANT}/returns/rt-1`, {
+    tenantId: TENANT,
+    saleId: "co-old",
+    businessDate: lastWeek,
+    status: "pending",
+    itemsReturned: [{productId: "prod-a", quantity: 1}],
+    refundMinor: 500,
+    refundTender: "mpesa",
+    refundShiftId: "shift-today",
+    refundBusinessDate: LOCAL_DATE,
+  });
+
+  await processMetricsPage(db.asFirestore(), claimedJob());
+  const id = shiftExpectationId(LOCAL_DATE, "shift-today");
+  const expectation = stored(db, `tenants/${TENANT}/shift_expectations/${id}`);
+  const metric = stored(db, `tenants/${TENANT}/daily_metrics/${LOCAL_DATE}`);
+
+  assert.equal(expectation.expectedCardMinor, 1000);
+  assert.equal(expectation.expectedMpesaMinor, -500);
+  // Today's takings are untouched: the return belongs to last week's.
+  assert.equal(metric.netSales, metric.sales);
+  assert.equal(metric.returnCount, 0);
+});
+
 test("a day with no returns still writes the net block", async () => {
   // `{merge: false}`, so the shape is the whole shape every time. A reader
   // must be able to tell "nothing came back" from "written before returns

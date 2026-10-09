@@ -394,6 +394,18 @@ final class ShiftHistoryCard extends StatelessWidget {
         ),
       );
     }
+    // Why a drawer that holds less than its sales is not short: the money went
+    // back to customers who returned goods.
+    if (summary != null && summary.refundedMinor > 0) {
+      gap();
+      rows.add(
+        _FigureLine(
+          label: 'Handed back for returns',
+          value: shiftMoney(currency, summary.refundedMinor),
+          valueKey: ValueKey<String>('shift-history-refunded-${entry.id}'),
+        ),
+      );
+    }
 
     // Silent where the two figures agree: the badge has already said so, and a
     // difference of nothing is not a difference.

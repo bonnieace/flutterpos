@@ -761,6 +761,10 @@ Map<String, Map<String, Object?>> seedReturns() =>
         'returnId': 'ret-1',
         'tenantId': seedTenantId,
         'saleId': 'co-1',
+        // Required of every return since #110; without them the sheet read
+        // refused the whole page and every capture of it said so.
+        'businessDate': seedBusinessDate(),
+        'recordedOn': seedBusinessDate(),
         'createdBy': cashierUid,
         'status': 'pending',
         'reason': 'Loaf was stale',
@@ -777,6 +781,10 @@ Map<String, Map<String, Object?>> seedReturns() =>
         'returnId': 'ret-2',
         'tenantId': seedTenantId,
         'saleId': 'co-2',
+        // Required of every return since #110; without them the sheet read
+        // refused the whole page and every capture of it said so.
+        'businessDate': seedBusinessDate(),
+        'recordedOn': seedBusinessDate(1),
         'createdBy': cashierUid,
         'status': 'verified',
         'reason': 'Wrong scent sold',

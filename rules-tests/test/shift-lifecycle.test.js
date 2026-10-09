@@ -271,6 +271,25 @@ test("a close may name the drawer count that settled it", async () => {
   }
 });
 
+test("a close may say what the drawer handed back, and never a negative", async () => {
+  // Refunds paid out of this drawer for returns, so the shift's own history
+  // row can tell a drawer that is short from one that paid a customer back.
+  // Reconciliation counts them again from the returns themselves.
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+  await assertSucceeds(openShift(firestore));
+  for (const refundedMinor of [-1, 100.5, "100"]) {
+    await assertFails(closeShift(firestore, { overrides: { refundedMinor } }));
+  }
+
+  await assertSucceeds(closeShift(firestore, { overrides: { refundedMinor: 100000 } }));
+
+  const closed = await storedShift("shift-a");
+  if (closed.refundedMinor !== 100000) {
+    throw new Error("The close did not record what the drawer handed back.");
+  }
+});
+
 test("an empty shift may close with a zero summary", async () => {
   await seedShiftTenant();
   const firestore = authenticatedFirestore(testEnvironment, "cashier-a");

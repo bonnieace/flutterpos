@@ -4,10 +4,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:uzapay_pos/checkout/checkout_draft.dart';
 import 'package:uzapay_pos/checkout/checkout_receipt.dart';
+import 'package:uzapay_pos/checkout/checkout_tender.dart';
 import 'package:uzapay_pos/returns/returns.dart';
 import 'package:uzapay_pos/sales/sales.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/fields.dart';
 import 'package:uzapay_pos/ui/record_list.dart';
 import 'package:uzapay_pos/ui/snackbar.dart';
 import 'package:uzapay_pos/ui/status.dart';
@@ -455,6 +458,152 @@ void main() {
       startsWith('Return recorded. No stock has been restored yet'),
     );
     expect(snackNotice(tester).status, AppStatus.ok);
+  });
+
+  testWidgets('a return hands back what came back, from the open till', (
+    tester,
+  ) async {
+    // **The other half of a return, missing until 2026-10-09.** The goods
+    // came back and the money went out of a drawer, and nothing said which -
+    // so the cashier who paid was counted short by it at close.
+    final writer = _Writer();
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      writer: writer,
+      bindShift: _openTill,
+      tender: 'cash',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('sale-returns-increase-product-1')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('sale-returns-increase-product-1')),
+    );
+    await tester.pump();
+
+    // Suggested: what the two bottles were charged, by how the sale was paid.
+    expect(
+      tester
+          .widget<AppTextField>(
+            find.byKey(const ValueKey('sale-returns-refund-amount')),
+          )
+          .controller
+          ?.text,
+      '10',
+    );
+    await _chooseReason(tester);
+    await _submitAndConfirm(tester);
+
+    final refund = writer.intents.single.refund;
+    expect(refund?.amountMinor, 1000);
+    expect(refund?.tender, CheckoutTender.cash);
+    expect(refund?.shiftId, 'shift-b');
+    expect(refund?.businessDate, '2026-10-09');
+  });
+
+  testWidgets('a cashier may hand back less, or nothing for an exchange', (
+    tester,
+  ) async {
+    final writer = _Writer();
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      writer: writer,
+      bindShift: _openTill,
+      tender: 'cash',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('sale-returns-increase-product-1')),
+    );
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const ValueKey('sale-returns-refund-amount')),
+      '0',
+    );
+    await tester.pump();
+    await _chooseReason(tester);
+    await _submitAndConfirm(tester);
+
+    expect(writer.intents.single.refund, isNull);
+  });
+
+  testWidgets('a sale nobody said how was paid asks how it was handed back', (
+    tester,
+  ) async {
+    final writer = _Writer();
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      writer: writer,
+      bindShift: _openTill,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('sale-returns-increase-product-1')),
+    );
+    await tester.pump();
+    await _chooseReason(tester);
+    // Money going out of a drawer has to say which part of it.
+    expect(pressable(tester, 'sale-returns-submit'), isFalse);
+
+    await tester.tap(
+      find.byKey(const ValueKey('sale-returns-refund-tender-mpesa')),
+    );
+    await tester.pump();
+    await _submitAndConfirm(tester);
+
+    expect(writer.intents.single.refund?.tender, CheckoutTender.mpesa);
+    expect(writer.intents.single.refund?.amountMinor, 500);
+  });
+
+  testWidgets('with no till open on this phone, no money is recorded', (
+    tester,
+  ) async {
+    // An owner recording a return from Sales, away from any drawer. The
+    // return is still recorded; the screen says no refund came out of a till.
+    final writer = _Writer();
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      writer: writer,
+      bindShift: (_, _) async =>
+          const CheckoutShiftBinding.refused('no_open_shift'),
+      tender: 'cash',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('sale-returns-increase-product-1')),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('sale-returns-refund-amount')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('sale-returns-refund-no-till')),
+      findsOneWidget,
+    );
+    await _chooseReason(tester);
+    await _submitAndConfirm(tester);
+
+    expect(writer.intents.single.refund, isNull);
   });
 
   testWidgets('the quantity can never exceed what is available', (
@@ -1039,6 +1188,8 @@ Future<void> _pump(
   bool settle = true,
   TenantReturnWriter? writer,
   VerifyReturnCallable? verifyCallable,
+  TenantReturnShiftBinder? bindShift,
+  String? tender,
   double width = 1400,
 }) async {
   // The record form adds a text field, so the page carries more than one
@@ -1055,13 +1206,14 @@ Future<void> _pump(
         child: Scaffold(
           body: TenantSaleReturnsPanel(
             reader: reader,
-            request: _request(),
+            request: _request(tender: tender),
             pageSize: pageSize,
             actions: writer == null && verifyCallable == null
                 ? null
                 : TenantReturnActions(
                     writer: writer,
                     verifyCallable: verifyCallable,
+                    bindShift: bindShift,
                   ),
             requestIdFactory: () => 'return-abcdefgh',
           ),
@@ -1174,7 +1326,35 @@ final class _Writer implements TenantReturnWriter {
   }
 }
 
-TenantSaleReturnsRequest _request() => TenantSaleReturnsRequest(sale: _sale());
+Future<CheckoutShiftBinding> _openTill(
+  TenantSessionController sessions,
+  TenantSession session,
+) async => CheckoutShiftBinding.bound(
+  CheckoutShiftAttribution(
+    uid: session.uid,
+    tenantId: session.tenantId,
+    shiftId: 'shift-b',
+    deviceId: _deviceA,
+    businessDate: '2026-10-09',
+  ),
+);
+
+Future<void> _chooseReason(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('sale-returns-reason-choice')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Damaged or broken').last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _submitAndConfirm(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('sale-returns-submit')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('sale-returns-confirm')));
+  await tester.pumpAndSettle();
+}
+
+TenantSaleReturnsRequest _request({String? tender}) =>
+    TenantSaleReturnsRequest(sale: _sale(tender: tender));
 
 String _receipt(int sequence) => formatCheckoutReceiptNumber(
   deviceId: _deviceA,
@@ -1182,9 +1362,10 @@ String _receipt(int sequence) => formatCheckoutReceiptNumber(
   sequence: sequence,
 );
 
-TenantSale _sale() => TenantSale.fromDocument(
+TenantSale _sale({String? tender}) => TenantSale.fromDocument(
   path: 'tenants/tenant-a/sales/co-1',
   data: <String, Object?>{
+    if (tender != null) 'tender': tender,
     'checkoutId': 'co-1',
     'tenantId': 'tenant-a',
     'soldById': 'user-a',

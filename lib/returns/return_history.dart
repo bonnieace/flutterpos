@@ -6,6 +6,7 @@ import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_types.dart';
+import 'return_refund.dart';
 
 /// Raised when a canonical return document cannot be trusted for display.
 final class TenantReturnException implements Exception {
@@ -133,6 +134,7 @@ final class TenantReturn {
       lines: _parseLines(data['itemsReturned']),
       verification: _verification(data),
       recordedAt: _takenAt(data),
+      refund: TenantReturnRefund.fromFields(data),
     );
   }
 
@@ -148,6 +150,7 @@ final class TenantReturn {
     required List<TenantReturnLine> lines,
     required this.verification,
     required this.recordedAt,
+    this.refund,
   }) : lines = List<TenantReturnLine>.unmodifiable(lines);
 
   final String id;
@@ -190,6 +193,12 @@ final class TenantReturn {
   /// believed unless it claims a time after the return arrived. Absent only
   /// where neither is held.
   final DateTime? recordedAt;
+
+  /// What was handed back over the counter, and from which drawer, or null
+  /// where nothing was - an exchange, a credit sale that only cancelled debt,
+  /// a return recorded away from any till, and every return before
+  /// 2026-10-09.
+  final TenantReturnRefund? refund;
 
   bool get isVerified => status == TenantReturnStatus.verified;
 
@@ -460,9 +469,7 @@ final class TenantReturnHistoryRepository extends TenantReadRepository {
   /// widget and back; this paging is internal to one report's gather loop and
   /// never leaves it, so encoding the pair would be ceremony around a value
   /// nobody else can see.
-  Future<
-    ({List<TenantReturn> items, TenantBusinessDateRangePosition? next})
-  >
+  Future<({List<TenantReturn> items, TenantBusinessDateRangePosition? next})>
   loadRecordedRange({
     required String startRecordedOn,
     required String endRecordedOn,

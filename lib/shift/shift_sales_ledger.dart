@@ -130,6 +130,7 @@ final class ShiftSalesSummary {
     this.tenders = ShiftTenderSplit.empty,
     this.creditOwedMinor = 0,
     this.repaidMinor = 0,
+    this.refundedMinor = 0,
   });
 
   static const ShiftSalesSummary empty = ShiftSalesSummary(
@@ -150,9 +151,14 @@ final class ShiftSalesSummary {
   /// not a sale.
   final int repaidMinor;
 
+  /// What this drawer handed back over the counter for returns, which left it
+  /// and is not a sale. See `TenantReturnRefund`.
+  final int refundedMinor;
+
   /// What the drawer should hold from trading, before any float: the sales
-  /// less what was lent, plus what was paid back.
-  int get drawerMinor => totalMinor - creditOwedMinor + repaidMinor;
+  /// less what was lent, plus what was paid back, less what was handed back.
+  int get drawerMinor =>
+      totalMinor - creditOwedMinor + repaidMinor - refundedMinor;
 
   /// How the confirmed takings above split across how they were paid for.
   ///
@@ -195,9 +201,15 @@ final class ShiftServerTotals {
     this.creditOwedMinor,
     this.repaidMinor,
     this.repaidPaymentIds,
+    this.refundedMinor,
+    this.refundedReturnIds,
   }) : assert(
          (repaidMinor == null) == (repaidPaymentIds == null),
          'A repaid figure is read with the payments that make it up.',
+       ),
+       assert(
+         (refundedMinor == null) == (refundedReturnIds == null),
+         'A refunded figure is read with the returns that make it up.',
        );
 
   final int transactionCount;
@@ -215,6 +227,14 @@ final class ShiftServerTotals {
   /// queued is added once and a landed one is not added twice. Null exactly
   /// where [repaidMinor] is: the two are one read.
   final Set<String>? repaidPaymentIds;
+
+  /// What the shift handed back for returns, or null where that could not be
+  /// read - which is never zero.
+  final int? refundedMinor;
+
+  /// The returns [refundedMinor] counts, so one this phone still has queued
+  /// is added once and a landed one is not added twice.
+  final Set<String>? refundedReturnIds;
 }
 
 /// Repayments this phone took into a shift, from its own durable queue.
@@ -262,6 +282,55 @@ final class PendingMutationShiftRepayments implements ShiftQueuedRepayments {
       }
     }
     return repayments;
+  }
+}
+
+/// Refunds this phone handed out of a shift, from its own durable queue.
+///
+/// **Why a close needs this.** A return is recorded queue-first, so one taken
+/// with no signal is on no server until the queue drains, and the server's
+/// count at close leaves its refund out - while the cashier has already handed
+/// the money over. The close takes off every one of these the server did not
+/// count, exactly as [ShiftQueuedRepayments] adds repayments.
+abstract interface class ShiftQueuedRefunds {
+  /// Each refund's amount by return ID, for [shiftId]. Refused returns are
+  /// not in it: the server never accepted that money leaving.
+  Future<Map<String, int>> forShift({
+    required String uid,
+    required String tenantId,
+    required String shiftId,
+  });
+}
+
+/// [ShiftQueuedRefunds] over the pending-mutation store.
+final class PendingMutationShiftRefunds implements ShiftQueuedRefunds {
+  const PendingMutationShiftRefunds(this._store);
+
+  final TenantPendingMutationStore _store;
+
+  @override
+  Future<Map<String, int>> forShift({
+    required String uid,
+    required String tenantId,
+    required String shiftId,
+  }) async {
+    final refunds = <String, int>{};
+    for (final record in await _store.recordsForSession(
+      uid: uid,
+      tenantId: tenantId,
+    )) {
+      if (record.kind != TenantPendingMutationKind.pendingReturnCreate ||
+          record.state == TenantPendingMutationState.rejected ||
+          record.payload['refundShiftId'] != shiftId) {
+        continue;
+      }
+      final returnId = record.payload['returnId'];
+      final amount = record.payload['refundMinor'];
+      if (returnId is String && amount is int && amount > 0) {
+        refunds[returnId] = amount;
+      }
+    }
+    return refunds;
   }
 }
 

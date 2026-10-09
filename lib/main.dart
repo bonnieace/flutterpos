@@ -788,17 +788,6 @@ class SpiritPOSApp extends StatelessWidget {
       },
     );
 
-    // Recording a pending return changes no stock and is open to every active
-    // member; restoring it is management-only and runs through the callable, so
-    // the two stay a deliberate two-person control. The same actions reach the
-    // returns route from shift history and from a receipt lookup.
-    final returnActions = TenantReturnActions(
-      writer: QueuedTenantReturnWriter(
-        store: tenantMutationStore,
-        onQueued: checkoutSyncSignals.requestSyncAfterSave,
-      ),
-      verifyCallable: FirebaseVerifyReturnCallable(),
-    );
     // **The one write a sale ever takes after it is created.** The register no
     // longer preselects a payment method, so a cashier who was never told how
     // the customer paid saves a sale that names none; this is what lets them
@@ -997,8 +986,31 @@ class SpiritPOSApp extends StatelessWidget {
       // A repayment taken with no signal is in the drawer before the server
       // hears of it, so the close counts this phone's queue too.
       queuedRepayments: PendingMutationShiftRepayments(tenantMutationStore),
+      // And a refund handed over with no signal has left it already.
+      queuedRefunds: PendingMutationShiftRefunds(tenantMutationStore),
       deviceId: deviceId,
       isOnline: isOnline,
+    );
+
+    // Recording a pending return changes no stock and is open to every active
+    // member; restoring it is management-only and runs through the callable, so
+    // the two stay a deliberate two-person control. The same actions reach the
+    // returns route from shift history and from a receipt lookup.
+    //
+    // **Declared after `shiftControllerFactory`, because the till a refund
+    // comes out of is asked of the server through it first.** This phone's own
+    // record of the open shift only catches up when something restores it, and
+    // a shift closed on another phone would otherwise take the refund.
+    final returnActions = TenantReturnActions(
+      writer: QueuedTenantReturnWriter(
+        store: tenantMutationStore,
+        onQueued: checkoutSyncSignals.requestSyncAfterSave,
+      ),
+      verifyCallable: FirebaseVerifyReturnCallable(),
+      bindShift: (sessions, session) => ServerCheckedShiftBinder(
+        shiftControllerFactory(sessions),
+        TenantShiftCheckoutBinder(tenantShiftState),
+      ).bindCheckoutShift(session),
     );
 
     // The count behind the badge on *Reports*. Cached per session for the same

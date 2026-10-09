@@ -25,6 +25,7 @@ import {
   processTenantDiscoveryPage,
   recordReconciliationFailure,
   registerReturnReceipt,
+  registerReturnRefundReceipt,
   registerCustomerPaymentReceipt,
   registerSaleReceipt,
   registerShiftClose,
@@ -32,6 +33,7 @@ import {
 import {
   discoveryTaskId,
   nairobiDate,
+  readReturnRefund,
   ReconciliationMode,
   reconciliationTaskId,
   ReconciliationTaskPayload,
@@ -327,6 +329,21 @@ export const mergeReturnReconciliationJob = onDocumentCreated(
       receivedAt: Timestamp.fromDate(received),
     });
     if (registration.task) await enqueueReconciliationTask(registration.task);
+    // **Money handed back marks the day of the drawer that paid it**, which is
+    // usually not the sale's: last week's goods brought back this morning
+    // come out of this morning's till. Its own receipt, so a retry marks it
+    // once and the sale's day above is never mistaken for it.
+    const refund = readReturnRefund(snapshot.data());
+    if (refund !== null) {
+      const refunded = await registerReturnRefundReceipt(getFirestore(), {
+        deferReconciliation: true,
+        tenantId: event.params.tenantId,
+        returnId: event.params.returnId,
+        businessDate: refund.businessDate,
+        receivedAt: Timestamp.fromDate(received),
+      });
+      if (refunded.task) await enqueueReconciliationTask(refunded.task);
+    }
   }
 );
 

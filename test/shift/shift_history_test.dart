@@ -140,6 +140,42 @@ void main() {
       expect(entry.cashVarianceMinor, -10000);
     });
 
+    test('money handed back for a return is not a shortfall', () {
+      // The device run of 2026-10-08: 1000 float, 6000 of sales of which 600
+      // stayed owed, and 1000 handed back in cash for a returned bottle. The
+      // cashier counted 4000 cash, 400 M-Pesa and 1000 card - exactly right -
+      // and the row said *Short by 1,000*.
+      final entry = TenantShiftHistoryEntry.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _closed(
+          overrides: <String, Object?>{
+            'openingFloatMinor': 100000,
+            'totalSalesMinor': 600000,
+            'totalSales': 6000,
+            'creditOwedMinor': 60000,
+            'refundedMinor': 100000,
+            'closingCashMinor': 400000,
+            'closingCash': 4000,
+            'declaredCashMinor': 400000,
+            'declaredMpesaMinor': 40000,
+            'declaredCardMinor': 100000,
+          },
+        ),
+      );
+
+      expect(entry.summary?.refundedMinor, 100000);
+      expect(entry.cashVarianceMinor, 0);
+    });
+
+    test('a shift closed before refunds were recorded reads as it did', () {
+      final entry = TenantShiftHistoryEntry.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _closed(),
+      );
+
+      expect(entry.summary?.refundedMinor, 0);
+    });
+
     test('a shift carrying no float reads exactly as it did before one', () {
       // Every shift closed before the field existed, and every shift of every
       // shop that keeps no change in the drawer.

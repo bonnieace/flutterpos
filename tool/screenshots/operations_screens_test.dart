@@ -1503,6 +1503,58 @@ void main() {
     viewports: responsiveViewports,
   );
 
+  // **What left the drawer, since 2026-10-09.** Drawn only once something is
+  // chosen and only where a till is open on this phone, so a capture that
+  // chooses nothing renders none of it. An M-Pesa sale with a discount, so the
+  // suggestion is visibly the discounted share rather than the list price.
+  screenshotCase(
+    '34c-return-hands-money-back',
+    build: () => inSession(
+      _SheetHost(
+        open: (context) => openTenantSaleReturnSheet(
+          context,
+          reader: FakeTenantReader.business(),
+          request: TenantSaleReturnsRequest(sale: _sale('co-2')),
+          actions: TenantReturnActions(
+            writer: FakeReturnWriter(),
+            bindShift: (_, session) async => CheckoutShiftBinding.bound(
+              CheckoutShiftAttribution(
+                uid: session.uid,
+                tenantId: session.tenantId,
+                shiftId: 'shift-today',
+                deviceId: 'dev-0123456789abcdef0123456789abcdef',
+                businessDate: '2026-10-09',
+              ),
+            ),
+          ),
+        ),
+      ),
+      controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
+    ),
+    afterPump: (tester) async {
+      final increase = find
+          .byWidgetPredicate(
+            (widget) =>
+                widget.key is ValueKey<String> &&
+                (widget.key! as ValueKey<String>).value.startsWith(
+                  'sale-returns-increase-',
+                ),
+          )
+          .first;
+      // The sheet's list builds lazily, so the form exists only once it has
+      // been scrolled to.
+      await tester.scrollUntilVisible(
+        increase,
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(increase);
+      await tester.pumpAndSettle();
+    },
+    viewports: responsiveViewports,
+  );
+
   screenshotCase(
     '35-activity-log',
     build: () => inSession(

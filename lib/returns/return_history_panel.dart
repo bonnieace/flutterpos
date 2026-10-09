@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:uzapay_pos/observability/app_telemetry.dart';
 
+import '../checkout/checkout_draft.dart';
+import '../checkout/checkout_tender.dart';
+import '../inventory/catalog_management.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
@@ -9,8 +13,10 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
+import '../ui/chips.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/money_text.dart';
 import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
@@ -206,11 +212,34 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     });
   }
 
+  /// Finds the drawer a refund on this return would come out of, or null
+  /// where the composition supplies no way to - which records no refund.
+  Future<CheckoutShiftAttribution?> Function()? _tillFinder(
+    TenantSession session,
+  ) {
+    final bind = widget.actions?.bindShift;
+    if (bind == null) return null;
+    final sessions = TenantSessionScope.read(context);
+    return () async {
+      try {
+        return (await bind(sessions, session)).attribution;
+      } catch (error, stackTrace) {
+        AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'returns.bind_till',
+        );
+        return null;
+      }
+    };
+  }
+
   Future<void> _record(
     TenantSession session,
     TenantReturnableSale returnable,
     Map<String, int> quantities,
     String reason,
+    _RefundChoice refund,
   ) async {
     final writer = widget.actions?.writer;
     if (writer == null || _busy) return;
@@ -239,6 +268,9 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
             reason: reason,
             requestId: _requestId ??=
                 (widget.requestIdFactory ?? secureTenantReturnRequestId)(),
+            refundMinor: refund.amountMinor,
+            refundTender: refund.tender,
+            refundShift: refund.till,
           );
       final result = await telemetry.trace(
         operation,
@@ -429,8 +461,9 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
             TenantReturnVerificationGateway.canVerifyInSession(session),
         onNextPage: () => _nextPage(view.page.nextCursor),
         onPreviousPage: _previousPage,
-        onRecord: (quantities, reason) =>
-            _record(session, view.returnable!, quantities, reason),
+        onRecord: (quantities, reason, refund) =>
+            _record(session, view.returnable!, quantities, reason, refund),
+        findTill: _tillFinder(session),
         onVerify: (record) => _verify(session, record),
         showHistory: widget.showHistory,
         scrollController: widget.scrollController,
@@ -575,6 +608,12 @@ AppNotice _refusalNotice(String code) => AppNotice.refused(switch (code) {
     'Record a reason of at least 3 characters for this return.',
   'invalid_return_quantities' => 'Choose at least one unit to return.',
   'return_forbidden' => 'This role may not record a return.',
+  'refund_exceeds_paid' =>
+    'That is more than was paid for this sale at the counter.',
+  'refund_needs_tender' => 'Say how the money was handed back.',
+  'refund_needs_shift' =>
+    'Open the register on this phone to record money handed back.',
+  'invalid_return_refund' => 'Enter the amount handed back, like 500.',
   _ => 'The return could not be recorded.',
 });
 
@@ -594,6 +633,7 @@ final class _SaleReturnsContents extends StatelessWidget {
     required this.showHistory,
     required this.scrollController,
     required this.onCancel,
+    this.findTill,
   });
 
   final TenantSaleReturnsRequest request;
@@ -608,9 +648,12 @@ final class _SaleReturnsContents extends StatelessWidget {
   final bool canVerify;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
-  final void Function(Map<String, int> quantities, String reason) onRecord;
+  final _RecordReturn onRecord;
   final ValueChanged<TenantReturn> onVerify;
   final bool showHistory;
+
+  /// See [_RecordReturnForm.findTill].
+  final Future<CheckoutShiftAttribution?> Function()? findTill;
 
   /// The sheet's drag controller. See
   /// [TenantSaleReturnsPanel.scrollController].
@@ -731,6 +774,7 @@ final class _SaleReturnsContents extends StatelessWidget {
                 busy: busy,
                 onRecord: onRecord,
                 onCancel: onCancel,
+                findTill: findTill,
               )
             else
               const Text(
@@ -855,6 +899,25 @@ final class _SaleReturnsContents extends StatelessWidget {
       tenantStaffLabel(uid, names: view.names, selfUid: selfUid);
 }
 
+/// What the form says was handed back: nothing, or an amount, how, and from
+/// which drawer.
+final class _RefundChoice {
+  const _RefundChoice({this.amountMinor = 0, this.tender, this.till});
+
+  static const _RefundChoice none = _RefundChoice();
+
+  final int amountMinor;
+  final CheckoutTender? tender;
+  final CheckoutShiftAttribution? till;
+}
+
+typedef _RecordReturn =
+    void Function(
+      Map<String, int> quantities,
+      String reason,
+      _RefundChoice refund,
+    );
+
 /// Selects the units to return and requires an explicit confirmation.
 final class _RecordReturnForm extends StatefulWidget {
   const _RecordReturnForm({
@@ -863,6 +926,7 @@ final class _RecordReturnForm extends StatefulWidget {
     required this.busy,
     required this.onRecord,
     this.onCancel,
+    this.findTill,
   });
 
   final TenantReturnableSale returnable;
@@ -875,7 +939,15 @@ final class _RecordReturnForm extends StatefulWidget {
   /// rules are about things a person can aim at. `secondary`, so §2.1's
   /// one-primary-per-region still names `Record return`.
   final VoidCallback? onCancel;
-  final void Function(Map<String, int> quantities, String reason) onRecord;
+  final _RecordReturn onRecord;
+
+  /// The recorder's open shift on this phone, which a refund comes out of.
+  ///
+  /// **Absent, the form offers no refund at all** - every return before
+  /// 2026-10-09, and any composition that does not wire it. Present but
+  /// answering null, the form says no money is recorded: an owner recording a
+  /// return from Sales, away from any till, hands nothing over from one.
+  final Future<CheckoutShiftAttribution?> Function()? findTill;
 
   @override
   State<_RecordReturnForm> createState() => _RecordReturnFormState();
@@ -896,10 +968,99 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
   final TextEditingController _reason = TextEditingController();
   String _choice = _noReason;
 
+  /// What is handed back, as typed. Follows the suggestion until the cashier
+  /// types over it, and then is theirs.
+  final TextEditingController _refund = TextEditingController();
+  bool _refundTyped = false;
+  late CheckoutTender? _refundTender = widget.returnable.refundTender;
+
+  CheckoutShiftAttribution? _till;
+  bool _tillKnown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final findTill = widget.findTill;
+    if (findTill == null) return;
+    findTill().then((till) {
+      if (!mounted) return;
+      setState(() {
+        _till = till;
+        _tillKnown = true;
+      });
+    });
+  }
+
   @override
   void dispose() {
     _reason.dispose();
+    _refund.dispose();
     super.dispose();
+  }
+
+  /// Whether any money could be handed back for what is chosen at all.
+  bool get _refundable =>
+      _selectedUnits > 0 && widget.returnable.refundableMinor > 0;
+
+  /// The refund section is drawn: a till is open here, and money could go.
+  bool get _refundShown => _till != null && _refundable;
+
+  /// No till is open here, so the form says no money is recorded.
+  bool get _noTillShown =>
+      widget.findTill != null && _tillKnown && _till == null && _refundable;
+
+  /// The typed amount in minor units, or null where it does not parse.
+  int? get _refundMinor {
+    final text = _refund.text.trim();
+    if (text.isEmpty) return 0;
+    try {
+      return tenantCatalogPriceMinorUnits(text);
+    } on TenantCatalogManagementException {
+      return null;
+    }
+  }
+
+  String? get _refundError {
+    if (!_refundShown) return null;
+    final amount = _refundMinor;
+    if (amount == null) return 'Enter the amount handed back, like 500.';
+    final most = widget.returnable.refundableMinor;
+    if (amount > most) {
+      return 'No more than ${moneyTextOfMinor(most)} was paid at the counter.';
+    }
+    return null;
+  }
+
+  bool get _refundReady {
+    if (!_refundShown) return true;
+    final amount = _refundMinor;
+    return _refundError == null &&
+        amount != null &&
+        (amount == 0 || _refundTender != null);
+  }
+
+  _RefundChoice get _refundChoice {
+    final amount = _refundMinor ?? 0;
+    if (!_refundShown || amount == 0) return _RefundChoice.none;
+    return _RefundChoice(
+      amountMinor: amount,
+      tender: _refundTender,
+      till: _till,
+    );
+  }
+
+  /// Keeps the amount on the suggestion while the cashier has not typed one.
+  void _suggestRefund() {
+    if (_refundTyped) return;
+    final suggested = widget.returnable.suggestedRefundMinor(_quantities);
+    _refund.text = suggested == 0 ? '0' : _typedAmount(suggested);
+  }
+
+  /// The way every typed amount in this app reads: no decimals on a whole one.
+  static String _typedAmount(int minorUnits) {
+    final major = minorUnits ~/ 100;
+    final minor = minorUnits % 100;
+    return minor == 0 ? '$major' : '$major.${minor.toString().padLeft(2, '0')}';
   }
 
   /// The reason this form would record, chosen or typed.
@@ -911,7 +1072,10 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
   void _change(TenantReturnableLine line, int delta) {
     final next = _quantityOf(line.productId) + delta;
     if (next < 0 || next > line.remainingQuantity) return;
-    setState(() => _quantities[line.productId] = next);
+    setState(() {
+      _quantities[line.productId] = next;
+      _suggestRefund();
+    });
   }
 
   int get _selectedUnits =>
@@ -920,15 +1084,23 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
   bool get _canSubmit =>
       !widget.busy &&
       _selectedUnits > 0 &&
-      _resolvedReason.trim().length >= minimumReturnReasonLength;
+      _resolvedReason.trim().length >= minimumReturnReasonLength &&
+      _refundReady;
 
   Future<void> _confirm() async {
+    final refund = _refundChoice;
+    final handedBack = refund.amountMinor == 0
+        ? ''
+        : ', and ${widget.returnable.currency} '
+              '${moneyTextOfMinor(refund.amountMinor)} handed back by '
+              '${refund.tender!.label} from your till';
     final confirmed = await showConfirmDialog(
       context,
       title: 'Record this return?',
       consequence:
           'This records $_selectedUnits '
-          '${_selectedUnits == 1 ? 'unit' : 'units'} as a pending return.',
+          '${_selectedUnits == 1 ? 'unit' : 'units'} as a pending return'
+          '$handedBack.',
       stillTrue: 'It restores no stock: a manager must verify it first.',
       confirmLabel: 'Record return',
       tier: AppButtonTier.primary,
@@ -939,6 +1111,7 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
     widget.onRecord(
       Map<String, int>.unmodifiable(_quantities),
       _resolvedReason,
+      refund,
     );
   }
 
@@ -1024,6 +1197,66 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
             maxLength: maximumReturnReasonLength,
             onChanged: (_) => setState(() {}),
             label: 'Say what happened',
+          ),
+        ],
+        // **What left the drawer.** Suggested from what the goods were charged
+        // at - after any debt on a credit sale - and how the sale was paid, so
+        // the usual return is one glance. Lowered for a partial refund, or to
+        // nothing for an exchange.
+        if (_refundShown) ...<Widget>[
+          SizedBox(height: tokens.spacing.s16),
+          AppTextField(
+            key: const ValueKey('sale-returns-refund-amount'),
+            controller: _refund,
+            enabled: !widget.busy,
+            label: 'Handed back to the customer',
+            leading: Icons.payments_outlined,
+            helper:
+                'Up to ${widget.returnable.currency} '
+                '${moneyTextOfMinor(widget.returnable.refundableMinor)}. '
+                'Put 0 for an exchange.',
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            error: _refundError,
+            onChanged: (_) => setState(() => _refundTyped = true),
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          FilterChipBar<CheckoutTender>(
+            semanticLabel: 'How it was handed back',
+            selected: _refundTender,
+            onSelected: (value) => setState(() => _refundTender = value),
+            options: <FilterChipOption<CheckoutTender>>[
+              for (final option in CheckoutTender.values)
+                FilterChipOption<CheckoutTender>(
+                  key: ValueKey(
+                    'sale-returns-refund-tender-${option.wireValue}',
+                  ),
+                  value: option,
+                  label: option.label,
+                ),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s8),
+          Text(
+            'It comes out of your till, so your drawer is expected to hold that '
+            'much less when you count it.',
+            style: tokens.typography.caption.copyWith(
+              color: tokens.colors.text.tertiary,
+            ),
+          ),
+        ],
+        if (_noTillShown) ...<Widget>[
+          SizedBox(height: tokens.spacing.s16),
+          Text(
+            key: const ValueKey('sale-returns-refund-no-till'),
+            'No till is open on this phone, so no money handed back is '
+            'recorded. Open the register first to pay the customer back from '
+            'your drawer.',
+            style: tokens.typography.caption.copyWith(
+              color: tokens.colors.text.secondary,
+            ),
           ),
         ],
         SizedBox(height: tokens.spacing.s16),

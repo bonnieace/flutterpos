@@ -226,6 +226,7 @@ final class TenantShiftCloseIntent {
     this.settlementId,
     this.creditOwedMinor = 0,
     this.repaidMinor = 0,
+    this.refundedMinor = 0,
   });
 
   final String path;
@@ -238,6 +239,11 @@ final class TenantShiftCloseIntent {
   /// there is one; reconciliation counts both again itself.
   final int creditOwedMinor;
   final int repaidMinor;
+
+  /// What this drawer handed back over the counter for returns. Written only
+  /// when there is some, for the same history row; reconciliation reads the
+  /// returns themselves.
+  final int refundedMinor;
 
   /// When the drawer was counted, by this device's clock - written beside the
   /// server's `endTime` as `closedAt`. See [TenantShift.endedAt].
@@ -304,6 +310,7 @@ final class TenantShiftCloseIntent {
     if (settlementId case final settlement?) 'settlementId': settlement,
     if (creditOwedMinor > 0) 'creditOwedMinor': creditOwedMinor,
     if (repaidMinor > 0) 'repaidMinor': repaidMinor,
+    if (refundedMinor > 0) 'refundedMinor': refundedMinor,
   };
 }
 
@@ -414,6 +421,7 @@ final class TenantShiftRepository extends TenantReadRepository {
           ? sales.creditOwedMinor
           : 0,
       repaidMinor: sales.repaidMinor > 0 ? sales.repaidMinor : 0,
+      refundedMinor: sales.refundedMinor > 0 ? sales.refundedMinor : 0,
     );
   }
 
@@ -745,6 +753,11 @@ final class FirebaseShiftServerSalesTotals implements ShiftServerSalesTotals {
         uid: uid,
         shiftId: shiftId,
       );
+      final refunded = await _refunded(
+        tenantId: tenantId,
+        uid: uid,
+        shiftId: shiftId,
+      );
       return ShiftServerTotals(
         transactionCount: transactionCount,
         totalMinor: total.toInt(),
@@ -756,6 +769,8 @@ final class FirebaseShiftServerSalesTotals implements ShiftServerSalesTotals {
         ),
         repaidMinor: repaid?.$1,
         repaidPaymentIds: repaid?.$2,
+        refundedMinor: refunded?.$1,
+        refundedReturnIds: refunded?.$2,
       );
     } catch (error, stackTrace) {
       AppTelemetry.captureHandled(
@@ -827,9 +842,11 @@ extension on FirebaseShiftServerSalesTotals {
   }) async {
     try {
       final snapshot = await _firestore
-          .collection(TenantPaths(tenantId).collectionPath(
-            TenantCollection.customerPayments,
-          ))
+          .collection(
+            TenantPaths(
+              tenantId,
+            ).collectionPath(TenantCollection.customerPayments),
+          )
           .where('shiftId', isEqualTo: shiftId)
           .where('recordedBy', isEqualTo: uid)
           .limit(_maximumRepaymentsRead + 1)
@@ -851,6 +868,46 @@ extension on FirebaseShiftServerSalesTotals {
         error,
         stackTrace,
         boundary: 'shift.server_repaid_read',
+      );
+      return null;
+    }
+  }
+
+  /// What this shift handed back for returns, counted on the server, and the
+  /// returns that make it up - or null where that could not be read.
+  ///
+  /// **The documents, not a `sum()`**, for the reason [_repaid] reads them: a
+  /// refund this phone still has queued is taken off once, and one that has
+  /// landed is not taken off twice. Filtered to the recorder because the
+  /// create rule only lets a refund leave its recorder's own drawer.
+  Future<(int, Set<String>)?> _refunded({
+    required String tenantId,
+    required String uid,
+    required String shiftId,
+  }) async {
+    try {
+      final snapshot = await _firestore
+          .collection(TenantPaths(tenantId).returns)
+          .where('refundShiftId', isEqualTo: shiftId)
+          .where('createdBy', isEqualTo: uid)
+          .limit(_maximumRepaymentsRead + 1)
+          .get(const GetOptions(source: Source.server))
+          .timeout(_timeout);
+      if (snapshot.docs.length > _maximumRepaymentsRead) return null;
+      var refunded = 0;
+      final ids = <String>{};
+      for (final document in snapshot.docs) {
+        final amount = document.data()['refundMinor'];
+        if (amount is! int || amount <= 0) return null;
+        refunded += amount;
+        ids.add(document.id);
+      }
+      return (refunded, ids);
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.server_refunded_read',
       );
       return null;
     }

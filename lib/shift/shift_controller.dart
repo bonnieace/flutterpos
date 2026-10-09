@@ -131,6 +131,7 @@ final class TenantShiftController extends ChangeNotifier {
     required TenantShiftOnlineCheck isOnline,
     ShiftServerSalesTotals? serverTotals,
     ShiftQueuedRepayments? queuedRepayments,
+    ShiftQueuedRefunds? queuedRefunds,
     TenantShiftIdFactory? shiftIdFactory,
     TenantShiftClock? clock,
     CheckoutBusinessDateResolver? businessDateResolver,
@@ -141,6 +142,7 @@ final class TenantShiftController extends ChangeNotifier {
        _salesLedger = salesLedger,
        _serverTotals = serverTotals,
        _queuedRepayments = queuedRepayments,
+       _queuedRefunds = queuedRefunds,
        _deviceId = validateCheckoutDeviceId(deviceId),
        _isOnline = isOnline,
        _shiftIdFactory = shiftIdFactory ?? _generateShiftId,
@@ -162,6 +164,10 @@ final class TenantShiftController extends ChangeNotifier {
   /// Null counts only what the server holds, which is what a test or a build
   /// without the queue wired in gets.
   final ShiftQueuedRepayments? _queuedRepayments;
+
+  /// The refunds this phone handed out that may not have reached the server.
+  /// Null counts only what the server holds, as for repayments.
+  final ShiftQueuedRefunds? _queuedRefunds;
   final String _deviceId;
   final TenantShiftOnlineCheck _isOnline;
   final TenantShiftIdFactory _shiftIdFactory;
@@ -1206,6 +1212,9 @@ final class TenantShiftController extends ChangeNotifier {
   /// **Repayments still on this phone's queue are added either way.** The
   /// cashier counts their cash in the drawer, and the server cannot count
   /// what has not reached it; one that has landed is counted there only.
+  ///
+  /// **Refunds still on the queue are taken off the same way.** The money was
+  /// handed over when the return was recorded, whether or not it has landed.
   Future<ShiftSalesSummary> _closingSummary(
     TenantSession captured,
     String shiftId,
@@ -1218,23 +1227,38 @@ final class TenantShiftController extends ChangeNotifier {
           shiftId: shiftId,
         ) ??
         const <String, int>{};
-    ShiftSalesSummary withRepaid(
-      ShiftSalesSummary summary,
-      int repaidMinor,
-      Set<String> counted,
-    ) => ShiftSalesSummary(
+    final queuedRefunds =
+        await _queuedRefunds?.forShift(
+          uid: captured.uid,
+          tenantId: captured.tenantId,
+          shiftId: shiftId,
+        ) ??
+        const <String, int>{};
+    int uncounted(Map<String, int> held, Set<String> counted) => held.entries
+        .where((entry) => !counted.contains(entry.key))
+        .fold(0, (sum, entry) => sum + entry.value);
+    ShiftSalesSummary withDrawerMoney(
+      ShiftSalesSummary summary, {
+      required int repaidMinor,
+      required Set<String> countedPayments,
+      required int refundedMinor,
+      required Set<String> countedRefunds,
+    }) => ShiftSalesSummary(
       transactionCount: summary.transactionCount,
       totalMinor: summary.totalMinor,
       unsettledCount: summary.unsettledCount,
       tenders: summary.tenders,
       creditOwedMinor: summary.creditOwedMinor,
-      repaidMinor:
-          repaidMinor +
-          queued.entries
-              .where((entry) => !counted.contains(entry.key))
-              .fold(0, (sum, entry) => sum + entry.value),
+      repaidMinor: repaidMinor + uncounted(queued, countedPayments),
+      refundedMinor: refundedMinor + uncounted(queuedRefunds, countedRefunds),
     );
-    final offline = withRepaid(local, local.repaidMinor, const <String>{});
+    final offline = withDrawerMoney(
+      local,
+      repaidMinor: local.repaidMinor,
+      countedPayments: const <String>{},
+      refundedMinor: local.refundedMinor,
+      countedRefunds: const <String>{},
+    );
     final totals = _serverTotals;
     if (totals == null || !await _online()) return offline;
     final server = await totals.read(
@@ -1258,10 +1282,19 @@ final class TenantShiftController extends ChangeNotifier {
     // this phone holds is the floor, as for every other figure here.
     final serverRepaid = server.repaidMinor;
     final serverPayments = server.repaidPaymentIds;
-    if (serverRepaid == null || serverPayments == null) {
-      return withRepaid(serverSummary, offline.repaidMinor, queued.keys.toSet());
-    }
-    return withRepaid(serverSummary, serverRepaid, serverPayments);
+    final repaidReadable = serverRepaid != null && serverPayments != null;
+    final serverRefunded = server.refundedMinor;
+    final serverRefunds = server.refundedReturnIds;
+    final refundedReadable = serverRefunded != null && serverRefunds != null;
+    return withDrawerMoney(
+      serverSummary,
+      repaidMinor: repaidReadable ? serverRepaid : offline.repaidMinor,
+      countedPayments: repaidReadable ? serverPayments : queued.keys.toSet(),
+      refundedMinor: refundedReadable ? serverRefunded : offline.refundedMinor,
+      countedRefunds: refundedReadable
+          ? serverRefunds
+          : queuedRefunds.keys.toSet(),
+    );
   }
 
   /// The honest offline view: only local facts, and all of them.
@@ -1630,6 +1663,45 @@ final class TenantShiftCheckoutBinder implements CheckoutShiftBinder {
         businessDate: record.businessDate,
       ),
     );
+  }
+}
+
+/// Binds a till only once the server has been asked whether it is still open.
+///
+/// **Why a return cannot use [TenantShiftCheckoutBinder] on its own.** That
+/// binder reads this phone's record of the open shift, and the record is only
+/// brought into line with the server by [TenantShiftController.restore] - which
+/// the till's gate runs on every entry, and nothing on the way to a return did.
+/// So a shift closed on another phone was still "open" here, and a refund
+/// handed back was bound to a drawer already counted: nightly reconciliation
+/// then called that shift over by the refund, and the drawer that really paid
+/// was never charged. Found on the device run of 2026-10-09, where an owner's
+/// shift closed elsewhere at 08:22 was offered as the till for a return.
+///
+/// **Restore first, then bind from what it settled.** Online, restore reads
+/// the canonical shift and clears a record the server says is closed or
+/// absent, so the bind that follows refuses it. Offline it changes nothing, and
+/// the phone's record is the best anyone can know: a refund handed over with no
+/// signal still comes out of the drawer the cashier is holding. A restore that
+/// fails falls back the same way rather than refusing a till that may be fine.
+final class ServerCheckedShiftBinder implements CheckoutShiftBinder {
+  const ServerCheckedShiftBinder(this._shifts, this._local);
+
+  final TenantShiftController _shifts;
+  final CheckoutShiftBinder _local;
+
+  @override
+  Future<CheckoutShiftBinding> bindCheckoutShift(TenantSession session) async {
+    try {
+      await _shifts.restore(session);
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'shift.bind_checked',
+      );
+    }
+    return _local.bindCheckoutShift(session);
   }
 }
 
