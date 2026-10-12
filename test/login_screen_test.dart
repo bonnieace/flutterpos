@@ -691,6 +691,90 @@ void main() {
       );
     });
   });
+
+  group('the keypad types a run of keys, not just the last one', () {
+    // Found on a large touchscreen on 2026-10-11: every key replaced the one
+    // before it. On web and desktop a tap outside a field unfocuses it, and a
+    // field that regains the focus there selects all of its text - so each key
+    // blurred the field, typed, refocused it, and left the next key a
+    // selection to overwrite. The default test platform is Android, which does
+    // neither, and is why the caps-lock test above passed throughout.
+    testWidgets(
+      'on a platform that selects all on focus',
+      (tester) async {
+        await _pumpAt(tester, _keypadFloor);
+        for (final face in <String>['a', 'b', 'c']) {
+          await tester.tap(_keyFace(tester, face));
+          await tester.pumpAndSettle();
+        }
+
+        final field = tester.widget<TextField>(_field('login-email'));
+        expect(field.controller!.text, 'abc');
+        expect(field.focusNode!.hasFocus, isTrue);
+      },
+      variant: TargetPlatformVariant.desktop(),
+    );
+  });
+
+  group('the keypad backspace', () {
+    TextEditingController email(WidgetTester tester) =>
+        tester.widget<TextField>(_field('login-email')).controller!;
+
+    Finder backspace() => find.descendant(
+      of: find.byType(PosKeyboard),
+      matching: find.byIcon(Icons.backspace_outlined),
+    );
+
+    void typed(WidgetTester tester, String text, [TextSelection? selection]) =>
+        email(tester).value = TextEditingValue(
+          text: text,
+          selection: selection ?? TextSelection.collapsed(offset: text.length),
+        );
+
+    testWidgets('a tap takes the character before the caret', (tester) async {
+      await _pumpAt(tester, _keypadFloor);
+      typed(tester, 'owner');
+      await tester.tap(backspace());
+      await tester.pumpAndSettle();
+      expect(email(tester).text, 'owne');
+    });
+
+    testWidgets('a selection goes whole, not one character before it', (
+      tester,
+    ) async {
+      // Before 2026-10-11 it deleted nothing at all when the selection began
+      // at the start of the text, which is where a field that selects all on
+      // focus puts it.
+      await _pumpAt(tester, _keypadFloor);
+      typed(
+        tester,
+        'owner@example.com',
+        const TextSelection(baseOffset: 0, extentOffset: 6),
+      );
+      await tester.tap(backspace());
+      await tester.pumpAndSettle();
+      expect(email(tester).text, 'example.com');
+    });
+
+    testWidgets('held, it keeps deleting until the field is empty', (
+      tester,
+    ) async {
+      final repeat = spiritTheme.extension<AppTokens>()!.motion.keyRepeat;
+      await _pumpAt(tester, _keypadFloor);
+      typed(tester, 'owner@example.com');
+
+      final gesture = await tester.startGesture(tester.getCenter(backspace()));
+      await tester.pump(repeat.delay - const Duration(milliseconds: 1));
+      expect(email(tester).text, 'owner@example.co');
+
+      // Seventeen characters, gone well inside two and a half seconds.
+      await tester.pump(repeat.ramp.duration + const Duration(seconds: 1));
+      expect(email(tester).text, isEmpty);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(email(tester).text, isEmpty);
+    });
+  });
 }
 
 /// The key whose face reads [face], inside the keypad.

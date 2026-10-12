@@ -25,7 +25,10 @@ library;
 import 'package:hive/hive.dart';
 
 import 'checkout_print_configuration.dart';
+import 'checkout_print_mode.dart';
 import 'checkout_print_transport_base.dart';
+import 'checkout_system_printer.dart';
+import 'checkout_usb_printer.dart';
 
 /// One device a Bluetooth search, or the paired list, turned up.
 ///
@@ -376,25 +379,82 @@ final class UnopenedDeviceBluetoothPrinterStore
 
 /// Where this device sends [tenantId]'s receipts.
 ///
-/// **A Bluetooth printer chosen on this device wins; otherwise the business's
-/// network printer, unchanged.** A record this device cannot read refuses
-/// rather than falling back: printing on the network printer when somebody
-/// chose a Bluetooth one would put receipts on the wrong counter without a
-/// word, which is §2's fail-open in a new place.
+/// **The kind of printer this device switched on decides, and only that
+/// kind** - see `checkout_print_mode.dart`. A kind switched on with no printer
+/// chosen for it prints nowhere and says so, rather than falling back to
+/// another kind the person switched off.
+///
+/// **A device that never switched one on reads as it always did**: a printer
+/// chosen on it - USB, Bluetooth, or the print window - or else the
+/// business's network printer. A record this device cannot read refuses
+/// rather than falling back: printing somewhere other than where somebody
+/// chose would put receipts on the wrong counter without a word, which is §2's
+/// fail-open in a new place.
 TenantConfiguredPrinter devicePrinter({
   required TenantConfiguredPrinter business,
   required DeviceBluetoothPrinterStore? store,
   required String tenantId,
-}) => _chosenHere(store, tenantId) ?? business;
+  DeviceUsbPrinterStore? usbStore,
+  DeviceSystemPrinterStore? systemStore,
+  DevicePrintModeStore? modeStore,
+}) {
+  final DevicePrintMode? mode;
+  try {
+    mode = modeStore?.read(tenantId);
+  } on FormatException {
+    return const TenantConfiguredPrinter.malformed();
+  }
+  if (mode == DevicePrintMode.network) return business;
+  return _onThisDevice(mode, store, usbStore, systemStore, tenantId) ??
+      business;
+}
 
 /// [devicePrinter], reading the business's printer only when it is the
-/// answer: a device printing on Bluetooth never needs it, and this asks for
-/// it on every receipt.
+/// answer: a device printing on its own printer never needs it, and this asks
+/// for it on every receipt.
 Future<TenantConfiguredPrinter> devicePrinterLoading({
   required Future<TenantConfiguredPrinter> Function() business,
   required DeviceBluetoothPrinterStore? store,
   required String tenantId,
-}) async => _chosenHere(store, tenantId) ?? await business();
+  DeviceUsbPrinterStore? usbStore,
+  DeviceSystemPrinterStore? systemStore,
+  DevicePrintModeStore? modeStore,
+}) async {
+  final DevicePrintMode? mode;
+  try {
+    mode = modeStore?.read(tenantId);
+  } on FormatException {
+    return const TenantConfiguredPrinter.malformed();
+  }
+  if (mode == DevicePrintMode.network) return business();
+  return _onThisDevice(mode, store, usbStore, systemStore, tenantId) ??
+      await business();
+}
+
+/// The printer [mode] names on this device, or null when the business's
+/// network printer is the answer.
+TenantConfiguredPrinter? _onThisDevice(
+  DevicePrintMode? mode,
+  DeviceBluetoothPrinterStore? store,
+  DeviceUsbPrinterStore? usbStore,
+  DeviceSystemPrinterStore? systemStore,
+  String tenantId,
+) => switch (mode) {
+  null =>
+    usbPrinterChosenHere(usbStore, tenantId) ??
+        _chosenHere(store, tenantId) ??
+        systemPrinterChosenHere(systemStore, tenantId),
+  DevicePrintMode.network => null,
+  DevicePrintMode.usb =>
+    usbPrinterChosenHere(usbStore, tenantId) ?? _nothingChosen,
+  DevicePrintMode.bluetooth => _chosenHere(store, tenantId) ?? _nothingChosen,
+  DevicePrintMode.dialog =>
+    systemPrinterChosenHere(systemStore, tenantId) ?? _nothingChosen,
+  DevicePrintMode.off => _nothingChosen,
+};
+
+/// A kind switched on with no printer chosen, or none switched on at all.
+const TenantConfiguredPrinter _nothingChosen = TenantConfiguredPrinter.absent();
 
 /// What this device chose for [tenantId], or null to use the business's.
 TenantConfiguredPrinter? _chosenHere(

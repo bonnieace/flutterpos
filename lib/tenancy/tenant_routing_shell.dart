@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../checkout/checkout_draft.dart';
 import '../observability/app_telemetry.dart';
 import '../checkout/checkout_outbox.dart';
+import '../checkout/checkout_unsent_sign_out.dart';
 import '../expenses/expense.dart';
 import '../expenses/expense_repository.dart';
 import '../reporting/daily_metrics.dart';
@@ -21,6 +22,7 @@ import '../ui/buttons.dart';
 import '../ui/card.dart';
 import '../ui/dialogs.dart';
 import '../ui/home_navigation.dart';
+import '../ui/hub_bar.dart';
 import '../ui/measure.dart';
 import '../ui/routes.dart';
 export '../ui/routes.dart' show tenantRouteObserver;
@@ -133,6 +135,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.checkoutRoute,
     this.settingsRoute,
     this.settingsRoles = const <TenantRole>[],
+    this.terminalLabel,
+    this.onlineChanges,
     this.printQueueCount,
     this.unresolvedDifferencesCount,
     this.catalogManagementRoute,
@@ -145,6 +149,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.salesTotalsCallable,
     this.pendingCheckoutPanel,
     this.checkoutOutbox,
+    this.warnBeforeSigningOutWithUnsentSales = false,
     this.shiftPanel,
     this.dailySummaryRoute,
     this.dailySummaryRoles = const <TenantRole>[],
@@ -351,6 +356,13 @@ final class TenantRoutingShell extends StatefulWidget {
   /// this device has not sent. See `TenantSafeLandingScreen.checkoutOutbox`.
   final HiveCheckoutOutbox? checkoutOutbox;
 
+  /// Whether signing out with sales only [checkoutOutbox] holds asks first.
+  ///
+  /// On in a browser and off on a phone, for the reason
+  /// `checkout_unsent_sign_out.dart` gives: only a browser's sign-out is
+  /// routinely followed by clearing the storage those sales live in.
+  final bool warnBeforeSigningOutWithUnsentSales;
+
   /// Optional point-of-sale route, injected for the same reason. It takes no
   /// reader: a sale is built from the device's own offline catalog, not from a
   /// live read, which is the whole point of the offline checkout design.
@@ -368,6 +380,13 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles offered these destinations. Each panel keeps its own guard.
   final List<TenantRole> settingsRoles;
+
+  /// This device's receipt code, for the home's top bar on a wider screen.
+  final String? terminalLabel;
+
+  /// Whether this device has a network, as it changes. The home's top bar
+  /// reads it with [tenantSwitchOnlineCheck] for its first value.
+  final Stream<bool>? onlineChanges;
 
   /// How many receipts this device has not printed.
   ///
@@ -1129,6 +1148,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
   }
 
   Future<void> _signOut() async {
+    if (!await _mayLeaveUnsentSales()) return;
     final telemetry = AppTelemetry.current;
     final operation = telemetry.start('auth.sign_out', screen: 'account');
     ++_flowToken;
@@ -1154,6 +1174,37 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       if (!mounted) return;
       _showFailure(error);
     }
+  }
+
+  /// True unless this browser holds sales the server has not seen and the
+  /// person chose to stay signed in.
+  ///
+  /// **An outbox that cannot be read does not hold the person here.** The
+  /// failure is reported and the sign-out goes ahead: a warning that can trap
+  /// somebody in an account is worse than one that is occasionally missing.
+  Future<bool> _mayLeaveUnsentSales() async {
+    final outbox = widget.checkoutOutbox;
+    final uid = _uid;
+    final tenantId = _sessionController.session?.tenantId;
+    if (!widget.warnBeforeSigningOutWithUnsentSales ||
+        outbox == null ||
+        uid == null ||
+        tenantId == null) {
+      return true;
+    }
+    final int unsent;
+    try {
+      unsent = await unsentSalesFor(outbox, uid: uid, tenantId: tenantId);
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'auth.sign_out_unsent_count',
+      );
+      return true;
+    }
+    if (unsent == 0 || !mounted) return true;
+    return confirmSignOutWithUnsentSales(context, unsent: unsent);
   }
 
   bool _isCurrent(String uid, int token) =>
@@ -1498,6 +1549,9 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell>
       checkoutRoute: widget.checkoutRoute,
       settingsRoute: widget.settingsRoute,
       settingsRoles: widget.settingsRoles,
+      terminalLabel: widget.terminalLabel,
+      onlineCheck: widget.tenantSwitchOnlineCheck,
+      onlineChanges: widget.onlineChanges,
       printQueueCount: widget.printQueueCount,
       unresolvedDifferencesCount: widget.unresolvedDifferencesCount,
       catalogManagementRoute: widget.catalogManagementRoute,
@@ -2961,6 +3015,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.checkoutRoute,
     this.settingsRoute,
     this.settingsRoles = const <TenantRole>[],
+    this.terminalLabel,
+    this.onlineCheck,
+    this.onlineChanges,
     this.printQueueCount,
     this.unresolvedDifferencesCount,
     this.catalogManagementRoute,
@@ -3079,6 +3136,16 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// The roles that route is offered to. Owner and administrator, which is what
   /// `configuration/{documentId}` admits for writing.
   final List<TenantRole> settingsRoles;
+
+  /// This device's receipt code - `CT-7F2` - for the top bar's status pill on
+  /// a tablet or a desktop. Null draws no pill. See `HubTopBar`.
+  final String? terminalLabel;
+
+  /// The pill's first reading of whether this device is online.
+  final Future<bool> Function()? onlineCheck;
+
+  /// Every later reading. Read-only: the bar shows it and nothing acts on it.
+  final Stream<bool>? onlineChanges;
 
   /// See `TenantRoutingShell.printQueueCount`.
   final int? Function()? printQueueCount;
@@ -3419,6 +3486,26 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     // withdrawn here; `AppScaffold` still offers it to any other screen that
     // wants one.
     final destinations = _destinations(context, overview);
+    // **Wider than a phone, the page is the old hub's**: the whole window less
+    // 32 a side, and 40 between the greeting and the cards - its own figures,
+    // restored with its cards on 2026-10-10. A phone keeps the 20 every other
+    // page pads itself with, and its launcher.
+    final wide = AppLayout.contract.isAtLeast(
+      MediaQuery.sizeOf(context).width,
+      AppBreakpoint.medium,
+    );
+    // **A cashier's phone stacks its cards**, as the old hub did on every
+    // phone - one to a row, full width - at the developer's direction on
+    // 2026-10-10: a cashier has few cards, and the launcher left them as a
+    // short row of glyphs. Every other role keeps the launcher. Layout only:
+    // which cards there are is still `_destinations`' decision.
+    final stackedOnPhone = membership.role == TenantRole.cashier;
+    // The old hub's own phone inset, 16, where it stacks.
+    final sideInset = wide
+        ? tokens.spacing.s32
+        : stackedOnPhone
+        ? tokens.spacing.s16
+        : inset;
     return AppScaffold(
       title: branding?.companyName ?? membership.tenantName,
       // The name of the business is what says which business this is, so it is
@@ -3436,10 +3523,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       titleActionLabel: _canOpenBusinesses
           ? 'My businesses'
           : 'Change business',
-      // §4.2's record row rather than its reading row: the grid wants the
-      // wider measure, and 720 would narrow the page under the shift panel it
-      // sits below.
-      contentWidth: AppContentWidth.records,
+      // **The full window, since 2026-10-10**: the old hub's grid had no
+      // maximum, and its cards are back. It was §4.2's record row, 1200; a
+      // phone is narrower than either, so nothing changes there.
+      contentWidth: AppContentWidth.full,
       // §4.4's top bar, in the two slots that need no data the home is not
       // given. The queue button is `CheckoutPendingEvidencePanel` itself,
       // moved rather than rebuilt: it already held the counts, so restyling it
@@ -3462,6 +3549,71 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           onPressed: () => unawaited(onSignOut()),
         ),
       ],
+      // **The old hub's bar, since 2026-10-10**, at the developer's direction:
+      // its mark and - where it said *Main Hub* - this business's name, still
+      // the control above; this device's real terminal and whether it is
+      // online; who is signed in; then the bell, settings and the way out, in
+      // the old bar's white. **On a phone too**, as the one exception the
+      // developer made to the old look being for wider screens: the old
+      // phone row, with the person as a circle and no status pill. The
+      // toolbar above is what a test that builds no bar falls back to.
+      topBar: HubTopBar(
+        compact: !wide,
+        title: branding?.companyName ?? membership.tenantName,
+        onTitlePressed: _canOpenBusinesses
+            ? () => _openBusinesses(context, overview)
+            : _canSwitchBusiness
+            ? () => _showBusinessSwitcher(context)
+            : null,
+        titleActionLabel: _canOpenBusinesses
+            ? 'My businesses'
+            : 'Change business',
+        terminalLabel: terminalLabel,
+        onlineCheck: onlineCheck,
+        onlineChanges: onlineChanges,
+        memberName: memberName,
+        memberRole: tenantRoleLabel(membership.role),
+        actions: <Widget>[
+          if (pendingCheckoutPanel != null) pendingCheckoutPanel!,
+          // **The old bar's gear, and now it opens something.** The old
+          // one's handler was commented out; this opens the settings
+          // a member may change, to the same people the *Configs* card
+          // is offered to, and is not drawn for anyone else.
+          if (settingsRoute != null && membership.role.canAccess(settingsRoles))
+            AppIconButton(
+              key: const ValueKey('hub-settings'),
+              icon: Icons.settings_outlined,
+              semanticLabel: 'Settings',
+              tier: AppButtonTier.tertiary,
+              bordered: false,
+              // The old bar's 24, and its phone row's 20, which is
+              // nearest `row`.
+              iconSize: wide ? tokens.icons.card : tokens.icons.row,
+              glyphColor: tokens.colors.text.primary,
+              onPressed: () {
+                final controller = TenantSessionScope.of(context);
+                Navigator.of(context).push(
+                  AppPageRoute<void>(
+                    builder: (_) => TenantSessionScope(
+                      controller: controller,
+                      child: settingsRoute!(reader, null),
+                    ),
+                  ),
+                );
+              },
+            ),
+          AppIconButton(
+            key: const ValueKey('sign-out'),
+            icon: Icons.logout,
+            semanticLabel: 'Sign out',
+            tier: AppButtonTier.tertiary,
+            bordered: false,
+            iconSize: wide ? tokens.icons.card : tokens.icons.row,
+            glyphColor: tokens.colors.text.primary,
+            onPressed: () => unawaited(onSignOut()),
+          ),
+        ],
+      ),
       // **No subtitle, since 2026-08-23.** It said `Dev Owner - Owner` under
       // a title that already named the business, and between them they cost
       // about 130 logical pixels of every route before a single figure. The
@@ -3486,12 +3638,23 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       //
       // Everything in it scrolls together.
       body: Padding(
-        padding: EdgeInsets.fromLTRB(inset, 0, inset, tokens.spacing.s24),
+        padding: EdgeInsets.fromLTRB(
+          sideInset,
+          0,
+          sideInset,
+          tokens.spacing.s24,
+        ),
         child: _LandingScrollArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // The old hub's 24 under its bar, on every size since
+              // 2026-10-10: the frame's own 8, and 16 here. A phone had the 8
+              // alone, and the developer asked for room between the bar and
+              // the greeting. **Inside the scroll, as the old hub's was**, so
+              // it scrolls away with the page rather than taking 16 off it.
+              SizedBox(height: tokens.spacing.s16),
               _LandingGreeting(
                 memberName: memberName,
                 businessName: branding?.companyName ?? membership.tenantName,
@@ -3504,8 +3667,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 // is why this is false rather than derived from the role.
                 isOwnFigures: false,
               ),
-              SizedBox(height: tokens.spacing.s32),
-              HomeModuleGrid(destinations: destinations),
+              SizedBox(height: wide ? tokens.spacing.s40 : tokens.spacing.s32),
+              HomeModuleGrid(
+                destinations: destinations,
+                stackedOnPhone: stackedOnPhone,
+              ),
               if (_figures(context, overview) case final grid?) ...[
                 SizedBox(height: tokens.spacing.s32),
                 grid,
@@ -3844,10 +4010,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         // there is no order anywhere in the live app. Customers exist since
         // 2026-10-01 - chosen at the till, with receipts that can go to them
         // on WhatsApp - so the line now says what the till does with one, and
-        // still names no order.
-        description:
-            'Ring up a sale for a walk-in or a customer, take the payment, and '
-            'hand over the receipt.',
+        // still names no order. **Shortened on 2026-10-10**, with every other
+        // sentence here, to two lines at the narrowest card a tablet or a
+        // desktop draws: the developer asked for every card's sentence to be
+        // two lines. It named "a walk-in or a customer", which ran to three.
+        description: 'Ring up a sale, take payment and hand over the receipt.',
         icon: Symbols.point_of_sale_rounded,
         isPrimary: true,
         onPressed: () {
@@ -3868,10 +4035,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         destinationKey: const ValueKey('sales'),
         accent: AppIdentityAccent.teal,
         label: 'Sales',
-        description:
-            'View sales reports, payment breakdowns, and transaction history.',
+        description: 'Sales reports, payments and transaction history.',
         group: 'Sales',
         icon: Symbols.bar_chart_rounded,
+        // The old hub's *Book Keeping*, which this is, was a book.
+        cardIcon: Symbols.menu_book_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -3945,6 +4113,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         description: 'View all products, sizes, pricing, and categories.',
         group: 'Inventory',
         icon: Symbols.inventory_2_rounded,
+        // The old hub's warehouse, on the wider screens' cards.
+        cardIcon: Symbols.warehouse_rounded,
         onPressed: () {
           final controller = TenantSessionScope.of(context);
           Navigator.of(context).push(
@@ -4028,8 +4198,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         destinationKey: const ValueKey('suppliers'),
         accent: AppIdentityAccent.orange,
         label: 'Suppliers',
-        description:
-            'Who you buy stock from, and what each delivery brought in.',
+        description: 'Who you buy from, and what each delivery brought in.',
         group: 'Inventory',
         icon: Symbols.local_shipping_rounded,
         onPressed: () {
@@ -4078,9 +4247,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         destinationKey: const ValueKey('expenses'),
         accent: AppIdentityAccent.green,
         label: 'Expenses',
-        description:
-            'Record rent, wages and running costs, and see what profit is '
-            'left after them.',
+        description: 'Rent, wages and running costs, and what profit is left.',
         group: 'Reports',
         icon: Symbols.account_balance_wallet_rounded,
         onPressed: () {
@@ -4099,18 +4266,20 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         membership.role.canAccess(dailySummaryRoles))
       HomeDestination(
         destinationKey: const ValueKey('view-daily-summary'),
-        accent: AppIdentityAccent.blue,
+        // Green with a bar chart, as the old hub's *Reports* card was. The
+        // accent only colours the wider screens' cards; a phone's launcher
+        // takes its colours by position.
+        accent: AppIdentityAccent.green,
         // **Renamed on 2026-08-27, and the route behind it changed with the
         // name.** The daily figures it used to open are the whole subject of
         // the Sales route, so this said the same thing twice; it now opens the
         // weekly report the old app had, which nothing else in this product
         // shows.
         label: 'Reports',
-        description:
-            'Weekly sales, profit and best sellers, and every other report '
-            'from the figures themselves.',
+        description: 'Weekly sales, profit, best sellers and more reports.',
         group: 'Reports',
         icon: Symbols.insights_rounded,
+        cardIcon: Symbols.bar_chart_rounded,
         // **No count on the tile**, at the developer's direction on
         // 2026-09-23. Open reconciliation differences are still said in a
         // sentence where the destination has room for one, and in full on the
@@ -4196,7 +4365,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         destinationKey: const ValueKey('whatsapp-receipts'),
         accent: AppIdentityAccent.green,
         label: 'WhatsApp',
-        description: 'Send receipts to customers on WhatsApp instead of paper.',
+        description: 'Send receipts to customers on WhatsApp, not paper.',
         group: 'Business',
         icon: Symbols.chat_rounded,
         brandIcon: AppBrandIcon.whatsapp,
@@ -4259,7 +4428,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     if (membership.role.canAccess(TenantStaffDirectoryScreen.allowedRoles))
       HomeDestination(
         destinationKey: const ValueKey('staff'),
-        accent: AppIdentityAccent.purple,
+        // Pink, as the old hub's *Staff* card was.
+        accent: AppIdentityAccent.pink,
         label: 'Staff',
         description: 'Manage your team, their roles and access.',
         group: 'Business',
@@ -4293,8 +4463,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         destinationKey: const ValueKey('shift-history'),
         accent: AppIdentityAccent.pink,
         label: 'Shift history',
-        description:
-            'What each drawer was counted at, against the sales it took.',
+        description: 'What each drawer was counted at, against its sales.',
         group: 'Reports',
         icon: Symbols.work_history_rounded,
         onPressed: () {

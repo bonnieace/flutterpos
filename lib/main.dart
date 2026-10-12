@@ -29,9 +29,11 @@ import 'checkout/checkout.dart';
 import 'dev/firebase_emulators.dart';
 import 'expenses/expenses.dart';
 import 'inventory/inventory.dart';
+import 'platform/browser_storage.dart';
 import 'platform/device_identity.dart';
 import 'platform/play_update_gate.dart';
 import 'reporting/reporting.dart';
+import 'reports/render/report_fonts.dart';
 import 'reports/report_saver.dart';
 import 'returns/returns.dart';
 import 'sales/sales.dart';
@@ -101,8 +103,32 @@ Future<void> main() async {
       // below opens through the gate: a torn final write is repaired, anything
       // else asks whoever is holding the phone whether to try again or carry
       // on without that store, whose file is then set aside rather than
-      // deleted. See `lib/storage/device_storage.dart`.
-      DeviceStorage.directory = (await getApplicationDocumentsDirectory()).path;
+      // deleted - except in a browser, which has no folder to set it aside in
+      // and clears it. See `lib/storage/device_storage.dart`.
+      //
+      // **There is no folder on web, so it is not asked for there.** A browser
+      // keeps Hive's boxes in IndexedDB, and `path_provider` has no web
+      // implementation: until 2026-10-10 this call threw before the first frame
+      // and a web build never left its splash. Left null, the torn-tail repair
+      // is off, as it is in every test - there is no file for it to repair.
+      if (!kIsWeb) {
+        DeviceStorage.directory =
+            (await getApplicationDocumentsDirectory()).path;
+      } else {
+        // Not awaited: Firefox puts the question to the person, and the first
+        // frame must not wait on their answer. See `browser_storage.dart`.
+        unawaited(
+          persistBrowserStorage().then<void>(
+            (_) {},
+            onError: (Object error, StackTrace stackTrace) =>
+                AppTelemetry.captureHandled(
+                  error,
+                  stackTrace,
+                  boundary: 'storage.persist_request',
+                ),
+          ),
+        );
+      }
       var storageQuestion = 0;
       final deviceStorage = DeviceStorageGate(
         ask: (store, {required canContinue}) {
@@ -261,6 +287,39 @@ Future<void> main() async {
           boundary: 'checkout.bluetooth_printer_open',
         ),
       );
+      // **Which USB printer this browser prints on, per business** - the web
+      // till's way to print, by the developer's choice (2026-10-10). Opened
+      // only on the web: nowhere else can choose one.
+      final usbPrinters = kIsWeb
+          ? await openDeviceUsbPrinterStore(
+              onError: (error, stackTrace) => AppTelemetry.captureHandled(
+                error,
+                stackTrace,
+                boundary: 'checkout.usb_printer_open',
+              ),
+            )
+          : null;
+      // **Whether this device prints through its own print window**, per
+      // business - the route to any printer the device itself can print to,
+      // in a browser or in the app (2026-10-10). A failure to open it costs
+      // only that choice.
+      final systemPrinters = await openDeviceSystemPrinterStore(
+        onError: (error, stackTrace) => AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'checkout.system_printer_open',
+        ),
+      );
+      // **Which kind of printer this device prints on, per business** - one
+      // at a time, switched on the Printer page (2026-10-11). Unopened, the
+      // device prints as it did before there was a choice.
+      final printModes = await openDevicePrintModeStore(
+        onError: (error, stackTrace) => AppTelemetry.captureHandled(
+          error,
+          stackTrace,
+          boundary: 'checkout.print_mode_open',
+        ),
+      );
       // Receipt counters, shift state, and the outbox share one key: a sale,
       // the receipt numbering it draws from, and the shift it belongs to must
       // share exactly one fate.
@@ -310,6 +369,7 @@ Future<void> main() async {
       // also carries Bluetooth, chosen per job by the job's own endpoint.
       final printerTransport = createPrinterTransport();
       final bluetoothPrinterDiscovery = createBluetoothPrinterDiscovery();
+      final usbPrinterChooser = createUsbPrinterChooser();
 
       // The installation identity is resolved once at startup so every shift
       // and receipt this device records names the same device.
@@ -418,9 +478,16 @@ Future<void> main() async {
               printerTransport: printerTransport,
               bluetoothPrinters: bluetoothPrinters,
               bluetoothPrinterDiscovery: bluetoothPrinterDiscovery,
+              usbPrinters: usbPrinters,
+              usbPrinterChooser: usbPrinterChooser,
+              systemPrinters: systemPrinters,
+              printModes: printModes,
               tenantShiftState: tenantShiftState,
               deviceId: deviceId,
               connectivity: connectivity,
+              onlineChanges: connectivity.onConnectivityChanged.map(
+                (result) => result != ConnectivityResult.none,
+              ),
               invitationIntake: invitationIntake,
               checkoutSyncSignals: checkoutSyncSignals,
               bootstrapRefreshSignals: bootstrapRefreshSignals,
@@ -540,6 +607,10 @@ class SpiritPOSApp extends StatelessWidget {
     required this.printerTransport,
     required this.bluetoothPrinters,
     required this.bluetoothPrinterDiscovery,
+    this.usbPrinters,
+    this.usbPrinterChooser = const UnsupportedUsbPrinterChooser(),
+    this.systemPrinters,
+    this.printModes,
     required this.tenantShiftState,
     required this.deviceId,
     required this.connectivity,
@@ -547,6 +618,7 @@ class SpiritPOSApp extends StatelessWidget {
     required this.bootstrapRefreshSignals,
     this.invitationIntake,
     this.cartActivity,
+    this.onlineChanges,
   });
 
   final TenantBootstrapService bootstrapService;
@@ -588,6 +660,20 @@ class SpiritPOSApp extends StatelessWidget {
   /// the printer page without its Bluetooth tab.
   final DeviceBluetoothPrinterStore? bluetoothPrinters;
   final BluetoothPrinterDiscovery bluetoothPrinterDiscovery;
+
+  /// The USB printer this browser prints on, per business. Null everywhere
+  /// but the web, and on the web when its box would not open.
+  final DeviceUsbPrinterStore? usbPrinters;
+  final UsbPrinterChooser usbPrinterChooser;
+
+  /// Whether this device prints through its print window, per business. Null
+  /// where its box would not open, which hides the *Print dialog* tab.
+  final DeviceSystemPrinterStore? systemPrinters;
+
+  /// Which kind of printer this device prints on, per business. Null where
+  /// its box would not open, which leaves the device printing as it did
+  /// before there was a choice, and the Printer page as the network form.
+  final DevicePrintModeStore? printModes;
   final HiveTenantShiftState tenantShiftState;
   final String deviceId;
   final Connectivity connectivity;
@@ -603,6 +689,11 @@ class SpiritPOSApp extends StatelessWidget {
 
   /// Whether the till holds an unsaved sale, for the Play update to wait on.
   final CheckoutCartActivity? cartActivity;
+
+  /// Whether this device has a network, each time that changes - for the
+  /// home's top bar to say *Online* or *Offline*. Built once in `main`, so the
+  /// bar listens to one stream for the life of the process.
+  final Stream<bool>? onlineChanges;
 
   /// Mints a newer ID token for the signed-in identity.
   ///
@@ -684,8 +775,31 @@ class SpiritPOSApp extends StatelessWidget {
         reader: tenantDataReader.cacheOnly,
       ).load().catchError(_absentPrinter),
       store: bluetoothPrinters,
+      usbStore: usbPrinters,
+      systemStore: systemPrinters,
+      modeStore: printModes,
       tenantId: session.tenantId,
     );
+    // **Choosing a printer makes its kind the one this device prints on**,
+    // so a USB or Bluetooth printer chosen is the printer in use.
+    Future<void> Function(String tenantId) printWith(DevicePrintMode mode) =>
+        (tenantId) async => printModes?.save(tenantId, mode);
+    // **The print helper, offered to a web till on Windows only** - the one
+    // platform it is built for. Its download is the dev/SIT bucket's copy, in
+    // a new tab so the till stays where it was.
+    final printHelper =
+        kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+        ? PrintHelperSetup(
+            helper: HttpPrintHelper(),
+            memory: createPrintHelperMemory(),
+            download: () async {
+              await launchUrl(
+                Uri.parse(printHelperDownloadUrl),
+                webOnlyWindowName: '_blank',
+              );
+            },
+          )
+        : null;
     // **Runs after the sale is durable, and can never un-write one.** §6.3
     // applied to printing: the record is written first, the receipt is produced
     // over committed state, and a printer that is off becomes a stated reason
@@ -747,15 +861,25 @@ class SpiritPOSApp extends StatelessWidget {
       final configuration = printer.require();
       await printerTransport.send(
         configuration.endpoint,
-        CheckoutBrandingProofPage(
-          profile: printerCapabilityProfile,
-          configuration: configuration,
-        ).build(
-          at: DateTime.now(),
-          companyName: companyName,
-          slogan: slogan,
-          logo: logo,
-        ),
+        configuration.endpoint.isSystem
+            ? await CheckoutReceiptPdf(
+                fonts: await TenantReportFonts.bundled(),
+                paperWidth: configuration.paperWidth,
+              ).brandingProof(
+                at: DateTime.now(),
+                companyName: companyName,
+                slogan: slogan,
+                logo: logo,
+              )
+            : CheckoutBrandingProofPage(
+                profile: printerCapabilityProfile,
+                configuration: configuration,
+              ).build(
+                at: DateTime.now(),
+                companyName: companyName,
+                slogan: slogan,
+                logo: logo,
+              ),
       );
     }
 
@@ -1110,25 +1234,65 @@ class SpiritPOSApp extends StatelessWidget {
               final branding = session == null
                   ? null
                   : await _receiptBranding(session, tenantDataReader.cacheOnly);
+              final logo = await _receiptLogo(
+                branding?.logoUrl,
+                tenantImageCache,
+              );
               await printerTransport.send(
                 configuration.endpoint,
-                CheckoutPrinterTestPage(
-                  profile: printerCapabilityProfile,
-                  configuration: configuration,
-                ).build(
-                  at: DateTime.now(),
-                  businessName: branding?.companyName,
-                  slogan: branding?.slogan,
-                  logo: await _receiptLogo(branding?.logoUrl, tenantImageCache),
-                ),
+                // The print window takes a page it can lay out; every other
+                // printer takes the ESC/POS test page with its ruler.
+                configuration.endpoint.isSystem
+                    ? await CheckoutReceiptPdf(
+                        fonts: await TenantReportFonts.bundled(),
+                        paperWidth: configuration.paperWidth,
+                      ).testPage(
+                        at: DateTime.now(),
+                        businessName: branding?.companyName,
+                        slogan: branding?.slogan,
+                        logo: logo,
+                      )
+                    : CheckoutPrinterTestPage(
+                        profile: printerCapabilityProfile,
+                        configuration: configuration,
+                      ).build(
+                        at: DateTime.now(),
+                        businessName: branding?.companyName,
+                        slogan: branding?.slogan,
+                        logo: logo,
+                      ),
               );
             },
             // The Bluetooth tab: a printer paired with this device, connected
             // through the same transport - and tested with the same page -
             // as a network one.
+            // **A browser gets the USB tab instead**: it has no Bluetooth to
+            // offer, and USB is how a web till prints.
             bluetooth: switch (bluetoothPrinters) {
-              final store? => BluetoothPrinterSetup(
+              final store? when !kIsWeb => BluetoothPrinterSetup(
                 discovery: bluetoothPrinterDiscovery,
+                store: store,
+                probe: printerTransport.probe,
+                onChosen: printWith(DevicePrintMode.bluetooth),
+              ),
+              _ => null,
+            },
+            usb: switch (usbPrinters) {
+              final store? => UsbPrinterSetup(
+                chooser: usbPrinterChooser,
+                store: store,
+                probe: printerTransport.probe,
+                onChosen: printWith(DevicePrintMode.usb),
+                helper: printHelper,
+              ),
+              null => null,
+            },
+            printHelper: printHelper,
+            // **One printer at a time on this device**: the page is a switch
+            // per kind, and the one switched on is where receipts go.
+            printModes: printModes,
+            system: switch (systemPrinters) {
+              final store? => SystemPrinterSetup(
                 store: store,
                 probe: printerTransport.probe,
               ),
@@ -1293,6 +1457,11 @@ class SpiritPOSApp extends StatelessWidget {
               ),
             ),
             tenantSwitchOnlineCheck: () async => isOnline(),
+            // The home's top bar on a wider screen: which terminal this is, as
+            // its receipts print it, and whether it has a network. Read-only.
+            terminalLabel:
+                '$checkoutReceiptPrefix-${checkoutReceiptDeviceCode(deviceId)}',
+            onlineChanges: onlineChanges,
             tenantSessionRecoveryFactory: (sessionController) {
               final coordinator = CheckoutRecoveryCoordinator(
                 sessionController: sessionController,
@@ -2107,6 +2276,7 @@ class SpiritPOSApp extends StatelessWidget {
             // invitation has no display name until somebody types one.
             memberName: () => FirebaseAuth.instance.currentUser?.displayName,
             signOut: FirebaseAuth.instance.signOut,
+            warnBeforeSigningOutWithUnsentSales: kIsWeb,
             // **Signing up is a route this screen opens, not a mode inside it.**
             // The wizard is pushed above the shell, so account creation - which
             // signs the new identity in and makes the shell rebuild underneath -

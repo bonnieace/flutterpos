@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:hive/hive.dart';
 
 import '../observability/app_telemetry.dart';
@@ -155,6 +156,27 @@ Future<String?> quarantineDeviceStore(
   return moved;
 }
 
+/// Empties [name] in a browser, where there is no file to set aside. Returns
+/// null, because nothing is kept.
+///
+/// **The one place a store the person could not open is deleted rather than
+/// moved.** A browser keeps each box as an IndexedDB database and the app has
+/// no folder there; [quarantineDeviceStore] found no folder, moved nothing,
+/// and the same unreadable box failed again behind "Continue without" - which
+/// asked again, for as long as the person kept answering. Clearing it is what
+/// that screen already told them they were giving up.
+Future<String?> clearBrowserDeviceStore(
+  String name, {
+  HiveInterface? hive,
+}) async {
+  // Hive closes the failed box without awaiting it, as in
+  // [openBoxRepairingTornTail]; a browser holds a database's deletion until
+  // its last connection closes.
+  await Future<void>.delayed(const Duration(milliseconds: 50));
+  await (hive ?? Hive).deleteBoxFromDisk(name);
+  return null;
+}
+
 Future<File> _copyAside(
   String folder,
   String name,
@@ -284,7 +306,9 @@ final class DeviceStorageGate {
     required DeviceStorageQuestion ask,
     Future<String?> Function(String boxName)? quarantine,
   }) : _ask = ask,
-       _quarantine = quarantine ?? quarantineDeviceStore;
+       _quarantine =
+           quarantine ??
+           (kIsWeb ? clearBrowserDeviceStore : quarantineDeviceStore);
 
   final DeviceStorageQuestion _ask;
   final Future<String?> Function(String boxName) _quarantine;

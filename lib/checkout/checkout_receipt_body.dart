@@ -39,7 +39,7 @@ import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
 import 'package:image/image.dart' as img;
 
 import 'checkout_print_configuration.dart';
-import 'checkout_receipt.dart' show printedCheckoutReceiptNumber;
+import 'checkout_receipt_content.dart';
 import 'checkout_sale.dart';
 import 'checkout_tender.dart';
 
@@ -367,7 +367,9 @@ final class CheckoutReceiptBody {
   ///
   /// [businessName] is the shop's own name, resolved by the caller from
   /// branding exactly as the home's title is — this class does not read
-  /// documents.
+  /// documents. **What is printed is decided in `checkout_receipt_content.dart`
+  /// and drawn here**, so a receipt and its PDF in a print window say the same
+  /// thing.
   List<int> build(
     CheckoutReceiptSale sale, {
     String? businessName,
@@ -385,11 +387,17 @@ final class CheckoutReceiptBody {
       // this one command is the difference between a shop's own name printing
       // and printing as mojibake.
       ...generator.setGlobalCodeTable(codePage),
-      ..._heading(generator, businessName, slogan, logo),
-      ..._provenance(generator, sale, servedBy),
-      ..._lines(generator, sale),
-      ..._totals(generator, sale),
-      ..._footer(generator, sale),
+      for (final row in checkoutReceiptRows(
+        sale,
+        businessName: businessName,
+        servedBy: servedBy,
+        // **Rastered into the bytes, not referenced.** A job is re-sent as it
+        // was built, so the logo a receipt printed with is the one it was
+        // created with, whatever the business publishes afterwards.
+        logo: logo,
+        slogan: slogan,
+      ))
+        ..._row(generator, row),
     ];
     // **A cut only where there is a cutter**, which is the one thing the
     // configuration's `hasCutter` decides. A cut command to a printer without
@@ -430,6 +438,62 @@ final class CheckoutReceiptBody {
   /// **a line is [_columns] characters, or it is a defect.**
   int get _columns => configuration.paperWidth.columns;
 
+  /// One row of the receipt, as the bytes that draw it.
+  ///
+  /// **Everything the shopkeeper typed goes through `ReceiptText.forPrinter`
+  /// here, and only here**, because this renderer is the one whose code page
+  /// cannot draw `ũ`. The fixed words are already in it, so for them it
+  /// changes nothing.
+  List<int> _row(Generator generator, CheckoutReceiptRow row) => switch (row) {
+    // **One empty line under the mark, and it is deliberate.** `GS v 0`
+    // advances the paper by exactly the height of the image and stops, so
+    // without it the first row of dots in the name sits against the last row
+    // of the logo. A mark no decoder recognises prints nothing - and no gap.
+    ReceiptLogoRow(:final bytes) => <int>[
+      if (receiptLogoMark(bytes) case final mark?) ...<int>[
+        ...generator.imageRaster(mark),
+        ...generator.emptyLines(1),
+      ],
+    ],
+    // Centred by padding at double width, so the name sits over the middle of
+    // the paper rather than wherever the printer decides `ESC a 1` means when
+    // an absolute position has also been set on the same line.
+    ReceiptTitleRow(:final text) => generator.text(
+      _centred(ReceiptText.forPrinter(text), scale: 2),
+      styles: const PosStyles(
+        bold: true,
+        height: PosTextSize.size2,
+        width: PosTextSize.size2,
+      ),
+    ),
+    ReceiptCentredRow(:final text) => generator.text(
+      _centred(ReceiptText.forPrinter(text)),
+    ),
+    ReceiptGapRow() => generator.emptyLines(1),
+    ReceiptRuleRow() => _rule(generator),
+    // **The whole row takes the emphasis, never half of it.** Emphasising one
+    // half of a line needs two writes to that line, and two writes to one line
+    // is exactly what was mis-positioning them. Double height changes the
+    // glyphs' height and not their width, so the padding is unaffected by it.
+    ReceiptPairRow(:final label, :final value, :final emphasis) =>
+      generator.text(
+        _pair(ReceiptText.forPrinter(label), ReceiptText.forPrinter(value)),
+        styles: switch (emphasis) {
+          ReceiptEmphasis.plain => const PosStyles(),
+          ReceiptEmphasis.strong => const PosStyles(bold: true),
+          ReceiptEmphasis.total => const PosStyles(
+            bold: true,
+            height: PosTextSize.size2,
+          ),
+        },
+      ),
+    ReceiptItemRow(:final description, :final amount) => _item(
+      generator,
+      ReceiptText.forPrinter(description),
+      amount,
+    ),
+  };
+
   /// [label] on the left, [value] hard against the right, in one full line.
   ///
   /// The label is truncated rather than the value: a value is a receipt number,
@@ -466,115 +530,6 @@ final class CheckoutReceiptBody {
   /// is built the same way and a rule cannot disagree with the rows it separates.
   List<int> _rule(Generator generator) => generator.text('-' * _columns);
 
-  /// The mark, the name, the slogan, and the rule that closes them off.
-  ///
-  /// **The blank lines are the whole of the spacing and they are deliberate.**
-  /// `GS v 0` advances the paper by exactly the height of the image and stops,
-  /// so without one the first row of dots in the name sits against the last row
-  /// of the logo; and the rule under the heading had the same problem against a
-  /// double-height name. One empty line above and below the block is what a
-  /// heading needs to read as a heading rather than as the top of a list.
-  ///
-  /// A receipt with no logo and no slogan prints what it always printed, plus
-  /// the line under the name.
-  List<int> _heading(
-    Generator generator,
-    String? businessName,
-    String? slogan,
-    Uint8List? logo,
-  ) {
-    final line = slogan?.trim();
-    return <int>[
-      // **The mark above the name, when the business has published one.** It is
-      // the first thing on the paper for the same reason it is the first thing
-      // on the business details screen: it is what a customer recognises
-      // without reading.
-      if (receiptLogoMark(logo) case final mark?) ...<int>[
-        ...generator.imageRaster(mark),
-        ...generator.emptyLines(1),
-      ],
-      ...generator.text(
-        // Centred by padding at double width, so the name sits over the middle
-        // of the paper rather than wherever the printer decides `ESC a 1` means
-        // when an absolute position has also been set on the same line.
-        _centred(
-          ReceiptText.forPrinter(
-            businessName?.trim().isNotEmpty ?? false
-                ? businessName!.trim()
-                : ReceiptWords.unnamedBusiness,
-          ),
-          scale: 2,
-        ),
-        styles: const PosStyles(
-          bold: true,
-          height: PosTextSize.size2,
-          width: PosTextSize.size2,
-        ),
-      ),
-      // **The slogan, which the business details screen has promised since it
-      // was written** - *one line under the name on a receipt* - and which no
-      // receipt has ever carried. It is at ordinary size under a double-height
-      // name, which is what makes the two read as a heading and a subtitle
-      // rather than as two headings.
-      if (line != null && line.isNotEmpty)
-        ...generator.text(_centred(ReceiptText.forPrinter(line))),
-      ...generator.emptyLines(1),
-      ..._rule(generator),
-    ];
-  }
-
-  List<int> _provenance(
-    Generator generator,
-    CheckoutReceiptSale sale,
-    String? servedBy,
-  ) => <int>[
-    // The receipt number is the thing a person quotes on the phone, so it is
-    // first and it is emphasised.
-    //
-    // **Printed in its readable form since 2026-09-29** - `JOHN-CT-7F2-001` -
-    // derived from the stored number and nothing else but the name below, so
-    // the paper still names exactly one sale once the date line is read with
-    // it. The stored number stays the queue's idempotency key.
-    //
-    // **The whole row is bold, not just the number.** Emphasising one half of a
-    // line needs two writes to that line, and two writes to one line is exactly
-    // what was mis-positioning them.
-    ...generator.text(
-      _pair(
-        ReceiptWords.receiptLabel,
-        ReceiptText.forPrinter(
-          printedCheckoutReceiptNumber(sale.receiptNumber, servedBy: servedBy),
-        ),
-      ),
-      styles: const PosStyles(bold: true),
-    ),
-    // **Required now, not decoration.** The printed number carries no date and
-    // restarts every day, so this line is what makes it one sale.
-    ...generator.text(_pair(ReceiptWords.dateLabel, sale.businessDate)),
-    if (servedBy != null && servedBy.trim().isNotEmpty)
-      ...generator.text(
-        _pair(
-          ReceiptWords.servedByLabel,
-          ReceiptText.forPrinter(servedBy.trim()),
-        ),
-      ),
-    // **Who it was for, only when the till named somebody.** A walk-in prints
-    // nothing here rather than the word, because a receipt is a record of what
-    // is true and "walk-in" is the absence of a fact, not one.
-    if (sale.customer case final customer?) ...<int>[
-      ...generator.text(
-        _pair(
-          ReceiptWords.customerLabel,
-          ReceiptText.forPrinter(customer.name),
-        ),
-      ),
-      // A business buyer's PIN is why many of them ask for a receipt at all.
-      if (customer.kraPin case final pin?)
-        ...generator.text(_pair(ReceiptWords.kraPinLabel, pin)),
-    ],
-    ..._rule(generator),
-  ];
-
   /// One sale line: the name in its own column, the amount against the right.
   ///
   /// **A receipt has two columns and this draws them, which is the whole of the
@@ -603,30 +558,13 @@ final class CheckoutReceiptBody {
   /// it stood: it claimed a 32-column line would cut the name "to about twelve
   /// characters", where the real budget is 21 - and `2 x Maize flour 2kg` is
   /// nineteen. The common case always fitted.
-  List<int> _lines(Generator generator, CheckoutReceiptSale sale) {
-    final bytes = <int>[];
-    for (final line in sale.lines) {
-      // **The code follows the name on the same line, and wraps with it** -
-      // the owner's choice on 2026-09-29 over a row of its own. It is one
-      // word to [_wrapped], so on a 58mm roll it usually takes the row the
-      // amount is on, whole, and on an 80mm roll the line often fits as is.
-      // A line sold before the code was recorded prints none.
-      final sku = line.sku;
-      final description = ReceiptText.forPrinter(
-        sku == null
-            ? '${line.quantity} x ${line.name}'
-            : '${line.quantity} x ${line.name} $sku',
-      );
-      final amount = _money(sale.currency, line.lineTotalMinor);
-      final rows = _wrapped(description, _nameColumn(amount));
+  List<int> _item(Generator generator, String description, String amount) {
+    final rows = _wrapped(description, _nameColumn(amount));
+    return <int>[
       // Every row but the last is name only; the last carries the amount.
-      for (final row in rows.take(rows.length - 1)) {
-        bytes.addAll(generator.text(row));
-      }
-      bytes.addAll(generator.text(_pair(rows.last, amount)));
-    }
-    bytes.addAll(_rule(generator));
-    return bytes;
+      for (final row in rows.take(rows.length - 1)) ...generator.text(row),
+      ...generator.text(_pair(rows.last, amount)),
+    ];
   }
 
   /// How wide the name column is, given the amount that shares its row.
@@ -684,74 +622,4 @@ final class CheckoutReceiptBody {
     flush();
     return rows.isEmpty ? <String>[''] : rows;
   }
-
-  List<int> _totals(Generator generator, CheckoutReceiptSale sale) => <int>[
-    ..._amount(generator, ReceiptWords.subtotalLabel, sale, sale.subtotalMinor),
-    // **A discount line only where there was a discount.** A permanent
-    // `Discount  KES 0.00` teaches a customer to ignore the line, which is
-    // the one place it matters.
-    if (sale.discountMinor != 0)
-      ..._amount(
-        generator,
-        ReceiptWords.discountLabel,
-        sale,
-        sale.discountMinor,
-      ),
-    // Double height applies to the whole row. It changes the glyphs' height and
-    // not their width, so the padding above is unaffected by it.
-    ..._amount(
-      generator,
-      ReceiptWords.totalLabel,
-      sale,
-      sale.totalMinor,
-      styles: const PosStyles(bold: true, height: PosTextSize.size2),
-    ),
-    ..._rule(generator),
-  ];
-
-  List<int> _footer(Generator generator, CheckoutReceiptSale sale) => <int>[
-    if (sale.credit case final credit?) ...<int>[
-      if (credit.paidMinor(sale.totalMinor) > 0)
-        ..._amount(
-          generator,
-          switch (ReceiptWords.tender(credit.paidTender)) {
-            final paid? => '${ReceiptWords.paidNowLabel} ($paid)',
-            null => ReceiptWords.paidNowLabel,
-          },
-          sale,
-          credit.paidMinor(sale.totalMinor),
-        ),
-      ..._amount(
-        generator,
-        ReceiptWords.owedLabel,
-        sale,
-        credit.owedMinor,
-        styles: const PosStyles(bold: true),
-      ),
-      if (credit.balanceAfterMinor case final balance?)
-        ..._amount(generator, ReceiptWords.balanceLabel, sale, balance),
-    ] else if (ReceiptWords.tender(sale.tender) case final paid?)
-      ...generator.text(_pair(ReceiptWords.paidByLabel, paid)),
-    ...generator.emptyLines(1),
-    ...generator.text(_centred(ReceiptText.forPrinter(ReceiptWords.footer))),
-  ];
-
-  /// A label and a money amount, in one full line.
-  List<int> _amount(
-    Generator generator,
-    String label,
-    CheckoutReceiptSale sale,
-    int minor, {
-    PosStyles styles = const PosStyles(),
-  }) => generator.text(
-    _pair(label, _money(sale.currency, minor)),
-    styles: styles,
-  );
-
-  /// §8 rule 8: money always carries a currency code.
-  ///
-  /// The code is the **sale's own**, not the business's current one, so a
-  /// receipt reprinted after a currency change still states what was charged.
-  static String _money(String currency, int minor) =>
-      '$currency ${(minor / 100).toStringAsFixed(2)}';
 }

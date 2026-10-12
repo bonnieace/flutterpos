@@ -477,7 +477,10 @@ void main() {
       // `section-title` on a card, and 30 is wide enough to force a phone's
       // grid of figures into one column. Fourteen until 2026-09-22, when
       // `mono.caption` put a SKU under a product name at `caption`'s size.
-      expect(type.all, hasLength(15));
+      // Fifteen until 2026-10-10, when the home's module cards came back as
+      // the old hub drew them, in that hub's own two sizes - and the same day
+      // its top bar, with the 10 its user pill printed a role in.
+      expect(type.all, hasLength(18));
       expect(type.all.keys, <String>[
         'display',
         'display.compact',
@@ -494,6 +497,9 @@ void main() {
         'numeric.body',
         'mono',
         'mono.caption',
+        'module.title',
+        'module.body',
+        'hub.role',
       ]);
     });
 
@@ -521,6 +527,10 @@ void main() {
         'mono': (14, 14, FontWeight.w500), // data-mono
         // `caption`'s size and leading in `data-mono`'s face and weight.
         'mono.caption': (12, 16, FontWeight.w500),
+        // The old hub's card, measured: 18 and 13 on Material's 20 / 14.
+        'module.title': (18, 18 * 20 / 14, FontWeight.w600),
+        'module.body': (13, 13 * 20 / 14, FontWeight.w400),
+        'hub.role': (10, 10 * 20 / 14, FontWeight.w400),
       };
       for (final entry in table.entries) {
         final style = type.all[entry.key]!;
@@ -1236,11 +1246,15 @@ void main() {
   group('the extension itself', () {
     test('spiritTheme registers it, and it is the only extension', () {
       // `same`, not `equals`: the point is that the theme hands every widget the
-      // one canonicalised `const` instance rather than rebuilding it. *Which* of
-      // the two it is belongs to `lib/theme.dart`, so this accepts either.
+      // one canonicalised `const` instance rather than rebuilding it. *Which*
+      // one it is belongs to `lib/theme.dart`, so this accepts any of the three.
       expect(
         registered,
-        anyOf(same(AppTokens.dark), same(AppTokens.profoundVerdant)),
+        anyOf(
+          same(AppTokens.dark),
+          same(AppTokens.profoundVerdant),
+          same(AppTokens.uzapay),
+        ),
       );
       expect(spiritTheme.extensions, hasLength(1));
     });
@@ -1916,6 +1930,92 @@ void main() {
         registered.colors.surface.borderSubtle,
       ];
       expect(painted, roles);
+    });
+  });
+
+  group('the uzapay palette - registered since 2026-10-10', () {
+    // A mix of the other two, so neither one's contrast tests speak for it:
+    // Profound Verdant's status inks were chosen against darker grounds than
+    // the ones this palette puts under them.
+    const mix = AppColorRoles.uzapay;
+    final grounds = <String, Color>{
+      'surface.base': mix.surface.base,
+      'surface.raised': mix.surface.raised,
+      'surface.overlay': mix.surface.overlay,
+    };
+
+    test('every text role a person reads clears 4.5:1 on every ground', () {
+      final inks = <String, Color>{
+        'text.primary': mix.text.primary,
+        'text.secondary': mix.text.secondary,
+        'text.tertiary': mix.text.tertiary,
+        'text.money': mix.text.money,
+      };
+      for (final ink in inks.entries) {
+        for (final ground in grounds.entries) {
+          expect(
+            contrastRatio(ink.value, ground.value),
+            greaterThanOrEqualTo(bodyTextContrast),
+            reason: '${ink.key} on ${ground.key}',
+          );
+        }
+      }
+    });
+
+    test(
+      'every status ink clears 4.5:1 on every ground and in its own box',
+      () {
+        for (final status in mix.status.all.entries) {
+          for (final ground in grounds.entries) {
+            final box = Color.alphaBlend(status.value.bg, ground.value);
+            expect(
+              contrastRatio(status.value.fg, ground.value),
+              greaterThanOrEqualTo(bodyTextContrast),
+              reason: '${status.key} on ${ground.key}',
+            );
+            expect(
+              contrastRatio(status.value.fg, box),
+              greaterThanOrEqualTo(bodyTextContrast),
+              reason: '${status.key} inside its box on ${ground.key}',
+            );
+          }
+        }
+      },
+    );
+
+    test('every action label clears 4.5:1 where it is drawn', () {
+      final action = mix.action;
+      expect(
+        contrastRatio(action.primary.label, action.primary.container),
+        greaterThanOrEqualTo(bodyTextContrast),
+      );
+      final secondaryFill = Color.alphaBlend(
+        action.secondary.container,
+        mix.surface.raised,
+      );
+      expect(
+        contrastRatio(action.secondary.label, secondaryFill),
+        greaterThanOrEqualTo(bodyTextContrast),
+      );
+      for (final ground in grounds.entries) {
+        expect(
+          contrastRatio(action.tertiary.label, ground.value),
+          greaterThanOrEqualTo(bodyTextContrast),
+          reason: 'tertiary on ${ground.key}',
+        );
+        expect(
+          contrastRatio(action.destructive.label, ground.value),
+          greaterThanOrEqualTo(bodyTextContrast),
+          reason: 'destructive on ${ground.key}',
+        );
+      }
+    });
+
+    test('a placeholder in text.secondary clears 4.5:1 inside a field', () {
+      expect(
+        contrastRatio(mix.text.secondary, mix.surface.field),
+        greaterThanOrEqualTo(bodyTextContrast),
+      );
     });
   });
 }

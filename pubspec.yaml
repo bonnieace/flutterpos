@@ -166,7 +166,29 @@ flutter:
   # `fonts/HankenGrotesk-OFL.txt` and `fonts/JetBrainsMono-OFL.txt`. The Roboto
   # faces stay in `fonts/` undeclared - an undeclared file is not in the app,
   # and the screenshot harness no longer needs them either.
+  #
+  # **The interface face is Roboto again since 2026-10-10**, at the developer's
+  # direction: the old app read as better quality, and Roboto is what it drew
+  # in - it named `Inter` but bundled nothing, so the tills rendered Android's
+  # own Roboto. These are Roboto 3, the version Android ships, because the
+  # older faces above stop at Medium and the type roles ask for SemiBold. In
+  # their own folder because `Roboto-Regular.ttf` and the undeclared
+  # `roboto-regular.ttf` are one file on Windows. SIL OFL 1.1, licence in
+  # `fonts/roboto/Roboto-OFL.txt`.
+  #
+  # **Hanken Grotesk stays declared for the PDF reports**, which embed it from
+  # the bundle (`lib/reports/render/report_fonts.dart`); no screen names it.
   fonts:
+    - family: Roboto
+      fonts:
+        - asset: fonts/roboto/Roboto-Regular.ttf
+          weight: 400
+        - asset: fonts/roboto/Roboto-Medium.ttf
+          weight: 500
+        - asset: fonts/roboto/Roboto-SemiBold.ttf
+          weight: 600
+        - asset: fonts/roboto/Roboto-Bold.ttf
+          weight: 700
     - family: Hanken Grotesk
       fonts:
         - asset: fonts/HankenGrotesk-Regular.ttf

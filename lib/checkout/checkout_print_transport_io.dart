@@ -24,9 +24,12 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'checkout_print_helper.dart';
 import 'checkout_bluetooth_printer.dart';
 import 'checkout_print_transport_base.dart';
 import 'checkout_print_transport_bluetooth.dart';
+import 'checkout_system_printer.dart';
+import 'checkout_usb_printer.dart';
 
 /// Opens a real socket. Injected so a test can drive a `ServerSocket` that
 /// accepts, or stalls, or refuses — which is `docs/printer_transport.md` §9's
@@ -43,12 +46,24 @@ PrinterTransport createPrinterTransport() => RoutedPrinterTransport(
   bluetooth: Platform.isAndroid
       ? AndroidBluetoothPrinterTransport()
       : const _NoBluetoothPrinterTransport(),
+  // Android's print screen, for a printer reached through a print service.
+  system: const SystemPrintTransport(),
 );
 
 BluetoothPrinterDiscovery createBluetoothPrinterDiscovery() =>
     Platform.isAndroid
     ? AndroidBluetoothPrinterDiscovery()
     : const UnsupportedBluetoothPrinterDiscovery();
+
+/// USB printing is the web's; the app on a phone or a computer does not need
+/// it (the developer's call, 2026-10-10).
+/// Never seen: the print helper is for a browser, and this is not one.
+PrintHelperMemory createPrintHelperMemory() => _noPrintHelper;
+
+final PrintHelperMemory _noPrintHelper = InMemoryPrintHelperMemory();
+
+UsbPrinterChooser createUsbPrinterChooser() =>
+    const UnsupportedUsbPrinterChooser();
 
 final class _NoBluetoothPrinterTransport implements PrinterTransport {
   const _NoBluetoothPrinterTransport();

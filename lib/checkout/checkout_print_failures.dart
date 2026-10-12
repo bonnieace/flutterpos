@@ -54,9 +54,14 @@ abstract final class PrinterFailureNotice {
       'No printer is set up for this business yet. Finish printer setup to '
       'start sending receipts.',
     ),
+    // **A browser reaches a printer by USB, through its own print window, or
+    // through the print helper, and nothing else**, so this says so - it is
+    // the code a web till gets for a network or Bluetooth printer.
     PrinterTransportCode.unsupported => const AppNotice.offline(
-      'Printing is not available in the browser yet. Use the app on a phone, '
-      'a tablet or a computer.',
+      'This printer cannot be reached from a browser by itself. On a Windows '
+      'computer, install the print helper from the Printer page. Or choose a '
+      'USB printer or the print dialog there - or print from the app on a '
+      'phone or tablet.',
     ),
     PrinterTransportCode.bridgeUnreachable => const AppNotice.refused(
       'The print bridge did not answer. Check that computer is running.',
@@ -81,6 +86,43 @@ abstract final class PrinterFailureNotice {
     PrinterTransportCode.bluetoothUnreachable => const AppNotice.refused(
       'The Bluetooth printer did not answer. Check it is switched on, close '
       'to this device and not connected to another phone.',
+    ),
+    // **The USB three name the cable, the power and Windows' own driver**,
+    // which are what a person at a till can see and change.
+    PrinterTransportCode.usbNotFound => const AppNotice.refused(
+      'The USB printer is not connected. Check its cable and that it is '
+      'switched on, then send it again. If it still is not found, choose it '
+      'again on the Printer page.',
+    ),
+    PrinterTransportCode.usbBusy => const AppNotice.refused(
+      'Another program is using the USB printer, so the browser cannot. On '
+      'Windows this is usually the printer’s own driver: close other '
+      'browser tabs using it, or replace its driver with WinUSB, then send '
+      'it again.',
+    ),
+    PrinterTransportCode.usbFailed => const AppNotice.refused(
+      'The USB printer did not take the receipt. Check its cable and power, '
+      'then send it again.',
+    ),
+    // Not a failure of anything: somebody closed the window. `info`, like an
+    // unconfigured printer, and sending it again opens the window again.
+    PrinterTransportCode.printDialogClosed => const AppNotice.offline(
+      'The print window was closed without printing. Send it again to open '
+      'it again.',
+    ),
+    PrinterTransportCode.printDialogFailed => const AppNotice.refused(
+      'This device could not open its print window. Send it again; if it '
+      'keeps failing, close and reopen the app.',
+    ),
+    PrinterTransportCode.printHelperUnreachable => const AppNotice.refused(
+      'The print helper is not running on this computer. Restart the '
+      'computer, or download it again from the Printer page and run it, then '
+      'send the receipt again.',
+    ),
+    PrinterTransportCode.printHelperRefused => const AppNotice.refused(
+      'The print helper only sends to printers on this shop’s own network, '
+      'and this printer’s address is not one of them. Check the address on '
+      'the Printer page.',
     ),
     _ => AppNotice.unknown(
       'This device does not recognise the printing result "$code". It may '
@@ -128,5 +170,6 @@ abstract final class PrinterFailureNotice {
   /// *Send again* on either would be a control that is guaranteed to fail.
   static bool isRetryable(String code) =>
       code != PrinterTransportCode.notConfigured &&
-      code != PrinterTransportCode.unsupported;
+      code != PrinterTransportCode.unsupported &&
+      code != PrinterTransportCode.printHelperRefused;
 }

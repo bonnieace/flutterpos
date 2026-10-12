@@ -1,0 +1,38 @@
+{
+  "_comment": "The print helper's download site, apart from the app's own hosting in the repo root so neither deploy can touch the other: a deploy from here replaces only this site, and the app's deploys never drop the download. `dart run tool/build.dart` fills build/site; deploy from this folder with `firebase deploy --only hosting --project multitenant-pos-b8326`. Served as downloads.uzapay.co.ke, a CNAME to uzapay-downloads.web.app.",
+  "hosting": {
+    "site": "uzapay-downloads",
+    "public": "build/site",
+    "cleanUrls": false,
+    "trailingSlash": false,
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "no-referrer"
+          }
+        ]
+      },
+      {
+        "_comment": "The CDN keeps it and a browser asks again every time. `no-cache` was tried first and the CDN fetched all 7 MB from the origin on every download, at 14-34 KB/s from Kenya; Hosting clears its CDN on each deploy, so `s-maxage` never serves a superseded helper.",
+        "source": "**/*.exe",
+        "headers": [
+          {
+            "key": "Content-Disposition",
+            "value": "attachment"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=0, s-maxage=31536000"
+          }
+        ]
+      }
+    ]
+  }
+}

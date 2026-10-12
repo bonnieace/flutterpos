@@ -148,7 +148,7 @@ void main() {
 
       expect(find.text('2'), findsOneWidget);
       // The palette `spiritTheme` is built from, which is what this pumps.
-      const tokens = AppTokens.profoundVerdant;
+      const tokens = AppTokens.uzapay;
       final glyph = tester.widget<Icon>(
         find.descendant(
           of: find.byKey(const ValueKey('Unprinted receipts')),
@@ -176,7 +176,7 @@ void main() {
       // says a problem that is not there.
       expect(find.text('0'), findsNothing);
       // The palette `spiritTheme` is built from, which is what this pumps.
-      const tokens = AppTokens.profoundVerdant;
+      const tokens = AppTokens.uzapay;
       final glyph = tester.widget<Icon>(
         find.descendant(
           of: find.byKey(const ValueKey('Unprinted receipts')),
@@ -257,7 +257,7 @@ void main() {
               ),
             )
             .color,
-        AppTokens.profoundVerdant.colors.text.disabled,
+        AppTokens.uzapay.colors.text.disabled,
       );
     });
 
@@ -281,7 +281,7 @@ void main() {
         width: 411,
       );
 
-      final palette = AppTokens.profoundVerdant.colors.accent.identity;
+      final palette = AppTokens.uzapay.colors.accent.identity;
       for (var index = 0; index < 12; index++) {
         final glyph = tester.widget<Icon>(
           find.descendant(
@@ -297,7 +297,7 @@ void main() {
     testWidgets('a chosen colour stays with its tile on wider layouts', (
       tester,
     ) async {
-      const tokens = AppTokens.profoundVerdant;
+      const tokens = AppTokens.uzapay;
       Color? glyphOf(String label) => tester
           .widget<Icon>(
             find.descendant(
@@ -348,8 +348,125 @@ void main() {
     test('phones use a four-across launcher grid', () {
       expect(HomeModuleGrid.columnsFor(411), 4);
       expect(HomeModuleGrid.columnsFor(767), 4);
+    });
+
+    test('wider than a phone, the width sets the columns for every role', () {
+      // The fewest columns that keep a card within the maximum, never under
+      // two. Four across at the old hub's own 1232 and 1440, so its look holds
+      // where it was measured.
       expect(HomeModuleGrid.columnsFor(768), 2);
       expect(HomeModuleGrid.columnsFor(1024), 3);
+      expect(HomeModuleGrid.columnsFor(1232), 4);
+      expect(HomeModuleGrid.columnsFor(1440), 4);
+      expect(HomeModuleGrid.columnsFor(1920), 5);
+      // No card is ever wider than the maximum, at any width a tablet or a
+      // desktop can be - which is what a cashier's 600-wide cards broke.
+      final maximum = _tokens.layout.moduleCardMaxWidth;
+      for (var width = 768.0; width <= 3840; width += 1) {
+        final room = width - 2 * _tokens.spacing.s32;
+        final columns = HomeModuleGrid.columnsFor(width);
+        final card = (room - (columns - 1) * _tokens.spacing.s20) / columns;
+        expect(card, lessThanOrEqualTo(maximum), reason: 'at $width');
+      }
+    });
+
+    testWidgets('stacked on a phone, it is the old hub\'s phone column', (
+      tester,
+    ) async {
+      // One card to a row, full width, in the old phone 1.8, and with the
+      // card's sentence - the launcher draws none.
+      await _pump(
+        tester,
+        HomeModuleGrid(
+          stackedOnPhone: true,
+          destinations: <HomeDestination>[
+            for (var index = 1; index <= 3; index++)
+              _destination('Destination $index', description: 'Short.'),
+          ],
+        ),
+        width: 411,
+      );
+      final first = tester.getRect(find.byKey(const ValueKey('Destination 1')));
+      final second = tester.getRect(
+        find.byKey(const ValueKey('Destination 2')),
+      );
+      final gridWidth = tester.getSize(find.byType(HomeModuleGrid)).width;
+      expect(first.width, closeTo(gridWidth, 0.01));
+      expect(second.left, first.left);
+      expect(second.top - first.bottom, _tokens.spacing.s12);
+      expect(find.text('Short.'), findsNWidgets(3));
+      expect(
+        find.byKey(const ValueKey('home-module-icon-Destination 1')),
+        findsNothing,
+        reason: 'a stacked card is the large card, not a launcher tile',
+      );
+    });
+
+    testWidgets('stacking changes nothing wider than a phone', (tester) async {
+      Future<Size> cardAt({required bool stacked}) async {
+        await _pump(
+          tester,
+          HomeModuleGrid(
+            stackedOnPhone: stacked,
+            destinations: <HomeDestination>[
+              for (var index = 1; index <= 4; index++)
+                _destination('Destination $index', description: 'Short.'),
+            ],
+          ),
+          width: 1232,
+        );
+        return tester.getSize(find.byKey(const ValueKey('Destination 1')));
+      }
+
+      expect(await cardAt(stacked: true), await cardAt(stacked: false));
+    });
+
+    testWidgets('a card is the same height at every width and on every role', (
+      tester,
+    ) async {
+      // The 375 phone's card at every size, large screens included - the
+      // developer's direction on 2026-10-10. A wider card used to be a taller
+      // one, and the growth all went between the glyph and the name.
+      Future<double> heightAt(double width, {required bool stacked}) async {
+        await _pump(
+          tester,
+          HomeModuleGrid(
+            stackedOnPhone: stacked,
+            destinations: <HomeDestination>[
+              for (var index = 1; index <= 4; index++)
+                _destination('Destination $index', description: 'Short.'),
+            ],
+          ),
+          width: width,
+        );
+        return tester
+            .getSize(find.byKey(const ValueKey('Destination 1')))
+            .height;
+      }
+
+      final phone = await heightAt(375, stacked: true);
+      expect(await heightAt(440, stacked: true), phone);
+      expect(await heightAt(768, stacked: false), phone);
+      expect(await heightAt(1232, stacked: false), phone);
+      expect(await heightAt(1920, stacked: false), phone);
+    });
+
+    testWidgets('a desktop card is the old hub\'s width', (tester) async {
+      // Four across at 1232 - 32 a side and 20 between - is 277 wide.
+      await _pump(
+        tester,
+        HomeModuleGrid(
+          destinations: <HomeDestination>[
+            for (var index = 1; index <= 4; index++)
+              _destination('Destination $index', description: 'Short.'),
+          ],
+        ),
+        width: 1232,
+      );
+      final size = tester.getSize(find.byKey(const ValueKey('Destination 1')));
+      final gridWidth = tester.getSize(find.byType(HomeModuleGrid)).width;
+      final cardWidth = (gridWidth - 3 * _tokens.spacing.s20) / 4;
+      expect(size.width, closeTo(cardWidth, 0.01));
     });
 
     testWidgets('phone modules are icon-and-title launchers only', (
@@ -404,7 +521,7 @@ void main() {
       expect(firstIcon.color, isNot(secondIcon.color));
     });
 
-    testWidgets('larger modules retain descriptions and shadowed card edges', (
+    testWidgets('larger modules keep descriptions, lifted by a shadow alone', (
       tester,
     ) async {
       await _pump(
@@ -435,7 +552,10 @@ void main() {
         (decoration) => decoration.boxShadow?.isNotEmpty ?? false,
       );
       expect(card.color, _tokens.colors.surface.raised);
-      expect(card.border, isNotNull);
+      // The old hub's card had no edge, and since 2026-10-10 neither does this.
+      expect(card.border, isNull);
+      expect(card.boxShadow!.single.blurRadius, _tokens.effects.cardShadowBlur);
+      expect(card.borderRadius, BorderRadius.circular(_tokens.radius.xl));
     });
   });
 

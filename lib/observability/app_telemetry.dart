@@ -139,7 +139,11 @@ class RecordingAppTelemetry implements AppTelemetry {
   Map<String, Object?> _device = {};
   final Map<String, int> _attemptCounts = {};
   static int _sequence = 0;
-  static final _processId = Random.secure().nextInt(1 << 32).toRadixString(16);
+  // 2^32 written out, not `1 << 32`: a shift on web is 32-bit, so that was 0
+  // there and `nextInt(0)` threw on the first operation - signing in.
+  static final _processId = Random.secure()
+      .nextInt(0x100000000)
+      .toRadixString(16);
 
   @override
   TelemetryOperation start(

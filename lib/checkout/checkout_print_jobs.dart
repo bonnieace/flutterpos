@@ -102,14 +102,14 @@ final class PrintJobRecord {
   final String host;
   final int port;
 
-  /// Network or Bluetooth, so a retry goes down the link the receipt was
+  /// Network, Bluetooth or USB, so a retry goes down the link the receipt was
   /// queued for.
   ///
-  /// **Written only for Bluetooth, and read as network when absent**, so every
-  /// record queued before Bluetooth existed parses exactly as it did, with no
-  /// migration and no new schema version. The reverse holds as well: a build
-  /// that predates Bluetooth reads a Bluetooth job's address as a host, refuses
-  /// it as `malformed_print_job` and counts it unreadable - it never dials it.
+  /// **Written only for Bluetooth and USB, and read as network when absent**,
+  /// so every record queued before either existed parses exactly as it did,
+  /// with no migration and no new schema version. The reverse holds as well: a
+  /// build that predates one refuses its jobs as `malformed_print_job` and
+  /// counts them unreadable - it never dials them.
   final PrinterEndpointKind kind;
 
   /// The finished ESC/POS payload. **This class does not build bytes** —
@@ -138,6 +138,16 @@ final class PrintJobRecord {
       port == PrinterEndpoint.bluetoothPort
           ? PrinterEndpoint.bluetooth(host)
           : throw ArgumentError.value(port, 'port'),
+    PrinterEndpointKind.usb =>
+      port == PrinterEndpoint.usbPort
+          ? PrinterEndpoint.usb(host)
+          : throw ArgumentError.value(port, 'port'),
+    // The print window has one endpoint, and a record naming any other host
+    // under it is not one this app wrote.
+    PrinterEndpointKind.system =>
+      host == PrinterEndpoint.systemHost && port == PrinterEndpoint.systemPort
+          ? const PrinterEndpoint.system()
+          : throw ArgumentError.value(host, 'host'),
   };
 
   Map<String, Object?> toMap() => <String, Object?>{
@@ -147,6 +157,8 @@ final class PrintJobRecord {
     'host': host,
     'port': port,
     if (kind == PrinterEndpointKind.bluetooth) 'kind': _bluetoothKind,
+    if (kind == PrinterEndpointKind.usb) 'kind': _usbKind,
+    if (kind == PrinterEndpointKind.system) 'kind': _systemKind,
     'bytes': List<int>.unmodifiable(bytes),
     'state': state.name,
     'attemptCount': attemptCount,
@@ -169,6 +181,8 @@ final class PrintJobRecord {
     final kind = switch (map['kind']) {
       null => PrinterEndpointKind.network,
       _bluetoothKind => PrinterEndpointKind.bluetooth,
+      _usbKind => PrinterEndpointKind.usb,
+      _systemKind => PrinterEndpointKind.system,
       _ => throw const PrintJobException('malformed_print_job'),
     };
     final bytes = map['bytes'];
@@ -219,6 +233,8 @@ final class PrintJobRecord {
   }
 
   static const String _bluetoothKind = 'bluetooth';
+  static const String _usbKind = 'usb';
+  static const String _systemKind = 'system';
 
   static PrintJobState? _stateFromName(Object? value) {
     if (value is! String) return null;

@@ -191,9 +191,7 @@ List<HomeDestination> _modules() {
       'Register',
       Symbols.point_of_sale_rounded,
       AppIdentityAccent.blue,
-      description:
-          'Ring up a sale for a walk-in or a customer, take the payment, and '
-          'hand over the receipt.',
+      description: 'Ring up a sale, take payment and hand over the receipt.',
       isPrimary: true,
     ),
     tile(
@@ -201,8 +199,7 @@ List<HomeDestination> _modules() {
       Symbols.bar_chart_rounded,
       AppIdentityAccent.teal,
       group: 'Sales',
-      description:
-          'View sales reports, payment breakdowns, and transaction history.',
+      description: 'Sales reports, payments and transaction history.',
     ),
     tile(
       'Returns',
@@ -244,7 +241,7 @@ List<HomeDestination> _modules() {
       Symbols.local_shipping_rounded,
       AppIdentityAccent.orange,
       group: 'Inventory',
-      description: 'Who you buy stock from, and what each delivery brought in.',
+      description: 'Who you buy from, and what each delivery brought in.',
     ),
     tile(
       'Production',
@@ -258,26 +255,21 @@ List<HomeDestination> _modules() {
       Symbols.account_balance_wallet_rounded,
       AppIdentityAccent.green,
       group: 'Reports',
-      description:
-          'Record rent, wages and running costs, and see what profit is left '
-          'after them.',
+      description: 'Rent, wages and running costs, and what profit is left.',
     ),
     tile(
       'Reports',
       Symbols.insights_rounded,
       AppIdentityAccent.blue,
       group: 'Reports',
-      description:
-          'Weekly sales, profit and best sellers, and every other report from '
-          'the figures themselves.',
+      description: 'Weekly sales, profit, best sellers and more reports.',
     ),
     tile(
       'Shift history',
       Symbols.work_history_rounded,
       AppIdentityAccent.pink,
       group: 'Reports',
-      description:
-          'What each drawer was counted at, against the sales it took.',
+      description: 'What each drawer was counted at, against its sales.',
     ),
     tile(
       'My businesses',
@@ -298,7 +290,7 @@ List<HomeDestination> _modules() {
       Symbols.chat_rounded,
       AppIdentityAccent.green,
       group: 'Business',
-      description: 'Send receipts to customers on WhatsApp instead of paper.',
+      description: 'Send receipts to customers on WhatsApp, not paper.',
       brandIcon: AppBrandIcon.whatsapp,
     ),
     tile(

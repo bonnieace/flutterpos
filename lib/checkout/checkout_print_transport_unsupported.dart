@@ -12,14 +12,24 @@
 /// behaviour: honest and loud.
 library;
 
+import 'checkout_print_helper.dart';
 import 'checkout_bluetooth_printer.dart';
 import 'checkout_print_transport_base.dart';
+import 'checkout_usb_printer.dart';
 
 PrinterTransport createPrinterTransport() =>
     const UnsupportedPrinterTransport();
 
 BluetoothPrinterDiscovery createBluetoothPrinterDiscovery() =>
     const UnsupportedBluetoothPrinterDiscovery();
+
+/// Never seen: the print helper is for a browser, and this is not one.
+PrintHelperMemory createPrintHelperMemory() => _noPrintHelper;
+
+final PrintHelperMemory _noPrintHelper = InMemoryPrintHelperMemory();
+
+UsbPrinterChooser createUsbPrinterChooser() =>
+    const UnsupportedUsbPrinterChooser();
 
 final class UnsupportedPrinterTransport implements PrinterTransport {
   const UnsupportedPrinterTransport();

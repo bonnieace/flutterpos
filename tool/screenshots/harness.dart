@@ -10,9 +10,9 @@
 ///
 /// 1. **Real fonts.** `flutter test` ships a metrics-only test face, so every
 ///    string renders as a filled rectangle. The app's own bundled faces are
-///    loaded from `fonts/` - Hanken Grotesk and JetBrains Mono, the two
-///    families `pubspec.yaml` declares - so a capture shows the typography the
-///    app actually ships. The Material icon font still comes from the SDK
+///    loaded from `fonts/` - Roboto and JetBrains Mono, the two families the
+///    type roles name - so a capture shows the typography the app actually
+///    ships. Hanken Grotesk is declared too, but only the PDF reports embed it. The Material icon font still comes from the SDK
 ///    cache, because it is the SDK's asset rather than the app's.
 ///
 ///    **This harness used to inject Roboto over the app's theme**, and worse,
@@ -236,7 +236,8 @@ bool _fontsLoaded = false;
 /// Flutter SDK's cache, and Material Symbols Rounded from the pub cache.
 ///
 /// The two families and the six faces below are exactly what `pubspec.yaml`
-/// declares. They are listed again here rather than parsed out of the manifest
+/// declares for the screen (Hanken Grotesk is declared for the PDF reports
+/// alone, and no type role names it). They are listed again here rather than parsed out of the manifest
 /// because a test binary has no asset bundle to read: `flutter test` does not
 /// build one, which is the same reason the icon font has to be fetched by path.
 /// A face added to `pubspec.yaml` and not to this list will render in the
@@ -258,10 +259,10 @@ Future<void> loadScreenshotFonts() async {
 
   final interface = FontLoader(AppTypeRoles.interfaceFamily);
   for (final face in const <String>[
-    'HankenGrotesk-Regular.ttf',
-    'HankenGrotesk-Medium.ttf',
-    'HankenGrotesk-SemiBold.ttf',
-    'HankenGrotesk-Bold.ttf',
+    'roboto/Roboto-Regular.ttf',
+    'roboto/Roboto-Medium.ttf',
+    'roboto/Roboto-SemiBold.ttf',
+    'roboto/Roboto-Bold.ttf',
   ]) {
     interface.addFont(_fontBytes(appFonts, face));
   }

@@ -25,6 +25,7 @@
 /// fix.
 library;
 
+import 'dart:async';
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
@@ -59,7 +60,11 @@ final class PressSurface extends StatefulWidget {
     this.fillHeight = false,
     this.reservesRingGutter = true,
     this.ringInside = false,
-  });
+    this.repeatsWhileHeld = false,
+  }) : assert(
+         !repeatsWhileHeld || onLongPress == null,
+         'A surface that repeats while held has no long press to offer.',
+       );
 
   /// The surface itself, drawing its own container, border and label.
   final Widget child;
@@ -150,6 +155,17 @@ final class PressSurface extends StatefulWidget {
   /// [reservesRingGutter] does not apply.
   final bool ringInside;
 
+  /// Whether [onPressed] fires as the press lands and again, faster and
+  /// faster, for as long as it is held - a keyboard's backspace.
+  ///
+  /// **The press itself fires, not the release**, which is the other half of
+  /// how a key behaves: the first character goes the moment the finger lands,
+  /// and the repeats follow on [AppMotion.keyRepeat]'s cadence until it lifts
+  /// or slides off. A held Space or Enter on a focused surface repeats on the
+  /// platform's own key repeat. Not combined with [onLongPress], which would
+  /// take the hold for itself.
+  final bool repeatsWhileHeld;
+
   @override
   State<PressSurface> createState() => _PressSurfaceState();
 }
@@ -177,6 +193,13 @@ class _PressSurfaceState extends State<PressSurface>
 
   bool get _enabled => widget.onPressed != null || widget.onLongPress != null;
 
+  bool get _repeats => widget.repeatsWhileHeld && widget.onPressed != null;
+
+  /// The next repeat of a held surface, and how long it has been repeating,
+  /// which is what sets the gap after it. See [PressSurface.repeatsWhileHeld].
+  Timer? _repeat;
+  Duration _repeating = Duration.zero;
+
   /// §9's focus indicator is for a person navigating with a keyboard, so a tap
   /// that happens to focus a button does not draw a ring.
   ///
@@ -198,6 +221,7 @@ class _PressSurfaceState extends State<PressSurface>
     FocusManager.instance.removeHighlightModeListener(
       _handleHighlightModeChange,
     );
+    _repeat?.cancel();
     _drive?.dispose();
     super.dispose();
   }
@@ -224,6 +248,30 @@ class _PressSurfaceState extends State<PressSurface>
     if (!mounted || _pressed == pressed) return;
     setState(() => _pressed = pressed);
     _spring.animateTo(pressed ? 1 : 0, immediately: _animationsDisabled);
+  }
+
+  void _press() {
+    _setPressed(true);
+    if (!_repeats) return;
+    _repeat?.cancel();
+    _repeating = Duration.zero;
+    _repeat = Timer(_tokens.motion.keyRepeat.delay, _repeatOnce);
+    widget.onPressed!();
+  }
+
+  void _release() {
+    _setPressed(false);
+    _repeat?.cancel();
+    _repeat = null;
+  }
+
+  void _repeatOnce() {
+    _repeat = null;
+    if (!mounted || !_repeats) return;
+    final gap = _tokens.motion.keyRepeat.gapAfter(_repeating);
+    _repeating += gap;
+    _repeat = Timer(gap, _repeatOnce);
+    widget.onPressed!();
   }
 
   @override
@@ -357,10 +405,12 @@ class _PressSurfaceState extends State<PressSurface>
 
     Widget result = GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: _enabled ? (_) => _setPressed(true) : null,
-      onTapUp: _enabled ? (_) => _setPressed(false) : null,
-      onTapCancel: _enabled ? () => _setPressed(false) : null,
-      onTap: widget.onPressed,
+      onTapDown: _enabled ? (_) => _press() : null,
+      onTapUp: _enabled ? (_) => _release() : null,
+      onTapCancel: _enabled ? _release : null,
+      // A surface that repeats has already fired on the way down, so its
+      // release is not a second press.
+      onTap: _repeats ? null : widget.onPressed,
       onLongPress: widget.onLongPress,
       child: sized,
     );
@@ -417,11 +467,16 @@ class _PressSurfaceState extends State<PressSurface>
     if (!isActivation) return KeyEventResult.ignored;
     if (event is KeyDownEvent) {
       _setPressed(true);
+      if (_repeats) widget.onPressed!();
+      return KeyEventResult.handled;
+    }
+    if (event is KeyRepeatEvent && _repeats) {
+      widget.onPressed!();
       return KeyEventResult.handled;
     }
     if (event is KeyUpEvent) {
       _setPressed(false);
-      widget.onPressed?.call();
+      if (!_repeats) widget.onPressed?.call();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

@@ -7,6 +7,7 @@ import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/ui/buttons.dart';
 import 'package:uzapay_pos/ui/snackbar.dart';
 import 'package:uzapay_pos/ui/states.dart';
+import 'package:uzapay_pos/ui/choice.dart';
 import 'package:uzapay_pos/ui/tabs.dart';
 import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -426,45 +427,8 @@ void main() {
       );
     });
 
-    testWidgets('a sideways swipe changes tab, and a short drag does not', (
-      tester,
-    ) async {
-      await _pump(
-        tester,
-        _controller(),
-        _Reader(stored: _stored()),
-        writer: _Writer(),
-        bluetooth: _bluetooth(),
-      );
-      final search = find.byKey(const ValueKey('printer-bluetooth-search'));
-      final field = find.byKey(const ValueKey('printer-configuration-host'));
-      // Just under the strip, on the tab's own content. A swipe that starts on
-      // a text field is the field's, as it is in a `TabBarView`.
-      Offset content() =>
-          tester.getBottomLeft(find.byType(AppTabs)) + const Offset(200, 24);
-
-      await tester.dragFrom(content(), const Offset(-40, 0));
-      await tester.pumpAndSettle();
-      expect(search, findsNothing);
-
-      await tester.flingFrom(content(), const Offset(-300, 0), 1000);
-      await tester.pumpAndSettle();
-      expect(search, findsOne);
-
-      // Past the last tab there is nowhere to go.
-      await tester.flingFrom(content(), const Offset(-300, 0), 1000);
-      await tester.pumpAndSettle();
-      expect(search, findsOne);
-
-      await tester.flingFrom(content(), const Offset(300, 0), 1000);
-      await tester.pumpAndSettle();
-      expect(search, findsNothing);
-      expect(field, findsOne);
-    });
-
-    testWidgets('opens on Network and asks the phone nothing until Search', (
-      tester,
-    ) async {
+    testWidgets('opens on the network printer and asks the phone nothing '
+        'until Search', (tester) async {
       // A permission prompt follows a press, never the opening of a page.
       final discovery = _FakeDiscovery();
       await _pump(
@@ -475,10 +439,7 @@ void main() {
         bluetooth: _bluetooth(discovery: discovery),
       );
 
-      expect(
-        find.byKey(const ValueKey('printer-configuration-tabs')),
-        findsOne,
-      );
+      expect(_isOn(tester, 'network'), isTrue);
       expect(
         find.byKey(const ValueKey('printer-configuration-host')),
         findsOne,
@@ -490,10 +451,15 @@ void main() {
 
       await _openBluetoothTab(tester);
 
+      // One on at a time, and only its settings shown.
+      expect(_isOn(tester, 'network'), isFalse);
+      expect(
+        find.byKey(const ValueKey('printer-configuration-host')),
+        findsNothing,
+      );
       expect(find.byKey(const ValueKey('printer-bluetooth-search')), findsOne);
       expect(discovery.prepareCalls, 0);
     });
-
     testWidgets('finds paired and nearby devices, and connects the chosen one', (
       tester,
     ) async {
@@ -797,44 +763,32 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets(
-      'a device on Bluetooth opens on that tab and says so on Network',
-      (tester) async {
-        final store = _MemoryStore(<String, DeviceBluetoothPrinter>{
-          'tenant-a': _mpt(),
-        });
-        await _pump(
-          tester,
-          _controller(),
-          _Reader(),
-          writer: _Writer(),
-          bluetooth: _bluetooth(store: store),
-        );
+    testWidgets('a device on Bluetooth has that switch on, and shows only '
+        'its settings', (tester) async {
+      final store = _MemoryStore(<String, DeviceBluetoothPrinter>{
+        'tenant-a': _mpt(),
+      });
+      final modes = _MemoryModes();
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(),
+        writer: _Writer(),
+        bluetooth: _bluetooth(store: store),
+        printModes: modes,
+      );
 
-        expect(
-          find.byKey(const ValueKey('printer-bluetooth-current')),
-          findsOne,
-        );
-
-        await _openNetworkTab(tester);
-
-        // The business has no network printer, but this device is not going
-        // nowhere - so the "receipts are not sent anywhere" notice would be
-        // untrue here, and this one replaces it.
-        expect(
-          noticeMessage(tester, 'printer-configuration-bluetooth-in-use'),
-          contains('MPT-II'),
-        );
-        expect(
-          find.byKey(const ValueKey('printer-configuration-current')),
-          findsNothing,
-        );
-      },
-    );
-
-    testWidgets('stop using returns this device to the network printer', (
-      tester,
-    ) async {
+      expect(_isOn(tester, 'bluetooth'), isTrue);
+      expect(find.byKey(const ValueKey('printer-bluetooth-current')), findsOne);
+      expect(
+        find.byKey(const ValueKey('printer-configuration-host')),
+        findsNothing,
+      );
+      // What the page read is now what the device keeps.
+      expect(modes.mode, DevicePrintMode.bluetooth);
+    });
+    testWidgets('stop using leaves Bluetooth on, printing nowhere, and says '
+        'so', (tester) async {
       final store = _MemoryStore(<String, DeviceBluetoothPrinter>{
         'tenant-a': _mpt(),
       });
@@ -850,19 +804,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(store.printers, isEmpty);
-      expect(
-        find.byKey(const ValueKey('printer-bluetooth-current')),
-        findsNothing,
-      );
       expect(snackNotice(tester).status, AppStatus.ok);
-
-      await _openNetworkTab(tester);
+      // No quiet fall back to the network printer someone switched off.
+      expect(_isOn(tester, 'bluetooth'), isTrue);
       expect(
-        find.byKey(const ValueKey('printer-configuration-bluetooth-in-use')),
-        findsNothing,
+        find.byKey(const ValueKey('printer-bluetooth-no-printer')),
+        findsOne,
       );
     });
-
     testWidgets('stop using that cannot be written says so and keeps it', (
       tester,
     ) async {
@@ -923,26 +872,6 @@ void main() {
       // Sent, not connected: the sheet stays open on the answer.
       expect(noticeStatus(tester, 'printer-bluetooth-answer'), AppStatus.ok);
       expect(find.byKey(const ValueKey('printer-bluetooth-sheet')), findsOne);
-    });
-
-    testWidgets('the tab opens on where this device prints now', (
-      tester,
-    ) async {
-      await _pump(
-        tester,
-        _controller(),
-        _Reader(stored: _stored(paperWidth: 'columns_48', hasCutter: false)),
-        writer: _Writer(),
-        bluetooth: _bluetooth(),
-      );
-      await _openBluetoothTab(tester);
-
-      expect(find.byKey(const ValueKey('printer-bluetooth-network')), findsOne);
-      expect(find.text('192.168.1.50:9100 · 80mm roll'), findsOne);
-      expect(
-        find.byKey(const ValueKey('printer-bluetooth-no-printer')),
-        findsNothing,
-      );
     });
 
     testWidgets('with no printer anywhere, the card says so', (tester) async {
@@ -1118,6 +1047,518 @@ void main() {
       );
     });
   });
+
+  group('the USB tab, in a browser', () {
+    testWidgets('a browser switches between network and USB, and has no '
+        'Bluetooth', (tester) async {
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(stored: _stored()),
+        writer: _Writer(),
+        usb: _usb(),
+      );
+
+      expect(_tabLabels(tester), <String>['Network', 'USB']);
+    });
+    testWidgets('a browser without WebUSB says where it works', (tester) async {
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(),
+        writer: _Writer(),
+        usb: _usb(chooser: _FakeUsbChooser(supported: false)),
+      );
+      await _openUsbTab(tester);
+
+      expect(
+        noticeStatus(tester, 'printer-usb-unsupported'),
+        AppStatus.attention,
+      );
+      expect(find.byKey(const ValueKey('printer-usb-choose')), findsNothing);
+    });
+
+    testWidgets('a chosen printer is connected, then kept, then used', (
+      tester,
+    ) async {
+      final store = _MemoryUsbStore();
+      final probe = _Probe();
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(stored: _stored()),
+        writer: _Writer(),
+        usb: _usb(
+          chooser: _FakeUsbChooser(chosen: _tmT20),
+          store: store,
+          probe: probe,
+        ),
+      );
+      await _openUsbTab(tester);
+      await tester.tap(find.byKey(const ValueKey('printer-usb-choose')));
+      await tester.pumpAndSettle();
+
+      // It answered before it was kept, and it was kept as a USB printer.
+      expect(probe.probes, <PrinterEndpoint>[PrinterEndpoint.usb(_tmT20.key)]);
+      final saved = store.printers['tenant-a']!;
+      expect(saved.endpoint.isUsb, isTrue);
+      expect(saved.name, 'EPSON TM-T20II');
+      expect(saved.paperWidth, PrinterPaperWidth.columns48);
+      expect(noticeStatus(tester, 'printer-usb-answer'), AppStatus.ok);
+      expect(find.byKey(const ValueKey('printer-usb-current')), findsOne);
+      expect(_isOn(tester, 'usb'), isTrue);
+    });
+
+    testWidgets('closing the picker changes nothing', (tester) async {
+      final store = _MemoryUsbStore();
+      final probe = _Probe();
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(),
+        writer: _Writer(),
+        usb: _usb(store: store, probe: probe),
+      );
+      await _openUsbTab(tester);
+      await tester.tap(find.byKey(const ValueKey('printer-usb-choose')));
+      await tester.pumpAndSettle();
+
+      expect(probe.probes, isEmpty);
+      expect(store.printers, isEmpty);
+      expect(find.byKey(const ValueKey('printer-usb-answer')), findsNothing);
+    });
+
+    testWidgets(
+      'a printer Windows holds is not kept, and says how to free it',
+      (tester) async {
+        final store = _MemoryUsbStore();
+        await _pump(
+          tester,
+          _controller(),
+          _Reader(),
+          writer: _Writer(),
+          usb: _usb(
+            chooser: _FakeUsbChooser(chosen: _tmT20),
+            store: store,
+            probe: _Probe(failWith: PrinterTransportCode.usbBusy),
+          ),
+        );
+        await _openUsbTab(tester);
+        await tester.tap(find.byKey(const ValueKey('printer-usb-choose')));
+        await tester.pumpAndSettle();
+
+        expect(store.printers, isEmpty);
+        expect(noticeStatus(tester, 'printer-usb-answer'), AppStatus.problem);
+        expect(noticeMessage(tester, 'printer-usb-answer'), contains('WinUSB'));
+      },
+    );
+
+    testWidgets('a printer this browser may already use needs no picker', (
+      tester,
+    ) async {
+      final chooser = _FakeUsbChooser(allowed: <UsbPrinterDevice>[_tmT20]);
+      final store = _MemoryUsbStore();
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(),
+        writer: _Writer(),
+        usb: _usb(chooser: chooser, store: store),
+      );
+      await _openUsbTab(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(ValueKey('printer-usb-permitted-${_tmT20.key}')),
+          matching: find.text('Use this printer'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(chooser.chooseCalls, 0);
+      expect(store.printers['tenant-a']?.key, _tmT20.key);
+    });
+
+    testWidgets('stop using forgets the printer in this browser', (
+      tester,
+    ) async {
+      final store = _MemoryUsbStore(<String, DeviceUsbPrinter>{
+        'tenant-a': DeviceUsbPrinter(
+          key: _tmT20.key,
+          name: 'EPSON TM-T20II',
+          paperWidth: PrinterPaperWidth.columns48,
+          hasCutter: true,
+        ),
+      });
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(),
+        writer: _Writer(),
+        usb: _usb(store: store),
+      );
+      // A browser printing on USB opens on its tab.
+      expect(find.byKey(const ValueKey('printer-usb-current')), findsOne);
+
+      await tester.tap(find.byKey(const ValueKey('printer-usb-forget')));
+      await tester.pumpAndSettle();
+
+      expect(store.printers, isEmpty);
+      expect(find.byKey(const ValueKey('printer-usb-none')), findsOne);
+    });
+  });
+
+  group('the print dialog', () {
+    testWidgets('is the last switch, after USB in a browser', (tester) async {
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(stored: _stored()),
+        writer: _Writer(),
+        usb: _usb(),
+        system: _system(),
+      );
+
+      expect(_tabLabels(tester), <String>['Network', 'USB', 'Print dialog']);
+    });
+
+    testWidgets('switched on, it is checked, given a width, and is the one '
+        'printer', (tester) async {
+      final store = _MemorySystemStore();
+      final probe = _Probe();
+      final modes = _MemoryModes();
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(stored: _stored()),
+        writer: _Writer(),
+        usb: _usb(),
+        system: _system(store: store, probe: probe),
+        printModes: modes,
+      );
+      expect(_isOn(tester, 'network'), isTrue);
+
+      await _openSystemTab(tester);
+
+      expect(probe.probes, <PrinterEndpoint>[const PrinterEndpoint.system()]);
+      expect(
+        store.printers['tenant-a'],
+        const DeviceSystemPrinter(paperWidth: PrinterPaperWidth.columns48),
+      );
+      expect(modes.mode, DevicePrintMode.dialog);
+      expect(_isOn(tester, 'network'), isFalse);
+      expect(find.byKey(const ValueKey('printer-system-in-use')), findsOne);
+      expect(
+        find.byKey(const ValueKey('printer-configuration-host')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a device with no print window stays as it was', (
+      tester,
+    ) async {
+      final store = _MemorySystemStore();
+      final modes = _MemoryModes(DevicePrintMode.network);
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(stored: _stored()),
+        writer: _Writer(),
+        system: _system(
+          store: store,
+          probe: _Probe(failWith: PrinterTransportCode.unsupported),
+        ),
+        printModes: modes,
+      );
+
+      await _switchOn(tester, 'dialog');
+
+      expect(modes.mode, DevicePrintMode.network);
+      expect(store.printers, isEmpty);
+      expect(_isOn(tester, 'network'), isTrue);
+      expect(snackNotice(tester).status, isNot(AppStatus.ok));
+    });
+
+    testWidgets('on, it tests through the window and keeps a new width', (
+      tester,
+    ) async {
+      final store = _MemorySystemStore(<String, DeviceSystemPrinter>{
+        'tenant-a': const DeviceSystemPrinter(
+          paperWidth: PrinterPaperWidth.columns48,
+        ),
+      });
+      final tested = <TenantPrinterConfiguration>[];
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(),
+        writer: _Writer(),
+        testPrint: (configuration) async => tested.add(configuration),
+        system: _system(store: store),
+        printModes: _MemoryModes(DevicePrintMode.dialog),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('printer-system-test')));
+      await tester.pumpAndSettle();
+      expect(tested.single.transport, PrinterTransportKind.system);
+      expect(noticeStatus(tester, 'printer-system-answer'), AppStatus.ok);
+
+      await tester.tap(find.byKey(const ValueKey('printer-system-paper')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('58mm roll').last);
+      await tester.pumpAndSettle();
+      expect(
+        store.printers['tenant-a'],
+        const DeviceSystemPrinter(paperWidth: PrinterPaperWidth.columns32),
+      );
+    });
+
+    testWidgets('switched off, nothing prints, and the page says so', (
+      tester,
+    ) async {
+      final modes = _MemoryModes(DevicePrintMode.dialog);
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(stored: _stored()),
+        writer: _Writer(),
+        system: _system(
+          store: _MemorySystemStore(<String, DeviceSystemPrinter>{
+            'tenant-a': const DeviceSystemPrinter(
+              paperWidth: PrinterPaperWidth.columns48,
+            ),
+          }),
+        ),
+        printModes: modes,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('printer-mode-dialog')));
+      await tester.pumpAndSettle();
+
+      expect(modes.mode, DevicePrintMode.off);
+      expect(
+        noticeStatus(tester, 'printer-mode-dialog-off'),
+        AppStatus.attention,
+      );
+      expect(find.byKey(const ValueKey('printer-system-in-use')), findsNothing);
+    });
+
+    testWidgets('a record it cannot read says so, and a width puts it right', (
+      tester,
+    ) async {
+      final store = _MemorySystemStore.unreadable();
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(),
+        writer: _Writer(),
+        system: _system(store: store),
+        printModes: _MemoryModes(DevicePrintMode.dialog),
+      );
+
+      expect(
+        noticeStatus(tester, 'printer-system-unreadable'),
+        AppStatus.problem,
+      );
+      await tester.tap(find.byKey(const ValueKey('printer-system-paper')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('80mm roll').last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('printer-system-in-use')), findsOne);
+    });
+
+    testWidgets('choosing a USB printer makes USB the printer in use', (
+      tester,
+    ) async {
+      final chosen = <String>[];
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(stored: _stored()),
+        writer: _Writer(),
+        usb: UsbPrinterSetup(
+          chooser: _FakeUsbChooser(chosen: _tmT20),
+          store: _MemoryUsbStore(),
+          probe: _Probe().call,
+          onChosen: (tenantId) async => chosen.add(tenantId),
+        ),
+        system: _system(),
+      );
+      await _openUsbTab(tester);
+      await tester.tap(find.byKey(const ValueKey('printer-usb-choose')));
+      await tester.pumpAndSettle();
+
+      expect(chosen, <String>['tenant-a']);
+    });
+  });
+
+  group('the print helper, on a web till on Windows', () {
+    testWidgets('without the helper, installing it is the only step shown', (
+      tester,
+    ) async {
+      final helper = _helperSetup();
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(),
+        writer: _Writer(),
+        usb: UsbPrinterSetup(
+          chooser: _FakeUsbChooser(),
+          store: _MemoryUsbStore(),
+          probe: _Probe().call,
+          helper: helper,
+        ),
+      );
+      await _openUsbTab(tester);
+
+      expect(find.byKey(const ValueKey('print-helper-download')), findsOne);
+      expect(find.byKey(const ValueKey('printer-usb-none')), findsNothing);
+      expect(find.byKey(const ValueKey('printer-usb-choose')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('printer-usb-helper-none')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a printer plugged in after the page opened appears by '
+        'itself', (tester) async {
+      final fake = _FakePrintHelper('1.0.3', printers: <PrintHelperPrinter>[]);
+      final helper = PrintHelperSetup(
+        helper: fake,
+        memory: InMemoryPrintHelperMemory(),
+        download: () async {},
+      );
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(),
+        writer: _Writer(),
+        usb: UsbPrinterSetup(
+          chooser: _FakeUsbChooser(),
+          store: _MemoryUsbStore(),
+          probe: _Probe().call,
+          helper: helper,
+        ),
+      );
+      await _openUsbTab(tester);
+      expect(find.byKey(const ValueKey('printer-usb-helper-none')), findsOne);
+
+      fake.printers = const <PrintHelperPrinter>[
+        PrintHelperPrinter(
+          key: '1FC9:2016:06C6ACA91073',
+          name: 'Xprinter XP-365B',
+        ),
+      ];
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('printer-usb-helper-1FC9:2016:06C6ACA91073')),
+        findsOne,
+      );
+      expect(
+        find.byKey(const ValueKey('printer-usb-helper-none')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('its printers are offered first, and one is kept as a USB '
+        'printer', (tester) async {
+      final store = _MemoryUsbStore();
+      final probe = _Probe();
+      final helper = _helperSetup(version: '1.0.0');
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(stored: _stored()),
+        writer: _Writer(),
+        usb: UsbPrinterSetup(
+          chooser: _FakeUsbChooser(),
+          store: store,
+          probe: probe.call,
+          helper: helper,
+        ),
+        printHelper: helper,
+      );
+      await _openUsbTab(tester);
+
+      expect(noticeStatus(tester, 'print-helper-running'), AppStatus.ok);
+      const key = '1FC9:2016:06C6ACA91073';
+      // No browser picker on Windows, and none of its driver-swap help: the
+      // printer the helper found is the one thing to press.
+      expect(find.byKey(const ValueKey('printer-usb-choose')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('printer-usb-windows-help')),
+        findsNothing,
+      );
+      expect(
+        tester
+            .widget<AppButton>(
+              find.descendant(
+                of: find.byKey(const ValueKey('printer-usb-helper-$key')),
+                matching: find.byType(AppButton),
+              ),
+            )
+            .tier,
+        AppButtonTier.primary,
+      );
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('printer-usb-helper-$key')),
+          matching: find.text('Use this printer'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(probe.probes, <PrinterEndpoint>[PrinterEndpoint.usb(key)]);
+      expect(store.printers['tenant-a']!.name, 'Xprinter XP-365B');
+      expect(store.printers['tenant-a']!.key, key);
+      expect(find.byKey(const ValueKey('printer-usb-current')), findsOne);
+    });
+
+    testWidgets('a browser without WebUSB still prints through it', (
+      tester,
+    ) async {
+      final helper = _helperSetup(version: '1.0.0');
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(),
+        writer: _Writer(),
+        usb: UsbPrinterSetup(
+          chooser: _FakeUsbChooser(supported: false),
+          store: _MemoryUsbStore(),
+          probe: _Probe().call,
+          helper: helper,
+        ),
+      );
+      await _openUsbTab(tester);
+
+      expect(
+        find.byKey(const ValueKey('printer-usb-unsupported')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('printer-usb-helper-1FC9:2016:06C6ACA91073')),
+        findsOne,
+      );
+      expect(find.byKey(const ValueKey('printer-usb-choose')), findsNothing);
+    });
+
+    testWidgets('the network tab says whether it is here', (tester) async {
+      await _pump(
+        tester,
+        _controller(),
+        _Reader(stored: _stored()),
+        writer: _Writer(),
+        printHelper: _helperSetup(),
+        system: _system(),
+      );
+
+      expect(find.byKey(const ValueKey('print-helper-absent')), findsOne);
+      expect(find.byKey(const ValueKey('print-helper-download')), findsOne);
+    });
+  });
 }
 
 String _text(WidgetTester tester, String key) =>
@@ -1151,6 +1592,10 @@ Future<void> _pump(
   TenantConfigurationDocumentWriter? writer,
   PrinterTestPrint? testPrint,
   BluetoothPrinterSetup? bluetooth,
+  UsbPrinterSetup? usb,
+  SystemPrinterSetup? system,
+  PrintHelperSetup? printHelper,
+  DevicePrintModeStore? printModes,
 }) async {
   tester.view.physicalSize = const Size(1400, 2400);
   tester.view.devicePixelRatio = 1;
@@ -1166,6 +1611,12 @@ Future<void> _pump(
             writer: writer,
             testPrint: testPrint,
             bluetooth: bluetooth,
+            usb: usb,
+            system: system,
+            printHelper: printHelper,
+            // A fresh device unless a test says otherwise: never switched,
+            // so the page reads what is chosen.
+            printModes: printModes ?? _MemoryModes(),
           ),
         ),
       ),
@@ -1189,17 +1640,58 @@ BluetoothPrinterSetup _bluetooth({
   probe: (probe ?? _Probe()).call,
 );
 
-Future<void> _openBluetoothTab(WidgetTester tester) async {
-  await tester.tap(find.text('Bluetooth'));
+List<String?> _tabLabels(WidgetTester tester) => tester
+    .widgetList<Text>(
+      find.descendant(of: find.byType(AppTabs), matching: find.byType(Text)),
+    )
+    .map((text) => text.data)
+    .toList();
+
+/// Each kind's tab, by its name on the strip.
+const Map<String, String> _tabs = <String, String>{
+  'network': 'Network',
+  'usb': 'USB',
+  'bluetooth': 'Bluetooth',
+  'dialog': 'Print dialog',
+};
+
+/// Opens [mode]'s tab and switches it on, unless it is on already.
+Future<void> _switchOn(WidgetTester tester, String mode) async {
+  await tester.tap(
+    find.descendant(
+      of: find.byType(AppTabs),
+      matching: find.text(_tabs[mode]!),
+    ),
+  );
+  await tester.pumpAndSettle();
+  final row = find.byKey(ValueKey('printer-mode-$mode'));
+  if (tester.widget<AppSwitchRow>(row).value) return;
+  await tester.tap(row);
   await tester.pumpAndSettle();
 }
 
-/// The tab, not the word: the Bluetooth tab's card wears a *Network* badge.
-Future<void> _openNetworkTab(WidgetTester tester) async {
-  await tester.tap(
-    find.descendant(of: find.byType(AppTabs), matching: find.text('Network')),
-  );
-  await tester.pumpAndSettle();
+/// Whether [mode] is switched on, whichever tab is showing.
+bool _isOn(WidgetTester tester, String mode) => tester
+    .widget<AppSwitchRow>(
+      find.byKey(ValueKey('printer-mode-$mode'), skipOffstage: false),
+    )
+    .value;
+
+Future<void> _openBluetoothTab(WidgetTester tester) =>
+    _switchOn(tester, 'bluetooth');
+
+/// The device's kind of printer, held in memory.
+final class _MemoryModes implements DevicePrintModeStore {
+  _MemoryModes([this.mode]);
+
+  DevicePrintMode? mode;
+
+  @override
+  DevicePrintMode? read(String tenantId) => mode;
+
+  @override
+  Future<void> save(String tenantId, DevicePrintMode mode) async =>
+      this.mode = mode;
 }
 
 /// Presses Search, reports [found] from discovery, and lets discovery end.
@@ -1402,4 +1894,147 @@ final class _Reader implements TenantDataReader {
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
   ) async => const <TenantQueryDocumentSnapshot>[];
+}
+
+const UsbPrinterDevice _tmT20 = UsbPrinterDevice(
+  vendorId: 0x04B8,
+  productId: 0x0E15,
+  serialNumber: 'J5A0123',
+  productName: 'TM-T20II',
+  manufacturerName: 'EPSON',
+);
+
+UsbPrinterSetup _usb({
+  _FakeUsbChooser? chooser,
+  _MemoryUsbStore? store,
+  _Probe? probe,
+}) => UsbPrinterSetup(
+  chooser: chooser ?? _FakeUsbChooser(),
+  store: store ?? _MemoryUsbStore(),
+  probe: (probe ?? _Probe()).call,
+);
+
+PrintHelperSetup _helperSetup({String? version}) => PrintHelperSetup(
+  helper: _FakePrintHelper(version),
+  memory: InMemoryPrintHelperMemory(),
+  download: () async {},
+);
+
+final class _FakePrintHelper implements PrintHelper {
+  _FakePrintHelper(
+    this._version, {
+    this.printers = const <PrintHelperPrinter>[
+      PrintHelperPrinter(
+        key: '1FC9:2016:06C6ACA91073',
+        name: 'Xprinter XP-365B',
+      ),
+    ],
+  });
+
+  final String? _version;
+
+  /// What the helper finds plugged in, which a test can change.
+  List<PrintHelperPrinter> printers;
+
+  @override
+  Future<String?> version() async => _version;
+
+  @override
+  Future<List<PrintHelperPrinter>> usbPrinters() async => printers;
+
+  @override
+  Future<void> send(PrinterEndpoint endpoint, List<int> bytes) async {}
+
+  @override
+  Future<void> probe(PrinterEndpoint endpoint) async {}
+
+  @override
+  Future<PrintHelperRemoval> remove() async => PrintHelperRemoval.removed;
+}
+
+SystemPrinterSetup _system({_MemorySystemStore? store, _Probe? probe}) =>
+    SystemPrinterSetup(
+      store: store ?? _MemorySystemStore(),
+      probe: (probe ?? _Probe()).call,
+    );
+
+Future<void> _openSystemTab(WidgetTester tester) => _switchOn(tester, 'dialog');
+
+final class _MemorySystemStore implements DeviceSystemPrinterStore {
+  _MemorySystemStore([Map<String, DeviceSystemPrinter>? printers])
+    : printers = printers ?? <String, DeviceSystemPrinter>{},
+      _unreadable = false;
+
+  _MemorySystemStore.unreadable()
+    : printers = <String, DeviceSystemPrinter>{},
+      _unreadable = true;
+
+  final Map<String, DeviceSystemPrinter> printers;
+  bool _unreadable;
+
+  @override
+  DeviceSystemPrinter? read(String tenantId) {
+    if (_unreadable) throw const FormatException('unreadable');
+    return printers[tenantId];
+  }
+
+  @override
+  Future<void> save(String tenantId, DeviceSystemPrinter printer) async {
+    _unreadable = false;
+    printers[tenantId] = printer;
+  }
+
+  @override
+  Future<void> forget(String tenantId) async {
+    _unreadable = false;
+    printers.remove(tenantId);
+  }
+}
+
+Future<void> _openUsbTab(WidgetTester tester) => _switchOn(tester, 'usb');
+
+final class _FakeUsbChooser implements UsbPrinterChooser {
+  _FakeUsbChooser({
+    this.supported = true,
+    this.chosen,
+    this.allowed = const <UsbPrinterDevice>[],
+  });
+
+  final bool supported;
+
+  /// What the picker answers: a device, or null for a closed picker.
+  final UsbPrinterDevice? chosen;
+
+  /// What the browser says this site may already use.
+  final List<UsbPrinterDevice> allowed;
+  int chooseCalls = 0;
+
+  @override
+  bool get isSupported => supported;
+
+  @override
+  Future<UsbPrinterDevice?> choose({bool anyDevice = false}) async {
+    chooseCalls++;
+    return chosen;
+  }
+
+  @override
+  Future<List<UsbPrinterDevice>> permitted() async => allowed;
+}
+
+final class _MemoryUsbStore implements DeviceUsbPrinterStore {
+  _MemoryUsbStore([Map<String, DeviceUsbPrinter>? printers])
+    : printers = printers ?? <String, DeviceUsbPrinter>{};
+
+  final Map<String, DeviceUsbPrinter> printers;
+
+  @override
+  DeviceUsbPrinter? read(String tenantId) => printers[tenantId];
+
+  @override
+  Future<void> save(String tenantId, DeviceUsbPrinter printer) async =>
+      printers[tenantId] = printer;
+
+  @override
+  Future<void> forget(String tenantId) async => printers.remove(tenantId);
 }

@@ -26,6 +26,20 @@ void main() {
       expect(find.byType(SingleChildScrollView), findsNothing);
     });
 
+    testWidgets('a bar sharing its row can ask for one line at any width', (
+      tester,
+    ) async {
+      // The till's category bar sits beside the search from 1024 up, where a
+      // wrap would grow the row downward with every category.
+      await _pump(tester, size: const Size(1400, 800), oneLine: true);
+      expect(find.byType(SingleChildScrollView), findsOne);
+      expect(find.byType(Wrap), findsNothing);
+
+      await _pump(tester, size: const Size(411, 800), oneLine: false);
+      expect(find.byType(Wrap), findsOne);
+      expect(find.byType(SingleChildScrollView), findsNothing);
+    });
+
     testWidgets('marks the selection with a glyph and not only a fill', (
       tester,
     ) async {
@@ -160,6 +174,7 @@ Future<void> _pump(
   ValueChanged<String?>? onSelected,
   Size size = const Size(411, 800),
   String? disable,
+  bool? oneLine,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -173,6 +188,7 @@ Future<void> _pump(
           semanticLabel: 'Filter by category',
           selected: selected,
           onSelected: onSelected ?? (_) {},
+          oneLine: oneLine,
           options: <FilterChipOption<String>>[
             const FilterChipOption<String>(value: null, label: 'Everything'),
             const FilterChipOption<String>(value: 'drinks', label: 'Drinks'),

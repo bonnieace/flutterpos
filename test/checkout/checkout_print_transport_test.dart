@@ -212,8 +212,10 @@ void main() {
       // "Mapping happens at the UI edge. The transport never builds a
       // sentence." Asserted by code, never by message — which is why the codes
       // are enumerable in the first place.
-      // §8's eight, and the three Bluetooth added on 2026-10-03.
-      expect(PrinterTransportCode.all, hasLength(11));
+      // §8's eight, the three Bluetooth added on 2026-10-03, USB's three on
+      // 2026-10-10, the print window's two the same day, and the print
+      // helper's two on 2026-10-11.
+      expect(PrinterTransportCode.all, hasLength(18));
       for (final code in PrinterTransportCode.all) {
         final notice = PrinterFailureNotice.of(code);
         expect(notice.message, isNotEmpty, reason: code);

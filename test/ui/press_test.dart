@@ -17,6 +17,7 @@ Widget _surface({
   bool autofocus = false,
   FocusNode? focusNode,
   Size? minimumTapTarget,
+  bool repeatsWhileHeld = false,
 }) => MaterialApp(
   theme: spiritTheme,
   home: Scaffold(
@@ -29,6 +30,7 @@ Widget _surface({
         autofocus: autofocus,
         focusNode: focusNode,
         minimumTapTarget: minimumTapTarget,
+        repeatsWhileHeld: repeatsWhileHeld,
         semanticLabel: 'Press me',
         child: const SizedBox(
           key: ValueKey('press-child'),
@@ -385,6 +387,128 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump(const Duration(milliseconds: 400));
       expect(presses, 2);
+    });
+  });
+
+  group('a surface that repeats while held, as a backspace does', () {
+    final repeat = _tokens.motion.keyRepeat;
+
+    Future<TestGesture> holdDown(WidgetTester tester) async {
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(PressSurface)),
+      );
+      await tester.pump();
+      return gesture;
+    }
+
+    testWidgets('it fires as the press lands, waits, then repeats', (
+      tester,
+    ) async {
+      var presses = 0;
+      await tester.pumpWidget(
+        _surface(onPressed: () => presses++, repeatsWhileHeld: true),
+      );
+      final gesture = await holdDown(tester);
+      expect(presses, 1);
+
+      await tester.pump(repeat.delay - const Duration(milliseconds: 1));
+      expect(presses, 1);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(presses, 2);
+      await tester.pump(repeat.slowest);
+      expect(presses, 3);
+
+      await gesture.up();
+      await tester.pump(const Duration(seconds: 2));
+      expect(presses, 3);
+    });
+
+    testWidgets('the repeats speed up, then hold at the fastest gap', (
+      tester,
+    ) async {
+      var presses = 0;
+      await tester.pumpWidget(
+        _surface(onPressed: () => presses++, repeatsWhileHeld: true),
+      );
+      final gesture = await holdDown(tester);
+      await tester.pump(repeat.delay);
+
+      var before = presses;
+      await tester.pump(repeat.ramp.duration);
+      final ramping = presses - before;
+      before = presses;
+      await tester.pump(repeat.ramp.duration);
+      final settled = presses - before;
+
+      expect(settled, greaterThan(ramping));
+      expect(
+        settled,
+        closeTo(
+          repeat.ramp.duration.inMicroseconds / repeat.fastest.inMicroseconds,
+          1,
+        ),
+      );
+      await gesture.up();
+    });
+
+    testWidgets('a tap fires once, and not again on the way up', (
+      tester,
+    ) async {
+      var presses = 0;
+      await tester.pumpWidget(
+        _surface(onPressed: () => presses++, repeatsWhileHeld: true),
+      );
+      await tester.tap(find.byType(PressSurface));
+      await tester.pump(const Duration(seconds: 2));
+      expect(presses, 1);
+    });
+
+    testWidgets('sliding off it stops the repeats', (tester) async {
+      var presses = 0;
+      await tester.pumpWidget(
+        _surface(onPressed: () => presses++, repeatsWhileHeld: true),
+      );
+      final gesture = await holdDown(tester);
+      await gesture.moveBy(const Offset(300, 0));
+      await tester.pump(const Duration(seconds: 2));
+      expect(presses, 1);
+      await gesture.up();
+    });
+
+    testWidgets('a held Space repeats on the platform\'s own key repeat', (
+      tester,
+    ) async {
+      var presses = 0;
+      final node = FocusNode();
+      addTearDown(node.dispose);
+      await tester.pumpWidget(
+        _surface(
+          onPressed: () => presses++,
+          focusNode: node,
+          repeatsWhileHeld: true,
+        ),
+      );
+      node.requestFocus();
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.space);
+      expect(presses, 1);
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.space);
+      expect(presses, 2);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.space);
+      expect(presses, 2);
+    });
+
+    testWidgets('a surface that does not repeat still fires once, on '
+        'release', (tester) async {
+      var presses = 0;
+      await tester.pumpWidget(_surface(onPressed: () => presses++));
+      final gesture = await holdDown(tester);
+      await tester.pump(const Duration(seconds: 2));
+      expect(presses, 0);
+      await gesture.up();
+      await tester.pump();
+      expect(presses, 1);
     });
   });
 

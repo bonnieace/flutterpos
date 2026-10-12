@@ -261,6 +261,7 @@ final class AppScaffold extends StatelessWidget {
     this.navigation = const <HomeDestination>[],
     this.onTitlePressed,
     this.titleActionLabel,
+    this.topBar,
   }) : assert(
          onTitlePressed == null || titleActionLabel != null,
          'A title that is a control has to say what it opens: a chevron is '
@@ -339,6 +340,15 @@ final class AppScaffold extends StatelessWidget {
   /// a control announce itself by its glyph. Asserted rather than defaulted so
   /// a second call site has to say what its own title opens.
   final String? titleActionLabel;
+
+  /// A bar drawn in place of the toolbar, or null for the toolbar.
+  ///
+  /// **One call site, and it is the home on a tablet or a desktop**, which
+  /// draws the old hub's bar there (`HubTopBar`) since 2026-10-10. The caller
+  /// decides the band, because the bar is the page's and the page knows what
+  /// it is restoring; [title], [actions] and [onTitlePressed] still describe
+  /// the toolbar a narrower window draws.
+  final PreferredSizeWidget? topBar;
 
   /// §4.4's navigation destinations, drawn as a persistent side menu at
   /// `expanded` and as nothing at all below it, where the page's own cards
@@ -496,48 +506,52 @@ final class AppScaffold extends StatelessWidget {
       drawer: hasDrawer
           ? _NavigationDrawer(destinations: navigation, tokens: tokens)
           : null,
-      appBar: AppBar(
-        automaticallyImplyLeading: automaticallyImplyLeading,
-        // **Taller when there is a subtitle**, which is the export's own
-        // header: a title and a small second line naming what the page is
-        // scoped to. Six routes carry one - which reconciliation run, which
-        // shift, which receipt - and it is the kind of fact a person needs
-        // before they read a single row.
-        toolbarHeight: subtitle == null ? null : toolbarHeightWithSubtitle,
-        // **No middle spacing where a leading control supplies the gap, and
-        // the ordinary inset where none does.** `NavigationToolbar` reserves
-        // 16 on each side of the title by default; between a hamburger, a
-        // reload glyph and a way out there are 144 pixels of control on a
-        // pushed route already, and the 32 was the difference between
-        // `Dev Corner Shop` and `Dev Corner S…` on a real handset.
-        //
-        // **The sentence that justified it was "the leading control's own 48
-        // square is the gap", and on the home there is no leading control.**
-        // It has no drawer and nothing to pop, so the business's name was
-        // printed hard against the edge of the screen. Reported on a device on
-        // 2026-09-03.
-        titleSpacing: _hasLeading(context, hasDrawer) ? 0 : tokens.spacing.s16,
-        // `section-title`, which is the role the export's own header uses and
-        // the largest §2.2 has that fits a toolbar. Never wrapped: a title on
-        // two lines in a 56-high bar pushes the page down for a word, so a
-        // long one ellipsises.
-        title: _Title(
-          title: title,
-          subtitle: subtitle,
-          onPressed: onTitlePressed,
-          actionLabel: titleActionLabel,
-        ),
-        // **The one action a page exists for goes at the trailing edge.** It
-        // sat beside the title in the header block; the block is gone, and the
-        // trailing edge of the bar is where the export puts a page's own
-        // control.
-        actions: actions.isEmpty && primaryAction == null
-            ? null
-            : <Widget>[
-                ...actions,
-                if (primaryAction case final action?) action,
-              ],
-      ),
+      appBar:
+          topBar ??
+          AppBar(
+            automaticallyImplyLeading: automaticallyImplyLeading,
+            // **Taller when there is a subtitle**, which is the export's own
+            // header: a title and a small second line naming what the page is
+            // scoped to. Six routes carry one - which reconciliation run, which
+            // shift, which receipt - and it is the kind of fact a person needs
+            // before they read a single row.
+            toolbarHeight: subtitle == null ? null : toolbarHeightWithSubtitle,
+            // **No middle spacing where a leading control supplies the gap, and
+            // the ordinary inset where none does.** `NavigationToolbar` reserves
+            // 16 on each side of the title by default; between a hamburger, a
+            // reload glyph and a way out there are 144 pixels of control on a
+            // pushed route already, and the 32 was the difference between
+            // `Dev Corner Shop` and `Dev Corner S…` on a real handset.
+            //
+            // **The sentence that justified it was "the leading control's own 48
+            // square is the gap", and on the home there is no leading control.**
+            // It has no drawer and nothing to pop, so the business's name was
+            // printed hard against the edge of the screen. Reported on a device on
+            // 2026-09-03.
+            titleSpacing: _hasLeading(context, hasDrawer)
+                ? 0
+                : tokens.spacing.s16,
+            // `section-title`, which is the role the export's own header uses and
+            // the largest §2.2 has that fits a toolbar. Never wrapped: a title on
+            // two lines in a 56-high bar pushes the page down for a word, so a
+            // long one ellipsises.
+            title: _Title(
+              title: title,
+              subtitle: subtitle,
+              onPressed: onTitlePressed,
+              actionLabel: titleActionLabel,
+            ),
+            // **The one action a page exists for goes at the trailing edge.** It
+            // sat beside the title in the header block; the block is gone, and the
+            // trailing edge of the bar is where the export puts a page's own
+            // control.
+            actions: actions.isEmpty && primaryAction == null
+                ? null
+                : <Widget>[
+                    ...actions,
+                    if (primaryAction case final action?) action,
+                  ],
+          ),
       body: drawn == null
           ? content
           : Row(

@@ -382,6 +382,34 @@ final class AppSurfaceRoles {
     selected: _ProfoundVerdant.surfaceContainerHighest,
   );
 
+  /// The surfaces the app paints with since 2026-10-10: [dark]'s, one step
+  /// lighter than [profoundVerdant] on every tier.
+  ///
+  /// **The developer's choice from a side-by-side of every screen**: the page,
+  /// the cards, the dialogs and the inputs back on the old app's ground, and
+  /// nothing else of [dark]'s taken along. Three roles are not [dark]'s,
+  /// because each kept the strength it has today rather than the weaker one
+  /// [dark] would have given it:
+  ///
+  /// - [cardEdge] stays `#283831`, the quietest edge on offer: 1.39:1 against
+  ///   the page, which is the figure it has against today's card.
+  /// - [borderStrong] is [dark]'s `#2C5340`, the nearest to today's strength
+  ///   against a field (1.43:1 where it was 1.63:1); `#3D4A3D` drops to 1.32.
+  /// - [selected] is `#3D4A3D`, so a chosen tab stands 1.63:1 off its track.
+  ///   [dark]'s `#1E3A2B` measured 1.23:1, weaker than today's 1.39:1.
+  static const AppSurfaceRoles uzapay = AppSurfaceRoles(
+    base: _Primitive.green900,
+    raised: _Primitive.green850,
+    sunken: _Primitive.green950,
+    field: _Primitive.green700,
+    overlay: _Primitive.green800,
+    scrim: Color.fromRGBO(0, 0, 0, 0.6),
+    borderSubtle: _Primitive.green700,
+    cardEdge: _ProfoundVerdant.surfaceContainerHighest,
+    borderStrong: _Primitive.green600,
+    selected: _ProfoundVerdant.outlineVariant,
+  );
+
   static AppSurfaceRoles lerp(AppSurfaceRoles a, AppSurfaceRoles b, double t) =>
       AppSurfaceRoles(
         base: Color.lerp(a.base, b.base, t)!,
@@ -813,6 +841,52 @@ final class AppActionRoles {
     loadingIndicatorSize: 16,
   );
 
+  /// The actions [AppColorRoles.uzapay] paints with: [dark]'s mint for the
+  /// primary, the tertiary and the focus ring, and everything else as it is
+  /// today.
+  ///
+  /// **The greens are [dark]'s because the developer chose them**, with the
+  /// lighter surfaces they were picked against. **The secondary keeps its
+  /// fill**, one step up with the surfaces: `#1C3328` sits 1.13:1 off a card,
+  /// which is exactly what today's fill does, where [dark]'s secondary is
+  /// outline-only. **The destructive red is [dark]'s**, the same ink
+  /// [AppStatusRoles.uzapay] gives a problem and for the same contrast reason.
+  static const AppActionRoles uzapay = AppActionRoles(
+    primary: AppActionRole(
+      container: _Primitive.mint400,
+      label: _Primitive.ink,
+      hoverContainer: _Primitive.green300,
+      pressedContainer: _Primitive.green400,
+      hoverOverlayOpacity: 0.08,
+      pressedOverlayOpacity: 0.12,
+    ),
+    secondary: AppActionRole(
+      container: _Primitive.green800,
+      label: _Primitive.white,
+      border: _Primitive.green600,
+      hoverOverlayOpacity: 0.08,
+      pressedOverlayOpacity: 0.12,
+    ),
+    tertiary: AppActionRole(
+      container: Colors.transparent,
+      label: _Primitive.mint400,
+      hoverOverlayOpacity: 0.08,
+      pressedOverlayOpacity: 0.12,
+    ),
+    destructive: AppActionRole(
+      container: Colors.transparent,
+      label: _Primitive.red400,
+      border: _Primitive.red400,
+      hoverOverlayOpacity: 0.08,
+      pressedOverlayOpacity: 0.12,
+    ),
+    disabledContainer: _Primitive.green700,
+    disabledLabel: _Primitive.sageDisabled,
+    disabledBorder: _Primitive.green700,
+    focusRing: AppFocusRing.dark,
+    loadingIndicatorSize: 16,
+  );
+
   static AppActionRoles lerp(AppActionRoles a, AppActionRoles b, double t) =>
       AppActionRoles(
         primary: AppActionRole.lerp(a.primary, b.primary, t),
@@ -1002,6 +1076,43 @@ final class AppStatusRoles {
     ),
     problem: AppStatusRole(
       fg: _ProfoundVerdant.statusCritical,
+      bg: _ProfoundVerdant.errorContainerTint20,
+      border: _ProfoundVerdant.criticalTint30,
+    ),
+    info: AppStatusRole(
+      fg: _ProfoundVerdant.secondary,
+      bg: _ProfoundVerdant.secondaryTint10,
+      border: _ProfoundVerdant.secondaryTint30,
+    ),
+    neutral: AppStatusRole(
+      fg: _ProfoundVerdant.onSurfaceVariant,
+      bg: _ProfoundVerdant.surfaceContainerHighest,
+      border: _ProfoundVerdant.outlineVariant,
+    ),
+  );
+
+  /// The statuses [AppColorRoles.uzapay] paints with: [profoundVerdant]'s,
+  /// with one ink changed.
+  ///
+  /// **The problem text is [dark]'s red, and the reason is arithmetic.**
+  /// `#EF4444` reads 4.56:1 on today's card and 4.05:1 on the lighter one this
+  /// palette puts under it, and 3.59:1 on [AppSurfaceRoles.overlay] - under §9's
+  /// 4.5 for text. `#FF5C6C` reads 5.08:1 on the card, 5.16:1 inside its own red
+  /// wash and 4.51:1 on an overlay. The wash and the edge are still
+  /// [profoundVerdant]'s, so a problem keeps the red box the developer kept.
+  static const AppStatusRoles uzapay = AppStatusRoles(
+    ok: AppStatusRole(
+      fg: _ProfoundVerdant.primary,
+      bg: _ProfoundVerdant.primaryTint10,
+      border: _ProfoundVerdant.primaryTint30,
+    ),
+    attention: AppStatusRole(
+      fg: _ProfoundVerdant.amber400,
+      bg: _ProfoundVerdant.amberTint10,
+      border: _ProfoundVerdant.amberTint30,
+    ),
+    problem: AppStatusRole(
+      fg: _Primitive.red400,
       bg: _ProfoundVerdant.errorContainerTint20,
       border: _ProfoundVerdant.criticalTint30,
     ),
@@ -1417,6 +1528,29 @@ final class AppColorRoles {
     report: AppReportRoles.profoundVerdant,
   );
 
+  /// The palette `lib/theme.dart` registers since 2026-10-10.
+  ///
+  /// **The developer chose it from a side-by-side of every screen** in both
+  /// palettes, and chose one line of the difference: the page, the cards, the
+  /// dialogs and the inputs a step lighter, headings pure white, and the
+  /// greens [dark]'s brighter mint. So the surfaces, the text and the actions
+  /// are [dark]'s (see [AppSurfaceRoles.uzapay] and [AppActionRoles.uzapay] for
+  /// the few roles that are not), and the status roles stay
+  /// [profoundVerdant]'s. That keeps information sage rather than [dark]'s
+  /// blue, and a problem on its red wash rather than [dark]'s brown one - in
+  /// [dark]'s red ink, which [AppStatusRoles.uzapay] explains.
+  ///
+  /// Charts, accents and paper are the same in both, so they are [dark]'s.
+  static const AppColorRoles uzapay = AppColorRoles(
+    surface: AppSurfaceRoles.uzapay,
+    text: AppTextRoles.dark,
+    action: AppActionRoles.uzapay,
+    status: AppStatusRoles.uzapay,
+    chart: AppChartRoles.dark,
+    accent: AppAccentRoles.dark,
+    report: AppReportRoles.dark,
+  );
+
   static AppColorRoles lerp(AppColorRoles a, AppColorRoles b, double t) =>
       AppColorRoles(
         surface: AppSurfaceRoles.lerp(a.surface, b.surface, t),
@@ -1446,10 +1580,11 @@ final class AppColorRoles {
 ///
 /// ~~**No role names a family.**~~ **Every role names one as of 2026-08-22**,
 /// and the two families are [interfaceFamily] and [monoFamily]. Profound
-/// Verdant names Hanken Grotesk for interface text and JetBrains Mono for
+/// Verdant named Hanken Grotesk for interface text and JetBrains Mono for
 /// figures and identifiers, and `docs/stitch/OPEN_QUESTIONS.md` decision 20
 /// bundles both rather than fetching them, because the exported screens link
-/// them from `fonts.googleapis.com` and a till is offline-first.
+/// them from `fonts.googleapis.com` and a till is offline-first. The interface
+/// face went back to Roboto on 2026-10-10; the mono face is still JetBrains.
 ///
 /// **The family belongs on the role, not only on `ThemeData.fontFamily`.** A
 /// **component** theme's text style *replaces* the text theme's rather than
@@ -1481,6 +1616,9 @@ final class AppTypeRoles {
     required this.mono,
     required this.numericCompact,
     required this.monoCaption,
+    required this.moduleTitle,
+    required this.moduleBody,
+    required this.hubRole,
   });
 
   /// `headline-lg` 32 / 1.2, 700, -0.64 tracking. Screen title, expanded only.
@@ -1602,13 +1740,40 @@ final class AppTypeRoles {
   /// already have.
   final TextStyle monoCaption;
 
-  /// Hanken Grotesk, the interface face every role but [mono] is set in.
+  /// A home module card's name on a wider screen: the old hub's 18 / 600.
+  ///
+  /// **Measured off the old app rather than taken from a design**, at the
+  /// developer's direction on 2026-10-10 that the cards come back exactly as
+  /// they were. The old card set no line height, so it inherited Material's
+  /// `bodyMedium` leading of 20 / 14; [titleMedium]'s 28 would put the name
+  /// about two pixels higher than it sat.
+  final TextStyle moduleTitle;
+
+  /// The sentence under [moduleTitle]: the old hub's 13, on the same 20 / 14
+  /// leading it inherited - 18.6 a line.
+  ///
+  /// **Its own role because no other is within a pixel.** [caption] is 12 / 16
+  /// and [bodyMedium] 14 / 21; at either one the old sentences re-wrap and a
+  /// two-line description moves by five pixels.
+  final TextStyle moduleBody;
+
+  /// The signed-in person's role under their name in the home's top bar - the
+  /// old hub's 10, on the same inherited 20 / 14 leading as [moduleTitle].
+  /// [caption]'s 12 would print *ADMIN* a fifth larger than it stood.
+  final TextStyle hubRole;
+
+  /// Roboto, the interface face every role but [mono] is set in.
+  ///
+  /// **Roboto again since 2026-10-10**, at the developer's direction: the old
+  /// app read as better quality, and it drew in Android's own Roboto. It was
+  /// Hanken Grotesk from 2026-08-22, Profound Verdant's face; the PDF reports
+  /// still embed that one, by file, so this repoint does not reach them.
   ///
   /// Named here rather than only on `ThemeData.fontFamily` so that component
   /// themes carry it too - see the note on this class for why that distinction
   /// has teeth. Declared in `pubspec.yaml` at 400, 500, 600 and 700, which is
   /// exactly the set the roles below read.
-  static const String interfaceFamily = 'Hanken Grotesk';
+  static const String interfaceFamily = 'Roboto';
 
   /// JetBrains Mono, the face [mono] is set in.
   ///
@@ -1769,7 +1934,7 @@ final class AppTypeRoles {
       fontFeatures: _tabular,
     ),
     // data-mono: 14px / 1.0 / 500 / -0.01em, in the one family that is not
-    // Hanken Grotesk. See the field's own note.
+    // the interface face. See the field's own note.
     mono: TextStyle(
       fontFamily: monoFamily,
       fontSize: 14,
@@ -1794,6 +1959,26 @@ final class AppTypeRoles {
       height: 16 / 12,
       fontWeight: FontWeight.w500,
     ),
+    // The old hub's card text, measured; see the fields. 20 / 14 is the
+    // leading both inherited from Material's `bodyMedium`.
+    moduleTitle: TextStyle(
+      fontFamily: interfaceFamily,
+      fontSize: 18,
+      height: 20 / 14,
+      fontWeight: FontWeight.w600,
+    ),
+    moduleBody: TextStyle(
+      fontFamily: interfaceFamily,
+      fontSize: 13,
+      height: 20 / 14,
+      fontWeight: FontWeight.w400,
+    ),
+    hubRole: TextStyle(
+      fontFamily: interfaceFamily,
+      fontSize: 10,
+      height: 20 / 14,
+      fontWeight: FontWeight.w400,
+    ),
   );
 
   /// Every role by its `design.md` name, so a test can measure the set rather
@@ -1817,6 +2002,9 @@ final class AppTypeRoles {
     'numeric.body': numericBody,
     'mono': mono,
     'mono.caption': monoCaption,
+    'module.title': moduleTitle,
+    'module.body': moduleBody,
+    'hub.role': hubRole,
   };
 
   static AppTypeRoles lerp(AppTypeRoles a, AppTypeRoles b, double t) =>
@@ -1836,6 +2024,9 @@ final class AppTypeRoles {
         numericBody: TextStyle.lerp(a.numericBody, b.numericBody, t)!,
         mono: TextStyle.lerp(a.mono, b.mono, t)!,
         monoCaption: TextStyle.lerp(a.monoCaption, b.monoCaption, t)!,
+        moduleTitle: TextStyle.lerp(a.moduleTitle, b.moduleTitle, t)!,
+        moduleBody: TextStyle.lerp(a.moduleBody, b.moduleBody, t)!,
+        hubRole: TextStyle.lerp(a.hubRole, b.hubRole, t)!,
       );
 }
 
@@ -1987,6 +2178,18 @@ final class AppEffects {
   double get floatingShadowBlur => 40;
 
   double get floatingShadowOpacity => 0.7;
+
+  /// The home's module cards on a wider screen, which are drawn the way the
+  /// old hub drew them at the developer's direction (2026-10-10): lifted by a
+  /// soft black shadow rather than outlined. Black at 40%, a blur of 20, no
+  /// offset - its own figures.
+  double get cardShadowBlur => 20;
+
+  double get cardShadowOpacity => 0.4;
+
+  /// The same card's glyph well: black at 40% over the card, the old hub's
+  /// wash, which measures `#0B1913` on `#132A1F`.
+  double get cardWellWashOpacity => 0.4;
 }
 
 // ---------------------------------------------------------------------------
@@ -2016,6 +2219,14 @@ final class AppIconography {
 
   /// A module card's glyph, inside its own well.
   double get card => 24;
+
+  /// The square well a wider screen's module card draws [card] centred in: the
+  /// old hub's 24 glyph inside 10 of padding, measured 44 on its own screen.
+  double get cardWell => 44;
+
+  /// The signed-in person's circle in the home's top bar: the old hub's, 14 in
+  /// radius.
+  double get hubAvatar => 28;
 
   /// The phone launcher's glyph.
   double get launcher => 28;
@@ -2084,6 +2295,59 @@ final class AppMotionDuration {
   );
 }
 
+/// How a held key repeats: a pause of [delay], then repeats whose gap closes
+/// from [slowest] to [fastest] over [ramp], and holds there.
+///
+/// **Faster the longer it is held, which is what a phone's keyboard does with
+/// its backspace.** A constant rate is either too slow to clear a field or too
+/// fast to stop on the character you meant; starting slow and closing the gap
+/// gives both. See [AppMotion.keyRepeat].
+@immutable
+final class AppKeyRepeat {
+  const AppKeyRepeat({
+    required this.delay,
+    required this.slowest,
+    required this.fastest,
+    required this.ramp,
+  });
+
+  /// How long a key is held before it first repeats - long enough that a tap
+  /// never repeats by accident.
+  final Duration delay;
+
+  /// The gap between the first repeats.
+  final Duration slowest;
+
+  /// The gap the repeats close to, and never go below.
+  final Duration fastest;
+
+  /// How long the gap takes to close from [slowest] to [fastest], timed from
+  /// the first repeat, and the curve it closes along.
+  final AppMotionDuration ramp;
+
+  /// The gap before the next repeat, once a key has been repeating for
+  /// [repeating].
+  Duration gapAfter(Duration repeating) {
+    final span = ramp.duration.inMicroseconds;
+    final t = span == 0
+        ? 1.0
+        : (repeating.inMicroseconds / span).clamp(0.0, 1.0);
+    return _lerp(slowest, fastest, ramp.curve.transform(t));
+  }
+
+  static Duration _lerp(Duration a, Duration b, double t) => Duration(
+    microseconds: lerpDouble(a.inMicroseconds, b.inMicroseconds, t)!.round(),
+  );
+
+  static AppKeyRepeat lerp(AppKeyRepeat a, AppKeyRepeat b, double t) =>
+      AppKeyRepeat(
+        delay: _lerp(a.delay, b.delay, t),
+        slowest: _lerp(a.slowest, b.slowest, t),
+        fastest: _lerp(a.fastest, b.fastest, t),
+        ramp: AppMotionDuration.lerp(a.ramp, b.ramp, t),
+      );
+}
+
 /// The springs and durations of `design.md` §2.4.
 ///
 /// **A spring is for anything spatial and a duration is for opacity and colour,
@@ -2105,6 +2369,7 @@ final class AppMotion {
     required this.long,
     required this.skeletonSweep,
     required this.skeletonDelay,
+    required this.keyRepeat,
     required this.pressScale,
     required this.routeParallax,
   });
@@ -2163,6 +2428,18 @@ final class AppMotion {
   /// in the app has the same type and lerps the same way.
   final AppMotionDuration skeletonDelay;
 
+  /// How a held key repeats, for a surface that asks to.
+  /// `PressSurface.repeatsWhileHeld` reads it, and the sign-in keypad's
+  /// backspace is the one surface that does.
+  ///
+  /// **This app's own, like the two skeleton timings, and out of [durations]
+  /// for the same reason.** Half a second before the first repeat is close to
+  /// what Windows and Android wait by default. The gap then closes from 100ms
+  /// to Android's own 50ms over the first second of repeating, so a held key
+  /// takes out about a dozen characters in that second and twenty a second
+  /// after it - a twenty-character address in under two seconds.
+  final AppKeyRepeat keyRepeat;
+
   /// What a pressed surface scales to, from §2.4's replacement for the ink
   /// ripple: opacity plus scale at `spring.snappy`, and no expanding circle.
   final double pressScale;
@@ -2208,6 +2485,15 @@ final class AppMotion {
     skeletonDelay: AppMotionDuration(
       duration: Duration(milliseconds: 100),
       curve: Curves.linear,
+    ),
+    keyRepeat: AppKeyRepeat(
+      delay: Duration(milliseconds: 500),
+      slowest: Duration(milliseconds: 100),
+      fastest: Duration(milliseconds: 50),
+      ramp: AppMotionDuration(
+        duration: Duration(milliseconds: 1000),
+        curve: Curves.linear,
+      ),
     ),
     pressScale: 0.97,
     routeParallax: 0.3,
@@ -2259,6 +2545,7 @@ final class AppMotion {
         b.skeletonDelay,
         t,
       ),
+      keyRepeat: AppKeyRepeat.lerp(a.keyRepeat, b.keyRepeat, t),
       pressScale: lerpDouble(a.pressScale, b.pressScale, t)!,
       routeParallax: lerpDouble(a.routeParallax, b.routeParallax, t)!,
     );
@@ -2470,6 +2757,43 @@ final class AppLayout {
   /// §4.2's maximum for record lists and tables.
   double get records => 1200;
 
+  /// The home's top bar on a tablet or a desktop: the old hub's, measured at
+  /// 70 on its own screen - 12 above and below a 46 user pill. Restored on
+  /// 2026-10-10 at the developer's direction; a phone keeps the toolbar.
+  double get hubBarHeight => 70;
+
+  /// The same bar on a phone, which the developer asked for as an exception
+  /// to the old hub's look being for wider screens only (2026-10-10).
+  ///
+  /// **56, not the old phone bar's 52.** That bar fitted because its controls
+  /// were 20-pixel icons with their padding stripped - under §9's 48. A 48
+  /// control with 4 above and below is 56, which is also the toolbar it
+  /// replaces, so nothing under it moves.
+  double get hubBarHeightCompact => 56;
+
+  /// The widest a home module card is drawn on a tablet or a desktop before
+  /// the grid adds a column - for every role, since 2026-10-10.
+  ///
+  /// **Why not the old hub's per-role columns.** It sat a cashier's cards two
+  /// across because a cashier had two; one has six or more now, and two across
+  /// at 1280 drew cards 600 wide. A width the grid fills up to is the same
+  /// answer at every window and for every role. 360 keeps four across at every
+  /// width the old hub's screenshots were taken at, 1232 to 1440, where its
+  /// cards measured 277 to 329.
+  double get moduleCardMaxWidth => 360;
+
+  /// The room between a home module card's glyph well and its name, at every
+  /// width and for every role - which makes every card the same height.
+  ///
+  /// **Taken from the one the developer approved, a 375 phone's stacked card
+  /// (2026-10-10).** Cards used to keep the old hub's shape - 1.4 wide over
+  /// tall, 1.8 stacked on a phone - so a wider card grew taller, and all of
+  /// the growth landed here: 36 on a 375 phone, 72 on a 440 one, 90 on a 768
+  /// tablet. The developer asked for the 375 card at every size, large
+  /// screens included. A card is its content with this between, so it is 191
+  /// tall wherever it is drawn; the old desktop card was 198.
+  double get moduleCardGlyphGap => 36;
+
   /// The width of a credential column — sign-in, and the tenant-entry screens
   /// that are one card and nothing else.
   ///
@@ -2668,6 +2992,18 @@ final class AppTokens extends ThemeExtension<AppTokens> {
   /// means the swap is a one-word change here rather than an edit to every value.
   static const AppTokens profoundVerdant = AppTokens(
     colors: AppColorRoles.profoundVerdant,
+    typography: AppTypeRoles.standard,
+    spacing: AppSpacing.scale,
+    radius: AppRadii.scale,
+    motion: AppMotion.standard,
+    density: AppDensity.comfortable,
+    layout: AppLayout.contract,
+  );
+
+  /// The set `lib/theme.dart` registers since 2026-10-10: [dark] with the
+  /// [AppColorRoles.uzapay] palette. Colour is the only difference.
+  static const AppTokens uzapay = AppTokens(
+    colors: AppColorRoles.uzapay,
     typography: AppTypeRoles.standard,
     spacing: AppSpacing.scale,
     radius: AppRadii.scale,

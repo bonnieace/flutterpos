@@ -49,10 +49,10 @@ void main() {
     await _tap(tester, 'checkout-product-product-b');
 
     expect(find.byKey(const ValueKey('checkout-line-product-a')), findsOne);
-    expect(
-      _text(tester, 'checkout-line-amount-product-a'),
-      '2 x KES 120.50 = KES 241',
-    );
+    // The two-pane line splits the sheet's `2 x KES 120.50 = KES 241` into
+    // what the line comes to and what one costs.
+    expect(_text(tester, 'checkout-line-amount-product-a'), 'KES 241');
+    expect(_text(tester, 'checkout-line-each-product-a'), 'KES 120.50 each');
     expect(_text(tester, 'checkout-total'), 'KES 248');
   });
 
@@ -754,10 +754,7 @@ void main() {
     await _tap(tester, 'checkout-product-product-a');
     await _decrement(tester, 'product-a');
 
-    expect(
-      _text(tester, 'checkout-line-amount-product-a'),
-      '1 x KES 120.50 = KES 120.50',
-    );
+    expect(_text(tester, 'checkout-line-amount-product-a'), 'KES 120.50');
 
     await _tap(tester, 'checkout-line-remove-product-a');
 
@@ -921,7 +918,9 @@ void main() {
       await _pump(tester, sessions, catalog, drafts);
 
       // Filtering must never be able to hide something the till can sell.
-      await _tap(tester, 'checkout-category-other');
+      // The bar scrolls in one line beside the search on a till this wide, so
+      // the last chip can be past its end.
+      await _tapScrolled(tester, 'checkout-category-other');
 
       expect(find.byKey(const ValueKey('checkout-product-candle')), findsOne);
       expect(find.byKey(const ValueKey('checkout-product-cola')), findsNothing);
@@ -1149,10 +1148,7 @@ void main() {
       await _tap(tester, 'checkout-product-product-b');
       await _enter(tester, 'checkout-line-quantity-product-b', '12');
 
-      expect(
-        _text(tester, 'checkout-line-amount-product-b'),
-        '12 x KES 7 = KES 84',
-      );
+      expect(_text(tester, 'checkout-line-amount-product-b'), 'KES 84');
 
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
@@ -1169,10 +1165,7 @@ void main() {
       await _enter(tester, 'checkout-line-quantity-product-b', '9');
       await _tap(tester, 'checkout-product-product-b');
 
-      expect(
-        _text(tester, 'checkout-line-amount-product-b'),
-        '10 x KES 7 = KES 70',
-      );
+      expect(_text(tester, 'checkout-line-amount-product-b'), 'KES 70');
       expect(
         _field(tester, 'checkout-line-quantity-product-b').controller!.text,
         '10',
@@ -1190,10 +1183,7 @@ void main() {
 
       // The last usable quantity is kept, so a half-typed number can never
       // become the sale.
-      expect(
-        _text(tester, 'checkout-line-amount-product-b'),
-        '1 x KES 7 = KES 7',
-      );
+      expect(_text(tester, 'checkout-line-amount-product-b'), 'KES 7');
       expect(
         _text(tester, 'checkout-save-blocked'),
         'Enter a whole quantity between 1 and 1,000,000 for every item.',
@@ -1386,6 +1376,104 @@ void main() {
       expect(pane.width, AppLayout.contract.salePane);
     });
 
+    testWidgets('gives a wide tile its picture and the count already sold', (
+      tester,
+    ) async {
+      // **The picture came back to the wide till on 2026-10-11.** The fixture
+      // has no photograph, so the band draws the product's initials - which
+      // is the band being there at all.
+      await _pumpAt(tester, sessions, catalog, drafts, tillScreen);
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-product-product-a');
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('checkout-product-product-a')),
+          matching: find.byKey(
+            const ValueKey('product-image-fallback-product-a'),
+          ),
+        ),
+        findsOne,
+      );
+      expect(
+        tester
+            .widget<Badge>(
+              find.byKey(const ValueKey('checkout-product-count-product-a')),
+            )
+            .isLabelVisible,
+        isTrue,
+      );
+    });
+
+    testWidgets('a long name and size fit a wide tile at its narrowest', (
+      tester,
+    ) async {
+      // A `GridView` cell is a fixed box and a `Column` that does not fit one
+      // throws, so these passing is the assertion. 768 is the narrowest
+      // two-pane width and 1024 the narrowest three-column one.
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        products: <TenantProduct>[
+          _product(
+            'tenant-a',
+            'golden sunflower cooking oil family pack',
+            sku: '5 litre jerrycan with tap',
+            quantity: -3,
+          ),
+        ],
+      );
+      for (final size in const <Size>[Size(768, 1000), Size(1024, 768)]) {
+        await _pumpAt(tester, sessions, catalog, drafts, size);
+        expect(find.byKey(const ValueKey('checkout-wide')), findsOne);
+      }
+    });
+
+    testWidgets('puts the search beside the categories from 1024 up', (
+      tester,
+    ) async {
+      expect(TenantCheckoutPanel.searchesBesideCategories(1024), isTrue);
+      expect(TenantCheckoutPanel.searchesBesideCategories(1023), isFalse);
+
+      await _pumpAt(tester, sessions, catalog, drafts, tillScreen);
+      expect(find.byKey(const ValueKey('checkout-browse-row')), findsOne);
+    });
+
+    testWidgets('stacks the search over the categories on a tablet', (
+      tester,
+    ) async {
+      await _pumpAt(tester, sessions, catalog, drafts, tablet);
+      expect(find.byKey(const ValueKey('checkout-browse-row')), findsNothing);
+    });
+
+    testWidgets('states the total beside a save that does not move', (
+      tester,
+    ) async {
+      await _pumpAt(tester, sessions, catalog, drafts, tillScreen);
+      await _tap(tester, 'checkout-product-product-b');
+
+      final row = find.byKey(const ValueKey('checkout-commit-row'));
+      expect(
+        find.descendant(
+          of: row,
+          matching: find.byKey(const ValueKey('checkout-total')),
+        ),
+        findsOne,
+      );
+      final save = find.descendant(
+        of: row,
+        matching: find.byKey(const ValueKey('checkout-save')),
+      );
+      expect(save, findsOne);
+
+      // **Half the row whatever the figure**: a save whose edge moved as the
+      // total grew would move under the finger about to press it.
+      final before = tester.getRect(save);
+      await _enter(tester, 'checkout-line-quantity-product-b', '9999');
+      expect(_text(tester, 'checkout-total'), 'KES 69993');
+      expect(tester.getRect(save), before);
+    });
+
     testWidgets('puts the cart behind a bar on a phone', (tester) async {
       await _pumpAt(tester, sessions, catalog, drafts, phone);
 
@@ -1432,6 +1520,22 @@ void main() {
       await _tap(tester, 'checkout-open-cart');
 
       expect(find.byKey(const ValueKey('checkout-line-product-b')), findsOne);
+      // **The sheet keeps its own line**, the card with the amount sentence:
+      // the two-pane till's receipt row and its foot are wide-only.
+      expect(
+        _text(tester, 'checkout-line-amount-product-b'),
+        '1 x KES 7 = KES 7',
+      );
+      expect(
+        find.byKey(const ValueKey('checkout-line-each-product-b')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('checkout-commit-row')), findsNothing);
+      expect(
+        _text(tester, 'checkout-tender-unset'),
+        'No payment method yet. The sale records that it was not said, and '
+        'you can set it later from the sale.',
+      );
 
       await _tapScrolled(tester, 'checkout-tender-cash');
       await _tapScrolled(tester, 'checkout-save');

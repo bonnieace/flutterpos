@@ -16,9 +16,11 @@ library;
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../platform/browser_file.dart';
 import 'report_file.dart';
 
 /// Saves the report to a folder the person picks, or offers it to the share
@@ -44,6 +46,13 @@ final class SharedFileTenantReportSaver implements TenantReportSaver {
   static Future<TenantReportSaveOutcome> _toDevice(
     TenantReportFile file,
   ) async {
+    // **A browser downloads it, and `saveFile` returns null either way.** On a
+    // phone null is the person backing out of the picker; read that way here,
+    // every report a browser downloaded was announced as saved nowhere.
+    if (kIsWeb) {
+      await downloadFromBrowser(bytes: file.bytes, filename: file.filename);
+      return TenantReportSaveOutcome.saved;
+    }
     try {
       final saved = await FilePicker.platform.saveFile(
         dialogTitle: file.subject,
@@ -68,6 +77,18 @@ final class SharedFileTenantReportSaver implements TenantReportSaver {
   static Future<TenantReportSaveOutcome> _toChooser(
     TenantReportFile file,
   ) async {
+    if (kIsWeb) {
+      return switch (await shareFromBrowser(
+        bytes: file.bytes,
+        filename: file.filename,
+        mimeType: file.mimeType,
+        subject: file.subject,
+        text: file.text,
+      )) {
+        BrowserFileOutcome.delivered => TenantReportSaveOutcome.saved,
+        BrowserFileOutcome.dismissed => TenantReportSaveOutcome.dismissed,
+      };
+    }
     final directory = await getTemporaryDirectory();
     final path = '${directory.path}${Platform.pathSeparator}${file.filename}';
     // **Bytes, and no byte-order mark.** The CSV saver this is modelled on

@@ -33,16 +33,20 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
-  Future<File> writeRecords(int count, {List<int>? key}) async {
+  Future<File> writeRecords(
+    int count, {
+    List<int>? key,
+    String name = _name,
+  }) async {
     final box = await Hive.openBox<dynamic>(
-      _name,
+      name,
       encryptionCipher: HiveAesCipher(key ?? _key),
     );
     for (var index = 0; index < count; index++) {
       await box.put('record-$index', 'sale $index ${'x' * 64}');
     }
     await box.close();
-    return deviceStoreFile(directory.path, _name);
+    return deviceStoreFile(directory.path, name);
   }
 
   List<File> quarantined() {
@@ -174,6 +178,66 @@ void main() {
         await quarantineDeviceStore(_name, directory: directory.path),
         isNull,
       );
+    });
+  });
+
+  group('in a browser, where there is no folder', () {
+    // `DeviceStorage.directory` stays null on web, as it does here. The gate
+    // clears the store's own box, so that is the box these tests damage.
+    const store = DeviceStore.stockTakeDrafts;
+
+    Future<Box<dynamic>> openUnderTheWrongKey() =>
+        openBoxRepairingTornTail<dynamic>(
+          Hive,
+          store.boxName,
+          cipher: HiveAesCipher(_otherKey),
+        );
+
+    test('setting the file aside moves nothing, so the same box fails '
+        'again', () async {
+      // The loop this group exists for: "Continue without" asked again, and
+      // again, because there was nothing to move.
+      await writeRecords(3, name: store.boxName);
+      var asked = 0;
+      final gate = DeviceStorageGate(
+        quarantine: quarantineDeviceStore,
+        ask: (store, {required canContinue}) async {
+          if (++asked == 3) throw StateError('still asking');
+          return DeviceStorageChoice.continueWithout;
+        },
+      );
+
+      await expectLater(
+        gate.open(store, openUnderTheWrongKey),
+        throwsStateError,
+      );
+      expect(asked, 3);
+    });
+
+    test('"Continue without" clears the box and asks once', () async {
+      await writeRecords(3, name: store.boxName);
+      var asked = 0;
+      final gate = DeviceStorageGate(
+        quarantine: clearBrowserDeviceStore,
+        ask: (store, {required canContinue}) async {
+          // Fails fast rather than spinning, should the loop come back.
+          if (++asked > 1) throw StateError('asked again');
+          expect(canContinue, isTrue);
+          return DeviceStorageChoice.continueWithout;
+        },
+      );
+
+      final box = await gate.open(store, openUnderTheWrongKey);
+
+      expect(asked, 1);
+      expect(box.isEmpty, isTrue);
+    });
+
+    test('says nothing was kept', () async {
+      final file = await writeRecords(1, name: store.boxName);
+      expect(await clearBrowserDeviceStore(store.boxName), isNull);
+      expect(file.existsSync(), isFalse);
+      expect(quarantined(), isEmpty);
     });
   });
 

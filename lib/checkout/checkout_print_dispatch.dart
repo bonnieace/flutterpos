@@ -26,10 +26,12 @@ import 'dart:typed_data';
 
 import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
 
+import '../reports/render/report_fonts.dart';
 import 'checkout_print_configuration.dart';
 import 'checkout_print_jobs.dart';
 import 'checkout_print_transport_base.dart';
 import 'checkout_receipt_body.dart';
+import 'checkout_receipt_pdf.dart';
 import 'checkout_sale.dart';
 
 /// What happened to one receipt.
@@ -80,13 +82,56 @@ final class CheckoutPrintDispatcher {
     required HivePrintJobQueue queue,
     required PrinterTransport transport,
     required CapabilityProfile profile,
+    Future<TenantReportFonts> Function() pdfFonts = TenantReportFonts.bundled,
   }) : _queue = queue,
        _transport = transport,
-       _profile = profile;
+       _profile = profile,
+       _pdfFonts = pdfFonts;
 
   final HivePrintJobQueue _queue;
   final PrinterTransport _transport;
   final CapabilityProfile _profile;
+
+  /// The faces a print-window receipt is set in, loaded only when one is
+  /// built - a till printing ESC/POS never parses a font.
+  final Future<TenantReportFonts> Function() _pdfFonts;
+
+  /// The receipt in the form [configuration]'s printer takes: ESC/POS for a
+  /// printer this app drives itself, a PDF for the device's print window.
+  ///
+  /// **The one place that branch is made**, so the first copy, a reprint and
+  /// a job sent again all carry the form their printer was chosen with.
+  Future<List<int>> _receipt(
+    TenantPrinterConfiguration configuration,
+    CheckoutReceiptSale sale, {
+    String? businessName,
+    String? servedBy,
+    Uint8List? logo,
+    String? slogan,
+  }) async {
+    if (configuration.transport == PrinterTransportKind.system) {
+      return CheckoutReceiptPdf(
+        fonts: await _pdfFonts(),
+        paperWidth: configuration.paperWidth,
+      ).build(
+        sale,
+        businessName: businessName,
+        servedBy: servedBy,
+        logo: logo,
+        slogan: slogan,
+      );
+    }
+    return CheckoutReceiptBody(
+      profile: _profile,
+      configuration: configuration,
+    ).build(
+      sale,
+      businessName: businessName,
+      servedBy: servedBy,
+      logo: logo,
+      slogan: slogan,
+    );
+  }
 
   /// Builds and durably queues a receipt without touching the transport.
   /// Checkout uses this local-only boundary so a slow or unreachable printer
@@ -105,21 +150,18 @@ final class CheckoutPrintDispatcher {
       );
     }
     final configuration = printer.require();
-    final bytes =
-        CheckoutReceiptBody(
-          profile: _profile,
-          configuration: configuration,
-        ).build(
-          sale,
-          businessName: businessName,
-          servedBy: servedBy,
-          // **Rastered into the durable bytes, not stored beside them.** A job is
-          // re-sent as it was built - see `retry` - so the logo a receipt printed
-          // with is the one it was created with, whatever the business publishes
-          // afterwards.
-          logo: logo,
-          slogan: slogan,
-        );
+    final bytes = await _receipt(
+      configuration,
+      sale,
+      businessName: businessName,
+      servedBy: servedBy,
+      // **Drawn into the durable bytes, not stored beside them.** A job is
+      // re-sent as it was built - see `retry` - so the logo a receipt printed
+      // with is the one it was created with, whatever the business publishes
+      // afterwards.
+      logo: logo,
+      slogan: slogan,
+    );
     final job = await _queue.enqueue(
       tenantId: sale.tenantId,
       receiptNumber: sale.receiptNumber,
@@ -217,17 +259,14 @@ final class CheckoutPrintDispatcher {
     if (existing == null) {
       await onReprint();
       final configuration = printer.require();
-      final bytes =
-          CheckoutReceiptBody(
-            profile: _profile,
-            configuration: configuration,
-          ).build(
-            sale,
-            businessName: businessName,
-            servedBy: servedBy,
-            logo: logo,
-            slogan: slogan,
-          );
+      final bytes = await _receipt(
+        configuration,
+        sale,
+        businessName: businessName,
+        servedBy: servedBy,
+        logo: logo,
+        slogan: slogan,
+      );
       await _queue.enqueue(
         tenantId: sale.tenantId,
         receiptNumber: sale.receiptNumber,

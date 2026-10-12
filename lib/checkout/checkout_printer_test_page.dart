@@ -230,31 +230,33 @@ final class CheckoutPrinterTestPage {
     return row.toString().substring(0, _columns - tail.length) + tail;
   }
 
-  /// `3 Sep 2026 15:51`, in the zone this device is set to.
-  ///
-  /// Written here rather than taken from `intl`, because every other string on
-  /// this page is measured against the roll's character count and a
-  /// locale-aware formatter can return one longer than the row it has to fit.
-  String _stamp(DateTime at) {
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final local = at.toLocal();
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '${local.day} ${months[local.month - 1]} ${local.year} $hour:$minute';
-  }
+  String _stamp(DateTime at) => printerPageStamp(at);
+}
+
+/// `3 Sep 2026 15:51`, in the zone this device is set to.
+///
+/// Written here rather than taken from `intl`, because every other string on
+/// a printed page is measured against the roll's character count and a
+/// locale-aware formatter can return one longer than the row it has to fit.
+String printerPageStamp(DateTime at) {
+  const months = <String>[
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final local = at.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '${local.day} ${months[local.month - 1]} ${local.year} $hour:$minute';
 }
 
 /// A tick inside a filled disc, [size] dots square.

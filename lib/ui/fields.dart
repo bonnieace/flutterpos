@@ -975,7 +975,9 @@ class _AppPhoneFieldState extends State<AppPhoneField> {
                   focusedErrorBorder: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   hintText: '712 345 678',
-                  hintStyle: textStyle.copyWith(color: colors.text.tertiary),
+                  // `text.secondary` for the reason `AppTextField` gives:
+                  // `text.tertiary` is 4.29:1 on `surface.field`, under 4.5.
+                  hintStyle: textStyle.copyWith(color: colors.text.secondary),
                 ),
               ),
             ),

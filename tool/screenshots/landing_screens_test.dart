@@ -86,6 +86,10 @@ void main() {
         reader: reader,
         onSignOut: () async {},
         isDefaultTenant: false,
+        // What the old hub's bar shows on a wider screen: this device's
+        // receipt code and that it is online.
+        terminalLabel: 'CT-7F2',
+        onlineCheck: () async => true,
         switchCandidates: <TenantMembership>[
           seedMembership(role: role),
           seedMembership(
@@ -199,6 +203,41 @@ void main() {
   }
 
   screenshotCase('10-business-home-owner', build: () => landing());
+
+  // **The home at the old hub's own screenshot geometry**, which the cards were
+  // measured off on 2026-10-10: 1232 wide at 1.5, so an old card and a new one
+  // can be held side by side pixel for pixel. Admin, the old screenshot's role,
+  // and owner, who gets the same four-across row.
+  // **Every role at every width a tablet or a desktop can be, since
+  // 2026-10-10**: the grid takes its columns from the width for every role,
+  // after a cashier's cards came out 600 wide under the old per-role table.
+  // The phone is here too, to show it is the launcher it always was.
+  for (final (role, uid) in const <(TenantRole, String)>[
+    (TenantRole.owner, ownerUid),
+    (TenantRole.manager, ownerUid),
+    (TenantRole.cashier, cashierUid),
+  ]) {
+    screenshotCase(
+      '10d-business-home-grid-${role.wireValue}',
+      build: () => landing(role: role, uid: uid),
+      viewports: const <ScreenshotViewport>[
+        _desktopWideViewport,
+        webViewport,
+        desktopNarrowViewport,
+        tabletViewport,
+        compactWideViewport,
+        mobileViewport,
+      ],
+    );
+  }
+
+  for (final role in const <TenantRole>[TenantRole.admin, TenantRole.manager]) {
+    screenshotCase(
+      '10c-business-home-old-hub-${role.wireValue}',
+      build: () => landing(role: role),
+      viewports: const <ScreenshotViewport>[_oldHubViewport],
+    );
+  }
 
   screenshotCase(
     '11-business-home-cashier',
@@ -618,3 +657,19 @@ Map<String, Object?> _openShiftDocument({
     'startTime': Timestamp.fromDate(openedAt),
   };
 }
+
+/// The geometry of the developer's screenshot of the old hub: 1828 by 912
+/// pixels at 1.5, and its cards put the window at 1232 logical wide - four of
+/// them at 277 with 32 a side and 20 between.
+const ScreenshotViewport _oldHubViewport = ScreenshotViewport(
+  name: 'old-hub',
+  size: Size(1232, 608),
+  devicePixelRatio: 1.5,
+);
+
+/// A 1920 desktop, the widest window the home's grid is checked at.
+const ScreenshotViewport _desktopWideViewport = ScreenshotViewport(
+  name: 'desktop-wide',
+  size: Size(1920, 1080),
+  devicePixelRatio: 1,
+);

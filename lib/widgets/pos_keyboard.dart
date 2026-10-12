@@ -206,50 +206,62 @@ class _PosKeyboardState extends State<PosKeyboard> {
     final keyboard = KeyboardScope.of(context);
     final gap = PosKeyboard._gap(tokens);
 
-    return Padding(
-      padding: EdgeInsets.all(PosKeyboard._margin(tokens)),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colors.surface.raised,
-          borderRadius: BorderRadius.circular(tokens.radius.md),
-          border: Border.all(color: colors.surface.borderSubtle),
-        ),
-        child: Padding(
-          padding: EdgeInsets.all(PosKeyboard._inset(tokens)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              for (final (index, row) in PosKeyboard.rows.indexed) ...<Widget>[
-                if (index > 0) SizedBox(height: gap),
-                Row(
-                  children: <Widget>[
-                    for (final (position, key) in row.indexed) ...<Widget>[
-                      if (position > 0) SizedBox(width: gap),
-                      Expanded(
-                        flex: PosKeyboard._flexOf(key),
-                        child: _Key(
-                          // The face shows the case the key will type, so a
-                          // person can see what `Caps` did rather than find out
-                          // by typing.
-                          label: _faceOf(key),
-                          face: PosKeyboard._faceOf(key),
-                          announcement: PosKeyboard._announcement(key),
-                          // §2.1's primary tier is what "on" looks like in this
-                          // system, so a locked `Caps` is a mint key among
-                          // bordered ones. No new token, and it is legible
-                          // without reading the glyph.
-                          on: key == PosKeyboard.caps && _caps,
-                          // `Enter` submits nothing, so it offers nothing.
-                          onPressed: key == PosKeyboard.enter
-                              ? null
-                              : () => _press(keyboard, key),
+    // **A key is inside the field it types into, as far as taps go.** On web
+    // and desktop a tap outside a field unfocuses it, and a field that regains
+    // the focus there selects all of its text - so each key blurred the field,
+    // [KeyboardController.insert] refocused it, and the next key overwrote the
+    // selection. Every key replaced the one before it. Joining the field's tap
+    // region means the focus never leaves, so nothing is selected.
+    return TextFieldTapRegion(
+      child: Padding(
+        padding: EdgeInsets.all(PosKeyboard._margin(tokens)),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.surface.raised,
+            borderRadius: BorderRadius.circular(tokens.radius.md),
+            border: Border.all(color: colors.surface.borderSubtle),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(PosKeyboard._inset(tokens)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                for (final (index, row)
+                    in PosKeyboard.rows.indexed) ...<Widget>[
+                  if (index > 0) SizedBox(height: gap),
+                  Row(
+                    children: <Widget>[
+                      for (final (position, key) in row.indexed) ...<Widget>[
+                        if (position > 0) SizedBox(width: gap),
+                        Expanded(
+                          flex: PosKeyboard._flexOf(key),
+                          child: _Key(
+                            // The face shows the case the key will type, so a
+                            // person can see what `Caps` did rather than find out
+                            // by typing.
+                            label: _faceOf(key),
+                            face: PosKeyboard._faceOf(key),
+                            announcement: PosKeyboard._announcement(key),
+                            // §2.1's primary tier is what "on" looks like in this
+                            // system, so a locked `Caps` is a mint key among
+                            // bordered ones. No new token, and it is legible
+                            // without reading the glyph.
+                            on: key == PosKeyboard.caps && _caps,
+                            // Held, it keeps deleting and speeds up, as a
+                            // phone's backspace does. Letters type once.
+                            repeats: key == PosKeyboard.backspace,
+                            // `Enter` submits nothing, so it offers nothing.
+                            onPressed: key == PosKeyboard.enter
+                                ? null
+                                : () => _press(keyboard, key),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -288,6 +300,7 @@ final class _Key extends StatelessWidget {
     this.face,
     this.announcement,
     this.on = false,
+    this.repeats = false,
   });
 
   final String label;
@@ -307,6 +320,9 @@ final class _Key extends StatelessWidget {
   /// satisfied by the fill *and* the glyph together, and by the announcement.
   final bool on;
 
+  /// See [PressSurface.repeatsWhileHeld].
+  final bool repeats;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -325,6 +341,7 @@ final class _Key extends StatelessWidget {
       hoverOverlay: role.hoverFill(),
       pressedOverlay: role.pressedFill(),
       semanticLabel: on ? '$announcement, on' : (announcement ?? label),
+      repeatsWhileHeld: repeats,
       // A key fills the column it was given; without this the tap-target box
       // shrink-wraps and ten keys sit in a huddle on the left of the row.
       fillWidth: true,

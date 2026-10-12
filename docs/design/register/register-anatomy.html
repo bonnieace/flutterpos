@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Register — measured</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+:root {
+  --base: #0D1F16; --raised: #132A1F; --sunken: #08140E; --field: #1E3A2B;
+  --overlay: #1C3328; --border-subtle: #1E3A2B; --card-edge: #283831;
+  --border-strong: #2C5340; --selected: #3D4A3D;
+  --text: #FFFFFF; --text-2: #B8D6C5; --text-3: #849E8F; --text-disabled: #5D7468;
+  --money: #45F28D; --primary: #45F28D; --primary-hover: #3DD47C; --on-primary: #0A0F0C;
+  --secondary: #1C3328; --secondary-border: #2C5340;
+  --problem: #FF5C6C; --problem-bg: rgba(147, 0, 10, 0.20); --problem-border: rgba(239, 68, 68, 0.30);
+  --ok: #4BE277; --ok-bg: rgba(75, 226, 119, 0.10); --ok-border: rgba(75, 226, 119, 0.30);
+  --attention: #F2C14E; --attention-bg: rgba(242, 193, 78, 0.10); --attention-border: rgba(242, 193, 78, 0.30);
+  --info: #B0CDBD; --info-bg: rgba(176, 205, 189, 0.10); --info-border: rgba(176, 205, 189, 0.30);
+  --focus: #45F28D;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #050C08; color: var(--text); font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; letter-spacing: 0.25px; }
+.page-nav a { color: var(--text-3); text-decoration: none; }
+.page-nav a:hover { color: var(--primary); text-decoration: underline; }
+.page-head { padding: 12px 24px 0; max-width: 1500px; margin: 0 auto; }
+.page-head h1 { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.page-head p { margin: 4px 0 0; max-width: 900px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.stage { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 20px 24px 56px; }
+.frame-label { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); align-self: center; }
+.frame { position: relative; overflow: hidden; background: var(--base); border-radius: 4px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; flex: none; }
+
+/* --- toolbar (AppScaffold) --- */
+.tb { height: 64px; flex: none; display: flex; align-items: center; padding: 0 8px; }
+.tb-title { display: inline-flex; align-items: center; gap: 4px; height: 48px; padding: 0 8px; border-radius: 8px; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; color: var(--text); }
+.tb-title svg { color: var(--text-2); }
+.tb-body { flex: 1; min-height: 0; display: flex; }
+
+/* --- products pane --- */
+.products { flex: 1; min-width: 0; overflow: hidden; padding: 12px 24px 0; }
+.browse { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.browse.stacked { flex-direction: column; align-items: stretch; gap: 8px; }
+.search { flex: none; width: 320px; height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--field); border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text-2); font-size: 16px; line-height: 24px; letter-spacing: 0.25px; }
+.browse.stacked .search { width: auto; }
+.chips { flex: 1; min-width: 0; height: 48px; display: flex; align-items: center; gap: 8px; overflow: hidden; }
+.chips.fades { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+.chip { flex: none; height: 32px; display: inline-flex; align-items: center; gap: 4px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--border-strong); color: var(--text-2); font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; white-space: nowrap; }
+.chip.on { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); padding-left: 8px; }
+.grid { display: grid; gap: 12px; }
+
+/* --- product tile, wide --- */
+.tile { height: 204px; display: flex; flex-direction: column; background: var(--raised); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; position: relative; }
+.tile.out { border-color: var(--problem-border); }
+.tile.hover::after { content: ''; position: absolute; inset: 0; background: rgba(255, 255, 255, 0.08); pointer-events: none; }
+.tile.pressed { transform: scale(0.98); }
+.tile.pressed::after { content: ''; position: absolute; inset: 0; background: rgba(255, 255, 255, 0.12); pointer-events: none; }
+.tile.focus { outline: 2px solid var(--focus); outline-offset: 2px; overflow: visible; }
+.band { height: 96px; flex: none; background: var(--overlay); display: flex; align-items: center; justify-content: center; position: relative; }
+.tile.focus .band { border-radius: 7px 7px 0 0; }
+.band svg.art { height: 84px; width: 84px; }
+.initials-lg { font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; color: var(--text-2); }
+.initials-md { font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; color: var(--text-2); }
+.count { position: absolute; top: 4px; right: 4px; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--primary); color: var(--on-primary); font-size: 12px; line-height: 20px; font-weight: 700; text-align: center; }
+.tile-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px; }
+.t-name { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.t-size { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-foot { margin-top: auto; padding-top: 4px; display: flex; align-items: flex-end; gap: 4px; }
+.t-figs { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 14px; font-weight: 500; letter-spacing: -0.14px; }
+.money { color: var(--money); }
+.t-price { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-price.bad { color: var(--problem); font-family: 'Roboto', sans-serif; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; }
+.t-stock { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.t-stock.out { color: var(--problem); }
+.add { width: 24px; height: 24px; flex: none; border-radius: 999px; background: var(--primary); color: var(--on-primary); display: flex; align-items: center; justify-content: center; }
+.sk { background: #1E3A2B; border-radius: 2px; }
+.sk-shimmer { background: linear-gradient(90deg, #1E3A2B 0%, #284A39 50%, #1E3A2B 100%); }
+
+/* --- cart pane --- */
+.cart { width: 420px; flex: none; border-left: 1px solid var(--border-strong); display: flex; flex-direction: column; background: var(--base); }
+.c-head { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 20px; background: var(--raised); border-bottom: 1px solid var(--border-subtle); }
+.c-head h2 { margin: 0; flex: 1; font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; color: var(--text); }
+.c-count { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.c-list { flex: 1; min-height: 0; overflow: hidden; background: var(--sunken); }
+.c-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 0 40px; text-align: center; color: var(--text-2); font-size: 14px; line-height: 21px; letter-spacing: 0.25px; }
+.c-empty svg { color: var(--text-3); }
+.line { display: flex; align-items: center; gap: 12px; padding: 8px 20px; border-bottom: 1px solid var(--border-subtle); background: var(--sunken); }
+.thumb { width: 64px; height: 64px; flex: none; border-radius: 8px; background: var(--overlay); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.thumb svg.art { width: 56px; height: 56px; }
+.l-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.l-top { display: flex; align-items: baseline; gap: 8px; height: 20px; }
+.l-name { min-width: 0; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.l-name.gone { color: var(--text-2); font-weight: 500; }
+.l-size { flex: none; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.l-total { margin-left: auto; flex: none; padding-left: 8px; }
+.l-total.bad { font-family: 'Roboto', sans-serif; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--problem); }
+.l-ctl { display: flex; align-items: center; gap: 12px; height: 48px; }
+.each { flex: 1; min-width: 0; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.each.bad { color: var(--problem); }
+.l-note { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.l-err { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--problem); }
+.stepper { flex: none; width: 148px; height: 48px; display: flex; background: var(--field); border: 1px solid var(--border-subtle); border-radius: 8px; }
+.stepper.err { border-color: var(--problem); }
+.stepper.focus { outline: 2px solid var(--focus); outline-offset: 0; }
+.stepper .sb { width: 48px; flex: none; display: flex; align-items: center; justify-content: center; color: var(--text-2); }
+.stepper .sb.off { color: var(--text-disabled); }
+.stepper .sn { flex: 1; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text); }
+.bin { width: 48px; height: 48px; flex: none; border-radius: 8px; border: 1px solid var(--problem-border); display: flex; align-items: center; justify-content: center; color: var(--problem); }
+
+/* --- cart foot --- */
+.c-foot { flex: none; background: var(--raised); border-top: 1px solid var(--border-strong); padding: 12px 20px 16px; display: flex; flex-direction: column; gap: 12px; }
+.adjust { display: flex; gap: 8px; }
+.btn { height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 20px; border-radius: 8px; border: 1px solid transparent; font-family: 'Roboto', sans-serif; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; }
+.btn.secondary { background: var(--secondary); border-color: var(--secondary-border); color: var(--text); }
+.btn.primary { background: var(--primary); color: var(--on-primary); }
+.btn.tertiary { background: transparent; color: var(--primary); padding: 0 12px; }
+.btn.disabled { background: var(--field); border-color: var(--field); color: var(--text-disabled); }
+.btn.grow { flex: 1; }
+.tender { display: flex; align-items: center; gap: 8px; height: 48px; }
+.tender-label { width: 56px; flex: none; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.hint { margin: -8px 0 0 64px; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.credit { display: flex; gap: 8px; }
+.credit-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.credit-what { font-size: 14px; line-height: 21px; font-weight: 600; letter-spacing: 0.25px; color: var(--text); }
+.credit-after { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-2); }
+.credit-acts { display: flex; gap: 8px; margin-top: 4px; }
+.agreed { display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.ag-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ag-word { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-2); }
+.ag-fig { font-family: 'JetBrains Mono', monospace; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: 0.25px; color: var(--text-2); }
+.ag-reason { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.commit { display: flex; align-items: center; gap: 16px; }
+.total { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.total-word { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; color: var(--text-2); }
+.total-fig { font-family: 'JetBrains Mono', monospace; font-size: 30px; line-height: 36px; font-weight: 500; letter-spacing: 0.25px; font-variant-numeric: tabular-nums; color: var(--money); white-space: nowrap; }
+.total-fig.bad { font-family: 'Roboto', sans-serif; font-size: 14px; line-height: 21px; font-weight: 600; color: var(--problem); }
+.commit .btn { flex: 0 0 182px; }
+.below { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); margin-top: -4px; }
+.callout { display: flex; gap: 8px; align-items: flex-start; padding: 12px; border-radius: 8px; border: 1px solid; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text); }
+.callout svg { flex: none; margin-top: 2px; }
+.callout.problem { background: var(--problem-bg); border-color: var(--problem-border); }
+.callout.problem svg { color: var(--problem); }
+.callout.info { background: var(--info-bg); border-color: var(--info-border); }
+.callout.info svg { color: var(--info); }
+.callout.attention { background: var(--attention-bg); border-color: var(--attention-border); }
+.callout.attention svg { color: var(--attention); }
+.spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(10, 15, 12, 0.25); border-top-color: var(--on-primary); }
+
+/* --- boards of specimens --- */
+.sheet { width: 1400px; display: flex; flex-direction: column; gap: 40px; }
+.section h2 { margin: 0 0 4px; font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; }
+.section > p { margin: 0 0 16px; max-width: 900px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.cells { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.cell { display: flex; flex-direction: column; gap: 8px; }
+.cell-name { font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-2); }
+.cell-note { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); max-width: 420px; }
+.pane-strip { width: 420px; background: var(--sunken); border: 1px solid var(--border-strong); border-radius: 4px; overflow: hidden; }
+.pane-strip.raised { background: var(--raised); }
+.pane-strip .c-foot { border-top: 0; }
+
+/* --- anatomy --- */
+.vs { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+.vs-col h3 { margin: 0 0 12px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-2); }
+.vs-col.new h3 { color: var(--ok); }
+.spec { display: flex; align-items: stretch; gap: 12px; margin-bottom: 24px; }
+.spec-box { flex: none; }
+.ruler { width: 72px; flex: none; position: relative; border-left: 1px solid var(--text-3); }
+.ruler::before, .ruler::after { content: ''; position: absolute; left: -5px; width: 9px; border-top: 1px solid var(--text-3); }
+.ruler::before { top: 0; } .ruler::after { bottom: 0; }
+.ruler span { position: absolute; top: 50%; left: 8px; transform: translateY(-50%); font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 16px; color: var(--text); white-space: nowrap; }
+.vs-col.new .ruler, .vs-col.new .ruler::before, .vs-col.new .ruler::after { border-color: var(--ok); }
+.facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.fact { background: var(--raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+.fact-word { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.fact-fig { font-family: 'JetBrains Mono', monospace; font-size: 22px; line-height: 30.8px; font-weight: 500; color: var(--text); }
+.fact-fig b { color: var(--ok); font-weight: 500; }
+.old-card { background: var(--raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; }
+.old-row { display: flex; align-items: center; gap: 8px; }
+.old-name { font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; }
+.old-head { height: 47px; display: flex; align-items: center; padding: 0 20px; background: var(--raised); border-bottom: 1px solid var(--border-subtle); font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.old-tile { height: 128px; background: var(--raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; All Register artboards</a></nav>
+<header class="page-head"><h1>Where the height went</h1><p>The same sale drawn both ways at 1:1 in the 420 pane. Rulers are measured by the browser from what it drew. The old line is the current _CartLine (card, padding 12, picture and name and bin, then the amount sentence, then the stepper); the old foot is the current _cartFoot with both adjustments offered and no payment method chosen.</p></header>
+<div class="stage">
+
+<div class="sheet">
+  <div class="facts">
+    <div class="fact"><span class="fact-word">Cart lines on screen at 1024 × 768</span><span class="fact-fig">2.3 → <b>4.9</b></span></div>
+    <div class="fact"><span class="fact-word">One cart line</span><span class="fact-fig" data-pair="line">— → <b>—</b></span></div>
+    <div class="fact"><span class="fact-word">Cart foot, both adjustments, no payment yet</span><span class="fact-fig" data-pair="foot">— → <b>—</b></span></div>
+    <div class="fact"><span class="fact-word">Product tile at 1024</span><span class="fact-fig" data-pair="tile">— → <b>—</b></span></div>
+  </div>
+  <div class="vs">
+    <div class="vs-col">
+      <h3>Today</h3>
+      <div class="cell-note" style="margin-bottom:8px">One cart line: a bordered card, three rows</div>
+      <div class="spec" data-key="line-old"><div class="spec-box" style="width:420px"><div class="pane-strip" style="padding:12px 20px 4px"><div style="padding-bottom:8px"><div class="old-card"><div class="old-row"><div class="thumb" style="width:48px;height:48px"><svg class="art" viewBox="0 0 100 100" aria-hidden="true"><path d="M10 64c0-22 17-34 40-34s40 12 40 34v8a6 6 0 0 1-6 6H16a6 6 0 0 1-6-6z" fill="#C98A45"/><path d="M10 64c0-22 17-34 40-34s40 12 40 34c-8-6-24-9-40-9s-32 3-40 9z" fill="#A86A2E"/><path d="M30 44l6 10M46 40l5 11M62 42l5 10" stroke="#E7BC80" stroke-width="3" stroke-linecap="round"/><rect x="14" y="70" width="72" height="4" rx="2" fill="#E9C893" opacity=".5"/></svg></div><div style="flex:1;min-width:0"><div class="old-name">White bread loaf</div><span class="l-size" style="display:block">400g</span></div><span class="bin"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg></span></div><div class="mono money" style="margin-top:0">1 x KES 65 = KES 65</div><div style="height:8px"></div><div class="stepper"><span class="sb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></span><span class="sn">1</span><span class="sb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></div></div></div></div></div><div class="ruler"><span>…</span></div></div>
+      <div class="cell-note" style="margin-bottom:8px">The foot</div>
+      <div class="spec" data-key="foot-old"><div class="spec-box" style="width:420px"><div class="pane-strip raised"><div class="c-foot" style="gap:0"><div class="commit" style="height:36px"><span style="font-size:22px;line-height:30.8px;font-weight:600;letter-spacing:.25px;flex:1">Total</span><span class="total-fig">KES 135</span></div><div style="height:12px"></div><div class="adjust"><span class="btn secondary grow">Agree a price</span><span class="btn secondary grow">Put on credit</span></div><div style="height:12px"></div><div class="tender"><span class="chip">Cash</span><span class="chip">M-Pesa</span><span class="chip">Card</span></div><div style="height:8px"></div><div class="l-note">No payment method yet. The sale records that it was not said, and you can set it later from the sale.</div><div style="height:20px"></div><span class="btn primary" style="width:100%">Save sale</span></div></div></div><div class="ruler"><span>…</span></div></div>
+      <div class="cell-note" style="margin-bottom:8px">A product tile, no picture</div>
+      <div class="spec" data-key="tile-old"><div class="spec-box" style="width:177px"><div class="old-tile" style="width:177px"><div class="old-name">White bread loaf</div><div class="mono" style="color:var(--text-3)">400g</div><div style="margin-top:auto"><div class="mono money">KES 65</div><div class="t-stock" style="margin-top:2px">40 in stock</div></div></div></div><div class="ruler"><span>…</span></div></div>
+    </div>
+    <div class="vs-col new">
+      <h3>Proposed</h3>
+      <div class="cell-note" style="margin-bottom:8px">One cart line: the receipt row over its controls, picture beside both</div>
+      <div class="spec" data-key="line-new"><div class="spec-box" style="width:420px"><div class="pane-strip"><div class="line"><div class="thumb"><svg class="art" viewBox="0 0 100 100" aria-hidden="true"><path d="M10 64c0-22 17-34 40-34s40 12 40 34v8a6 6 0 0 1-6 6H16a6 6 0 0 1-6-6z" fill="#C98A45"/><path d="M10 64c0-22 17-34 40-34s40 12 40 34c-8-6-24-9-40-9s-32 3-40 9z" fill="#A86A2E"/><path d="M30 44l6 10M46 40l5 11M62 42l5 10" stroke="#E7BC80" stroke-width="3" stroke-linecap="round"/><rect x="14" y="70" width="72" height="4" rx="2" fill="#E9C893" opacity=".5"/></svg></div><div class="l-body"><div class="l-top"><span class="l-name">White bread loaf</span><span class="l-size">400g</span><span class="l-total mono money">KES 65</span></div><div class="l-ctl"><div class="stepper"><span class="sb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></span><span class="sn">1</span><span class="sb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></div><span class="each">KES 65 each</span><span class="bin"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg></span></div></div></div></div></div><div class="ruler"><span>…</span></div></div>
+      <div class="cell-note" style="margin-bottom:8px">The foot: total and save share the last row</div>
+      <div class="spec" data-key="foot-new"><div class="spec-box" style="width:420px"><div class="pane-strip raised"><div class="c-foot"><div class="adjust"><span class="btn secondary grow">Agree a price</span><span class="btn secondary grow">Put on credit</span></div><div class="tender"><span class="tender-label">Paid by</span><span class="chip">Cash</span><span class="chip">M-Pesa</span><span class="chip">Card</span></div><div class="hint">Not said yet. You can set it later from the sale.</div><div class="commit"><div class="total"><span class="total-word">Total</span><span class="total-fig">KES 135</span></div><span class="btn primary">Save sale</span></div></div></div></div><div class="ruler"><span>…</span></div></div>
+      <div class="cell-note" style="margin-bottom:8px">A product tile, picture back</div>
+      <div class="spec" data-key="tile-new"><div class="spec-box" style="width:177px"><div class="tile"><div class="band"><svg class="art" viewBox="0 0 100 100" aria-hidden="true"><path d="M10 64c0-22 17-34 40-34s40 12 40 34v8a6 6 0 0 1-6 6H16a6 6 0 0 1-6-6z" fill="#C98A45"/><path d="M10 64c0-22 17-34 40-34s40 12 40 34c-8-6-24-9-40-9s-32 3-40 9z" fill="#A86A2E"/><path d="M30 44l6 10M46 40l5 11M62 42l5 10" stroke="#E7BC80" stroke-width="3" stroke-linecap="round"/><rect x="14" y="70" width="72" height="4" rx="2" fill="#E9C893" opacity=".5"/></svg></div><div class="tile-body"><div class="t-name">White bread loaf</div><div class="t-size">400g</div><div class="t-foot"><div class="t-figs"><div class="t-price mono money">KES 65</div><div class="t-stock">40 in stock</div></div><span class="add"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></div></div></div></div><div class="ruler"><span>…</span></div></div>
+    </div>
+  </div>
+</div>
+<script>
+  // The rulers measure what the browser drew rather than repeating a sum.
+  const h = {};
+  document.querySelectorAll('.spec').forEach((s) => {
+    const box = s.querySelector('.spec-box').firstElementChild;
+    let px = box.getBoundingClientRect().height;
+    // Pane strips carry a 1px frame and the old line's 12/4 padding, which are the board's, not the till's.
+    if (box.classList.contains('pane-strip')) px -= 2;
+    if (s.dataset.key === 'line-old') px -= 16;
+    const v = Math.round(px);
+    h[s.dataset.key] = v;
+    s.querySelector('.ruler span').textContent = v;
+  });
+  document.querySelectorAll('[data-pair]').forEach((el) => {
+    const k = el.dataset.pair;
+    el.innerHTML = h[k + '-old'] + ' → <b>' + h[k + '-new'] + '</b>';
+  });
+</script>
+
+</div>
+</body>
+</html>

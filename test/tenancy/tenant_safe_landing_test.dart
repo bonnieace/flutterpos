@@ -6,6 +6,7 @@ import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:uzapay_pos/reporting/reporting.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/ui/home_navigation.dart';
+import 'package:uzapay_pos/ui/hub_bar.dart';
 import 'package:uzapay_pos/ui/stats.dart';
 import 'package:uzapay_pos/ui/status.dart';
 import 'package:uzapay_pos/ui/scaffold.dart';
@@ -208,16 +209,18 @@ void main() {
     // the header block it replaced cost about 128 pixels of every route.
     //
     // What is still asserted is what the original was about: a long business
-    // name does not push the bar's own controls off the end of it.
+    // name does not push the bar's own controls off the end of it. **The bar
+    // is the old hub's since 2026-10-10**, on a phone too, so it is the one
+    // measured.
     for (final name in <String>[
       'Chilltent Lounge',
       'Chilltent Lounge Nairobi Westlands Branch',
     ]) {
       await _pumpLanding(tester, panelHeight: 120, tenantName: name);
 
-      final bar = tester.getRect(find.byType(AppBar));
+      final bar = tester.getRect(find.byType(HubTopBar));
       final title = tester.getRect(
-        find.descendant(of: find.byType(AppBar), matching: find.text(name)),
+        find.descendant(of: find.byType(HubTopBar), matching: find.text(name)),
       );
 
       expect(title.left, greaterThanOrEqualTo(bar.left), reason: name);

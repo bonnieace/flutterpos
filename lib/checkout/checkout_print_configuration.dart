@@ -89,6 +89,16 @@ final class TenantPrinterConfiguration {
         'carry one.',
       );
     }
+    if ((transport == PrinterTransportKind.usb) != endpoint.isUsb) {
+      throw const FormatException(
+        'A USB transport needs a USB printer, and only it may name one.',
+      );
+    }
+    if ((transport == PrinterTransportKind.system) != endpoint.isSystem) {
+      throw const FormatException(
+        'The print window is its own transport, and only it may name it.',
+      );
+    }
     if (transport == PrinterTransportKind.httpBridge &&
         (bridgeToken != null && bridgeToken!.trim().isEmpty)) {
       throw const FormatException('bridgeToken must not be blank when set.');
@@ -155,15 +165,19 @@ final class TenantPrinterConfiguration {
     }
   }
 
-  /// **Bluetooth has no wire value and throws**, as `none` does. A Bluetooth
-  /// printer is paired with one phone, so it is stored on that phone - see
-  /// `checkout_bluetooth_printer.dart` - and a business document naming one
-  /// would point every other till at a device it cannot reach.
+  /// **Bluetooth and USB have no wire value and throw**, as `none` does. A
+  /// Bluetooth printer is paired with one phone and a USB printer is cabled to
+  /// one computer, so each is stored there - see `checkout_bluetooth_printer`
+  /// and `checkout_usb_printer` - and a business document naming one would
+  /// point every other till at a device it cannot reach.
   static String transportToWire(PrinterTransportKind kind) => switch (kind) {
     PrinterTransportKind.directTcp => 'direct_tcp',
     PrinterTransportKind.httpBridge => 'http_bridge',
     PrinterTransportKind.none ||
-    PrinterTransportKind.bluetooth => throw ArgumentError.value(kind, 'kind'),
+    PrinterTransportKind.bluetooth ||
+    PrinterTransportKind.usb ||
+    PrinterTransportKind.system ||
+    PrinterTransportKind.printHelper => throw ArgumentError.value(kind, 'kind'),
   };
 
   final PrinterTransportKind transport;

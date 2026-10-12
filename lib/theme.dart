@@ -64,7 +64,12 @@ WidgetStateProperty<Color?> _pressOverlay(AppActionRole role) =>
 /// [AppTokens.dark] is the palette this app shipped. It is kept, not deleted:
 /// `test/ui/tokens_test.dart` still measures its contrast and its agreement with
 /// those four constants, so what the app used to look like stays on the record.
-const AppTokens _palette = AppTokens.profoundVerdant;
+///
+/// **[AppTokens.uzapay] since 2026-10-10**, at the developer's direction after
+/// comparing every screen in both palettes: [AppTokens.dark]'s lighter
+/// surfaces, white headings and mint greens, with Profound Verdant's status
+/// colours kept. [AppColorRoles.uzapay] says which roles came from where.
+const AppTokens _palette = AppTokens.uzapay;
 
 /// The action tiers this file paints with, read once rather than per button
 /// theme.
@@ -230,6 +235,8 @@ final class SpiritScrollBehavior extends MaterialScrollBehavior {
 /// Roboto and Roboto Mono under `docs/stitch/OPEN_QUESTIONS.md` decision 20.
 /// Both are bundled at the weights the roles read, because the exported design
 /// links them from `fonts.googleapis.com` and a till cannot depend on that.
+/// **The interface face is Roboto again since 2026-10-10**, at the developer's
+/// direction, bundled the same way; JetBrains Mono is unchanged.
 ///
 /// **This line is the fallback, not the mechanism.** Every role in
 /// [AppTypeRoles.standard] names its own family, which is what reaches the

@@ -1,0 +1,4 @@
+# The compiled helper: built with `dart run tool/build.dart`, served from the
+# download site (`firebase.json`), never committed.
+build/
+.firebase/

@@ -64,7 +64,18 @@ final class HomeDestination {
     this.description,
     this.accent,
     this.brandIcon,
+    this.cardIcon,
   });
+
+  /// The glyph a wider screen's module card draws in place of [icon], where
+  /// the old hub drew that module with a different one.
+  ///
+  /// **Wider screens only, and that is the point of it being separate.** The
+  /// cards on a tablet or a desktop came back as the old hub drew them on
+  /// 2026-10-10 - its *Book Keeping* was a book, its *Inventory* a warehouse -
+  /// while the phone's launcher stays exactly as it is. A destination the old
+  /// hub never had leaves this null and draws [icon], filled.
+  final IconData? cardIcon;
 
   /// Another app's own icon, drawn in place of [icon] and the well around it,
   /// for a destination that sends through that app - *WhatsApp*, *Email*.
@@ -446,24 +457,48 @@ final class _HomeMenuRow extends StatelessWidget {
 /// the closures, and the conditions all stay where they were: a destination a
 /// session may not reach was never built, so it cannot appear here either.
 ///
-/// **The column count follows the band rather than the role.** The old grid
-/// picked its columns from a role *and* a width — cashiers two, managers
-/// three, everyone else four — which put one person's four cards in a layout
-/// nobody else saw. Here the band decides and the count of cards falls out of
-/// what the role was given, which is the same information without the
-/// per-role branch.
+/// **On a tablet or a desktop the cards are the old hub's**, restored on
+/// 2026-10-10 - its card, its 20 between cards and its 1.4 shape. **The column
+/// count is not its table any more**: the old hub chose columns by role, which
+/// sat a cashier's six cards two across at 600 wide each. Every role now gets
+/// as many columns as the width holds without a card passing
+/// [AppLayout.moduleCardMaxWidth] - four across at every width the old hub's
+/// screenshots were taken at, so its look holds where it was measured. **A
+/// phone keeps its four-across launcher**, unless [stackedOnPhone] asks for
+/// the old hub's phone layout instead.
 final class HomeModuleGrid extends StatelessWidget {
-  const HomeModuleGrid({super.key, required this.destinations});
+  const HomeModuleGrid({
+    super.key,
+    required this.destinations,
+    this.stackedOnPhone = false,
+  });
 
   final List<HomeDestination> destinations;
 
-  /// Columns at [width]. Phones use an Android-style four-across launcher;
-  /// larger bands use the roomier information cards.
-  static int columnsFor(double width) {
+  /// The old hub's phone layout rather than the launcher: one card to a row,
+  /// full width, in its 1.8 shape, 12 apart.
+  ///
+  /// **For a session with few destinations**, which is the developer's reason
+  /// for asking (2026-10-10): a cashier's handful of cards fills a phone as
+  /// stacked cards, where the launcher leaves a short row of glyphs at the top
+  /// of an empty screen. The caller decides who, because who has few cards is
+  /// the caller's to know. Wider than a phone it changes nothing.
+  final bool stackedOnPhone;
+
+  /// Columns on a screen [width] wide, with [available] of it for the grid.
+  ///
+  /// Phones use an Android-style four-across launcher. Wider than a phone it
+  /// is the fewest columns that keep every card within
+  /// [AppLayout.moduleCardMaxWidth], and never fewer than two. [available]
+  /// defaults to the home's own: the screen less its 32 a side.
+  static int columnsFor(double width, {double? available}) {
     final contract = AppLayout.contract;
     if (!contract.isAtLeast(width, AppBreakpoint.medium)) return 4;
-    if (!contract.isAtLeast(width, AppBreakpoint.expanded)) return 2;
-    return 3;
+    const spacing = AppSpacing.scale;
+    final room = available ?? width - 2 * spacing.s32;
+    final gap = spacing.s20;
+    final columns = ((room + gap) / (contract.moduleCardMaxWidth + gap)).ceil();
+    return columns < 2 ? 2 : columns;
   }
 
   @override
@@ -477,76 +512,104 @@ final class HomeModuleGrid extends StatelessWidget {
       screenWidth,
       AppBreakpoint.medium,
     );
-    final columns = columnsFor(screenWidth);
-    final gap = compact ? tokens.spacing.s8 : tokens.spacing.s16;
+    // The launcher is the phone's unless this session stacks its cards.
+    final launcher = compact && !stackedOnPhone;
+    final stacked = compact && stackedOnPhone;
+    // The old hub's 20 between cards wider than a phone, and its 12 on one.
+    final gap = launcher
+        ? tokens.spacing.s8
+        : stacked
+        ? tokens.spacing.s12
+        : tokens.spacing.s20;
 
-    // **Explicit rows under an `IntrinsicHeight`, not a `Wrap`.** A `Wrap`
-    // gives every card its own natural height, so a row came out ragged
-    // wherever one description ran to three lines and its neighbour to one —
-    // which the old hub never did, because its `GridView` gave every tile the
-    // same aspect ratio. `IntrinsicHeight` restores that without pinning a
-    // height nobody measured: the tallest card in a row sets the row, and the
-    // rest stretch to it.
-    final rows = <List<HomeDestination>>[
-      for (int start = 0; start < ordered.length; start += columns)
-        ordered.sublist(
-          start,
-          start + columns > ordered.length ? ordered.length : start + columns,
-        ),
-    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // **Measured against the grid, not the screen**, so the count answers
+        // the width the cards actually share.
+        final columns = stacked
+            ? 1
+            : columnsFor(screenWidth, available: constraints.maxWidth);
+        // **Explicit rows under an `IntrinsicHeight`, not a `Wrap`.** A `Wrap`
+        // gives every card its own natural height, so a row came out ragged
+        // wherever one description ran to three lines and its neighbour to
+        // one — which the old hub never did, because its `GridView` gave every
+        // tile the same aspect ratio. `IntrinsicHeight` restores that without
+        // pinning a height nobody measured: the tallest card in a row sets the
+        // row, and the rest stretch to it.
+        final rows = <List<HomeDestination>>[
+          for (int start = 0; start < ordered.length; start += columns)
+            ordered.sublist(
+              start,
+              start + columns > ordered.length
+                  ? ordered.length
+                  : start + columns,
+            ),
+        ];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            for (final (index, row) in rows.indexed) ...<Widget>[
+              if (index > 0) SizedBox(height: gap),
+              _row(
+                context,
+                tokens: tokens,
+                row: row,
+                index: index,
+                columns: columns,
+                gap: gap,
+                compact: launcher,
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
 
-    return Column(
+  Widget _row(
+    BuildContext context, {
+    required AppTokens tokens,
+    required List<HomeDestination> row,
+    required int index,
+    required int columns,
+    required double gap,
+    required bool compact,
+  }) => IntrinsicHeight(
+    child: Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        for (final (index, row) in rows.indexed) ...<Widget>[
-          if (index > 0) SizedBox(height: gap),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                for (final (column, destination) in row.indexed) ...<Widget>[
-                  if (column > 0) SizedBox(width: gap),
-                  Expanded(
-                    child: _HomeModuleCard(
-                      destination: destination,
-                      tokens: tokens,
-                      compact: compact,
-                      // **The six moved into `AppTokens` on 2026-08-28.**
-                      // They were a private list here until the staff cards
-                      // wanted the same six for their avatars, and a palette
-                      // living inside one widget is a palette the next surface
-                      // has to copy.
-                      // Six colours across four phone columns repeat two
-                      // places to the right on the next row. On larger layouts
-                      // the destination keeps its named colour.
-                      accent: compact || destination.accent == null
-                          ? tokens.colors.accent.identity[(index * columns +
-                                    column) %
-                                tokens.colors.accent.identity.length]
-                          : tokens.colors.accent.identityAt(
-                              destination.accent!,
-                            ),
-                    ),
-                  ),
-                ],
-                // A short final row keeps its cards the width of every other
-                // row's rather than stretching two cards across three columns.
-                for (
-                  int filler = row.length;
-                  filler < columns;
-                  filler++
-                ) ...<Widget>[
-                  SizedBox(width: gap),
-                  const Expanded(child: SizedBox.shrink()),
-                ],
-              ],
+        for (final (column, destination) in row.indexed) ...<Widget>[
+          if (column > 0) SizedBox(width: gap),
+          Expanded(
+            child: _HomeModuleCard(
+              destination: destination,
+              tokens: tokens,
+              compact: compact,
+              // **The six moved into `AppTokens` on 2026-08-28.**
+              // They were a private list here until the staff cards
+              // wanted the same six for their avatars, and a palette
+              // living inside one widget is a palette the next surface
+              // has to copy.
+              // Six colours across four phone columns repeat two
+              // places to the right on the next row. On larger layouts
+              // the destination keeps its named colour.
+              accent: compact || destination.accent == null
+                  ? tokens.colors.accent.identity[(index * columns + column) %
+                        tokens.colors.accent.identity.length]
+                  : tokens.colors.accent.identityAt(destination.accent!),
             ),
           ),
         ],
+        // A short final row keeps its cards the width of every other
+        // row's rather than stretching two cards across three columns.
+        for (int filler = row.length; filler < columns; filler++) ...<Widget>[
+          SizedBox(width: gap),
+          const Expanded(child: SizedBox.shrink()),
+        ],
       ],
-    );
-  }
+    ),
+  );
 }
 
 /// A launcher label that refuses to break a word in half.
@@ -646,8 +709,9 @@ final class _HomeModuleCard extends StatelessWidget {
     final titleColor = enabled ? colors.text.primary : colors.text.disabled;
     final bodyColor = enabled ? colors.text.secondary : colors.text.disabled;
 
+    // The old hub's card was 16 round; the phone launcher keeps its own.
     final radius = BorderRadius.circular(
-      compact ? tokens.radius.md : tokens.radius.lg,
+      compact ? tokens.radius.md : tokens.radius.xl,
     );
 
     if (compact) {
@@ -744,6 +808,12 @@ final class _HomeModuleCard extends StatelessWidget {
       );
     }
 
+    // **The old hub's card, as it drew on a tablet or a desktop**, restored at
+    // the developer's direction on 2026-10-10 - "pixel perfect to how they
+    // looked". Every figure below is measured off that screen: the card's fill
+    // with no edge and a soft black shadow under it, a 44 well of black wash
+    // with a solid glyph in it, and the name and its sentence in the same pale
+    // sage. Where the old figure is not on the scale the token says why.
     final card = Container(
       // **The whole cell, both ways.** `PressSurface.fillWidth` widens what
       // answers a tap, not what is drawn, so a card with a short sentence -
@@ -754,13 +824,13 @@ final class _HomeModuleCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: container,
         borderRadius: radius,
-        border: Border.all(color: colors.surface.borderStrong),
+        // No edge: the old card was lifted by its shadow, not outlined.
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: colors.surface.scrim.withValues(alpha: 0.42),
-            blurRadius: 14,
-            spreadRadius: 1,
-            offset: const Offset(0, 5),
+            color: colors.surface.scrim.withValues(
+              alpha: tokens.effects.cardShadowOpacity,
+            ),
+            blurRadius: tokens.effects.cardShadowBlur,
           ),
         ],
       ),
@@ -772,59 +842,85 @@ final class _HomeModuleCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          // The glyph sits in its own well, which is the old card's shape and
-          // is a surface step rather than the old screen's black wash. An app's
-          // own icon takes the well's place, at the glyph and its padding.
-          _tile(
-                size: tokens.icons.card + 2 * tokens.spacing.s12,
-                radius: tokens.radius.md,
-              ) ??
+          // An app's own icon takes the well's place, at the well's size.
+          _tile(size: tokens.icons.cardWell, radius: tokens.radius.lg) ??
               Container(
-                padding: EdgeInsets.all(tokens.spacing.s12),
+                width: tokens.icons.cardWell,
+                height: tokens.icons.cardWell,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: enabled
-                      ? accent.withValues(alpha: 0.14)
+                      ? colors.surface.scrim.withValues(
+                          alpha: tokens.effects.cardWellWashOpacity,
+                        )
                       : colors.surface.field,
-                  borderRadius: BorderRadius.circular(tokens.radius.md),
-                  border: Border.all(
-                    color: enabled
-                        ? accent.withValues(alpha: 0.34)
-                        : colors.surface.borderSubtle,
-                  ),
+                  borderRadius: BorderRadius.circular(tokens.radius.lg),
                 ),
                 child: _DestinationGlyph(
                   destination: destination,
                   tokens: tokens,
                   size: tokens.icons.card,
                   color: enabled ? accent : colors.text.disabled,
+                  icon: destination.cardIcon,
+                  // Every glyph on the old cards was solid, not only the
+                  // till's.
+                  filled: true,
                 ),
               ),
+          // **The one gap that sets the card's height**, the same at every
+          // width - see `AppLayout.moduleCardGlyphGap`. A card in a row with
+          // a taller neighbour is stretched, and `spaceBetween` keeps its
+          // words at the bottom so the names still line up.
           Padding(
-            padding: EdgeInsets.only(top: tokens.spacing.s16),
+            padding: EdgeInsets.only(top: tokens.layout.moduleCardGlyphGap),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Text(
                   destination.label,
-                  style: tokens.typography.titleMedium.copyWith(
-                    color: titleColor,
-                    fontWeight: primary ? FontWeight.w700 : null,
+                  // The old card's name was the same sage as its sentence -
+                  // it inherited the theme's body colour - and the same weight
+                  // on every card, the till's included.
+                  style: tokens.typography.moduleTitle.copyWith(
+                    color: bodyColor,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (destination.description case final sentence?) ...<Widget>[
-                  SizedBox(height: tokens.spacing.s4),
-                  Text(
-                    sentence,
-                    style: tokens.typography.bodyMedium.copyWith(
-                      color: bodyColor,
-                    ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                // The old gap was 6, between `space.4` and `space.8`. Measured
+                // against the old screen, 8 puts the name 1.4 from where it sat
+                // and 4 puts it 2.6 off, because Roboto 3's glyphs sit a little
+                // lower in the line than the old face's did.
+                SizedBox(height: tokens.spacing.s8),
+                // **Always two lines, at the developer's direction on
+                // 2026-10-10, so every card in a row is the same shape**: the
+                // names line up, and so do the sentences under them. A
+                // one-line sentence keeps its second line empty, and a card
+                // with none - *Logs* - keeps both. Every sentence the home
+                // carries is written to fit two lines at the narrowest card a
+                // tablet or a desktop draws, and
+                // `test/tenancy/home_card_descriptions_test.dart` holds each
+                // one to it; the ellipsis is for a text size a person has
+                // raised past that.
+                SizedBox(
+                  height:
+                      MediaQuery.textScalerOf(
+                        context,
+                      ).scale(tokens.typography.moduleBody.fontSize!) *
+                      tokens.typography.moduleBody.height! *
+                      2,
+                  child: destination.description == null
+                      ? null
+                      : Text(
+                          destination.description!,
+                          style: tokens.typography.moduleBody.copyWith(
+                            color: bodyColor,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                ),
                 // A destination's own condition — *2 waiting to send* — is
                 // drawn here as well as in the menu, because a card a person
                 // is looking at should not be the one surface that does not
@@ -854,6 +950,12 @@ final class _HomeModuleCard extends StatelessWidget {
       role: role,
       radius: radius,
       fillHeight: true,
+      // **The ring is drawn outside the card rather than given a gutter**, so
+      // the card fills its cell and the old hub's 20 between cards is the 20
+      // a person sees. A gutter took 4 off every side: 268 wide where the old
+      // card measured 277, and 28 between them. The ring still has its room -
+      // half of each 20 and most of the page's 32.
+      reservesRingGutter: false,
       child: card,
     );
   }
@@ -882,6 +984,7 @@ final class _HomeModuleCard extends StatelessWidget {
     required BorderRadius radius,
     required bool fillHeight,
     required Widget child,
+    bool reservesRingGutter = true,
   }) => Semantics(
     button: true,
     enabled: enabled,
@@ -902,6 +1005,7 @@ final class _HomeModuleCard extends StatelessWidget {
         minimumTapTarget: tokens.density.minimumTapTarget,
         fillWidth: true,
         fillHeight: fillHeight,
+        reservesRingGutter: reservesRingGutter,
         child: child,
       ),
     ),
@@ -921,6 +1025,8 @@ final class _DestinationGlyph extends StatelessWidget {
     required this.tokens,
     required this.size,
     required this.color,
+    this.icon,
+    this.filled = false,
   });
 
   final HomeDestination destination;
@@ -928,14 +1034,22 @@ final class _DestinationGlyph extends StatelessWidget {
   final double size;
   final Color color;
 
+  /// A different glyph for this host - [HomeDestination.cardIcon] - or null for
+  /// the destination's own.
+  final IconData? icon;
+
+  /// Solid whatever the destination is. The wider screens' cards ask for it,
+  /// because every glyph on the old hub's cards was solid.
+  final bool filled;
+
   @override
   Widget build(BuildContext context) {
     final icons = tokens.icons;
     return Icon(
-      destination.icon,
+      icon ?? destination.icon,
       size: size,
       color: color,
-      fill: destination.isPrimary ? icons.primaryFill : icons.fill,
+      fill: filled || destination.isPrimary ? icons.primaryFill : icons.fill,
       weight: icons.weight,
       grade: icons.grade,
       opticalSize: icons.opticalSizeFor(size),

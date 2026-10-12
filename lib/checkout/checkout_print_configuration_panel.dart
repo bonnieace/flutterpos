@@ -25,6 +25,8 @@
 /// device is printing with.
 library;
 
+import 'dart:async';
+
 import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import 'package:flutter/material.dart';
@@ -34,6 +36,7 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
+import '../ui/choice.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
@@ -42,12 +45,16 @@ import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tabs.dart';
 import '../ui/tokens.dart';
-import 'checkout_bluetooth_printer.dart';
 import 'checkout_bluetooth_printer_panel.dart';
 import 'checkout_configuration_writer.dart';
 import 'checkout_print_configuration.dart';
 import 'checkout_print_failures.dart';
+import 'checkout_print_helper_panel.dart';
+import 'checkout_print_mode.dart';
 import 'checkout_print_transport_base.dart';
+import 'checkout_system_printer.dart';
+import 'checkout_system_printer_panel.dart';
+import 'checkout_usb_printer_panel.dart';
 
 /// Prints one test page against what is **typed**. Injected so a test never
 /// opens a socket, and so a build with no transport simply cannot offer it.
@@ -68,6 +75,10 @@ final class TenantPrinterConfigurationScreen extends StatelessWidget {
     this.testPrint,
     this.onPublished,
     this.bluetooth,
+    this.usb,
+    this.system,
+    this.printHelper,
+    this.printModes,
   });
 
   final TenantDocumentReader reader;
@@ -86,6 +97,23 @@ final class TenantPrinterConfigurationScreen extends StatelessWidget {
   /// While absent the page is the network form alone, with no tabs.
   final BluetoothPrinterSetup? bluetooth;
 
+  /// The browser's USB tab, in place of [bluetooth] on the web. While both are
+  /// absent the page is the network form alone.
+  final UsbPrinterSetup? usb;
+
+  /// The *Print dialog* tab, on any device that has a print window: receipts
+  /// as a PDF in it, for a printer this app cannot reach directly.
+  final SystemPrinterSetup? system;
+
+  /// The print helper, on a web till on Windows: the one way a browser
+  /// reaches a network printer, so the network tab says whether it is here.
+  final PrintHelperSetup? printHelper;
+
+  /// Which kind of printer this device prints on. With it, the page is one
+  /// switch per kind, one on at a time; without it - or with nothing but the
+  /// network printer to offer - the network form alone.
+  final DevicePrintModeStore? printModes;
+
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Printer',
@@ -99,6 +127,10 @@ final class TenantPrinterConfigurationScreen extends StatelessWidget {
       testPrint: testPrint,
       onPublished: onPublished,
       bluetooth: bluetooth,
+      usb: usb,
+      system: system,
+      printHelper: printHelper,
+      printModes: printModes,
     ),
   );
 }
@@ -117,6 +149,10 @@ final class TenantPrinterConfigurationPanel extends StatefulWidget {
     this.testPrint,
     this.onPublished,
     this.bluetooth,
+    this.usb,
+    this.system,
+    this.printHelper,
+    this.printModes,
   });
 
   final TenantDocumentReader reader;
@@ -126,6 +162,18 @@ final class TenantPrinterConfigurationPanel extends StatefulWidget {
 
   /// See [TenantPrinterConfigurationScreen.bluetooth].
   final BluetoothPrinterSetup? bluetooth;
+
+  /// See [TenantPrinterConfigurationScreen.usb].
+  final UsbPrinterSetup? usb;
+
+  /// See [TenantPrinterConfigurationScreen.system].
+  final SystemPrinterSetup? system;
+
+  /// See [TenantPrinterConfigurationScreen.printHelper].
+  final PrintHelperSetup? printHelper;
+
+  /// See [TenantPrinterConfigurationScreen.printModes].
+  final DevicePrintModeStore? printModes;
 
   @override
   State<TenantPrinterConfigurationPanel> createState() =>
@@ -419,82 +467,275 @@ final class _TenantPrinterConfigurationPanelState
         ),
       ),
       builder: (context, session, configured) {
+        final tenantId = session.tenantId;
         final bluetooth = widget.bluetooth;
-        // Read on every build, which is cheap - one key in a small box - and
-        // means the network tab restates where receipts go the moment the
-        // Bluetooth tab changes it.
-        DeviceBluetoothPrinter? inUse;
-        var bluetoothChosen = false;
-        if (bluetooth != null) {
-          try {
-            inUse = bluetooth.store.read(session.tenantId);
-            bluetoothChosen = inUse != null;
-          } on FormatException {
-            // Unreadable is still *chosen*: the Bluetooth tab owns saying so,
-            // and this device is not printing on the network printer.
-            bluetoothChosen = true;
-          }
-        }
+        final usb = widget.usb;
+        final system = widget.system;
         final network = _PrinterContents(
           configured: configured,
-          bluetoothInUse: inUse,
+          printHelper: widget.printHelper,
           busy: _busy,
           canPublish: widget.writer != null,
           canTest: widget.testPrint != null,
           onPublish: (values) => _publish(session, configured, values),
           onTest: _test,
         );
-        if (bluetooth == null) return scrolled(network);
+        final modes = widget.printModes;
+        // A device that can print only on the network printer has nothing to
+        // switch between.
+        if (modes == null ||
+            (usb == null && bluetooth == null && system == null)) {
+          return scrolled(network);
+        }
         return _PrinterTabs(
           inset: inset,
-          startOnBluetooth: bluetoothChosen,
-          network: network,
-          bluetooth: BluetoothPrinterTab(
-            setup: bluetooth,
-            tenantId: session.tenantId,
-            // Already read for the network tab; the Bluetooth tab says where
-            // this device prints from it rather than reading it again.
-            business: configured,
-            testPrint: widget.testPrint,
-            onChanged: () => setState(() {}),
-          ),
+          mode: _modeOf(tenantId, modes, configured),
+          busy: _switching,
+          onMode: (next) => _switchTo(tenantId, next),
+          options: <_PrinterOption>[
+            (
+              mode: DevicePrintMode.network,
+              tab: 'Network',
+              label: 'Network printer',
+              name: 'the network printer',
+              icon: Icons.lan_outlined,
+              section: network,
+            ),
+            // **A browser's own kind is USB, a phone's is Bluetooth**: each
+            // is the one way that device reaches a printer of its own.
+            if (usb != null)
+              (
+                mode: DevicePrintMode.usb,
+                tab: 'USB',
+                label: 'USB printer',
+                name: 'the USB printer',
+                icon: Icons.usb,
+                section: UsbPrinterTab(
+                  setup: usb,
+                  tenantId: tenantId,
+                  testPrint: widget.testPrint,
+                  onChanged: () => setState(() {}),
+                ),
+              )
+            else if (bluetooth != null)
+              (
+                mode: DevicePrintMode.bluetooth,
+                tab: 'Bluetooth',
+                label: 'Bluetooth printer',
+                name: 'the Bluetooth printer',
+                icon: Icons.bluetooth,
+                section: BluetoothPrinterTab(
+                  setup: bluetooth,
+                  tenantId: tenantId,
+                  // Switched on, Bluetooth is where this device prints: with
+                  // none chosen that is nowhere, never the network printer.
+                  business: const TenantConfiguredPrinter.absent(),
+                  testPrint: widget.testPrint,
+                  onChanged: () => setState(() {}),
+                ),
+              ),
+            if (system != null)
+              (
+                mode: DevicePrintMode.dialog,
+                tab: 'Print dialog',
+                label: 'Print dialog',
+                name: 'the print dialog',
+                icon: Icons.print_outlined,
+                section: SystemPrinterTab(
+                  setup: system,
+                  tenantId: tenantId,
+                  testPrint: widget.testPrint,
+                  onChanged: () => setState(() {}),
+                ),
+              ),
+          ],
         );
       },
     );
   }
+
+  /// Switching a kind of printer on or off is under way.
+  bool _switching = false;
+
+  /// Which kind of printer this device prints on: the one switched on, or -
+  /// for a device that never switched one - the one it prints on now.
+  DevicePrintMode _modeOf(
+    String tenantId,
+    DevicePrintModeStore modes,
+    TenantConfiguredPrinter configured,
+  ) {
+    try {
+      if (modes.read(tenantId) case final stored?) return stored;
+    } on FormatException {
+      // Read as never chosen: the device prints as `devicePrinter` reads it.
+    }
+    bool chosen(Object? Function() read) {
+      try {
+        return read() != null;
+      } on FormatException {
+        // Unreadable is still chosen: its own section says so.
+        return true;
+      }
+    }
+
+    final DevicePrintMode onThisDevice;
+    if (chosen(() => widget.usb?.store.read(tenantId))) {
+      onThisDevice = DevicePrintMode.usb;
+    } else if (chosen(() => widget.bluetooth?.store.read(tenantId))) {
+      onThisDevice = DevicePrintMode.bluetooth;
+    } else if (chosen(() => widget.system?.store.read(tenantId))) {
+      onThisDevice = DevicePrintMode.dialog;
+    } else {
+      return configured.state == TenantPrinterConfigurationState.absent
+          ? DevicePrintMode.off
+          : DevicePrintMode.network;
+    }
+    _keep(modes, tenantId, onThisDevice);
+    return onThisDevice;
+  }
+
+  /// Saves the kind of printer a device that never switched was found on, so
+  /// what the page shows is what the device keeps: stop using its printer
+  /// and it prints nowhere, as the page then says, rather than falling back
+  /// to the network printer nobody switched on.
+  ///
+  /// **Only a printer chosen on this device is kept this way.** The network
+  /// printer, or none, is what a device that never chose reads anyway - and
+  /// keeping "none" would stop this device using a network printer the owner
+  /// sets up later from another till.
+  void _keep(
+    DevicePrintModeStore modes,
+    String tenantId,
+    DevicePrintMode mode,
+  ) {
+    if (_kept) return;
+    _kept = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        modes.save(tenantId, mode).catchError((Object error, StackTrace stack) {
+          AppTelemetry.captureHandled(
+            error,
+            stack,
+            boundary: 'printing.keep_mode',
+          );
+        }),
+      );
+    });
+  }
+
+  bool _kept = false;
+
+  /// Makes [next] the one kind this device prints on.
+  ///
+  /// **The print dialog is checked first and given a width**, because it
+  /// needs nothing chosen: switched on, it is printing. Every other kind
+  /// keeps whatever was chosen for it before, and prints nowhere until its
+  /// printer is chosen.
+  Future<void> _switchTo(String tenantId, DevicePrintMode next) async {
+    final modes = widget.printModes;
+    if (modes == null || _switching) return;
+    setState(() => _switching = true);
+    try {
+      final system = widget.system;
+      if (next == DevicePrintMode.dialog && system != null) {
+        await system.probe(const PrinterEndpoint.system());
+        DeviceSystemPrinter? current;
+        try {
+          current = system.store.read(tenantId);
+        } on FormatException {
+          current = null;
+        }
+        if (current == null) {
+          await system.store.save(
+            tenantId,
+            const DeviceSystemPrinter(paperWidth: PrinterPaperWidth.columns48),
+          );
+        }
+      }
+      await modes.save(tenantId, next);
+    } on PrinterTransportException catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'printing.switch_mode',
+      );
+      if (mounted) {
+        showAppSnackBar(context, PrinterFailureNotice.of(error.code));
+      }
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'printing.switch_mode',
+      );
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          const AppNotice.refused(
+            'The printer could not be switched on this device. Try again.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _switching = false);
+    }
+  }
 }
 
-/// *Network* and *Bluetooth*, as two tabs of one page.
+/// One kind of printer on the page: its tab, its switch, and what shows
+/// under the switch.
+typedef _PrinterOption = ({
+  DevicePrintMode mode,
+
+  /// The tab's own short name.
+  String tab,
+
+  /// The switch's label.
+  String label,
+
+  /// How another tab names it: *the USB printer*.
+  String name,
+  IconData icon,
+  Widget section,
+});
+
+/// Each kind of printer on its own tab, with its own switch at the top - the
+/// way the email and WhatsApp receipt screens each have theirs.
+///
+/// **One switched on at a time** (2026-10-11): switching one on switches the
+/// others off, and a tab that is off shows its switch and where receipts go
+/// instead, never its settings. The page opens on the tab that is on.
 ///
 /// **A `TabBarView`, as every other tabbed page is**, at the developer's
-/// direction on 2026-10-05. Until then the two were shown one at a time inside
-/// the host's scroll view, so a swipe moved nothing under the finger - and the
-/// first fix, a swipe that changed tab on release, still did not. Here a tab
-/// follows the finger, springs back from a short drag, and keeps its own
-/// scroll position. Both stay alive once opened, so switching never loses
-/// what was typed or found.
+/// direction on 2026-10-05: a tab follows the finger, springs back from a
+/// short drag, and keeps its own scroll position. Every tab stays alive once
+/// opened, so switching never loses what was typed or found.
 final class _PrinterTabs extends StatelessWidget {
   const _PrinterTabs({
     required this.inset,
-    required this.startOnBluetooth,
-    required this.network,
-    required this.bluetooth,
+    required this.mode,
+    required this.busy,
+    required this.onMode,
+    required this.options,
   });
 
   /// The page's own inset, which the strip and each tab's scroll take.
   final double inset;
 
-  /// Open on the tab this device is printing with.
-  final bool startOnBluetooth;
-  final Widget network;
-  final Widget bluetooth;
+  final DevicePrintMode mode;
+
+  /// A switch is being made: the switches wait.
+  final bool busy;
+  final ValueChanged<DevicePrintMode> onMode;
+  final List<_PrinterOption> options;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    // Both tabs open on a `Disclosure`, whose line sits in its focus-ring
-    // gutter: `s12` here puts it `s16` under the tabs, where
-    // `docs/design/bluetooth-printer/` draws it.
+    final current = options.indexWhere((option) => option.mode == mode);
+    final inUse = current < 0 ? null : options[current];
+    // Every tab opens on its switch: `s12` here puts it `s16` under the
+    // tabs, where `docs/design/bluetooth-printer/` draws a tab's first line.
     Widget tab(Widget child) => AppKeptTab(
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(inset, tokens.spacing.s12, inset, inset),
@@ -502,18 +743,87 @@ final class _PrinterTabs extends StatelessWidget {
       ),
     );
     return DefaultTabController(
-      length: 2,
-      initialIndex: startOnBluetooth ? 1 : 0,
+      length: options.length,
+      initialIndex: current < 0 ? 0 : current,
       child: Column(
         key: const ValueKey('printer-configuration-tabs'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          AppTabs(tabs: const <String>['Network', 'Bluetooth'], inset: inset),
+          AppTabs(
+            tabs: <String>[for (final option in options) option.tab],
+            inset: inset,
+          ),
           Expanded(
-            child: TabBarView(children: <Widget>[tab(network), tab(bluetooth)]),
+            child: TabBarView(
+              children: <Widget>[
+                for (final option in options)
+                  tab(
+                    _PrinterTab(
+                      option: option,
+                      inUse: inUse,
+                      busy: busy,
+                      onMode: onMode,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// One kind of printer's tab: its switch, then its settings when it is on.
+final class _PrinterTab extends StatelessWidget {
+  const _PrinterTab({
+    required this.option,
+    required this.inUse,
+    required this.busy,
+    required this.onMode,
+  });
+
+  final _PrinterOption option;
+
+  /// The kind switched on, which may be this one, or none.
+  final _PrinterOption? inUse;
+  final bool busy;
+  final ValueChanged<DevicePrintMode> onMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final on = inUse?.mode == option.mode;
+    final elsewhere = on ? null : inUse;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        AppSwitchRow(
+          key: ValueKey('printer-mode-${option.mode.wireValue}'),
+          label: option.label,
+          icon: option.icon,
+          value: on,
+          flat: true,
+          onChanged: busy
+              ? null
+              : (value) => onMode(value ? option.mode : DevicePrintMode.off),
+        ),
+        if (on) ...<Widget>[
+          SizedBox(height: tokens.spacing.s12),
+          option.section,
+        ] else ...<Widget>[
+          SizedBox(height: tokens.spacing.s8),
+          Callout(
+            key: ValueKey('printer-mode-${option.mode.wireValue}-off'),
+            status: elsewhere == null ? AppStatus.attention : AppStatus.info,
+            message: elsewhere == null
+                ? 'No printer is switched on, so receipts from this device '
+                      'are not printed. Sales are recorded as normal.'
+                : 'Receipts from this device print on ${elsewhere.name} now. '
+                      'Switch this on to print here instead.',
+          ),
+        ],
+      ],
     );
   }
 }
@@ -591,7 +901,7 @@ final class _PrinterFormValues {
 final class _PrinterContents extends StatefulWidget {
   const _PrinterContents({
     required this.configured,
-    required this.bluetoothInUse,
+    this.printHelper,
     required this.busy,
     required this.canPublish,
     required this.canTest,
@@ -601,8 +911,9 @@ final class _PrinterContents extends StatefulWidget {
 
   final TenantConfiguredPrinter configured;
 
-  /// The Bluetooth printer this device prints on instead, or null.
-  final DeviceBluetoothPrinter? bluetoothInUse;
+  /// Shown first, on a web till on Windows: a browser reaches the network
+  /// printer below only through it.
+  final PrintHelperSetup? printHelper;
   final bool busy;
   final bool canPublish;
   final bool canTest;
@@ -662,6 +973,10 @@ class _PrinterContentsState extends State<_PrinterContents> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        if (widget.printHelper case final helper?) ...<Widget>[
+          PrintHelperCard(setup: helper),
+          SizedBox(height: tokens.spacing.s16),
+        ],
         // **This screen opens on the fold since 2026-08-26.** It used to begin
         // with `SectionHeading('Where receipts print')` under an app bar and a
         // page header both already reading *Printer* - §7's "title appears
@@ -690,25 +1005,10 @@ class _PrinterContentsState extends State<_PrinterContents> {
         // *"unreadable"*; `attention` for none set up is its *"awaiting"*,
         // because that is a setup step nobody has taken yet.
         //
-        // **This device's exception, stated where the business setting is.**
-        // A Bluetooth printer chosen here takes this device's receipts, so the
-        // form below no longer describes them - only the other tills'.
-        if (widget.bluetoothInUse case final inUse?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('printer-configuration-bluetooth-in-use'),
-            status: AppStatus.info,
-            icon: Icons.bluetooth_connected,
-            message:
-                'This device prints its receipts on the Bluetooth printer '
-                '${inUse.name}. The network printer here is for this '
-                'business’s other devices.',
-          ),
-        ],
-        // **Only when receipts are going nowhere**, since 2026-09-23: a working
-        // printer is already stated by the filled fields under it. Not on a
-        // device printing over Bluetooth, where it would not be true.
-        if (!configured.canPrint && widget.bluetoothInUse == null) ...<Widget>[
+        // **No word about this device printing elsewhere any more.** Since
+        // 2026-10-11 this form shows only while the network printer is the
+        // kind switched on, so it always describes this device's receipts.
+        if (!configured.canPrint) ...<Widget>[
           SizedBox(height: tokens.spacing.s12),
           Callout(
             key: const ValueKey('printer-configuration-current'),

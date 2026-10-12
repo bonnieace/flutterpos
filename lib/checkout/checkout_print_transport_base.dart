@@ -25,6 +25,15 @@ enum PrinterEndpointKind {
 
   /// A Bluetooth Classic serial (SPP) link to a paired device.
   bluetooth,
+
+  /// A USB printer plugged into this computer, reached from the browser
+  /// through WebUSB. Web only, and chosen on the browser that uses it.
+  usb,
+
+  /// Whatever printer the device's own print window chooses. **Not an
+  /// address at all**: the job is a PDF, and the person picks the printer in
+  /// the window, so every job for it shares the one endpoint.
+  system,
 }
 
 /// A printer address. Immutable, and validated at construction.
@@ -99,8 +108,71 @@ final class PrinterEndpoint {
     );
   }
 
+  /// A USB printer, by the key [usbKey] builds from what the printer reports
+  /// about itself: its vendor and product numbers, and its serial number when
+  /// it has one.
+  ///
+  /// **Not an address**, because USB has none a browser can see: a printer is
+  /// found again among the devices this browser was allowed to use, by these
+  /// numbers. Throws [ArgumentError] for anything [usbKey] would not build.
+  factory PrinterEndpoint.usb(String key) {
+    if (!_usbKeyPattern.hasMatch(key)) {
+      throw ArgumentError.value(
+        key,
+        'key',
+        'Must be a USB printer key such as 04B8:0E15 or 04B8:0E15:J5A0123.',
+      );
+    }
+    return PrinterEndpoint._(key, usbPort, PrinterEndpointKind.usb);
+  }
+
+  /// The device's own print window. See [PrinterEndpointKind.system].
+  const PrinterEndpoint.system()
+    : host = systemHost,
+      port = systemPort,
+      kind = PrinterEndpointKind.system;
+
+  /// `04B8:0E15`, or `04B8:0E15:J5A0123` with a serial number - upper-case
+  /// hex, so one printer is one key however its numbers arrived.
+  ///
+  /// **The serial number is what tells two of the same model apart.** A
+  /// printer that reports none is matched by model alone, which is right for
+  /// the one printer a counter has and ambiguous for two identical ones.
+  static String usbKey({
+    required int vendorId,
+    required int productId,
+    String? serialNumber,
+  }) {
+    String hex(int value) =>
+        value.toRadixString(16).toUpperCase().padLeft(4, '0');
+    final serial = serialNumber?.trim();
+    // A serial number that would not survive the key's own pattern is
+    // dropped rather than refused: the printer is still the printer.
+    final usable =
+        serial != null &&
+        serial.isNotEmpty &&
+        _usbSerialPattern.hasMatch(serial);
+    return usable
+        ? '${hex(vendorId)}:${hex(productId)}:$serial'
+        : '${hex(vendorId)}:${hex(productId)}';
+  }
+
   /// The [port] every Bluetooth endpoint carries. See the class note.
   static const int bluetoothPort = 0;
+
+  /// The [port] every USB endpoint carries, for the same reason.
+  static const int usbPort = 0;
+
+  /// The [host] and [port] of the print-window endpoint: names for a durable
+  /// job record to carry, not anything dialled.
+  static const String systemHost = 'print-dialog';
+  static const int systemPort = 0;
+
+  static final RegExp _usbKeyPattern = RegExp(
+    r'^[0-9A-F]{4}:[0-9A-F]{4}(:[A-Za-z0-9._\-]{1,64})?$',
+  );
+
+  static final RegExp _usbSerialPattern = RegExp(r'^[A-Za-z0-9._\-]{1,64}$');
 
   static final RegExp _bluetoothAddressPattern = RegExp(
     r'^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$',
@@ -133,6 +205,10 @@ final class PrinterEndpoint {
 
   bool get isBluetooth => kind == PrinterEndpointKind.bluetooth;
 
+  bool get isUsb => kind == PrinterEndpointKind.usb;
+
+  bool get isSystem => kind == PrinterEndpointKind.system;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -144,10 +220,17 @@ final class PrinterEndpoint {
   @override
   int get hashCode => Object.hash(host, port, kind);
 
-  /// `192.168.1.50:9100`, or the bare Bluetooth address. Never ambiguous: a
-  /// network host cannot contain a colon, and a Bluetooth address has five.
+  /// `192.168.1.50:9100`, the bare Bluetooth address, `USB 04B8:0E15`, or
+  /// `Print dialog`. Never ambiguous: a network host cannot contain a colon or
+  /// a space, a Bluetooth address has five colons, and the other two say what
+  /// they are.
   @override
-  String toString() => isBluetooth ? host : '$host:$port';
+  String toString() => switch (kind) {
+    PrinterEndpointKind.network => '$host:$port',
+    PrinterEndpointKind.bluetooth => host,
+    PrinterEndpointKind.usb => 'USB $host',
+    PrinterEndpointKind.system => 'Print dialog',
+  };
 }
 
 /// Which implementation answered.
@@ -165,6 +248,20 @@ enum PrinterTransportKind {
   /// **never a business setting**: a Bluetooth printer is paired with one
   /// phone, so it is chosen on that phone and stored there.
   bluetooth,
+
+  /// WebUSB from the browser to a printer plugged into this computer. Web
+  /// only, and never a business setting, for Bluetooth's reason: a USB
+  /// printer is cabled to one computer.
+  usb,
+
+  /// The device's own print window, handed a PDF. Never a business setting:
+  /// which printers a print window offers is a fact about one device.
+  system,
+
+  /// The print helper on this Windows computer, which a browser asks to do
+  /// what it cannot: open a network printer's socket, or write to a USB
+  /// printer through Windows' own driver.
+  printHelper,
 }
 
 /// What the setup screen needs to explain which path is active.
@@ -261,7 +358,37 @@ abstract final class PrinterTransportCode {
   /// and the advice to the operator is the same.
   static const String bluetoothUnreachable = 'bluetooth_printer_unreachable';
 
-  /// Every code: §8's eight, then the three Bluetooth added.
+  /// The USB printer this browser chose is not among the devices it may use:
+  /// unplugged, switched off, or its permission was taken back.
+  static const String usbNotFound = 'usb_printer_not_found';
+
+  /// The browser could not take the USB printer: another program holds it.
+  /// **On Windows that is almost always the printer's own driver**, which
+  /// claims the device for Windows printing, and the operator-facing text
+  /// says how to free it.
+  static const String usbBusy = 'usb_printer_busy';
+
+  /// The USB printer was reached and refused the bytes, for a reason the
+  /// browser did not name.
+  static const String usbFailed = 'usb_printer_failed';
+
+  /// The print window was closed without printing. Only a phone says so; a
+  /// browser never tells the page what happened in its print window.
+  static const String printDialogClosed = 'print_dialog_closed';
+
+  /// The device could not open its print window at all.
+  static const String printDialogFailed = 'print_dialog_failed';
+
+  /// Nothing answered where the print helper listens: it is not installed on
+  /// this computer, or not running.
+  static const String printHelperUnreachable = 'print_helper_unreachable';
+
+  /// The print helper would not send to this printer's address, which is not
+  /// on this shop's own network.
+  static const String printHelperRefused = 'print_helper_refused';
+
+  /// Every code: §8's eight, the three Bluetooth added, USB's three, the
+  /// print window's two, then the print helper's two.
   static const List<String> all = <String>[
     unreachable,
     connectTimeout,
@@ -274,6 +401,13 @@ abstract final class PrinterTransportCode {
     bluetoothOff,
     bluetoothPermissionDenied,
     bluetoothUnreachable,
+    usbNotFound,
+    usbBusy,
+    usbFailed,
+    printDialogClosed,
+    printDialogFailed,
+    printHelperUnreachable,
+    printHelperRefused,
   ];
 }
 
@@ -311,30 +445,56 @@ final class RoutedPrinterTransport implements PrinterTransport {
   const RoutedPrinterTransport({
     required PrinterTransport network,
     required PrinterTransport bluetooth,
+    PrinterTransport? usb,
+    PrinterTransport? system,
   }) : _network = network,
-       _bluetooth = bluetooth;
+       _bluetooth = bluetooth,
+       _usb = usb,
+       _system = system;
 
   final PrinterTransport _network;
   final PrinterTransport _bluetooth;
 
+  /// The browser's WebUSB link. Null on every platform but the web, where a
+  /// USB endpoint is refused as unsupported - it cannot be chosen elsewhere.
+  final PrinterTransport? _usb;
+
+  /// The device's print window. Null where nothing can open one.
+  final PrinterTransport? _system;
+
   /// The network transport's, because that is what the setup form's address
-  /// fields describe. The Bluetooth tab asks its own questions.
+  /// fields describe. The Bluetooth and USB tabs ask their own questions.
   @override
   PrinterTransportCapability get capability => _network.capability;
 
-  PrinterTransport _for(PrinterEndpoint endpoint) =>
-      endpoint.isBluetooth ? _bluetooth : _network;
+  PrinterTransport _for(PrinterEndpoint endpoint) => switch (endpoint.kind) {
+    PrinterEndpointKind.network => _network,
+    PrinterEndpointKind.bluetooth => _bluetooth,
+    PrinterEndpointKind.usb =>
+      _usb ??
+          (throw const PrinterTransportException(
+            PrinterTransportCode.unsupported,
+          )),
+    PrinterEndpointKind.system =>
+      _system ??
+          (throw const PrinterTransportException(
+            PrinterTransportCode.unsupported,
+          )),
+  };
 
   @override
-  Future<void> probe(PrinterEndpoint endpoint) => _for(endpoint).probe(endpoint);
+  Future<void> probe(PrinterEndpoint endpoint) async =>
+      _for(endpoint).probe(endpoint);
 
   @override
-  Future<void> send(PrinterEndpoint endpoint, List<int> bytes) =>
+  Future<void> send(PrinterEndpoint endpoint, List<int> bytes) async =>
       _for(endpoint).send(endpoint, bytes);
 
   @override
   Future<void> dispose() async {
     await _network.dispose();
     await _bluetooth.dispose();
+    await _usb?.dispose();
+    await _system?.dispose();
   }
 }

@@ -76,9 +76,18 @@ final class FilterChipBar<T> extends StatelessWidget {
     required this.selected,
     required this.onSelected,
     this.semanticLabel,
+    this.oneLine,
   });
 
   final List<FilterChipOption<T>> options;
+
+  /// Whether the bar scrolls in one line whatever the band, or wraps whatever
+  /// the band. Null leaves the choice to [scrollsInOneLine].
+  ///
+  /// **For a bar that shares its row with something else.** The till's
+  /// category bar sits beside the search from `expanded` up, and a wrap there
+  /// would grow the row downward with every category a business adds.
+  final bool? oneLine;
 
   /// The selected value, or null. Compared by `==`, so a `T` with value
   /// semantics behaves and an identity type behaves the way its own `==` does.
@@ -125,7 +134,8 @@ final class FilterChipBar<T> extends StatelessWidget {
     ];
     // §4.3's own words for the two forms. The gap is `space.8` from §2.3 in both
     // directions, which is what all five hand-built `Wrap`s already used.
-    final Widget row = scrollsInOneLine(MediaQuery.sizeOf(context).width)
+    final Widget row =
+        oneLine ?? scrollsInOneLine(MediaQuery.sizeOf(context).width)
         ? SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             // **Clipped to the page edge rather than inset**, so a half-visible

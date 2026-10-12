@@ -102,7 +102,8 @@ void main() {
       'business-details': AppIdentityAccent.teal,
       'printer': AppIdentityAccent.teal,
       'configurations': AppIdentityAccent.teal,
-      'staff': AppIdentityAccent.purple,
+      // Pink since 2026-10-10, the old hub's *Staff* colour, with its cards.
+      'staff': AppIdentityAccent.pink,
     };
 
     testWidgets('an owner, an admin and a manager see the same colours', (

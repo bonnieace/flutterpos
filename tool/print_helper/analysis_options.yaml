@@ -1,0 +1,7 @@
+# A plain Dart package beside the Flutter app: the app's options include
+# flutter_lints, which this package does not depend on.
+linter:
+  rules:
+    - avoid_print
+    - prefer_final_locals
+    - unawaited_futures

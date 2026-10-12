@@ -22,6 +22,7 @@ import 'package:flutter/widgets.dart';
 import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:uzapay_pos/ui/choice.dart';
 import 'package:uzapay_pos/ui/tabs.dart';
 
 import 'fakes.dart';
@@ -196,6 +197,7 @@ void main() {
         writer: FakeConfigurationDocumentWriter(),
         testPrint: _refusePrint,
         bluetooth: _bluetooth(),
+        printModes: _ShotModes(),
       ),
     ),
     afterPump: _openBluetooth,
@@ -212,32 +214,9 @@ void main() {
         writer: FakeConfigurationDocumentWriter(),
         testPrint: _refusePrint,
         bluetooth: _bluetooth(inUse: true),
+        printModes: _ShotModes(),
       ),
     ),
-    viewports: responsiveViewports,
-  );
-
-  // The network tab on that device: the business setting, with this device's
-  // exception stated above it.
-  screenshotCase(
-    '36g-printer-network-with-bluetooth-in-use',
-    build: () => inSession(
-      TenantPrinterConfigurationScreen(
-        reader: FakeTenantReader.business(extraDocuments: _btNetworkPrinter),
-        writer: FakeConfigurationDocumentWriter(),
-        testPrint: _refusePrint,
-        bluetooth: _bluetooth(inUse: true),
-      ),
-    ),
-    afterPump: (tester) async {
-      await tester.tap(
-        find.descendant(
-          of: find.byType(AppTabs),
-          matching: find.text('Network'),
-        ),
-      );
-      await tester.pumpAndSettle();
-    },
     viewports: responsiveViewports,
   );
 
@@ -251,6 +230,7 @@ void main() {
         writer: FakeConfigurationDocumentWriter(),
         testPrint: _refusePrint,
         bluetooth: _bluetooth(),
+        printModes: _ShotModes(),
       ),
     ),
     afterPump: _search,
@@ -267,6 +247,7 @@ void main() {
         writer: FakeConfigurationDocumentWriter(),
         testPrint: _refusePrint,
         bluetooth: _bluetooth(),
+        printModes: _ShotModes(),
       ),
     ),
     afterPump: (tester) async {
@@ -294,11 +275,127 @@ void main() {
         writer: FakeConfigurationDocumentWriter(),
         testPrint: _refusePrint,
         bluetooth: _bluetooth(),
+        printModes: _ShotModes(),
       ),
     ),
     afterPump: _openBluetooth,
     viewports: responsiveViewports,
   );
+
+  // **USB, in a browser** - the web till's way to print since 2026-10-10.
+  // Nothing chosen yet, with one printer the browser already allowed.
+  screenshotCase(
+    '36k-printer-usb-none',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        usb: _usb(),
+        system: _system(),
+        printModes: _ShotModes(),
+      ),
+    ),
+    afterPump: _openUsb,
+    viewports: responsiveViewports,
+  );
+
+  // A USB printer in use: the page opens on its tab.
+  screenshotCase(
+    '36l-printer-usb-in-use',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(extraDocuments: _btNetworkPrinter),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        usb: _usb(inUse: true),
+        system: _system(),
+        printModes: _ShotModes(),
+      ),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  // A browser with no WebUSB - Safari, Firefox.
+  screenshotCase(
+    '36m-printer-usb-unsupported',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        usb: _usb(supported: false),
+        system: _system(),
+        printModes: _ShotModes(),
+      ),
+    ),
+    afterPump: _openUsb,
+    viewports: responsiveViewports,
+  );
+
+  // **The print dialog** - receipts as a page in the device's own print
+  // window, for a printer this app cannot reach directly (2026-10-10).
+  screenshotCase(
+    '36n-printer-system-none',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        usb: _usb(),
+        system: _system(),
+        printModes: _ShotModes(),
+      ),
+    ),
+    afterPump: _openSystem,
+    viewports: responsiveViewports,
+  );
+
+  // The print dialog in use: the page opens on its tab.
+  screenshotCase(
+    '36o-printer-system-in-use',
+    build: () => inSession(
+      TenantPrinterConfigurationScreen(
+        reader: FakeTenantReader.business(extraDocuments: _btNetworkPrinter),
+        writer: FakeConfigurationDocumentWriter(),
+        testPrint: _refusePrint,
+        usb: _usb(),
+        system: _system(inUse: true),
+        printModes: _ShotModes(),
+      ),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  // **USB on a web till on Windows** - the print helper's three steps, and
+  // nothing of the browser's own picker (2026-10-11).
+  for (final (name, version, printers) in <(String, String?, bool)>[
+    ('36q-printer-usb-windows-install', null, false),
+    ('36r-printer-usb-windows-plug-in', '1.0.3', false),
+    ('36s-printer-usb-windows-choose', '1.0.3', true),
+  ]) {
+    screenshotCase(
+      name,
+      build: () => inSession(
+        TenantPrinterConfigurationScreen(
+          reader: FakeTenantReader.business(),
+          writer: FakeConfigurationDocumentWriter(),
+          testPrint: _refusePrint,
+          usb: UsbPrinterSetup(
+            chooser: const _ShotUsbChooser(supported: true),
+            store: _ShotUsbStore(null),
+            probe: (_) async {},
+            helper: _helper(version, printers: printers),
+          ),
+          system: _system(),
+          printModes: _ShotModes(),
+          printHelper: _helper(version, printers: printers),
+        ),
+      ),
+      afterPump: _openUsb,
+      viewports: responsiveViewports,
+    );
+  }
 
   // -------------------------------------------------------------------------
   // The queue
@@ -391,10 +488,30 @@ final Map<String, Map<String, Object?>> _btNetworkPrinter = _printer(
   paperWidth: 'columns_48',
 );
 
-Future<void> _openBluetooth(WidgetTester tester) async {
-  await tester.tap(find.text('Bluetooth'));
+/// Each kind's tab, by its name on the strip.
+const Map<String, String> _tabs = <String, String>{
+  'usb': 'USB',
+  'bluetooth': 'Bluetooth',
+  'dialog': 'Print dialog',
+};
+
+/// Opens [mode]'s tab and switches it on, unless it is on already.
+Future<void> _switchOn(WidgetTester tester, String mode) async {
+  await tester.tap(
+    find.descendant(
+      of: find.byType(AppTabs),
+      matching: find.text(_tabs[mode]!),
+    ),
+  );
+  await tester.pumpAndSettle();
+  final row = find.byKey(ValueKey('printer-mode-$mode'));
+  if (tester.widget<AppSwitchRow>(row).value) return;
+  await tester.tap(row);
   await tester.pumpAndSettle();
 }
+
+Future<void> _openBluetooth(WidgetTester tester) =>
+    _switchOn(tester, 'bluetooth');
 
 Future<void> _search(WidgetTester tester) async {
   await _openBluetooth(tester);
@@ -506,3 +623,143 @@ final class _ShotStore implements DeviceBluetoothPrinterStore {
 /// bare `probe` no longer fits it.
 Future<void> _refusePrint(TenantPrinterConfiguration configuration) async =>
     throw const PrinterTransportException(PrinterTransportCode.unreachable);
+
+Future<void> _openUsb(WidgetTester tester) => _switchOn(tester, 'usb');
+
+/// The print helper as a capture needs it: answering as [version], or not
+/// installed when that is null, with the Xprinter plugged in when [printers].
+PrintHelperSetup _helper(String? version, {required bool printers}) =>
+    PrintHelperSetup(
+      helper: _ShotPrintHelper(version, printers: printers),
+      memory: InMemoryPrintHelperMemory(),
+      download: () async {},
+    );
+
+final class _ShotPrintHelper implements PrintHelper {
+  const _ShotPrintHelper(this._version, {required this.printers});
+
+  final String? _version;
+  final bool printers;
+
+  @override
+  Future<String?> version() async => _version;
+
+  @override
+  Future<List<PrintHelperPrinter>> usbPrinters() async => printers
+      ? const <PrintHelperPrinter>[
+          PrintHelperPrinter(
+            key: '1FC9:2016:06C6ACA91073',
+            name: 'Xprinter XP-365B',
+          ),
+        ]
+      : const <PrintHelperPrinter>[];
+
+  @override
+  Future<void> send(PrinterEndpoint endpoint, List<int> bytes) async {}
+
+  @override
+  Future<void> probe(PrinterEndpoint endpoint) async {}
+
+  @override
+  Future<PrintHelperRemoval> remove() async => PrintHelperRemoval.removed;
+}
+
+Future<void> _openSystem(WidgetTester tester) => _switchOn(tester, 'dialog');
+
+/// The kind of printer a capture's device prints on: none chosen yet, so the
+/// page reads it from what is chosen, as an installed device does.
+final class _ShotModes implements DevicePrintModeStore {
+  DevicePrintMode? _mode;
+
+  @override
+  DevicePrintMode? read(String tenantId) => _mode;
+
+  @override
+  Future<void> save(String tenantId, DevicePrintMode mode) async =>
+      _mode = mode;
+}
+
+/// The print dialog tab, chosen when [inUse].
+SystemPrinterSetup _system({bool inUse = false}) => SystemPrinterSetup(
+  store: _ShotSystemStore(
+    inUse
+        ? const DeviceSystemPrinter(paperWidth: PrinterPaperWidth.columns48)
+        : null,
+  ),
+  probe: (_) async {},
+);
+
+final class _ShotSystemStore implements DeviceSystemPrinterStore {
+  _ShotSystemStore(this._printer);
+
+  DeviceSystemPrinter? _printer;
+
+  @override
+  DeviceSystemPrinter? read(String tenantId) => _printer;
+
+  @override
+  Future<void> save(String tenantId, DeviceSystemPrinter printer) async =>
+      _printer = printer;
+
+  @override
+  Future<void> forget(String tenantId) async => _printer = null;
+}
+
+const UsbPrinterDevice _usbPrinter = UsbPrinterDevice(
+  vendorId: 0x04B8,
+  productId: 0x0E15,
+  serialNumber: 'J5A0123',
+  productName: 'TM-T20II',
+  manufacturerName: 'EPSON',
+);
+
+/// A USB tab in a browser that has WebUSB unless [supported] is false, with
+/// the counter's printer already allowed - and chosen, when [inUse].
+UsbPrinterSetup _usb({bool inUse = false, bool supported = true}) =>
+    UsbPrinterSetup(
+      chooser: _ShotUsbChooser(supported: supported),
+      store: _ShotUsbStore(
+        inUse
+            ? DeviceUsbPrinter(
+                key: _usbPrinter.key,
+                name: _usbPrinter.label,
+                paperWidth: PrinterPaperWidth.columns48,
+                hasCutter: true,
+              )
+            : null,
+      ),
+      probe: (_) async {},
+    );
+
+final class _ShotUsbChooser implements UsbPrinterChooser {
+  const _ShotUsbChooser({required this.supported});
+
+  final bool supported;
+
+  @override
+  bool get isSupported => supported;
+
+  @override
+  Future<UsbPrinterDevice?> choose({bool anyDevice = false}) async => null;
+
+  @override
+  Future<List<UsbPrinterDevice>> permitted() async => const <UsbPrinterDevice>[
+    _usbPrinter,
+  ];
+}
+
+final class _ShotUsbStore implements DeviceUsbPrinterStore {
+  _ShotUsbStore(this._printer);
+
+  DeviceUsbPrinter? _printer;
+
+  @override
+  DeviceUsbPrinter? read(String tenantId) => _printer;
+
+  @override
+  Future<void> save(String tenantId, DeviceUsbPrinter printer) async =>
+      _printer = printer;
+
+  @override
+  Future<void> forget(String tenantId) async => _printer = null;
+}

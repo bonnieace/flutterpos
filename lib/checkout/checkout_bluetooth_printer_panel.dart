@@ -56,11 +56,17 @@ final class BluetoothPrinterSetup {
     required this.discovery,
     required this.store,
     required this.probe,
+    this.onChosen,
   });
 
   final BluetoothPrinterDiscovery discovery;
   final DeviceBluetoothPrinterStore store;
   final PrinterProbe probe;
+
+  /// Called once a printer is chosen here, so the print dialog - the other
+  /// way this device can print on its own - is forgotten and one choice
+  /// stands. Absent where there is no print dialog to forget.
+  final Future<void> Function(String tenantId)? onChosen;
 }
 
 /// What the tab is doing, so one control at a time is busy and the rest wait.
@@ -405,6 +411,20 @@ class _BluetoothPrinterTabState extends State<BluetoothPrinterTab> {
       );
       await widget.setup.store.save(widget.tenantId, printer);
       telemetry.recordStep(operation, 'saved');
+      // A failure here does not unsave the printer: it already takes this
+      // device's receipts ahead of the print dialog.
+      if (widget.setup.onChosen case final onChosen?) {
+        try {
+          await onChosen(widget.tenantId);
+        } catch (error, stackTrace) {
+          AppTelemetry.captureHandled(
+            error,
+            stackTrace,
+            operation: operation,
+            boundary: 'printing.bluetooth_forget_print_dialog',
+          );
+        }
+      }
       telemetry.finishOperation(operation);
       if (!mounted) return false;
       setState(() {
@@ -529,9 +549,8 @@ class _BluetoothPrinterTabState extends State<BluetoothPrinterTab> {
     widget.onChanged();
     _report(
       AppNotice.confirmed(
-        '${name ?? 'The Bluetooth printer'} is no longer used. '
-        'Receipts from this device go to the network printer, if this business '
-        'has one.',
+        '${name ?? 'The Bluetooth printer'} is no longer used, so receipts '
+        'from this device are not printed until another printer is chosen.',
       ),
     );
   }
@@ -935,8 +954,7 @@ final class _BusinessPrinterCard extends StatelessWidget {
       badge: StatusBadge(status: AppStatus.attention, label: 'Not set up'),
       sentence:
           'Receipts from this device are not sent anywhere. Connect a '
-          'Bluetooth printer below, or set up the network printer on the '
-          'Network tab.',
+          'Bluetooth printer below, or switch on the network printer.',
     ),
     // Not *Not set up*: a business that has a printer must not be invited to
     // set one up again. The network tab's own word for settings it cannot
@@ -948,8 +966,8 @@ final class _BusinessPrinterCard extends StatelessWidget {
       badge: StatusBadge(status: AppStatus.problem, label: 'Not read'),
       sentence:
           'Its settings cannot be read, so receipts from this device are not '
-          'sent anywhere. Connect a Bluetooth printer below, or save the '
-          'network printer again on the Network tab.',
+          'sent anywhere. Connect a Bluetooth printer below, or switch on the '
+          'network printer and save it again.',
     ),
   };
 }

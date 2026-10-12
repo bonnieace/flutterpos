@@ -29,6 +29,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../platform/browser_file.dart';
+
 /// A file the person chose, as bytes and under the name their device gave it.
 ///
 /// **Bytes rather than a path.** A picked file on Android may be a content URI
@@ -323,6 +325,17 @@ final class SharedFileTenantProductSheetSaver
     required String filename,
     required String contents,
   }) async {
+    // **A download, not a share sheet, in a browser.** The control says
+    // "Download template", and a browser's downloads folder is where somebody
+    // at a computer looks for a file - the reason the share sheet won on a
+    // phone does not carry over. The same byte-order mark as below.
+    if (kIsWeb) {
+      await downloadFromBrowser(
+        bytes: utf8.encode('﻿$contents'),
+        filename: filename,
+      );
+      return TenantSheetSaveOutcome.saved;
+    }
     final directory = await getTemporaryDirectory();
     final file = File('${directory.path}${Platform.pathSeparator}$filename');
     // **A byte-order mark, and it earns its three bytes.** Excel opens a UTF-8
