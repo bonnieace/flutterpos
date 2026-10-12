@@ -120,7 +120,12 @@ jobs:
           path=build/app/outputs/mapping/release/mapping.txt
           if [[ -f "$path" ]]; then echo "path=$path" >> "$GITHUB_OUTPUT"; fi
 
+      # A copy for us, not the release: the bundle and its mapping go to Play
+      # below. Non-fatal since 1.0.14 (9), whose run built a good bundle and
+      # then stopped here on "Artifact storage quota has been hit" - a quota
+      # the whole account shares, recalculated only every 6-12 hours.
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: app-release-${{ steps.version.outputs.version }}
           path: |
