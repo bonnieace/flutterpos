@@ -60,9 +60,11 @@ void main() {
       if (width < narrowest) narrowest = width;
     }
 
+    // LF whatever the working copy holds: git stores this file with LF, but a
+    // Windows editor can save it with CRLF, and the search below is for `\n`.
     final source = File(
       'lib/tenancy/tenant_routing_shell.dart',
-    ).readAsStringSync();
+    ).readAsStringSync().replaceAll('\r\n', '\n');
     final start = source.indexOf('List<HomeDestination> _destinations(');
     expect(start, isNot(-1), reason: '_destinations moved or was renamed');
     final body = source.substring(start, source.indexOf('\n  }\n', start));
