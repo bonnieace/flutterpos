@@ -1,0 +1,678 @@
+﻿[
+    {
+        "path":  "lib/audit/audit_log_panel.dart",
+        "line":  544,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg"
+                   ],
+        "icon":  "",
+        "title":  "page.isEventScoped",
+        "key":  "audit-log-empty"
+    },
+    {
+        "path":  "lib/audit/audit_log_panel.dart",
+        "line":  559,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Nothing from ${_dayLabel(day!)} on this page\u0027,",
+        "key":  "audit-log-day-empty"
+    },
+    {
+        "path":  "lib/checkout/checkout_notifications_screen.dart",
+        "line":  268,
+        "type":  "EmptyState",
+        "assets":  [
+                       "approve.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No notifications available\u0027,",
+        "key":  "notifications-clear"
+    },
+    {
+        "path":  "lib/checkout/checkout_price_agreement_panel.dart",
+        "line":  288,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "",
+        "title":  "\u0027Nobody to choose yet\u0027,",
+        "key":  "price-agreement-settings-no-staff"
+    },
+    {
+        "path":  "lib/customers/customer_directory_panel.dart",
+        "line":  675,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Nobody owes you anything\u0027,",
+        "key":  "customers-nobody-owes"
+    },
+    {
+        "path":  "lib/customers/customer_directory_panel.dart",
+        "line":  684,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg",
+                       "logistics.svg"
+                   ],
+        "icon":  "",
+        "title":  "hasQuery ? \u0027No matching customers\u0027 : \u0027No customers yet\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/customers/customer_record_panel.dart",
+        "line":  163,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027This customer is not in this business\u0027,",
+        "key":  "customer-record-missing"
+    },
+    {
+        "path":  "lib/customers/customer_record_panel.dart",
+        "line":  665,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Nothing on their account yet\u0027,",
+        "key":  "customer-statement-empty"
+    },
+    {
+        "path":  "lib/customers/customer_record_panel.dart",
+        "line":  1058,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No purchases yet\u0027,",
+        "key":  "customer-purchases-empty"
+    },
+    {
+        "path":  "lib/email_receipts/email_receipts_screen.dart",
+        "line":  434,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.mail_outline",
+        "title":  "\u0027No receipts sent yet\u0027,",
+        "key":  "email-receipts-deliveries-empty"
+    },
+    {
+        "path":  "lib/expenses/expense_category_panel.dart",
+        "line":  189,
+        "type":  "EmptyState",
+        "assets":  [
+                       "empty-wallet.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Nothing under ${category.label.toLowerCase()}\u0027,",
+        "key":  "expense-category-empty"
+    },
+    {
+        "path":  "lib/expenses/expense_panel.dart",
+        "line":  447,
+        "type":  "EmptyState",
+        "assets":  [
+                       "access-denied.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Expenses are not shown for this role\u0027,",
+        "key":  "expenses-denied"
+    },
+    {
+        "path":  "lib/expenses/expense_panel.dart",
+        "line":  755,
+        "type":  "EmptyState",
+        "assets":  [
+                       "empty-wallet.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Nothing recorded ${rangeLabel.toLowerCase()}\u0027,",
+        "key":  "expenses-empty"
+    },
+    {
+        "path":  "lib/inventory/catalog_management_panel.dart",
+        "line":  3848,
+        "type":  "EmptyState",
+        "assets":  [
+                       "no-data.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Categories could not be read\u0027,",
+        "key":  "inventory-categories-unreadable"
+    },
+    {
+        "path":  "lib/inventory/catalog_management_panel.dart",
+        "line":  3855,
+        "type":  "EmptyState",
+        "assets":  [
+                       "my-files.svg"
+                   ],
+        "icon":  "",
+        "title":  "_page == 0",
+        "key":  "inventory-categories-empty"
+    },
+    {
+        "path":  "lib/inventory/stock_take_panel.dart",
+        "line":  182,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "",
+        "title":  "\u0027No catalog on this device yet\u0027,",
+        "key":  "stock-take-no-catalog"
+    },
+    {
+        "path":  "lib/inventory/stock_take_panel.dart",
+        "line":  193,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "",
+        "title":  "\u0027Nothing to count\u0027,",
+        "key":  "stock-take-empty"
+    },
+    {
+        "path":  "lib/inventory/stock_take_review_panel.dart",
+        "line":  429,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "",
+        "title":  "\u0027No counts yet\u0027,",
+        "key":  "stock-take-review-empty"
+    },
+    {
+        "path":  "lib/inventory/stock_take_review_panel.dart",
+        "line":  470,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "",
+        "title":  "\u0027No counts match\u0027,",
+        "key":  "stock-take-review-no-matches"
+    },
+    {
+        "path":  "lib/inventory/stock_take_review_panel.dart",
+        "line":  644,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "",
+        "title":  "\u0027No counts match\u0027,",
+        "key":  "stock-take-review-no-matches"
+    },
+    {
+        "path":  "lib/inventory/stock_take_settings_panel.dart",
+        "line":  518,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "",
+        "title":  "\u0027Nobody to ask yet\u0027,",
+        "key":  "stock-take-settings-no-staff"
+    },
+    {
+        "path":  "lib/production/production_panel.dart",
+        "line":  388,
+        "type":  "EmptyState",
+        "assets":  [
+                       "approve.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No batches yet\u0027,",
+        "key":  "production-empty"
+    },
+    {
+        "path":  "lib/reporting/monthly_report_panel.dart",
+        "line":  329,
+        "type":  "EmptyState",
+        "assets":  [
+                       "calendar.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027This month has not started\u0027,",
+        "key":  "monthly-report-not-begun"
+    },
+    {
+        "path":  "lib/reporting/monthly_report_panel.dart",
+        "line":  341,
+        "type":  "EmptyState",
+        "assets":  [
+                       "no-data.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Nothing was recorded in ${report.month.label}\u0027,",
+        "key":  "monthly-report-empty"
+    },
+    {
+        "path":  "lib/reporting/weekly_report_charts.dart",
+        "line":  272,
+        "type":  "EmptyState",
+        "assets":  [
+                       "no-data.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No sales this week\u0027,",
+        "key":  "weekly-report-top-items-empty"
+    },
+    {
+        "path":  "lib/reporting/weekly_report_charts.dart",
+        "line":  516,
+        "type":  "EmptyState",
+        "assets":  [
+                       "no-data.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No transactions this week\u0027,",
+        "key":  "weekly-report-transactions-empty"
+    },
+    {
+        "path":  "lib/returns/return_feed_panel.dart",
+        "line":  612,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No returns on $recordedOn\u0027,",
+        "key":  "return-feed-no-matches"
+    },
+    {
+        "path":  "lib/returns/return_feed_panel.dart",
+        "line":  774,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No returns on $recordedOn\u0027,",
+        "key":  "return-feed-no-matches"
+    },
+    {
+        "path":  "lib/sales/sales_report_panel.dart",
+        "line":  2571,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Receipt not found\u0027,",
+        "key":  "sales-receipt-missing"
+    },
+    {
+        "path":  "lib/sales/sales_report_panel.dart",
+        "line":  2672,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg",
+                       "no-data.svg"
+                   ],
+        "icon":  "",
+        "title":  "allReturned",
+        "key":  ""
+    },
+    {
+        "path":  "lib/sales/sale_history_panel.dart",
+        "line":  346,
+        "type":  "EmptyState",
+        "assets":  [
+                       "no-data.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No sales yet\u0027,",
+        "key":  "sale-history-empty"
+    },
+    {
+        "path":  "lib/shift/shift_gate.dart",
+        "line":  432,
+        "type":  "EmptyState",
+        "assets":  [
+                       "schedule.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No shift is open\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/shift/shift_gate.dart",
+        "line":  446,
+        "type":  "EmptyState",
+        "assets":  [
+                       "schedule.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Shift closed on this device\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/shift/shift_gate.dart",
+        "line":  574,
+        "type":  "AppIllustration",
+        "assets":  [
+                       "schedule.svg"
+                   ],
+        "icon":  "",
+        "title":  "",
+        "key":  ""
+    },
+    {
+        "path":  "lib/shift/shift_history_panel.dart",
+        "line":  523,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "",
+        "title":  "\u0027Shift history is not available here\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/shift/shift_history_panel.dart",
+        "line":  692,
+        "type":  "EmptyState",
+        "assets":  [
+                       "schedule.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No closed shifts on this day\u0027,",
+        "key":  "shift-history-empty"
+    },
+    {
+        "path":  "lib/shift/shift_panel.dart",
+        "line":  825,
+        "type":  "AppIllustration",
+        "assets":  [
+                       "approve.svg",
+                       "access-denied.svg"
+                   ],
+        "icon":  "",
+        "title":  "",
+        "key":  ""
+    },
+    {
+        "path":  "lib/suppliers/supplier_delivery_history.dart",
+        "line":  297,
+        "type":  "EmptyState",
+        "assets":  [
+                       "logistics.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No deliveries yet\u0027,",
+        "key":  "supplier-deliveries-empty"
+    },
+    {
+        "path":  "lib/suppliers/supplier_directory_panel.dart",
+        "line":  667,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg",
+                       "logistics.svg"
+                   ],
+        "icon":  "",
+        "title":  "_hasQuery ? \u0027No matching suppliers\u0027 : \u0027No suppliers yet\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/suppliers/supplier_record_panel.dart",
+        "line":  175,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027This supplier is not in this business\u0027,",
+        "key":  "supplier-record-missing"
+    },
+    {
+        "path":  "lib/tenancy/onboarding_flow.dart",
+        "line":  1529,
+        "type":  "AppIllustration",
+        "assets":  [
+                       "mail-sent.svg"
+                   ],
+        "icon":  "",
+        "title":  "",
+        "key":  "onboarding-verify-illustration"
+    },
+    {
+        "path":  "lib/tenancy/onboarding_flow.dart",
+        "line":  1720,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "",
+        "title":  "\u0027Your session has ended\u0027,",
+        "key":  "onboarding-business-unavailable"
+    },
+    {
+        "path":  "lib/tenancy/onboarding_flow.dart",
+        "line":  1763,
+        "type":  "AppIllustration",
+        "assets":  [
+                       "approve.svg"
+                   ],
+        "icon":  "",
+        "title":  "",
+        "key":  "onboarding-complete-illustration"
+    },
+    {
+        "path":  "lib/tenancy/platform_console_activity.dart",
+        "line":  87,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.notifications_none",
+        "title":  "\u0027No alerts\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_console_activity.dart",
+        "line":  389,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.timeline",
+        "title":  "\u0027Nothing here yet\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_console_businesses.dart",
+        "line":  292,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.search",
+        "title":  "\u0027No business matches “$query”\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_console_businesses.dart",
+        "line":  306,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.inventory_2_outlined",
+        "title":  "\u0027No archived businesses\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_console_businesses.dart",
+        "line":  311,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.pause_circle_outline",
+        "title":  "\u0027No suspended businesses\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_console_businesses.dart",
+        "line":  316,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.check_circle_outline",
+        "title":  "\u0027Nothing needs attention\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_console_businesses.dart",
+        "line":  321,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.storefront_outlined",
+        "title":  "\u0027No businesses yet\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_console_businesses.dart",
+        "line":  588,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.storefront_outlined",
+        "title":  "\u0027This business no longer exists\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_console_people.dart",
+        "line":  166,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.search",
+        "title":  "\u0027Nobody matches “$_query”\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_console_people.dart",
+        "line":  178,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.group_outlined",
+        "title":  "\u0027Nobody here\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_console_people.dart",
+        "line":  532,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.person_outline",
+        "title":  "\u0027No account has this ID\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/platform_tenant_lifecycle.dart",
+        "line":  855,
+        "type":  "EmptyState",
+        "assets":  [
+                       "approve.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No active or suspended businesses\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/tenancy/tenant_branding_panel.dart",
+        "line":  403,
+        "type":  "EmptyState",
+        "assets":  [
+                       "access-denied.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027Receipt branding is not shown for this role\u0027,",
+        "key":  "branding-denied"
+    },
+    {
+        "path":  "lib/tenancy/tenant_catalog.dart",
+        "line":  802,
+        "type":  "EmptyState",
+        "assets":  [
+                       "empty.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No categories yet\u0027,",
+        "key":  "catalog-categories-empty"
+    },
+    {
+        "path":  "lib/tenancy/tenant_catalog.dart",
+        "line":  850,
+        "type":  "EmptyState",
+        "assets":  [
+                       "empty.svg"
+                   ],
+        "icon":  "",
+        "title":  "\u0027No products yet\u0027,",
+        "key":  "catalog-products-empty"
+    },
+    {
+        "path":  "lib/tenancy/tenant_settings_screen.dart",
+        "line":  143,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "",
+        "title":  "\u0027No settings are shown for this role\u0027,",
+        "key":  "settings-none"
+    },
+    {
+        "path":  "lib/tenancy/tenant_staff_directory.dart",
+        "line":  1458,
+        "type":  "EmptyState",
+        "assets":  [
+                       "file-search.svg",
+                       "team.svg"
+                   ],
+        "icon":  "",
+        "title":  "_hasQuery ? \u0027No matching staff\u0027 : \u0027No staff yet\u0027,",
+        "key":  ""
+    },
+    {
+        "path":  "lib/whatsapp/e_receipt_settings_panel.dart",
+        "line":  554,
+        "type":  "EmptyState",
+        "assets":  [
+
+                   ],
+        "icon":  "Icons.chat_outlined",
+        "title":  "\u0027No receipts sent yet\u0027,",
+        "key":  "e-receipts-deliveries-empty"
+    }
+]

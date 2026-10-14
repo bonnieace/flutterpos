@@ -272,8 +272,8 @@ final class WeeklyTopItems extends StatelessWidget {
             const EmptyState(
               key: ValueKey('weekly-report-top-items-empty'),
               title: 'No sales this week',
-              hint: 'Items appear here once this week has takings.',
-              illustration: 'no-data.svg',
+              hint: 'Sold items appear here.',
+              illustration: 'report-chart.svg',
             )
           else
             for (final (index, item) in items.indexed) ...<Widget>[
@@ -517,7 +517,7 @@ final class WeeklyRecentTransactions extends StatelessWidget {
               key: ValueKey('weekly-report-transactions-empty'),
               title: 'No transactions this week',
               hint: 'Sales appear here as they are recorded.',
-              illustration: 'no-data.svg',
+              illustration: 'report-chart.svg',
             )
           else
             for (final row in rows) ...<Widget>[

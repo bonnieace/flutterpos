@@ -23,7 +23,10 @@ import '../tenancy/tenant_staff_directory.dart';
 import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/money_text.dart';
 import '../ui/pagination.dart';
+import '../ui/record_list.dart';
+import '../ui/record_sheet.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/skeleton.dart';
@@ -93,7 +96,7 @@ final class TenantShiftHistoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Shift history',
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     // **One toolbar control since 2026-09-24.** *My recent sales* and the
     // reconciliation explainer were taken off this bar on 2026-09-23 because
     // the day and the person above the list are the whole of what the page
@@ -518,8 +521,9 @@ final class _TenantShiftHistoryPanelState
       denied: const Center(
         key: ValueKey('shift-history-denied'),
         child: EmptyState(
-          title: 'Shift history is not available here',
-          hint: 'This business does not open closed shifts to your role.',
+          illustration: 'access-denied.svg',
+          title: 'Shift history unavailable',
+          hint: 'Your role cannot view closed shifts.',
         ),
       ),
       failure: (context, error) => switch (scoped) {
@@ -635,9 +639,13 @@ final class _ShiftHistoryContents extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final loaded = load;
+    final table = RecordSheet.drawnAt(MediaQuery.sizeOf(context).width);
     return PagedListView(
       listKey: const ValueKey('shift-history'),
-      padding: EdgeInsets.all(tokens.spacing.s20),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(tokens.spacing.s20),
+      ),
       pagination: loaded == null
           ? null
           : Pagination(
@@ -649,51 +657,67 @@ final class _ShiftHistoryContents extends StatelessWidget {
               endOfList: !loaded.page.hasMore,
             ),
       children: <Widget>[
-        _filters(tokens),
+        if (!table) _filters(tokens),
         // **Said once, and only where it is true.** Reporting never assumes a
         // currency, so a business that has published none gets bare figures
         // and one sentence saying why - rather than `KES` guessed onto a
         // screen people settle cash from.
         if (loaded != null && !loaded.currency.isKnown) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
+          if (!table) SizedBox(height: tokens.spacing.s12),
           const Callout(
             key: ValueKey('shift-history-currency-unknown'),
             status: AppStatus.info,
             message: TenantReportingCurrency.unknownNotice,
           ),
+          if (table) SizedBox(height: tokens.spacing.s20),
         ],
-        SizedBox(height: tokens.spacing.s20),
-        if (failed)
-          const ErrorState(
-            key: ValueKey('shift-history-failure'),
-            badgeLabel: 'Not read',
-            statement: 'This page of shifts did not load',
-            stillTrue:
-                'Nothing has changed, and every shift is still recorded on the '
-                'server.',
-          )
-        else if (loaded == null)
-          // **Placeholder cards rather than a spinner**, because this list is
-          // what the wait is for and its shape is known before its contents
-          // are. §5.1's `LoadingState` stays the guard's default everywhere the
-          // shape is not.
-          const SkeletonGroup(
-            semanticLabel: 'Reading closed shifts.',
-            child: RecordListSkeleton(),
-          )
-        else if (loaded.page.items.isEmpty)
-          const EmptyState(
-            key: ValueKey('shift-history-empty'),
-            title: 'No closed shifts on this day',
-            hint:
-                'A shift appears here once it has been closed. Closing happens '
-                'on the shift banner.',
-            illustration: 'schedule.svg',
-          )
-        else
-          ..._days(tokens, loaded),
+        if (table)
+          _sheet(tokens)
+        else ...<Widget>[
+          SizedBox(height: tokens.spacing.s20),
+          ..._cards(tokens),
+        ],
       ],
     );
+  }
+
+  static const Widget _failure = ErrorState(
+    key: ValueKey('shift-history-failure'),
+    badgeLabel: 'Not read',
+    statement: 'This page of shifts did not load',
+    stillTrue:
+        'Nothing has changed, and every shift is still recorded on the '
+        'server.',
+  );
+
+  static const Widget _empty = EmptyState(
+    key: ValueKey('shift-history-empty'),
+    title: 'No closed shifts on this day',
+    hint: 'Close a shift from the shift banner.',
+    illustration: 'closed-shift.svg',
+  );
+
+  /// The phone's and the tablet's list: one card per shift, under its day.
+  /// Unchanged by the table.
+  List<Widget> _cards(AppTokens tokens) {
+    final loaded = load;
+    return <Widget>[
+      if (failed)
+        _failure
+      else if (loaded == null)
+        // **Placeholder cards rather than a spinner**, because this list is
+        // what the wait is for and its shape is known before its contents
+        // are. §5.1's `LoadingState` stays the guard's default everywhere the
+        // shape is not.
+        const SkeletonGroup(
+          semanticLabel: 'Reading closed shifts.',
+          child: RecordListSkeleton(),
+        )
+      else if (loaded.page.items.isEmpty)
+        _empty
+      else
+        ..._days(tokens, loaded),
+    ];
   }
 
   /// The day, and whose shifts - one row, as the sales report draws its own.
@@ -703,24 +727,40 @@ final class _ShiftHistoryContents extends StatelessWidget {
   /// it, and a select reading *All staff* does not need *Staff*. Both keep the
   /// word as what a screen reader hears.
   Widget _filters(AppTokens tokens) {
-    final date = Semantics(
-      key: const ValueKey('shift-history-date-filter'),
-      label: 'Shifts for $businessDate. Change the day.',
-      button: true,
-      excludeSemantics: true,
-      child: AppButton(
-        key: const ValueKey('shift-history-date-picker'),
-        label: businessDate,
-        icon: Icons.calendar_today_outlined,
-        tier: AppButtonTier.secondary,
-        expand: true,
-        onPressed: onPickDate,
-      ),
-    );
+    final date = _dateFilter(expand: true);
+    final staff = _staffFilter();
     // A cashier reads their own shifts and nothing else, so there is nobody to
     // choose between and the day takes the row.
+    if (staff == null) return date;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(child: date),
+        SizedBox(width: tokens.spacing.s12),
+        Expanded(child: staff),
+      ],
+    );
+  }
+
+  Widget _dateFilter({required bool expand}) => Semantics(
+    key: const ValueKey('shift-history-date-filter'),
+    label: 'Shifts for $businessDate. Change the day.',
+    button: true,
+    excludeSemantics: true,
+    child: AppButton(
+      key: const ValueKey('shift-history-date-picker'),
+      label: businessDate,
+      icon: Icons.calendar_today_outlined,
+      tier: AppButtonTier.secondary,
+      expand: expand,
+      onPressed: onPickDate,
+    ),
+  );
+
+  /// Whose shifts, for management. Null for a cashier, who reads their own.
+  Widget? _staffFilter() {
     if (!TenantShiftHistoryRepository.canReadEveryCashier(session)) {
-      return date;
+      return null;
     }
     final offered = roster;
     final names = offered?.names ?? const <String, String>{};
@@ -728,7 +768,7 @@ final class _ShiftHistoryContents extends StatelessWidget {
         tenantStaffLabel(uid, names: names, selfUid: session.uid);
     final chosen = staffId;
     final listed = offered?.uids ?? const <String>[];
-    final staff = AppSelect<String>(
+    return AppSelect<String>(
       key: const ValueKey('shift-history-staff-filter'),
       value: chosen ?? _everyone,
       label: 'Staff',
@@ -766,15 +806,314 @@ final class _ShiftHistoryContents extends StatelessWidget {
       onChanged: (value) =>
           onStaffChanged(value == null || value == _everyone ? null : value),
     );
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  }
+
+  /// The large-screen list: one table, its filters on its top edge.
+  ///
+  /// **The same page, read the same way, drawn as rows** - `docs/design/
+  /// tables/`, the Sales and Widths boards. A shift is a row of the figures the
+  /// card stacks: its hours, its sales, the recorded and counted amounts, the
+  /// difference between them signed, and the standing. What a card adds only
+  /// sometimes - a float, credit, repayments, refunds, or why there is nothing
+  /// to compare - folds under the row that has it, so every row is the same
+  /// height until somebody asks.
+  Widget _sheet(AppTokens tokens) {
+    final loaded = load;
+    final onePerson = staffId != null;
+    final code = loaded?.currency.code;
+    final columns = <SheetColumn>[
+      // **The cashier names a row only where the rows are different cashiers**,
+      // the cards' rule: with one person chosen, the hours name the shift.
+      if (!onePerson)
+        const SheetColumn(label: 'Cashier', kind: SheetColumnKind.identity),
+      SheetColumn(
+        label: 'Hours',
+        kind: onePerson ? SheetColumnKind.identity : SheetColumnKind.time,
+      ),
+      const SheetColumn(label: 'Sales', kind: SheetColumnKind.figure),
+      SheetColumn(label: 'Recorded', kind: SheetColumnKind.figure, unit: code),
+      SheetColumn(label: 'Counted', kind: SheetColumnKind.figure, unit: code),
+      SheetColumn(
+        label: 'Difference',
+        kind: SheetColumnKind.figure,
+        unit: code,
+      ),
+      const SheetColumn(label: 'Standing', kind: SheetColumnKind.status),
+    ];
+    final staff = _staffFilter();
+    final bar = Row(
       children: <Widget>[
-        Expanded(child: date),
-        SizedBox(width: tokens.spacing.s12),
-        Expanded(child: staff),
+        _dateFilter(expand: false),
+        if (staff != null) ...<Widget>[
+          SizedBox(width: tokens.spacing.s12),
+          SizedBox(width: tokens.layout.tableFilter, child: staff),
+        ],
       ],
     );
+    final Widget? state;
+    if (failed) {
+      state = _failure;
+    } else if (loaded != null && loaded.page.items.isEmpty) {
+      state = _empty;
+    } else {
+      state = null;
+    }
+    return RecordSheet(
+      key: const ValueKey('shift-history-sheet'),
+      columns: columns,
+      bar: bar,
+      body: state,
+      rows: loaded == null || state != null
+          ? null
+          : _rows(loaded, columns, onePerson: onePerson),
+      // No foot caption, at the developer's direction on 2026-10-13. What a
+      // row opens is still each row's screen-reader hint.
+      loadingLabel: 'Reading closed shifts.',
+    );
   }
+
+  /// The page as the sheet's rows, in the page's own order: oldest first, the
+  /// order the day was worked in.
+  ///
+  /// **No day heading, at the developer's direction on 2026-10-13.** The date
+  /// filter on the sheet's top edge already names the one day a page holds,
+  /// so a band repeating it under the header said the same thing twice. The
+  /// cards keep theirs.
+  List<SheetRow> _rows(
+    ShiftHistoryLoad loaded,
+    List<SheetColumn> columns, {
+    required bool onePerson,
+  }) {
+    final shown = loaded.page.items;
+    final counted = columns.indexWhere((column) => column.label == 'Counted');
+
+    // **Whole amounts hold `.00` as blank space where their column has cents**,
+    // so `1,250` sits with its units under the units of `982.50`. Decided per
+    // column from the amounts themselves, which this screen holds as minor
+    // units - nothing is read back out of a formatted string.
+    bool hasCents(Iterable<int?> amounts) =>
+        amounts.any((minor) => minor != null && minor % 100 != 0);
+    String? reserveFor(bool cents, int? minor) =>
+        cents && (minor == null || minor % 100 == 0) ? '.00' : null;
+    List<int> foldAmounts(TenantShiftHistoryEntry entry) => <int>[
+      entry.openingFloatMinor,
+      ...?switch (entry.summary) {
+        final summary? => <int>[
+          summary.creditOwedMinor,
+          summary.repaidMinor,
+          summary.refundedMinor,
+        ],
+        null => null,
+      },
+    ];
+    final recordedCents = hasCents(
+      shown.map((entry) => entry.summary?.totalSalesMinor),
+    );
+    final countedCents = hasCents(<int>[
+      for (final entry in shown) ...<int>[
+        entry.closingCashMinor,
+        ...foldAmounts(entry),
+      ],
+    ]);
+    final differenceCents = hasCents(
+      shown.map((entry) => entry.cashVarianceMinor),
+    );
+
+    return <SheetRow>[
+      for (final entry in shown)
+        _row(
+          loaded,
+          entry,
+          onePerson: onePerson,
+          counted: counted,
+          reserve: (
+            recorded: (int? minor) => reserveFor(recordedCents, minor),
+            counted: (int? minor) => reserveFor(countedCents, minor),
+            difference: (int? minor) => reserveFor(differenceCents, minor),
+          ),
+        ),
+    ];
+  }
+
+  SheetRow _row(
+    ShiftHistoryLoad loaded,
+    TenantShiftHistoryEntry entry, {
+    required bool onePerson,
+    required int counted,
+    required ({
+      String? Function(int?) recorded,
+      String? Function(int?) counted,
+      String? Function(int?) difference,
+    })
+    reserve,
+  }) {
+    final id = entry.id;
+    final summary = entry.summary;
+    final variance = entry.cashVarianceMinor;
+    final standing = ShiftStanding.of(entry);
+    final hours = shiftHoursLabel(entry);
+    final title = onePerson
+        ? hours
+        : tenantStaffLabel(
+            entry.staffId,
+            names: loaded.names,
+            selfUid: session.uid,
+          );
+    final who = tenantStaffLabelParts(
+      entry.staffId,
+      names: loaded.names,
+      selfUid: session.uid,
+    );
+    final amendment = entry.amendment;
+
+    final lines = <SheetFoldLine>[
+      if (entry.openingFloatMinor > 0)
+        _foldLine(
+          'Opening float',
+          entry.openingFloatMinor,
+          counted,
+          reserve.counted,
+          ValueKey<String>('shift-history-float-$id'),
+        ),
+      if (summary != null && summary.creditOwedMinor > 0)
+        _foldLine(
+          'Sold on credit',
+          summary.creditOwedMinor,
+          counted,
+          reserve.counted,
+          ValueKey<String>('shift-history-credit-$id'),
+        ),
+      if (summary != null && summary.repaidMinor > 0)
+        _foldLine(
+          'Paid back by customers',
+          summary.repaidMinor,
+          counted,
+          reserve.counted,
+          ValueKey<String>('shift-history-repaid-$id'),
+        ),
+      if (summary != null && summary.refundedMinor > 0)
+        _foldLine(
+          'Handed back for returns',
+          summary.refundedMinor,
+          counted,
+          reserve.counted,
+          ValueKey<String>('shift-history-refunded-$id'),
+        ),
+    ];
+    final silence = shiftSilenceSentence(standing);
+
+    return SheetRow(
+      id: id,
+      key: ValueKey<String>('shift-history-entry-$id'),
+      pressKey: ValueKey<String>('shift-history-sales-link-$id'),
+      onPressed: () => onViewSales(entry),
+      semanticLabel: title,
+      semanticHint: "Opens the sales report for this shift's day and cashier.",
+      cells: <SheetCell?>[
+        if (!onePerson)
+          SheetText(
+            who.name,
+            caption: who.under,
+            key: ValueKey<String>('shift-history-subject-$id'),
+            captionKey: ValueKey<String>('shift-history-uid-$id'),
+          ),
+        SheetText(
+          hours,
+          key: ValueKey<String>(
+            onePerson
+                ? 'shift-history-subject-$id'
+                : 'shift-history-window-$id',
+          ),
+        ),
+        switch (summary) {
+          final closed? => SheetFigure(
+            '${closed.transactionCount}',
+            key: ValueKey<String>('shift-history-count-$id'),
+          ),
+          null => SheetFigure.unknown(
+            key: ValueKey<String>('shift-history-count-$id'),
+          ),
+        },
+        switch (summary) {
+          final closed? => SheetFigure(
+            moneyTextGroupedOfMinor(closed.totalSalesMinor),
+            reserve: reserve.recorded(closed.totalSalesMinor),
+            key: ValueKey<String>('shift-history-sales-$id'),
+            // **The marker rides on the figure it is about**, as it does on the
+            // card: a corrected shift's recorded sales are the rewritten ones.
+            caption: amendment == null ? null : 'corrected ×${amendment.count}',
+            captionKey: ValueKey<String>('shift-history-amended-$id'),
+          ),
+          null => SheetFigure.unknown(
+            reserve: reserve.recorded(null),
+            key: ValueKey<String>('shift-history-sales-$id'),
+          ),
+        },
+        SheetFigure(
+          moneyTextGroupedOfMinor(entry.closingCashMinor),
+          reserve: reserve.counted(entry.closingCashMinor),
+          key: ValueKey<String>('shift-history-counted-$id'),
+        ),
+        switch (variance) {
+          final difference? => SheetFigure(
+            shiftDifferenceLabel(difference),
+            reserve: reserve.difference(difference),
+            key: ValueKey<String>('shift-history-variance-$id'),
+          ),
+          null => SheetFigure.unknown(
+            reserve: reserve.difference(null),
+            key: ValueKey<String>('shift-history-variance-$id'),
+          ),
+        },
+        SheetStatus(
+          key: ValueKey<String>('shift-history-status-$id'),
+          status: standing.status,
+          label: standing.label,
+          icon: standing.icon,
+          semanticLabel: shiftStandingSemantics(entry),
+          // A drawer that agreed is the one state nobody has to act on, so it
+          // is a glyph and a word rather than a badge - which is what lets the
+          // shifts that need a look stand out of the column.
+          quiet: standing == ShiftStanding.settled,
+        ),
+      ],
+      actions: <RecordAction>[
+        if (amendment != null && canReadCorrections)
+          RecordAction(
+            label: "This shift's corrections",
+            icon: Icons.history,
+            onPressed: () => onViewCorrections(id),
+            actionKey: ValueKey<String>('shift-history-corrections-link-$id'),
+          ),
+      ],
+      actionsKey: ValueKey<String>('shift-history-menu-$id'),
+      actionsTooltip: 'More for this shift',
+      fold: silence == null && lines.isEmpty
+          ? null
+          : SheetFold(
+              note: silence,
+              noteKey: ValueKey<String>('shift-history-silence-$id'),
+              lines: lines,
+              toggleKey: ValueKey<String>('shift-history-fold-$id'),
+              showLabel: "Show the rest of this shift's figures",
+              hideLabel: "Hide the rest of this shift's figures",
+            ),
+    );
+  }
+
+  SheetFoldLine _foldLine(
+    String label,
+    int minor,
+    int column,
+    String? Function(int?) reserve,
+    Key key,
+  ) => SheetFoldLine(
+    label: label,
+    value: moneyTextGroupedOfMinor(minor),
+    column: column,
+    reserve: reserve(minor),
+    valueKey: key,
+  );
 
   /// The shifts, under the business day they belong to.
   ///

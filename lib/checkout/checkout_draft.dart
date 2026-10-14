@@ -533,7 +533,8 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     // Re-deriving it here refused every sale after midnight, and a sale dated
     // by the clock could not be filed against its shift anyway -
     // `validSaleShift` requires the two to agree. What bounds a shift left
-    // running is its 24-hour cap, which refuses the sale on its own.
+    // running is its trading day's 06:00 cutoff and its 24-hour cap, either
+    // of which refuses the sale on its own.
     final businessDate = _validatedShiftBusinessDate(attribution);
     final deviceId = await _resolvedDeviceId();
     if (!_owns(captured)) {

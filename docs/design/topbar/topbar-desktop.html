@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Top bar &#8212; desktop</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&amp;display=block">
+<style>
+/* AppTokens.uzapay, quoted from lib/ui/tokens.dart */
+:root {
+  --base: #0D1F16;        /* surface.base      green900 */
+  --raised: #132A1F;      /* surface.raised    green850 */
+  --sunken: #08140E;      /* surface.sunken    green950 */
+  --field: #1E3A2B;       /* surface.field     green700 */
+  --overlay: #1C3328;     /* surface.overlay   green800 */
+  --border-subtle: #1E3A2B;
+  --card-edge: #283831;
+  --border-strong: #2C5340;
+  --selected: #3D4A3D;
+  --t1: #FFFFFF;          /* text.primary   */
+  --t2: #B8D6C5;          /* text.secondary sage050 */
+  --t3: #849E8F;          /* text.tertiary  sage200 */
+  --mint: #45F28D;        /* action.primary, focus ring */
+  --ink: #0A0F0C;
+  --ok: #4BE277;
+  --amber: #F2C14E;
+  --amber-bg: rgba(242, 193, 78, 0.10);
+  --amber-edge: rgba(242, 193, 78, 0.30);
+  --red: #FF5C6C;
+  --wash-hover: rgba(255, 255, 255, 0.08);
+  --wash-press: rgba(255, 255, 255, 0.12);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--sunken); color: var(--t1); font-family: Roboto, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+a { color: var(--mint); }
+.ms { font-family: 'Material Symbols Rounded'; font-weight: normal; font-style: normal; font-size: 24px; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; direction: ltr; -webkit-font-feature-settings: 'liga'; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+.ms.fill { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+.ms.s18 { font-size: 18px; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+.ms.s16 { font-size: 16px; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20; }
+.ms.s20 { font-size: 20px; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+
+/* ---- board chrome ---- */
+.nav { padding: 20px 32px 0; font-size: 14px; }
+.nav a { color: var(--t3); text-decoration: none; }
+.nav a:hover { color: var(--mint); text-decoration: underline; }
+.board-head { padding: 16px 32px 8px; max-width: 1100px; }
+.board-head h1 { margin: 0 0 8px; font-size: 28px; line-height: 34px; font-weight: 700; }
+.board-head p { margin: 0; font-size: 15px; line-height: 22px; color: var(--t2); }
+.row { display: flex; flex-wrap: wrap; gap: 40px; padding: 24px 32px; align-items: flex-start; }
+.cap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-width: 390px; min-height: 78px; }
+.cap b { font-size: 13px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--mint); }
+.cap span { font-size: 13px; line-height: 19px; color: var(--t2); }
+.shot { border-radius: 4px; overflow: hidden; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55); outline: 1px solid #1b2a22; }
+
+/* ---- device frames ---- */
+.screen { background: var(--base); position: relative; overflow: hidden; display: flex; flex-direction: column; }
+.sysbar { height: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 12px; font-weight: 500; color: var(--t1); background: inherit; }
+.sysbar .ms { font-size: 14px; }
+.webtop { height: 36px; flex-shrink: 0; background: #202124; display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+.webtop i { width: 10px; height: 10px; border-radius: 50%; background: #5f6368; display: block; }
+.webtop .url { margin-left: 16px; height: 24px; flex: 0 1 420px; border-radius: 12px; background: #303134; color: #9aa0a6; font-size: 12px; display: flex; align-items: center; padding: 0 12px; }
+
+/* ---- THE BAR ---- */
+.bar { position: relative; z-index: 2; flex-shrink: 0; display: flex; align-items: center; background: var(--base); transition: background-color 160ms cubic-bezier(.215,.61,.355,1), box-shadow 160ms cubic-bezier(.215,.61,.355,1); }
+.bar.ph { height: 56px; padding: 0 4px 0 16px; }
+.bar.ph.sub { height: 68px; }
+.bar.wd { height: 64px; }
+.bar.scrolled { background: var(--raised); box-shadow: inset 0 -1px 0 var(--border-subtle); }
+.grow { flex: 1 1 auto; min-width: 0; }
+
+.mark { color: var(--t1); flex-shrink: 0; }
+.title-btn { display: inline-flex; align-items: center; gap: 4px; height: 48px; padding: 0 8px; margin-left: -8px; border: 0; background: transparent; border-radius: 8px; cursor: pointer; min-width: 0; }
+.title-btn:hover { background: var(--wash-hover); }
+.title-btn:active { background: var(--wash-press); }
+.title-btn:focus-visible, .ib:focus-visible, .acct:focus-visible, .mi:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+.title-btn .name { font-size: 18px; line-height: 26px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.title-btn .chev { font-size: 20px; color: var(--t3); flex-shrink: 0; }
+
+.screen-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.screen-title .t { font-size: 22px; line-height: 28px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.screen-title .s { font-size: 14px; line-height: 20px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.screen-title.stack { flex-direction: column; align-items: flex-start; gap: 0; }
+.screen-title.stack .s { color: var(--t2); }
+
+.ib { width: 48px; height: 48px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; border-radius: 999px; color: var(--t2); position: relative; cursor: pointer; }
+.ib:hover { background: var(--wash-hover); color: var(--t1); }
+.ib:active { background: var(--wash-press); color: var(--t1); }
+.ib:disabled { color: #4E6358; cursor: default; background: transparent; }
+.badge { position: absolute; top: 6px; right: 5px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: var(--ink); font-size: 12px; line-height: 18px; font-weight: 700; text-align: center; box-shadow: 0 0 0 2px var(--base); }
+.bar.scrolled .badge { box-shadow: 0 0 0 2px var(--raised); }
+
+.av { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; background: var(--field); box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--t2); font-size: 12px; line-height: 28px; font-weight: 600; text-align: center; letter-spacing: 0.3px; }
+.av.lg { width: 40px; height: 40px; line-height: 40px; font-size: 14px; }
+.acct { display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px 0 10px; border: 0; background: transparent; border-radius: 999px; cursor: pointer; flex-shrink: 0; }
+.acct:hover { background: var(--wash-hover); }
+.acct:active, .acct.open { background: var(--wash-press); }
+.acct .who { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--t1); white-space: nowrap; }
+.acct .ms { font-size: 18px; color: var(--t3); }
+
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: var(--t3); white-space: nowrap; flex-shrink: 0; }
+.status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.status .code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--t3); }
+.chip-off { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px 0 8px; border-radius: 999px; background: var(--amber-bg); box-shadow: inset 0 0 0 1px var(--amber-edge); color: var(--amber); font-size: 12px; line-height: 16px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.chip-off .code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; }
+
+.vrule { width: 1px; height: 24px; background: var(--card-edge); margin: 0 8px; flex-shrink: 0; }
+.btn-primary { height: 40px; padding: 0 16px 0 12px; border: 0; border-radius: 8px; background: var(--mint); color: var(--ink); font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; flex-shrink: 0; margin: 4px 0; }
+.btn-primary .ms { font-size: 20px; }
+
+/* account menu */
+.menu { position: absolute; z-index: 5; width: 288px; background: var(--overlay); border-radius: 12px; box-shadow: inset 0 0 0 1px var(--card-edge), 0 16px 40px rgba(0, 0, 0, 0.45); padding: 8px; }
+.menu .head { display: flex; gap: 12px; align-items: center; padding: 8px 8px 12px; }
+.menu .head .n { font-size: 16px; line-height: 22px; font-weight: 600; color: var(--t1); }
+.menu .head .r { font-size: 14px; line-height: 20px; color: var(--t2); }
+.menu .dev { margin: 0 8px 8px; padding: 10px 12px; border-radius: 8px; background: var(--base); display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--t2); }
+.menu .dev .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.menu .dev .code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--t2); margin-left: auto; }
+.menu hr { border: 0; height: 1px; background: var(--card-edge); margin: 4px 0; }
+.mi { display: flex; align-items: center; gap: 12px; width: 100%; height: 48px; padding: 0 12px; border: 0; background: transparent; border-radius: 8px; color: var(--t1); font-size: 14px; font-weight: 500; text-align: left; cursor: pointer; }
+.mi .ms { color: var(--t2); font-size: 20px; }
+.mi:hover { background: var(--wash-hover); }
+
+/* page content stand-ins */
+.greet { text-align: center; padding-top: 24px; }
+.greet .h { font-size: 28px; line-height: 34px; font-weight: 700; color: var(--t1); }
+.greet .p { margin-top: 8px; font-size: 16px; line-height: 22px; color: var(--t2); }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px 0; padding: 32px 16px 0; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--t1); text-align: center; }
+.tile .sq { width: 56px; height: 56px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.cards { display: grid; gap: 20px; }
+.card { background: var(--raised); border-radius: 16px; padding: 22px 20px; height: 191px; display: flex; flex-direction: column; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+.card .ic { width: 44px; height: 44px; border-radius: 10px; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; }
+.card .ti { margin-top: auto; font-size: 18px; line-height: 26px; font-weight: 600; color: var(--t2); }
+.card .de { margin-top: 8px; font-size: 13px; line-height: 20px; color: var(--t2); }
+.fld { height: 48px; border-radius: 8px; background: var(--field); box-shadow: inset 0 0 0 1px var(--border-strong); display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 15px; color: var(--t1); }
+.fld .ms { color: var(--t3); font-size: 20px; }
+.rec { background: var(--raised); border-radius: 12px; box-shadow: inset 0 0 0 1px var(--card-edge); padding: 16px; display: flex; gap: 14px; align-items: flex-start; }
+.rec .who2 { font-size: 16px; font-weight: 600; color: var(--t1); }
+.rec .mail { font-size: 14px; color: var(--t2); margin-top: 2px; }
+.rec .ph2 { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t3); margin-top: 4px; }
+.tag { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-top: 10px; margin-right: 6px; }
+.fig { background: var(--raised); border-radius: 12px; box-shadow: inset 0 0 0 1px var(--card-edge); padding: 16px; }
+.fig .l { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--t2); }
+.fig .v { margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 700; color: var(--t1); }
+.fig .v.m { color: var(--mint); }
+.fig .d { margin-top: 6px; font-size: 12px; color: var(--t3); }
+.tbl { background: var(--raised); border-radius: 12px; box-shadow: inset 0 0 0 1px var(--card-edge); overflow: hidden; }
+.tbl .tr { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr; padding: 0 20px; height: 48px; align-items: center; font-size: 14px; color: var(--t1); box-shadow: inset 0 -1px 0 var(--card-edge); }
+.tbl .tr.h { height: 40px; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--t3); background: var(--sunken); }
+.tbl .num { font-family: 'JetBrains Mono', monospace; text-align: right; }
+
+/* measurement callouts (anatomy) */
+.meas { position: absolute; z-index: 10; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #FFB4E1; white-space: nowrap; }
+.mline { position: absolute; z-index: 10; background: #FF7AC8; }
+.zone { position: absolute; z-index: 10; top: 0; height: 100%; outline: 1px dashed rgba(255, 122, 200, 0.55); outline-offset: -1px; }
+.zl { position: absolute; top: -20px; left: 0; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #FFB4E1; white-space: nowrap; }
+table.spec { border-collapse: collapse; font-size: 13px; width: 100%; }
+table.spec th, table.spec td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--card-edge); vertical-align: top; }
+table.spec th { color: var(--t3); font-weight: 700; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; }
+table.spec td { color: var(--t2); }
+table.spec td code { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--mint); }
+</style>
+</head>
+<body>
+<nav class="nav"><a href="index.html">&#8592; All top bar boards</a></nav>
+<header class="board-head"><h1>Top bar &#8212; desktop</h1><p>1440 wide in a browser, 64 tall. The same bar, wider: nothing new appears at desktop size, the slack goes to the space between the name and the controls.</p></header><div class="row" style="flex-direction:column;gap:48px"><div><div class="cap"><b>Home, account menu open</b><span>One place for the person: who they are, which device this is and whether it is online, settings for those allowed it, and sign out. The button stays pressed while its menu is open.</span></div><div class="shot"><div class="screen" style="width:1440px;height:600px"><div class="webtop"><i></i><i></i><i></i><span class="url">pos.uzapay.co.ke</span></div><header class="bar wd" style="padding:0 20px 0 32px"><span class="ms fill mark" aria-hidden="true">hub</span><span style="width:12px;flex-shrink:0"></span><button class="title-btn" aria-label="Dev Corner Shop. My businesses."><span class="name">Dev Corner Shop</span><span class="ms chev" aria-hidden="true">expand_more</span></button><span style="width:12px;flex-shrink:0"></span><span class="status"><span class="dot"></span>Online &#183; <span class="code">CT-7F2</span></span><span class="grow"></span><button class="ib" aria-label="4 waiting to send"><span class="ms " aria-hidden="true">notifications</span><span class="badge">4</span></button><span style="width:4px"></span><button class="acct open" aria-label="Amina Wanjiru, Manager. Account" aria-expanded="true"><span class="av">AW</span><span class="who">Amina W.</span><span class="ms " aria-hidden="true">expand_more</span></button></header><div class="menu" role="menu" style="top:104px;right:20px">
+  <div class="head"><span class="av lg">AW</span><div><div class="n">Amina Wanjiru</div><div class="r">Manager &#183; Dev Corner Shop</div></div></div>
+  <div class="dev"><span class="dot"></span>Online, this device is<span class="code">CT-7F2</span></div>
+  <hr>
+  <button class="mi" role="menuitem"><span class="ms " aria-hidden="true">settings</span>Settings</button>
+  <button class="mi" role="menuitem"><span class="ms " aria-hidden="true">logout</span>Sign out</button>
+</div><div style="flex:1;min-height:0;overflow:hidden;position:relative;z-index:1"><div class="greet"><div class="h">Good evening, Amina Wanjiru</div><div class="p">Select a module to begin.</div></div><div class="cards" style="grid-template-columns:repeat(4,1fr);padding:32px 32px 0;margin-top:0px"><div class="card"><span class="ic"><span class="ms fill" style="color:#42A5F5">point_of_sale</span></span><span class="ti">Register</span><span class="de">Ring up a sale, take payment and hand over the receipt.</span></div><div class="card"><span class="ic"><span class="ms fill" style="color:#26A69A">menu_book</span></span><span class="ti">Sales</span><span class="de">Sales reports, payments and transaction history.</span></div><div class="card"><span class="ic"><span class="ms fill" style="color:#AB47BC">store</span></span><span class="ti">Inventory</span><span class="de">View all products, sizes, pricing, and categories.</span></div><div class="card"><span class="ic"><span class="ms fill" style="color:#66BB6A">bar_chart</span></span><span class="ti">Reports</span><span class="de">Weekly sales, profit, best sellers and more reports.</span></div></div></div></div></div></div><div><div class="cap"><b>Inner screen, scrolled, with a primary action</b><span>A page that already carries a primary action in its bar draws it as a 40-tall filled button inside a 48 target; icon actions stay to its left.</span></div><div class="shot"><div class="screen" style="width:1440px;height:520px"><div class="webtop"><i></i><i></i><i></i><span class="url">pos.uzapay.co.ke</span></div><header class="bar wd scrolled" style="padding:0 8px 0 8px"><button class="ib" aria-label="Back"><span class="ms " aria-hidden="true">arrow_back</span></button><span style="width:4px;flex-shrink:0"></span><div class="screen-title"><span class="t">Sales report</span><span class="s">Thursday 14 October &#183; Main store</span></div><span class="grow"></span><button class="ib" aria-label="Choose dates"><span class="ms " aria-hidden="true">calendar_month</span></button><button class="ib" aria-label="Refresh"><span class="ms " aria-hidden="true">refresh</span></button><span style="width:8px"></span><button class="btn-primary"><span class="ms " aria-hidden="true">download</span>Export</button><span style="width:4px"></span></header><div style="flex:1;min-height:0;overflow:hidden;position:relative;z-index:1"><div style="margin-top:-120px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:8px 20px 0"><div class="fig"><div class="l">Sales</div><div class="v m">KES 41,250</div><div class="d">38 receipts</div></div><div class="fig"><div class="l">Profit</div><div class="v m">KES 9,870</div><div class="d">After cost of goods</div></div><div class="fig"><div class="l">Discounts</div><div class="v">KES 1,120</div><div class="d">6 receipts</div></div><div class="fig"><div class="l">Returns</div><div class="v">KES 600</div><div class="d">1 receipt</div></div></div><div style="padding:20px 20px 0"><div class="tbl"><div class="tr h"><span>Product</span><span class="num">Sold</span><span class="num">Takings</span><span class="num">Cost</span><span class="num">Profit</span></div><div class="tr"><span>Ugali flour 2kg</span><span class="num">14</span><span class="num">KES 2,940</span><span class="num">KES 2,310</span><span class="num" style="color:var(--mint)">KES 630</span></div><div class="tr"><span>Cooking oil 1L</span><span class="num">9</span><span class="num">KES 3,330</span><span class="num">KES 2,790</span><span class="num" style="color:var(--mint)">KES 540</span></div><div class="tr"><span>Sugar 1kg</span><span class="num">21</span><span class="num">KES 3,150</span><span class="num">KES 2,730</span><span class="num" style="color:var(--mint)">KES 420</span></div><div class="tr"><span>Milk 500ml</span><span class="num">32</span><span class="num">KES 1,920</span><span class="num">KES 1,600</span><span class="num" style="color:var(--mint)">KES 320</span></div><div class="tr"><span>Bread 400g</span><span class="num">18</span><span class="num">KES 1,170</span><span class="num">KES 990</span><span class="num" style="color:var(--mint)">KES 180</span></div><div class="tr"><span>Rice 1kg</span><span class="num">11</span><span class="num">KES 2,090</span><span class="num">KES 1,870</span><span class="num" style="color:var(--mint)">KES 220</span></div></div></div></div></div></div></div></div><div><div class="cap"><b>Home, offline</b><span>The status text becomes the amber chip in the same place; nothing else in the bar moves.</span></div><div class="shot"><div class="screen" style="width:1440px;height:200px"><div class="webtop"><i></i><i></i><i></i><span class="url">pos.uzapay.co.ke</span></div><header class="bar wd" style="padding:0 20px 0 32px"><span class="ms fill mark" aria-hidden="true">hub</span><span style="width:12px;flex-shrink:0"></span><button class="title-btn" aria-label="Dev Corner Shop. My businesses."><span class="name">Dev Corner Shop</span><span class="ms chev" aria-hidden="true">expand_more</span></button><span style="width:12px;flex-shrink:0"></span><span class="chip-off" role="status"><span class="ms s16" aria-hidden="true">cloud_off</span>Offline &#183; <span class="code">CT-7F2</span></span><span class="grow"></span><button class="ib" aria-label="4 waiting to send"><span class="ms " aria-hidden="true">notifications</span><span class="badge">4</span></button><span style="width:4px"></span><button class="acct" aria-label="Amina Wanjiru, Manager. Account" aria-expanded="false"><span class="av">AW</span><span class="who">Amina W.</span><span class="ms " aria-hidden="true">expand_more</span></button></header><div style="flex:1;min-height:0;overflow:hidden;position:relative;z-index:1"><div class="greet"><div class="h">Good evening, Amina Wanjiru</div><div class="p">Select a module to begin.</div></div></div></div></div></div></div></body>
+</html>

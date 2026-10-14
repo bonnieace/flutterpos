@@ -101,7 +101,8 @@ final class EmptyState extends StatelessWidget {
   /// is a drawing about *that* screen's emptiness rather than the same box
   /// twenty-one times.
   ///
-  /// The file's own colours are not used; see `AppIllustration`.
+  /// Materials and accent details use the illustration palette in `AppTokens`;
+  /// see `AppIllustration`.
   final String? illustration;
 
   /// A glyph to draw in a ring in place of the painted mark, for a list that
@@ -129,7 +130,7 @@ final class EmptyState extends StatelessWidget {
   /// drawing with a scene in it does not. 168 is three and a half of §9's 48,
   /// which is the nearest derivation available and still leaves the title
   /// above the fold on the shortest phone this app supports.
-  static const double illustrationSize = 168;
+  static const double illustrationSize = AppIllustration.sceneSize;
 
   @override
   Widget build(BuildContext context) {
@@ -172,6 +173,55 @@ final class EmptyState extends StatelessWidget {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A centered scene above a section's empty message, with its text key retained.
+/// Used where other records or controls remain on screen around the empty part.
+final class IllustratedMessage extends StatelessWidget {
+  const IllustratedMessage({
+    super.key,
+    required this.message,
+    required this.illustration,
+    this.textKey,
+    this.style,
+    this.textAlign,
+  });
+
+  final String message;
+  final String illustration;
+  final Key? textKey;
+  final TextStyle? style;
+  final TextAlign? textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(tokens.spacing.s24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppIllustration(
+              asset: illustration,
+              size: EmptyState.illustrationSize,
+            ),
+            SizedBox(height: tokens.spacing.s16),
+            Text(
+              message,
+              key: textKey,
+              textAlign: textAlign ?? TextAlign.center,
+              style:
+                  style ??
+                  tokens.density
+                      .body(tokens.typography)
+                      .copyWith(color: tokens.colors.text.secondary),
+            ),
+          ],
         ),
       ),
     );

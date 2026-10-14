@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Still trading — web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+:root {
+  --base: #0D1F16; --raised: #132A1F; --sunken: #08140E; --field: #1E3A2B;
+  --overlay: #1C3328; --border-subtle: #1E3A2B; --card-edge: #283831;
+  --border-strong: #2C5340; --selected: #3D4A3D;
+  --text: #FFFFFF; --text-2: #B8D6C5; --text-3: #849E8F; --text-disabled: #5D7468;
+  --money: #45F28D; --primary: #45F28D; --primary-hover: #3DD47C; --on-primary: #0A0F0C;
+  --secondary: #1C3328; --secondary-border: #2C5340;
+  --ok: #4BE277;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --focus: #45F28D;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #050C08; color: var(--text); font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; letter-spacing: 0.25px; }
+.page-nav a { color: var(--text-3); text-decoration: none; }
+.page-nav a:hover { color: var(--primary); text-decoration: underline; }
+.page-head { padding: 12px 24px 0; max-width: 1500px; margin: 0 auto; }
+.page-head h1 { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.page-head p { margin: 4px 0 0; max-width: 900px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.stage { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 24px 56px; }
+.frame-label { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.frame { position: relative; overflow: hidden; width: 1440px; height: 900px; background: var(--base); border-radius: 4px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6); flex: none; }
+
+/* --- the report behind, unchanged --- */
+.tb { height: 64px; display: flex; flex-direction: column; justify-content: center; padding: 0 16px; }
+.tb-title { font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.tb-sub { font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.report { width: 1152px; margin: 24px auto 0; display: flex; flex-direction: column; gap: 16px; }
+.row { display: flex; gap: 20px; }
+.field { flex: 1; height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--field); border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text-3); font-size: 16px; letter-spacing: 0.25px; }
+.icon-btn { width: 48px; height: 48px; border: 1px solid var(--border-strong); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text); }
+.btn-sec { flex: 1; height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--secondary); border: 1px solid var(--secondary-border); border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; color: var(--text); }
+.select { flex: 1; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: var(--field); border-radius: 8px; color: var(--text-2); font-size: 16px; }
+.select .grow { flex: 1; }
+.band { background: var(--raised); border: 1px solid var(--card-edge); border-radius: 8px; padding: 20px 24px; display: flex; align-items: baseline; gap: 16px; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; letter-spacing: -0.14px; }
+.big { font-size: 32px; line-height: 38.4px; color: var(--money); }
+.cap { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.table { background: var(--raised); border: 1px solid var(--card-edge); border-radius: 8px; overflow: hidden; }
+.tr { height: 64px; display: grid; grid-template-columns: 1.6fr 1fr 0.7fr 0.6fr; align-items: center; padding: 0 24px; border-top: 1px solid var(--card-edge); font-size: 14px; line-height: 20px; letter-spacing: 0.25px; }
+.tr:first-child { border-top: 0; height: 48px; color: var(--text-3); font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
+.tr .mono { color: var(--money); text-align: right; }
+.tr .r { text-align: right; }
+.scrim { position: absolute; inset: 0; background: var(--scrim); }
+
+/* --- the dialog: surface.overlay at radius.lg, space.24 inside --- */
+.dialog { position: absolute; left: 50%; top: 50%; width: 520px; transform: translate(-50%, -50%); background: var(--overlay); border-radius: 12px; padding: 24px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); }
+.eyebrow { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); }
+.title { margin: 8px 0 0; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; color: var(--text); }
+.body { margin: 8px 0 0; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+
+.night { position: relative; margin-top: 24px; padding-top: 24px; }
+.now-label { position: absolute; top: 0; transform: translateX(-50%); font-size: 12px; line-height: 16px; font-weight: 400; letter-spacing: 0.25px; color: var(--ok); white-space: nowrap; }
+.track { position: relative; height: 8px; border-radius: 999px; background: var(--border-strong); }
+.fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--ok); }
+.notch { position: absolute; top: -4px; width: 2px; height: 16px; margin-left: -1px; background: var(--overlay); }
+.mark { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 999px; background: var(--ok); border: 4px solid var(--overlay); }
+.ticks { position: relative; height: 16px; margin-top: 8px; }
+.tick { position: absolute; top: 0; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; }
+.tick b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; letter-spacing: -0.12px; color: var(--text-2); }
+.tick.mid { transform: translateX(-50%); }
+.tick.right { right: 0; }
+
+.foot { margin-top: 32px; display: flex; align-items: center; gap: 8px; }
+.check { height: 48px; flex: 1; display: flex; align-items: center; gap: 12px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.box { width: 18px; height: 18px; margin-left: 3px; border: 1px solid var(--border-strong); background: var(--field); border-radius: 2px; flex: none; }
+.btn { height: 48px; padding: 0 24px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; }
+.btn.primary { background: var(--primary); color: var(--on-primary); }
+.btn.secondary { background: var(--secondary); border: 1px solid var(--secondary-border); color: var(--text); }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; Still trading</a></nav>
+<header class="page-head">
+  <h1>Still trading — web</h1>
+  <p>The same moment in a browser: Sales opened from the home at 01:30 on Monday, by the owner. A 520 dialog rather than a sheet, with the answers on one line — <em>Don’t show again</em> on the left where a desktop puts it, the two days on the right.</p>
+</header>
+
+<div class="stage">
+  <div class="frame-label">1440 × 900 · owner · 01:30 Mon</div>
+  <div class="frame">
+    <div class="tb">
+      <span class="tb-title">Sales Report</span>
+      <span class="tb-sub">Review transactions, receipts, and returns.</span>
+    </div>
+    <div class="report">
+      <div class="row">
+        <div class="field"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5 18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5zM19 19.09H5V4.91h14v14.18zM6 15h12v2H6zm0-4h12v2H6zm0-4h12v2H6z"/></svg>Receipt, e.g. ACHIENG-CT-FB9-031 or 0042</div>
+        <div class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></div>
+      </div>
+      <div class="row">
+        <div class="btn-sec"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V8h16v13z"/></svg>2026-10-11</div>
+        <div class="select"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4C9.79 4 8 5.79 8 8s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 9c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4z"/></svg><span class="grow">All staff</span><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></div>
+      </div>
+      <div class="band"><span class="mono big">KES 18,450</span><span class="cap">23 sales · Sun 11 Oct</span></div>
+      <div class="table">
+        <div class="tr"><span>Items</span><span>Receipt</span><span>Sold by</span><span class="r">Total</span></div>
+        <div class="tr"><span>Beard Oil · 30ml × 2</span><span class="cap">ACHIENG-CT-FB9-031 · 01:12</span><span>Achieng</span><span class="mono">KES 2,000</span></div>
+        <div class="tr"><span>Tallow · 60ml</span><span class="cap">ACHIENG-CT-FB9-030 · 00:47</span><span>Achieng</span><span class="mono">KES 2,000</span></div>
+        <div class="tr"><span>tallow · 30ml × 3</span><span class="cap">ACHIENG-CT-FB9-029 · 23:58</span><span>Achieng</span><span class="mono">KES 3,000</span></div>
+        <div class="tr"><span>Beard Oil · 30ml</span><span class="cap">MWANGI-CT-3A1-012 · 21:40</span><span>Mwangi</span><span class="mono">KES 1,000</span></div>
+        <div class="tr"><span>Tallow · 60ml × 2</span><span class="cap">MWANGI-CT-3A1-011 · 20:15</span><span>Mwangi</span><span class="mono">KES 4,000</span></div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+
+    <div class="dialog" role="dialog" aria-labelledby="t">
+      <div class="eyebrow">Sun 11 Oct · business day</div>
+      <h2 class="title" id="t">Still trading on Sunday</h2>
+      <p class="body">Sales made since midnight count toward Sunday until the shift is closed, or 06:00 at the latest.</p>
+
+      <div class="night" role="img" aria-label="Shift opened 18:02 on Sunday. It is now 01:30. It stops selling at 06:00.">
+        <span class="now-label" style="left: 62.4%;">Now 01:30</span>
+        <div class="track">
+          <div class="fill" style="width: 62.4%;"></div>
+          <div class="notch" style="left: 49.9%;"></div>
+          <div class="mark" style="left: 62.4%;"></div>
+        </div>
+        <div class="ticks">
+          <span class="tick"><b>18:02</b> opened</span>
+          <span class="tick mid" style="left: 49.9%;"><b>00:00</b></span>
+          <span class="tick right"><b>06:00</b> stops</span>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div class="check"><span class="box"></span>Don’t show again</div>
+        <div class="btn secondary">Show today</div>
+        <div class="btn primary">Show Sunday</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

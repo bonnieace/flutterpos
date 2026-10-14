@@ -346,8 +346,8 @@ final class _SaleHistoryContents extends StatelessWidget {
             empty: const EmptyState(
               key: ValueKey('sale-history-empty'),
               title: 'No sales yet',
-              hint: 'A sale appears here once it has been confirmed.',
-              illustration: 'no-data.svg',
+              hint: 'Confirmed sales appear here.',
+              illustration: 'receipt-history.svg',
             ),
           )
         else

@@ -146,7 +146,7 @@ void main() {
       businessDate: monday,
     );
 
-    expect(find.textContaining('2 counts to take'), findsOneWidget);
+    expect(find.textContaining('2 counts due today'), findsOneWidget);
   });
 
   // **Found on two emulators on 2026-09-29**: the gate read this device's copy

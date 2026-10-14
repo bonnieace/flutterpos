@@ -16,6 +16,9 @@ library;
 import 'package:flutter/material.dart';
 
 import '../reporting/reporting_currency.dart';
+import '../ui/money_text.dart';
+import '../ui/record_list.dart' show RecordAction;
+import '../ui/record_sheet.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
@@ -62,10 +65,13 @@ final class TenantExpenseCategoryScreen extends StatelessWidget {
     return AppScaffold(
       title: category.label,
       subtitle: 'Spending under one type, $periodLabel.',
-      contentWidth: AppContentWidth.records,
+      contentWidth: RecordSheet.contentWidth(context),
       body: ListView(
         key: const ValueKey('expense-category'),
-        padding: EdgeInsets.all(AppTokens.componentOf(context).spacing.s20),
+        padding: RecordSheet.pagePadding(
+          context,
+          fallback: EdgeInsets.all(AppTokens.componentOf(context).spacing.s20),
+        ),
         children: <Widget>[
           TenantExpenseCategoryDetail(
             category: category,
@@ -206,19 +212,84 @@ final class TenantExpenseCategoryDetail extends StatelessWidget {
             ),
           ),
           SizedBox(height: tokens.spacing.s8),
-          for (final (index, record) in period.records.indexed)
-            ExpenseRow(
-              key: ValueKey('expense-category-${record.expenseId}'),
-              record: record,
-              currency: currency,
-              first: index == 0,
-              // Every row here is under the type this screen is named for.
-              showCategory: false,
-              onVoid: onVoid == null || record.isVoided
-                  ? null
-                  : () => _withdraw(context, record),
-            ),
+          if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width))
+            _sheet(context)
+          else
+            for (final (index, record) in period.records.indexed)
+              ExpenseRow(
+                key: ValueKey('expense-category-${record.expenseId}'),
+                record: record,
+                currency: currency,
+                first: index == 0,
+                // Every row here is under the type this screen is named for.
+                showCategory: false,
+                onVoid: onVoid == null || record.isVoided
+                    ? null
+                    : () => _withdraw(context, record),
+              ),
         ],
+      ],
+    );
+  }
+
+  /// The large-screen records: one row each, under the chart.
+  ///
+  /// **The same records, drawn as a table** - `docs/design/tables/`, at the
+  /// developer's direction on 2026-10-13. Every row is this one type, so there
+  /// is no type column. A voided record keeps its row and its amount, says
+  /// *Voided* and why under its description, and *not counted* under the
+  /// amount, which is what the card's strike-through means. *Void* is the
+  /// row's menu, under the card's conditions. Below 1024 the rows are
+  /// unchanged.
+  Widget _sheet(BuildContext context) {
+    final cents = period.records.any((record) => record.amountMinor % 100 != 0);
+    return RecordSheet(
+      key: const ValueKey('expense-category-sheet'),
+      columns: <SheetColumn>[
+        const SheetColumn(label: 'Date', kind: SheetColumnKind.text),
+        const SheetColumn(label: 'Description', kind: SheetColumnKind.identity),
+        SheetColumn(
+          label: 'Amount',
+          kind: SheetColumnKind.figure,
+          unit: currency.code,
+        ),
+      ],
+      rows: <SheetRow>[
+        for (final record in period.records)
+          SheetRow(
+            id: record.expenseId,
+            key: ValueKey('expense-category-${record.expenseId}'),
+            semanticLabel: record.description,
+            cells: <SheetCell?>[
+              SheetText(expenseDayLabel(record.businessDate)),
+              SheetText(
+                record.description,
+                caption: !record.isVoided
+                    ? null
+                    : record.voidReason == null
+                    ? 'Voided'
+                    : 'Voided - ${record.voidReason}',
+              ),
+              SheetFigure(
+                moneyTextGroupedOfMinor(record.amountMinor),
+                reserve: cents && record.amountMinor % 100 == 0 ? '.00' : null,
+                key: ValueKey('expense-amount-${record.expenseId}'),
+                caption: record.isVoided ? 'not counted' : null,
+              ),
+            ],
+            actions: <RecordAction>[
+              if (onVoid != null && !record.isVoided)
+                RecordAction(
+                  label: 'Void',
+                  icon: Icons.remove_circle_outline,
+                  destructive: true,
+                  onPressed: () => _withdraw(context, record),
+                  actionKey: ValueKey('expense-void-${record.expenseId}'),
+                ),
+            ],
+            actionsKey: ValueKey('expense-menu-${record.expenseId}'),
+            actionsTooltip: 'More for ${record.description}',
+          ),
       ],
     );
   }

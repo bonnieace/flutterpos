@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orders &#8212; design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #050C08; font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #FFFFFF; }
+a { color: #45F28D; } a:hover { color: #3DD47C; }
+:focus-visible { outline: 2px solid #45F28D; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.back { font-size: 14px; color: #849E8F; text-decoration: none; }
+h1 { margin: 12px 0 0; font-size: 28px; line-height: 33.6px; font-weight: 700; }
+.lede { margin: 8px 0 32px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; max-width: 700px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; margin-bottom: 12px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #FFFFFF; flex-shrink: 0; width: 200px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; }
+.size { font-size: 12px; color: #849E8F; flex-shrink: 0; margin-left: auto; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) { .board { flex-direction: column; gap: 6px; } .board h2 { width: auto; } .size { margin-left: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../accounting/index.html">&#8592; Accounting and documents</a>
+  <h1>Orders</h1>
+  <p class="lede">A new Sales icon (D-42). An order is an accepted job that is not handed over in one go: it holds its deposit, fixes its prices, and counts what was ordered, delivered and cancelled on each line. Every delivery is a sale with its own invoice. Read <a href="README.md">README.md</a> for the reasoning and the open questions.</p>
+  <a class="board" href="orders-list.html">
+    <h2>The list</h2>
+    <p>Open orders by next delivery, with a delivered-of-ordered meter, money held and money due; the sheet at 1440.</p>
+    <span class="size">390, 1440</span>
+  </a>
+  <a class="board" href="order-detail.html">
+    <h2>An order</h2>
+    <p>St. Mark&#8217;s three Sundays, one delivered: the count, the lines, the money in two sums, and the deliveries with their invoices.</p>
+    <span class="size">390, 1440</span>
+  </a>
+  <a class="board" href="order-actions.html">
+    <h2>Working an order</h2>
+    <p>Take a deposit, deliver, start an order with no quote, change a price, cancel what&#8217;s left, keep part of a deposit, and decide about too much delivered.</p>
+    <span class="size">390</span>
+  </a>
+</div>
+</body>
+</html>

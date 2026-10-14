@@ -290,9 +290,9 @@ final class _PlatformBusinessesPageState extends State<PlatformBusinessesPage> {
   Widget _emptyFor(PlatformBusinessFilter filter, String query) {
     if (query.isNotEmpty) {
       return EmptyState(
-        icon: Icons.search,
+        illustration: 'business-search.svg',
         title: 'No business matches “$query”',
-        hint: 'Search looks at the start of a business’s name.',
+        hint: 'Search by the start of a business name.',
         action: AppButton(
           label: 'Clear search',
           onPressed: () {
@@ -304,24 +304,24 @@ final class _PlatformBusinessesPageState extends State<PlatformBusinessesPage> {
     }
     return switch (filter) {
       PlatformBusinessFilter.archived => const EmptyState(
-        icon: Icons.inventory_2_outlined,
+        illustration: 'business-archived.svg',
         title: 'No archived businesses',
-        hint: 'Archiving is permanent, and nobody has needed it yet.',
+        hint: 'Archived businesses appear here.',
       ),
       PlatformBusinessFilter.suspended => const EmptyState(
-        icon: Icons.pause_circle_outline,
+        illustration: 'business-paused.svg',
         title: 'No suspended businesses',
-        hint: 'Every business that is not archived is trading.',
+        hint: 'Active businesses can keep trading.',
       ),
       PlatformBusinessFilter.attention => const EmptyState(
-        icon: Icons.check_circle_outline,
+        illustration: 'businesses.svg',
         title: 'Nothing needs attention',
         hint: 'No alert was raised in the last seven days.',
       ),
       _ => const EmptyState(
-        icon: Icons.storefront_outlined,
+        illustration: 'businesses.svg',
         title: 'No businesses yet',
-        hint: 'A business appears here the moment somebody creates one.',
+        hint: 'New businesses appear here.',
       ),
     };
   }
@@ -586,7 +586,7 @@ final class _PlatformBusinessPageState extends State<PlatformBusinessPage> {
         builder: (context, detail, reload) {
           if (detail == null) {
             return const EmptyState(
-              icon: Icons.storefront_outlined,
+              illustration: 'business-search.svg',
               title: 'This business no longer exists',
             );
           }

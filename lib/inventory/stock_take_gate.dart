@@ -30,6 +30,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../tenancy/tenant_session.dart';
@@ -335,10 +336,10 @@ final class _StockTakeHeld extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
                 SizedBox(height: tokens.spacing.s12),
-                Text(
-                  'A stock count is due today and this register is waiting for it. '
-                  'It takes as long as it takes to walk the shelf; nothing else '
-                  'is held up once you have handed it in.',
+                IllustratedMessage(
+                  illustration: 'stock-count.svg',
+                  message:
+                      'Count and submit the stock to unlock this register.',
                   style: tokens.typography.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -382,15 +383,14 @@ final class _StockTakeGateDialog extends StatelessWidget {
       canPop: !blocking,
       child: AppDialog(
         title: 'A stock count is due',
-        content: Text(
-          remaining > 1
-              ? 'You have $remaining counts to take today. Start with the '
-                    'first; the others follow.'
+        centerTitle: true,
+        content: IllustratedMessage(
+          illustration: 'stock-count.svg',
+          message: remaining > 1
+              ? '$remaining counts due today. Start with the first.'
               : blocking
-              ? 'This register is waiting for it. Count the shelf and hand the '
-                    'figures in, and the register opens.'
-              : 'Count the shelf when you get a moment and hand the figures '
-                    'in. Nothing is held up in the meantime.',
+              ? 'Count and submit the stock to unlock this register.'
+              : 'Count when ready. You can keep selling.',
           style: tokens.typography.bodyMedium,
         ),
         actions: <Widget>[

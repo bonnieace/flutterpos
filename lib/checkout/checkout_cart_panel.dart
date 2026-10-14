@@ -44,6 +44,8 @@ import '../ui/money_text.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
+import '../ui/states.dart';
 import 'package:flutter/services.dart';
 
 import '../customers/customer.dart';
@@ -62,6 +64,7 @@ import '../whatsapp/e_receipt_settings.dart';
 import '../whatsapp/receipt_delivery.dart';
 import '../whatsapp/send_receipt_sheet.dart';
 import '../ui/brand_icon.dart';
+import '../ui/illustration.dart';
 import '../ui/buttons.dart';
 import '../ui/chips.dart';
 import '../ui/dialogs.dart';
@@ -1677,12 +1680,6 @@ final class _CartEditorState extends State<_CartEditor> {
         key: const ValueKey('checkout-cart-pane'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          // **Only the two-pane cart keeps a fixed head.** In the sheet it
-          // was a non-scrolling strip holding a heading that repeated what the
-          // sheet already was, and it blocked the drag: a gesture starting on
-          // it moved nothing. The clear moves into the scrolling content
-          // below, still at the top and still far from the save.
-          if (stepped) _cartHead(context, tokens, inset, stepped: stepped),
           Expanded(
             child: ColoredBox(
               color: stepped
@@ -1712,67 +1709,10 @@ final class _CartEditorState extends State<_CartEditor> {
     );
   }
 
-  /// The sale's name, and how many units it holds.
-  ///
-  /// **`title.md` rather than `SectionHeading`'s `title.lg`, since
-  /// 2026-10-11.** The head is the one fixed strip above the lines, and every
-  /// pixel of it is a pixel the lines do not get; the smaller role is still a
-  /// heading to a screen reader. The count is [_itemCount], the figure the
-  /// phone's cart badge already states.
-  Widget _cartHead(
-    BuildContext context,
-    AppTokens tokens,
-    double inset, {
-    required bool stepped,
-  }) {
-    final units = _itemCount;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: stepped ? tokens.colors.surface.raised : null,
-        border: Border(
-          bottom: BorderSide(color: tokens.colors.surface.borderSubtle),
-        ),
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: inset,
-          vertical: tokens.spacing.s8,
-        ),
-        child: Row(
-          children: <Widget>[
-            Expanded(
-              child: Semantics(
-                header: true,
-                child: Text(
-                  'This sale',
-                  style: tokens.typography.titleMedium.copyWith(
-                    color: tokens.colors.text.primary,
-                  ),
-                ),
-              ),
-            ),
-            if (units > 0) ...<Widget>[
-              SizedBox(width: tokens.spacing.s8),
-              Text(
-                key: const ValueKey('checkout-cart-count'),
-                units == 1 ? '1 item' : '$units items',
-                style: tokens.typography.caption.copyWith(
-                  color: tokens.colors.text.tertiary,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   /// The two-pane cart's lines: hairline rows on the sunken ground rather than
   /// the sheet's cards, or the sentence that says there are none.
   ///
-  /// **Centred when empty**, with the receipt glyph over it, because on a till
-  /// screen this is most of the pane and a sentence pinned to its top corner
-  /// reads as a leftover rather than as the state of the sale.
+  /// The legacy cart animation and its message are stacked at the pane's center.
   Widget _wideSaleLines(
     BuildContext context,
     AppTokens tokens,
@@ -1780,30 +1720,7 @@ final class _CartEditorState extends State<_CartEditor> {
     double inset,
   ) {
     if (_quantities.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: inset),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(
-                Icons.receipt_long_outlined,
-                size: tokens.spacing.s32,
-                color: tokens.colors.text.tertiary,
-              ),
-              SizedBox(height: tokens.spacing.s12),
-              Text(
-                key: const ValueKey('checkout-cart-empty'),
-                'No items yet. Add a product to start the sale.',
-                textAlign: TextAlign.center,
-                style: tokens.density
-                    .body(tokens.typography)
-                    .copyWith(color: tokens.colors.text.secondary),
-              ),
-            ],
-          ),
-        ),
-      );
+      return const Center(child: _CheckoutEmptyCart());
     }
     return ListView(
       padding: EdgeInsets.zero,
@@ -1843,13 +1760,7 @@ final class _CartEditorState extends State<_CartEditor> {
     String currency,
   ) => <Widget>[
     if (_quantities.isEmpty)
-      Text(
-        key: const ValueKey('checkout-cart-empty'),
-        'No items yet. Add a product to start the sale.',
-        style: tokens.density
-            .body(tokens.typography)
-            .copyWith(color: tokens.colors.text.secondary),
-      )
+      const _CheckoutEmptyCart()
     else
       for (final entry in _quantities.entries)
         _cartLine(entry, currency, dense: false),
@@ -1972,7 +1883,7 @@ final class _CartEditorState extends State<_CartEditor> {
           message: _unavailable.message,
         ),
       ],
-      if (blocker != null) ...<Widget>[
+      if (_quantities.isNotEmpty && blocker != null) ...<Widget>[
         SizedBox(height: tokens.spacing.s8),
         Text(
           key: const ValueKey('checkout-save-blocked'),
@@ -2062,8 +1973,7 @@ final class _CartEditorState extends State<_CartEditor> {
     );
   }
 
-  /// *Paid by* and the tender chips, with the not-said line under them while
-  /// nothing is chosen.
+  /// *Paid by* and the tender chips.
   ///
   /// **The label is for the eye only.** The bar already announces itself as
   /// *How the customer paid*, and reading both would say it twice.
@@ -2071,34 +1981,14 @@ final class _CartEditorState extends State<_CartEditor> {
     final quiet = tokens.typography.caption.copyWith(
       color: tokens.colors.text.tertiary,
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
+    return Row(
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            SizedBox(
-              width: _wideTenderLabelWidth,
-              child: ExcludeSemantics(child: Text('Paid by', style: quiet)),
-            ),
-            SizedBox(width: tokens.spacing.s8),
-            Expanded(child: _tenderChips()),
-          ],
+        SizedBox(
+          width: _wideTenderLabelWidth,
+          child: ExcludeSemantics(child: Text('Paid by', style: quiet)),
         ),
-        // The sheet's sentence, shortened to the one line this pane has room
-        // for. What it answers is the same: nothing here is refused.
-        if (_tender == null)
-          Padding(
-            padding: EdgeInsetsDirectional.only(
-              start: _wideTenderLabelWidth + tokens.spacing.s8,
-              top: tokens.spacing.s4,
-            ),
-            child: Text(
-              key: const ValueKey('checkout-tender-unset'),
-              'Not said yet. You can set it later from the sale.',
-              style: quiet,
-            ),
-          ),
+        SizedBox(width: tokens.spacing.s8),
+        Expanded(child: _tenderChips()),
       ],
     );
   }
@@ -2834,9 +2724,6 @@ final class _CartEditorState extends State<_CartEditor> {
     final quiet = tokens.typography.caption.copyWith(
       color: tokens.colors.text.tertiary,
     );
-    final body = tokens.density
-        .body(tokens.typography)
-        .copyWith(color: tokens.colors.text.secondary);
     final matches = _visibleProducts;
     // A `Wrap` builds every child eagerly even inside a `ListView`, and the
     // cache admits two thousand products. Only what is drawn is bounded; every
@@ -2844,6 +2731,42 @@ final class _CartEditorState extends State<_CartEditor> {
     final visible = matches.length > maximumRenderedCheckoutProducts
         ? matches.sublist(0, maximumRenderedCheckoutProducts)
         : matches;
+    if (visible.isEmpty) {
+      final emptyCatalog = _snapshot.products.isEmpty;
+      return CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.symmetric(
+              horizontal: AppScaffold.horizontalInset(tokens.spacing),
+              vertical: tokens.spacing.s12,
+            ),
+            sliver: SliverToBoxAdapter(child: _browseHead(context, tokens)),
+          ),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: _CheckoutEmptyMessage(
+                illustration: AppIllustration(
+                  key: const ValueKey('checkout-catalog-illustration'),
+                  asset: emptyCatalog
+                      ? 'catalog-sync.svg'
+                      : 'product-search.svg',
+                  size: EmptyState.illustrationSize,
+                ),
+                textKey: ValueKey(
+                  emptyCatalog
+                      ? 'checkout-catalog-empty'
+                      : 'checkout-catalog-no-matches',
+                ),
+                message: emptyCatalog
+                    ? 'No products yet. Connect to sync.'
+                    : 'No matching products. Try another search.',
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return ListView(
       padding: EdgeInsets.symmetric(
         horizontal: AppScaffold.horizontalInset(tokens.spacing),
@@ -2857,27 +2780,7 @@ final class _CartEditorState extends State<_CartEditor> {
         // that whole asymmetry is gone: both layouts now report the same way,
         // from `_reportSave`, and neither reserves space for it.
         _browseHead(context, tokens),
-        // **Two full-page-ish states that stay prose, deliberately.** §5.1 gives
-        // `EmptyState` a row and §5.2 specifies it nowhere, and step 9 already
-        // took this decision once for screen 08: giving one of the three missing
-        // full-page states a bespoke treatment here is how a fourth
-        // implementation of an empty state gets written. They take a §2.2 role
-        // and no shape of their own.
-        if (_snapshot.products.isEmpty)
-          Text(
-            key: const ValueKey('checkout-catalog-empty'),
-            'This device holds no products for this business yet. Connect to '
-            'sync them before selling.',
-            style: body,
-          )
-        else if (visible.isEmpty)
-          Text(
-            key: const ValueKey('checkout-catalog-no-matches'),
-            'No product on this device matches that search. Clear it to see the '
-            'whole list.',
-            style: body,
-          )
-        else ...<Widget>[
+        ...<Widget>[
           if (matches.length > visible.length) ...<Widget>[
             Text(
               key: const ValueKey('checkout-catalog-truncated'),
@@ -3033,20 +2936,6 @@ final class _CartEditorState extends State<_CartEditor> {
         // half of that is true of an unanswered question: it reads as
         // unanswered, and the sale's card can set it later.
         _tenderChips(),
-        // **Only while nothing is chosen**, so it reads as an answer to *what
-        // happens if I do not pick one* rather than as a warning about a sale
-        // that is about to be refused. Nothing here is refused.
-        if (_tender == null) ...[
-          SizedBox(height: tokens.spacing.s8),
-          Text(
-            key: const ValueKey('checkout-tender-unset'),
-            'No payment method yet. The sale records that it was not said, and '
-            'you can set it later from the sale.',
-            style: tokens.typography.caption.copyWith(
-              color: tokens.colors.text.tertiary,
-            ),
-          ),
-        ],
         SizedBox(height: tokens.spacing.s20),
       ];
 
@@ -3096,11 +2985,11 @@ final class _CartEditorState extends State<_CartEditor> {
     final blocker = _blocker(total);
     return <Widget>[
       _saveButton(total),
-      if (blocker case final reason?) ...[
+      if (_quantities.isNotEmpty && blocker != null) ...[
         SizedBox(height: tokens.spacing.s8),
         Text(
           key: const ValueKey('checkout-save-blocked'),
-          reason,
+          blocker,
           style: tokens.typography.caption.copyWith(
             color: tokens.colors.text.tertiary,
           ),
@@ -4554,4 +4443,77 @@ String _grouped(int value) {
     buffer.write(digits[index]);
   }
   return buffer.toString();
+}
+
+/// The legacy empty-cart artwork at the full scene size, with centered copy.
+final class _CheckoutEmptyCart extends StatelessWidget {
+  const _CheckoutEmptyCart();
+
+  @override
+  Widget build(BuildContext context) {
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    return _CheckoutEmptyMessage(
+      illustration: Lottie.asset(
+        'images/empty.json',
+        key: const ValueKey('checkout-empty-cart-animation'),
+        width: EmptyState.illustrationSize,
+        height: EmptyState.illustrationSize,
+        fit: BoxFit.contain,
+        animate: !reducedMotion,
+        repeat: true,
+        // A representative frame stays visible under reduced motion.
+        controller: reducedMotion
+            ? const AlwaysStoppedAnimation<double>(0.5)
+            : null,
+        errorBuilder: (context, error, stackTrace) => const AppIllustration(
+          asset: 'empty-cart.svg',
+          size: EmptyState.illustrationSize,
+        ),
+      ),
+      textKey: const ValueKey('checkout-cart-empty'),
+      message: 'Your cart is empty. Add a product.',
+    );
+  }
+}
+
+/// A full-sized checkout scene above concise, centered copy.
+final class _CheckoutEmptyMessage extends StatelessWidget {
+  const _CheckoutEmptyMessage({
+    required this.illustration,
+    required this.textKey,
+    required this.message,
+  });
+
+  final Widget illustration;
+  final Key textKey;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Padding(
+      padding: EdgeInsets.all(tokens.spacing.s24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          ExcludeSemantics(
+            child: SizedBox.square(
+              dimension: EmptyState.illustrationSize,
+              child: illustration,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s16),
+          Text(
+            message,
+            key: textKey,
+            textAlign: TextAlign.center,
+            style: tokens.density
+                .body(tokens.typography)
+                .copyWith(color: tokens.colors.text.secondary),
+          ),
+        ],
+      ),
+    );
+  }
 }

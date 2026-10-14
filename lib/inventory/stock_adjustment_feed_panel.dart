@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 
 import '../ui/pagination.dart';
 import '../ui/record_list.dart';
@@ -233,11 +234,12 @@ final class _AdjustmentFeedContents extends StatelessWidget {
                 selfUid: selfUid,
               ),
           ],
-          empty: Text(
-            key: const ValueKey('stock-adjustments-empty'),
-            page.isProductScoped
-                ? 'No manual adjustment has been recorded for this product.'
-                : 'No manual adjustment has been recorded in this business.',
+          empty: IllustratedMessage(
+            illustration: 'stock-adjustment.svg',
+            textKey: const ValueKey('stock-adjustments-empty'),
+            message: page.isProductScoped
+                ? 'No adjustments for this product yet.'
+                : 'No stock adjustments yet.',
           ),
         ),
       ],

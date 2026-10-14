@@ -137,11 +137,9 @@ flutter:
     # delegate tints them - a multi-coloured file is refused, which is the whole
     # of what makes an authored asset survive a palette change.
     - assets/lottie/
-    # unDraw illustrations (MIT, no attribution). Sourced multi-colour, which
-    # the Lottie note above would refuse - the difference is that these are
-    # never drawn in the colours they ship with. `AppIllustration` binds each of
-    # unDraw's five palette slots to a token role at render time, so the file on
-    # disk is a shape and the palette is still `AppTokens`.
+    # unDraw vectors, artistically painted through AppTokens illustration roles.
+    # Material colors and authored --paint-* IDs keep skin, paper, clothing,
+    # accent details and gradient stops distinct on the app's dark backgrounds.
     - assets/illustrations/
     # Other apps' own icons, for the home tiles that send through them -
     # WhatsApp and Gmail - at the developer's direction on 2026-10-04. The one

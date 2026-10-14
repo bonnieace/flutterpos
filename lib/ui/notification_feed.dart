@@ -225,6 +225,8 @@ class _AppNotificationTileState extends State<AppNotificationTile>
     final item = widget.item;
     final role = item.status.role(tokens);
     final expandable = item.isExpandable;
+    final desktop =
+        MediaQuery.sizeOf(context).width >= tokens.layout.expandedFloor;
     return Semantics(
       container: true,
       label: '${_statusWord(item.status)}. ${item.title}',
@@ -264,7 +266,9 @@ class _AppNotificationTileState extends State<AppNotificationTile>
                             ),
                           ),
                         ],
-                        if (item.sourceLabel != null || item.timeLabel != null)
+                        if (!desktop &&
+                            (item.sourceLabel != null ||
+                                item.timeLabel != null))
                           Padding(
                             padding: EdgeInsets.only(top: tokens.spacing.s8),
                             child: _Meta(
@@ -276,6 +280,16 @@ class _AppNotificationTileState extends State<AppNotificationTile>
                       ],
                     ),
                   ),
+                  if (desktop) ...[
+                    SizedBox(width: tokens.spacing.s24),
+                    Expanded(
+                      child: _Meta(
+                        source: item.sourceLabel,
+                        time: item.timeLabel,
+                        role: role,
+                      ),
+                    ),
+                  ],
                   if (expandable)
                     _Chevron(
                       expanded: _expanded,

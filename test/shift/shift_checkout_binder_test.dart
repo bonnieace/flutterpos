@@ -268,7 +268,12 @@ void main() {
     // shift and business date, and the sale carries the shift's date, so the
     // whole night lands on the day that drawer was opened for.
     await shiftState.save(
-      _record(deviceId: deviceId, businessDate: '2026-07-30'),
+      _record(
+        deviceId: deviceId,
+        businessDate: '2026-07-30',
+        // 18:00 on the 30th in Nairobi.
+        openedAt: DateTime.utc(2026, 7, 30, 15),
+      ),
     );
 
     final record = await _service(
@@ -277,7 +282,8 @@ void main() {
       outbox,
       receipts,
       shiftState,
-      clock,
+      // 01:30 on the 31st in Nairobi: past midnight, before the 06:00 cutoff.
+      () => DateTime.utc(2026, 7, 30, 22, 30),
     ).createDraft(_request());
 
     expect(record.payload['businessDate'], '2026-07-30');
@@ -311,11 +317,16 @@ void main() {
     // and the binder - the one thing every sale goes through - never asked. So
     // the picture refused and the till accepted, and since nothing recomputes
     // expiry while a till is open, a device left running kept selling past it.
-    await shiftState.save(_record(deviceId: deviceId));
+    //
+    // Opened at 03:30 in Nairobi, so its cap arrives before its trading day's
+    // 06:00 cutoff does and it is the cap this refuses on.
+    await shiftState.save(
+      _record(deviceId: deviceId, openedAt: DateTime.utc(2026, 7, 31, 0, 30)),
+    );
     final binder = TenantShiftCheckoutBinder(
       shiftState,
       // One minute past a day after the shift opened.
-      clock: () => DateTime.utc(2026, 8, 1, 9, 1),
+      clock: () => DateTime.utc(2026, 8, 1, 0, 31),
     );
 
     final binding = await binder.bindCheckoutShift(
@@ -326,11 +337,13 @@ void main() {
   });
 
   test('a shift inside the cap still binds', () async {
-    await shiftState.save(_record(deviceId: deviceId));
+    await shiftState.save(
+      _record(deviceId: deviceId, openedAt: DateTime.utc(2026, 7, 31, 0, 30)),
+    );
     final binder = TenantShiftCheckoutBinder(
       shiftState,
       // One minute short of a day, which is still a trading shift.
-      clock: () => DateTime.utc(2026, 8, 1, 8, 59),
+      clock: () => DateTime.utc(2026, 8, 1, 0, 29),
     );
 
     final binding = await binder.bindCheckoutShift(
@@ -338,6 +351,25 @@ void main() {
     );
 
     expect(binding.refusalCode, isNull);
+  });
+
+  test('a shift stops binding at its trading day\'s cutoff', () async {
+    // Opened at noon on the 31st in Nairobi: twenty-one hours later is well
+    // inside the cap, and the next morning's trade must not be filed under
+    // the 31st. 03:00 UTC is 06:00 in Nairobi on the 1st.
+    await shiftState.save(_record(deviceId: deviceId));
+
+    final before = await TenantShiftCheckoutBinder(
+      shiftState,
+      clock: () => DateTime.utc(2026, 8, 1, 2, 59),
+    ).bindCheckoutShift(_session(TenantRole.cashier));
+    final at = await TenantShiftCheckoutBinder(
+      shiftState,
+      clock: () => DateTime.utc(2026, 8, 1, 3),
+    ).bindCheckoutShift(_session(TenantRole.cashier));
+
+    expect(before.refusalCode, isNull);
+    expect(at.refusalCode, 'shift_expired');
   });
 
   test('the binder itself answers only for this exact session', () async {

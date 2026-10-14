@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tables — states</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+/* ===== tokens: AppTokens.uzapay, quoted from lib/ui/tokens.dart ===== */
+:root {
+  --stage: #050C08;
+  --base: #0D1F16; --raised: #132A1F; --sunken: #08140E; --field: #1E3A2B;
+  --overlay: #1C3328; --border-subtle: #1E3A2B; --card-edge: #283831;
+  --border-strong: #2C5340; --selected: #3D4A3D;
+  --text: #FFFFFF; --text-2: #B8D6C5; --text-3: #849E8F; --text-disabled: #5D7468;
+  --mint: #45F28D; --mint-hover: #3DD47C; --on-mint: #0A0F0C;
+  --secondary: #1C3328; --secondary-border: #2C5340;
+  --ok: #4BE277; --ok-bg: rgba(75, 226, 119, 0.10); --ok-edge: rgba(75, 226, 119, 0.30);
+  --att: #F2C14E; --att-bg: rgba(242, 193, 78, 0.10); --att-edge: rgba(242, 193, 78, 0.30);
+  --prob: #FF5C6C; --prob-bg: rgba(147, 0, 10, 0.20); --prob-edge: rgba(239, 68, 68, 0.30);
+  --info: #B0CDBD; --info-bg: rgba(176, 205, 189, 0.10); --info-edge: rgba(176, 205, 189, 0.30);
+  --neu: #BCCBB9; --neu-bg: #283831; --neu-edge: #3D4A3D;
+  --focus: #45F28D;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--stage); color: var(--text); font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+svg.i { width: 20px; height: 20px; fill: currentColor; flex: none; }
+svg.i16 { width: 16px; height: 16px; fill: currentColor; flex: none; }
+svg.i14 { width: 14px; height: 14px; fill: currentColor; flex: none; }
+svg.i24 { width: 24px; height: 24px; fill: currentColor; flex: none; }
+
+/* ===== board chrome (not app UI) ===== */
+.page-nav { padding: 20px 24px 0; font-size: 14px; letter-spacing: 0.25px; }
+.page-nav a { color: var(--text-3); text-decoration: none; }
+.page-nav a:hover { color: var(--mint); text-decoration: underline; }
+.page-head { padding: 12px 24px 0; max-width: 1488px; margin: 0 auto; }
+.page-head h1 { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.page-head p { margin: 4px 0 0; max-width: 940px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.stage { max-width: 1488px; margin: 0 auto; padding: 24px 24px 72px; display: flex; flex-direction: column; gap: 48px; }
+.section > h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; }
+.section > .lede { margin: 4px 0 16px; max-width: 940px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.section > .lede b, .note b { color: var(--text); font-weight: 600; }
+.frame-label { margin: 0 0 8px; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.frame { position: relative; overflow: hidden; background: var(--base); border-radius: 4px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6); flex: none; }
+.notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.notes.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.note { background: var(--sunken); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.note .n { display: inline-flex; width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; background: #F2C14E; color: #0A0F0C; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; vertical-align: 1px; }
+.note code, .lede code, td code { font-family: var(--mono); font-size: 12px; color: var(--mint); }
+.mk { position: absolute; z-index: 5; width: 22px; height: 22px; border-radius: 50%; background: #F2C14E; color: #0A0F0C; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px rgba(5, 12, 8, 0.85); }
+.was { margin-top: 12px; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 16px; max-width: 1200px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.was dt { color: var(--text-3); font-size: 12px; line-height: 21px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
+.was dd { margin: 0; }
+
+/* ===== app frame pieces ===== */
+.tb { height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px 0 8px; }
+.tb .ib { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; color: var(--text); border-radius: 8px; flex: none; }
+.tb .tt { font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; white-space: nowrap; }
+.tb .ts { font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); white-space: nowrap; }
+.tb .grow { flex: 1; }
+.page { width: 1200px; margin: 8px auto 0; }
+
+/* ===== the sheet ===== */
+.sheet { background: var(--raised); border: 1px solid var(--card-edge); border-radius: 8px; overflow: hidden; }
+.bar { display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border-subtle); }
+.bar .sp { flex: 1; }
+.bar .lead { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.bar .lead b { font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; color: var(--text); white-space: nowrap; }
+.bar .lead small { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; }
+.fld { height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--field); border: 1px solid var(--border-strong); border-radius: 8px; font-size: 16px; line-height: 24px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; flex: none; }
+.fld.search { width: 320px; }
+.fld .v { color: var(--text); }
+.fld .dd { margin-left: auto; color: var(--text-2); }
+.fld svg { color: var(--text-3); }
+.btn { height: 48px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; flex: none; border: 1px solid transparent; }
+.btn.icon { padding: 0 16px; }
+.btn.pri { background: var(--mint); color: var(--on-mint); }
+.btn.sec { background: var(--secondary); border-color: var(--secondary-border); color: var(--text); }
+.btn.ter { color: var(--mint); }
+.btn.off { background: var(--field); border-color: var(--field); color: var(--text-disabled); }
+
+.th, .tr, .tg, .tsum, .tx { display: grid; grid-template-columns: var(--cols); column-gap: 16px; padding: 0 24px; align-items: center; }
+.th { height: 40px; border-bottom: 1px solid var(--border-strong); font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+.th .u { color: var(--text-disabled); }
+.tr { min-height: 56px; border-top: 1px solid var(--border-subtle); font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); position: relative; }
+.th + .tr, .tg + .tr, .th + .tg { border-top: 0; }
+.tr.hover { background: var(--overlay); }
+.tr.press { background: var(--field); }
+.tr.focus { box-shadow: inset 0 0 0 2px var(--focus); }
+.tr.open { background: var(--overlay); }
+.tr.muted .id b, .tr.muted .txt, .tr.muted .num, .tr.muted .time { color: var(--text-3); }
+.tg { height: 40px; background: var(--sunken); border-top: 1px solid var(--border-subtle); font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+.tg .num { font-size: 12px; line-height: 16px; color: var(--text-2); text-transform: none; letter-spacing: 0; }
+.tg .cap { text-transform: none; font-weight: 400; letter-spacing: 0.25px; }
+.tsum { min-height: 56px; background: var(--sunken); border-top: 1px solid var(--border-strong); font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); }
+.tsum .num { color: var(--mint); }
+.tsum .cap { text-transform: none; font-weight: 400; letter-spacing: 0.25px; }
+.tx { background: var(--sunken); border-top: 1px solid var(--border-subtle); padding-top: 8px; padding-bottom: 8px; }
+.tx .line { display: contents; }
+.tx .li { min-height: 32px; display: flex; align-items: center; }
+.span-all { grid-column: 1 / -1; }
+
+/* cells */
+.id { min-width: 0; display: flex; flex-direction: column; }
+.id b { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.id small { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.id small.code, .code { font-family: var(--mono); font-weight: 500; letter-spacing: 0; }
+.code { font-size: 12px; line-height: 16px; color: var(--text-2); white-space: nowrap; }
+.txt { min-width: 0; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.txt.two { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.txt .you { color: var(--text-3); }
+.num { font-family: var(--mono); font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: 0; color: var(--text); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.num .pad { visibility: hidden; }
+.num.dim { color: var(--text-3); }
+.num.neg { color: var(--text); }
+.time { font-family: var(--mono); font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: 0; color: var(--text-2); white-space: nowrap; }
+.r { text-align: right; justify-self: end; }
+.c { justify-self: center; }
+.dl { font-family: var(--mono); font-weight: 500; font-size: 14px; line-height: 20px; color: var(--text-2); white-space: nowrap; display: inline-flex; align-items: center; gap: 2px; justify-self: end; }
+.dl svg { width: 20px; height: 20px; fill: currentColor; flex: none; margin: -2px -2px -2px -4px; color: var(--text-3); }
+.st { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); white-space: nowrap; }
+.st.ok svg { color: var(--ok); } .st.att svg { color: var(--att); } .st.prob svg { color: var(--prob); } .st.neu svg { color: var(--text-3); } .st.info svg { color: var(--info); }
+.bdg { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 8px; border: 1px solid; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; white-space: nowrap; justify-self: start; }
+.bdg.ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-edge); }
+.bdg.att { color: var(--att); background: var(--att-bg); border-color: var(--att-edge); }
+.bdg.prob { color: var(--prob); background: var(--prob-bg); border-color: var(--prob-edge); }
+.bdg.info { color: var(--info); background: var(--info-bg); border-color: var(--info-edge); }
+.bdg.neu { color: var(--neu); background: var(--neu-bg); border-color: var(--neu-edge); }
+.kb { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; color: var(--text-2); border-radius: 8px; justify-self: end; }
+.kb.hover { background: rgba(255, 255, 255, 0.08); }
+.dis { width: 48px; height: 48px; margin: 0 -8px; display: flex; align-items: center; justify-content: center; color: var(--text-2); border-radius: 8px; }
+.acts { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.prog { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.trk { width: 64px; height: 4px; border-radius: 999px; background: var(--border-strong); overflow: hidden; flex: none; }
+.trk i { display: block; height: 100%; background: var(--ok); border-radius: 999px; }
+.trk.att i { background: var(--att); }
+.wait { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--att); }
+
+/* foot */
+.foot { min-height: 64px; display: flex; align-items: center; gap: 16px; padding: 8px 24px; border-top: 1px solid var(--border-subtle); }
+.foot .cnt { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.foot .cnt b { color: var(--text-2); font-weight: 500; }
+.pg { margin-left: auto; display: flex; align-items: stretch; height: 48px; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; flex: none; }
+.pg span { display: flex; align-items: center; gap: 4px; padding: 0 16px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; color: var(--text); white-space: nowrap; }
+.pg span + span { border-left: 1px solid var(--border-strong); }
+.pg .off { color: var(--text-disabled); }
+.pg .mid { background: var(--overlay); }
+
+/* skeleton, notices */
+.sk { display: block; height: 12px; border-radius: 6px; background: var(--border-subtle); }
+.sk.hi { background: var(--border-strong); }
+.callout { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: 8px; border: 1px solid; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; }
+.callout.info { color: var(--text-2); background: var(--info-bg); border-color: var(--info-edge); }
+.callout.info svg { color: var(--info); }
+.callout.prob { color: var(--text); background: var(--prob-bg); border-color: var(--prob-edge); }
+.callout.prob svg { color: var(--prob); }
+.callout.att { color: var(--text); background: var(--att-bg); border-color: var(--att-edge); }
+.callout.att svg { color: var(--att); }
+.callout b { font-weight: 600; color: var(--text); }
+.empty { padding: 56px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+.empty b { font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; color: var(--text); }
+.empty p { margin: 0 0 8px; max-width: 460px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.empty .glyph { width: 48px; height: 48px; border-radius: 12px; background: var(--field); color: var(--text-2); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+
+/* ===== this board ===== */
+.sup { --cols: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 0.9fr) minmax(0, 0.9fr) 48px; }
+.sup-s { --cols: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 0.9fr) 48px; }
+.states { display: grid; grid-template-columns: 210px minmax(0, 1fr); column-gap: 24px; }
+.labels { display: flex; flex-direction: column; }
+.labels .h { height: 41px; }
+.labels .l { height: 57px; display: flex; flex-direction: column; justify-content: center; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; color: var(--text); }
+.labels .l small { font-weight: 400; font-size: 12px; line-height: 16px; color: var(--text-3); }
+.menu { position: absolute; right: 24px; top: 52px; z-index: 4; width: 240px; padding: 8px 0; background: var(--overlay); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }
+.menu span { height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text); }
+.menu span.d { color: var(--prob); }
+.menu span.f { background: rgba(255, 255, 255, 0.08); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 24px; }
+.cap2 { margin: 0 0 8px; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; }
+.cap2 small { display: block; font-weight: 400; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); margin-top: 2px; }
+.inbar { padding: 16px 24px 0; }
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<symbol id="more" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></symbol>
+<symbol id="right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></symbol>
+<symbol id="left" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></symbol>
+<symbol id="down" viewBox="0 0 24 24"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></symbol>
+<symbol id="up" viewBox="0 0 24 24"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></symbol>
+<symbol id="drop" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></symbol>
+<symbol id="tri-up" viewBox="0 0 24 24"><path d="M7 14l5-5 5 5z"/></symbol>
+<symbol id="tri-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></symbol>
+<symbol id="filter" viewBox="0 0 24 24"><path d="M7 6h10l-5.01 6.3L7 6zm-2.75-.39C6.27 8.2 10 13 10 13v6c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-6s3.72-4.8 5.74-7.39c.51-.66.04-1.61-.79-1.61H5.04c-.83 0-1.3.95-.79 1.61z"/></symbol>
+<symbol id="cal" viewBox="0 0 24 24"><path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V10h16v11zm0-13H4V5h16v3z"/></symbol>
+<symbol id="ok" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></symbol>
+<symbol id="ok-o" viewBox="0 0 24 24"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></symbol>
+<symbol id="err" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></symbol>
+<symbol id="warn" viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></symbol>
+<symbol id="info" viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></symbol>
+<symbol id="block" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM4 12c0-4.42 3.58-8 8-8 1.85 0 3.55.63 4.9 1.69L5.69 16.9C4.63 15.55 4 13.85 4 12zm8 8c-1.85 0-3.55-.63-4.9-1.69L18.31 7.1C19.37 8.45 20 10.15 20 12c0 4.42-3.58 8-8 8z"/></symbol>
+<symbol id="upload" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95C8.08 7.14 9.94 6 12 6c2.62 0 4.88 1.86 5.39 4.43l.3 1.5 1.53.11c1.56.1 2.78 1.41 2.78 2.96 0 1.65-1.35 3-3 3zM8 13h2.55v3h2.9v-3H16l-4-4z"/></symbol>
+<symbol id="back" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></symbol>
+<symbol id="add" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></symbol>
+<symbol id="person-add" viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></symbol>
+<symbol id="truck" viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></symbol>
+<symbol id="dl" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></symbol>
+<symbol id="refresh" viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></symbol>
+<symbol id="print" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></symbol>
+<symbol id="receipt" viewBox="0 0 24 24"><path d="M19.5 3.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2v14H3v3c0 1.66 1.34 3 3 3h12c1.66 0 3-1.34 3-3V2l-1.5 1.5zM19 19c0 .55-.45 1-1 1s-1-.45-1-1v-3H8V5h11v14z"/><path d="M9 7h6v2H9zm7 0h2v2h-2zm-7 3h6v2H9zm7 0h2v2h-2z"/></symbol>
+<symbol id="close" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
+<symbol id="help" viewBox="0 0 24 24"><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></symbol>
+<symbol id="inbox" viewBox="0 0 24 24"><path d="M19 3H4.99C3.88 3 3.01 3.89 3.01 5L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z"/></symbol>
+<symbol id="cloud-off" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4c-1.48 0-2.85.43-4.01 1.17l1.46 1.46C10.21 6.23 11.08 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3 0 1.13-.64 2.11-1.56 2.62l1.45 1.45C23.16 18.16 24 16.68 24 15c0-2.64-2.05-4.78-4.65-4.96zM3 5.27l2.75 2.74C2.56 8.15 0 10.77 0 14c0 3.31 2.69 6 6 6h11.73l2 2L21 20.73 4.27 4 3 5.27zM7.73 10l8 8H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h1.73z"/></symbol>
+<symbol id="report" viewBox="0 0 24 24"><path d="M15 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.89 2 1.99 2H19c1.1 0 2-.9 2-2V9l-6-6zM5 19V5h9v5h5v9H5zM9 8c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1zm0 4c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1zm0 4c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1z"/></symbol>
+</svg>
+<nav class="page-nav"><a href="index.html">&larr; Tables</a></nav>
+<header class="page-head">
+  <h1>States</h1>
+  <p>Every state a row and a sheet can be in, drawn on Suppliers, whose rows reach all of them. The states of each control inside a row, such as the button and the menu, are the components&#8217; own and are not redrawn here.</p>
+</header>
+<main class="stage">
+<section class="section">
+  <h2>A row</h2>
+  <p class="lede">The whole row is one <code>PressSurface</code> that opens the record. The kebab is a second focus stop inside it. Fills come from the surface roles, never from a tint of the action colour, so every ink keeps its contrast on every state.</p>
+  <div class="states">
+    <div class="labels">
+      <div class="h"></div>
+      <div class="l">Enabled<small>surface.raised</small></div>
+      <div class="l">Hover<small>surface.overlay &#183; pointer only</small></div>
+      <div class="l">Focus-visible<small>2 mint ring, drawn inside</small></div>
+      <div class="l">Pressed<small>surface.field</small></div>
+      <div class="l">Inactive<small>text steps down to tertiary</small></div>
+      <div class="l">Not sent yet<small>made on this device</small></div>
+      <div class="l">Menu open<small>kebab holds a hover wash</small></div>
+    </div>
+    <div class="sheet sup" style="position:relative;overflow:visible;margin-bottom:204px;">
+      <div class="th"><span>Supplier</span><span>Phone</span><span>Email</span><span>Last delivery</span><span>Standing</span><span></span></div>
+      <div class="tr"><div class="id"><b>ABC Distributors</b><small>Industrial Area, Enterprise Road</small></div><span class="txt">0712 345 678</span><span class="txt">orders@abc.example</span><span class="txt">10 Oct</span><span></span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div>
+      <div class="tr hover"><div class="id"><b>Fresh Farms Dairy</b></div><span class="txt">&#8212;</span><span class="txt">sales@freshfarms.example</span><span class="txt">None yet</span><span></span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div>
+      <div class="tr focus"><div class="id"><b>Mama Njeri Flour</b></div><span class="txt">0722 100 200</span><span class="txt">&#8212;</span><span class="txt">6 Oct</span><span></span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div>
+      <div class="tr press"><div class="id"><b>Mama Njeri Flour</b></div><span class="txt">0722 100 200</span><span class="txt">&#8212;</span><span class="txt">6 Oct</span><span></span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div>
+      <div class="tr muted"><div class="id"><b>XYZ Wholesale</b></div><span class="txt">0733 999 000</span><span class="txt">&#8212;</span><span class="txt">12 Sep</span><span class="bdg neu"><svg class="i14"><use href="#block"/></svg>Inactive</span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div>
+      <div class="tr"><div class="id"><b>Kariuki Hardware</b><span class="wait"><svg class="i14"><use href="#upload"/></svg>Not sent yet</span></div><span class="txt">0710 555 018</span><span class="txt">&#8212;</span><span class="txt">None yet</span><span></span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div>
+      <div class="tr" style="position:relative;"><div class="id"><b>ABC Distributors</b><small>Industrial Area, Enterprise Road</small></div><span class="txt">0712 345 678</span><span class="txt">orders@abc.example</span><span class="txt">10 Oct</span><span></span><span class="kb hover"><svg class="i"><use href="#more"/></svg></span>
+        <div class="menu"><span class="f">View</span><span>Receive delivery</span><span>Edit</span><span class="d">Mark inactive</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note"><b>Focus is drawn inside the row.</b> <code>AppFocusRing</code> is 2 wide with a 2 offset. Outside the row, the rows above and below would paint over it, so the ring is inset by its own offset, inside the 4 gutter <code>PressSurface</code> already reserves. Tab moves row, then kebab, then the next row. Enter opens the row. Arrow keys between rows would be new, and are an open question.</div>
+    <div class="note"><b>Inactive keeps its row.</b> The name and every figure step down to <code>text.tertiary</code>, and the neutral <code>Inactive</code> badge says why, so the state is never told by greyness alone. The row still opens and the menu offers <em>Reactivate</em>. It appears only under the <em>Inactive</em> or <em>All</em> filter, as today.</div>
+    <div class="note"><b>Not sent yet</b> is a caption in place of the identity&#8217;s second line, with the upload glyph in <code>status.attention</code>. It appears only where a screen already knows a record is still on the device, as the sales outbox does. Whether the supplier list knows that about a queued supplier today is an open question in the README. No screen gains a sync check to draw it.</div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>A sheet</h2>
+  <p class="lede">The sheet keeps its frame through every state, so a list that is loading, empty or failing still reads as the same object in the same place. The bar stays wherever its controls still mean something.</p>
+  <div class="grid2">
+    <div>
+      <p class="cap2">Loading<small>The header is real; the rows are <code>SkeletonLine</code>s shaped like the cells they stand for: two lines under the identity, short bars under figures, aligned the way the column aligns.</small></p>
+      <div class="sheet sup-s">
+        <div class="th"><span>Supplier</span><span>Phone</span><span>Last delivery</span><span></span></div>
+        <div class="tr"><div class="id" style="gap:6px;"><span class="sk" style="width:160px;"></span><span class="sk" style="width:220px;height:10px;"></span></div><span class="sk" style="width:96px;"></span><span class="sk" style="width:56px;"></span><span></span></div>
+        <div class="tr"><div class="id" style="gap:6px;"><span class="sk hi" style="width:132px;"></span><span class="sk hi" style="width:180px;height:10px;"></span></div><span class="sk hi" style="width:96px;"></span><span class="sk hi" style="width:56px;"></span><span></span></div>
+        <div class="tr"><div class="id" style="gap:6px;"><span class="sk" style="width:148px;"></span><span class="sk" style="width:120px;height:10px;"></span></div><span class="sk" style="width:96px;"></span><span class="sk" style="width:56px;"></span><span></span></div>
+      </div>
+    </div>
+    <div>
+      <p class="cap2">Empty, the first time<small><code>EmptyState</code> in the body: what the list will hold, and the page&#8217;s own action, which also stays in the bar.</small></p>
+      <div class="sheet sup-s">
+        <div class="bar"><span class="sp"></span><span class="btn sec icon"><svg class="i"><use href="#add"/></svg>Add supplier</span></div>
+        <div class="empty"><span class="glyph"><svg class="i24"><use href="#truck"/></svg></span><b>No suppliers yet</b><p>Add the people you buy stock from, and every delivery you receive is kept against them.</p></div>
+      </div>
+    </div>
+    <div>
+      <p class="cap2">Nothing matches<small>The bar keeps the search that caused it, and the body offers to undo it. This is a different sentence from &#8220;none yet&#8221;.</small></p>
+      <div class="sheet sup-s">
+        <div class="bar"><div class="fld search" style="width:260px;"><svg class="i"><use href="#search"/></svg><span class="v">kam</span></div><div class="fld" style="width:170px;"><svg class="i"><use href="#filter"/></svg><span class="v">Active</span><svg class="i dd"><use href="#drop"/></svg></div></div>
+        <div class="empty" style="padding:40px 24px;"><b>No active suppliers match &#8220;kam&#8221;</b><p>Search reads names only. An inactive supplier is listed under <em>Inactive</em>.</p><span class="btn ter">Clear the search</span></div>
+      </div>
+    </div>
+    <div>
+      <p class="cap2">Could not be read<small>A problem <code>Callout</code> where the rows would be, with the retry the screen already has. The header goes, because there are no columns to head.</small></p>
+      <div class="sheet sup-s">
+        <div class="bar"><div class="fld search" style="width:260px;"><svg class="i"><use href="#search"/></svg>Search</div><div class="fld" style="width:170px;"><svg class="i"><use href="#filter"/></svg><span class="v">Active</span><svg class="i dd"><use href="#drop"/></svg></div></div>
+        <div style="padding:24px;"><div class="callout prob"><svg class="i"><use href="#err"/></svg><div style="flex:1;"><b>Suppliers could not be read.</b><br>This device could not reach the server. Nothing here was changed.</div><span class="btn sec" style="margin:-4px 0;">Try again</span></div></div>
+      </div>
+    </div>
+    <div>
+      <p class="cap2">Read-only<small>One info <code>Callout</code> under the bar, not a disabled control on every row. The menu offers only <em>View</em>.</small></p>
+      <div class="sheet sup-s">
+        <div class="inbar"><div class="callout info"><svg class="i"><use href="#info"/></svg><div>This build cannot change suppliers, so the list is read-only here.</div></div></div>
+        <div class="th" style="margin-top:16px;border-top:1px solid var(--border-subtle);"><span>Supplier</span><span>Phone</span><span>Last delivery</span><span></span></div>
+        <div class="tr"><div class="id"><b>ABC Distributors</b></div><span class="txt">0712 345 678</span><span class="txt">10 Oct</span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div>
+      </div>
+    </div>
+    <div>
+      <p class="cap2">Cut short, and the last page<small>An attention <code>Callout</code> when the screen read less than everything, as Suppliers does past 500. The pager says <em>&#183; last</em> and its <em>Next</em> is disabled, which is today&#8217;s <code>Pagination</code>.</small></p>
+      <div class="sheet sup-s">
+        <div class="inbar"><div class="callout att"><svg class="i"><use href="#warn"/></svg><div>This business has more than 500 suppliers, and some are not listed. Search to find one.</div></div></div>
+        <div class="th" style="margin-top:16px;border-top:1px solid var(--border-subtle);"><span>Supplier</span><span>Phone</span><span>Last delivery</span><span></span></div>
+        <div class="tr"><div class="id"><b>Zawadi Packaging</b></div><span class="txt">0700 321 654</span><span class="txt">2 Oct</span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div>
+        <div class="foot"><span class="cnt">A to Z.</span><div class="pg"><span><svg class="i16"><use href="#left"/></svg>Previous</span><span class="mid">Page 25 &#183; last</span><span class="off">Next<svg class="i16"><use href="#right"/></svg></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+</body>
+</html>

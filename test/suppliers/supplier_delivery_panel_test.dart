@@ -196,6 +196,9 @@ void main() {
           },
         ),
         writer: _DeliveryWriter(),
+        // **The cards, at 800**: this case reads their sentences. From 1024
+        // the same facts are a table's; the case below reads those.
+        width: 800,
       );
 
       expect(find.byKey(const ValueKey('delivery-row-sd_old')), findsOneWidget);
@@ -229,6 +232,51 @@ void main() {
       expect(find.text('12 × no cost recorded'), findsOneWidget);
     },
   );
+
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: one row per delivery from 1024, its lines always under
+  // it - the 2026-09-27 ruling that a delivery has nothing to open still holds.
+  testWidgets('on a screen 1024 and wider the deliveries are a table with '
+      'every line on it', (tester) async {
+    await _pumpRecord(
+      tester,
+      _Reader(
+        deliveries: <String, Map<String, Object?>>{
+          'sd_old': _deliveryDocument(reference: 'INV-1', complete: false),
+        },
+      ),
+      writer: _DeliveryWriter(),
+    );
+
+    expect(
+      find.byKey(const ValueKey('supplier-deliveries-sheet')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('delivery-row-sd_old')), findsOneWidget);
+    // The figure with no code - the column's header states it - and the line
+    // without a cost said in words beneath it.
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('delivery-value-sd_old')))
+          .data,
+      '1,092',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('delivery-costless-sd_old')))
+          .data,
+      '1 line has no cost',
+    );
+    expect(find.byKey(const ValueKey('delivery-arriving-sd_old')), findsOne);
+    // Nothing to open: no disclosure, and every line already drawn.
+    expect(find.byIcon(Icons.expand_more), findsNothing);
+    // Each line in the row's columns: units under the units, the unit cost
+    // with the product.
+    expect(find.textContaining('45.50 each'), findsOneWidget);
+    expect(find.textContaining('· no cost'), findsOneWidget);
+    expect(find.text('24'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+  });
 }
 
 Future<void> _addProduct(
@@ -258,8 +306,9 @@ Future<void> _pumpRecord(
   WidgetTester tester,
   _Reader reader, {
   required TenantSupplierDeliveryWriter writer,
+  double width = 1200,
 }) async {
-  tester.view.physicalSize = const Size(1200, 2400);
+  tester.view.physicalSize = Size(width, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

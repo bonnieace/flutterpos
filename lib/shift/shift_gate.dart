@@ -402,12 +402,15 @@ class _TenantShiftGateState extends State<TenantShiftGate>
           ErrorState(
             status: AppStatus.attention,
             badgeLabel: 'Shift over',
-            // **Worded by the product owner on 2026-09-29**, replacing three
-            // sentences about offline counting and saved sales. It names the
-            // duration, which is the common case; the other way here - a shift
-            // filed under a day that has not arrived, after the clock was
-            // corrected - is rare, and closing is the way out of both.
-            statement: 'This shift has been open for more than 24 hours.',
+            // **Reworded 2026-10-12, when a shift began to stop at its trading
+            // day's 06:00 cutoff.** The product owner's wording of 2026-09-29
+            // named the 24-hour cap, which is now the rare way here: a shift
+            // opened at 18:00 stops after twelve hours, and "more than 24
+            // hours" would be untrue of it. Every expired shift is from an
+            // earlier day, whichever way it got here - bar a shift filed under
+            // a day that has not arrived after the clock was corrected, which
+            // is rarer still - and closing is the way out of all of them.
+            statement: "This shift's trading day is over.",
             detail: 'Close it and open a new one.',
             actions: <Widget>[
               AppButton(
@@ -442,11 +445,8 @@ class _TenantShiftGateState extends State<TenantShiftGate>
           key: const ValueKey('shift-gate-closed-pending'),
           const EmptyState(
             title: 'Shift closed on this device',
-            hint:
-                'Its count is saved. It reaches the server on its own when '
-                'this device is back online, and a new shift can be opened '
-                'once it has.',
-            illustration: 'schedule.svg',
+            hint: 'Count saved. Go online to sync it and open a new shift.',
+            illustration: 'closed-shift.svg',
           ),
         ),
         TenantShiftPhase.unavailable => _surface(

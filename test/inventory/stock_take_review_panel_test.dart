@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:uzapay_pos/inventory/inventory.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
+import 'package:uzapay_pos/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The management side of a stock take.
@@ -15,7 +16,15 @@ void main() {
     // The manager this screen exists for knows their staff by name. A UID is
     // the identity every other record is attributed by, so it stays visible -
     // but it cannot be the whole of the label.
-    await _pump(tester, server: _server());
+    //
+    // **On the cards, at 800**, where the label is one string: from 1024 the
+    // table sets the UID on its own line under the name, which the group
+    // below asserts.
+    tester.view.physicalSize = const Size(800, 3600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pump(tester, server: _server(), sizeViewport: false);
 
     expect(find.textContaining('Wamweki Njoroge'), findsOneWidget);
     expect(
@@ -162,6 +171,142 @@ void main() {
     await _pumpScreen(tester, server: _server());
 
     expect(find.byKey(const ValueKey('stock-take-review-tabs')), findsNothing);
+  });
+
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: one row per count from 1024, the cards below it. The
+  // pump helpers above already run at 1400.
+  group('on a screen 1024 and wider', () {
+    testWidgets('the counts are one table, their figures in columns', (
+      tester,
+    ) async {
+      await _pump(tester, server: _server());
+
+      final sheet = find.byKey(const ValueKey('stock-take-review-sheet'));
+      expect(sheet, findsOneWidget);
+      expect(find.byType(TenantStockTakeCard), findsNothing);
+      // Both filters are the sheet's own.
+      for (final key in <String>[
+        'stock-take-review-status-filter',
+        'stock-take-review-counter-filter',
+      ]) {
+        expect(
+          find.descendant(of: sheet, matching: find.byKey(ValueKey(key))),
+          findsOneWidget,
+          reason: key,
+        );
+      }
+      final id = 'st_2026-09-11_${'a' * 40}';
+      expect(
+        tester
+            .widget<Text>(find.byKey(ValueKey('stock-take-coverage-$id')))
+            .data,
+        '2 of 3',
+      );
+      expect(
+        tester
+            .widget<Text>(find.byKey(ValueKey('stock-take-uncounted-$id')))
+            .data,
+        '1 not counted',
+      );
+      expect(
+        tester
+            .widget<Text>(find.byKey(ValueKey('stock-take-variance-$id')))
+            .data,
+        '1',
+      );
+      // The counter by name, with the UID they are recorded under beneath it.
+      expect(find.text('Wamweki Njoroge'), findsOneWidget);
+      expect(find.text('staff-cashier'), findsOneWidget);
+      // A count with differences is what a manager is looking for.
+      expect(
+        tester
+            .widget<StatusBadge>(
+              find.byKey(ValueKey('stock-take-standing-$id')),
+            )
+            .label,
+        'Needs review',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('below 1024 the cards are unchanged', (tester) async {
+      tester.view.physicalSize = const Size(1023, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _pump(tester, server: _server(), sizeViewport: false);
+
+      expect(find.byType(TenantStockTakeCard), findsNWidgets(2));
+      expect(
+        find.byKey(const ValueKey('stock-take-review-sheet')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a row opens the count', (tester) async {
+      await _pump(tester, server: _server());
+
+      final id = 'st_2026-09-11_${'a' * 40}';
+      await tester.tap(find.byKey(ValueKey('stock-take-open-$id')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('The count'), findsOneWidget);
+    });
+
+    testWidgets('an agreed count is a word, not a badge', (tester) async {
+      final server = _Server();
+      _seedTake(server);
+      await _pump(tester, server: server);
+
+      final standing = find.byKey(
+        ValueKey('stock-take-standing-st_2026-09-20_${'a' * 40}'),
+      );
+      expect(tester.widget(standing), isNot(isA<StatusBadge>()));
+      expect(
+        find.descendant(of: standing, matching: find.text('All agreed')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('filters that match nothing say so inside the sheet', (
+      tester,
+    ) async {
+      await _pump(tester, server: _server());
+
+      await tester.tap(
+        find.byKey(const ValueKey('stock-take-review-status-filter')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('stock-take-review-status-accepted')).last,
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('stock-take-review-sheet')),
+          matching: find.byKey(const ValueKey('stock-take-review-no-matches')),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Count stock is offered over the table at its own width', (
+      tester,
+    ) async {
+      var opened = 0;
+      await _pumpScreen(tester, server: _server(), onCount: () => opened++);
+
+      final count = find.byKey(const ValueKey('stock-take-review-count'));
+      expect(
+        tester.getSize(count).width,
+        lessThan(tester.getSize(find.byType(Scaffold)).width / 2),
+      );
+      await tester.tap(count);
+      await tester.pumpAndSettle();
+      expect(opened, 1);
+    });
   });
 }
 

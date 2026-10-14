@@ -1,3 +1,88 @@
+# My businesses
+
+## 2026-10-13: redrawn in the house style, and shared with *Choose a business*
+
+The developer's brief: make *My businesses* "a high fidelity screen but also matching our design
+style in other designs, it sticks out today". It stood out because it was the only white surface in
+the app. A paper receipt in all-mono type on the green `AppTokens.uzapay` ground. Every other
+screen (Books, the customer account, the home tiles) uses raised green cards, Roboto names, eyebrow
+labels and one mono figure.
+
+Boards: [`businesses-phone.html`](businesses-phone.html), [`businesses-wide.html`](businesses-wide.html),
+[`businesses-states.html`](businesses-states.html), [`businesses-add.html`](businesses-add.html).
+The receipt board is kept as [`businesses-receipt-2026-10-08.html`](businesses-receipt-2026-10-08.html).
+The boards reuse Books' CSS and icon sprite (`docs/design/books/books-home.html`), so they share one
+vocabulary with the rest of `docs/design/`.
+
+### The card
+
+The 2026-10-08 idea still holds: a business is shown through what is uniquely it, not as a name with
+badges. Only the drawing changes.
+
+- **Brand:** the uploaded logo (48, radius 8), or the store glyph on a field square. Never a
+  coloured monogram. The name is `titleMedium`, and the slogan is `bodyMedium` in secondary text.
+- **Status:** a glyph and a word under the name, so colour is never the only signal: *Open now ·
+  you're in it*, *Invited*, *Suspended*, *Setting up*. The open business's edge takes the ok
+  border. The tilted *OPEN NOW* stamp is gone.
+- **A dashed rule** in the strong border is all that is left of the receipt.
+- **One figure:** an eyebrow naming the day (*TODAY*, *LAST COUNTED · 7 OCT*), then a small
+  currency code and the amount in mono. Today's is `numericHero` 30; another business's last
+  counted day is `numericCompact` 22, so it never reads as live.
+- **Facts:** up to three eyebrow-labelled values: Sales, Till, You.
+- **Footer row:** what pressing does, in white with a chevron, as on the Books home rows. There is no
+  green link text. The whole card is still the one press target.
+
+### What changed besides the drawing
+
+| Change | Kind |
+| --- | --- |
+| From 768 the cards sit in columns: 2 across, 3 from 1024, 20 apart. Page width `reading` (720) → `records` (1200). | Layout |
+| The add sheet's masthead is the new business's card on the sunken surface, captioned *How it will show on this page.* It replaces the 2026-10-08 ruling "the receipt is the sheet's masthead". | Visual, reverses a ruling |
+| Copy: *Open now · you're in it*; status words carry *can't be opened*; the edit detail reads *on its receipt*; dates print *7 Oct*. | Copy |
+| *Switching…* shows a spinner in the footer. | Visual |
+
+There are no new reads, routes or callables. The data, the order and the press targets are the
+receipt's.
+
+### *Choose a business* uses the same card
+
+The developer asked on 2026-10-13 for the selector after sign-in to use this screen. It now draws each
+membership as a `BusinessCard` in the same grid, under a header with the count and *Add business*:
+
+- **What the selector already knows, and nothing more:** name, role (*You*) and standing. An open
+  business shows *Open this business*. An invitation the person can accept shows *Accept
+  invitation*, with the acceptance form under the card. Anything else shows its standing and has
+  no action.
+- ***Request business* is now *Add business*,** a secondary button in the list's header rather
+  than a tertiary toolbar action. The toolbar keeps only *Sign out*, which fixes the title
+  truncating to "Choos…" on a phone. With no memberships, the button stays in the toolbar,
+  because the empty state has no header.
+- **Standing words now match My businesses:** *Invited* (was *Pending*) and *Deactivated* (was
+  *Inactive*). `tenantMembershipDisplayStatus` is still there for its other uses.
+- **Open question:** no logo, slogan or figure is shown, because no business is open yet. Showing
+  them would add the branding and `daily_metrics` reads My businesses makes, per business, before
+  one is chosen. Not done without a ruling.
+
+### Built, 2026-10-13
+
+- `lib/tenancy/tenant_business_card.dart`: `BusinessCard` and its status, figure, fact and action
+  types, `BusinessCardGrid`, and `businessCardStanding`. Every value comes from `AppTokens`.
+- `tenant_businesses_screen.dart`: `BusinessReceipt`, the stamp and the torn-edge clipper are gone.
+- `tenant_routing_shell.dart`: `TenantBusinessSelector` draws its list with the card.
+- Tests moved with the copy. Two test changes, both explained in the tests themselves: the switching
+  test pumps frames instead of settling, because the spinner never settles when nothing pops the page.
+  The invitation test scrolls the confirm button into view, because the card is taller than the old
+  `ListTile`.
+- Harness: `my-businesses`, `my-businesses-one`, `my-businesses-add`, and `02-choose-business`
+  (mobile and web).
+
+**What the screenshots prove and what they don't.** They show the widget tree drawn at those sizes.
+They don't prove the app runs, don't show the spinner or the press states moving, and don't cover
+the 768/1024 column switch for My businesses. That page has phone captures only, while the selector's
+web capture shows 3 across. **Not run on a device.**
+
+---
+
 # My businesses — a design, 2026-10-08
 
 A page that lists every business on the account, each drawn as the receipt it prints, with *Add

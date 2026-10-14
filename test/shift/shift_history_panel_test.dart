@@ -7,6 +7,7 @@ import 'package:uzapay_pos/shift/shift_history_card.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/ui/status.dart';
 import 'package:uzapay_pos/ui/press.dart';
+import 'package:uzapay_pos/ui/skeleton.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
@@ -747,6 +748,435 @@ void main() {
     expect(find.textContaining('tenant-b'), findsNothing);
     // §7's other half: what is still true despite the failure.
     expect(find.textContaining('still recorded on the server'), findsOne);
+  });
+
+  // **The large-screen version, and only it.** At the developer's direction on
+  // 2026-10-12 the screen draws `RecordSheet` from 1024 and keeps its cards
+  // below; every case above runs at 800 and is the cards' own.
+  group('on a screen 1024 and wider', () {
+    testWidgets('the day is one table, its figures in columns', (tester) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+          _snapshot('shift-b'),
+          _snapshot(
+            'shift-a',
+            overrides: <String, Object?>{'closingCashMinor': 90000},
+          ),
+        ]);
+
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.manager),
+        reader,
+        width: 1280,
+      );
+
+      final sheet = find.byKey(const ValueKey('shift-history-sheet'));
+      expect(sheet, findsOne);
+      expect(find.byType(ShiftHistoryCard), findsNothing);
+      // The filters are the sheet's own, not the page's.
+      for (final key in <String>[
+        'shift-history-date-filter',
+        'shift-history-staff-filter',
+      ]) {
+        expect(
+          find.descendant(of: sheet, matching: find.byKey(ValueKey(key))),
+          findsOne,
+          reason: key,
+        );
+      }
+      // The date filter names the day, so no band under the header repeats
+      // it (2026-10-13).
+      expect(
+        find.byKey(const ValueKey('shift-history-day-2026-07-31')),
+        findsNothing,
+      );
+      for (final header in <String>[
+        'CASHIER',
+        'HOURS',
+        'SALES',
+        'RECORDED',
+        'COUNTED',
+        'DIFFERENCE',
+        'STANDING',
+      ]) {
+        expect(find.text(header, findRichText: true), findsOne, reason: header);
+      }
+      // No currency is published here, so no column claims one.
+      _expectText(tester, 'shift-history-count-shift-b', '3');
+      _expectText(tester, 'shift-history-sales-shift-b', '987.50');
+      _expectText(tester, 'shift-history-counted-shift-b', '1,250');
+      // **The sign carries the direction** in a column, with a real minus.
+      _expectText(tester, 'shift-history-variance-shift-b', '+262.50');
+      _expectText(tester, 'shift-history-variance-shift-a', '−87.50');
+      _expectStatus(
+        tester,
+        'shift-history-status-shift-b',
+        'Over',
+        status: AppStatus.problem,
+      );
+      _expectStatus(
+        tester,
+        'shift-history-status-shift-a',
+        'Short',
+        status: AppStatus.problem,
+      );
+      // A column of figures ends on one edge, whatever each figure's length.
+      expect(
+        tester
+            .getRect(
+              find.byKey(const ValueKey('shift-history-counted-shift-a')),
+            )
+            .right,
+        closeTo(
+          tester
+              .getRect(
+                find.byKey(const ValueKey('shift-history-counted-shift-b')),
+              )
+              .right,
+          0.5,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('below 1024 the cards are unchanged', (tester) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+          _snapshot('shift-a'),
+        ]);
+
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.manager),
+        reader,
+        width: 1023,
+      );
+
+      expect(find.byType(ShiftHistoryCard), findsOne);
+      expect(find.byKey(const ValueKey('shift-history-sheet')), findsNothing);
+    });
+
+    testWidgets('a row opens the Sales report on its day and cashier', (
+      tester,
+    ) async {
+      final opened = <(String, String)>[];
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+          _snapshot(
+            'shift-b',
+            overrides: <String, Object?>{'staffId': 'user-b'},
+          ),
+        ]);
+
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.manager),
+        reader,
+        width: 1280,
+        salesReport: ({required businessDate, required staffId}) {
+          opened.add((businessDate, staffId));
+          return const Scaffold(body: Text('The sales report'));
+        },
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('shift-history-sales-link-shift-b')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('The sales report'), findsOne);
+      expect(opened.last, (_businessDate, 'user-b'));
+    });
+
+    testWidgets('a row is one sentence to a screen reader', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+          _snapshot('shift-b'),
+        ]);
+
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.manager),
+        reader,
+        width: 1280,
+      );
+
+      final row = tester.getSemantics(
+        find.byKey(const ValueKey('shift-history-sales-link-shift-b')),
+      );
+      // Every figure under its column's name, and the standing's sentence
+      // rather than its one word.
+      expect(row.label, contains('Recorded: 987.50'));
+      expect(row.label, contains('Difference: +262.50'));
+      expect(
+        row.label,
+        contains('Declared takings are over the recorded sales by 262.50'),
+      );
+      expect(
+        row.hint,
+        "Opens the sales report for this shift's day and cashier.",
+      );
+      semantics.dispose();
+    });
+
+    testWidgets('a corrected shift marks its figure and keeps its trail in '
+        'the row menu', (tester) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+          _snapshot('shift-a', overrides: _amended()),
+        ])
+        ..respond(
+          'tenants/tenant-a/shift_amendments',
+          <TenantQueryDocumentSnapshot>[_amendmentSnapshot()],
+        );
+
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.manager),
+        reader,
+        width: 1280,
+      );
+
+      _expectText(tester, 'shift-history-amended-shift-a', 'corrected ×2');
+      expect(
+        find.byKey(const ValueKey('shift-history-corrections-link-shift-a')),
+        findsNothing,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('shift-history-menu-shift-a')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('shift-history-corrections-link-shift-a')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('shift-a'),
+        ),
+        findsOne,
+      );
+      expect(reader.queries.last.equalityFilters, <String, Object?>{
+        'shiftId': 'shift-a',
+      });
+    });
+
+    testWidgets('a cashier reads their own shifts named by the hours, with no '
+        'trail to open', (tester) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+          _snapshot('shift-a', overrides: _amended()),
+        ]);
+
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.cashier),
+        reader,
+        width: 1280,
+      );
+
+      // One person's shifts: the hours name the row, as they title the card.
+      expect(find.text('CASHIER', findRichText: true), findsNothing);
+      _expectText(
+        tester,
+        'shift-history-subject-shift-a',
+        shiftWindowLabelFor(
+          DateTime.utc(2026, 7, 31, 6),
+          DateTime.utc(2026, 7, 31, 18),
+        ).replaceAll(' → ', '–'),
+      );
+      expect(
+        find.byKey(const ValueKey('shift-history-staff-filter')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('shift-history-amended-shift-a')),
+        findsOne,
+      );
+      expect(
+        find.byKey(const ValueKey('shift-history-menu-shift-a')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a drawer that agreed is a quiet word, not a badge', (
+      tester,
+    ) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+          _snapshot(
+            'shift-a',
+            overrides: <String, Object?>{'closingCashMinor': 98750},
+          ),
+        ]);
+
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.manager),
+        reader,
+        width: 1280,
+      );
+
+      final standing = find.byKey(
+        const ValueKey('shift-history-status-shift-a'),
+      );
+      expect(tester.widget(standing), isNot(isA<StatusBadge>()));
+      expect(
+        find.descendant(of: standing, matching: find.text('Settled')),
+        findsOne,
+      );
+      _expectText(tester, 'shift-history-variance-shift-a', '0');
+    });
+
+    testWidgets('what a shift cannot compare folds under it until asked', (
+      tester,
+    ) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+          _snapshot(
+            'shift-a',
+            overrides: <String, Object?>{
+              'totalSalesMinor': null,
+              'totalSales': null,
+              'transactionCount': null,
+            },
+          ),
+        ]);
+
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.cashier),
+        reader,
+        width: 1280,
+      );
+
+      _expectStatus(
+        tester,
+        'shift-history-status-shift-a',
+        'No summary',
+        status: AppStatus.attention,
+      );
+      // Unknown is a dash, never a zero.
+      _expectText(tester, 'shift-history-sales-shift-a', '—');
+      _expectText(tester, 'shift-history-count-shift-a', '—');
+      _expectText(tester, 'shift-history-variance-shift-a', '—');
+      _expectText(tester, 'shift-history-counted-shift-a', '1,250');
+
+      final silence = find.byKey(
+        const ValueKey('shift-history-silence-shift-a'),
+      );
+      final fold = find.byKey(const ValueKey('shift-history-fold-shift-a'));
+      expect(silence, findsNothing);
+
+      await tester.tap(fold);
+      await tester.pumpAndSettle();
+      _expectContains(
+        tester,
+        'shift-history-silence-shift-a',
+        'closed before the app recorded closing summaries',
+      );
+
+      // Closing again runs from where it is, and closed is out of the tree.
+      await tester.tap(fold);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(silence, findsOne);
+      await tester.pumpAndSettle();
+      expect(silence, findsNothing);
+    });
+
+    testWidgets('a float folds under the row, in the counted column', (
+      tester,
+    ) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+          _snapshot(
+            'shift-a',
+            overrides: <String, Object?>{'openingFloatMinor': 50000},
+          ),
+        ]);
+
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.manager),
+        reader,
+        width: 1280,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('shift-history-fold-shift-a')),
+      );
+      await tester.pumpAndSettle();
+
+      final float = find.byKey(const ValueKey('shift-history-float-shift-a'));
+      _expectText(tester, 'shift-history-float-shift-a', '500');
+      expect(
+        tester.getRect(float).right,
+        closeTo(
+          tester
+              .getRect(
+                find.byKey(const ValueKey('shift-history-counted-shift-a')),
+              )
+              .right,
+          0.5,
+        ),
+      );
+    });
+
+    testWidgets('while the day is read the sheet keeps its filters', (
+      tester,
+    ) async {
+      final pending = _Reader(deferred: true)
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+          _snapshot('shift-a'),
+        ]);
+
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.manager),
+        pending,
+        width: 1280,
+      );
+
+      final sheet = find.byKey(const ValueKey('shift-history-sheet'));
+      expect(sheet, findsOne);
+      expect(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const ValueKey('shift-history-date-filter')),
+        ),
+        findsOne,
+      );
+      expect(
+        find.descendant(of: sheet, matching: find.byType(SkeletonGroup)),
+        findsOne,
+      );
+      expect(find.text('COUNTED', findRichText: true), findsOne);
+    });
+
+    testWidgets('a day with no shifts says so inside the sheet', (
+      tester,
+    ) async {
+      final empty = _Reader()
+        ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[]);
+      await _pumpPanel(
+        tester,
+        _controller(TenantRole.manager),
+        empty,
+        width: 1280,
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('shift-history-sheet')),
+          matching: find.byKey(const ValueKey('shift-history-empty')),
+        ),
+        findsOne,
+      );
+    });
   });
 
   group('the business day heading', () {

@@ -1,0 +1,953 @@
+[
+  {
+    "file": "lib/audit/audit_log_panel.dart",
+    "line": 548,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Nothing has been recorded yet",
+        "after": "No events yet"
+      },
+      {
+        "before": "An event appears here when somebody changes the business, its staff, or its stock.",
+        "after": "Business, staff and stock changes appear here."
+      }
+    ]
+  },
+  {
+    "file": "lib/audit/audit_log_panel.dart",
+    "line": 563,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "The trail is ordered by record, not by time, so that day may be further on. Turn the page, or choose any day.",
+        "after": "Try another page or day. Events follow record order."
+      }
+    ]
+  },
+  {
+    "file": "lib/checkout/checkout_bluetooth_printer_panel.dart",
+    "line": 782,
+    "component": "Callout",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "No Bluetooth devices were found. Check the printer is switched on and close by, then search again.",
+        "after": "No devices found. Turn on the nearby printer and search again."
+      }
+    ]
+  },
+  {
+    "file": "lib/checkout/checkout_notifications_screen.dart",
+    "line": 268,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "No notifications available",
+        "after": "No notifications"
+      }
+    ]
+  },
+  {
+    "file": "lib/checkout/checkout_price_agreement_panel.dart",
+    "line": 288,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Nobody to choose yet",
+        "after": "No staff yet"
+      },
+      {
+        "before": "Invite the people who work here, then choose who can agree a price.",
+        "after": "Invite staff, then choose who can agree prices."
+      }
+    ]
+  },
+  {
+    "file": "lib/checkout/checkout_print_queue_panel.dart",
+    "line": 154,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/checkout/checkout_usb_printer_panel.dart",
+    "line": 542,
+    "component": "Callout",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "Plug the printer into this computer and switch it on. It appears here by itself.",
+        "after": "Connect and switch on the printer. It appears automatically."
+      }
+    ]
+  },
+  {
+    "file": "lib/customers/customer_directory_panel.dart",
+    "line": 677,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Nobody owes you anything",
+        "after": "No unpaid balances"
+      },
+      {
+        "before": "Customers who buy on credit are listed here, biggest debt first, until they have paid it back.",
+        "after": "Unpaid customer balances appear here, largest first."
+      }
+    ]
+  },
+  {
+    "file": "lib/customers/customer_directory_panel.dart",
+    "line": 686,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Try another name or number, or show every customer.",
+        "after": "Try another name or number, or clear the search."
+      },
+      {
+        "before": "Add the people who buy from you, here or at the till, so a sale can say who it was for and send them their receipt.",
+        "after": "Add customers here or at the register."
+      }
+    ]
+  },
+  {
+    "file": "lib/customers/customer_record_panel.dart",
+    "line": 163,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "This customer is not in this business",
+        "after": "Customer not found"
+      },
+      {
+        "before": "They may have been added on a device that has not synced yet.",
+        "after": "This customer may still be syncing."
+      }
+    ]
+  },
+  {
+    "file": "lib/customers/customer_record_panel.dart",
+    "line": 665,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Nothing on their account yet",
+        "after": "No account activity yet"
+      },
+      {
+        "before": "Each sale on credit and each payment back is listed here once it reaches the server.",
+        "after": "Credit sales and repayments appear after syncing."
+      }
+    ]
+  },
+  {
+    "file": "lib/customers/customer_record_panel.dart",
+    "line": 1058,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Each sale the till records for this customer is listed here once it reaches the server.",
+        "after": "Customer purchases appear after syncing."
+      }
+    ]
+  },
+  {
+    "file": "lib/email_receipts/email_receipts_screen.dart",
+    "line": 434,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Each receipt sent by email is listed here with what became of it.",
+        "after": "Email receipts and delivery status appear here."
+      }
+    ]
+  },
+  {
+    "file": "lib/expenses/expense_category_panel.dart",
+    "line": 189,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/expenses/expense_panel.dart",
+    "line": 447,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Expenses are not shown for this role",
+        "after": "Expenses unavailable for your role"
+      },
+      {
+        "before": "An owner or an administrator can record and review them.",
+        "after": "Owners and administrators can manage expenses."
+      }
+    ]
+  },
+  {
+    "file": "lib/expenses/expense_panel.dart",
+    "line": 755,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Record rent, wages, fuel or a repair and it counts against profit from then on.",
+        "after": "Record an expense to include it in profit."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/bulk_catalog_panel.dart",
+    "line": 1281,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "This business has no categories yet, so there is nothing to file these products under.",
+        "after": "No categories yet. Create one to group products."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/bulk_catalog_panel.dart",
+    "line": 1361,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/inventory/catalog_management_panel.dart",
+    "line": 1948,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "No products match this search and filter combination.",
+        "after": "No matching products"
+      },
+      {
+        "before": "This catalog has no products yet.",
+        "after": "No products yet"
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/catalog_management_panel.dart",
+    "line": 3852,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "A category groups products in the catalog and filters them at the register.",
+        "after": "Group products with categories for easier browsing."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_adjustment_feed_panel.dart",
+    "line": 237,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "No manual adjustment has been recorded for this product.",
+        "after": "No adjustments for this product yet."
+      },
+      {
+        "before": "No manual adjustment has been recorded in this business.",
+        "after": "No stock adjustments yet."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_adjustment_panel.dart",
+    "line": 903,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "No stock movements have been recorded for this product.",
+        "after": "No stock movements for this product yet."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_movement_feed_panel.dart",
+    "line": 326,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "No \"${page.source!.label}\" entry has been recorded for this business.",
+        "after": "No \"${page.source!.label}\" movements yet."
+      },
+      {
+        "before": "No stock movement has been recorded for this business.",
+        "after": "No stock movements yet."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_product_ledger_panel.dart",
+    "line": 267,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "No stock movement has been recorded against this product.",
+        "after": "No stock movements for this product yet."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_take_gate.dart",
+    "line": 339,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "A stock count is due today and this register is waiting for it. It takes as long as it takes to walk the shelf; nothing else is held up once you have handed it in.",
+        "after": "Count and submit the stock to unlock this register."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_take_gate.dart",
+    "line": 388,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "You have $remaining counts to take today. Start with the first; the others follow.",
+        "after": "$remaining counts due today. Start with the first."
+      },
+      {
+        "before": "This register is waiting for it. Count the shelf and hand the figures in, and the register opens.",
+        "after": "Count and submit the stock to unlock this register."
+      },
+      {
+        "before": "Count the shelf when you get a moment and hand the figures in. Nothing is held up in the meantime.",
+        "after": "Count when ready. You can keep selling."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_take_panel.dart",
+    "line": 182,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "No catalog on this device yet",
+        "after": "Products not synced yet"
+      },
+      {
+        "before": "Open the register once while you have a connection. The product list is saved here and the count then works with no signal.",
+        "after": "Open the register online to sync products, then count offline."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_take_panel.dart",
+    "line": 194,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "There are no products here to count.",
+        "after": "No products in this count."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_take_review_panel.dart",
+    "line": 429,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "A count appears here when somebody hands one in. Set the days and who counts what in Settings.",
+        "after": "Submitted counts appear here. Manage the schedule in Settings."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_take_review_panel.dart",
+    "line": 471,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Try another standing, or another person.",
+        "after": "Try another status or person."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_take_review_panel.dart",
+    "line": 646,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Try another standing, or another person.",
+        "after": "Try another status or person."
+      }
+    ]
+  },
+  {
+    "file": "lib/inventory/stock_take_settings_panel.dart",
+    "line": 518,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Nobody to ask yet",
+        "after": "No staff yet"
+      },
+      {
+        "before": "Invite the people who work here, then set the rota.",
+        "after": "Invite staff, then set the counting schedule."
+      }
+    ]
+  },
+  {
+    "file": "lib/production/production_cost_screen.dart",
+    "line": 93,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "No costs were recorded for this batch.",
+        "after": "No costs for this batch."
+      }
+    ]
+  },
+  {
+    "file": "lib/production/production_panel.dart",
+    "line": 388,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Record what was made and what it cost, and its stock and its cost follow.",
+        "after": "Record a batch to update stock and costs."
+      }
+    ]
+  },
+  {
+    "file": "lib/reporting/monthly_report_panel.dart",
+    "line": 329,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/reporting/monthly_report_panel.dart",
+    "line": 341,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Nothing was recorded in ${report.month.label}",
+        "after": "No sales in ${report.month.label}"
+      },
+      {
+        "before": "No sale carries a business date in this month.",
+        "after": "Try another month."
+      }
+    ]
+  },
+  {
+    "file": "lib/reporting/reconciliation_anomalies_panel.dart",
+    "line": 583,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "The server has recorded no unresolved differences for this business.",
+        "after": "No unresolved differences."
+      },
+      {
+        "before": "No unresolved difference of this kind has been recorded.",
+        "after": "No differences of this kind."
+      }
+    ]
+  },
+  {
+    "file": "lib/reporting/reconciliation_run_panel.dart",
+    "line": 259,
+    "component": "Callout",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "No run is recorded at this ID any more. A difference outlives the run that found it, so this is an ordinary answer rather than a fault - what the difference itself records still stands.",
+        "after": "Run not found. Its recorded differences remain available."
+      }
+    ]
+  },
+  {
+    "file": "lib/reporting/reconciliation_status_panel.dart",
+    "line": 582,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "No reconciliation run has been queued for this day.",
+        "after": "No runs queued for this day."
+      }
+    ]
+  },
+  {
+    "file": "lib/reporting/shift_amendment_feed_panel.dart",
+    "line": 256,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "This shift's summary has never been corrected.",
+        "after": "No corrections for this shift."
+      },
+      {
+        "before": "No shift summary has been corrected in this business.",
+        "after": "No shift corrections yet."
+      }
+    ]
+  },
+  {
+    "file": "lib/reporting/weekly_report_charts.dart",
+    "line": 272,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Items appear here once this week has takings.",
+        "after": "Sold items appear here."
+      }
+    ]
+  },
+  {
+    "file": "lib/reporting/weekly_report_charts.dart",
+    "line": 516,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/returns/return_feed_panel.dart",
+    "line": 612,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Pick another day to look at.",
+        "after": "Try another day."
+      },
+      {
+        "before": "Try another day, or every standing.",
+        "after": "Try another day or clear the status filter."
+      }
+    ]
+  },
+  {
+    "file": "lib/returns/return_feed_panel.dart",
+    "line": 774,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Pick another day to look at.",
+        "after": "Try another day."
+      },
+      {
+        "before": "Try another day, or every standing.",
+        "after": "Try another day or clear the status filter."
+      }
+    ]
+  },
+  {
+    "file": "lib/returns/return_history_panel.dart",
+    "line": 737,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "No returns were recorded against this sale.",
+        "after": "No returns for this sale."
+      }
+    ]
+  },
+  {
+    "file": "lib/sales/receipt_lookup_panel.dart",
+    "line": 238,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "No sale in this business carries that receipt. Check the number, and remember a receipt belongs to the business that issued it.",
+        "after": "Receipt not found. Check the number and business."
+      }
+    ]
+  },
+  {
+    "file": "lib/sales/sale_history_panel.dart",
+    "line": 346,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "A sale appears here once it has been confirmed.",
+        "after": "Confirmed sales appear here."
+      }
+    ]
+  },
+  {
+    "file": "lib/sales/sales_report_panel.dart",
+    "line": 2571,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Check the selected date and receipt number, then try again.",
+        "after": "Check the date and receipt number."
+      }
+    ]
+  },
+  {
+    "file": "lib/sales/sales_report_panel.dart",
+    "line": 2672,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Every sale recorded on this date has been returned in full. The returns themselves are on the Returns screen.",
+        "after": "View the returned sales on the Returns screen."
+      },
+      {
+        "before": "Transactions recorded on this date will appear here.",
+        "after": "Sales for this date appear here."
+      }
+    ]
+  },
+  {
+    "file": "lib/shift/shift_gate.dart",
+    "line": 432,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/shift/shift_gate.dart",
+    "line": 446,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Its count is saved. It reaches the server on its own when this device is back online, and a new shift can be opened once it has.",
+        "after": "Count saved. Go online to sync it and open a new shift."
+      }
+    ]
+  },
+  {
+    "file": "lib/shift/shift_history_panel.dart",
+    "line": 523,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Shift history is not available here",
+        "after": "Shift history unavailable"
+      },
+      {
+        "before": "This business does not open closed shifts to your role.",
+        "after": "Your role cannot view closed shifts."
+      }
+    ]
+  },
+  {
+    "file": "lib/shift/shift_history_panel.dart",
+    "line": 693,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "A shift appears here once it has been closed. Closing happens on the shift banner.",
+        "after": "Close a shift from the shift banner."
+      }
+    ]
+  },
+  {
+    "file": "lib/suppliers/supplier_delivery_history.dart",
+    "line": 297,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Each delivery received from this supplier is listed here.",
+        "after": "Received deliveries appear here."
+      }
+    ]
+  },
+  {
+    "file": "lib/suppliers/supplier_delivery_panel.dart",
+    "line": 608,
+    "component": "IllustratedMessage",
+    "centering_fixed": true,
+    "copy_changes": [
+      {
+        "before": "Nothing added yet. Add each product on the invoice.",
+        "after": "Add the products from the invoice."
+      }
+    ]
+  },
+  {
+    "file": "lib/suppliers/supplier_directory_panel.dart",
+    "line": 667,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Try another name, or show every supplier.",
+        "after": "Try another name or clear the search."
+      },
+      {
+        "before": "Add the businesses you buy stock from, so each delivery can say where it came from.",
+        "after": "Add suppliers to track stock deliveries."
+      }
+    ]
+  },
+  {
+    "file": "lib/suppliers/supplier_record_panel.dart",
+    "line": 175,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "This supplier is not in this business",
+        "after": "Supplier not found"
+      },
+      {
+        "before": "It may have been added on a device that has not synced yet.",
+        "after": "This supplier may still be syncing."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/onboarding_flow.dart",
+    "line": 1720,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/tenancy/platform_console_activity.dart",
+    "line": 87,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "An alert is raised when a business is left without an owner or an administrator, or its reconciliation stops retrying.",
+        "after": "Ownership and reconciliation issues appear here."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/platform_console_activity.dart",
+    "line": 389,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Every platform action lands here, with the reason it was given.",
+        "after": "Platform actions and reasons appear here."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/platform_console_businesses.dart",
+    "line": 292,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Search looks at the start of a business’s name.",
+        "after": "Search by the start of a business name."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/platform_console_businesses.dart",
+    "line": 306,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Archiving is permanent, and nobody has needed it yet.",
+        "after": "Archived businesses appear here."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/platform_console_businesses.dart",
+    "line": 311,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Every business that is not archived is trading.",
+        "after": "Active businesses can keep trading."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/platform_console_businesses.dart",
+    "line": 316,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/tenancy/platform_console_businesses.dart",
+    "line": 321,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "A business appears here the moment somebody creates one.",
+        "after": "New businesses appear here."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/platform_console_businesses.dart",
+    "line": 588,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/tenancy/platform_console_people.dart",
+    "line": 166,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Search looks at the start of an email address.",
+        "after": "Search by the start of an email."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/platform_console_people.dart",
+    "line": 178,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Nobody here",
+        "after": "No matching accounts"
+      },
+      {
+        "before": "Nobody has an account that fits this filter.",
+        "after": "Try another filter."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/platform_console_people.dart",
+    "line": 532,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/tenancy/platform_tenant_lifecycle.dart",
+    "line": 855,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/tenancy/tenant_branding_panel.dart",
+    "line": 403,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Receipt branding is not shown for this role",
+        "after": "Branding unavailable for your role"
+      },
+      {
+        "before": "An owner or an administrator can change them.",
+        "after": "Owners and administrators can change branding."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/tenant_catalog.dart",
+    "line": 802,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/tenancy/tenant_catalog.dart",
+    "line": 850,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": []
+  },
+  {
+    "file": "lib/tenancy/tenant_settings_screen.dart",
+    "line": 143,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "No settings are shown for this role",
+        "after": "Settings unavailable for your role"
+      },
+      {
+        "before": "Ask an owner or administrator to change a business setting.",
+        "after": "Ask an owner or administrator to change settings."
+      }
+    ]
+  },
+  {
+    "file": "lib/tenancy/tenant_staff_directory.dart",
+    "line": 1458,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Invite somebody to give them access to this business.",
+        "after": "Invite staff to give them access."
+      }
+    ]
+  },
+  {
+    "file": "lib/whatsapp/e_receipt_settings_panel.dart",
+    "line": 557,
+    "component": "EmptyState",
+    "centering_fixed": false,
+    "copy_changes": [
+      {
+        "before": "Each receipt sent on WhatsApp is listed here with what became of it.",
+        "after": "WhatsApp receipts and delivery status appear here."
+      }
+    ]
+  }
+]

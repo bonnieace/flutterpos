@@ -38,7 +38,9 @@ import 'package:flutter/material.dart';
 
 import 'brand_icon.dart';
 import 'press.dart';
+import 'routes.dart';
 import 'tokens.dart';
+import 'top_bar.dart';
 
 export 'brand_icon.dart' show AppBrandIcon;
 
@@ -114,6 +116,20 @@ final class HomeDestination {
   /// What pressing it does. Null renders §2.1's disabled row and takes the
   /// press, the hover and the focus with it.
   final VoidCallback? onPressed;
+
+  /// [onPressed], with the route it pushes tagged as this module, so the
+  /// screen's top bar draws this destination's glyph beside its title
+  /// (`docs/design/topbar-inner/`). The press does exactly what it did.
+  VoidCallback? get open {
+    final press = onPressed;
+    if (press == null) return null;
+    final module = TopBarModule(
+      icon: cardIcon ?? icon,
+      label: label,
+      accent: accent,
+    );
+    return () => AppPageRoute.openingModule(module, press);
+  }
 
   /// This destination's own condition, in words - *3 unresolved differences*,
   /// *2 waiting to send*.
@@ -428,7 +444,7 @@ final class _HomeMenuRow extends StatelessWidget {
         child: PressSurface(
           key: destination.destinationKey,
           borderRadius: radius,
-          onPressed: destination.onPressed,
+          onPressed: destination.open,
           // A row is content with an overlay stacked on it, not a container
           // the press replaces - so it takes the wash. See `pressedWash`.
           hoverOverlay: role.hoverWash(),
@@ -997,7 +1013,7 @@ final class _HomeModuleCard extends StatelessWidget {
       child: PressSurface(
         key: destination.destinationKey,
         borderRadius: radius,
-        onPressed: destination.onPressed,
+        onPressed: destination.open,
         // The card is a glyph, a name and a sentence; a solid overlay covers
         // all three. See `pressedWash` for what that looked like.
         hoverOverlay: role.hoverWash(),

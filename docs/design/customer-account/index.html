@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer account &#8212; design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #050C08; font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #FFFFFF; }
+a { color: #45F28D; } a:hover { color: #3DD47C; }
+:focus-visible { outline: 2px solid #45F28D; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+h1 { margin: 0; font-size: 28px; line-height: 33.6px; font-weight: 700; }
+.lede { margin: 8px 0 32px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; max-width: 700px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; margin-bottom: 12px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #FFFFFF; flex-shrink: 0; width: 200px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; }
+.size { font-size: 12px; color: #849E8F; flex-shrink: 0; margin-left: auto; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) { .board { flex-direction: column; gap: 6px; } .board h2 { width: auto; } .size { margin-left: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="../accounting/index.html" style="font-size:14px;color:#849E8F;text-decoration:none;">&#8592; Accounting and documents</a>
+  <h1 style="margin-top:12px;">Customer account</h1>
+  <p class="lede">A customer&#8217;s page once quotes, orders and invoices exist (<code>ACCOUNTING_WORKFLOW_DISCOVERY.md</code>). It is opened to answer one question: where do things stand with this person? What they owe and how old it is, what of theirs you are holding, and what needs doing. Debt and held money are shown side by side and never netted. Every action says what it will change before it changes it. Read <a href="README.md">README.md</a> for the reasoning, what the spec is missing, and the open questions.</p>
+
+  <a class="board" href="account-phone.html">
+    <h2>On a phone</h2>
+    <p>The whole page for a customer who owes, is overdue and has money held, with numbered notes. Then three calmer customers and the toolbar menu.</p>
+    <span class="size">390</span>
+  </a>
+  <a class="board" href="account-wide.html">
+    <h2>From 768 up</h2>
+    <p>The details as a strip, the account as a three-column band, and the Invoices sheet with the paid invoice behind the waiting money opened. Also the 834 band.</p>
+    <span class="size">834, 1440</span>
+  </a>
+  <a class="board" href="account-statement.html">
+    <h2>Statement</h2>
+    <p>The ledger with two balances, owes and held. An overpayment, its void and the corrected payment on one morning; a payment&#8217;s menu; the phone list.</p>
+    <span class="size">390, 1440</span>
+  </a>
+  <a class="board" href="account-actions.html">
+    <h2>Actions</h2>
+    <p>Record a payment with <em>Apply to</em> and a preview; the receipt; refund or keep as credit; void; write off; send a reminder.</p>
+    <span class="size">390</span>
+  </a>
+  <a class="board" href="account-states.html">
+    <h2>States</h2>
+    <p>Loading, a tab that cannot be read, a payment still on the phone. The page in Phase A before invoices exist, on go-live day, and for a customer who is inactive and blocked.</p>
+    <span class="size">390</span>
+  </a>
+</div>
+</body>
+</html>

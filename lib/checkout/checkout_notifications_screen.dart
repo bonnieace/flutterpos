@@ -267,8 +267,8 @@ class _PageState extends State<_Page> {
             child: const Center(
               child: EmptyState(
                 key: ValueKey('notifications-clear'),
-                title: 'No notifications available',
-                illustration: 'approve.svg',
+                title: 'No notifications',
+                illustration: 'notifications.svg',
               ),
             ),
           ),

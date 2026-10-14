@@ -193,7 +193,7 @@ void main() {
             find.byKey(const ValueKey('stock-movements-feed-empty')),
           )
           .data,
-      'No stock movement has been recorded for this business.',
+      'No stock movements yet.',
     );
   });
 

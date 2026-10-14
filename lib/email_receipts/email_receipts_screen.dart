@@ -31,6 +31,7 @@ import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tabs.dart';
 import '../ui/tokens.dart';
+import '../ui/record_sheet.dart';
 import '../whatsapp/e_receipt_settings.dart';
 import 'email_receipt_delivery.dart';
 import 'email_receipt_settings.dart';
@@ -147,7 +148,7 @@ class _TenantEmailReceiptsScreenState extends State<TenantEmailReceiptsScreen> {
       length: 2,
       child: AppScaffold(
         title: 'Email receipts',
-        contentWidth: AppContentWidth.reading,
+        contentWidth: AppContentWidth.records,
         body: Column(
           children: <Widget>[
             // Two tabs draw as a switch, in the inset the tab content below
@@ -155,6 +156,8 @@ class _TenantEmailReceiptsScreenState extends State<TenantEmailReceiptsScreen> {
             AppTabs(
               key: const ValueKey('email-receipts-tabs'),
               tabs: const <String>['Settings', 'Sent receipts'],
+              // Over the centred settings column.
+              alignment: Alignment.center,
               inset:
                   MediaQuery.sizeOf(context).width <
                       AppLayout.contract.mediumFloor
@@ -189,7 +192,18 @@ class _TenantEmailReceiptsScreenState extends State<TenantEmailReceiptsScreen> {
                       : tokens.spacing.s24;
                   return TabBarView(
                     children: <Widget>[
-                      _KeptTab(child: _build(context, session, data, inset)),
+                      _KeptTab(
+                        // Centred in the records frame, so a wide window
+                        // has the column in its middle rather than against
+                        // its left edge with the rest empty.
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            width: tokens.layout.reading,
+                            child: _build(context, session, data, inset),
+                          ),
+                        ),
+                      ),
                       _KeptTab(
                         child: _sent(
                           tokens,
@@ -433,11 +447,9 @@ class _TenantEmailReceiptsScreenState extends State<TenantEmailReceiptsScreen> {
               padding: EdgeInsets.only(bottom: tokens.spacing.s40 * 2),
               child: const EmptyState(
                 key: ValueKey('email-receipts-deliveries-empty'),
+                illustration: 'receipt-email.svg',
                 title: 'No receipts sent yet',
-                hint:
-                    'Each receipt sent by email is listed here with what '
-                    'became of it.',
-                icon: Icons.mail_outline,
+                hint: 'Email receipts and delivery status appear here.',
               ),
             ),
           ),
@@ -449,8 +461,46 @@ class _TenantEmailReceiptsScreenState extends State<TenantEmailReceiptsScreen> {
       key: const ValueKey('email-receipts-sent'),
       padding: listPadding,
       children: <Widget>[
-        for (final delivery in data.deliveries)
-          _DeliveryRow(delivery: delivery, now: now),
+        if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width))
+          RecordSheet(
+            columns: const [
+              SheetColumn(label: 'Customer', kind: SheetColumnKind.identity),
+              SheetColumn(label: 'Recipient'),
+              SheetColumn(label: 'Receipt', kind: SheetColumnKind.code),
+              SheetColumn(label: 'Status'),
+              SheetColumn(label: 'Sent'),
+              SheetColumn(label: 'When', kind: SheetColumnKind.time),
+            ],
+            rows: [
+              for (final delivery in data.deliveries)
+                SheetRow(
+                  id: delivery.id,
+                  key: ValueKey('email-receipts-delivery-${delivery.id}'),
+                  cells: [
+                    SheetText(delivery.customerName ?? '\u2014'),
+                    SheetText(delivery.emailMasked),
+                    SheetText(delivery.receiptNumber ?? 'Not numbered yet'),
+                    SheetText(delivery.status.label),
+                    SheetText(delivery.automatic ? 'Automatically' : 'By hand'),
+                    SheetText(
+                      (emailReceiptDeliveryWhen(delivery.createdAt, now) ??
+                          '\u2014'),
+                    ),
+                  ],
+                  fold: delivery.reasonText == null
+                      ? null
+                      // Why, under the status it explains.
+                      : SheetFold(
+                          note: delivery.reasonText,
+                          noteColumn: 3,
+                          alwaysOpen: true,
+                        ),
+                ),
+            ],
+          )
+        else
+          for (final delivery in data.deliveries)
+            _DeliveryRow(delivery: delivery, now: now),
         // **Where the list stops, said.** The tab reads the most recent few
         // and no more, and without this the last of them reads as the first
         // receipt the business ever sent. A shorter list is every receipt

@@ -43,7 +43,8 @@ enum TenantShiftPhase {
   /// Reachable only offline, or after a close whose outcome was uncertain.
   closedPending,
 
-  /// The shift has run past [TenantShiftController.maximumShiftDuration].
+  /// The shift has reached [TenantShiftController.sellingEndsAt]: its trading
+  /// day's cutoff, or its 24-hour cap.
   ///
   /// **Selling stops and only a close may follow.** A shift is the unit a
   /// day's takings are reconciled in, so one left running for days makes its
@@ -189,6 +190,55 @@ final class TenantShiftController extends ChangeNotifier {
   /// replayed now, so the way out of this state is always available.
   static const maximumShiftDuration = Duration(hours: 24);
 
+  /// The time of the morning, in the shop's own clock, at which a shift dated
+  /// the day before stops selling.
+  ///
+  /// **Set by the developer on 2026-10-12, because the cap alone let one day's
+  /// shift sell into the next.** A shift opened at 18:00 could sell until
+  /// 17:59 the next day under [maximumShiftDuration], and since a sale takes
+  /// its date from its shift, the whole of that next morning was filed under
+  /// the day before - the day's report read empty and nothing said why. The
+  /// cutoff keeps what the shift's date is for, a night's trading running past
+  /// midnight, and ends it before the next day's trade begins.
+  static const tradingDayCutoff = Duration(hours: 6);
+
+  /// When a shift filed under [businessDate] stops selling whatever its age:
+  /// [tradingDayCutoff] on the morning after it.
+  static DateTime tradingDayEndsAt(String businessDate) {
+    final day = DateTime.parse(businessDate);
+    return DateTime.utc(
+      day.year,
+      day.month,
+      day.day + 1,
+    ).add(tradingDayCutoff).subtract(checkoutBusinessDayOffset);
+  }
+
+  /// When a shift stops taking sales: at the end of its trading day, or
+  /// [maximumShiftDuration] after it opened, whichever comes first.
+  ///
+  /// [openedAt] may be null for a canonical shift whose start the server has
+  /// not stamped yet; its trading day still ends.
+  static DateTime sellingEndsAt({
+    required DateTime? openedAt,
+    required String businessDate,
+  }) {
+    final dayEnds = tradingDayEndsAt(businessDate);
+    if (openedAt == null) return dayEnds;
+    final capped = openedAt.toUtc().add(maximumShiftDuration);
+    return capped.isBefore(dayEnds) ? capped : dayEnds;
+  }
+
+  /// Whether a shift may still take a sale at [now]. The one rule the till,
+  /// the shift a phone joins, the binding of every sale and the sales report
+  /// all ask, so none of them can disagree about when a shift is over.
+  static bool canStillSell({
+    required DateTime? openedAt,
+    required String businessDate,
+    required DateTime now,
+  }) => now.toUtc().isBefore(
+    sellingEndsAt(openedAt: openedAt, businessDate: businessDate),
+  );
+
   TenantShiftState get state => _state;
 
   /// Whether this shift may no longer take sales, for either reason.
@@ -196,11 +246,14 @@ final class TenantShiftController extends ChangeNotifier {
   /// Both land on [TenantShiftPhase.expired] because the till does the same
   /// thing in each case: it stops selling and offers only a close.
   bool _hasExpired(TenantShiftLocalRecord record) =>
-      _outlivedItsDuration(record) || _isFutureDated(record);
+      _pastSellingEnd(record) || _isFutureDated(record);
 
-  /// Whether this shift has outlived [maximumShiftDuration].
-  bool _outlivedItsDuration(TenantShiftLocalRecord record) =>
-      _clock().toUtc().difference(record.openedAt) >= maximumShiftDuration;
+  /// Whether this shift has reached [sellingEndsAt].
+  bool _pastSellingEnd(TenantShiftLocalRecord record) => !canStillSell(
+    openedAt: record.openedAt,
+    businessDate: record.businessDate,
+    now: _clock(),
+  );
 
   /// Whether this shift is filed under a day that has not arrived yet.
   ///
@@ -214,9 +267,9 @@ final class TenantShiftController extends ChangeNotifier {
   /// home, the daily summary and reconciliation are all reading a different
   /// one - so the figures never move and nothing says why.
   ///
-  /// **[_outlivedItsDuration] cannot catch this.** `Duration.difference` is
-  /// signed, so a record opened in the future reads as a negative age and never
-  /// reaches [maximumShiftDuration]: that shift would sell indefinitely.
+  /// **[_pastSellingEnd] cannot catch this.** A record opened in the future
+  /// reads as a negative age and never reaches [maximumShiftDuration], and its
+  /// trading day has not even begun: that shift would sell indefinitely.
   ///
   /// **Compared as business dates, not as instants**, because that is the harm.
   /// A shift opened minutes ahead files under the same day and is nobody's
@@ -1177,7 +1230,7 @@ final class TenantShiftController extends ChangeNotifier {
   /// The shift a phone holding none of its own should join.
   ///
   /// **The newest one that can still take sales**, because that is the one the
-  /// cashier is trading in. Only where every one has run past the cap is the
+  /// cashier is trading in. Only where every one has stopped selling is the
   /// newest of those joined - as expired, so this phone asks for it to be
   /// counted off before another opens, exactly as the phone that opened it
   /// would. The rest are left for the count to sweep.
@@ -1186,7 +1239,11 @@ final class TenantShiftController extends ChangeNotifier {
     final today = checkoutBusinessDate(now);
     DateTime opened(TenantShift shift) => shift.startedAt ?? now;
     bool live(TenantShift shift) =>
-        now.difference(opened(shift)) < maximumShiftDuration &&
+        canStillSell(
+          openedAt: shift.startedAt,
+          businessDate: shift.businessDate,
+          now: now,
+        ) &&
         shift.businessDate.compareTo(today) <= 0;
     // Ties broken by id, which leads with the opening instant, so two phones
     // asking the same question join the same shift.
@@ -1639,19 +1696,24 @@ final class TenantShiftCheckoutBinder implements CheckoutShiftBinder {
     if (record.closeInProgress) {
       return const CheckoutShiftBinding.refused('shift_closing');
     }
-    // **The 24-hour cap, enforced where a sale is actually bound.** It was a
-    // property of the screen and of nothing else: `TenantShiftPhase.expired`
-    // stopped the gate drawing a till, and this - the one thing every sale goes
-    // through - never asked. So an expired shift was refused by the picture and
-    // accepted by the till, and since nothing recomputes expiry while a till is
-    // open, a device left running simply kept selling past the cap it was
-    // supposed to stop at.
+    // **The end of the shift's selling, enforced where a sale is actually
+    // bound** - its trading day's cutoff or its 24-hour cap, whichever came
+    // first. It was a property of the screen and of nothing else:
+    // `TenantShiftPhase.expired` stopped the gate drawing a till, and this -
+    // the one thing every sale goes through - never asked. So an expired shift
+    // was refused by the picture and accepted by the till, and since nothing
+    // recomputes expiry while a till is open, a device left running simply kept
+    // selling past the point it was supposed to stop at.
     //
-    // Refusing here is what makes the cap a rule rather than a drawing. The way
-    // out is unchanged and still always available: a close needs no network.
+    // Refusing here is what makes the rule a rule rather than a drawing. The
+    // way out is unchanged and still always available: a close needs no
+    // network.
     final clock = _clock ?? _utcNow;
-    if (clock().toUtc().difference(record.openedAt) >=
-        TenantShiftController.maximumShiftDuration) {
+    if (!TenantShiftController.canStillSell(
+      openedAt: record.openedAt,
+      businessDate: record.businessDate,
+      now: clock(),
+    )) {
       return const CheckoutShiftBinding.refused('shift_expired');
     }
     return CheckoutShiftBinding.bound(

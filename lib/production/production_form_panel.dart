@@ -28,6 +28,7 @@ import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import 'production_batch.dart';
 
 /// Everything recording production needs from the composition root.
@@ -149,8 +150,7 @@ final class _ProductionFormFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Record production',
-    subtitle: 'What was made, and what it cost.',
-    contentWidth: AppContentWidth.reading,
+    contentWidth: AppContentWidth.records,
     body: child,
   );
 }
@@ -503,176 +503,191 @@ final class _ProductionFormState extends State<_ProductionForm> {
       key: const ValueKey('production-form'),
       padding: EdgeInsets.all(inset),
       children: <Widget>[
-        const SectionHeading('What was made'),
-        SizedBox(height: tokens.spacing.s8),
-        // **The search or the product, never both.** Once a product is chosen
-        // the search gives way to the product itself, and *Edit* brings the
-        // search back.
-        if (product == null || _choosingProduct) ...<Widget>[
-          // **Above the search, not under it**: the search opens its
-          // suggestions downward the moment *Edit* focuses it, and a way back
-          // drawn beneath the field sat under that list.
-          if (product != null) ...<Widget>[
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: AppButton(
-                key: const ValueKey('production-product-keep'),
-                label: 'Keep ${product.name}',
-                icon: Icons.undo,
-                tier: AppButtonTier.tertiary,
-                size: AppButtonSize.sm,
-                onPressed: _busy
-                    ? null
-                    : () => setState(() => _choosingProduct = false),
-              ),
-            ),
-            SizedBox(height: tokens.spacing.s4),
-          ],
-          TenantProductTypeAhead(
-            key: const ValueKey('production-product-search'),
-            session: widget.session,
-            reader: widget.reader,
-            productSearchReader: widget.services.productSearchReader,
-            label: 'Product made',
-            selected: product,
-            enabled: !_busy,
-            // Focused only when *Edit* opened it: on arrival the form's first
-            // question is read before the keyboard covers it.
-            autofocus: _choosingProduct,
-            onSelected: _selectProduct,
-            onEdited: () => setState(() {
-              _product = null;
-              _choosingProduct = false;
-              _startedFrom = null;
-              _error = null;
-            }),
-          ),
-        ] else
-          _ChosenProduct(
-            product: product,
-            costLabel: product.cost == null
-                ? 'No cost recorded'
-                : 'Costs '
-                      '${_money(checkoutMinorUnitsFromMajor(product.cost!) ?? 0)}',
-            onEdit: _busy
-                ? null
-                : () => setState(() => _choosingProduct = true),
-          ),
-        SizedBox(height: tokens.spacing.s12),
-        AppTextField(
-          key: const ValueKey('production-quantity'),
-          controller: _quantity,
-          enabled: !_busy,
-          label: 'How many were made',
-          leading: Icons.numbers,
-          keyboardType: TextInputType.number,
-          onChanged: (_) => _quantityEdited(),
-        ),
-        SizedBox(height: tokens.spacing.s24),
-        const SectionHeading('What it cost'),
-        SizedBox(height: tokens.spacing.s8),
-        const Disclosure(
-          key: ValueKey('production-expenses-warning'),
-          summary: 'Keep these out of Expenses',
-          child: Text(
-            key: ValueKey('production-expenses-warning-text'),
-            productionExpensesWarning,
-          ),
-        ),
-        if (startedFrom != null) ...<Widget>[
-          SizedBox(height: tokens.spacing.s8),
-          Text(
-            key: const ValueKey('production-started-from'),
-            'Started from batch ${startedFrom.batchNumber}'
-            '${startedFrom.occurredAt == null ? '' : ' of ${reportShortDate(checkoutBusinessDate(startedFrom.occurredAt!))}'}. '
-            'The costs follow how many were made until you change one.',
-            style: tokens.typography.caption.copyWith(
-              color: tokens.colors.text.tertiary,
-            ),
-          ),
-        ],
-        SizedBox(height: tokens.spacing.s12),
-        for (final (index, row) in _rows.indexed) ...<Widget>[
-          if (index > 0) SizedBox(height: tokens.spacing.s8),
-          Row(
-            key: row.key,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        AppWorkspace(
+          leading: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Expanded(
-                flex: 3,
-                child: AppTextField(
-                  key: ValueKey('production-row-description-$index'),
-                  controller: row.description,
-                  enabled: !_busy,
-                  label: 'Cost ${index + 1}',
-                  // One example, on the first row. Repeated on every row it
-                  // read as a value the form had filled in.
-                  placeholder: index == 0 ? 'Flour' : null,
-                  maxLength: maximumProductionDescriptionLength,
-                  onChanged: (_) => _edited(),
-                ),
-              ),
-              SizedBox(width: tokens.spacing.s8),
-              Expanded(
-                flex: 2,
-                child: AppTextField(
-                  key: ValueKey('production-row-amount-$index'),
-                  controller: row.amount,
-                  enabled: !_busy,
-                  label: 'Amount',
-                  leading: Icons.payments_outlined,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+              const SectionHeading('What was made'),
+              SizedBox(height: tokens.spacing.s8),
+              // **The search or the product, never both.** Once a product is chosen
+              // the search gives way to the product itself, and *Edit* brings the
+              // search back.
+              if (product == null || _choosingProduct) ...<Widget>[
+                // **Above the search, not under it**: the search opens its
+                // suggestions downward the moment *Edit* focuses it, and a way back
+                // drawn beneath the field sat under that list.
+                if (product != null) ...<Widget>[
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: AppButton(
+                      key: const ValueKey('production-product-keep'),
+                      label: 'Keep ${product.name}',
+                      icon: Icons.undo,
+                      tier: AppButtonTier.tertiary,
+                      size: AppButtonSize.sm,
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _choosingProduct = false),
+                    ),
                   ),
-                  onChanged: (_) => _amountEdited(row),
+                  SizedBox(height: tokens.spacing.s4),
+                ],
+                TenantProductTypeAhead(
+                  key: const ValueKey('production-product-search'),
+                  session: widget.session,
+                  reader: widget.reader,
+                  productSearchReader: widget.services.productSearchReader,
+                  label: 'Product made',
+                  selected: product,
+                  enabled: !_busy,
+                  // Focused only when *Edit* opened it: on arrival the form's first
+                  // question is read before the keyboard covers it.
+                  autofocus: _choosingProduct,
+                  onSelected: _selectProduct,
+                  onEdited: () => setState(() {
+                    _product = null;
+                    _choosingProduct = false;
+                    _startedFrom = null;
+                    _error = null;
+                  }),
+                ),
+              ] else
+                _ChosenProduct(
+                  product: product,
+                  costLabel: product.cost == null
+                      ? 'No cost recorded'
+                      : 'Costs '
+                            '${_money(checkoutMinorUnitsFromMajor(product.cost!) ?? 0)}',
+                  onEdit: _busy
+                      ? null
+                      : () => setState(() => _choosingProduct = true),
+                ),
+              SizedBox(height: tokens.spacing.s12),
+              AppTextField(
+                key: const ValueKey('production-quantity'),
+                controller: _quantity,
+                enabled: !_busy,
+                label: 'How many were made',
+                leading: Icons.numbers,
+                keyboardType: TextInputType.number,
+                onChanged: (_) => _quantityEdited(),
+              ),
+              SizedBox(height: tokens.spacing.s24),
+            ],
+          ),
+          trailing: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const SectionHeading('What it cost'),
+              SizedBox(height: tokens.spacing.s8),
+              const Disclosure(
+                key: ValueKey('production-expenses-warning'),
+                summary: 'Keep these out of Expenses',
+                child: Text(
+                  key: ValueKey('production-expenses-warning-text'),
+                  productionExpensesWarning,
                 ),
               ),
-              IconButton(
-                key: ValueKey('production-row-remove-$index'),
-                tooltip: 'Remove cost ${index + 1}',
-                constraints: BoxConstraints.tight(
-                  tokens.density.minimumTapTarget,
+              if (startedFrom != null) ...<Widget>[
+                SizedBox(height: tokens.spacing.s8),
+                Text(
+                  key: const ValueKey('production-started-from'),
+                  'Started from batch ${startedFrom.batchNumber}'
+                  '${startedFrom.occurredAt == null ? '' : ' of ${reportShortDate(checkoutBusinessDate(startedFrom.occurredAt!))}'}. '
+                  'The costs follow how many were made until you change one.',
+                  style: tokens.typography.caption.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
                 ),
-                icon: Icon(Icons.close, color: tokens.colors.text.secondary),
-                onPressed: _busy ? null : () => _removeRow(row),
+              ],
+              SizedBox(height: tokens.spacing.s12),
+              for (final (index, row) in _rows.indexed) ...<Widget>[
+                if (index > 0) SizedBox(height: tokens.spacing.s8),
+                Row(
+                  key: row.key,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(
+                      flex: 3,
+                      child: AppTextField(
+                        key: ValueKey('production-row-description-$index'),
+                        controller: row.description,
+                        enabled: !_busy,
+                        label: 'Cost ${index + 1}',
+                        // One example, on the first row. Repeated on every row it
+                        // read as a value the form had filled in.
+                        placeholder: index == 0 ? 'Flour' : null,
+                        maxLength: maximumProductionDescriptionLength,
+                        onChanged: (_) => _edited(),
+                      ),
+                    ),
+                    SizedBox(width: tokens.spacing.s8),
+                    Expanded(
+                      flex: 2,
+                      child: AppTextField(
+                        key: ValueKey('production-row-amount-$index'),
+                        controller: row.amount,
+                        enabled: !_busy,
+                        label: 'Amount',
+                        leading: Icons.payments_outlined,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        onChanged: (_) => _amountEdited(row),
+                      ),
+                    ),
+                    IconButton(
+                      key: ValueKey('production-row-remove-$index'),
+                      tooltip: 'Remove cost ${index + 1}',
+                      constraints: BoxConstraints.tight(
+                        tokens.density.minimumTapTarget,
+                      ),
+                      icon: Icon(
+                        Icons.close,
+                        color: tokens.colors.text.secondary,
+                      ),
+                      onPressed: _busy ? null : () => _removeRow(row),
+                    ),
+                  ],
+                ),
+              ],
+              SizedBox(height: tokens.spacing.s8),
+              AppButton(
+                key: const ValueKey('production-add-row'),
+                label: 'Add cost',
+                icon: Icons.add,
+                expand: true,
+                onPressed: _busy || _rows.length >= maximumProductionExpenses
+                    ? null
+                    : _addRow,
+              ),
+              SizedBox(height: tokens.spacing.s16),
+              _Figures(
+                total: preview == null ? null : _money(preview.totalCostMinor),
+                perUnit: preview?.unitCostMinor == null
+                    ? null
+                    : _money(preview!.unitCostMinor!),
+              ),
+              if (_error case final message?) ...<Widget>[
+                SizedBox(height: tokens.spacing.s16),
+                Callout(
+                  key: const ValueKey('production-error'),
+                  status: AppStatus.problem,
+                  message: message,
+                ),
+              ],
+              SizedBox(height: tokens.spacing.s32),
+              AppButton(
+                key: const ValueKey('production-submit'),
+                label: 'Complete production',
+                icon: Icons.check_circle_outline,
+                tier: AppButtonTier.secondary,
+                loading: _busy,
+                expand: true,
+                onPressed: _canSubmit ? _submit : null,
               ),
             ],
           ),
-        ],
-        SizedBox(height: tokens.spacing.s8),
-        AppButton(
-          key: const ValueKey('production-add-row'),
-          label: 'Add cost',
-          icon: Icons.add,
-          expand: true,
-          onPressed: _busy || _rows.length >= maximumProductionExpenses
-              ? null
-              : _addRow,
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        _Figures(
-          total: preview == null ? null : _money(preview.totalCostMinor),
-          perUnit: preview?.unitCostMinor == null
-              ? null
-              : _money(preview!.unitCostMinor!),
-        ),
-        if (_error case final message?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          Callout(
-            key: const ValueKey('production-error'),
-            status: AppStatus.problem,
-            message: message,
-          ),
-        ],
-        SizedBox(height: tokens.spacing.s32),
-        AppButton(
-          key: const ValueKey('production-submit'),
-          label: 'Complete production',
-          icon: Icons.check_circle_outline,
-          tier: AppButtonTier.secondary,
-          loading: _busy,
-          expand: true,
-          onPressed: _canSubmit ? _submit : null,
         ),
       ],
     );

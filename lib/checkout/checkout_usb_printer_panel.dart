@@ -27,6 +27,7 @@ import '../ui/fields.dart';
 import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import 'checkout_print_configuration.dart';
 import 'checkout_print_failures.dart';
 import 'checkout_print_helper.dart';
@@ -503,71 +504,83 @@ class _UsbPrinterTabState extends State<UsbPrinterTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        PrintHelperCard(setup: helper, onLooked: _onHelperLooked),
-        if (_currentUnreadable) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          const Callout(
-            key: ValueKey('printer-usb-unreadable'),
-            status: AppStatus.problem,
-            message:
-                'This browser’s USB printer could not be read, so receipts '
-                'from it are not sent anywhere. Choose the printer again.',
+        AppWorkspace(
+          leading: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              PrintHelperCard(setup: helper, onLooked: _onHelperLooked),
+              if (_currentUnreadable) ...<Widget>[
+                SizedBox(height: tokens.spacing.s16),
+                const Callout(
+                  key: ValueKey('printer-usb-unreadable'),
+                  status: AppStatus.problem,
+                  message:
+                      'This browser’s USB printer could not be read, so receipts '
+                      'from it are not sent anywhere. Choose the printer again.',
+                ),
+              ] else if (current != null) ...<Widget>[
+                SizedBox(height: tokens.spacing.s16),
+                _ChosenPrinterCard(
+                  printer: current,
+                  paperWidth: _paperWidth,
+                  hasCutter: _hasCutter,
+                  busy: busy,
+                  testing: _step == _Step.testing,
+                  forgetting: _step == _Step.forgetting,
+                  canTest: widget.testPrint != null,
+                  onPaperWidth: (value) => _update(paperWidth: value),
+                  onCutter: (value) => _update(hasCutter: value),
+                  onTest: _test,
+                  onForget: _forget,
+                ),
+              ],
+              if (answer != null) ...<Widget>[
+                SizedBox(height: tokens.spacing.s12),
+                Callout(
+                  key: const ValueKey('printer-usb-answer'),
+                  status: answer.status,
+                  message: answer.message,
+                ),
+              ],
+            ],
           ),
-        ] else if (current != null) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          _ChosenPrinterCard(
-            printer: current,
-            paperWidth: _paperWidth,
-            hasCutter: _hasCutter,
-            busy: busy,
-            testing: _step == _Step.testing,
-            forgetting: _step == _Step.forgetting,
-            canTest: widget.testPrint != null,
-            onPaperWidth: (value) => _update(paperWidth: value),
-            onCutter: (value) => _update(hasCutter: value),
-            onTest: _test,
-            onForget: _forget,
+          trailing: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (_helperRunning && choosing && found.isEmpty) ...<Widget>[
+                SizedBox(height: tokens.spacing.s16),
+                const Callout(
+                  key: ValueKey('printer-usb-helper-none'),
+                  illustration: 'printer-connection.svg',
+                  status: AppStatus.info,
+                  icon: Icons.usb,
+                  message:
+                      'Connect and switch on the printer. It appears automatically.',
+                ),
+              ],
+              if (_helperRunning && found.isNotEmpty) ...<Widget>[
+                SizedBox(height: tokens.spacing.s24),
+                Text(
+                  choosing ? 'CHOOSE THE PRINTER' : 'OTHER PRINTERS',
+                  style: tokens.typography.labelEyebrow.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                ),
+                SizedBox(height: tokens.spacing.s8),
+                for (final device in found) ...<Widget>[
+                  _PermittedRow(
+                    device: device,
+                    keyPrefix: 'printer-usb-helper',
+                    primary: choosing,
+                    enabled: !busy,
+                    onUse: () => _connect(device),
+                  ),
+                  SizedBox(height: tokens.spacing.s8),
+                ],
+              ],
+            ],
           ),
-        ],
-        if (answer != null) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('printer-usb-answer'),
-            status: answer.status,
-            message: answer.message,
-          ),
-        ],
-        if (_helperRunning && choosing && found.isEmpty) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          const Callout(
-            key: ValueKey('printer-usb-helper-none'),
-            status: AppStatus.info,
-            icon: Icons.usb,
-            message:
-                'Plug the printer into this computer and switch it on. It '
-                'appears here by itself.',
-          ),
-        ],
-        if (_helperRunning && found.isNotEmpty) ...<Widget>[
-          SizedBox(height: tokens.spacing.s24),
-          Text(
-            choosing ? 'CHOOSE THE PRINTER' : 'OTHER PRINTERS',
-            style: tokens.typography.labelEyebrow.copyWith(
-              color: tokens.colors.text.tertiary,
-            ),
-          ),
-          SizedBox(height: tokens.spacing.s8),
-          for (final device in found) ...<Widget>[
-            _PermittedRow(
-              device: device,
-              keyPrefix: 'printer-usb-helper',
-              primary: choosing,
-              enabled: !busy,
-              onUse: () => _connect(device),
-            ),
-            SizedBox(height: tokens.spacing.s8),
-          ],
-        ],
+        ),
       ],
     );
   }
@@ -597,90 +610,104 @@ class _UsbPrinterTabState extends State<UsbPrinterTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (_currentUnreadable)
-          const Callout(
-            key: ValueKey('printer-usb-unreadable'),
-            status: AppStatus.problem,
-            message:
-                'This browser’s USB printer could not be read, so receipts '
-                'from it are not sent anywhere. Choose the printer again.',
-          )
-        else if (current != null)
-          _ChosenPrinterCard(
-            printer: current,
-            paperWidth: _paperWidth,
-            hasCutter: _hasCutter,
-            busy: busy,
-            testing: _step == _Step.testing,
-            forgetting: _step == _Step.forgetting,
-            canTest: widget.testPrint != null,
-            onPaperWidth: (value) => _update(paperWidth: value),
-            onCutter: (value) => _update(hasCutter: value),
-            onTest: _test,
-            onForget: _forget,
-          )
-        else
-          const Callout(
-            key: ValueKey('printer-usb-none'),
-            status: AppStatus.info,
-            icon: Icons.usb,
-            message:
-                'No USB printer is chosen in this browser, so its receipts '
-                'are not printed. Plug the printer into this computer, switch '
-                'it on, and choose it below.',
+        AppWorkspace(
+          leading: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (_currentUnreadable)
+                const Callout(
+                  key: ValueKey('printer-usb-unreadable'),
+                  status: AppStatus.problem,
+                  message:
+                      'This browser’s USB printer could not be read, so receipts '
+                      'from it are not sent anywhere. Choose the printer again.',
+                )
+              else if (current != null)
+                _ChosenPrinterCard(
+                  printer: current,
+                  paperWidth: _paperWidth,
+                  hasCutter: _hasCutter,
+                  busy: busy,
+                  testing: _step == _Step.testing,
+                  forgetting: _step == _Step.forgetting,
+                  canTest: widget.testPrint != null,
+                  onPaperWidth: (value) => _update(paperWidth: value),
+                  onCutter: (value) => _update(hasCutter: value),
+                  onTest: _test,
+                  onForget: _forget,
+                )
+              else
+                const Callout(
+                  key: ValueKey('printer-usb-none'),
+                  status: AppStatus.info,
+                  icon: Icons.usb,
+                  message:
+                      'No USB printer is chosen in this browser, so its receipts '
+                      'are not printed. Plug the printer into this computer, switch '
+                      'it on, and choose it below.',
+                ),
+              if (answer != null) ...<Widget>[
+                SizedBox(height: tokens.spacing.s12),
+                Callout(
+                  key: const ValueKey('printer-usb-answer'),
+                  status: answer.status,
+                  message: answer.message,
+                ),
+              ],
+              SizedBox(height: tokens.spacing.s24),
+            ],
           ),
-        if (answer != null) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('printer-usb-answer'),
-            status: answer.status,
-            message: answer.message,
+          trailing: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              AppButton(
+                key: const ValueKey('printer-usb-choose'),
+                label: current == null
+                    ? 'Choose USB printer'
+                    : 'Choose another',
+                icon: Icons.usb,
+                tier: current == null
+                    ? AppButtonTier.primary
+                    : AppButtonTier.secondary,
+                loading: _step == _Step.choosing || _step == _Step.connecting,
+                expand: true,
+                onPressed: busy ? null : () => _choose(),
+              ),
+              SizedBox(height: tokens.spacing.s4),
+              AppButton(
+                key: const ValueKey('printer-usb-choose-any'),
+                label: 'My printer is not listed',
+                tier: AppButtonTier.tertiary,
+                expand: true,
+                onPressed: busy ? null : () => _choose(anyDevice: true),
+              ),
+              if (others.isNotEmpty) ...<Widget>[
+                SizedBox(height: tokens.spacing.s24),
+                Text(
+                  'ALLOWED IN THIS BROWSER',
+                  style: tokens.typography.labelEyebrow.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                ),
+                SizedBox(height: tokens.spacing.s8),
+                for (final device in others) ...<Widget>[
+                  _PermittedRow(
+                    device: device,
+                    keyPrefix: 'printer-usb-permitted',
+                    enabled: !busy,
+                    onUse: () => _connect(device),
+                  ),
+                  SizedBox(height: tokens.spacing.s8),
+                ],
+              ],
+              SizedBox(height: tokens.spacing.s16),
+              const Disclosure(
+                key: ValueKey('printer-usb-windows-help'),
+                summary: 'The printer is listed but will not print',
+                child: _WindowsHelp(),
+              ),
+            ],
           ),
-        ],
-        SizedBox(height: tokens.spacing.s24),
-        AppButton(
-          key: const ValueKey('printer-usb-choose'),
-          label: current == null ? 'Choose USB printer' : 'Choose another',
-          icon: Icons.usb,
-          tier: current == null
-              ? AppButtonTier.primary
-              : AppButtonTier.secondary,
-          loading: _step == _Step.choosing || _step == _Step.connecting,
-          expand: true,
-          onPressed: busy ? null : () => _choose(),
-        ),
-        SizedBox(height: tokens.spacing.s4),
-        AppButton(
-          key: const ValueKey('printer-usb-choose-any'),
-          label: 'My printer is not listed',
-          tier: AppButtonTier.tertiary,
-          expand: true,
-          onPressed: busy ? null : () => _choose(anyDevice: true),
-        ),
-        if (others.isNotEmpty) ...<Widget>[
-          SizedBox(height: tokens.spacing.s24),
-          Text(
-            'ALLOWED IN THIS BROWSER',
-            style: tokens.typography.labelEyebrow.copyWith(
-              color: tokens.colors.text.tertiary,
-            ),
-          ),
-          SizedBox(height: tokens.spacing.s8),
-          for (final device in others) ...<Widget>[
-            _PermittedRow(
-              device: device,
-              keyPrefix: 'printer-usb-permitted',
-              enabled: !busy,
-              onUse: () => _connect(device),
-            ),
-            SizedBox(height: tokens.spacing.s8),
-          ],
-        ],
-        SizedBox(height: tokens.spacing.s16),
-        const Disclosure(
-          key: ValueKey('printer-usb-windows-help'),
-          summary: 'The printer is listed but will not print',
-          child: _WindowsHelp(),
         ),
       ],
     );

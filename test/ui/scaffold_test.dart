@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/semantics.dart';
 import 'package:flutter/material.dart';
 import 'package:uzapay_pos/theme.dart';
 import 'package:uzapay_pos/ui/buttons.dart';
 import 'package:uzapay_pos/ui/home_navigation.dart';
+import 'package:uzapay_pos/ui/routes.dart';
 import 'package:uzapay_pos/ui/scaffold.dart';
 import 'package:uzapay_pos/ui/tokens.dart';
+import 'package:uzapay_pos/ui/top_bar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _tokens = spiritTheme.extension<AppTokens>()!;
@@ -17,6 +21,7 @@ final _tokens = spiritTheme.extension<AppTokens>()!;
 /// `AppLayout.expandedFloor` - and did not move it.
 final double _compactWidth = AppLayout.contract.expandedFloor - 1;
 final double _expandedWidth = AppLayout.contract.expandedFloor;
+const double _phoneWidth = 390;
 
 /// Mounts [child] at [width], under the app's own theme.
 Future<void> _pump(
@@ -189,6 +194,7 @@ void main() {
           title: 'Sales totals',
           body: SizedBox(),
         ),
+        width: _phoneWidth,
       );
 
       expect(
@@ -198,7 +204,7 @@ void main() {
       expect(
         tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight,
         isNull,
-        reason: 'a bar with one line keeps Material\'s own height',
+        reason: 'a bar with one line keeps Material\'s own height on a phone',
       );
     });
 
@@ -217,6 +223,7 @@ void main() {
           subtitle: '2026-08-12 UTC',
           body: SizedBox(),
         ),
+        width: _phoneWidth,
       );
 
       final style = _styleOf(tester, '2026-08-12 UTC');
@@ -231,6 +238,134 @@ void main() {
         AppScaffold.toolbarHeightWithSubtitle,
       );
     });
+
+    testWidgets('sits on the title\'s line from 768 up, and the bar stays 64', (
+      tester,
+    ) async {
+      // docs/design/topbar/, 2026-10-13: one height for every wide bar, so
+      // the subtitle moves beside the title in tertiary.
+      await _pump(
+        tester,
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Reconciliation status',
+          subtitle: '2026-08-12 UTC',
+          body: SizedBox(),
+        ),
+        width: AppLayout.contract.mediumFloor,
+      );
+
+      final style = _styleOf(tester, '2026-08-12 UTC');
+      expect(style.color, _tokens.colors.text.tertiary);
+      final title = tester.getRect(find.text('Reconciliation status'));
+      final subtitle = tester.getRect(find.text('2026-08-12 UTC'));
+      expect(subtitle.left, title.right + _tokens.spacing.s12);
+      expect(subtitle.top, greaterThanOrEqualTo(title.top));
+      expect(subtitle.bottom, lessThanOrEqualTo(title.bottom));
+      expect(
+        tester.getSize(find.byType(AppBar)).height,
+        AppLayout.contract.topBarHeight,
+      );
+    });
+  });
+
+  group('the bar from 768 up', () {
+    testWidgets('is 64 with one line too', (tester) async {
+      await _pump(
+        tester,
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Sales totals',
+          body: SizedBox(),
+        ),
+        width: AppLayout.contract.mediumFloor,
+      );
+      expect(
+        tester.getSize(find.byType(AppBar)).height,
+        AppLayout.contract.topBarHeight,
+      );
+    });
+
+    testWidgets('starts its title on the page inset when nothing leads it', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const AppScaffold(
+          contentWidth: AppContentWidth.full,
+          title: 'Sales totals',
+          body: SizedBox(),
+        ),
+        width: AppLayout.contract.mediumFloor,
+      );
+      expect(
+        tester.getTopLeft(find.text('Sales totals')).dx,
+        AppScaffold.horizontalInset(_tokens.spacing),
+      );
+    });
+
+    testWidgets('puts the back arrow\'s glyph on the page inset', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(AppLayout.contract.mediumFloor, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final navigator = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: spiritTheme,
+          navigatorKey: navigator,
+          home: const SizedBox(),
+        ),
+      );
+      unawaited(
+        navigator.currentState!.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const AppScaffold(
+              contentWidth: AppContentWidth.full,
+              title: 'Sales totals',
+              body: SizedBox(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final inset = AppScaffold.horizontalInset(_tokens.spacing);
+      final glyph = tester.getRect(find.byType(BackButtonIcon));
+      expect(glyph.left, inset);
+      expect(
+        tester.getTopLeft(find.text('Sales totals')).dx,
+        inset * 2 + _tokens.icons.card,
+      );
+    });
+  });
+
+  testWidgets('the bar stands on the page and lifts once content is under it', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      AppScaffold(
+        contentWidth: AppContentWidth.full,
+        title: 'Sales totals',
+        body: ListView(
+          children: <Widget>[for (var i = 0; i < 60; i++) Text('Row $i')],
+        ),
+      ),
+      width: _phoneWidth,
+    );
+    Color background() =>
+        tester.widget<AppBar>(find.byType(AppBar)).backgroundColor!;
+    expect(background(), _tokens.colors.surface.base);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(background(), _tokens.colors.surface.raised);
+
+    await tester.drag(find.byType(ListView), const Offset(0, 600));
+    await tester.pumpAndSettle();
+    expect(background(), _tokens.colors.surface.base);
   });
 
   group('the primary action', () {
@@ -961,6 +1096,180 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(pressed, 1);
+    });
+  });
+
+  group('an inner bar names its module and says when it is offline', () {
+    // `docs/design/topbar-inner/`, 2026-10-13.
+    const inventory = TopBarModule(
+      icon: Icons.warehouse,
+      label: 'Inventory',
+      accent: AppIdentityAccent.purple,
+    );
+    final well = find.byKey(const ValueKey('top-bar-module-well'));
+    final offline = find.byKey(const ValueKey('top-bar-offline'));
+
+    Widget screen(String title) => AppScaffold(
+      contentWidth: AppContentWidth.records,
+      title: title,
+      body: const SizedBox(),
+    );
+
+    /// Mounts a home at [width] whose button opens [open] - inside
+    /// [AppPageRoute.openingModule] when [module] is given, as a home
+    /// destination's press does.
+    Future<void> pumpHome(
+      WidgetTester tester, {
+      required double width,
+      TopBarModule? module,
+      Stream<bool>? onlineChanges,
+    }) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: spiritTheme,
+          builder: onlineChanges == null
+              ? null
+              : (context, child) => DeviceOnlineScope(
+                  onlineChanges: onlineChanges,
+                  child: child!,
+                ),
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () {
+                void push() => Navigator.of(context).push(
+                  AppPageRoute<void>(builder: (_) => screen('Stock counts')),
+                );
+                if (module == null) {
+                  push();
+                } else {
+                  AppPageRoute.openingModule(module, push);
+                }
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a screen a module opened draws its glyph from 768 up', (
+      tester,
+    ) async {
+      await pumpHome(tester, width: 834, module: inventory);
+
+      expect(well, findsOneWidget);
+      final glyph = tester.widget<Icon>(
+        find.descendant(of: well, matching: find.byType(Icon)),
+      );
+      expect(glyph.icon, Icons.warehouse);
+      expect(glyph.size, _tokens.icons.row);
+      expect(
+        glyph.color,
+        _tokens.colors.accent.identityAt(AppIdentityAccent.purple),
+      );
+      expect(tester.getSize(well), Size.square(_tokens.icons.barWell));
+      // Before the title, on its line.
+      expect(
+        tester.getTopRight(well).dx,
+        lessThan(tester.getTopLeft(find.text('Stock counts')).dx),
+      );
+    });
+
+    testWidgets('not on a phone, where the title keeps the width', (
+      tester,
+    ) async {
+      await pumpHome(tester, width: _phoneWidth, module: inventory);
+
+      expect(find.text('Stock counts'), findsOneWidget);
+      expect(well, findsNothing);
+    });
+
+    testWidgets('a route pushed over it is still in that module', (
+      tester,
+    ) async {
+      await pumpHome(tester, width: 834, module: inventory);
+      final context = tester.element(find.text('Stock counts'));
+      unawaited(
+        Navigator.of(context).push(
+          AppPageRoute<void>(builder: (_) => screen('Product stock ledger')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final route = ModalRoute.of(
+        tester.element(find.text('Product stock ledger')),
+      );
+      expect((route! as AppPageRoute<void>).module, same(inventory));
+      expect(well, findsOneWidget);
+    });
+
+    testWidgets('a screen no module opened draws no well', (tester) async {
+      await pumpHome(tester, width: 1440);
+
+      expect(find.text('Stock counts'), findsOneWidget);
+      expect(well, findsNothing);
+    });
+
+    testWidgets('offline says so with a glyph and a word, online says nothing', (
+      tester,
+    ) async {
+      final readings = StreamController<bool>.broadcast();
+      addTearDown(readings.close);
+      await pumpHome(tester, width: _phoneWidth, onlineChanges: readings.stream);
+      expect(offline, findsNothing, reason: 'no reading yet');
+
+      readings.add(false);
+      await tester.pumpAndSettle();
+      expect(offline, findsOneWidget);
+      expect(
+        find.descendant(of: offline, matching: find.text('Offline')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: offline, matching: find.byIcon(Icons.cloud_off)),
+        findsOneWidget,
+      );
+
+      readings.add(true);
+      await tester.pumpAndSettle();
+      expect(offline, findsNothing);
+    });
+
+    testWidgets('from 1024 it says what offline means for a sale', (
+      tester,
+    ) async {
+      final readings = StreamController<bool>.broadcast();
+      addTearDown(readings.close);
+      await pumpHome(tester, width: _expandedWidth, onlineChanges: readings.stream);
+      readings.add(false);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: offline,
+          matching: find.text('Offline · sales save on this device'),
+        ),
+        findsOneWidget,
+      );
+      // Alone in the bar, it ends on the page's inset.
+      expect(
+        _expandedWidth - tester.getTopRight(offline).dx,
+        moreOrLessEquals(AppScaffold.horizontalInset(_tokens.spacing)),
+      );
+    });
+
+    testWidgets('no scope above the app is no reading, and draws nothing', (
+      tester,
+    ) async {
+      await pumpHome(tester, width: _phoneWidth);
+
+      expect(offline, findsNothing);
     });
   });
 }

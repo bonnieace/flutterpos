@@ -18,6 +18,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 
 import '../ui/buttons.dart';
 import '../ui/snackbar.dart';
@@ -150,9 +151,10 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
         // where nothing at all is waiting; a section that happens to be
         // empty says so and gets out of the way.
         if (listing.jobs.isEmpty)
-          Text(
-            key: const ValueKey('print-queue-empty'),
-            'No receipts are waiting.',
+          IllustratedMessage(
+            illustration: 'printing-invoices.svg',
+            textKey: const ValueKey('print-queue-empty'),
+            message: 'No receipts are waiting.',
             style: tokens.density
                 .body(tokens.typography)
                 .copyWith(color: tokens.colors.text.secondary),

@@ -86,13 +86,19 @@ void main() {
     // The row is drawn from this device, named, while the live pass is still
     // outstanding. Before the fix the cached pass resolved `cashier-a` through
     // the live reader and hung with it, so nothing below was on screen.
-    expect(find.byKey(const ValueKey('audit-log-event-aud_001')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('audit-log-event-aud_001')),
+      findsOneWidget,
+    );
+    // At 1400 the log is a table (2026-10-13): the name in the cell, the UID it
+    // is recorded under on the line beneath it.
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('audit-log-target-aud_001')))
           .data,
-      'Amina (cashier-a)',
+      'Amina',
     );
+    expect(find.text('cashier-a'), findsOneWidget);
     // **Not one document read was attempted on the live reader.** This is the
     // assertion that fails without the fix: the label is not worth a network
     // round trip in front of records already held.
@@ -185,8 +191,7 @@ Future<void> _pumpAuditLog(WidgetTester tester, TenantDataReader reader) async {
 }
 
 /// A reader that never answers, paired with a device copy that does.
-final class _StallingReader
-    implements TenantDataReader, TenantCacheReadable {
+final class _StallingReader implements TenantDataReader, TenantCacheReadable {
   _StallingReader({required this.cache});
 
   final _CacheReader cache;
@@ -275,8 +280,7 @@ TenantMembership _membership() => TenantMembership(
   canonicalTenantExists: true,
 );
 
-const String _takeId =
-    'st_2026-09-10_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const String _takeId = 'st_2026-09-10_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 /// A live reader that never answers, over a device copy holding one count,
 /// its differing line, the counter and the product that line names.
@@ -314,9 +318,7 @@ final class _StockCacheReader implements TenantDataReader {
       },
     };
     final data = documents[path];
-    return data == null
-        ? null
-        : TenantDocumentSnapshot(path: path, data: data);
+    return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
   }
 
   @override

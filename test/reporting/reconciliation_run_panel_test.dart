@@ -472,7 +472,7 @@ void main() {
     expect(callout.status, AppStatus.info);
     expect(
       callout.message,
-      startsWith('No run is recorded at this ID any more.'),
+      'Run not found. Its recorded differences remain available.',
     );
     expect(
       find.byKey(const ValueKey('reconciliation-status-run-rj_abc')),

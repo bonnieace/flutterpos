@@ -253,9 +253,7 @@ final class TenantStockTakeCard extends StatelessWidget {
             tokens,
             status: AppStatus.attention,
             icon: Icons.schedule,
-            message:
-                'The device that took this has not finished sending, so these '
-                'figures are not final and nothing can be accepted yet.',
+            message: stockTakeArrivingNote,
             noteKey: ValueKey<String>('stock-take-arriving-${take.id}'),
           ),
         ],
@@ -351,10 +349,7 @@ final class TenantStockTakeCard extends StatelessWidget {
     tokens,
     status: AppStatus.attention,
     icon: Icons.help_outline,
-    message: take.unmatchedLineCount == 1
-        ? '1 line names a product this business does not hold.'
-        : '${take.unmatchedLineCount} lines name products this business does '
-              'not hold.',
+    message: stockTakeUnmatchedNote(take.unmatchedLineCount),
     noteKey: ValueKey<String>('stock-take-unmatched-${take.id}'),
   );
 
@@ -405,3 +400,14 @@ final class TenantStockTakeCard extends StatelessWidget {
   static const double _chevron = 18;
   static const double _glyph = 18;
 }
+
+/// Why a count's figures are not final: the card's note, and the table's.
+const String stockTakeArrivingNote =
+    'The device that took this has not finished sending, so these figures are '
+    'not final and nothing can be accepted yet.';
+
+/// The lines a count holds for products this business does not: the card's
+/// note, and the table's.
+String stockTakeUnmatchedNote(int lines) => lines == 1
+    ? '1 line names a product this business does not hold.'
+    : '$lines lines name products this business does not hold.';

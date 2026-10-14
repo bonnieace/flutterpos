@@ -477,22 +477,31 @@ final class RecordActionSet extends StatelessWidget {
                 ? AppButtonTier.destructive
                 : AppButtonTier.secondary,
           ),
-        if (overflow.isNotEmpty) _RecordOverflowMenu(actions: overflow),
+        if (overflow.isNotEmpty) RecordOverflowMenu(actions: overflow),
       ],
     );
   }
 }
 
-final class _RecordOverflowMenu extends StatelessWidget {
-  const _RecordOverflowMenu({required this.actions});
+/// A record's actions behind one 48 control: the overflow [RecordActionSet]
+/// draws past three, and the menu every `RecordSheet` row keeps its actions in.
+final class RecordOverflowMenu extends StatelessWidget {
+  const RecordOverflowMenu({
+    super.key,
+    required this.actions,
+    this.tooltip = 'More actions',
+  });
 
   final List<RecordAction> actions;
+
+  /// What a pointer's hover and a screen reader say the control is.
+  final String tooltip;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     return PopupMenuButton<RecordAction>(
-      tooltip: 'More actions',
+      tooltip: tooltip,
       icon: Icon(Icons.more_vert, color: tokens.colors.text.secondary),
       // §9's target, and the same figure `AppButton` keeps whatever it paints.
       iconSize: RecordActionSet.glyphSize,

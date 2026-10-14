@@ -281,6 +281,56 @@ void main() {
   });
 
   group('the record', () {
+    // **The statement as a ledger from 1024**, at the developer's direction on
+    // 2026-10-12 and 13; the record pumps at 1200, below it the cards stay.
+    testWidgets(
+      'the statement is a ledger: what moved, and what was owed after',
+      (tester) async {
+        await _pumpRecord(
+          tester,
+          _Reader(
+            activity: <TenantQueryDocumentSnapshot>[
+              _entry('payment-cp_1', 12, <String, Object?>{
+                'kind': 'payment',
+                'credit': true,
+                'tender': 'mpesa',
+                'balanceChangeMinor': -50000,
+                'balanceAfterMinor': 20000,
+              }),
+              _entry('co-1', 10, <String, Object?>{
+                'kind': 'sale',
+                'credit': true,
+                'receiptNumber': 'CT-A7F-20261001-0002',
+                'creditPaidTender': 'cash',
+                'balanceChangeMinor': 70000,
+                'balanceAfterMinor': 70000,
+              }),
+            ],
+          ),
+        );
+
+        expect(
+          find.byKey(const ValueKey('customer-statement-sheet')),
+          findsOneWidget,
+        );
+        String text(String key) =>
+            tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+        // Plus means they owe more, and a repayment carries a real minus.
+        expect(text('customer-statement-change-payment-cp_1'), '−500');
+        expect(text('customer-statement-after-payment-cp_1'), '200');
+        expect(text('customer-statement-change-co-1'), '+700');
+        expect(find.text('CT-A7F-20261001-0002'), findsOneWidget);
+
+        tester.view.physicalSize = const Size(1023, 2400);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('customer-statement-sheet')),
+          findsNothing,
+        );
+        expect(text('customer-statement-change-co-1'), '+ 700');
+      },
+    );
+
     testWidgets('states what they owe, and whether they may, never a limit', (
       tester,
     ) async {

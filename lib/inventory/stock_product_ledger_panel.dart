@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 
 import '../ui/pagination.dart';
 import '../ui/record_list.dart';
@@ -263,9 +264,10 @@ final class _LedgerContents extends StatelessWidget {
                 selfUid: selfUid,
               ),
           ],
-          empty: const Text(
-            key: ValueKey('product-ledger-empty'),
-            'No stock movement has been recorded against this product.',
+          empty: const IllustratedMessage(
+            illustration: 'product-ledger.svg',
+            textKey: ValueKey('product-ledger-empty'),
+            message: 'No stock movements for this product yet.',
           ),
         ),
       ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 
 import '../ui/fields.dart';
 import '../ui/pagination.dart';
@@ -322,12 +323,12 @@ final class _MovementFeedContents extends StatelessWidget {
           items: <RecordItem>[
             for (final movement in page.items) _record(context, movement),
           ],
-          empty: Text(
-            key: const ValueKey('stock-movements-feed-empty'),
-            page.isSourceScoped
-                ? 'No "${page.source!.label}" entry has been recorded for this '
-                      'business.'
-                : 'No stock movement has been recorded for this business.',
+          empty: IllustratedMessage(
+            illustration: 'stock-movements.svg',
+            textKey: const ValueKey('stock-movements-feed-empty'),
+            message: page.isSourceScoped
+                ? 'No "${page.source!.label}" movements yet.'
+                : 'No stock movements yet.',
           ),
         ),
       ],

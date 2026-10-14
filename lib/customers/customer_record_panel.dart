@@ -13,6 +13,7 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_staff_names.dart';
+import '../ui/record_sheet.dart';
 import '../ui/buttons.dart';
 import '../ui/card.dart';
 import '../ui/scaffold.dart';
@@ -161,11 +162,9 @@ final class _TenantCustomerRecordScreenState
             title: 'Customer',
             child: EmptyState(
               key: ValueKey('customer-record-missing'),
-              title: 'This customer is not in this business',
-              hint:
-                  'They may have been added on a device that has not synced '
-                  'yet.',
-              illustration: 'file-search.svg',
+              title: 'Customer not found',
+              hint: 'This customer may still be syncing.',
+              illustration: 'customer-search.svg',
             ),
           );
         }
@@ -218,8 +217,7 @@ final class _RecordFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: title,
-    subtitle: 'Customer',
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     body: child,
   );
 }
@@ -279,7 +277,10 @@ final class _RecordContents extends StatelessWidget {
         key: const ValueKey('customer-record'),
         headerSliverBuilder: (context, _) => <Widget>[
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(inset, inset, inset, 0),
+            padding: RecordSheet.pagePadding(
+              context,
+              fallback: EdgeInsets.all(inset),
+            ).resolve(Directionality.of(context)).copyWith(bottom: 0),
             sliver: SliverList.list(children: _header(tokens, facts)),
           ),
         ],
@@ -440,7 +441,16 @@ final class _RecordTabs extends StatelessWidget {
     Widget tab(Widget child) => AppKeptTab(
       child: SingleChildScrollView(
         primary: true,
-        padding: EdgeInsets.fromLTRB(inset, tokens.spacing.s16, inset, inset),
+        padding: RecordSheet.pagePadding(
+          context,
+          fallback: EdgeInsets.fromLTRB(
+            inset,
+            tokens.spacing.s16,
+            inset,
+            inset,
+          ),
+          belowScaffold: false,
+        ),
         child: child,
       ),
     );
@@ -651,12 +661,12 @@ final class _TenantCustomerStatementState
           if (_entries.isEmpty)
             const EmptyState(
               key: ValueKey('customer-statement-empty'),
-              title: 'Nothing on their account yet',
-              hint:
-                  'Each sale on credit and each payment back is listed here '
-                  'once it reaches the server.',
-              illustration: 'file-search.svg',
+              title: 'No account activity yet',
+              hint: 'Credit sales and repayments appear after syncing.',
+              illustration: 'customer-account.svg',
             )
+          else if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width))
+            _sheet()
           else
             for (final (index, entry) in _entries.indexed) ...<Widget>[
               if (index > 0) SizedBox(height: tokens.spacing.s12),
@@ -677,6 +687,71 @@ final class _TenantCustomerStatementState
             ),
           ],
         ],
+      ],
+    );
+  }
+
+  /// The large-screen statement: a ledger, one row per entry.
+  ///
+  /// **What the account moved by and what it stood at after, side by side in
+  /// two columns that read down** - `docs/design/tables/`, at the developer's
+  /// direction on 2026-10-13. The card's sentence *Then owed KES 1700* is the
+  /// second column; *paid ahead* rides under its figure, so the meaning is in
+  /// words and not in a sign a reader has to know. Below 1024 the cards are
+  /// unchanged.
+  Widget _sheet() {
+    final code = _currency.code;
+    final cents = _entries.any(
+      (entry) =>
+          entry.changeMinor % 100 != 0 || entry.balanceAfterMinor % 100 != 0,
+    );
+    String? reserve(int minor) => cents && minor % 100 == 0 ? '.00' : null;
+    return RecordSheet(
+      key: const ValueKey('customer-statement-sheet'),
+      columns: <SheetColumn>[
+        const SheetColumn(label: 'Date', kind: SheetColumnKind.text),
+        const SheetColumn(
+          label: 'What happened',
+          kind: SheetColumnKind.identity,
+        ),
+        const SheetColumn(label: 'Receipt', kind: SheetColumnKind.code),
+        const SheetColumn(label: 'Paid by', kind: SheetColumnKind.text),
+        SheetColumn(label: 'Change', kind: SheetColumnKind.figure, unit: code),
+        SheetColumn(
+          label: 'Then owed',
+          kind: SheetColumnKind.figure,
+          unit: code,
+        ),
+      ],
+      rows: <SheetRow>[
+        for (final entry in _entries)
+          SheetRow(
+            id: entry.id,
+            key: ValueKey('customer-statement-${entry.id}'),
+            semanticLabel: entry.kind.label,
+            cells: <SheetCell?>[
+              SheetText(
+                entry.at == null ? '—' : reportShortDate(_isoDate(entry.at!)),
+              ),
+              SheetText(entry.kind.label),
+              SheetText(entry.receiptNumber ?? '—'),
+              SheetText(entry.tender?.label ?? '—'),
+              SheetFigure(
+                // **Plus means they owe more**, the card's own sign, with a
+                // real minus for a repayment.
+                '${entry.changeMinor > 0 ? '+' : '−'}'
+                '${moneyTextGroupedOfMinor(entry.changeMinor.abs())}',
+                reserve: reserve(entry.changeMinor),
+                key: ValueKey('customer-statement-change-${entry.id}'),
+              ),
+              SheetFigure(
+                moneyTextGroupedOfMinor(entry.balanceAfterMinor.abs()),
+                reserve: reserve(entry.balanceAfterMinor),
+                caption: entry.balanceAfterMinor < 0 ? 'paid ahead' : null,
+                key: ValueKey('customer-statement-after-${entry.id}'),
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -978,10 +1053,14 @@ final class _TenantCustomerPurchasesState
             const EmptyState(
               key: ValueKey('customer-purchases-empty'),
               title: 'No purchases yet',
-              hint:
-                  'Each sale the till records for this customer is listed '
-                  'here once it reaches the server.',
-              illustration: 'file-search.svg',
+              hint: 'Customer purchases appear after syncing.',
+              illustration: 'customer-purchases.svg',
+            )
+          else if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width))
+            TenantPurchaseTable(
+              sales: _sales,
+              names: _names,
+              selfUid: widget.session.uid,
             )
           else
             for (final (index, sale) in _sales.indexed) ...<Widget>[

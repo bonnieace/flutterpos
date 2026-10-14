@@ -5,3 +5,5 @@ export 'sale_history_panel.dart';
 export 'sale_reprint.dart';
 export 'sale_tender.dart';
 export 'sales_report_panel.dart';
+export 'sales_trading_day_notice.dart';
+export 'trading_day_explanation.dart';

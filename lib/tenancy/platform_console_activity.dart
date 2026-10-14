@@ -85,10 +85,9 @@ final class PlatformAlertsPage extends StatelessWidget {
               children: <Widget>[
                 if (views.isEmpty)
                   const EmptyState(
-                    icon: Icons.notifications_none,
+                    illustration: 'platform-alerts.svg',
                     title: 'No alerts',
-                    hint:
-                        'An alert is raised when a business is left without an owner or an administrator, or its reconciliation stops retrying.',
+                    hint: 'Ownership and reconciliation issues appear here.',
                   )
                 else ...[
                   if (recent.isNotEmpty) group('Raised this week', recent),
@@ -387,9 +386,9 @@ final class _PlatformActivityLogPageState
       content = const LoadingState(message: 'Reading the activity.');
     } else if (_entries.isEmpty) {
       content = const EmptyState(
-        icon: Icons.timeline,
+        illustration: 'audit-history.svg',
         title: 'Nothing here yet',
-        hint: 'Every platform action lands here, with the reason it was given.',
+        hint: 'Platform actions and reasons appear here.',
       );
     } else {
       content = Column(

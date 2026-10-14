@@ -17,13 +17,17 @@ void main() {
 
     expect(_names(tester), <String>['Jane Wanjiku', 'John Otieno']);
     // Consent is said in words beside the number, never by a colour alone.
+    expect(find.text('+254 ••• 678 · WhatsApp receipts'), findsOneWidget);
     expect(
-      find.text('+254 ••• 678 · WhatsApp receipts'),
+      find.byKey(const ValueKey('customer-points-cu_jane')),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('customer-points-cu_jane')), findsOneWidget);
 
-    await _choose(tester, 'customers-standing-filter', 'customers-standing-all');
+    await _choose(
+      tester,
+      'customers-standing-filter',
+      'customers-standing-all',
+    );
 
     expect(_names(tester), <String>['Jane Wanjiku', 'John Otieno', 'Old Mary']);
     expect(
@@ -55,78 +59,83 @@ void main() {
     expect(find.byKey(const ValueKey('customers-empty')), findsOneWidget);
   });
 
-  testWidgets('a customer is added with their consent, in the shop\'s country', (
-    tester,
-  ) async {
-    final writer = _Writer();
-    await _pump(tester, _Reader.seeded(), writer: writer);
+  testWidgets(
+    'a customer is added with their consent, in the shop\'s country',
+    (tester) async {
+      final writer = _Writer();
+      await _pump(tester, _Reader.seeded(), writer: writer);
 
-    await tester.tap(find.byKey(const ValueKey('customers-add')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('customer-form-name')),
-      'Amina Hassan',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('phone-local-number')),
-      '0722 111 222',
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('customer-form-whatsapp-consent')),
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('customer-form-kraPin')),
-      'p051234567q',
-    );
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('customer-form-submit')),
-    );
-    await tester.tap(find.byKey(const ValueKey('customer-form-submit')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('customers-add')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('customer-form-name')),
+        'Amina Hassan',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('phone-local-number')),
+        '0722 111 222',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('customer-form-whatsapp-consent')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('customer-form-kraPin')),
+        'p051234567q',
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('customer-form-submit')),
+      );
+      await tester.tap(find.byKey(const ValueKey('customer-form-submit')));
+      await tester.pumpAndSettle();
 
-    final created = writer.created.single.documentData();
-    expect(created['name'], 'Amina Hassan');
-    // A shop selling in shillings starts a number at +254.
-    expect(created['phone'], '+254722111222');
-    expect(created['whatsappOptIn'], isTrue);
-    expect(created['kraPin'], 'P051234567Q');
-    expect(snackNotice(tester).status, AppStatus.ok);
-    expect(snackNotice(tester).message, contains('Amina Hassan added'));
-  });
+      final created = writer.created.single.documentData();
+      expect(created['name'], 'Amina Hassan');
+      // A shop selling in shillings starts a number at +254.
+      expect(created['phone'], '+254722111222');
+      expect(created['whatsappOptIn'], isTrue);
+      expect(created['kraPin'], 'P051234567Q');
+      expect(snackNotice(tester).status, AppStatus.ok);
+      expect(snackNotice(tester).message, contains('Amina Hassan added'));
+    },
+  );
 
-  testWidgets('a number another customer already holds is refused on the form', (
-    tester,
-  ) async {
-    final writer = _Writer();
-    await _pump(tester, _Reader.seeded(), writer: writer);
+  testWidgets(
+    'a number another customer already holds is refused on the form',
+    (tester) async {
+      final writer = _Writer();
+      await _pump(tester, _Reader.seeded(), writer: writer);
 
-    await tester.tap(find.byKey(const ValueKey('customers-add')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('customer-form-name')),
-      'Someone Else',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('phone-local-number')),
-      '0712345678',
-    );
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('customer-form-submit')),
-    );
-    await tester.tap(find.byKey(const ValueKey('customer-form-submit')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('customers-add')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('customer-form-name')),
+        'Someone Else',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('phone-local-number')),
+        '0712345678',
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('customer-form-submit')),
+      );
+      await tester.tap(find.byKey(const ValueKey('customer-form-submit')));
+      await tester.pumpAndSettle();
 
-    expect(writer.created, isEmpty);
-    expect(find.textContaining('already belongs to Jane Wanjiku'), findsOneWidget);
-    // Choosing the holder instead is a till's offer, not the directory's.
-    expect(
-      find.byKey(const ValueKey('customer-form-choose-existing')),
-      findsNothing,
-    );
-  });
+      expect(writer.created, isEmpty);
+      expect(
+        find.textContaining('already belongs to Jane Wanjiku'),
+        findsOneWidget,
+      );
+      // Choosing the holder instead is a till's offer, not the directory's.
+      expect(
+        find.byKey(const ValueKey('customer-form-choose-existing')),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('marking a customer inactive asks first, then says what it did', (
     tester,
@@ -236,6 +245,78 @@ void main() {
     expect(find.byKey(const ValueKey('loyalty-edit')), findsNothing);
     expect(find.byKey(const ValueKey('customers')), findsOneWidget);
   });
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: one row per customer from 1024, the cards below it. The
+  // cases above pump at 1200, so they already read the table.
+  group('on a screen 1024 and wider', () {
+    testWidgets('the customers are one table, with the page\'s controls on '
+        'its edge', (tester) async {
+      await _pump(tester, _Reader.seeded());
+
+      final sheet = find.byKey(const ValueKey('customers-sheet'));
+      expect(sheet, findsOneWidget);
+      expect(find.byType(TenantCustomerCard), findsNothing);
+      for (final key in <String>[
+        'customers-search',
+        'customers-standing-filter',
+        'customers-add',
+      ]) {
+        expect(
+          find.descendant(of: sheet, matching: find.byKey(ValueKey(key))),
+          findsOneWidget,
+          reason: key,
+        );
+      }
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('customer-points-cu_jane')))
+            .data,
+        '12',
+      );
+      // Nobody on this page owes or is inactive, so neither column is drawn:
+      // a column of nothing says nothing.
+      expect(find.textContaining('OWES'), findsNothing);
+      expect(find.textContaining('STANDING'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('an inactive customer on the page brings the standing column', (
+      tester,
+    ) async {
+      await _pump(tester, _Reader.seeded());
+      await tester.tap(find.byKey(const ValueKey('customers-standing-filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('customers-standing-all')).last,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('STANDING'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('customer-inactive-badge-cu_mary')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('below 1024 the cards are unchanged', (tester) async {
+      await _pump(tester, _Reader.seeded());
+      tester.view.physicalSize = const Size(1023, 2400);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TenantCustomerCard), findsWidgets);
+      expect(find.byKey(const ValueKey('customers-sheet')), findsNothing);
+    });
+
+    testWidgets('a row opens the customer', (tester) async {
+      await _pump(tester, _Reader.seeded());
+
+      await tester.tap(find.byKey(const ValueKey('customer-view-cu_jane')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TenantCustomerRecordScreen), findsOneWidget);
+    });
+  });
 }
 
 List<String> _names(WidgetTester tester) => tester
@@ -244,7 +325,9 @@ List<String> _names(WidgetTester tester) => tester
         (widget) =>
             widget is Text &&
             widget.key is ValueKey<String> &&
-            (widget.key! as ValueKey<String>).value.startsWith('customer-name-'),
+            (widget.key! as ValueKey<String>).value.startsWith(
+              'customer-name-',
+            ),
       ),
     )
     .map((text) => text.data!)
@@ -398,23 +481,24 @@ final class _Reader implements TenantDataReader, TenantCustomerSearchReader {
   Future<List<TenantQueryDocumentSnapshot>> searchTenantCustomers(
     TenantCustomerSearchQuery query,
   ) async {
-    final rows = <TenantQueryDocumentSnapshot>[
-      for (final entry in customers.entries)
-        if ((query.active == null ||
-                (entry.value['active'] != false) == query.active) &&
-            (query.searchPrefix == null ||
-                (entry.value['searchPrefixes']! as List<String>).contains(
-                  query.searchPrefix,
-                )))
-          TenantQueryDocumentSnapshot(
-            path: '${query.collectionPath}/${entry.key}',
-            data: entry.value,
+    final rows =
+        <TenantQueryDocumentSnapshot>[
+          for (final entry in customers.entries)
+            if ((query.active == null ||
+                    (entry.value['active'] != false) == query.active) &&
+                (query.searchPrefix == null ||
+                    (entry.value['searchPrefixes']! as List<String>).contains(
+                      query.searchPrefix,
+                    )))
+              TenantQueryDocumentSnapshot(
+                path: '${query.collectionPath}/${entry.key}',
+                data: entry.value,
+              ),
+        ]..sort(
+          (left, right) => (left.data['searchName']! as String).compareTo(
+            right.data['searchName']! as String,
           ),
-    ]..sort(
-        (left, right) => (left.data['searchName']! as String).compareTo(
-          right.data['searchName']! as String,
-        ),
-      );
+        );
     return rows.take(query.limit).toList();
   }
 }

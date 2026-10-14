@@ -90,7 +90,6 @@ final class TenantStockTakeSettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Stock counts',
-    subtitle: 'When a count is due, and who takes it.',
     contentWidth: AppContentWidth.reading,
     body: TenantStockTakeSettingsPanel(
       reader: reader,
@@ -517,8 +516,9 @@ class _TenantStockTakeSettingsPanelState
           tokens,
           const EmptyState(
             key: ValueKey('stock-take-settings-no-staff'),
-            title: 'Nobody to ask yet',
-            hint: 'Invite the people who work here, then set the rota.',
+            illustration: 'staff-assignment.svg',
+            title: 'No staff yet',
+            hint: 'Invite staff, then set the counting schedule.',
           ),
         ),
       ];

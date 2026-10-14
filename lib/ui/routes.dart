@@ -49,6 +49,7 @@ import 'package:flutter/material.dart';
 
 import 'spring.dart';
 import 'tokens.dart';
+import 'top_bar.dart';
 
 /// Which of `design.md` §6.2's two route rows a transition runs.
 enum AppRouteTransition {
@@ -86,10 +87,56 @@ final class AppPageRoute<T> extends PageRoute<T> {
     super.settings,
     super.fullscreenDialog,
     this.maintainState = true,
-  });
+    TopBarModule? module,
+  }) : _module = module ?? _opening;
 
   /// Builds the page. Called once per route, as `MaterialPageRoute`'s is.
   final WidgetBuilder builder;
+
+  /// The home module this route belongs to, which its top bar draws in a
+  /// well beside the title (`docs/design/topbar-inner/`). Null for a route
+  /// no module opened.
+  ///
+  /// **Named by the route that opens a module, and inherited after that.** A
+  /// home destination opens through [openingModule], which tags the route it
+  /// pushes; a route pushed over a tagged one carries the same module, so a
+  /// product's ledger opened from Inventory is still Inventory. Nothing about
+  /// where a route goes or what it shows depends on it.
+  TopBarModule? get module => _module;
+  TopBarModule? _module;
+  bool _inherited = false;
+
+  /// The module a destination is opening, for the duration of its press.
+  static TopBarModule? _opening;
+
+  /// Runs [open] with every [AppPageRoute] it constructs tagged [module].
+  ///
+  /// **Only what is built synchronously inside the press**, which is every
+  /// destination on the home: each is a `Navigator.push`. A destination that
+  /// awaited first would push an untagged route, which draws no well rather
+  /// than a wrong one.
+  static void openingModule(TopBarModule module, VoidCallback open) {
+    final previous = _opening;
+    _opening = module;
+    try {
+      open();
+    } finally {
+      _opening = previous;
+    }
+  }
+
+  /// Takes the module of the route underneath, once, on the push that puts
+  /// this route above it. `Navigator` announces the previous route before
+  /// the new one is first built.
+  @override
+  void didChangePrevious(Route<dynamic>? previousRoute) {
+    super.didChangePrevious(previousRoute);
+    if (_inherited) return;
+    _inherited = true;
+    if (_module == null && previousRoute is AppPageRoute) {
+      _module = previousRoute.module;
+    }
+  }
 
   @override
   final bool maintainState;

@@ -303,15 +303,10 @@ final class ShiftHistoryCard extends StatelessWidget {
 
     // **The sentence comes first where there is one**, because it is the reason
     // the figures below it are short of the figures on every other card.
-    if (standing == ShiftStanding.unaccounted ||
-        standing == ShiftStanding.noSummary) {
+    if (shiftSilenceSentence(standing) case final sentence?) {
       rows.add(
         Text(
-          standing == ShiftStanding.unaccounted
-              ? "Ended from another device, which held none of this shift's "
-                    'sales. Nothing can be compared with the cash.'
-              : 'This shift closed before the app recorded closing summaries, '
-                    'so there is nothing to compare the cash with.',
+          sentence,
           key: ValueKey<String>('shift-history-silence-${entry.id}'),
           style: tokens.density
               .body(tokens.typography)
@@ -622,6 +617,44 @@ String shiftWindowLabel(TenantShiftHistoryEntry entry) =>
       (final from?, null) => 'Opened ${_clock(from)}, close time not confirmed',
       _ => 'Close time not confirmed',
     };
+
+/// `06:04–14:12`: [shiftWindowLabel] for a table's column.
+///
+/// **An en dash rather than the card's arrow**, because a column of spans
+/// reads as figures and the arrow is a sentence's. The fallbacks are the
+/// card's own words, shortened to fit a column: the close time a shift never
+/// confirmed is still said rather than guessed.
+String shiftHoursLabel(TenantShiftHistoryEntry entry) =>
+    switch ((entry.startedAt, entry.endedAt)) {
+      (final from?, final to?) => '${_clock(from)}–${_clock(to)}',
+      (null, final to?) => 'Closed ${_clock(to)}',
+      (final from?, null) => 'From ${_clock(from)}, close not confirmed',
+      _ => 'Close time not confirmed',
+    };
+
+/// The drawer's difference, signed: `+267.50`, `−120`, `0`.
+///
+/// **The sign carries the direction**, so a table can state it in a column
+/// without the colour the card's `Over by` / `Short by` line wears. A real
+/// minus, U+2212, which is the width of the plus beside it in a mono face.
+/// Grouped, with no code: the column's header states the currency once.
+String shiftDifferenceLabel(int minorUnits) {
+  if (minorUnits == 0) return '0';
+  final amount = moneyTextGroupedOfMinor(minorUnits.abs());
+  return minorUnits > 0 ? '+$amount' : '−$amount';
+}
+
+/// Why a shift has no difference to show, where it has none: the card's first
+/// line and the table's fold. Null for a shift whose drawer was compared.
+String? shiftSilenceSentence(ShiftStanding standing) => switch (standing) {
+  ShiftStanding.unaccounted =>
+    "Ended from another device, which held none of this shift's sales. "
+        'Nothing can be compared with the cash.',
+  ShiftStanding.noSummary =>
+    'This shift closed before the app recorded closing summaries, so there is '
+        'nothing to compare the cash with.',
+  ShiftStanding.settled || ShiftStanding.over || ShiftStanding.short => null,
+};
 
 /// `63 sales`, or what stands in for it where the close recorded none.
 String shiftSalesLabel(TenantShiftHistoryEntry entry) {

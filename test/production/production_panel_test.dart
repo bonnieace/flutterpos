@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:uzapay_pos/production/production.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/ui/status.dart';
+import 'package:uzapay_pos/production/production_batch_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/buttons.dart';
@@ -12,7 +13,9 @@ void main() {
   testWidgets('batches are listed newest first, with what one unit cost', (
     tester,
   ) async {
-    await _pump(tester, _Reader(batches: _twoBatches()));
+    // **The cards, at 800**, whose sentence this reads; the group below reads
+    // the table the same batches are from 1024.
+    await _pump(tester, _Reader(batches: _twoBatches()), width: 800);
 
     expect(find.byKey(const ValueKey('production-row-pb_2')), findsOneWidget);
     expect(find.text('White bread loaf · 100 made'), findsWidgets);
@@ -25,6 +28,45 @@ void main() {
     );
     expect(find.text('Flour'), findsOneWidget);
     expect(find.text('Was KES 28 before this batch'), findsOneWidget);
+  });
+
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: one row per batch from 1024, the cards below it.
+  group('on a screen 1024 and wider', () {
+    testWidgets('the batches are one table, and a row opens its costs', (
+      tester,
+    ) async {
+      await _pump(tester, _Reader(batches: _twoBatches()), writer: _Writer());
+
+      final sheet = find.byKey(const ValueKey('production-sheet'));
+      expect(sheet, findsOneWidget);
+      expect(find.byType(TenantProductionBatchCard), findsNothing);
+      expect(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const ValueKey('production-record')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('production-number-pb_2')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('production-costs-pb_2')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('production-cost-screen')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('below 1024 the cards are unchanged', (tester) async {
+      await _pump(tester, _Reader(batches: _twoBatches()), width: 1023);
+
+      expect(find.byType(TenantProductionBatchCard), findsWidgets);
+      expect(find.byKey(const ValueKey('production-sheet')), findsNothing);
+    });
   });
 
   testWidgets('a business with no batches is told what to do first', (
@@ -85,38 +127,37 @@ void main() {
     },
   );
 
-  testWidgets(
-    'the costs follow how many were made, until one is typed over',
-    (tester) async {
-      await _pump(tester, _Reader(batches: _twoBatches()), writer: _Writer());
+  testWidgets('the costs follow how many were made, until one is typed over', (
+    tester,
+  ) async {
+    await _pump(tester, _Reader(batches: _twoBatches()), writer: _Writer());
 
-      await tester.tap(find.byKey(const ValueKey('production-record')));
-      await tester.pumpAndSettle();
-      await _chooseProduct(tester, 'prod-bread');
+    await tester.tap(find.byKey(const ValueKey('production-record')));
+    await tester.pumpAndSettle();
+    await _chooseProduct(tester, 'prod-bread');
 
-      await tester.enterText(
-        find.byKey(const ValueKey('production-quantity')),
-        '50',
-      );
-      await tester.pumpAndSettle();
-      expect(_fieldText(tester, 'production-row-amount-0'), '1000');
-      expect(_fieldText(tester, 'production-row-amount-1'), '500');
+    await tester.enterText(
+      find.byKey(const ValueKey('production-quantity')),
+      '50',
+    );
+    await tester.pumpAndSettle();
+    expect(_fieldText(tester, 'production-row-amount-0'), '1000');
+    expect(_fieldText(tester, 'production-row-amount-1'), '500');
 
-      // Labour was dearer this time; that figure is now the person's own.
-      await tester.enterText(
-        find.byKey(const ValueKey('production-row-amount-1')),
-        '600',
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('production-quantity')),
-        '200',
-      );
-      await tester.pumpAndSettle();
-      expect(_fieldText(tester, 'production-row-amount-0'), '4000');
-      expect(_fieldText(tester, 'production-row-amount-1'), '600');
-      expect(_text(tester, 'production-total'), 'KES 4600');
-    },
-  );
+    // Labour was dearer this time; that figure is now the person's own.
+    await tester.enterText(
+      find.byKey(const ValueKey('production-row-amount-1')),
+      '600',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('production-quantity')),
+      '200',
+    );
+    await tester.pumpAndSettle();
+    expect(_fieldText(tester, 'production-row-amount-0'), '4000');
+    expect(_fieldText(tester, 'production-row-amount-1'), '600');
+    expect(_text(tester, 'production-total'), 'KES 4600');
+  });
 
   testWidgets('complete stays unavailable until the batch has a cost', (
     tester,
@@ -248,26 +289,23 @@ void main() {
     },
   );
 
-  testWidgets(
-    'every product is offered, bought in or not',
-    (tester) async {
-      await _pump(tester, _Reader(), writer: _Writer());
+  testWidgets('every product is offered, bought in or not', (tester) async {
+    await _pump(tester, _Reader(), writer: _Writer());
 
-      await tester.tap(find.byKey(const ValueKey('production-record')));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('product-typeahead-search')),
-        'mi',
-      );
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('production-record')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('product-typeahead-search')),
+      'mi',
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const ValueKey('product-typeahead-prod-milk')),
-        findsOneWidget,
-      );
-    },
-  );
+    expect(
+      find.byKey(const ValueKey('product-typeahead-prod-milk')),
+      findsOneWidget,
+    );
+  });
 }
 
 List<Map<String, Object?>> _rows() => <Map<String, Object?>>[
@@ -353,8 +391,9 @@ Future<void> _pump(
   WidgetTester tester,
   _Reader reader, {
   TenantProductionWriter? writer,
+  double width = 1200,
 }) async {
-  tester.view.physicalSize = const Size(1200, 2600);
+  tester.view.physicalSize = Size(width, 2600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

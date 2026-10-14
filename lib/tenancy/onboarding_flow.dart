@@ -1190,6 +1190,11 @@ class _OnboardingFlowState extends State<OnboardingFlow>
                     child: Text(
                       _sessionEnded ? 'Your session has ended' : _heading(step),
                       key: const ValueKey('onboarding-heading'),
+                      textAlign:
+                          step == OnboardingStep.verify ||
+                              step == OnboardingStep.complete
+                          ? TextAlign.center
+                          : TextAlign.start,
                       style: tokens.typography.display.copyWith(
                         color: tokens.colors.text.primary,
                       ),
@@ -1204,6 +1209,11 @@ class _OnboardingFlowState extends State<OnboardingFlow>
                       return Text(
                         subheading,
                         key: const ValueKey('onboarding-subheading'),
+                        textAlign:
+                            step == OnboardingStep.verify ||
+                                step == OnboardingStep.complete
+                            ? TextAlign.center
+                            : TextAlign.start,
                         // **The zero-width space is for the line breaker, not
                         // for a listener.** [_breakableVerifyingAddress] puts
                         // one inside the address so the sentence can wrap.
@@ -1351,13 +1361,12 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     // [onboardingUnreachableNotice] saying why in the meantime.
     OnboardingStep.verify =>
       _addressOutcomeUnknown
-          ? 'We sent a link to your address. Open it and this screen moves on by '
-                'itself.'
+          ? 'We sent a link to your address. Open it to continue.'
           : 'We sent a link to $_breakableVerifyingAddress. '
-                'Open it and this screen moves on by itself.',
+                'Open it to continue.',
     OnboardingStep.business =>
       'The last step. You can trade straight away while it is reviewed.',
-    OnboardingStep.complete => 'Your register is ready to take its first sale.',
+    OnboardingStep.complete => 'Ready for your first sale.',
   };
 
   /// One sentence for a session that ended without being asked to.
@@ -1719,6 +1728,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     if (identity == null) {
       return const EmptyState(
         key: ValueKey('onboarding-business-unavailable'),
+        illustration: 'session-ended.svg',
         title: 'Your session has ended',
         hint: 'Sign in again to set up your business.',
       );
@@ -1767,12 +1777,19 @@ class _OnboardingFlowState extends State<OnboardingFlow>
           ),
         ),
         SizedBox(height: tokens.spacing.s24),
-        Text('${result.name} is ready.', style: tokens.typography.titleMedium),
+        Text(
+          '${result.name} is ready.',
+          textAlign: TextAlign.center,
+          style: tokens.typography.titleMedium,
+        ),
         SizedBox(height: tokens.spacing.s16),
         _Detail(label: 'Currency', value: result.currency),
         const _Detail(label: 'Status', value: 'Open for business.'),
         SizedBox(height: tokens.spacing.s20),
-        const Text('Add your first product and you can ring up a sale.'),
+        const Text(
+          'Add a product to start selling.',
+          textAlign: TextAlign.center,
+        ),
         SizedBox(height: tokens.spacing.s24),
         AppButton(
           key: const ValueKey('onboarding-open-business'),

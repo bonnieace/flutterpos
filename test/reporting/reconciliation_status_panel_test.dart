@@ -34,7 +34,14 @@ void main() {
           ),
         ]);
 
-    await _pump(tester, _controller(), reader);
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      // **The run cards, at 800**, whose sentences this reads; the
+      // table the runs are from 1024 is the case at the end.
+      width: 800,
+    );
 
     expect(
       tester
@@ -191,7 +198,14 @@ void main() {
           ),
         ]);
 
-    await _pump(tester, _controller(), reader);
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      // **The run cards, at 800**, whose sentences this reads; the
+      // table the runs are from 1024 is the case at the end.
+      width: 800,
+    );
 
     expect(
       tester
@@ -595,6 +609,9 @@ void main() {
       _controller(role: TenantRole.owner),
       reader,
       amendCallable: _AmendCallable(),
+      // The differences page's cards, where the correction is a button in
+      // view; from 1024 it is that row's menu (2026-10-13).
+      width: 800,
     );
     await _tap(tester, 'reconciliation-status-anomalies');
 
@@ -882,6 +899,35 @@ void main() {
       findsOne,
     );
   });
+
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: a day's runs are a table from 1024.
+  testWidgets('on a screen 1024 and wider the runs are a table', (
+    tester,
+  ) async {
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{
+        'tenants/tenant-a/reconciliation_dirty_days/2026-07-31': _intake(),
+      },
+    )..respond(<TenantQueryDocumentSnapshot>[_run('rj_abc')]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-runs-sheet')),
+      findsOne,
+    );
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-run-rj_abc')),
+      findsOne,
+    );
+    expect(find.text('ATTEMPTS', findRichText: true), findsOne);
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-run-badge-rj_abc')),
+      findsOne,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _pump(
@@ -894,8 +940,9 @@ Future<void> _pump(
   _Callable? callable,
   AmendShiftSummaryCallable? amendCallable,
   List<String> requestIds = const <String>['reconcile-fixed-1'],
+  double width = 1400,
 }) async {
-  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

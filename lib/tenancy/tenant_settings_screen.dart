@@ -139,11 +139,12 @@ final class TenantSettingsScreen extends StatelessWidget {
       // a role with nothing here is told so, rather than shown an empty strip.
       return const AppScaffold(
         title: 'Settings',
-        contentWidth: AppContentWidth.reading,
+        contentWidth: AppContentWidth.records,
         body: EmptyState(
           key: ValueKey('settings-none'),
-          title: 'No settings are shown for this role',
-          hint: 'Ask an owner or administrator to change a business setting.',
+          illustration: 'settings-access.svg',
+          title: 'Settings unavailable for your role',
+          hint: 'Ask an owner or administrator to change settings.',
         ),
       );
     }
@@ -172,7 +173,7 @@ final class TenantSettingPage extends StatelessWidget {
   Widget build(BuildContext context) => AppScaffold(
     key: ValueKey('setting-page-${destination.settingKey}'),
     title: destination.label,
-    contentWidth: AppContentWidth.reading,
+    contentWidth: AppContentWidth.records,
     // **The scroll view and the page inset are the host's, not the panel's.**
     // Every one of these panels was written to be hosted: the stock take one
     // returns a bare `Column` and says so in a comment - "a second scrollable
@@ -261,7 +262,7 @@ class _TenantSettingsIndexState extends State<_TenantSettingsIndex> {
     final tokens = AppTokens.componentOf(context);
     return AppScaffold(
       title: 'Settings',
-      contentWidth: AppContentWidth.reading,
+      contentWidth: AppContentWidth.records,
       body: _standings == null
           ? _list(context, const <TenantSettingKind, TenantSettingStanding>{})
           : FutureBuilder<Map<TenantSettingKind, TenantSettingStanding>>(
@@ -357,14 +358,32 @@ class _TenantSettingsIndexState extends State<_TenantSettingsIndex> {
           ),
           SizedBox(height: tokens.spacing.s16),
         ],
-        for (final (index, destination) in widget.destinations.indexed) ...[
-          if (index > 0) SizedBox(height: tokens.spacing.s12),
-          _SettingRow(
-            destination: destination,
-            standing: standings[destination.kind],
-            onPressed: () => _open(destination),
-          ),
-        ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns =
+                constraints.maxWidth >=
+                    tokens.layout.expandedFloor - tokens.spacing.s24 * 2
+                ? 2
+                : 1;
+            final gap = tokens.spacing.s12;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final destination in widget.destinations)
+                  SizedBox(
+                    width:
+                        (constraints.maxWidth - gap * (columns - 1)) / columns,
+                    child: _SettingRow(
+                      destination: destination,
+                      standing: standings[destination.kind],
+                      onPressed: () => _open(destination),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
         SizedBox(height: tokens.spacing.s16),
         Text(
           key: const ValueKey('settings-audience'),

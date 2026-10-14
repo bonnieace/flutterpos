@@ -10,6 +10,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../reports/analysis/report_prose.dart';
@@ -20,6 +21,7 @@ import '../ui/scaffold.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import '../tenancy/tenant_catalog.dart';
 import 'production_batch.dart';
 
@@ -65,75 +67,89 @@ final class TenantProductionCostScreen extends StatelessWidget {
       subtitle:
           '${tenantProductLabel(batch.productName, size)} '
           '· ${batch.batchNumber}',
-      contentWidth: AppContentWidth.reading,
+      contentWidth: AppContentWidth.records,
       body: ListView(
         padding: EdgeInsets.all(tokens.spacing.s16),
         children: <Widget>[
-          StatRow(
-            tiles: <StatTile>[
-              StatTile(
-                label: 'Total cost',
-                value: money(batch.totalCostMinor),
-                detail: batch.quantity == 1
-                    ? 'For 1 unit made'
-                    : 'For ${batch.quantity} units made',
-                valueKey: const ValueKey('production-cost-total'),
-                money: true,
-              ),
-              _unitCostTile(),
-            ],
-          ),
-          SizedBox(height: tokens.spacing.s24),
-          const SectionHeading('What it cost'),
-          SizedBox(height: tokens.spacing.s8),
-          AppCard(
-            key: const ValueKey('production-cost-breakdown'),
-            child: lines.isEmpty
-                ? Text(
-                    'No costs were recorded for this batch.',
-                    style: tokens.density
-                        .body(tokens.typography)
-                        .copyWith(color: tokens.colors.text.secondary),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      for (final (index, line) in lines.indexed) ...<Widget>[
-                        if (index > 0)
-                          Divider(
-                            height: tokens.spacing.s24,
-                            color: tokens.colors.surface.borderSubtle,
-                          ),
-                        _CostLine(
-                          key: ValueKey('production-cost-line-$index'),
-                          line: line,
-                          totalMinor: batch.totalCostMinor,
-                          money: money,
-                        ),
-                      ],
-                      Divider(
-                        height: tokens.spacing.s24,
-                        color: tokens.colors.surface.borderStrong,
-                      ),
-                      StatLine(
-                        label: 'Total',
-                        value: money(batch.totalCostMinor),
-                        money: true,
-                        emphasis: true,
-                      ),
-                    ],
-                  ),
-          ),
-          SizedBox(height: tokens.spacing.s24),
-          const SectionHeading('Batch'),
-          SizedBox(height: tokens.spacing.s8),
-          AppCard(
-            child: Column(
+          AppWorkspace(
+            leading: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                StatLine(label: 'Made', value: made),
-                StatLine(label: 'Units made', value: '${batch.quantity}'),
-                StatLine(label: 'Batch number', value: batch.batchNumber),
+                StatRow(
+                  tiles: <StatTile>[
+                    StatTile(
+                      label: 'Total cost',
+                      value: money(batch.totalCostMinor),
+                      detail: batch.quantity == 1
+                          ? 'For 1 unit made'
+                          : 'For ${batch.quantity} units made',
+                      valueKey: const ValueKey('production-cost-total'),
+                      money: true,
+                    ),
+                    _unitCostTile(),
+                  ],
+                ),
+                SizedBox(height: tokens.spacing.s24),
+              ],
+            ),
+            trailing: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                const SectionHeading('What it cost'),
+                SizedBox(height: tokens.spacing.s8),
+                AppCard(
+                  key: const ValueKey('production-cost-breakdown'),
+                  child: lines.isEmpty
+                      ? IllustratedMessage(
+                          illustration: 'production.svg',
+                          message: 'No costs for this batch.',
+                          style: tokens.density
+                              .body(tokens.typography)
+                              .copyWith(color: tokens.colors.text.secondary),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            for (final (index, line)
+                                in lines.indexed) ...<Widget>[
+                              if (index > 0)
+                                Divider(
+                                  height: tokens.spacing.s24,
+                                  color: tokens.colors.surface.borderSubtle,
+                                ),
+                              _CostLine(
+                                key: ValueKey('production-cost-line-$index'),
+                                line: line,
+                                totalMinor: batch.totalCostMinor,
+                                money: money,
+                              ),
+                            ],
+                            Divider(
+                              height: tokens.spacing.s24,
+                              color: tokens.colors.surface.borderStrong,
+                            ),
+                            StatLine(
+                              label: 'Total',
+                              value: money(batch.totalCostMinor),
+                              money: true,
+                              emphasis: true,
+                            ),
+                          ],
+                        ),
+                ),
+                SizedBox(height: tokens.spacing.s24),
+                const SectionHeading('Batch'),
+                SizedBox(height: tokens.spacing.s8),
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      StatLine(label: 'Made', value: made),
+                      StatLine(label: 'Units made', value: '${batch.quantity}'),
+                      StatLine(label: 'Batch number', value: batch.batchNumber),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),

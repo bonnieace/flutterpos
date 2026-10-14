@@ -10,6 +10,8 @@ import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
+import '../ui/money_text.dart';
+import '../ui/record_sheet.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
@@ -117,6 +119,158 @@ final class _TenantSupplierDeliveryHistoryState
 
   String _money(int minor) => _currency.format(minor / 100);
 
+  /// The large-screen list: one row per delivery, its lines under it.
+  ///
+  /// **Every line is still on screen, with nothing to open** - the developer's
+  /// ruling of 2026-09-27 for these cards, kept in the table at 1024 and up
+  /// (`docs/design/tables/`, 2026-10-13) by an always-open fold whose figures
+  /// sit under the row's *Value*. Below 1024 the cards are unchanged.
+  Widget _sheet() {
+    final cents = _deliveries.any(
+      (delivery) =>
+          delivery.valueMinor % 100 != 0 ||
+          delivery.lines.any(
+            (line) =>
+                line.unitCostMinor != null &&
+                (line.unitCostMinor! * line.quantity) % 100 != 0,
+          ),
+    );
+    String? reserve(int? minor) =>
+        cents && (minor == null || minor % 100 == 0) ? '.00' : null;
+    const valueColumn = 4;
+    // The standing column only where a delivery listed is still arriving: a
+    // finished one says nothing, and most are finished.
+    final arriving = _deliveries.any((delivery) => !delivery.complete);
+    return RecordSheet(
+      key: const ValueKey('supplier-deliveries-sheet'),
+      columns: <SheetColumn>[
+        const SheetColumn(label: 'Delivered', kind: SheetColumnKind.text),
+        const SheetColumn(label: 'Reference', kind: SheetColumnKind.code),
+        const SheetColumn(
+          label: 'What arrived',
+          kind: SheetColumnKind.identity,
+        ),
+        const SheetColumn(label: 'Units', kind: SheetColumnKind.figure),
+        SheetColumn(
+          label: 'Value',
+          kind: SheetColumnKind.figure,
+          unit: _currency.code,
+        ),
+        if (arriving)
+          const SheetColumn(label: 'Standing', kind: SheetColumnKind.status),
+      ],
+      rows: <SheetRow>[
+        for (final delivery in _deliveries)
+          _row(
+            delivery,
+            valueColumn: valueColumn,
+            reserve: reserve,
+            arriving: arriving,
+          ),
+      ],
+    );
+  }
+
+  SheetRow _row(
+    TenantSupplierDelivery delivery, {
+    required int valueColumn,
+    required String? Function(int?) reserve,
+    required bool arriving,
+  }) {
+    final id = delivery.id;
+    final products = delivery.lines.length;
+    final costed =
+        delivery.lines.isNotEmpty &&
+        delivery.costlessLineCount < delivery.lines.length;
+    final costless = delivery.costlessLineCount;
+    return SheetRow(
+      id: id,
+      key: ValueKey('delivery-row-$id'),
+      semanticLabel: delivery.occurredAt == null
+          ? 'Delivery, date not recorded'
+          : 'Delivery of '
+                '${reportShortDate(checkoutBusinessDate(delivery.occurredAt!))}',
+      cells: <SheetCell?>[
+        SheetText(
+          delivery.occurredAt == null
+              ? 'Date not recorded'
+              : reportShortDate(checkoutBusinessDate(delivery.occurredAt!)),
+        ),
+        SheetText(
+          delivery.reference ?? '—',
+          key: ValueKey('delivery-reference-$id'),
+        ),
+        SheetText(
+          delivery.lines.map((line) => line.productName).join(', '),
+          caption: '$products ${products == 1 ? 'product' : 'products'}',
+        ),
+        SheetFigure('${delivery.unitCount}'),
+        // **The figure alone in the money face**, and the words about it in
+        // the caption, as on the card: *No costs recorded* is never an amount.
+        if (costed)
+          SheetFigure(
+            moneyTextGroupedOfMinor(delivery.valueMinor),
+            reserve: reserve(delivery.valueMinor),
+            key: ValueKey('delivery-value-$id'),
+            // Shorter than the card's sentence, which ran to three lines in
+            // a figure column: the line itself is drawn beneath with its dash.
+            caption: costless == 0
+                ? null
+                : '$costless ${costless == 1 ? 'line has' : 'lines have'} '
+                      'no cost',
+            captionKey: ValueKey('delivery-costless-$id'),
+          )
+        else
+          SheetFigure.unknown(
+            reserve: reserve(null),
+            key: ValueKey('delivery-value-$id'),
+            caption: delivery.lines.isEmpty
+                ? 'Not recorded'
+                : 'No costs recorded',
+          ),
+        if (arriving)
+          delivery.complete
+              ? null
+              : SheetStatus(
+                  key: ValueKey('delivery-arriving-$id'),
+                  status: AppStatus.attention,
+                  icon: Icons.schedule,
+                  label: 'Still arriving',
+                ),
+      ],
+      fold: delivery.lines.isEmpty
+          ? null
+          : SheetFold(
+              alwaysOpen: true,
+              lines: <SheetFoldLine>[
+                for (final (index, line) in delivery.lines.indexed)
+                  // In the row's columns: the product under what arrived,
+                  // its units under the units, its value under the value.
+                  SheetFoldLine(
+                    labelColumn: 2,
+                    label:
+                        '${tenantProductLabel(line.productName, _sizes[line.productId])}'
+                        ' · '
+                        '${line.unitCostMinor == null ? 'no cost' : '${moneyTextGroupedOfMinor(line.unitCostMinor!)} each'}',
+                    figures: <int, String>{3: '${line.quantity}'},
+                    value: line.unitCostMinor == null
+                        ? '—'
+                        : moneyTextGroupedOfMinor(
+                            line.unitCostMinor! * line.quantity,
+                          ),
+                    reserve: reserve(
+                      line.unitCostMinor == null
+                          ? null
+                          : line.unitCostMinor! * line.quantity,
+                    ),
+                    column: valueColumn,
+                    valueKey: ValueKey('delivery-line-total-$id-$index'),
+                  ),
+              ],
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -147,9 +301,11 @@ final class _TenantSupplierDeliveryHistoryState
             const EmptyState(
               key: ValueKey('supplier-deliveries-empty'),
               title: 'No deliveries yet',
-              hint: 'Each delivery received from this supplier is listed here.',
+              hint: 'Received deliveries appear here.',
               illustration: 'logistics.svg',
             )
+          else if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width))
+            _sheet()
           else
             for (final (index, delivery) in _deliveries.indexed) ...<Widget>[
               if (index > 0) SizedBox(height: tokens.spacing.s12),

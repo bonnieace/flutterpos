@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/money_text.dart';
+import '../ui/record_sheet.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
@@ -83,7 +85,7 @@ final class TenantDailySummaryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Daily summary',
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     body: TenantDailySummaryPanel(
       reader: reader,
       expenseReader: expenseReader,
@@ -401,9 +403,13 @@ final class _DailySummaryContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final table = RecordSheet.drawnAt(MediaQuery.sizeOf(context).width);
     return ListView(
       key: const ValueKey('daily-summary'),
-      padding: EdgeInsets.all(tokens.spacing.s20),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(tokens.spacing.s20),
+      ),
       children: [
         // **The screen's own title used to be drawn here as well**, in a
         // `headlineSmall` under the `PageHeader` that already carries it. §7's
@@ -435,7 +441,8 @@ final class _DailySummaryContents extends StatelessWidget {
         // Offered here because the fold above has just explained why today
         // shows nothing. The totals route answers that exact question, from the
         // sales the server holds rather than from reconciled figures.
-        if (salesTotalsRoute != null) ...[
+        // On the table's top edge from 1024 instead; see [_sheet].
+        if (salesTotalsRoute != null && !table) ...[
           SizedBox(height: tokens.spacing.s12),
           AppButton(
             key: const ValueKey('daily-summary-sales-totals'),
@@ -445,310 +452,646 @@ final class _DailySummaryContents extends StatelessWidget {
           ),
         ],
         SizedBox(height: tokens.spacing.s16),
-        for (final (index, day) in days.indexed)
-          Card(
-            key: ValueKey('daily-summary-${day.businessDate}'),
-            child: Padding(
-              padding: EdgeInsets.all(tokens.spacing.s16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          day.businessDate,
-                          style: tokens.typography.titleMedium.copyWith(
-                            color: tokens.colors.text.primary,
+        if (table)
+          _sheet(context, tokens)
+        else
+          for (final (index, day) in days.indexed)
+            Card(
+              key: ValueKey('daily-summary-${day.businessDate}'),
+              child: Padding(
+                padding: EdgeInsets.all(tokens.spacing.s16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            day.businessDate,
+                            style: tokens.typography.titleMedium.copyWith(
+                              color: tokens.colors.text.primary,
+                            ),
                           ),
                         ),
-                      ),
-                      SizedBox(width: tokens.spacing.s12),
-                      // **A day's standing is a lookup in §2.1 and not a
-                      // sentence.** "Reconciled" is `ok`'s own meaning and
-                      // "unreconciled" is `attention`'s, word for word, so this
-                      // is the document's decision rather than this screen's.
-                      // The unreconciled key is the one the sentence carried,
-                      // because it states the same fact.
-                      // **Four readings, because a published figure and a
-                      // current one are different facts.** This used to ask
-                      // `metrics == null` and call everything else
-                      // *Reconciled*, so a day the server had taken more sales
-                      // for - or had stopped working on entirely - kept a green
-                      // badge over figures the intake record knew were stale.
-                      switch (day.standing) {
-                        TenantDailyMetricsStanding.unpublished => StatusBadge(
-                          key: ValueKey(
-                            'daily-summary-pending-${day.businessDate}',
+                        SizedBox(width: tokens.spacing.s12),
+                        // **A day's standing is a lookup in §2.1 and not a
+                        // sentence.** "Reconciled" is `ok`'s own meaning and
+                        // "unreconciled" is `attention`'s, word for word, so this
+                        // is the document's decision rather than this screen's.
+                        // The unreconciled key is the one the sentence carried,
+                        // because it states the same fact.
+                        // **Four readings, because a published figure and a
+                        // current one are different facts.** This used to ask
+                        // `metrics == null` and call everything else
+                        // *Reconciled*, so a day the server had taken more sales
+                        // for - or had stopped working on entirely - kept a green
+                        // badge over figures the intake record knew were stale.
+                        switch (day.standing) {
+                          TenantDailyMetricsStanding.unpublished => StatusBadge(
+                            key: ValueKey(
+                              'daily-summary-pending-${day.businessDate}',
+                            ),
+                            status: AppStatus.attention,
+                            label: 'Not reconciled yet',
+                            semanticLabel:
+                                '${day.businessDate} is not reconciled yet',
                           ),
-                          status: AppStatus.attention,
-                          label: 'Not reconciled yet',
-                          semanticLabel:
-                              '${day.businessDate} is not reconciled yet',
-                        ),
-                        TenantDailyMetricsStanding.current => StatusBadge(
-                          key: ValueKey(
-                            'daily-summary-reconciled-${day.businessDate}',
+                          TenantDailyMetricsStanding.current => StatusBadge(
+                            key: ValueKey(
+                              'daily-summary-reconciled-${day.businessDate}',
+                            ),
+                            status: AppStatus.ok,
+                            label: 'Reconciled',
+                            semanticLabel: '${day.businessDate} is reconciled',
                           ),
-                          status: AppStatus.ok,
-                          label: 'Reconciled',
-                          semanticLabel: '${day.businessDate} is reconciled',
-                        ),
-                        TenantDailyMetricsStanding.superseded => StatusBadge(
-                          key: ValueKey(
-                            'daily-summary-superseded-${day.businessDate}',
+                          TenantDailyMetricsStanding.superseded => StatusBadge(
+                            key: ValueKey(
+                              'daily-summary-superseded-${day.businessDate}',
+                            ),
+                            status: AppStatus.attention,
+                            // The intake record's own word for the state it is
+                            // in, so this screen does not invent a second
+                            // vocabulary for the server's decision.
+                            label:
+                                day.intake?.status ==
+                                    TenantReconciliationIntakeStatus.quarantined
+                                ? 'Stopped'
+                                : 'Waiting to be regenerated',
+                            semanticLabel:
+                                '${day.businessDate} has figures that are out of '
+                                'date',
                           ),
-                          status: AppStatus.attention,
-                          // The intake record's own word for the state it is
-                          // in, so this screen does not invent a second
-                          // vocabulary for the server's decision.
-                          label:
-                              day.intake?.status ==
-                                  TenantReconciliationIntakeStatus.quarantined
-                              ? 'Stopped'
-                              : 'Waiting to be regenerated',
-                          semanticLabel:
-                              '${day.businessDate} has figures that are out of '
-                              'date',
-                        ),
-                        TenantDailyMetricsStanding.unconfirmed => StatusBadge(
-                          key: ValueKey(
-                            'daily-summary-unconfirmed-${day.businessDate}',
+                          TenantDailyMetricsStanding.unconfirmed => StatusBadge(
+                            key: ValueKey(
+                              'daily-summary-unconfirmed-${day.businessDate}',
+                            ),
+                            status: AppStatus.attention,
+                            label: 'Not confirmed current',
+                            semanticLabel:
+                                '${day.businessDate} could not be confirmed as '
+                                'current',
                           ),
-                          status: AppStatus.attention,
-                          label: 'Not confirmed current',
-                          semanticLabel:
-                              '${day.businessDate} could not be confirmed as '
-                              'current',
-                        ),
-                      },
-                    ],
-                  ),
-                  if (day.metrics case final metrics?) ...[
-                    SizedBox(height: tokens.spacing.s8),
-                    // **The sentence these three lines replace is why §2.2
-                    // names this screen.** "Sales: KES 1250.50 over 12
-                    // transactions in 2 shifts" put three figures inside prose,
-                    // so nothing lined up down a column of days and every count
-                    // needed its own singular. Three `numeric.body` figures,
-                    // right-aligned, line up and need none.
-                    StatLine(
-                      label: 'Sales',
-                      money: true,
-                      value: currency.format(metrics.netSales),
-                      valueKey: ValueKey(
-                        'daily-summary-sales-${day.businessDate}',
-                      ),
-                      emphasis: true,
+                        },
+                      ],
                     ),
-                    // **The comparison this page could not make.** It listed
-                    // seven days and never said whether one was up or down on
-                    // the day before it, which is the analytical question
-                    // ST-041 draws two bars to answer. Two bars is the wrong
-                    // form for it - `dataviz`'s own table sends a handful of
-                    // headline numbers to stat tiles and names the one-bar and
-                    // grouped-bar versions as what *not* to do - and a chart
-                    // beside figures the page already states is the decorative
-                    // case Phase 05's second criterion forbids. A value and its
-                    // delta is the form that reference recommends, and
-                    // `OPEN_QUESTIONS.md` Phase 05 item 1 caps charting at
-                    // "two exact daily sales bars" as a ceiling rather than
-                    // asking for them.
-                    //
-                    // **Stated only where the day before it is also
-                    // reconciled.** An unreconciled neighbour has no sales
-                    // figure at all, and a delta against nothing would read as
-                    // a fall to zero.
-                    if (_previousSales(days, index) case final previous?)
+                    if (day.metrics case final metrics?) ...[
+                      SizedBox(height: tokens.spacing.s8),
+                      // **The sentence these three lines replace is why §2.2
+                      // names this screen.** "Sales: KES 1250.50 over 12
+                      // transactions in 2 shifts" put three figures inside prose,
+                      // so nothing lined up down a column of days and every count
+                      // needed its own singular. Three `numeric.body` figures,
+                      // right-aligned, line up and need none.
                       StatLine(
-                        label: 'Change on the day before',
+                        label: 'Sales',
                         money: true,
-                        value: _signedCurrency(
-                          currency,
-                          metrics.netSales - previous,
+                        value: currency.format(metrics.netSales),
+                        valueKey: ValueKey(
+                          'daily-summary-sales-${day.businessDate}',
+                        ),
+                        emphasis: true,
+                      ),
+                      // **The comparison this page could not make.** It listed
+                      // seven days and never said whether one was up or down on
+                      // the day before it, which is the analytical question
+                      // ST-041 draws two bars to answer. Two bars is the wrong
+                      // form for it - `dataviz`'s own table sends a handful of
+                      // headline numbers to stat tiles and names the one-bar and
+                      // grouped-bar versions as what *not* to do - and a chart
+                      // beside figures the page already states is the decorative
+                      // case Phase 05's second criterion forbids. A value and its
+                      // delta is the form that reference recommends, and
+                      // `OPEN_QUESTIONS.md` Phase 05 item 1 caps charting at
+                      // "two exact daily sales bars" as a ceiling rather than
+                      // asking for them.
+                      //
+                      // **Stated only where the day before it is also
+                      // reconciled.** An unreconciled neighbour has no sales
+                      // figure at all, and a delta against nothing would read as
+                      // a fall to zero.
+                      if (_previousSales(days, index) case final previous?)
+                        StatLine(
+                          label: 'Change on the day before',
+                          money: true,
+                          value: _signedCurrency(
+                            currency,
+                            metrics.netSales - previous,
+                          ),
+                          valueKey: ValueKey(
+                            'daily-summary-change-${day.businessDate}',
+                          ),
+                        ),
+                      StatLine(
+                        label: 'Transactions',
+                        value: '${metrics.netTransactions}',
+                        valueKey: ValueKey(
+                          'daily-summary-transactions-${day.businessDate}',
+                        ),
+                      ),
+                      StatLine(
+                        label: 'Shifts',
+                        value: '${metrics.shiftCount}',
+                        valueKey: ValueKey(
+                          'daily-summary-shifts-${day.businessDate}',
+                        ),
+                      ),
+                      // The whole statement about profit, or - for a session that
+                      // may not be shown one - the cost-data fact on its own.
+                      // Never both: the statement carries the same count inside
+                      // it, and saying it twice reads as two different findings.
+                      if (showProfit)
+                        TenantProfitStatement(
+                          report: metrics.netProfitReport,
+                          currency: currency,
+                          keyPrefix: 'daily-summary-${day.businessDate}',
+                          // This day's slice of the span read once above. Null
+                          // where the session may not read spending at all, in
+                          // which case the block says `Profit` exactly as it
+                          // always did rather than implying a net it has not got.
+                          net: expenses == null
+                              ? null
+                              : TenantNetProfitReport.from(
+                                  gross: metrics.netProfitReport,
+                                  expenses: expenses!.forDate(day.businessDate),
+                                ),
+                        )
+                      else if (!metrics.hasCompleteCostData)
+                        Padding(
+                          padding: EdgeInsets.only(top: tokens.spacing.s4),
+                          child: Text(
+                            key: ValueKey(
+                              'daily-summary-cost-${day.businessDate}',
+                            ),
+                            '${metrics.incompleteCostLineCount} sale '
+                            '${metrics.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
+                            'no cost recorded.',
+                            style: tokens.typography.caption.copyWith(
+                              color: tokens.colors.text.tertiary,
+                            ),
+                          ),
+                        ),
+                      // Said where anything came back, for the reason the
+                      // totals page says it: takings net of returns and takings
+                      // gross of them are different numbers, and a reader
+                      // checking against a till roll needs to know which.
+                      if (metrics.net case final net when net.returnCount > 0)
+                        Padding(
+                          padding: EdgeInsets.only(top: tokens.spacing.s4),
+                          child: Text(
+                            key: ValueKey(
+                              'daily-summary-returns-${day.businessDate}',
+                            ),
+                            '${net.returnCount} '
+                            '${net.returnCount == 1 ? 'return has' : 'returns have'} '
+                            'been taken back out of these figures.',
+                            style: tokens.typography.caption.copyWith(
+                              color: tokens.colors.text.tertiary,
+                            ),
+                          ),
+                        ),
+                      SizedBox(height: tokens.spacing.s8),
+                      // **When these figures were made, not when the day was
+                      // settled.** Saying *Reconciled* over a superseded day
+                      // would restate the claim the badge has just withdrawn.
+                      ProvenanceLine(
+                        day.standing == TenantDailyMetricsStanding.current
+                            ? 'Reconciled ${_instant(metrics.regeneratedAt)}'
+                            : 'Published ${_instant(metrics.regeneratedAt)}',
+                      ),
+                      if (day.standing ==
+                          TenantDailyMetricsStanding.superseded) ...[
+                        SizedBox(height: tokens.spacing.s4),
+                        Text(
+                          key: ValueKey(
+                            'daily-summary-superseded-note-${day.businessDate}',
+                          ),
+                          day.intake?.status ==
+                                  TenantReconciliationIntakeStatus.quarantined
+                              ? 'The server stopped working on this day, so these '
+                                    'figures are the last it published.'
+                              : 'Sales have reached the server since these '
+                                    'figures were published.',
+                          style: tokens.typography.caption.copyWith(
+                            color: tokens.colors.text.tertiary,
+                          ),
+                        ),
+                      ],
+                    ]
+                    // **A day the server has not published, added up here.**
+                    // #115: this screen showed a badge and nothing else, and sent
+                    // the reader to Sales Totals for a figure this device was
+                    // already holding. A certified result still wins wherever
+                    // there is one - this branch is only reachable where there is
+                    // none - and it is labelled as what it is rather than being
+                    // mixed in with a reconciled figure.
+                    else if (deviceDays[day.businessDate]?.displayable
+                        case final counted?) ...[
+                      SizedBox(height: tokens.spacing.s8),
+                      StatLine(
+                        label: 'Sales',
+                        money: true,
+                        value: currency.format(
+                          counted.net?.sales ?? counted.sales,
                         ),
                         valueKey: ValueKey(
-                          'daily-summary-change-${day.businessDate}',
+                          'daily-summary-device-sales-${day.businessDate}',
+                        ),
+                        emphasis: true,
+                      ),
+                      StatLine(
+                        label: 'Transactions',
+                        value:
+                            '${counted.net?.transactions ?? counted.transactions}',
+                        valueKey: ValueKey(
+                          'daily-summary-device-transactions-${day.businessDate}',
                         ),
                       ),
-                    StatLine(
-                      label: 'Transactions',
-                      value: '${metrics.netTransactions}',
-                      valueKey: ValueKey(
-                        'daily-summary-transactions-${day.businessDate}',
-                      ),
-                    ),
-                    StatLine(
-                      label: 'Shifts',
-                      value: '${metrics.shiftCount}',
-                      valueKey: ValueKey(
-                        'daily-summary-shifts-${day.businessDate}',
-                      ),
-                    ),
-                    // The whole statement about profit, or - for a session that
-                    // may not be shown one - the cost-data fact on its own.
-                    // Never both: the statement carries the same count inside
-                    // it, and saying it twice reads as two different findings.
-                    if (showProfit)
-                      TenantProfitStatement(
-                        report: metrics.netProfitReport,
-                        currency: currency,
-                        keyPrefix: 'daily-summary-${day.businessDate}',
-                        // This day's slice of the span read once above. Null
-                        // where the session may not read spending at all, in
-                        // which case the block says `Profit` exactly as it
-                        // always did rather than implying a net it has not got.
-                        net: expenses == null
-                            ? null
-                            : TenantNetProfitReport.from(
-                                gross: metrics.netProfitReport,
-                                expenses: expenses!.forDate(day.businessDate),
-                              ),
-                      )
-                    else if (!metrics.hasCompleteCostData)
-                      Padding(
-                        padding: EdgeInsets.only(top: tokens.spacing.s4),
-                        child: Text(
-                          key: ValueKey(
-                            'daily-summary-cost-${day.businessDate}',
-                          ),
-                          '${metrics.incompleteCostLineCount} sale '
-                          '${metrics.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
-                          'no cost recorded.',
-                          style: tokens.typography.caption.copyWith(
-                            color: tokens.colors.text.tertiary,
-                          ),
+                      // **No shift count, and no change on the day before.** The
+                      // cache holds this device's sales, not the registers
+                      // another till opened, so a count from here would
+                      // understate exactly the days that had more than one. A
+                      // delta across two different bases would be arithmetic on
+                      // figures that do not mean the same thing.
+                      if (showProfit)
+                        TenantProfitStatement(
+                          report:
+                              counted.net?.profitReport ?? counted.profitReport,
+                          currency: currency,
+                          keyPrefix: 'daily-summary-device-${day.businessDate}',
+                          net: expenses == null
+                              ? null
+                              : TenantNetProfitReport.from(
+                                  gross:
+                                      counted.net?.profitReport ??
+                                      counted.profitReport,
+                                  expenses: expenses!.forDate(day.businessDate),
+                                ),
                         ),
-                      ),
-                    // Said where anything came back, for the reason the
-                    // totals page says it: takings net of returns and takings
-                    // gross of them are different numbers, and a reader
-                    // checking against a till roll needs to know which.
-                    if (metrics.net case final net when net.returnCount > 0)
-                      Padding(
-                        padding: EdgeInsets.only(top: tokens.spacing.s4),
-                        child: Text(
-                          key: ValueKey(
-                            'daily-summary-returns-${day.businessDate}',
-                          ),
-                          '${net.returnCount} '
-                          '${net.returnCount == 1 ? 'return has' : 'returns have'} '
-                          'been taken back out of these figures.',
-                          style: tokens.typography.caption.copyWith(
-                            color: tokens.colors.text.tertiary,
-                          ),
-                        ),
-                      ),
-                    SizedBox(height: tokens.spacing.s8),
-                    // **When these figures were made, not when the day was
-                    // settled.** Saying *Reconciled* over a superseded day
-                    // would restate the claim the badge has just withdrawn.
-                    ProvenanceLine(
-                      day.standing == TenantDailyMetricsStanding.current
-                          ? 'Reconciled ${_instant(metrics.regeneratedAt)}'
-                          : 'Published ${_instant(metrics.regeneratedAt)}',
-                    ),
-                    if (day.standing ==
-                        TenantDailyMetricsStanding.superseded) ...[
+                      SizedBox(height: tokens.spacing.s8),
+                      const ProvenanceLine('Counted on this device'),
                       SizedBox(height: tokens.spacing.s4),
                       Text(
                         key: ValueKey(
-                          'daily-summary-superseded-note-${day.businessDate}',
+                          'daily-summary-device-basis-${day.businessDate}',
                         ),
-                        day.intake?.status ==
-                                TenantReconciliationIntakeStatus.quarantined
-                            ? 'The server stopped working on this day, so these '
-                                  'figures are the last it published.'
-                            : 'Sales have reached the server since these '
-                                  'figures were published.',
+                        'Rung on this till and not reconciled yet. A sale rung on '
+                        'another register is not in this figure.',
                         style: tokens.typography.caption.copyWith(
                           color: tokens.colors.text.tertiary,
                         ),
                       ),
                     ],
-                  ]
-                  // **A day the server has not published, added up here.**
-                  // #115: this screen showed a badge and nothing else, and sent
-                  // the reader to Sales Totals for a figure this device was
-                  // already holding. A certified result still wins wherever
-                  // there is one - this branch is only reachable where there is
-                  // none - and it is labelled as what it is rather than being
-                  // mixed in with a reconciled figure.
-                  else if (deviceDays[day.businessDate]?.displayable
-                      case final counted?) ...[
-                    SizedBox(height: tokens.spacing.s8),
-                    StatLine(
-                      label: 'Sales',
-                      money: true,
-                      value: currency.format(
-                        counted.net?.sales ?? counted.sales,
+                    if (reconciliationRoute != null) ...[
+                      SizedBox(height: tokens.spacing.s8),
+                      AppButton(
+                        key: ValueKey(
+                          'daily-summary-reconciliation-${day.businessDate}',
+                        ),
+                        label: 'Why is it in this state?',
+                        icon: Icons.help_outline,
+                        onPressed: () =>
+                            _openReconciliation(context, day.businessDate),
                       ),
-                      valueKey: ValueKey(
-                        'daily-summary-device-sales-${day.businessDate}',
-                      ),
-                      emphasis: true,
-                    ),
-                    StatLine(
-                      label: 'Transactions',
-                      value:
-                          '${counted.net?.transactions ?? counted.transactions}',
-                      valueKey: ValueKey(
-                        'daily-summary-device-transactions-${day.businessDate}',
-                      ),
-                    ),
-                    // **No shift count, and no change on the day before.** The
-                    // cache holds this device's sales, not the registers
-                    // another till opened, so a count from here would
-                    // understate exactly the days that had more than one. A
-                    // delta across two different bases would be arithmetic on
-                    // figures that do not mean the same thing.
-                    if (showProfit)
-                      TenantProfitStatement(
-                        report:
-                            counted.net?.profitReport ?? counted.profitReport,
-                        currency: currency,
-                        keyPrefix: 'daily-summary-device-${day.businessDate}',
-                        net: expenses == null
-                            ? null
-                            : TenantNetProfitReport.from(
-                                gross:
-                                    counted.net?.profitReport ??
-                                    counted.profitReport,
-                                expenses: expenses!.forDate(day.businessDate),
-                              ),
-                      ),
-                    SizedBox(height: tokens.spacing.s8),
-                    const ProvenanceLine('Counted on this device'),
-                    SizedBox(height: tokens.spacing.s4),
-                    Text(
-                      key: ValueKey(
-                        'daily-summary-device-basis-${day.businessDate}',
-                      ),
-                      'Rung on this till and not reconciled yet. A sale rung on '
-                      'another register is not in this figure.',
-                      style: tokens.typography.caption.copyWith(
-                        color: tokens.colors.text.tertiary,
-                      ),
-                    ),
+                    ],
                   ],
-                  if (reconciliationRoute != null) ...[
-                    SizedBox(height: tokens.spacing.s8),
-                    AppButton(
-                      key: ValueKey(
-                        'daily-summary-reconciliation-${day.businessDate}',
-                      ),
-                      label: 'Why is it in this state?',
-                      icon: Icons.help_outline,
-                      onPressed: () =>
-                          _openReconciliation(context, day.businessDate),
-                    ),
-                  ],
-                ],
+                ),
               ),
+            ),
+      ],
+    );
+  }
+
+  /// The large-screen form: one row per day.
+  ///
+  /// **The same days, read the same way, drawn as rows** - `docs/design/
+  /// tables/`, at the developer's direction on 2026-10-13 for every screen
+  /// that stretched a phone card across a large window. A week's sales read
+  /// down one column, where seven cards had to be read one at a time. Below
+  /// 1024 the cards above are unchanged.
+  ///
+  /// **What a card says about only some days folds under the row**: when its
+  /// figures were made, the returns taken out of them, why they are out of
+  /// date, the device's caveat, and the whole sentence about the cost data
+  /// behind the profit. The profit cell still carries its qualification -
+  /// `tenantProfitCeilingNote`, the wording written for a figure drawn without
+  /// room for the full sentence - so no ceiling is ever drawn as a plain
+  /// figure, which is the rule `TenantProfitStatement` exists to keep.
+  Widget _sheet(BuildContext context, AppTokens tokens) {
+    final code = currency.code;
+    final columns = <SheetColumn>[
+      const SheetColumn(label: 'Day', kind: SheetColumnKind.identity),
+      SheetColumn(label: 'Sales', kind: SheetColumnKind.figure, unit: code),
+      // **Change, not the card's "Change on the day before"**: a header is
+      // read once over every row, and the long form made it the widest column
+      // on the sheet, which every other column is then drawn as wide as.
+      SheetColumn(label: 'Change', kind: SheetColumnKind.figure, unit: code),
+      const SheetColumn(label: 'Transactions', kind: SheetColumnKind.figure),
+      const SheetColumn(label: 'Shifts', kind: SheetColumnKind.figure),
+      if (showProfit) ...<SheetColumn>[
+        SheetColumn(
+          // Gross only where there is a net to tell it apart from, as the
+          // card's own statement names it.
+          label: expenses == null ? 'Profit' : 'Gross profit',
+          kind: SheetColumnKind.figure,
+          unit: code,
+        ),
+        const SheetColumn(label: 'Margin', kind: SheetColumnKind.figure),
+      ],
+      const SheetColumn(label: 'Standing', kind: SheetColumnKind.status),
+    ];
+    final profitColumn = showProfit ? 5 : -1;
+    final marginColumn = showProfit ? 6 : -1;
+
+    final rows = <_DayFigures>[
+      for (final (index, day) in days.indexed) _figuresOf(day, index),
+    ];
+    // **Whole amounts hold `.00` as blank space where their column has cents**,
+    // decided per column from the amounts themselves.
+    bool hasCents(Iterable<double?> amounts) => amounts.any(
+      (amount) => amount != null && (amount * 100).round() % 100 != 0,
+    );
+    final salesCents = hasCents(rows.map((row) => row.sales));
+    final changeCents = hasCents(rows.map((row) => row.change));
+    final profitCents = hasCents(<double?>[
+      for (final row in rows) ...<double?>[
+        row.report?.profit,
+        row.net?.expenses,
+        row.net?.netProfit,
+      ],
+    ]);
+    String? reserve(bool cents, double? amount) =>
+        cents && (amount == null || (amount * 100).round() % 100 == 0)
+        ? '.00'
+        : null;
+    SheetCell money(
+      double? amount,
+      bool cents,
+      String key, {
+      String? caption,
+    }) => amount == null
+        ? SheetFigure.unknown(
+            reserve: reserve(cents, null),
+            key: ValueKey<String>(key),
+          )
+        : SheetFigure(
+            moneyTextGrouped(amount),
+            reserve: reserve(cents, amount),
+            caption: caption,
+            key: ValueKey<String>(key),
+          );
+    SheetCell count(int? value, String key) => value == null
+        ? SheetFigure.unknown(key: ValueKey<String>(key))
+        : SheetFigure('$value', key: ValueKey<String>(key));
+
+    final route = reconciliationRoute;
+    return RecordSheet(
+      key: const ValueKey('daily-summary-sheet'),
+      columns: columns,
+      bar: salesTotalsRoute == null
+          ? null
+          : Row(
+              children: <Widget>[
+                const Spacer(),
+                AppButton(
+                  key: const ValueKey('daily-summary-sales-totals'),
+                  label: 'Total sales over a period',
+                  icon: Icons.calculate_outlined,
+                  onPressed: () => _openSalesTotals(context),
+                ),
+              ],
+            ),
+      rows: <SheetRow>[
+        for (final row in rows)
+          SheetRow(
+            id: row.date,
+            key: ValueKey<String>('daily-summary-${row.date}'),
+            // The card's *Why is it in this state?*, which is the one thing a
+            // day leads to. Absent where the session may not be offered it.
+            pressKey: route == null
+                ? null
+                : ValueKey<String>('daily-summary-reconciliation-${row.date}'),
+            onPressed: route == null
+                ? null
+                : () => _openReconciliation(context, row.date),
+            semanticLabel: row.date,
+            semanticHint: route == null
+                ? null
+                : 'Opens why this day is in this state.',
+            cells: <SheetCell?>[
+              SheetText(
+                row.date,
+                caption: row.counted ? 'Counted on this device' : null,
+              ),
+              money(row.sales, salesCents, row.salesKey),
+              switch (row.change) {
+                final delta? => SheetFigure(
+                  _signedFigure(delta),
+                  reserve: reserve(changeCents, delta),
+                  key: ValueKey<String>('daily-summary-change-${row.date}'),
+                ),
+                null => SheetFigure.unknown(
+                  reserve: reserve(changeCents, null),
+                  key: ValueKey<String>('daily-summary-change-${row.date}'),
+                ),
+              },
+              count(row.transactions, row.transactionsKey),
+              count(row.shifts, 'daily-summary-shifts-${row.date}'),
+              if (showProfit) ...<SheetCell?>[
+                switch (row.report) {
+                  final report? when report.isDrawable => money(
+                    report.profit,
+                    profitCents,
+                    '${row.prefix}-profit',
+                    caption: report.isShowable
+                        ? null
+                        : tenantProfitCeilingNote(report),
+                  ),
+                  _ => money(null, profitCents, '${row.prefix}-profit'),
+                },
+                switch (row.report?.marginPercent) {
+                  final margin? => SheetFigure(
+                    '${margin.toStringAsFixed(1)}%',
+                    key: ValueKey<String>('${row.prefix}-margin'),
+                  ),
+                  null => SheetFigure.unknown(
+                    key: ValueKey<String>('${row.prefix}-margin'),
+                  ),
+                },
+              ],
+              _standing(row.day),
+            ],
+            fold: _foldOf(
+              row,
+              profitColumn: profitColumn,
+              marginColumn: marginColumn,
+              reserve: (amount) => reserve(profitCents, amount),
             ),
           ),
       ],
+    );
+  }
+
+  /// One day's figures, from whichever source has them: the server's
+  /// published day, or - where there is none - what this device counted.
+  _DayFigures _figuresOf(TenantDailyMetricsDay day, int index) {
+    final date = day.businessDate;
+    final metrics = day.metrics;
+    final counted = metrics == null ? deviceDays[date]?.displayable : null;
+    final report =
+        metrics?.netProfitReport ??
+        (counted == null
+            ? null
+            : counted.net?.profitReport ?? counted.profitReport);
+    final previous = metrics == null ? null : _previousSales(days, index);
+    return _DayFigures(
+      day: day,
+      date: date,
+      counted: counted != null,
+      // The card's keys: a device's own figures are named as such, and a day
+      // with no figures at all keeps the published day's names.
+      prefix: counted == null
+          ? 'daily-summary-$date'
+          : 'daily-summary-device-$date',
+      salesKey: counted == null
+          ? 'daily-summary-sales-$date'
+          : 'daily-summary-device-sales-$date',
+      transactionsKey: counted == null
+          ? 'daily-summary-transactions-$date'
+          : 'daily-summary-device-transactions-$date',
+      sales:
+          metrics?.netSales ??
+          (counted == null ? null : counted.net?.sales ?? counted.sales),
+      transactions:
+          metrics?.netTransactions ??
+          (counted == null
+              ? null
+              : counted.net?.transactions ?? counted.transactions),
+      // **No shift count and no change for a device's figure**, for the
+      // card's reason: the cache holds this till's sales, not another's.
+      shifts: metrics?.shiftCount,
+      change: metrics == null || previous == null
+          ? null
+          : metrics.netSales - previous,
+      report: showProfit ? report : null,
+      net: !showProfit || report == null || expenses == null
+          ? null
+          : TenantNetProfitReport.from(
+              gross: report,
+              expenses: expenses!.forDate(date),
+            ),
+      returnCount: metrics?.net.returnCount ?? 0,
+      incompleteCostLines: metrics == null || metrics.hasCompleteCostData
+          ? 0
+          : metrics.incompleteCostLineCount,
+    );
+  }
+
+  /// The card's badge, as a cell. A reconciled day is the settled state, so it
+  /// is a quiet glyph and word; every other standing wants a look.
+  SheetStatus _standing(TenantDailyMetricsDay day) {
+    final date = day.businessDate;
+    final stopped =
+        day.intake?.status == TenantReconciliationIntakeStatus.quarantined;
+    return switch (day.standing) {
+      TenantDailyMetricsStanding.unpublished => SheetStatus(
+        key: ValueKey('daily-summary-pending-$date'),
+        status: AppStatus.attention,
+        label: 'Not reconciled yet',
+        semanticLabel: '$date is not reconciled yet',
+      ),
+      TenantDailyMetricsStanding.current => SheetStatus(
+        key: ValueKey('daily-summary-reconciled-$date'),
+        status: AppStatus.ok,
+        label: 'Reconciled',
+        semanticLabel: '$date is reconciled',
+        quiet: true,
+      ),
+      TenantDailyMetricsStanding.superseded => SheetStatus(
+        key: ValueKey('daily-summary-superseded-$date'),
+        status: AppStatus.attention,
+        label: stopped ? 'Stopped' : 'Waiting to be regenerated',
+        semanticLabel: '$date has figures that are out of date',
+      ),
+      TenantDailyMetricsStanding.unconfirmed => SheetStatus(
+        key: ValueKey('daily-summary-unconfirmed-$date'),
+        status: AppStatus.attention,
+        label: 'Not confirmed current',
+        semanticLabel: '$date could not be confirmed as current',
+      ),
+    };
+  }
+
+  /// Everything the card says in sentences about this day, and the net
+  /// figures where spending was read. Null where the day has nothing to say,
+  /// which is a day nothing was published or counted for.
+  SheetFold? _foldOf(
+    _DayFigures row, {
+    required int profitColumn,
+    required int marginColumn,
+    required String? Function(double?) reserve,
+  }) {
+    final day = row.day;
+    final metrics = day.metrics;
+    final notes = <String>[
+      if (metrics != null)
+        day.standing == TenantDailyMetricsStanding.current
+            ? 'Reconciled ${_instant(metrics.regeneratedAt)}.'
+            : 'Published ${_instant(metrics.regeneratedAt)}.',
+      if (metrics != null &&
+          day.standing == TenantDailyMetricsStanding.superseded)
+        day.intake?.status == TenantReconciliationIntakeStatus.quarantined
+            ? 'The server stopped working on this day, so these figures are '
+                  'the last it published.'
+            : 'Sales have reached the server since these figures were '
+                  'published.',
+      if (row.counted)
+        'Rung on this till and not reconciled yet. A sale rung on another '
+            'register is not in this figure.',
+      if (row.returnCount > 0)
+        '${row.returnCount} '
+            '${row.returnCount == 1 ? 'return has' : 'returns have'} been '
+            'taken back out of these figures.',
+      if (row.report case final report?) tenantProfitNote(report),
+      if (!showProfit && row.incompleteCostLines > 0)
+        '${row.incompleteCostLines} sale '
+            '${row.incompleteCostLines == 1 ? 'line has' : 'lines have'} no '
+            'cost recorded.',
+    ];
+    final net = row.net;
+    final lines = <SheetFoldLine>[
+      if (net != null && net.isDrawable && profitColumn > 0) ...<SheetFoldLine>[
+        SheetFoldLine(
+          label: 'Expenses',
+          value: moneyTextGrouped(net.expenses),
+          reserve: reserve(net.expenses),
+          column: profitColumn,
+          valueKey: ValueKey<String>('${row.prefix}-expenses'),
+        ),
+        SheetFoldLine(
+          label: net.isShowable ? 'Net profit' : 'Net profit, at most',
+          value: moneyTextGrouped(net.netProfit),
+          reserve: reserve(net.netProfit),
+          column: profitColumn,
+          valueKey: ValueKey<String>('${row.prefix}-net-profit'),
+        ),
+        if (net.netMarginPercent case final margin? when marginColumn > 0)
+          SheetFoldLine(
+            label: 'Net margin',
+            value: '${margin.toStringAsFixed(1)}%',
+            column: marginColumn,
+            valueKey: ValueKey<String>('${row.prefix}-net-margin'),
+          ),
+      ],
+    ];
+    if (notes.isEmpty && lines.isEmpty) return null;
+    return SheetFold(
+      note: notes.isEmpty ? null : notes.join(' '),
+      noteKey: ValueKey<String>('daily-summary-note-${row.date}'),
+      lines: lines,
+      toggleKey: ValueKey<String>('daily-summary-fold-${row.date}'),
+      showLabel: 'Show more about ${row.date}',
+      hideLabel: 'Show less about ${row.date}',
     );
   }
 
@@ -789,6 +1132,55 @@ double? _previousSales(List<TenantDailyMetricsDay> days, int index) {
   // The same basis as the day it is subtracted from, or the delta is a
   // difference between two different questions.
   return days[index + 1].metrics?.netSales;
+}
+
+/// A signed delta for a table cell: [_signedCurrency]'s rule, with no code
+/// (the column's header states it once), grouped, and a real minus.
+String _signedFigure(double delta) {
+  if (delta == 0) return '0';
+  final formatted = moneyTextGrouped(delta.abs());
+  return delta > 0 ? '+$formatted' : '−$formatted';
+}
+
+/// One day's figures as the table reads them.
+final class _DayFigures {
+  const _DayFigures({
+    required this.day,
+    required this.date,
+    required this.counted,
+    required this.prefix,
+    required this.salesKey,
+    required this.transactionsKey,
+    required this.sales,
+    required this.transactions,
+    required this.shifts,
+    required this.change,
+    required this.report,
+    required this.net,
+    required this.returnCount,
+    required this.incompleteCostLines,
+  });
+
+  final TenantDailyMetricsDay day;
+  final String date;
+
+  /// Whether the figures are this device's rather than the server's.
+  final bool counted;
+
+  /// The card's own key prefix for this day's profit figures.
+  final String prefix;
+  final String salesKey;
+  final String transactionsKey;
+  final double? sales;
+  final int? transactions;
+  final int? shifts;
+  final double? change;
+
+  /// The profit, or null where this session is not shown one.
+  final TenantProfitReport? report;
+  final TenantNetProfitReport? net;
+  final int returnCount;
+  final int incompleteCostLines;
 }
 
 /// A signed money delta, with the sign doing the work.

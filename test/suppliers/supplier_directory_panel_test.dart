@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/suppliers/supplier_card.dart';
 import 'package:uzapay_pos/suppliers/suppliers.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/ui/status.dart';
@@ -180,6 +181,66 @@ void main() {
     await _pump(tester, _Reader.seeded(), role: TenantRole.cashier);
 
     expect(find.byKey(const ValueKey('supplier-row-sp_abc')), findsNothing);
+  });
+
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: one row per supplier from 1024, the cards below it. The
+  // cases above pump at 1200, so they already read the table.
+  group('on a screen 1024 and wider', () {
+    testWidgets('an empty table has equal margins around the page', (
+      tester,
+    ) async {
+      await _pump(tester, _Reader(const <String, Map<String, Object?>>{}));
+      for (final width in <double>[1440, 1920, 1024]) {
+        tester.view.physicalSize = Size(width, 900);
+        await tester.pumpAndSettle();
+        final sheet = tester.getRect(
+          find.byKey(const ValueKey('suppliers-sheet')),
+        );
+        final bar = tester.getRect(find.byType(AppBar));
+        expect(sheet.left, closeTo(24, 0.5));
+        expect(width - sheet.right, closeTo(24, 0.5));
+        expect(sheet.top - bar.bottom, closeTo(24, 0.5));
+        expect(900 - sheet.bottom, closeTo(24, 0.5));
+        expect(tester.takeException(), isNull);
+      }
+    });
+
+    testWidgets('the suppliers are one table, with the page controls on '
+        'its edge', (tester) async {
+      await _pump(tester, _Reader.seeded());
+
+      final sheet = find.byKey(const ValueKey('suppliers-sheet'));
+      expect(sheet, findsOneWidget);
+      expect(find.byType(TenantSupplierCard), findsNothing);
+      for (final key in <String>[
+        'suppliers-search',
+        'suppliers-standing-filter',
+        'suppliers-add',
+      ]) {
+        expect(
+          find.descendant(of: sheet, matching: find.byKey(ValueKey(key))),
+          findsOneWidget,
+          reason: key,
+        );
+      }
+      // Phone and email each have a column, where the card had room for one.
+      expect(find.text('0712 345 678'), findsOneWidget);
+      expect(find.text('orders@abc.example'), findsOneWidget);
+      // The *Active* view has no inactive supplier on it, so no column for
+      // the one standing it could show.
+      expect(find.textContaining('STANDING'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('below 1024 the cards are unchanged', (tester) async {
+      await _pump(tester, _Reader.seeded());
+      tester.view.physicalSize = const Size(1023, 2400);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TenantSupplierCard), findsWidgets);
+      expect(find.byKey(const ValueKey('suppliers-sheet')), findsNothing);
+    });
   });
 }
 

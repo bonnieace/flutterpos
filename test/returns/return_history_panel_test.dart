@@ -1150,6 +1150,132 @@ void main() {
       'recordedOn': _businessDate,
     });
   });
+
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: one row per return from 1024, the cards below it. The
+  // feed cases above pump at 1400, so they already read the table.
+  group('the feed on a screen 1024 and wider', () {
+    String text(WidgetTester tester, String key) =>
+        tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+    testWidgets('the returns are one table, a fact per column', (tester) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+          _verified('ret-2'),
+          _pending('ret-1'),
+        ]);
+
+      await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
+
+      final sheet = find.byKey(const ValueKey('return-feed-sheet'));
+      expect(sheet, findsOne);
+      for (final key in <String>[
+        'return-feed-day-filter',
+        'return-feed-standing-filter',
+      ]) {
+        expect(
+          find.descendant(of: sheet, matching: find.byKey(ValueKey(key))),
+          findsOne,
+          reason: key,
+        );
+      }
+      expect(text(tester, 'return-feed-units-ret-1'), '3');
+      expect(
+        text(tester, 'return-feed-stock-note-ret-1'),
+        'not back in stock yet',
+      );
+      expect(
+        find.byKey(const ValueKey('return-feed-stock-note-ret-2')),
+        findsNothing,
+      );
+      expect(
+        tester
+            .widget<StatusBadge>(
+              find.byKey(const ValueKey('return-feed-status-ret-1')),
+            )
+            .label,
+        'Pending',
+      );
+      // Verified is the settled state: a word, not a badge.
+      expect(
+        tester.widget(find.byKey(const ValueKey('return-feed-status-ret-2'))),
+        isNot(isA<StatusBadge>()),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('below 1024 the cards are unchanged', (tester) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+          _pending('ret-1'),
+        ]);
+
+      await _pumpFeed(
+        tester,
+        _controller(role: TenantRole.manager),
+        reader,
+        width: 1023,
+      );
+
+      expect(find.byKey(const ValueKey('return-feed-sheet')), findsNothing);
+      expect(find.byKey(const ValueKey('return-feed-entry-ret-1')), findsOne);
+      expect(text(tester, 'return-feed-status-ret-1'), 'PENDING');
+    });
+
+    testWidgets('a row opens the return, and verifying is the row menu', (
+      tester,
+    ) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+          _pending('ret-1'),
+        ]);
+
+      await _pumpFeed(
+        tester,
+        _controller(role: TenantRole.manager),
+        reader,
+        verifyCallable: _VerifyCallable(const <String, Object?>{}),
+      );
+
+      // Verify sits behind the row's menu, under the card's own conditions.
+      expect(
+        find.byKey(const ValueKey('return-feed-verify-ret-1')),
+        findsNothing,
+      );
+      await tester.tap(find.byKey(const ValueKey('return-feed-menu-ret-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('return-feed-verify-ret-1')));
+      await tester.pumpAndSettle();
+      // The same confirmation the card's button asked for.
+      expect(find.text('Restore this stock?'), findsOne);
+      await tester.tap(find.byKey(const ValueKey('return-feed-cancel-verify')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('return-feed-open-ret-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('View return'), findsWidgets);
+    });
+
+    testWidgets('a cashier is offered no verify, and told why below', (
+      tester,
+    ) async {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+          _pending('ret-1'),
+        ]);
+
+      await _pumpFeed(tester, _controller(), reader);
+
+      expect(
+        find.byKey(const ValueKey('return-feed-menu-ret-1')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('return-feed-verification-unavailable')),
+        findsOne,
+      );
+    });
+  });
 }
 
 /// The screen opens on today and on every standing, and both narrow.
@@ -1158,6 +1284,7 @@ Future<void> _pumpFeed(
   TenantSessionController controller,
   _Reader reader, {
   double width = 1400,
+  VerifyReturnCallable? verifyCallable,
 }) async {
   tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
@@ -1169,6 +1296,9 @@ Future<void> _pumpFeed(
         controller: controller,
         child: TenantReturnFeedScreen(
           reader: reader,
+          actions: verifyCallable == null
+              ? null
+              : TenantReturnActions(verifyCallable: verifyCallable),
           // The day the fixtures were recorded on, so the screen opens on the
           // filter's default and shows them.
           clock: () => DateTime.utc(2026, 7, 31, 15),

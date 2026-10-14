@@ -39,6 +39,7 @@ TenantShiftControllerFactory sharedShiftControllerFactory(
   ShiftServer server, {
   ShiftSalesSummary sales = ShiftSalesSummary.empty,
   TenantShiftOnlineCheck? isOnline,
+  TenantShiftClock? clock,
 }) {
   final built = Expando<TenantShiftController>();
   return (sessions) => built[sessions] ??= shiftControllerFor(
@@ -47,6 +48,7 @@ TenantShiftControllerFactory sharedShiftControllerFactory(
     server,
     sales: sales,
     isOnline: isOnline,
+    clock: clock,
   );
 }
 
@@ -60,6 +62,10 @@ TenantShiftController shiftControllerFor(
   /// genuinely needs the server, so a test about that refusal has to be able to
   /// take the network away partway through a journey rather than at the start.
   TenantShiftOnlineCheck? isOnline,
+
+  /// The suite's 2026-07-31 09:00 unless a test needs another hour - the
+  /// night side of a trading day's cutoff, for one.
+  TenantShiftClock? clock,
 }) {
   var nextShift = 0;
   return TenantShiftController(
@@ -75,7 +81,7 @@ TenantShiftController shiftControllerFor(
     deviceId: shiftDeviceId,
     isOnline: isOnline ?? () async => true,
     shiftIdFactory: () => 'shift-${++nextShift}',
-    clock: () => DateTime.utc(2026, 7, 31, 9),
+    clock: clock ?? () => DateTime.utc(2026, 7, 31, 9),
   );
 }
 

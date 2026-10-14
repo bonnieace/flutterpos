@@ -106,6 +106,29 @@ String tenantStaffLabel(
   return name == null ? uid : '$name ($uid)';
 }
 
+/// [tenantStaffLabel] in two parts, for a table: the name, and what names them
+/// beneath it.
+///
+/// **The UID stays visible**, which is [tenantStaffLabel]'s rule, but under the
+/// name rather than in brackets after it. A real UID is 28 characters, and in
+/// brackets it wrapped every name in a table's column onto a second line
+/// (`docs/design/tables/`, 2026-10-13). The session's own member reads as their
+/// name over *You*.
+({String name, String? under}) tenantStaffLabelParts(
+  String uid, {
+  required Map<String, String> names,
+  String? selfUid,
+  String selfLabel = 'You',
+}) {
+  final name = names[uid];
+  if (uid == selfUid) {
+    return name == null
+        ? (name: selfLabel, under: null)
+        : (name: name, under: selfLabel);
+  }
+  return name == null ? (name: uid, under: null) : (name: name, under: uid);
+}
+
 /// Holds one [TenantStaffNameResolver] per session **and per read pass**.
 ///
 /// **A panel reads its page twice and a name is optional on both.** Every

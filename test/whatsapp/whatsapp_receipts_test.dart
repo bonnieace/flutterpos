@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/ui/record_sheet.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:uzapay_pos/checkout/checkout_configuration_writer.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/ui/choice.dart';
+import 'package:uzapay_pos/ui/illustration.dart';
 import 'package:uzapay_pos/whatsapp/whatsapp.dart';
 
 import '../support/notices.dart';
@@ -14,6 +16,20 @@ import '../support/notices.dart';
 /// The device's half of WhatsApp receipts: what a business has chosen, a
 /// cashier's request to send one, and the screen an owner sets it up on.
 void main() {
+  testWidgets('desktop receipt history aligns recipient, receipt and status', (
+    tester,
+  ) async {
+    await _pump(tester, const _Reader(withDeliveries: true));
+    await tester.tap(find.text('Sent receipts'));
+    await tester.pumpAndSettle();
+    expect(find.byType(RecordSheet), findsOneWidget);
+    expect(find.text('JOHN-CT-7F2-001'), findsOneWidget);
+    expect(find.text('Jane'), findsOneWidget);
+    expect(find.text('Delivered'), findsOneWidget);
+    expect(find.text('Automatically'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   group('settings', () {
     test('a business that chose nothing sends nothing', () {
       expect(TenantEReceiptSettings.off.whatsappEnabled, isFalse);
@@ -66,23 +82,26 @@ void main() {
     // A Saturday afternoon.
     final now = DateTime(2026, 10, 3, 14, 40);
 
-    test('is the time today, a word yesterday, then a weekday, then a date', () {
-      expect(receiptDeliveryWhen(DateTime(2026, 10, 3, 9, 5), now), '09:05');
-      expect(receiptDeliveryWhen(DateTime(2026, 10, 3, 0, 1), now), '00:01');
-      expect(
-        receiptDeliveryWhen(DateTime(2026, 10, 2, 23, 59), now),
-        'Yesterday',
-      );
-      expect(receiptDeliveryWhen(DateTime(2026, 9, 28, 12), now), 'Mon');
-      // Six days back is still this week's Sunday; seven is a date, or the
-      // weekday would name two different days.
-      expect(receiptDeliveryWhen(DateTime(2026, 9, 27, 12), now), 'Sun');
-      expect(receiptDeliveryWhen(DateTime(2026, 9, 26, 12), now), '26 Sep');
-      expect(
-        receiptDeliveryWhen(DateTime(2025, 12, 31, 12), now),
-        '31 Dec 2025',
-      );
-    });
+    test(
+      'is the time today, a word yesterday, then a weekday, then a date',
+      () {
+        expect(receiptDeliveryWhen(DateTime(2026, 10, 3, 9, 5), now), '09:05');
+        expect(receiptDeliveryWhen(DateTime(2026, 10, 3, 0, 1), now), '00:01');
+        expect(
+          receiptDeliveryWhen(DateTime(2026, 10, 2, 23, 59), now),
+          'Yesterday',
+        );
+        expect(receiptDeliveryWhen(DateTime(2026, 9, 28, 12), now), 'Mon');
+        // Six days back is still this week's Sunday; seven is a date, or the
+        // weekday would name two different days.
+        expect(receiptDeliveryWhen(DateTime(2026, 9, 27, 12), now), 'Sun');
+        expect(receiptDeliveryWhen(DateTime(2026, 9, 26, 12), now), '26 Sep');
+        expect(
+          receiptDeliveryWhen(DateTime(2025, 12, 31, 12), now),
+          '31 Dec 2025',
+        );
+      },
+    );
 
     test('is nothing for a record with no time on it yet', () {
       expect(receiptDeliveryWhen(null, now), isNull);
@@ -137,45 +156,48 @@ void main() {
       if (await directory.exists()) await directory.delete(recursive: true);
     });
 
-    test('is queued as the callable request, and settled by sending again', () async {
-      final intent = TenantWhatsappReceiptIntent.build(
-        session: _session(TenantRole.cashier),
-        saleId: 'co-1',
-        phone: '+254712345678',
-        customerName: 'Jane',
-        requestId: 'receipt-request-0001',
-      );
-      await QueuedTenantWhatsappReceiptWriter(
-        store: store,
-        currentUid: () => 'user-a',
-      ).send(intent);
+    test(
+      'is queued as the callable request, and settled by sending again',
+      () async {
+        final intent = TenantWhatsappReceiptIntent.build(
+          session: _session(TenantRole.cashier),
+          saleId: 'co-1',
+          phone: '+254712345678',
+          customerName: 'Jane',
+          requestId: 'receipt-request-0001',
+        );
+        await QueuedTenantWhatsappReceiptWriter(
+          store: store,
+          currentUid: () => 'user-a',
+        ).send(intent);
 
-      final record = (await store.recordsForSession(
-        uid: 'user-a',
-        tenantId: 'tenant-a',
-      )).single;
-      expect(record.kind, TenantPendingMutationKind.whatsappReceiptRequest);
-      expect(record.targetPath, intent.path);
-      expect(record.payload, <String, Object?>{
-        'tenantId': 'tenant-a',
-        'saleId': 'co-1',
-        'phone': '+254712345678',
-        'requestId': 'receipt-request-0001',
-        'customerName': 'Jane',
-      });
-      expect(tenantMutationIsCallable(record.kind), isTrue);
-      expect(tenantMutationResendConfirms(record.kind), isTrue);
+        final record = (await store.recordsForSession(
+          uid: 'user-a',
+          tenantId: 'tenant-a',
+        )).single;
+        expect(record.kind, TenantPendingMutationKind.whatsappReceiptRequest);
+        expect(record.targetPath, intent.path);
+        expect(record.payload, <String, Object?>{
+          'tenantId': 'tenant-a',
+          'saleId': 'co-1',
+          'phone': '+254712345678',
+          'requestId': 'receipt-request-0001',
+          'customerName': 'Jane',
+        });
+        expect(tenantMutationIsCallable(record.kind), isTrue);
+        expect(tenantMutationResendConfirms(record.kind), isTrue);
 
-      // Drawn for the WhatsApp screen without the number in the clear.
-      final drawn = await TenantPendingMutationOverlayReader(
-        base: const _Nothing(),
-        store: store,
-        currentUid: () => 'user-a',
-      ).getDocument(intent.path);
-      expect(drawn!.data['status'], 'queued');
-      expect(drawn.data['phoneMasked'], '+254•••678');
-      expect(drawn.data.values.contains('+254712345678'), isFalse);
-    });
+        // Drawn for the WhatsApp screen without the number in the clear.
+        final drawn = await TenantPendingMutationOverlayReader(
+          base: const _Nothing(),
+          store: store,
+          currentUid: () => 'user-a',
+        ).getDocument(intent.path);
+        expect(drawn!.data['status'], 'queued');
+        expect(drawn.data['phoneMasked'], '+254•••678');
+        expect(drawn.data.values.contains('+254712345678'), isFalse);
+      },
+    );
   });
 
   group('the WhatsApp screen', () {
@@ -209,7 +231,10 @@ void main() {
       expect(writer.data?['format'], 'summary');
       expect(writer.data?['mode'], 'automatic');
       expect(snackNotice(tester).message, contains('Saved'));
-      expect(find.byKey(const ValueKey('e-receipts-unavailable')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('e-receipts-unavailable')),
+        findsNothing,
+      );
     });
 
     testWidgets('says plainly when the number is not connected yet', (
@@ -217,7 +242,10 @@ void main() {
     ) async {
       await _pump(tester, const _Reader(), available: false);
 
-      expect(find.byKey(const ValueKey('e-receipts-unavailable')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('e-receipts-unavailable')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('lists recent receipts with what became of each, in words', (
@@ -250,7 +278,9 @@ void main() {
       expect(
         tester.getTopLeft(find.byKey(const ValueKey('e-receipts-preview'))).dy,
         lessThan(
-          tester.getTopLeft(find.byKey(const ValueKey('e-receipts-enabled'))).dy,
+          tester
+              .getTopLeft(find.byKey(const ValueKey('e-receipts-enabled')))
+              .dy,
         ),
       );
       // The file is a document of its own, not words in the message.
@@ -269,8 +299,14 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('e-receipts-format-summary')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('e-receipts-preview-file')), findsNothing);
-      expect(find.textContaining('3 items, total KES 1,250.00'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('e-receipts-preview-file')),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('3 items, total KES 1,250.00'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a sent receipt says who, when, what became of it, and how', (
@@ -283,6 +319,7 @@ void main() {
         const _Reader(withDeliveries: true),
         available: true,
         clock: () => now,
+        width: 411,
       );
       await tester.tap(find.text('Sent receipts'));
       await tester.pumpAndSettle();
@@ -295,19 +332,30 @@ void main() {
       // How it went is a glyph, with its words for a screen reader.
       expect(
         tester
-            .getSemantics(find.byKey(const ValueKey('e-receipts-delivery-rd_1')))
+            .getSemantics(
+              find.byKey(const ValueKey('e-receipts-delivery-rd_1')),
+            )
             .label,
-        allOf(contains('Jane'), contains('Delivered'), contains('automatically')),
+        allOf(
+          contains('Jane'),
+          contains('Delivered'),
+          contains('automatically'),
+        ),
       );
       expect(
         tester
-            .getSemantics(find.byKey(const ValueKey('e-receipts-delivery-rd_2')))
+            .getSemantics(
+              find.byKey(const ValueKey('e-receipts-delivery-rd_2')),
+            )
             .label,
         contains('Sent by hand'),
       );
       // Two receipts are every receipt there is, so no limit is claimed: the
       // footer is for a full page, where the list stops short of the rest.
-      expect(find.byKey(const ValueKey('e-receipts-deliveries-end')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('e-receipts-deliveries-end')),
+        findsNothing,
+      );
     });
 
     testWidgets('says nothing about the connection while the check is out', (
@@ -357,8 +405,7 @@ void main() {
         findsNothing,
       );
 
-      // The server saying none is the truth, and it is drawn - under the
-      // chat glyph, as an empty chat list is, not a search that found nothing.
+      // The server saying none is drawn with the WhatsApp receipt scene.
       server.complete(const <TenantQueryDocumentSnapshot>[]);
       await tester.pumpAndSettle();
       expect(
@@ -368,7 +415,11 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('e-receipts-deliveries-empty')),
-          matching: find.byIcon(Icons.chat_outlined),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is AppIllustration &&
+                widget.asset == 'receipt-whatsapp.svg',
+          ),
         ),
         findsOneWidget,
       );
@@ -401,8 +452,9 @@ Future<void> _pump(
   WhatsappReceiptStatusCheck? statusCheck,
   DateTime Function()? clock,
   bool settle = true,
+  double width = 1200,
 }) async {
-  tester.view.physicalSize = const Size(1200, 3000);
+  tester.view.physicalSize = Size(width, 3000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

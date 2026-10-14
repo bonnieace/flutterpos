@@ -48,8 +48,13 @@ import 'tokens.dart';
 /// which tab is selected is state, and a component that owned it would be a
 /// behaviour change wearing a visual component's clothes.
 final class AppTabs extends StatefulWidget implements PreferredSizeWidget {
-  const AppTabs({super.key, required this.tabs, this.icons, this.inset = 0})
-    : assert(icons == null || icons.length == tabs.length);
+  const AppTabs({
+    super.key,
+    required this.tabs,
+    this.icons,
+    this.inset = 0,
+    this.alignment = AlignmentDirectional.centerStart,
+  }) : assert(icons == null || icons.length == tabs.length);
 
   /// One label per tab, in order. Sentence case, §8 rule 7 - this widget does
   /// not case them.
@@ -71,6 +76,11 @@ final class AppTabs extends StatefulWidget implements PreferredSizeWidget {
   /// hairline should - and are padded so the first glyph, which sits a tab's
   /// padding into its cell, lands on the inset.
   final double inset;
+
+  /// Where a switch narrower than its row sits. From the start by default; a
+  /// screen whose content column is centred on a wide window centres its
+  /// switch over it. Icon tabs ignore it.
+  final AlignmentGeometry alignment;
 
   /// §9's touch-target row, which Material's own tab height misses by two.
   static double get height => AppDensity.comfortable.minimumTapTarget.height;
@@ -349,7 +359,7 @@ final class _AppTabsState extends State<AppTabs> with TickerProviderStateMixin {
     // the wider label and `space.24` a side, so the halves stay equal and stay
     // a thumb's width apart rather than a column's.
     final hugged = 2 * (widest + 2 * space.s24);
-    final wide = MediaQuery.sizeOf(context).width >= _tokens.layout.mediumFloor;
+    final wide = maxWidth >= _tokens.layout.mediumFloor;
     if (wide && hugged <= available) {
       final line = _wrappedHeight(widget.tabs.first, style, scaler, widest);
       return (
@@ -529,7 +539,7 @@ final class _AppTabsState extends State<AppTabs> with TickerProviderStateMixin {
     );
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: widget.inset),
-      child: Align(alignment: AlignmentDirectional.centerStart, child: track),
+      child: Align(alignment: widget.alignment, child: track),
     );
   }
 

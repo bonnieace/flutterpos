@@ -446,8 +446,8 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
         filters: filters,
         child: const EmptyState(
           key: ValueKey('expenses-denied'),
-          title: 'Expenses are not shown for this role',
-          hint: 'An owner or an administrator can record and review them.',
+          title: 'Expenses unavailable for your role',
+          hint: 'Owners and administrators can manage expenses.',
           illustration: 'access-denied.svg',
         ),
       ),
@@ -614,7 +614,6 @@ final class _ExpensesFrame extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return AppScaffold(
       title: 'Expenses',
-      subtitle: 'What the business spent, beyond the cost of its stock.',
       contentWidth: AppContentWidth.records,
       actions: <Widget>[if (reportAction != null) reportAction!],
       body: ListView(
@@ -756,8 +755,7 @@ final class _ExpensesContents extends StatelessWidget {
             key: const ValueKey('expenses-empty'),
             title: 'Nothing recorded ${rangeLabel.toLowerCase()}',
             hint: canRecord
-                ? 'Record rent, wages, fuel or a repair and it counts against '
-                      'profit from then on.'
+                ? 'Record an expense to include it in profit.'
                 : null,
             illustration: 'empty-wallet.svg',
           ),
@@ -782,6 +780,18 @@ final class _ExpensesContents extends StatelessWidget {
 /// trailing edge - where this app already puts a record's own control wherever
 /// a table is drawn - rather than a button the width of its own label sitting
 /// under the figure it withdraws.
+/// An expense's business date as the record list states it: `11 Oct 2026`.
+///
+/// The reference's `DateFormat.yMMMd`, in this app's order - the same face the
+/// daily chart labels its axis with, so a date means the same thing on both
+/// halves of the screen. A date that does not parse is printed as it stands.
+String expenseDayLabel(String businessDate) {
+  final date = DateTime.tryParse(businessDate);
+  return date == null ? businessDate : _expenseDayFormat.format(date);
+}
+
+final DateFormat _expenseDayFormat = DateFormat('d MMM yyyy');
+
 final class ExpenseRow extends StatelessWidget {
   const ExpenseRow({
     super.key,
@@ -814,14 +824,8 @@ final class ExpenseRow extends StatelessWidget {
   /// holding the slot would only rob the description of 48 it could have used.
   final bool reserveAction;
 
-  /// The reference's `DateFormat.yMMMd`, in this app's order - the same face
-  /// the daily chart labels its axis with, so a date means the same thing on
-  /// both halves of the screen.
-  static final DateFormat _dayFormat = DateFormat('d MMM yyyy');
-
   String get _when {
-    final date = DateTime.tryParse(record.businessDate);
-    final day = date == null ? record.businessDate : _dayFormat.format(date);
+    final day = expenseDayLabel(record.businessDate);
     return showCategory ? '${record.category.label} - $day' : day;
   }
 

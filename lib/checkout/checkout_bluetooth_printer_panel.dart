@@ -41,6 +41,7 @@ import '../ui/sheet.dart';
 import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import 'checkout_bluetooth_printer.dart';
 import 'checkout_print_configuration.dart';
 import 'checkout_print_failures.dart';
@@ -612,181 +613,194 @@ class _BluetoothPrinterTabState extends State<BluetoothPrinterTab> {
       key: const ValueKey('printer-bluetooth'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const Disclosure(
-          key: ValueKey('printer-bluetooth-scope'),
-          summary: 'How Bluetooth printing works',
-          child: Text(
-            'A Bluetooth printer is paired with this device only. Receipts '
-            'rung up here print on it, and the business’s other devices keep '
-            'using the network printer. Each receipt connects, prints and lets '
-            'go, so the printer is free for the next one.',
-          ),
-        ),
-        // `s8` plus the disclosure's focus-ring gutter is the boards' `s12`.
-        SizedBox(height: tokens.spacing.s8),
-        // **Where this device prints, in every state**, so the tab opens on
-        // the question it is opened with. A saved printer this device cannot
-        // read is the one answer that is a fault rather than a place, and it
-        // keeps the callout it has always had.
-        if (_currentUnreadable)
-          Callout(
-            key: const ValueKey('printer-bluetooth-unreadable'),
-            status: AppStatus.problem,
-            message:
-                'The Bluetooth printer saved on this device cannot be read, so '
-                'receipts from this device are not sent anywhere. Connect a '
-                'printer below, or stop using Bluetooth.',
-            action: AppButton(
-              label: 'Stop using Bluetooth',
-              tier: AppButtonTier.secondary,
-              onPressed: busy ? null : _forget,
-            ),
-          )
-        else if (current != null)
-          _CurrentPrinterCard(
-            printer: current,
-            canTest: widget.testPrint != null,
-            testing:
-                _step == _Step.testing &&
-                _testing == current.address &&
-                _selected != current.address,
-            onTest: busy ? null : () => _test(current),
-            onForget: busy ? null : _forget,
-          )
-        else
-          _BusinessPrinterCard(business: widget.business),
-        SizedBox(height: tokens.spacing.s24),
-        SectionHeading(
-          current == null ? 'Find a printer' : 'Use a different printer',
-        ),
-        SizedBox(height: tokens.spacing.s8),
-        Text(
-          'Switch the printer on and keep it close. Printers usually show '
-          'their model name, such as MPT-II or XP-P300.',
-          style: tokens.typography.bodyMedium.copyWith(
-            color: tokens.colors.text.secondary,
-          ),
-        ),
-        if (_readiness == BluetoothReadiness.off) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('printer-bluetooth-off'),
-            status: AppStatus.attention,
-            // Nothing is waiting, a switch is off: the radio's own glyph
-            // rather than `attention`'s clock.
-            icon: Icons.bluetooth_disabled,
-            message: 'Bluetooth is off on this device.',
-            action: AppButton(
-              key: const ValueKey('printer-bluetooth-turn-on'),
-              label: 'Turn on Bluetooth',
-              onPressed: busy ? null : _turnOn,
-            ),
-          ),
-        ],
-        if (_readiness == BluetoothReadiness.permissionDenied) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('printer-bluetooth-denied'),
-            status: AppStatus.problem,
-            message:
-                'UzaPay is not allowed to use Bluetooth, so it cannot find '
-                'printers. Allow Nearby devices in the phone settings, then '
-                'search again.',
-            action: AppButton(
-              key: const ValueKey('printer-bluetooth-settings'),
-              label: 'Open settings',
-              onPressed: _discovery.openPermissionSettings,
-            ),
-          ),
-        ],
-        if (_readiness == BluetoothReadiness.unsupported) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          const Callout(
-            key: ValueKey('printer-bluetooth-no-radio'),
-            status: AppStatus.info,
-            message: 'This device has no Bluetooth.',
-          ),
-        ],
-        SizedBox(height: tokens.spacing.s12),
-        AppActionRow(
-          alignment: MainAxisAlignment.start,
-          actions: <Widget>[
-            if (_searching)
-              AppButton(
-                key: const ValueKey('printer-bluetooth-stop'),
-                label: 'Stop searching',
-                icon: Icons.stop_circle_outlined,
-                onPressed: _stopSearch,
-              )
-            else
-              AppButton(
-                key: const ValueKey('printer-bluetooth-search'),
-                label: _searched ? 'Search again' : 'Search for printers',
-                icon: Icons.bluetooth_searching,
-                // Primary only while it is the one thing to do: with a printer
-                // in use, or one open in its sheet, it is not.
-                tier: current == null && _selected == null
-                    ? AppButtonTier.primary
-                    : AppButtonTier.secondary,
-                loading: _step == _Step.preparing,
-                onPressed: busy ? null : _find,
+        AppWorkspace(
+          leading: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const Disclosure(
+                key: ValueKey('printer-bluetooth-scope'),
+                summary: 'How Bluetooth printing works',
+                child: Text(
+                  'A Bluetooth printer is paired with this device only. Receipts '
+                  'rung up here print on it, and the business’s other devices keep '
+                  'using the network printer. Each receipt connects, prints and lets '
+                  'go, so the printer is free for the next one.',
+                ),
               ),
-            if (_searching)
-              const StatusBadge(
-                key: ValueKey('printer-bluetooth-searching'),
-                status: AppStatus.info,
-                label: 'Searching',
-                icon: Icons.bluetooth_searching,
-              ),
-          ],
-        ),
-        if (_devices.isNotEmpty) ...<Widget>[
-          if (groups.paired.isNotEmpty) ...<Widget>[
-            SizedBox(height: tokens.spacing.s16),
-            _DeviceGroup(
-              key: const ValueKey('printer-bluetooth-paired'),
-              label: 'Paired with this device',
-              count: groups.paired.length,
-              list: list(groups.paired),
-            ),
-          ],
-          if (groups.nearby.isNotEmpty) ...<Widget>[
-            SizedBox(height: tokens.spacing.s16),
-            _DeviceGroup(
-              key: const ValueKey('printer-bluetooth-nearby'),
-              label: 'Nearby',
-              count: groups.nearby.length,
-              list: list(groups.nearby),
-            ),
-          ],
-          if (groups.nameless.isNotEmpty) ...<Widget>[
-            // The disclosure's line sits in its focus-ring gutter, so the
-            // smaller step lands it a gap of `s8` under the list above.
-            SizedBox(
-              height: groups.paired.isEmpty && groups.nearby.isEmpty
-                  ? tokens.spacing.s16
-                  : tokens.spacing.s4,
-            ),
-            Disclosure(
-              key: const ValueKey('printer-bluetooth-nameless'),
-              summary:
-                  '${groups.nameless.length} '
-                  '${groups.nameless.length == 1 ? 'device' : 'devices'} '
-                  'with no name',
-              indentChild: false,
-              child: list(groups.nameless),
-            ),
-          ],
-        ] else if (_searched && !_searching) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          const Callout(
-            key: ValueKey('printer-bluetooth-none-found'),
-            status: AppStatus.info,
-            message:
-                'No Bluetooth devices were found. Check the printer is '
-                'switched on and close by, then search again.',
+              // `s8` plus the disclosure's focus-ring gutter is the boards' `s12`.
+              SizedBox(height: tokens.spacing.s8),
+              // **Where this device prints, in every state**, so the tab opens on
+              // the question it is opened with. A saved printer this device cannot
+              // read is the one answer that is a fault rather than a place, and it
+              // keeps the callout it has always had.
+              if (_currentUnreadable)
+                Callout(
+                  key: const ValueKey('printer-bluetooth-unreadable'),
+                  status: AppStatus.problem,
+                  message:
+                      'The Bluetooth printer saved on this device cannot be read, so '
+                      'receipts from this device are not sent anywhere. Connect a '
+                      'printer below, or stop using Bluetooth.',
+                  action: AppButton(
+                    label: 'Stop using Bluetooth',
+                    tier: AppButtonTier.secondary,
+                    onPressed: busy ? null : _forget,
+                  ),
+                )
+              else if (current != null)
+                _CurrentPrinterCard(
+                  printer: current,
+                  canTest: widget.testPrint != null,
+                  testing:
+                      _step == _Step.testing &&
+                      _testing == current.address &&
+                      _selected != current.address,
+                  onTest: busy ? null : () => _test(current),
+                  onForget: busy ? null : _forget,
+                )
+              else
+                _BusinessPrinterCard(business: widget.business),
+              SizedBox(height: tokens.spacing.s24),
+            ],
           ),
-        ],
+          trailing: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              SectionHeading(
+                current == null ? 'Find a printer' : 'Use a different printer',
+              ),
+              SizedBox(height: tokens.spacing.s8),
+              Text(
+                'Switch the printer on and keep it close. Printers usually show '
+                'their model name, such as MPT-II or XP-P300.',
+                style: tokens.typography.bodyMedium.copyWith(
+                  color: tokens.colors.text.secondary,
+                ),
+              ),
+              if (_readiness == BluetoothReadiness.off) ...<Widget>[
+                SizedBox(height: tokens.spacing.s12),
+                Callout(
+                  key: const ValueKey('printer-bluetooth-off'),
+                  status: AppStatus.attention,
+                  // Nothing is waiting, a switch is off: the radio's own glyph
+                  // rather than `attention`'s clock.
+                  icon: Icons.bluetooth_disabled,
+                  message: 'Bluetooth is off on this device.',
+                  action: AppButton(
+                    key: const ValueKey('printer-bluetooth-turn-on'),
+                    label: 'Turn on Bluetooth',
+                    onPressed: busy ? null : _turnOn,
+                  ),
+                ),
+              ],
+              if (_readiness ==
+                  BluetoothReadiness.permissionDenied) ...<Widget>[
+                SizedBox(height: tokens.spacing.s12),
+                Callout(
+                  key: const ValueKey('printer-bluetooth-denied'),
+                  status: AppStatus.problem,
+                  message:
+                      'UzaPay is not allowed to use Bluetooth, so it cannot find '
+                      'printers. Allow Nearby devices in the phone settings, then '
+                      'search again.',
+                  action: AppButton(
+                    key: const ValueKey('printer-bluetooth-settings'),
+                    label: 'Open settings',
+                    onPressed: _discovery.openPermissionSettings,
+                  ),
+                ),
+              ],
+              if (_readiness == BluetoothReadiness.unsupported) ...<Widget>[
+                SizedBox(height: tokens.spacing.s12),
+                const Callout(
+                  key: ValueKey('printer-bluetooth-no-radio'),
+                  status: AppStatus.info,
+                  message: 'This device has no Bluetooth.',
+                ),
+              ],
+              SizedBox(height: tokens.spacing.s12),
+              AppActionRow(
+                alignment: MainAxisAlignment.start,
+                actions: <Widget>[
+                  if (_searching)
+                    AppButton(
+                      key: const ValueKey('printer-bluetooth-stop'),
+                      label: 'Stop searching',
+                      icon: Icons.stop_circle_outlined,
+                      onPressed: _stopSearch,
+                    )
+                  else
+                    AppButton(
+                      key: const ValueKey('printer-bluetooth-search'),
+                      label: _searched ? 'Search again' : 'Search for printers',
+                      icon: Icons.bluetooth_searching,
+                      // Primary only while it is the one thing to do: with a printer
+                      // in use, or one open in its sheet, it is not.
+                      tier: current == null && _selected == null
+                          ? AppButtonTier.primary
+                          : AppButtonTier.secondary,
+                      loading: _step == _Step.preparing,
+                      onPressed: busy ? null : _find,
+                    ),
+                  if (_searching)
+                    const StatusBadge(
+                      key: ValueKey('printer-bluetooth-searching'),
+                      status: AppStatus.info,
+                      label: 'Searching',
+                      icon: Icons.bluetooth_searching,
+                    ),
+                ],
+              ),
+              if (_devices.isNotEmpty) ...<Widget>[
+                if (groups.paired.isNotEmpty) ...<Widget>[
+                  SizedBox(height: tokens.spacing.s16),
+                  _DeviceGroup(
+                    key: const ValueKey('printer-bluetooth-paired'),
+                    label: 'Paired with this device',
+                    count: groups.paired.length,
+                    list: list(groups.paired),
+                  ),
+                ],
+                if (groups.nearby.isNotEmpty) ...<Widget>[
+                  SizedBox(height: tokens.spacing.s16),
+                  _DeviceGroup(
+                    key: const ValueKey('printer-bluetooth-nearby'),
+                    label: 'Nearby',
+                    count: groups.nearby.length,
+                    list: list(groups.nearby),
+                  ),
+                ],
+                if (groups.nameless.isNotEmpty) ...<Widget>[
+                  // The disclosure's line sits in its focus-ring gutter, so the
+                  // smaller step lands it a gap of `s8` under the list above.
+                  SizedBox(
+                    height: groups.paired.isEmpty && groups.nearby.isEmpty
+                        ? tokens.spacing.s16
+                        : tokens.spacing.s4,
+                  ),
+                  Disclosure(
+                    key: const ValueKey('printer-bluetooth-nameless'),
+                    summary:
+                        '${groups.nameless.length} '
+                        '${groups.nameless.length == 1 ? 'device' : 'devices'} '
+                        'with no name',
+                    indentChild: false,
+                    child: list(groups.nameless),
+                  ),
+                ],
+              ] else if (_searched && !_searching) ...<Widget>[
+                SizedBox(height: tokens.spacing.s12),
+                const Callout(
+                  key: ValueKey('printer-bluetooth-none-found'),
+                  illustration: 'printer-connection.svg',
+                  status: AppStatus.info,
+                  message:
+                      'No devices found. Turn on the nearby printer and search again.',
+                ),
+              ],
+            ],
+          ),
+        ),
       ],
     );
   }

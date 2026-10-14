@@ -9,6 +9,7 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
 import '../ui/card.dart';
+import '../ui/record_sheet.dart';
 import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
 import '../ui/states.dart';
@@ -173,11 +174,9 @@ final class _TenantSupplierRecordScreenState
             title: 'Supplier',
             child: EmptyState(
               key: ValueKey('supplier-record-missing'),
-              title: 'This supplier is not in this business',
-              hint:
-                  'It may have been added on a device that has not synced '
-                  'yet.',
-              illustration: 'file-search.svg',
+              title: 'Supplier not found',
+              hint: 'This supplier may still be syncing.',
+              illustration: 'supplier-search.svg',
             ),
           );
         }
@@ -223,8 +222,7 @@ final class _RecordFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: title,
-    subtitle: 'Supplier',
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     body: child,
   );
 }
@@ -265,7 +263,10 @@ final class _RecordContents extends StatelessWidget {
     ];
     return ListView(
       key: const ValueKey('supplier-record'),
-      padding: EdgeInsets.all(inset),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(inset),
+      ),
       children: <Widget>[
         if (!supplier.active) ...<Widget>[
           const Callout(

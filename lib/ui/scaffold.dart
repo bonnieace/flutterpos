@@ -66,7 +66,9 @@ import 'package:flutter/material.dart';
 import 'buttons.dart';
 import 'home_navigation.dart';
 import 'press.dart';
+import 'routes.dart';
 import 'tokens.dart';
+import 'top_bar.dart';
 
 /// A screen's title, its optional subtitle, and its optional primary action.
 ///
@@ -506,52 +508,7 @@ final class AppScaffold extends StatelessWidget {
       drawer: hasDrawer
           ? _NavigationDrawer(destinations: navigation, tokens: tokens)
           : null,
-      appBar:
-          topBar ??
-          AppBar(
-            automaticallyImplyLeading: automaticallyImplyLeading,
-            // **Taller when there is a subtitle**, which is the export's own
-            // header: a title and a small second line naming what the page is
-            // scoped to. Six routes carry one - which reconciliation run, which
-            // shift, which receipt - and it is the kind of fact a person needs
-            // before they read a single row.
-            toolbarHeight: subtitle == null ? null : toolbarHeightWithSubtitle,
-            // **No middle spacing where a leading control supplies the gap, and
-            // the ordinary inset where none does.** `NavigationToolbar` reserves
-            // 16 on each side of the title by default; between a hamburger, a
-            // reload glyph and a way out there are 144 pixels of control on a
-            // pushed route already, and the 32 was the difference between
-            // `Dev Corner Shop` and `Dev Corner S…` on a real handset.
-            //
-            // **The sentence that justified it was "the leading control's own 48
-            // square is the gap", and on the home there is no leading control.**
-            // It has no drawer and nothing to pop, so the business's name was
-            // printed hard against the edge of the screen. Reported on a device on
-            // 2026-09-03.
-            titleSpacing: _hasLeading(context, hasDrawer)
-                ? 0
-                : tokens.spacing.s16,
-            // `section-title`, which is the role the export's own header uses and
-            // the largest §2.2 has that fits a toolbar. Never wrapped: a title on
-            // two lines in a 56-high bar pushes the page down for a word, so a
-            // long one ellipsises.
-            title: _Title(
-              title: title,
-              subtitle: subtitle,
-              onPressed: onTitlePressed,
-              actionLabel: titleActionLabel,
-            ),
-            // **The one action a page exists for goes at the trailing edge.** It
-            // sat beside the title in the header block; the block is gone, and the
-            // trailing edge of the bar is where the export puts a page's own
-            // control.
-            actions: actions.isEmpty && primaryAction == null
-                ? null
-                : <Widget>[
-                    ...actions,
-                    if (primaryAction case final action?) action,
-                  ],
-          ),
+      appBar: topBar ?? _toolbar(context, tokens, screenWidth, hasDrawer),
       body: drawn == null
           ? content
           : Row(
@@ -570,6 +527,136 @@ final class AppScaffold extends StatelessWidget {
             ),
     );
   }
+
+  /// The toolbar, on the surface every top bar stands on (`TopBarSurface`).
+  ///
+  /// **One height from 768 up, subtitle or not**, since 2026-10-13
+  /// (`docs/design/topbar/`): the subtitle moves onto the title's line there,
+  /// so the bar is `topBarHeight` rather than growing a row. Below 768 it is
+  /// Material's 56, or two lines in [toolbarHeightWithSubtitle].
+  ///
+  /// **From 768 up the leading glyph sits on the page's own inset** - the 20
+  /// every body pads itself with - so the back arrow and the first row of the
+  /// page share a left edge, and the last action's glyph ends on the same
+  /// inset at the other side. The toolbar is still the full window wide.
+  PreferredSizeWidget _toolbar(
+    BuildContext context,
+    AppTokens tokens,
+    double screenWidth,
+    bool hasDrawer,
+  ) {
+    final wide = screenWidth >= tokens.layout.mediumFloor;
+    final inset = horizontalInset(tokens.spacing);
+    final hasLeading = _hasLeading(context, hasDrawer);
+    final height = wide
+        ? tokens.layout.topBarHeight
+        : subtitle == null
+        ? tokens.layout.topBarHeightCompact
+        : toolbarHeightWithSubtitle;
+    // **The module this screen is in, from 768 up** (`docs/design/topbar-
+    // inner/`): the home card's glyph in its well, before the title. A route
+    // no module opened draws none. On a phone the title keeps the width.
+    final route = ModalRoute.of(context);
+    final module = wide && route is AppPageRoute ? route.module : null;
+    // **Offline, and only offline.** The home names the terminal and says
+    // when it is online; an inner screen speaks up only when something is
+    // wrong. No scope above - a widget test - is no reading, and draws none.
+    final offline = DeviceOnlineScope.of(context) == false;
+    final trailing = <Widget>[
+      if (offline)
+        Padding(
+          // Before the page's own actions, so they don't move when it
+          // appears; alone, it ends on the page's inset.
+          padding: EdgeInsetsDirectional.only(
+            end: actions.isEmpty && primaryAction == null
+                ? (wide ? tokens.spacing.s12 : tokens.spacing.s16)
+                : (wide ? tokens.spacing.s12 : tokens.spacing.s4),
+          ),
+          child: TopBarOfflineBadge(
+            explained: screenWidth >= tokens.layout.expandedFloor,
+          ),
+        ),
+      ...actions,
+      if (primaryAction case final action?) action,
+    ];
+    return PreferredSize(
+      preferredSize: Size.fromHeight(height),
+      child: TopBarSurface(
+        builder: (context, background) => AppBar(
+          backgroundColor: background,
+          automaticallyImplyLeading: automaticallyImplyLeading,
+          // **Taller when there is a subtitle and no room beside the title**,
+          // which is the export's own header: a title and a small second line
+          // naming what the page is scoped to. Six routes carry one - which
+          // reconciliation run, which shift, which receipt - and it is the
+          // kind of fact a person needs before they read a single row.
+          toolbarHeight: wide
+              ? height
+              : subtitle == null
+              ? null
+              : toolbarHeightWithSubtitle,
+          // The leading control's 48 centred in a slot twice the inset wider
+          // than its glyph puts the glyph on the inset.
+          leadingWidth: wide && hasLeading
+              ? inset * 2 + tokens.icons.card
+              : null,
+          // **No middle spacing where a leading control supplies the gap, and
+          // the ordinary inset where none does.** `NavigationToolbar` reserves
+          // 16 on each side of the title by default; between a hamburger, a
+          // reload glyph and a way out there are 144 pixels of control on a
+          // pushed route already, and the 32 was the difference between
+          // `Dev Corner Shop` and `Dev Corner S…` on a real handset.
+          //
+          // **The sentence that justified it was "the leading control's own 48
+          // square is the gap", and on the home there is no leading control.**
+          // It has no drawer and nothing to pop, so the business's name was
+          // printed hard against the edge of the screen. Reported on a device
+          // on 2026-09-03.
+          titleSpacing: hasLeading
+              ? 0
+              : wide
+              ? inset
+              : tokens.spacing.s16,
+          // A 48 control draws its glyph 12 in from its edge.
+          actionsPadding: wide
+              ? EdgeInsetsDirectional.only(end: inset - tokens.spacing.s12)
+              : null,
+          // `section-title`, which is the role the export's own header uses
+          // and the largest §2.2 has that fits a toolbar. Never wrapped: a
+          // title on two lines in a 56-high bar pushes the page down for a
+          // word, so a long one ellipsises.
+          title: module == null
+              ? _Title(
+                  title: title,
+                  subtitle: subtitle,
+                  inline: wide,
+                  onPressed: onTitlePressed,
+                  actionLabel: titleActionLabel,
+                )
+              : Row(
+                  children: <Widget>[
+                    TopBarModuleWell(module: module),
+                    SizedBox(width: tokens.spacing.s12),
+                    Flexible(
+                      child: _Title(
+                        title: title,
+                        subtitle: subtitle,
+                        inline: wide,
+                        onPressed: onTitlePressed,
+                        actionLabel: titleActionLabel,
+                      ),
+                    ),
+                  ],
+                ),
+          // **The one action a page exists for goes at the trailing edge.**
+          // It sat beside the title in the header block; the block is gone,
+          // and the trailing edge of the bar is where the export puts a page's
+          // own control. The device's state comes first.
+          actions: trailing.isEmpty ? null : trailing,
+        ),
+      ),
+    );
+  }
 }
 
 /// The screen's name, and where it is also the way to a different one.
@@ -582,12 +669,17 @@ final class _Title extends StatelessWidget {
   const _Title({
     required this.title,
     required this.subtitle,
+    required this.inline,
     required this.onPressed,
     required this.actionLabel,
   });
 
   final String title;
   final String? subtitle;
+
+  /// The subtitle on the title's line, in tertiary, from 768 up: the bar
+  /// keeps one height, and the title stays the thing that is read first.
+  final bool inline;
   final VoidCallback? onPressed;
   final String? actionLabel;
 
@@ -598,29 +690,53 @@ final class _Title extends StatelessWidget {
     // largest §2.2 has that fits a toolbar. Never wrapped: a title on two
     // lines in a 56-high bar pushes the page down for a word, so a long one
     // ellipsises.
-    final lines = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: tokens.typography.titleLarge.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
-        if (subtitle case final line?)
-          Text(
-            line,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: tokens.typography.bodyMedium.copyWith(
-              color: tokens.colors.text.secondary,
-            ),
-          ),
-      ],
+    final name = Text(
+      title,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: tokens.typography.titleLarge.copyWith(
+        color: tokens.colors.text.primary,
+      ),
     );
+    final line = subtitle;
+    final Widget lines = line == null
+        ? name
+        : inline
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: <Widget>[
+              // The title gives way last: the subtitle ellipsises first.
+              Flexible(flex: 0, child: name),
+              SizedBox(width: tokens.spacing.s12),
+              Flexible(
+                child: Text(
+                  line,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: tokens.typography.bodyMedium.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                ),
+              ),
+            ],
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              name,
+              Text(
+                line,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: tokens.typography.bodyMedium.copyWith(
+                  color: tokens.colors.text.secondary,
+                ),
+              ),
+            ],
+          );
     final press = onPressed;
     if (press == null) return Semantics(header: true, child: lines);
     return Semantics(

@@ -724,7 +724,6 @@ final class _StaffFrame extends StatelessWidget {
     // `User Management` line it replaced, and so a readability regression
     // rather than the clarification it was meant to be. Same three nouns, one
     // line that fits.
-    subtitle: 'Manage your team, their roles and access.',
     contentWidth: AppContentWidth.records,
     actions: <Widget>[if (reportAction != null) reportAction!],
     body: child,
@@ -1464,8 +1463,8 @@ final class _StaffManagementContents extends StatelessWidget {
             title: _hasQuery ? 'No matching staff' : 'No staff yet',
             hint: _hasQuery
                 ? 'Try a different role or status.'
-                : 'Invite somebody to give them access to this business.',
-            illustration: _hasQuery ? 'file-search.svg' : 'team.svg',
+                : 'Invite staff to give them access.',
+            illustration: _hasQuery ? 'people-search.svg' : 'team.svg',
           ),
           actionsFor: actionsFor,
           invitationStateFor: invitationStateFor,

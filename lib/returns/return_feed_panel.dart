@@ -19,6 +19,8 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import '../ui/record_list.dart' show RecordAction;
+import '../ui/record_sheet.dart';
 import '../ui/buttons.dart';
 import '../ui/card.dart';
 import '../ui/dialogs.dart';
@@ -64,8 +66,7 @@ final class TenantReturnFeedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Returns',
-    subtitle: 'All returns recorded by this business',
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     actions: <Widget>[
       TenantSessionReportAction(
         clock: clock ?? DateTime.now,
@@ -553,9 +554,13 @@ final class _ReturnFeedContents extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final page = view.page;
+    final table = RecordSheet.drawnAt(MediaQuery.sizeOf(context).width);
     return PagedListView(
       listKey: const ValueKey('return-feed'),
-      padding: EdgeInsets.all(tokens.spacing.s20),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(tokens.spacing.s20),
+      ),
       pagination: Pagination(
         pageNumber: pageIndex + 1,
         previousKey: const ValueKey('return-feed-previous'),
@@ -569,85 +574,89 @@ final class _ReturnFeedContents extends StatelessWidget {
         // Sales Report's date and staff pair they are drawn before anything is
         // read and stay put through a reload, because what a person is looking
         // *at* must not wait on the answer.
-        _Filters(
-          recordedOn: recordedOn,
-          today: today,
-          standing: standing,
-          onRecordedOnChanged: onRecordedOnChanged,
-          onStandingChanged: onStandingChanged,
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        // **The pending and verified tiles are gone too, 2026-09-22.** The
-        // paragraph and the counts sentence went on 2026-09-04 and left a pair
-        // of figures behind; those are now gone at the developer's direction.
-        // Neither was a total for the business - both counted the page in hand
-        // - and every card below already wears its own standing, so the pair
-        // restated in two tiles what the list says row by row.
-        // **Day headings and cards, not a record table, since 2026-08-26.**
-        // The old till grouped its returns under *Today*, *Yesterday* and then
-        // a date, and drew each one as a card with a tinted glyph for its
-        // standing. A `RecordList` states the same facts in the same order and
-        // reads as a ledger: nothing on the row is louder than anything else,
-        // so a person scanning for the odd return has to read every one.
-        if (page.items.isEmpty)
-          // **A filter that matched nothing is not a business with no
-          // returns**, and telling a manager "no returns yet" about a shop
-          // that has taken hundreds would be the screen lying about its own
-          // controls.
-          // **One empty state, because there is only one thing it can mean.**
-          // A day is always applied now, so an empty page is never "this
-          // business has never taken a return" - it is "none on this day", and
-          // saying the first about a shop that has taken hundreds would be the
-          // screen lying about its own controls. The `return-feed-empty` key
-          // went with the reading it named.
-          EmptyState(
-            key: const ValueKey('return-feed-no-matches'),
-            title: 'No returns on $recordedOn',
-            hint: standing == null
-                ? 'Pick another day to look at.'
-                : 'Try another day, or every standing.',
-            illustration: 'file-search.svg',
-          )
-        else
-          for (final day in _byDay(page.items)) ...<Widget>[
-            // **An eyebrow and a rule, not a bright green heading.** The day
-            // was set in the action colour at `title.md` bold, which made the
-            // dates the loudest thing on a page whose subject is the returns
-            // under them.
-            Padding(
-              padding: EdgeInsets.only(bottom: tokens.spacing.s12),
-              child: Row(
-                children: <Widget>[
-                  Text(
-                    day.label,
-                    key: ValueKey('return-feed-day-${day.key}'),
-                    style: tokens.typography.labelEyebrow.copyWith(
-                      color: tokens.colors.text.tertiary,
+        if (table)
+          _sheet(context, tokens)
+        else ...<Widget>[
+          _Filters(
+            recordedOn: recordedOn,
+            today: today,
+            standing: standing,
+            onRecordedOnChanged: onRecordedOnChanged,
+            onStandingChanged: onStandingChanged,
+          ),
+          SizedBox(height: tokens.spacing.s16),
+          // **The pending and verified tiles are gone too, 2026-09-22.** The
+          // paragraph and the counts sentence went on 2026-09-04 and left a pair
+          // of figures behind; those are now gone at the developer's direction.
+          // Neither was a total for the business - both counted the page in hand
+          // - and every card below already wears its own standing, so the pair
+          // restated in two tiles what the list says row by row.
+          // **Day headings and cards, not a record table, since 2026-08-26.**
+          // The old till grouped its returns under *Today*, *Yesterday* and then
+          // a date, and drew each one as a card with a tinted glyph for its
+          // standing. A `RecordList` states the same facts in the same order and
+          // reads as a ledger: nothing on the row is louder than anything else,
+          // so a person scanning for the odd return has to read every one.
+          if (page.items.isEmpty)
+            // **A filter that matched nothing is not a business with no
+            // returns**, and telling a manager "no returns yet" about a shop
+            // that has taken hundreds would be the screen lying about its own
+            // controls.
+            // **One empty state, because there is only one thing it can mean.**
+            // A day is always applied now, so an empty page is never "this
+            // business has never taken a return" - it is "none on this day", and
+            // saying the first about a shop that has taken hundreds would be the
+            // screen lying about its own controls. The `return-feed-empty` key
+            // went with the reading it named.
+            EmptyState(
+              key: const ValueKey('return-feed-no-matches'),
+              title: 'No returns on $recordedOn',
+              hint: standing == null
+                  ? 'Try another day.'
+                  : 'Try another day or clear the status filter.',
+              illustration: 'returns.svg',
+            )
+          else
+            for (final day in _byDay(page.items)) ...<Widget>[
+              // **An eyebrow and a rule, not a bright green heading.** The day
+              // was set in the action colour at `title.md` bold, which made the
+              // dates the loudest thing on a page whose subject is the returns
+              // under them.
+              Padding(
+                padding: EdgeInsets.only(bottom: tokens.spacing.s12),
+                child: Row(
+                  children: <Widget>[
+                    Text(
+                      day.label,
+                      key: ValueKey('return-feed-day-${day.key}'),
+                      style: tokens.typography.labelEyebrow.copyWith(
+                        color: tokens.colors.text.tertiary,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: tokens.spacing.s12),
-                  Expanded(
-                    child: Divider(
-                      height: 0,
-                      color: tokens.colors.surface.cardEdge,
+                    SizedBox(width: tokens.spacing.s12),
+                    Expanded(
+                      child: Divider(
+                        height: 0,
+                        color: tokens.colors.surface.cardEdge,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            for (final record in day.records) ...<Widget>[
-              _ReturnCard(
-                record: record,
-                facts: view.facts[record.id],
-                who: _label(record.createdBy),
-                onOpen: () => _openJournal(context, record),
-                onVerify: !record.isVerified && canVerify && !busy
-                    ? () => _confirmVerification(context, record)
-                    : null,
-              ),
-              SizedBox(height: tokens.spacing.s12),
+              for (final record in day.records) ...<Widget>[
+                _ReturnCard(
+                  record: record,
+                  facts: view.facts[record.id],
+                  who: _label(record.createdBy),
+                  onOpen: () => _openJournal(context, record),
+                  onVerify: !record.isVerified && canVerify && !busy
+                      ? () => _confirmVerification(context, record)
+                      : null,
+                ),
+                SizedBox(height: tokens.spacing.s12),
+              ],
             ],
-          ],
+        ],
         // **A footnote rather than a `Callout`.** Whose job it is to verify a
         // return is policy, not a notice: it does not change, nothing is wrong
         // when it applies, and the control it explains is simply not drawn. It
@@ -717,6 +726,164 @@ final class _ReturnFeedContents extends StatelessWidget {
 
   String _label(String uid) =>
       tenantStaffLabel(uid, names: view.names, selfUid: selfUid);
+
+  /// The large-screen list: one table, its two filters on its top edge.
+  ///
+  /// **The same page, read and narrowed the same way, drawn as rows** -
+  /// `docs/design/tables/`, at the developer's direction on 2026-10-13. No day
+  /// headings: the day filter names the day a page holds. A row opens the
+  /// return, which is what the card's eye button did, and *Verify* is the
+  /// row's menu under the same three conditions and the same confirmation.
+  /// Below 1024 the cards are unchanged.
+  Widget _sheet(BuildContext context, AppTokens tokens) {
+    final page = view.page;
+    final currency = <String?>[
+      for (final record in page.items) view.facts[record.id]?.currency,
+    ].whereType<String>().firstOrNull;
+    final cents = page.items.any(
+      (record) => (view.facts[record.id]?.returnedMinor ?? 0) % 100 != 0,
+    );
+    return RecordSheet(
+      key: const ValueKey('return-feed-sheet'),
+      columns: <SheetColumn>[
+        const SheetColumn(label: 'Returned', kind: SheetColumnKind.time),
+        const SheetColumn(label: 'Items', kind: SheetColumnKind.identity),
+        const SheetColumn(label: 'Receipt', kind: SheetColumnKind.code),
+        const SheetColumn(label: 'Units', kind: SheetColumnKind.figure),
+        SheetColumn(
+          label: 'Amount',
+          kind: SheetColumnKind.figure,
+          unit: currency,
+        ),
+        const SheetColumn(label: 'Reason', kind: SheetColumnKind.text),
+        const SheetColumn(label: 'Recorded by', kind: SheetColumnKind.text),
+        const SheetColumn(label: 'Standing', kind: SheetColumnKind.status),
+      ],
+      bar: _Filters(
+        recordedOn: recordedOn,
+        today: today,
+        standing: standing,
+        onRecordedOnChanged: onRecordedOnChanged,
+        onStandingChanged: onStandingChanged,
+        inBar: true,
+      ),
+      // **A filter that matched nothing is not a business with no returns**,
+      // for the reason the cards' empty state gives.
+      body: page.items.isEmpty
+          ? EmptyState(
+              key: const ValueKey('return-feed-no-matches'),
+              title: 'No returns on $recordedOn',
+              hint: standing == null
+                  ? 'Try another day.'
+                  : 'Try another day or clear the status filter.',
+              illustration: 'returns.svg',
+            )
+          : null,
+      rows: <SheetRow>[
+        for (final record in page.items) _row(context, record, cents: cents),
+      ],
+    );
+  }
+
+  SheetRow _row(
+    BuildContext context,
+    TenantReturn record, {
+    required bool cents,
+  }) {
+    final id = record.id;
+    final sale = view.facts[id];
+    final items = record.lines
+        .map(
+          (line) =>
+              _lineLabel(line, sale?.productNames ?? const <String, String>{}),
+        )
+        .join(', ');
+    final who = tenantStaffLabelParts(
+      record.createdBy,
+      names: view.names,
+      selfUid: selfUid,
+    );
+    final soldAt = sale?.soldAt;
+    final recordedAt = record.recordedAt;
+    final minor = sale?.returnedMinor;
+    final pending = !record.isVerified;
+    final reserve = cents && (minor == null || minor % 100 == 0) ? '.00' : null;
+    return SheetRow(
+      id: id,
+      key: ValueKey('return-feed-entry-$id'),
+      // The card's *View this return*, which a row is now in full.
+      pressKey: ValueKey('return-feed-open-$id'),
+      onPressed: () => _openJournal(context, record),
+      semanticLabel: items,
+      semanticHint: 'Opens this return.',
+      cells: <SheetCell?>[
+        SheetText(
+          recordedAt == null ? '—' : _clock(recordedAt),
+          key: ValueKey('return-feed-recorded-$id'),
+        ),
+        SheetText(
+          items,
+          key: ValueKey('return-feed-subject-$id'),
+          // When it was bought, beside when it came back: the card's
+          // *Sold -> Returned* line, read across the row.
+          caption: soldAt == null ? 'sold —' : 'sold ${_clock(soldAt)}',
+        ),
+        // **The receipt, never cut.** The card's reported defect was a receipt
+        // squeezed to `#0` beside the figures; in its own column it is measured
+        // to fit like any figure.
+        SheetText(
+          sale?.receipt ?? record.saleId,
+          key: ValueKey('return-feed-sale-$id'),
+        ),
+        SheetFigure(
+          '${record.returnedUnits}',
+          key: ValueKey('return-feed-units-$id'),
+          // **The half of a pending return nobody can see from its money.** The
+          // takings net it the moment it is filed and the shelf only gets the
+          // goods back once a manager verifies them - said here, at the units,
+          // which is where a reader would assume otherwise.
+          caption: pending ? 'not back in stock yet' : null,
+          captionKey: ValueKey('return-feed-stock-note-$id'),
+        ),
+        if (minor != null)
+          SheetFigure(
+            moneyTextGroupedOfMinor(minor),
+            reserve: reserve,
+            key: ValueKey('return-feed-value-$id'),
+          )
+        else
+          // Absent rather than wrong: a return that cannot be priced against
+          // its sale has no honest amount.
+          SheetFigure.unknown(reserve: reserve),
+        SheetText(record.reason, key: ValueKey('return-feed-reason-$id')),
+        SheetText(
+          who.name,
+          caption: who.under,
+          key: ValueKey('return-feed-actor-$id'),
+        ),
+        SheetStatus(
+          key: ValueKey('return-feed-status-$id'),
+          status: pending ? AppStatus.attention : AppStatus.ok,
+          label: pending ? 'Pending' : 'Verified',
+          icon: pending ? Icons.schedule : null,
+          // Verified is settled; a pending return is what a manager opens
+          // this list to clear.
+          quiet: !pending,
+        ),
+      ],
+      actions: <RecordAction>[
+        if (pending && canVerify && !busy)
+          RecordAction(
+            label: 'Verify and restore stock',
+            icon: Icons.verified_outlined,
+            onPressed: () => _confirmVerification(context, record),
+            actionKey: ValueKey('return-feed-verify-$id'),
+          ),
+      ],
+      actionsKey: ValueKey('return-feed-menu-$id'),
+      actionsTooltip: 'More for this return',
+    );
+  }
 }
 
 AppNotice _verificationFailureNotice(TenantReturnVerificationFailure failure) =>
@@ -783,6 +950,7 @@ final class _Filters extends StatelessWidget {
     required this.standing,
     required this.onRecordedOnChanged,
     required this.onStandingChanged,
+    this.inBar = false,
   });
 
   final String recordedOn;
@@ -790,6 +958,10 @@ final class _Filters extends StatelessWidget {
   final TenantReturnStatus? standing;
   final ValueChanged<String> onRecordedOnChanged;
   final ValueChanged<TenantReturnStatus?> onStandingChanged;
+
+  /// Whether these sit on a table's top edge, at their own widths, rather than
+  /// sharing the page's width between them.
+  final bool inBar;
 
   /// The standing filter's value for "every standing".
   static const String _allStandings = '';
@@ -820,79 +992,91 @@ final class _Filters extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final day = _day(context);
+    final kind = _standing();
+    if (inBar) {
+      return Row(
+        children: <Widget>[
+          day,
+          SizedBox(width: tokens.spacing.s12),
+          SizedBox(width: tokens.layout.tableFilter, child: kind),
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Expanded(
-          // **A date picker since 2026-09-21, where this was a list of three.**
-          // *Today*, *Yesterday* and *All dates* were the only days a person
-          // could reach from this screen, so a return taken the Friday before
-          // last could be found only by reading back through every page. The
-          // read boundary always accepted any business date - `loadReturns`
-          // takes one exact value and validates it - so the three options were
-          // the control's limit and never the query's.
-          //
-          // **The caption above it went with them.** A button showing a date
-          // behind a calendar glyph does not need the word *Recorded* over it,
-          // which is the same redundancy the other filters on this screen shed
-          // on the same day. It keeps the word as its announcement, because
-          // `AppButton` has no `semanticLabel` and a button reading only
-          // `2026-09-21` says nothing about what pressing it does.
-          child: Semantics(
-            key: const ValueKey('return-feed-day-filter'),
-            label: 'Returns recorded on $recordedOn. Change the day.',
-            button: true,
-            excludeSemantics: true,
-            child: AppButton(
-              key: const ValueKey('return-feed-day-picker'),
-              label: recordedOn,
-              icon: Icons.calendar_today_outlined,
-              tier: AppButtonTier.secondary,
-              expand: true,
-              onPressed: () => _pickDay(context),
-            ),
-          ),
-        ),
+        Expanded(child: day),
         SizedBox(width: tokens.spacing.s12),
-        Expanded(
-          child: AppSelect<String>(
-            key: const ValueKey('return-feed-standing-filter'),
-            value: standing?.wireValue ?? _allStandings,
-            label: 'Standing',
-            // The day control is a button now rather than a second well with a
-            // glyph in it, so this one can afford the glyph that lets its own
-            // caption go - the pair that `AppSelect.dense` asks for.
-            dense: true,
-            leading: Icons.filter_alt_outlined,
-            items: <AppSelectItem<String>>[
-              const AppSelectItem<String>(
-                key: ValueKey('return-feed-standing-all'),
-                value: _allStandings,
-                label: 'All types',
-              ),
-              AppSelectItem<String>(
-                key: const ValueKey('return-feed-standing-pending'),
-                value: TenantReturnStatus.pending.wireValue,
-                label: 'Pending',
-              ),
-              AppSelectItem<String>(
-                key: const ValueKey('return-feed-standing-verified'),
-                value: TenantReturnStatus.verified.wireValue,
-                label: 'Verified',
-              ),
-            ],
-            onChanged: (value) => onStandingChanged(
-              value == null || value == _allStandings
-                  ? null
-                  : TenantReturnStatus.values.firstWhere(
-                      (status) => status.wireValue == value,
-                    ),
-            ),
-          ),
-        ),
+        Expanded(child: kind),
       ],
     );
   }
+
+  Widget _day(BuildContext context) =>
+      // **A date picker since 2026-09-21, where this was a list of three.**
+      // *Today*, *Yesterday* and *All dates* were the only days a person
+      // could reach from this screen, so a return taken the Friday before
+      // last could be found only by reading back through every page. The
+      // read boundary always accepted any business date - `loadReturns`
+      // takes one exact value and validates it - so the three options were
+      // the control's limit and never the query's.
+      //
+      // **The caption above it went with them.** A button showing a date
+      // behind a calendar glyph does not need the word *Recorded* over it,
+      // which is the same redundancy the other filters on this screen shed
+      // on the same day. It keeps the word as its announcement, because
+      // `AppButton` has no `semanticLabel` and a button reading only
+      // `2026-09-21` says nothing about what pressing it does.
+      Semantics(
+        key: const ValueKey('return-feed-day-filter'),
+        label: 'Returns recorded on $recordedOn. Change the day.',
+        button: true,
+        excludeSemantics: true,
+        child: AppButton(
+          key: const ValueKey('return-feed-day-picker'),
+          label: recordedOn,
+          icon: Icons.calendar_today_outlined,
+          tier: AppButtonTier.secondary,
+          expand: !inBar,
+          onPressed: () => _pickDay(context),
+        ),
+      );
+
+  Widget _standing() => AppSelect<String>(
+    key: const ValueKey('return-feed-standing-filter'),
+    value: standing?.wireValue ?? _allStandings,
+    label: 'Standing',
+    // The day control is a button now rather than a second well with a
+    // glyph in it, so this one can afford the glyph that lets its own
+    // caption go - the pair that `AppSelect.dense` asks for.
+    dense: true,
+    leading: Icons.filter_alt_outlined,
+    items: <AppSelectItem<String>>[
+      const AppSelectItem<String>(
+        key: ValueKey('return-feed-standing-all'),
+        value: _allStandings,
+        label: 'All types',
+      ),
+      AppSelectItem<String>(
+        key: const ValueKey('return-feed-standing-pending'),
+        value: TenantReturnStatus.pending.wireValue,
+        label: 'Pending',
+      ),
+      AppSelectItem<String>(
+        key: const ValueKey('return-feed-standing-verified'),
+        value: TenantReturnStatus.verified.wireValue,
+        label: 'Verified',
+      ),
+    ],
+    onChanged: (value) => onStandingChanged(
+      value == null || value == _allStandings
+          ? null
+          : TenantReturnStatus.values.firstWhere(
+              (status) => status.wireValue == value,
+            ),
+    ),
+  );
 }
 
 /// One return, as the old till drew one and then some.

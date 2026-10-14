@@ -139,6 +139,11 @@ void main() {
       );
       expect(find.text('Invited role: Cashier'), findsOneWidget);
 
+      // The form opens under the invitation's card, below the fold at 800x600.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('accept-visible-invitation-confirm')),
+      );
+      await tester.pump();
       await tester.tap(
         find.byKey(const ValueKey('accept-visible-invitation-confirm')),
       );
@@ -166,7 +171,8 @@ void main() {
       );
 
       expect(find.byIcon(Icons.mark_email_read_outlined), findsNothing);
-      expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+      expect(find.text('Accept invitation'), findsNothing);
+      expect(find.textContaining('Invited'), findsOneWidget);
       expect(callable.payloads, isEmpty);
     });
 

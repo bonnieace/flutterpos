@@ -1,4 +1,5 @@
 export 'abandoned_shift.dart';
+export 'open_trading_day.dart';
 export 'shift_controller.dart';
 export 'shift_declaration.dart';
 export 'shift_gate.dart';

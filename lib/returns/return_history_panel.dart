@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 import 'package:flutter/services.dart';
 import 'package:uzapay_pos/observability/app_telemetry.dart';
 
@@ -733,9 +734,10 @@ final class _SaleReturnsContents extends StatelessWidget {
             items: <RecordItem>[
               for (final record in page.items) _entry(context, record),
             ],
-            empty: const Text(
-              key: ValueKey('sale-returns-empty'),
-              'No returns were recorded against this sale.',
+            empty: const IllustratedMessage(
+              illustration: 'returns.svg',
+              textKey: ValueKey('sale-returns-empty'),
+              message: 'No returns for this sale.',
             ),
           ),
           ...Pagination(

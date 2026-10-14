@@ -679,7 +679,10 @@ void main() {
     await _pumpRouting(tester);
 
     expect(find.text('Choose a business'), findsOneWidget);
-    expect(find.text('Administrator - Accessible'), findsNWidgets(2));
+    // Each membership is a business card: the role as its fact, and an
+    // Open action because both can be opened.
+    expect(find.text('Administrator'), findsNWidgets(2));
+    expect(find.text('Open this business'), findsNWidgets(2));
 
     await tester.tap(find.text('Business tenant-b'));
     await _pumpRouting(tester);
@@ -1273,11 +1276,14 @@ void main() {
     fixture.auth.add('user-a');
     await _pumpRouting(tester);
 
-    expect(find.text('Administrator - Pending'), findsOneWidget);
-    expect(find.text('Administrator - Inactive'), findsOneWidget);
-    expect(find.text('Administrator - Suspended'), findsOneWidget);
-    expect(find.text('Administrator - Archived'), findsOneWidget);
-    expect(find.byIcon(Icons.lock_outline), findsNWidgets(4));
+    // The standing is the card's status line, in My businesses' words.
+    expect(find.textContaining('Invited'), findsOneWidget);
+    expect(find.textContaining('Deactivated'), findsOneWidget);
+    expect(find.textContaining('Suspended'), findsOneWidget);
+    expect(find.textContaining('Archived'), findsOneWidget);
+    expect(find.text('Administrator'), findsNWidgets(4));
+    // None of them can be opened, so none offers to.
+    expect(find.text('Open this business'), findsNothing);
     await fixture.dispose(tester);
   });
 

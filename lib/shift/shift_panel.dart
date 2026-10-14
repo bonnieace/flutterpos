@@ -435,9 +435,8 @@ String shiftErrorMessage(String? code) => switch (code) {
     'This device has no copy of this shift yet, so it cannot be closed here. '
         'Connect once and it can be closed from then on, online or not.',
   'shift_expired_offline' =>
-    'This shift has been open more than a day, so it can no longer take '
-        'sales. Count it off and it will be sent when this device is back '
-        'online.',
+    "This shift's trading day is over, so it can no longer take sales. "
+        'Count it off and it will be sent when this device is back online.',
   'shift_open_unconfirmed' =>
     'This shift has not reached the server yet. It and its sales are saved '
         'here and will be sent.',
@@ -824,8 +823,8 @@ final class _ShiftClosed extends StatelessWidget {
       children: <Widget>[
         Center(
           child: AppIllustration(
-            asset: _closed ? 'approve.svg' : 'access-denied.svg',
-            size: EmptyState.markSize,
+            asset: _closed ? 'closed-shift.svg' : 'access-denied.svg',
+            size: EmptyState.illustrationSize,
             semanticLabel: _closed ? 'The shift is closed' : 'Nothing was sent',
           ),
         ),

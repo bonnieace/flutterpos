@@ -27,6 +27,7 @@ import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import 'supplier.dart';
 import 'supplier_delivery.dart';
 import 'supplier_form.dart';
@@ -190,8 +191,7 @@ final class _DeliveryFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Receive delivery',
-    subtitle: 'Stock in from a supplier.',
-    contentWidth: AppContentWidth.reading,
+    contentWidth: AppContentWidth.records,
     body: child,
   );
 }
@@ -538,138 +538,157 @@ final class _DeliveryFormState extends State<_DeliveryForm> {
       key: const ValueKey('delivery-form'),
       padding: EdgeInsets.all(inset),
       children: <Widget>[
-        const Disclosure(
-          key: ValueKey('delivery-explanation'),
-          summary: 'What receiving does',
-          child: Text(
-            key: ValueKey('delivery-explanation-text'),
-            'Each product\'s stock goes up by what arrived, and each line is '
-            'recorded in that product\'s stock ledger.\n\n'
-            'A unit cost you enter becomes the product\'s cost for every sale '
-            'from now on. Leave it blank to keep the cost as it is. Sales '
-            'already recorded keep the cost they were sold at.',
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        // Typed nullable so it can stand empty until a supplier is chosen.
-        AppSelect<String?>(
-          key: const ValueKey('delivery-supplier'),
-          label: 'Supplier',
-          value: chosen?.id,
-          enabled: !_busy,
-          helper: active.isEmpty
-              ? 'Add the supplier this delivery came from.'
-              : null,
-          items: <AppSelectItem<String?>>[
-            for (final supplier in active)
-              AppSelectItem<String?>(
-                key: ValueKey('delivery-supplier-${supplier.id}'),
-                value: supplier.id,
-                label: supplier.name,
-              ),
-            if (widget.supplierWriter != null)
-              const AppSelectItem<String?>(
-                key: ValueKey('delivery-supplier-new'),
-                value: _newSupplier,
-                label: 'Add new supplier',
-              ),
-          ],
-          onChanged: _busy ? null : _chooseSupplier,
-        ),
-        SizedBox(height: tokens.spacing.s12),
-        AppTextField(
-          key: const ValueKey('delivery-reference'),
-          controller: _reference,
-          enabled: !_busy,
-          label: 'Invoice or reference (optional)',
-          placeholder: 'INV-48392',
-          maxLength: maximumDeliveryReferenceLength,
-          leading: Icons.receipt_long_outlined,
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        const SectionHeading('What arrived'),
-        SizedBox(height: tokens.spacing.s8),
-        for (final (index, line) in _lines.indexed) ...<Widget>[
-          if (index > 0) SizedBox(height: tokens.spacing.s12),
-          _DeliveryLineCard(
-            line: line,
-            enabled: !_busy,
-            costLabel: line.product.cost == null
-                ? 'No cost recorded'
-                : checkoutMinorUnitsFromMajor(line.product.cost!) == null
-                ? 'Cost unreadable'
-                : 'Costs ${_money(checkoutMinorUnitsFromMajor(line.product.cost!)!)}',
-            // A refusal is about the last attempt, and goes with any edit.
-            onChanged: () => setState(() => _error = null),
-            onRemove: () => _remove(line),
-          ),
-        ],
-        if (_lines.isEmpty)
-          Text(
-            key: const ValueKey('delivery-no-lines'),
-            'Nothing added yet. Add each product on the invoice.',
-            style: tokens.typography.caption.copyWith(
-              color: tokens.colors.text.tertiary,
-            ),
-          ),
-        for (final field in _openProductFields) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Row(
-            key: ValueKey('delivery-product-field-$field'),
-            crossAxisAlignment: CrossAxisAlignment.start,
+        AppWorkspace(
+          leading: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Expanded(
-                child: TenantProductTypeAhead(
-                  session: widget.session,
-                  reader: widget.reader,
-                  productSearchReader: widget.services.productSearchReader,
-                  label: 'Product',
-                  excludedIds: <String>{
-                    for (final line in _lines) line.product.id,
-                  },
-                  enabled: !_busy,
-                  onSelected: (product) => _selectProduct(field, product),
+              const Disclosure(
+                key: ValueKey('delivery-explanation'),
+                summary: 'What receiving does',
+                child: Text(
+                  key: ValueKey('delivery-explanation-text'),
+                  'Each product\'s stock goes up by what arrived, and each line is '
+                  'recorded in that product\'s stock ledger.\n\n'
+                  'A unit cost you enter becomes the product\'s cost for every sale '
+                  'from now on. Leave it blank to keep the cost as it is. Sales '
+                  'already recorded keep the cost they were sold at.',
                 ),
               ),
-              IconButton(
-                key: ValueKey('delivery-product-field-remove-$field'),
-                tooltip: 'Remove product search',
-                icon: Icon(Icons.close, color: tokens.colors.text.secondary),
-                onPressed: _busy ? null : () => _removeProductField(field),
+              SizedBox(height: tokens.spacing.s16),
+              // Typed nullable so it can stand empty until a supplier is chosen.
+              AppSelect<String?>(
+                key: const ValueKey('delivery-supplier'),
+                label: 'Supplier',
+                value: chosen?.id,
+                enabled: !_busy,
+                helper: active.isEmpty
+                    ? 'Add the supplier this delivery came from.'
+                    : null,
+                items: <AppSelectItem<String?>>[
+                  for (final supplier in active)
+                    AppSelectItem<String?>(
+                      key: ValueKey('delivery-supplier-${supplier.id}'),
+                      value: supplier.id,
+                      label: supplier.name,
+                    ),
+                  if (widget.supplierWriter != null)
+                    const AppSelectItem<String?>(
+                      key: ValueKey('delivery-supplier-new'),
+                      value: _newSupplier,
+                      label: 'Add new supplier',
+                    ),
+                ],
+                onChanged: _busy ? null : _chooseSupplier,
+              ),
+              SizedBox(height: tokens.spacing.s12),
+              AppTextField(
+                key: const ValueKey('delivery-reference'),
+                controller: _reference,
+                enabled: !_busy,
+                label: 'Invoice or reference (optional)',
+                placeholder: 'INV-48392',
+                maxLength: maximumDeliveryReferenceLength,
+                leading: Icons.receipt_long_outlined,
+              ),
+              SizedBox(height: tokens.spacing.s16),
+            ],
+          ),
+          trailing: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const SectionHeading('What arrived'),
+              SizedBox(height: tokens.spacing.s8),
+              for (final (index, line) in _lines.indexed) ...<Widget>[
+                if (index > 0) SizedBox(height: tokens.spacing.s12),
+                _DeliveryLineCard(
+                  line: line,
+                  enabled: !_busy,
+                  costLabel: line.product.cost == null
+                      ? 'No cost recorded'
+                      : checkoutMinorUnitsFromMajor(line.product.cost!) == null
+                      ? 'Cost unreadable'
+                      : 'Costs ${_money(checkoutMinorUnitsFromMajor(line.product.cost!)!)}',
+                  // A refusal is about the last attempt, and goes with any edit.
+                  onChanged: () => setState(() => _error = null),
+                  onRemove: () => _remove(line),
+                ),
+              ],
+              if (_lines.isEmpty)
+                IllustratedMessage(
+                  illustration: 'suppliers.svg',
+                  textKey: const ValueKey('delivery-no-lines'),
+                  message: 'Add the products from the invoice.',
+                  style: tokens.typography.caption.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                ),
+              for (final field in _openProductFields) ...<Widget>[
+                SizedBox(height: tokens.spacing.s12),
+                Row(
+                  key: ValueKey('delivery-product-field-$field'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(
+                      child: TenantProductTypeAhead(
+                        session: widget.session,
+                        reader: widget.reader,
+                        productSearchReader:
+                            widget.services.productSearchReader,
+                        label: 'Product',
+                        excludedIds: <String>{
+                          for (final line in _lines) line.product.id,
+                        },
+                        enabled: !_busy,
+                        onSelected: (product) => _selectProduct(field, product),
+                      ),
+                    ),
+                    IconButton(
+                      key: ValueKey('delivery-product-field-remove-$field'),
+                      tooltip: 'Remove product search',
+                      icon: Icon(
+                        Icons.close,
+                        color: tokens.colors.text.secondary,
+                      ),
+                      onPressed: _busy
+                          ? null
+                          : () => _removeProductField(field),
+                    ),
+                  ],
+                ),
+              ],
+              SizedBox(height: tokens.spacing.s12),
+              AppButton(
+                key: const ValueKey('delivery-add-product'),
+                label: 'Add product',
+                icon: Icons.add,
+                expand: true,
+                onPressed:
+                    _busy ||
+                        _lines.length + _openProductFields.length >=
+                            maximumDeliveryLines
+                    ? null
+                    : _addProduct,
+              ),
+              if (_error case final message?) ...<Widget>[
+                SizedBox(height: tokens.spacing.s16),
+                Callout(
+                  key: const ValueKey('delivery-error'),
+                  status: AppStatus.problem,
+                  message: message,
+                ),
+              ],
+              SizedBox(height: tokens.spacing.s32),
+              AppButton(
+                key: const ValueKey('delivery-submit'),
+                label: 'Receive delivery',
+                icon: Icons.local_shipping_outlined,
+                tier: AppButtonTier.secondary,
+                loading: _busy,
+                expand: true,
+                onPressed: _canSubmit ? _submit : null,
               ),
             ],
           ),
-        ],
-        SizedBox(height: tokens.spacing.s12),
-        AppButton(
-          key: const ValueKey('delivery-add-product'),
-          label: 'Add product',
-          icon: Icons.add,
-          expand: true,
-          onPressed:
-              _busy ||
-                  _lines.length + _openProductFields.length >=
-                      maximumDeliveryLines
-              ? null
-              : _addProduct,
-        ),
-        if (_error case final message?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          Callout(
-            key: const ValueKey('delivery-error'),
-            status: AppStatus.problem,
-            message: message,
-          ),
-        ],
-        SizedBox(height: tokens.spacing.s32),
-        AppButton(
-          key: const ValueKey('delivery-submit'),
-          label: 'Receive delivery',
-          icon: Icons.local_shipping_outlined,
-          tier: AppButtonTier.secondary,
-          loading: _busy,
-          expand: true,
-          onPressed: _canSubmit ? _submit : null,
         ),
       ],
     );

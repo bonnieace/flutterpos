@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:uzapay_pos/customers/customers.dart';
 import 'package:uzapay_pos/sales/sales.dart';
+import 'package:uzapay_pos/ui/record_sheet.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 
 /// One customer's record: who they are, how their receipts reach them, and what
@@ -34,15 +35,15 @@ void main() {
     );
   });
 
-  testWidgets('a purchase is drawn with the Sales report card', (tester) async {
+  testWidgets('a desktop purchase uses the Sales table without write actions', (
+    tester,
+  ) async {
     await _pump(tester, const _Reader(withSale: true));
     await _openPurchases(tester);
 
-    expect(find.byType(TenantSaleCard), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('customer-purchase-co-1')),
-      findsOneWidget,
-    );
+    expect(find.byType(TenantPurchaseTable), findsOneWidget);
+    expect(find.byType(RecordSheet), findsOneWidget);
+    expect(find.byKey(const ValueKey('sales-record-co-1')), findsOneWidget);
     // A card with no actions draws no menu.
     expect(find.byKey(const ValueKey('sales-actions-co-1')), findsNothing);
   });

@@ -4,6 +4,8 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
+import '../ui/record_list.dart' show RecordAction;
+import '../ui/record_sheet.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
@@ -72,7 +74,7 @@ final class TenantReconciliationAnomalyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Unresolved differences',
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     body: TenantReconciliationAnomalyPanel(
       reader: reader,
       kind: kind,
@@ -478,7 +480,10 @@ final class _AnomalyContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return PagedListView(
       listKey: const ValueKey('reconciliation-anomalies'),
-      padding: EdgeInsets.all(tokens.spacing.s20),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(tokens.spacing.s20),
+      ),
       pagination: Pagination(
         pageNumber: pageIndex + 1,
         previousKey: const ValueKey('reconciliation-anomalies-previous'),
@@ -550,18 +555,16 @@ final class _AnomalyContents extends StatelessWidget {
           ),
         ],
         SizedBox(height: tokens.spacing.s16),
-        _KindChips(selected: selected, onNarrow: onNarrow),
-        SizedBox(height: tokens.spacing.s16),
-        if (page.items.isEmpty)
-          Text(
-            key: const ValueKey('reconciliation-anomalies-empty'),
-            selected == null
-                ? 'The server has recorded no unresolved differences for this '
-                      'business.'
-                : 'No unresolved difference of this kind has been recorded.',
-          )
-        else
-          for (final anomaly in page.items) _anomaly(context, anomaly),
+        if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width))
+          _sheet(context, tokens)
+        else ...[
+          _KindChips(selected: selected, onNarrow: onNarrow),
+          SizedBox(height: tokens.spacing.s16),
+          if (page.items.isEmpty)
+            _empty
+          else
+            for (final anomaly in page.items) _anomaly(context, anomaly),
+        ],
         SizedBox(height: tokens.spacing.s16),
         // A resolved difference is deleted from this list, so without this the
         // corrections made here would leave no visible trace. The trail is
@@ -574,6 +577,123 @@ final class _AnomalyContents extends StatelessWidget {
           onPressed: () => onOpenAmendments(null),
         ),
       ],
+    );
+  }
+
+  Widget get _empty => IllustratedMessage(
+    illustration: 'reconciliation.svg',
+    textKey: const ValueKey('reconciliation-anomalies-empty'),
+    message: selected == null
+        ? 'No unresolved differences.'
+        : 'No differences of this kind.',
+  );
+
+  /// The large-screen list: one row per difference, its kind filter on its
+  /// top edge.
+  ///
+  /// **The same page, narrowed the same way, drawn as rows** -
+  /// `docs/design/tables/`, at the developer's direction on 2026-10-13. Every
+  /// row is a difference, so there is no status column. A row states its kind,
+  /// what it is about, and its headline figure; the rest of its figures, its
+  /// sentence and its instants fold under it, and its three buttons are its
+  /// menu under the same conditions. Below 1024 the cards are unchanged.
+  Widget _sheet(BuildContext context, AppTokens tokens) => RecordSheet(
+    key: const ValueKey('reconciliation-anomalies-sheet'),
+    columns: const <SheetColumn>[
+      SheetColumn(label: 'Difference', kind: SheetColumnKind.identity),
+      SheetColumn(label: 'Figure', kind: SheetColumnKind.figure),
+      SheetColumn(label: 'Run', kind: SheetColumnKind.code),
+    ],
+    bar: Row(
+      children: <Widget>[
+        // The kinds are sentences, so the select takes a search field's room.
+        SizedBox(
+          width: tokens.layout.tableSearch,
+          child: _KindChips(selected: selected, onNarrow: onNarrow),
+        ),
+      ],
+    ),
+    body: page.items.isEmpty ? _empty : null,
+    rows: <SheetRow>[for (final anomaly in page.items) _row(context, anomaly)],
+  );
+
+  SheetRow _row(BuildContext context, TenantReconciliationAnomaly anomaly) {
+    final id = anomaly.id;
+    final figures = reconciliationDifferenceFigureLines(anomaly);
+    final headline = figures.isEmpty ? null : figures.first;
+    final notes = <String>[
+      if (reconciliationDifferenceExplanation(anomaly) case final prose?) prose,
+      reconciliationDifferenceProvenance(anomaly),
+    ];
+    return SheetRow(
+      id: id,
+      key: ValueKey('reconciliation-anomaly-$id'),
+      semanticLabel: reconciliationDifferenceKindLabel(anomaly),
+      cells: <SheetCell?>[
+        SheetText(
+          reconciliationDifferenceKindLabel(anomaly),
+          key: ValueKey('reconciliation-anomaly-kind-$id'),
+          caption: reconciliationDifferenceSubject(anomaly),
+          captionKey: ValueKey('reconciliation-anomaly-subject-$id'),
+        ),
+        if (headline != null)
+          SheetFigure(
+            headline.value,
+            key: ValueKey('reconciliation-anomaly-figure-${headline.slug}-$id'),
+            // What the figure is a measure of, as the card's line names it.
+            caption: headline.detail == null
+                ? headline.label
+                : '${headline.label}, ${headline.detail}',
+          )
+        else
+          // The kinds that report something could not be read: they have a
+          // sentence, folded, and no measurement to stand here.
+          SheetFigure.unknown(),
+        SheetText(anomaly.jobId ?? '—'),
+      ],
+      actions: <RecordAction>[
+        if (_canAmendRow(anomaly))
+          RecordAction(
+            label: busy ? 'Correcting...' : 'Correct this shift\'s totals',
+            icon: Icons.rule_outlined,
+            onPressed: busy ? null : () => _confirmAmend(context, anomaly),
+            actionKey: ValueKey('reconciliation-anomaly-amend-$id'),
+          ),
+        if (anomaly.shiftId case final shiftId?)
+          RecordAction(
+            label: 'View this shift\'s corrections',
+            onPressed: () => onOpenAmendments(shiftId),
+            actionKey: ValueKey('reconciliation-anomaly-corrections-$id'),
+          ),
+        if (anomaly.jobId case final jobId?)
+          RecordAction(
+            label: 'About this run',
+            onPressed: () => onOpenRun(jobId),
+            actionKey: ValueKey('reconciliation-anomaly-run-$id'),
+          ),
+      ],
+      actionsKey: ValueKey('reconciliation-anomaly-menu-$id'),
+      actionsTooltip: 'More about this difference',
+      fold: SheetFold(
+        note: notes.join(' '),
+        noteKey: ValueKey('reconciliation-anomaly-notes-$id'),
+        lines: <SheetFoldLine>[
+          for (final figure in figures.skip(1))
+            SheetFoldLine(
+              label: figure.detail == null
+                  ? figure.label
+                  : '${figure.label}, ${figure.detail}',
+              value: figure.value,
+              column: 1,
+              valueKey: ValueKey(
+                'reconciliation-anomaly-figure-${figure.slug}-$id',
+              ),
+            ),
+        ],
+        toggleKey: ValueKey('reconciliation-anomaly-fold-$id'),
+        showLabel: 'Show more about this difference',
+        hideLabel: 'Show less about this difference',
+      ),
     );
   }
 

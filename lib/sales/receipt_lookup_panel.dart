@@ -3,6 +3,7 @@ import '../tenancy/tenant_catalog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
@@ -234,10 +235,10 @@ final class _ReceiptLookupResult extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     if (result.isMissing) {
-      return const Text(
-        key: ValueKey('receipt-lookup-missing'),
-        'No sale in this business carries that receipt. Check the number, and '
-        'remember a receipt belongs to the business that issued it.',
+      return const IllustratedMessage(
+        illustration: 'receipt-search.svg',
+        textKey: ValueKey('receipt-lookup-missing'),
+        message: 'Receipt not found. Check the number and business.',
       );
     }
     return Column(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 
 import '../ui/buttons.dart';
 import '../ui/money_text.dart';
@@ -252,11 +253,12 @@ final class _AmendmentContents extends StatelessWidget {
         RecordList(
           identityLabel: 'Correction',
           items: <RecordItem>[for (final record in page.items) _record(record)],
-          empty: Text(
-            key: const ValueKey('shift-amendments-empty'),
-            page.isShiftScoped
-                ? 'This shift\'s summary has never been corrected.'
-                : 'No shift summary has been corrected in this business.',
+          empty: IllustratedMessage(
+            illustration: 'shift-corrections.svg',
+            textKey: const ValueKey('shift-amendments-empty'),
+            message: page.isShiftScoped
+                ? 'No corrections for this shift.'
+                : 'No shift corrections yet.',
           ),
         ),
         SizedBox(height: tokens.spacing.s8),

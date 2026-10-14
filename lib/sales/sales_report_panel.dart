@@ -1,3 +1,5 @@
+import '../ui/record_list.dart' show RecordAction;
+import '../ui/record_sheet.dart';
 import '../ui/money_text.dart';
 import '../tenancy/tenant_catalog.dart';
 import 'dart:async';
@@ -28,6 +30,9 @@ import '../returns/return_history_panel.dart';
 import '../returns/return_offsets.dart';
 import '../inventory/product_image_cache.dart';
 import '../reports/analysis/sales_report.dart';
+import '../shift/open_trading_day.dart';
+import 'sales_trading_day_notice.dart';
+import 'trading_day_explanation.dart';
 import '../reports/report_document.dart';
 import '../reports/report_file.dart';
 import '../reports/report_identity_source.dart';
@@ -131,6 +136,8 @@ final class TenantSalesReportScreen extends StatelessWidget {
     this.clock,
     this.initialBusinessDate,
     this.initialStaffId,
+    this.followTradingDay = false,
+    this.tradingDayNotice,
     this.reportSaver,
     this.imageCache,
     this.receiptWriter,
@@ -144,6 +151,12 @@ final class TenantSalesReportScreen extends StatelessWidget {
   /// Where *Send by email* queues a receipt. Absent, the sale menu offers
   /// no such entry.
   final TenantEmailReceiptWriter? emailReceiptWriter;
+
+  /// See [TenantSalesReportPanel.followTradingDay].
+  final bool followTradingDay;
+
+  /// See [TenantSalesReportPanel.tradingDayNotice].
+  final SalesTradingDayNotice? tradingDayNotice;
 
   /// Where a generated report goes. Null renders no report control at all.
   final TenantReportSaver? reportSaver;
@@ -181,8 +194,7 @@ final class TenantSalesReportScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Sales Report',
-    subtitle: 'Review transactions, receipts, and returns.',
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     actions: <Widget>[
       Builder(
         builder: (context) => _salesReportAction(
@@ -206,6 +218,8 @@ final class TenantSalesReportScreen extends StatelessWidget {
       clock: clock,
       initialBusinessDate: initialBusinessDate,
       initialStaffId: initialStaffId,
+      followTradingDay: followTradingDay,
+      tradingDayNotice: tradingDayNotice,
       receiptWriter: receiptWriter,
       emailReceiptWriter: emailReceiptWriter,
     ),
@@ -229,6 +243,8 @@ final class TenantSalesReportPanel extends StatefulWidget {
     this.staffPageSize = 50,
     this.initialBusinessDate,
     this.initialStaffId,
+    this.followTradingDay = false,
+    this.tradingDayNotice,
     this.receiptWriter,
     this.emailReceiptWriter,
   });
@@ -240,6 +256,23 @@ final class TenantSalesReportPanel extends StatefulWidget {
   /// Where *Send by email* queues a receipt. Absent, the sale menu offers
   /// no such entry.
   final TenantEmailReceiptWriter? emailReceiptWriter;
+
+  /// Whether a report opened on today opens instead on the earlier day an open
+  /// shift is still selling under, saying so.
+  ///
+  /// **Added 2026-10-12: after midnight the report read empty while the till
+  /// was busy.** A sale is filed under its shift's date, so until that shift
+  /// stops selling at `TenantShiftController.tradingDayCutoff`, *today* is a
+  /// day nothing has been filed under yet. See
+  /// `TenantOpenTradingDayRepository`. Ignored where [initialBusinessDate]
+  /// names a day, since a screen that opened the report about a day meant it.
+  final bool followTradingDay;
+
+  /// Which businesses on this device chose *Don't show again* on the modal
+  /// that explains [followTradingDay]. Null shows it every time, which is
+  /// what a test or a device whose box would not open gets. Silencing it
+  /// silences the explanation only: the report still opens on that day.
+  final SalesTradingDayNotice? tradingDayNotice;
 
   /// The business date the report opens on. Null is today, which is how the
   /// home opens it.
@@ -325,16 +358,124 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   /// two audit lines, and the second is almost always the first tap repeated
   /// because nothing had happened yet.
   bool _reprinting = false;
+
+  /// Whether the report is holding its first read until it knows which day
+  /// the till is trading in. See [TenantSalesReportPanel.followTradingDay].
+  ///
+  /// **Held rather than read and then moved**, because today's read would
+  /// answer first - from the cache, at once - and draw *no sales* for the
+  /// moment before the report moved to the day that has them. On a screen
+  /// about money that reads as the takings vanishing and coming back.
+  bool _awaitingTradingDay = false;
+  bool _tradingDayAsked = false;
+
+  /// The takings band drawn while [_awaitingTradingDay]: one never answered,
+  /// so it holds its placeholder where the real band will land.
+  _TotalsBandController? _awaitingBand;
+
   @override
   void initState() {
     super.initState();
     _businessDate = widget.initialBusinessDate ?? _todayBusinessDate;
     _staffId = widget.initialStaffId;
+    _awaitingTradingDay =
+        widget.followTradingDay &&
+        widget.initialBusinessDate == null &&
+        TenantOpenTradingDayRepository.mayStillBeTrading(_now());
   }
 
-  String get _todayBusinessDate => checkoutBusinessDate(
-    (widget.clock?.call() ?? DateTime.now().toUtc()).toUtc(),
-  );
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_awaitingTradingDay || _tradingDayAsked) return;
+    _tradingDayAsked = true;
+    final session = TenantSessionScope.of(context).session;
+    if (session == null) {
+      _awaitingTradingDay = false;
+      return;
+    }
+    unawaited(_readTradingDay(session));
+  }
+
+  /// Finds the day the till is trading in and opens on it, or on today.
+  ///
+  /// **Every failure opens on today**, which is what the report did before it
+  /// asked: the question only ever moves the report to a better day.
+  Future<void> _readTradingDay(TenantSession session) async {
+    TenantOpenTradingDay? day;
+    try {
+      day = await TenantOpenTradingDayRepository(
+        session: session,
+        reader: widget.reader,
+      ).read(collectionReader: widget.reader, nowUtc: _now());
+    } on TimeoutException {
+      day = null;
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'sales.trading_day_read',
+      );
+      day = null;
+    }
+    // Overtaken: the report closed, a date was chosen while this was asked, or
+    // the session it was asked for is no longer the one on screen.
+    if (!mounted || !_awaitingTradingDay) return;
+    final live = TenantSessionScope.of(context).session;
+    final same =
+        live != null &&
+        live.uid == session.uid &&
+        live.tenantId == session.tenantId &&
+        live.epoch == session.epoch;
+    final found = same ? day : null;
+    setState(() {
+      _awaitingTradingDay = false;
+      if (found != null) {
+        _businessDate = found.businessDate;
+        _resetPages();
+      }
+    });
+    if (found == null ||
+        (widget.tradingDayNotice?.isSilenced(session.tenantId) ?? false)) {
+      return;
+    }
+    // After the frame, so the report is drawn on that day behind the scrim
+    // rather than the dialog arriving over the placeholder it replaces.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(_explainTradingDay(found, session.tenantId)),
+    );
+  }
+
+  /// Says why the report is on [day] rather than today, and offers today.
+  ///
+  /// **Now is taken here, once**: the night is drawn as it stood when the
+  /// report opened, which is also when the report chose its day.
+  Future<void> _explainTradingDay(
+    TenantOpenTradingDay day,
+    String tenantId,
+  ) async {
+    if (!mounted || _businessDate != day.businessDate) return;
+    final reply = await showTradingDayExplanation(
+      context,
+      explanation: TradingDayExplanation.of(day, now: _now()),
+      canSilence: widget.tradingDayNotice != null,
+    );
+    if (reply.answer == TradingDayAnswer.today && mounted) _showToday();
+    if (!reply.silence) return;
+    try {
+      await widget.tradingDayNotice?.silence(tenantId);
+    } catch (error, stackTrace) {
+      AppTelemetry.captureHandled(
+        error,
+        stackTrace,
+        boundary: 'sales.trading_day_notice_silence',
+      );
+    }
+  }
+
+  DateTime _now() => (widget.clock?.call() ?? DateTime.now().toUtc()).toUtc();
+
+  String get _todayBusinessDate => checkoutBusinessDate(_now());
 
   @override
   void dispose() {
@@ -342,6 +483,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
     for (final band in _bands.values) {
       band.dispose();
     }
+    _awaitingBand?.dispose();
     super.dispose();
   }
 
@@ -353,8 +495,12 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
   }
 
   void _setBusinessDate(String businessDate) {
-    if (businessDate == _businessDate) return;
+    // A day chosen while the trading day was being asked for is the answer;
+    // the one still on its way must not move the report off it.
+    final wasAwaiting = _awaitingTradingDay;
+    if (businessDate == _businessDate && !wasAwaiting) return;
     setState(() {
+      _awaitingTradingDay = false;
       _businessDate = businessDate;
       _resetPages();
     });
@@ -1025,15 +1171,69 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
     });
   }
 
+  /// The report with its day still outstanding: while it is read, after the
+  /// read failed, and while the trading day is being found.
+  _SalesReportContents _outstanding(
+    BuildContext context,
+    TenantSession session, {
+    required _TotalsBandController? band,
+    String? failureMessage,
+  }) => _SalesReportContents(
+    session: session,
+    view: null,
+    totalsBand: band,
+    businessDate: _businessDate,
+    management: session.canAccess(
+      allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
+    ),
+    receipt: _receipt,
+    submittedEnding: _submittedEnding,
+    receiptRejection: _receiptRejection,
+    receiptResult: null,
+    pageIndex: _pageIndex,
+    paging: _paging,
+    pageSize: widget.pageSize,
+    failureMessage: failureMessage,
+    onReceiptChanged: _onReceiptChanged,
+    onSubmitReceipt: _submitReceipt,
+    onPickDate: _pickBusinessDate,
+    onStaffChanged: _setStaff,
+    onPrevious: null,
+    onNext: null,
+    onOpenReturns: (sale) => _openReturns(context, sale),
+    onReprint: _reprintAction(session),
+    onSendWhatsapp: _sendWhatsappAction(session),
+    onSendEmail: _sendEmailAction(session),
+    onSetTender: _setTenderAction(context, session),
+  );
+
+  void _showToday() => _setBusinessDate(_todayBusinessDate);
+
   @override
   Widget build(BuildContext context) {
+    final scoped = TenantSessionScope.of(context).session;
+    if (_awaitingTradingDay) {
+      // Nothing is read until the day is known - see [_awaitingTradingDay] -
+      // so this is the report's own loading picture without the guard: the
+      // furniture, and placeholders where the day will land.
+      final band = widget.reader.cached == null && widget.totalsCallable == null
+          ? null
+          : _awaitingBand ??= _TotalsBandController(local: null, server: null);
+      return SaleLineProducts(
+        catalog: widget.catalog,
+        session: scoped,
+        child: switch (scoped) {
+          final session? => _outstanding(context, session, band: band),
+          null => const SizedBox.shrink(),
+        },
+      );
+    }
     final key =
         'sales:$_generation:$_pageIndex:$_businessDate:${_staffId ?? '-'}';
     // **Started here rather than inside either branch, and handed to both.**
     // The band outlives the guard's loading state: it is the same widget and
     // the same future before and after the day's sales land, so it neither
     // restarts nor blinks when they do.
-    final scoped = TenantSessionScope.of(context).session;
     final band = scoped == null ? null : _totalsBandFor(key, scoped);
     _composeHistoryLoaders(key);
     // **The catalog is read once around the guard rather than once per card.**
@@ -1057,33 +1257,7 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
       // guard has not admitted one yet at this point; `requireSession` is what
       // decides that, and a denied session never reaches here.
       loading: switch (scoped) {
-        final session? => _SalesReportContents(
-          session: session,
-          view: null,
-          totalsBand: band,
-          businessDate: _businessDate,
-          management: session.canAccess(
-            allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
-          ),
-          receipt: _receipt,
-          submittedEnding: _submittedEnding,
-          receiptRejection: _receiptRejection,
-          receiptResult: null,
-          pageIndex: _pageIndex,
-          paging: _paging,
-          pageSize: widget.pageSize,
-          onReceiptChanged: _onReceiptChanged,
-          onSubmitReceipt: _submitReceipt,
-          onPickDate: _pickBusinessDate,
-          onStaffChanged: _setStaff,
-          onPrevious: null,
-          onNext: null,
-          onOpenReturns: (sale) => _openReturns(context, sale),
-          onReprint: _reprintAction(session),
-          onSendWhatsapp: _sendWhatsappAction(session),
-          onSendEmail: _sendEmailAction(session),
-          onSetTender: _setTenderAction(context, session),
-        ),
+        final session? => _outstanding(context, session, band: band),
         // No session in scope at all is the guard's own `denied` case arriving
         // a frame early. Drawing nothing is what it draws.
         null => const SizedBox.shrink(),
@@ -1095,33 +1269,11 @@ final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
       // weekly report already keeps its furniture through a failure; this is
       // the same call.
       failure: (context, error) => switch (scoped) {
-        final session? => _SalesReportContents(
-          session: session,
-          view: null,
-          totalsBand: band,
-          businessDate: _businessDate,
-          management: session.canAccess(
-            allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
-          ),
-          receipt: _receipt,
-          submittedEnding: _submittedEnding,
-          receiptRejection: _receiptRejection,
-          receiptResult: null,
-          pageIndex: _pageIndex,
-          paging: _paging,
-          pageSize: widget.pageSize,
+        final session? => _outstanding(
+          context,
+          session,
+          band: band,
           failureMessage: 'The sales for this day could not be read.',
-          onReceiptChanged: _onReceiptChanged,
-          onSubmitReceipt: _submitReceipt,
-          onPickDate: _pickBusinessDate,
-          onStaffChanged: _setStaff,
-          onPrevious: null,
-          onNext: null,
-          onOpenReturns: (sale) => _openReturns(context, sale),
-          onReprint: _reprintAction(session),
-          onSendWhatsapp: _sendWhatsappAction(session),
-          onSendEmail: _sendEmailAction(session),
-          onSetTender: _setTenderAction(context, session),
         ),
         null => const SizedBox.shrink(),
       },
@@ -1367,7 +1519,10 @@ final class _SalesReportContents extends StatelessWidget {
     final showingReceipt = submittedEnding != null && receiptResult != null;
     return PagedListView(
       listKey: const ValueKey('sales-report'),
-      padding: EdgeInsets.all(inset),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(inset),
+      ),
       // A receipt looked up by its number is one sale, and does not page.
       pagination: showingReceipt ? null : _pager(context),
       children: <Widget>[
@@ -1665,6 +1820,15 @@ final class _SaleCardsSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    // **The table's own placeholder from 1024**, so a day that is still being
+    // read promises the table it will become rather than cards it will not.
+    if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width)) {
+      return RecordSheet(
+        columns: _SalesPresentation._columns(null, returns: false),
+        rows: null,
+        loadingLabel: 'Reading the sales for this day.',
+      );
+    }
     return SkeletonGroup(
       semanticLabel: 'Reading the sales for this day.',
       child: Column(
@@ -2406,8 +2570,8 @@ final class _ReceiptSearchResult extends StatelessWidget {
       return const EmptyState(
         key: ValueKey('sales-receipt-missing'),
         title: 'Receipt not found',
-        hint: 'Check the selected date and receipt number, then try again.',
-        illustration: 'file-search.svg',
+        hint: 'Check the date and receipt number.',
+        illustration: 'receipt-search.svg',
       );
     }
     return Column(
@@ -2448,6 +2612,33 @@ final class _ReceiptSearchResult extends StatelessWidget {
   }
 }
 
+/// Read-only purchase history using the same desktop columns as Sales.
+final class TenantPurchaseTable extends StatelessWidget {
+  const TenantPurchaseTable({
+    super.key,
+    required this.sales,
+    required this.names,
+    required this.selfUid,
+  });
+  final List<TenantSale> sales;
+  final Map<String, String> names;
+  final String selfUid;
+  @override
+  Widget build(BuildContext context) => _SalesPresentation(
+    sales: sales,
+    returns: TenantDayReturns.none,
+    hideFullyReturned: false,
+    names: names,
+    selfUid: selfUid,
+    filtered: false,
+    onOpenReturns: null,
+    onReprint: null,
+    onSendWhatsapp: null,
+    onSendEmail: null,
+    onSetTender: null,
+  );
+}
+
 final class _SalesPresentation extends StatelessWidget {
   const _SalesPresentation({
     required this.sales,
@@ -2476,7 +2667,7 @@ final class _SalesPresentation extends StatelessWidget {
   final Map<String, String> names;
   final String selfUid;
   final bool filtered;
-  final ValueChanged<TenantSale> onOpenReturns;
+  final ValueChanged<TenantSale>? onOpenReturns;
 
   /// Null where this member may not reprint, or this build has no printer.
   final ValueChanged<TenantSale>? onReprint;
@@ -2518,18 +2709,22 @@ final class _SalesPresentation extends StatelessWidget {
             ? 'No matching sales'
             : 'No sales yet',
         hint: allReturned
-            ? 'Every sale recorded on this date has been returned in full. '
-                  'The returns themselves are on the Returns screen.'
+            ? 'View the returned sales on the Returns screen.'
             : filtered
             ? 'Try another date or staff member.'
-            : 'Transactions recorded on this date will appear here.',
+            : 'Sales for this date appear here.',
         // A filter that matched nothing and a day that had nothing are
         // different facts, and section 7 already gives them different words.
         // They get different drawings for the same reason.
-        illustration: filtered || allReturned
-            ? 'file-search.svg'
-            : 'no-data.svg',
+        illustration: allReturned
+            ? 'returns.svg'
+            : filtered
+            ? 'receipt-search.svg'
+            : 'receipt-history.svg',
       );
+    }
+    if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width)) {
+      return _sheet(shown);
     }
     final tokens = AppTokens.componentOf(context);
     return Column(
@@ -2545,7 +2740,9 @@ final class _SalesPresentation extends StatelessWidget {
               sale: sale,
               offset: returns.offsetFor(sale),
               staffLabel: _staffLabel(sale),
-              onOpenReturns: () => onOpenReturns(sale),
+              onOpenReturns: onOpenReturns == null
+                  ? null
+                  : () => onOpenReturns!(sale),
               onReprint: onReprint == null ? null : () => onReprint!(sale),
               onSendWhatsapp: onSendWhatsapp == null
                   ? null
@@ -2576,6 +2773,199 @@ final class _SalesPresentation extends StatelessWidget {
 
   String _staffLabel(TenantSale sale) =>
       tenantStaffLabel(sale.soldById, names: names, selfUid: selfUid);
+
+  /// Whether this viewer may set or change how [sale] was paid: the card's
+  /// condition, word for word. See the card's own comment on it.
+  bool _mayTender(TenantSale sale) =>
+      onSetTender != null && sale.soldById == selfUid && sale.credit == null;
+
+  /// The table's columns. The returns column only where a sale on the page has
+  /// had something come back, since a column of nothing says nothing.
+  static List<SheetColumn> _columns(String? code, {required bool returns}) =>
+      <SheetColumn>[
+        const SheetColumn(label: 'Time', kind: SheetColumnKind.time),
+        const SheetColumn(label: 'Receipt', kind: SheetColumnKind.code),
+        const SheetColumn(label: 'Items', kind: SheetColumnKind.identity),
+        const SheetColumn(label: 'Sold by', kind: SheetColumnKind.text),
+        const SheetColumn(label: 'Paid by', kind: SheetColumnKind.text),
+        const SheetColumn(label: 'Customer', kind: SheetColumnKind.text),
+        SheetColumn(label: 'Total', kind: SheetColumnKind.figure, unit: code),
+        if (returns)
+          const SheetColumn(label: 'Returns', kind: SheetColumnKind.status),
+      ];
+
+  /// The large-screen form: one row per sale, its lines under it.
+  ///
+  /// **The same sales, filtered the same way, drawn as rows** -
+  /// `docs/design/tables/`, at the developer's direction on 2026-10-13. Every
+  /// line of a sale is still on screen with nothing to open, as on the card -
+  /// the rule the developer gave the delivery cards, which were drawn the way a
+  /// sale card is - laid under the row so each line total sits in the *Total*
+  /// column. The till's receipt number is a column rather than the card's foot,
+  /// and the card's menu is the row's. Below 1024 the cards are unchanged.
+  Widget _sheet(List<TenantSale> shown) {
+    final returns = shown.any((sale) => this.returns.offsetFor(sale) != null);
+    final cents = shown.any(
+      (sale) =>
+          sale.totalMinor % 100 != 0 ||
+          sale.discountMinor % 100 != 0 ||
+          sale.lines.any((line) => line.lineTotalMinor % 100 != 0),
+    );
+    String? reserve(int minor) => cents && minor % 100 == 0 ? '.00' : null;
+    const totalColumn = 6;
+    return RecordSheet(
+      key: const ValueKey('sales-report-sheet'),
+      columns: _columns(shown.first.currency, returns: returns),
+      rows: <SheetRow>[
+        for (final sale in shown)
+          _row(
+            sale,
+            returns: returns,
+            totalColumn: totalColumn,
+            reserve: reserve,
+          ),
+      ],
+    );
+  }
+
+  SheetRow _row(
+    TenantSale sale, {
+    required bool returns,
+    required int totalColumn,
+    required String? Function(int) reserve,
+  }) {
+    final id = sale.id;
+    final offset = this.returns.offsetFor(sale);
+    final net = sale.totalMinor - (offset?.returnedMinor ?? 0);
+    final who = tenantStaffLabelParts(
+      sale.soldById,
+      names: names,
+      selfUid: selfUid,
+    );
+    final count = sale.lines.fold<int>(0, (sum, line) => sum + line.quantity);
+    final reason = sale.discountReason;
+    final synced = _syncedLaterAt(sale);
+    return SheetRow(
+      id: id,
+      key: ValueKey('sales-record-$id'),
+      semanticLabel: 'Receipt ${_receiptLabel(sale)}',
+      cells: <SheetCell?>[
+        SheetText(
+          _recordedTime(sale),
+          key: ValueKey('sales-recorded-time-$id'),
+          // When the books heard of it, where that is materially later - the
+          // card foot's *Synced* fact, under the time it qualifies.
+          caption: synced == null ? null : 'synced ${_clockTime(synced)}',
+          captionKey: ValueKey('sales-synced-later-$id'),
+        ),
+        SheetText(_receiptLabel(sale), key: ValueKey('sales-receipt-till-$id')),
+        SheetText(
+          sale.lines
+              .map((line) => tenantProductLabel(line.name, line.sku))
+              .join(', '),
+          caption: <String>[
+            '$count ${count == 1 ? 'item' : 'items'}',
+            if (sale.discountMinor > 0)
+              reason == null ? 'discount' : 'agreed price',
+          ].join(' · '),
+        ),
+        SheetText(who.name, caption: who.under),
+        SheetText(_tender(sale)),
+        SheetText(
+          sale.customer?.name ?? '—',
+          key: sale.customer == null ? null : ValueKey('sales-customer-$id'),
+        ),
+        // **What the shop still has, not what it rang up**, as on the card.
+        SheetFigure(
+          moneyTextGroupedOfMinor(net),
+          reserve: reserve(net),
+          key: ValueKey('sales-total-$id'),
+        ),
+        if (returns)
+          offset == null
+              ? null
+              : SheetStatus(
+                  key: ValueKey('sales-returned-badge-$id'),
+                  status: AppStatus.attention,
+                  icon: Icons.assignment_return_outlined,
+                  label: offset.isFullyReturned
+                      ? 'Returned'
+                      : 'Partly returned',
+                ),
+      ],
+      actions: <RecordAction>[
+        if (onOpenReturns != null)
+          RecordAction(
+            label: 'Return',
+            icon: Icons.assignment_return_outlined,
+            onPressed: () => onOpenReturns!(sale),
+            actionKey: ValueKey('sales-returns-$id'),
+          ),
+        if (onReprint case final reprint?)
+          RecordAction(
+            label: 'Reprint receipt',
+            icon: Icons.print_outlined,
+            onPressed: () => reprint(sale),
+            actionKey: ValueKey('sales-reprint-$id'),
+          ),
+        if (onSendWhatsapp case final send?)
+          RecordAction(
+            label: 'Send on WhatsApp',
+            icon: Icons.send_outlined,
+            onPressed: () => send(sale),
+            actionKey: ValueKey('sales-send-whatsapp-$id'),
+          ),
+        if (onSendEmail case final send?)
+          RecordAction(
+            label: 'Send by email',
+            icon: Icons.mail_outline,
+            onPressed: () => send(sale),
+            actionKey: ValueKey('sales-send-email-$id'),
+          ),
+        if (_mayTender(sale))
+          RecordAction(
+            label: sale.tender == null
+                ? 'Set payment method'
+                : 'Change payment method',
+            icon: Icons.payments_outlined,
+            onPressed: () => onSetTender!(sale),
+            actionKey: ValueKey('sales-set-tender-$id'),
+          ),
+      ],
+      actionsKey: ValueKey('sales-actions-$id'),
+      actionsTooltip: 'Actions for receipt ${sale.receiptNumber}',
+      fold: SheetFold(
+        alwaysOpen: true,
+        lines: <SheetFoldLine>[
+          for (final (index, line) in sale.lines.indexed)
+            // Under the row's items, so each line reads in the table's
+            // columns rather than on a band of its own.
+            SheetFoldLine(
+              labelColumn: 2,
+              label:
+                  '${tenantProductLabel(line.name, line.sku)} · '
+                  '${line.quantity} × '
+                  '${moneyTextGroupedOfMinor(line.unitPriceMinor)}',
+              value: moneyTextGroupedOfMinor(line.lineTotalMinor),
+              reserve: reserve(line.lineTotalMinor),
+              column: totalColumn,
+              valueKey: ValueKey('sales-item-$id-$index'),
+            ),
+          // What came off, under the lines it came off, so the column adds up
+          // to the figure in the row - the card's discount row.
+          if (sale.discountMinor > 0)
+            SheetFoldLine(
+              labelColumn: 2,
+              label: reason == null ? 'Discount' : 'Agreed price · $reason',
+              value: '−${moneyTextGroupedOfMinor(sale.discountMinor)}',
+              reserve: reserve(sale.discountMinor),
+              column: totalColumn,
+              valueKey: ValueKey('sales-agreed-price-amount-$id'),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// One sale, drawn exactly as the Sales report draws it, for any other screen

@@ -246,7 +246,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('product-ledger-empty')))
           .data,
-      'No stock movement has been recorded against this product.',
+      'No stock movements for this product yet.',
     );
   });
 

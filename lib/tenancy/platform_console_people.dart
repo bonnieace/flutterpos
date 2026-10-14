@@ -164,9 +164,9 @@ final class _PlatformPeoplePageState extends State<PlatformPeoplePage> {
     } else if (page.items.isEmpty) {
       content = _query.isNotEmpty
           ? EmptyState(
-              icon: Icons.search,
+              illustration: 'people-search.svg',
               title: 'Nobody matches “$_query”',
-              hint: 'Search looks at the start of an email address.',
+              hint: 'Search by the start of an email.',
               action: AppButton(
                 label: 'Clear search',
                 onPressed: () {
@@ -176,9 +176,9 @@ final class _PlatformPeoplePageState extends State<PlatformPeoplePage> {
               ),
             )
           : const EmptyState(
-              icon: Icons.group_outlined,
-              title: 'Nobody here',
-              hint: 'Nobody has an account that fits this filter.',
+              illustration: 'platform-accounts.svg',
+              title: 'No matching accounts',
+              hint: 'Try another filter.',
             );
     } else {
       final pageNumber = _starts.length;
@@ -530,7 +530,7 @@ final class _PlatformPersonPageState extends State<PlatformPersonPage> {
         builder: (context, detail, reload) {
           if (detail == null) {
             return const EmptyState(
-              icon: Icons.person_outline,
+              illustration: 'people-search.svg',
               title: 'No account has this ID',
             );
           }

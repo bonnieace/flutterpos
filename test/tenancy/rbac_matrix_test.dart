@@ -66,6 +66,7 @@ import 'package:uzapay_pos/returns/return_history.dart';
 import 'package:uzapay_pos/sales/receipt_lookup.dart';
 import 'package:uzapay_pos/sales/sale_history.dart';
 import 'package:uzapay_pos/shift/abandoned_shift.dart';
+import 'package:uzapay_pos/shift/open_trading_day.dart';
 import 'package:uzapay_pos/shift/shift_history.dart';
 import 'package:uzapay_pos/suppliers/supplier.dart';
 import 'package:uzapay_pos/tenancy/tenant_staff_directory.dart';
@@ -127,6 +128,15 @@ _guards = <String, ({List<TenantRole> expected, String row})>{
   'TenantAbandonedShiftRepository.allowedRoles': (
     expected: TenantAbandonedShiftRepository.allowedRoles,
     row: 'Close an abandoned shift: manager-or-above finds, server decides.',
+  ),
+  // | View management shift history | Full | Full | Full | No |
+  //
+  // **A read scope, not a gate.** Whether the open trading day is asked of
+  // every shift in the business or only the member's own - the same read the
+  // management history scope is, and the one `firestore.rules` allows.
+  'TenantOpenTradingDayRepository.businessWideRoles': (
+    expected: TenantOpenTradingDayRepository.businessWideRoles,
+    row: 'View management shift history: manager-or-above reads every shift.',
   ),
   // | Manage catalog operational fields | Full | Full | Full | No |
   'TenantCatalogManagementRepository.allowedRoles': (
@@ -457,6 +467,8 @@ const Map<String, List<TenantRole>> _fromTheMatrix = <String, List<TenantRole>>{
   'TenantShiftHistoryRepository.managementRoles': _management,
   // Finding one is the same read as the row above; ending one is the server's.
   'TenantAbandonedShiftRepository.allowedRoles': _management,
+  // Every shift in the business is the management history scope's read.
+  'TenantOpenTradingDayRepository.businessWideRoles': _management,
   'TenantCatalogManagementRepository.allowedRoles': _management,
   'TenantCatalogManagementRepository.costRoles': <TenantRole>[_o, _a],
   'TenantCatalogManagementRepository.retireRoles': <TenantRole>[_o, _a],

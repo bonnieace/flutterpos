@@ -225,10 +225,11 @@ void main() {
       await tester.tap(find.text('Staff'));
       await tester.pumpAndSettle();
 
-      // The destination and the page it opens now carry the same name, so the
-      // subtitle is what identifies the screen rather than its title.
+      // The destination and the page it opens carry the same name, so the
+      // bar's title is what identifies the screen. Its tagline left the bar
+      // on 2026-10-13 (`docs/design/topbar-inner/`).
       expect(
-        find.text('Manage your team, their roles and access.'),
+        find.descendant(of: find.byType(AppBar), matching: find.text('Staff')),
         findsOneWidget,
       );
       expect(find.text('Owner Person'), findsOneWidget);

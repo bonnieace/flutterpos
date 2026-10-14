@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tables — records</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+/* ===== tokens: AppTokens.uzapay, quoted from lib/ui/tokens.dart ===== */
+:root {
+  --stage: #050C08;
+  --base: #0D1F16; --raised: #132A1F; --sunken: #08140E; --field: #1E3A2B;
+  --overlay: #1C3328; --border-subtle: #1E3A2B; --card-edge: #283831;
+  --border-strong: #2C5340; --selected: #3D4A3D;
+  --text: #FFFFFF; --text-2: #B8D6C5; --text-3: #849E8F; --text-disabled: #5D7468;
+  --mint: #45F28D; --mint-hover: #3DD47C; --on-mint: #0A0F0C;
+  --secondary: #1C3328; --secondary-border: #2C5340;
+  --ok: #4BE277; --ok-bg: rgba(75, 226, 119, 0.10); --ok-edge: rgba(75, 226, 119, 0.30);
+  --att: #F2C14E; --att-bg: rgba(242, 193, 78, 0.10); --att-edge: rgba(242, 193, 78, 0.30);
+  --prob: #FF5C6C; --prob-bg: rgba(147, 0, 10, 0.20); --prob-edge: rgba(239, 68, 68, 0.30);
+  --info: #B0CDBD; --info-bg: rgba(176, 205, 189, 0.10); --info-edge: rgba(176, 205, 189, 0.30);
+  --neu: #BCCBB9; --neu-bg: #283831; --neu-edge: #3D4A3D;
+  --focus: #45F28D;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--stage); color: var(--text); font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+svg.i { width: 20px; height: 20px; fill: currentColor; flex: none; }
+svg.i16 { width: 16px; height: 16px; fill: currentColor; flex: none; }
+svg.i14 { width: 14px; height: 14px; fill: currentColor; flex: none; }
+svg.i24 { width: 24px; height: 24px; fill: currentColor; flex: none; }
+
+/* ===== board chrome (not app UI) ===== */
+.page-nav { padding: 20px 24px 0; font-size: 14px; letter-spacing: 0.25px; }
+.page-nav a { color: var(--text-3); text-decoration: none; }
+.page-nav a:hover { color: var(--mint); text-decoration: underline; }
+.page-head { padding: 12px 24px 0; max-width: 1488px; margin: 0 auto; }
+.page-head h1 { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.page-head p { margin: 4px 0 0; max-width: 940px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.stage { max-width: 1488px; margin: 0 auto; padding: 24px 24px 72px; display: flex; flex-direction: column; gap: 48px; }
+.section > h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; }
+.section > .lede { margin: 4px 0 16px; max-width: 940px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.section > .lede b, .note b { color: var(--text); font-weight: 600; }
+.frame-label { margin: 0 0 8px; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.frame { position: relative; overflow: hidden; background: var(--base); border-radius: 4px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6); flex: none; }
+.notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.notes.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.note { background: var(--sunken); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.note .n { display: inline-flex; width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; background: #F2C14E; color: #0A0F0C; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; vertical-align: 1px; }
+.note code, .lede code, td code { font-family: var(--mono); font-size: 12px; color: var(--mint); }
+.mk { position: absolute; z-index: 5; width: 22px; height: 22px; border-radius: 50%; background: #F2C14E; color: #0A0F0C; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px rgba(5, 12, 8, 0.85); }
+.was { margin-top: 12px; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 16px; max-width: 1200px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.was dt { color: var(--text-3); font-size: 12px; line-height: 21px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
+.was dd { margin: 0; }
+
+/* ===== app frame pieces ===== */
+.tb { height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px 0 8px; }
+.tb .ib { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; color: var(--text); border-radius: 8px; flex: none; }
+.tb .tt { font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; white-space: nowrap; }
+.tb .ts { font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); white-space: nowrap; }
+.tb .grow { flex: 1; }
+.page { width: 1200px; margin: 8px auto 0; }
+
+/* ===== the sheet ===== */
+.sheet { background: var(--raised); border: 1px solid var(--card-edge); border-radius: 8px; overflow: hidden; }
+.bar { display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border-subtle); }
+.bar .sp { flex: 1; }
+.bar .lead { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.bar .lead b { font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; color: var(--text); white-space: nowrap; }
+.bar .lead small { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; }
+.fld { height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--field); border: 1px solid var(--border-strong); border-radius: 8px; font-size: 16px; line-height: 24px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; flex: none; }
+.fld.search { width: 320px; }
+.fld .v { color: var(--text); }
+.fld .dd { margin-left: auto; color: var(--text-2); }
+.fld svg { color: var(--text-3); }
+.btn { height: 48px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; flex: none; border: 1px solid transparent; }
+.btn.icon { padding: 0 16px; }
+.btn.pri { background: var(--mint); color: var(--on-mint); }
+.btn.sec { background: var(--secondary); border-color: var(--secondary-border); color: var(--text); }
+.btn.ter { color: var(--mint); }
+.btn.off { background: var(--field); border-color: var(--field); color: var(--text-disabled); }
+
+.th, .tr, .tg, .tsum, .tx { display: grid; grid-template-columns: var(--cols); column-gap: 16px; padding: 0 24px; align-items: center; }
+.th { height: 40px; border-bottom: 1px solid var(--border-strong); font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+.th .u { color: var(--text-disabled); }
+.tr { min-height: 56px; border-top: 1px solid var(--border-subtle); font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); position: relative; }
+.th + .tr, .tg + .tr, .th + .tg { border-top: 0; }
+.tr.hover { background: var(--overlay); }
+.tr.press { background: var(--field); }
+.tr.focus { box-shadow: inset 0 0 0 2px var(--focus); }
+.tr.open { background: var(--overlay); }
+.tr.muted .id b, .tr.muted .txt, .tr.muted .num, .tr.muted .time { color: var(--text-3); }
+.tg { height: 40px; background: var(--sunken); border-top: 1px solid var(--border-subtle); font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+.tg .num { font-size: 12px; line-height: 16px; color: var(--text-2); text-transform: none; letter-spacing: 0; }
+.tg .cap { text-transform: none; font-weight: 400; letter-spacing: 0.25px; }
+.tsum { min-height: 56px; background: var(--sunken); border-top: 1px solid var(--border-strong); font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); }
+.tsum .num { color: var(--mint); }
+.tsum .cap { text-transform: none; font-weight: 400; letter-spacing: 0.25px; }
+.tx { background: var(--sunken); border-top: 1px solid var(--border-subtle); padding-top: 8px; padding-bottom: 8px; }
+.tx .line { display: contents; }
+.tx .li { min-height: 32px; display: flex; align-items: center; }
+.span-all { grid-column: 1 / -1; }
+
+/* cells */
+.id { min-width: 0; display: flex; flex-direction: column; }
+.id b { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.id small { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.id small.code, .code { font-family: var(--mono); font-weight: 500; letter-spacing: 0; }
+.code { font-size: 12px; line-height: 16px; color: var(--text-2); white-space: nowrap; }
+.txt { min-width: 0; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.txt.two { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.txt .you { color: var(--text-3); }
+.num { font-family: var(--mono); font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: 0; color: var(--text); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.num .pad { visibility: hidden; }
+.num.dim { color: var(--text-3); }
+.num.neg { color: var(--text); }
+.time { font-family: var(--mono); font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: 0; color: var(--text-2); white-space: nowrap; }
+.r { text-align: right; justify-self: end; }
+.c { justify-self: center; }
+.dl { font-family: var(--mono); font-weight: 500; font-size: 14px; line-height: 20px; color: var(--text-2); white-space: nowrap; display: inline-flex; align-items: center; gap: 2px; justify-self: end; }
+.dl svg { width: 20px; height: 20px; fill: currentColor; flex: none; margin: -2px -2px -2px -4px; color: var(--text-3); }
+.st { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); white-space: nowrap; }
+.st.ok svg { color: var(--ok); } .st.att svg { color: var(--att); } .st.prob svg { color: var(--prob); } .st.neu svg { color: var(--text-3); } .st.info svg { color: var(--info); }
+.bdg { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 8px; border: 1px solid; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; white-space: nowrap; justify-self: start; }
+.bdg.ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-edge); }
+.bdg.att { color: var(--att); background: var(--att-bg); border-color: var(--att-edge); }
+.bdg.prob { color: var(--prob); background: var(--prob-bg); border-color: var(--prob-edge); }
+.bdg.info { color: var(--info); background: var(--info-bg); border-color: var(--info-edge); }
+.bdg.neu { color: var(--neu); background: var(--neu-bg); border-color: var(--neu-edge); }
+.kb { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; color: var(--text-2); border-radius: 8px; justify-self: end; }
+.kb.hover { background: rgba(255, 255, 255, 0.08); }
+.dis { width: 48px; height: 48px; margin: 0 -8px; display: flex; align-items: center; justify-content: center; color: var(--text-2); border-radius: 8px; }
+.acts { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.prog { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.trk { width: 64px; height: 4px; border-radius: 999px; background: var(--border-strong); overflow: hidden; flex: none; }
+.trk i { display: block; height: 100%; background: var(--ok); border-radius: 999px; }
+.trk.att i { background: var(--att); }
+.wait { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--att); }
+
+/* foot */
+.foot { min-height: 64px; display: flex; align-items: center; gap: 16px; padding: 8px 24px; border-top: 1px solid var(--border-subtle); }
+.foot .cnt { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.foot .cnt b { color: var(--text-2); font-weight: 500; }
+.pg { margin-left: auto; display: flex; align-items: stretch; height: 48px; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; flex: none; }
+.pg span { display: flex; align-items: center; gap: 4px; padding: 0 16px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; color: var(--text); white-space: nowrap; }
+.pg span + span { border-left: 1px solid var(--border-strong); }
+.pg .off { color: var(--text-disabled); }
+.pg .mid { background: var(--overlay); }
+
+/* skeleton, notices */
+.sk { display: block; height: 12px; border-radius: 6px; background: var(--border-subtle); }
+.sk.hi { background: var(--border-strong); }
+.callout { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: 8px; border: 1px solid; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; }
+.callout.info { color: var(--text-2); background: var(--info-bg); border-color: var(--info-edge); }
+.callout.info svg { color: var(--info); }
+.callout.prob { color: var(--text); background: var(--prob-bg); border-color: var(--prob-edge); }
+.callout.prob svg { color: var(--prob); }
+.callout.att { color: var(--text); background: var(--att-bg); border-color: var(--att-edge); }
+.callout.att svg { color: var(--att); }
+.callout b { font-weight: 600; color: var(--text); }
+.empty { padding: 56px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+.empty b { font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; color: var(--text); }
+.empty p { margin: 0 0 8px; max-width: 460px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.empty .glyph { width: 48px; height: 48px; border-radius: 12px; background: var(--field); color: var(--text-2); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+
+/* ===== this board ===== */
+.tx .q { font-family: var(--mono); font-size: 12px; line-height: 16px; color: var(--text-3); text-align: right; }
+.tx .lt { font-size: 14px; line-height: 20px; letter-spacing: 0.25px; color: var(--text-2); }
+.band { display: flex; align-items: stretch; gap: 0; margin-bottom: 16px; background: var(--raised); border: 1px solid var(--card-edge); border-radius: 8px; }
+.band > div { padding: 16px 24px; display: flex; flex-direction: column; gap: 6px; }
+.band > div + div { border-left: 1px solid var(--border-subtle); }
+.band .e { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); }
+.band .big { font-family: var(--mono); font-weight: 500; font-size: 22px; line-height: 30.8px; color: var(--mint); }
+.band .mid { font-family: var(--mono); font-weight: 500; font-size: 22px; line-height: 30.8px; color: var(--text); }
+.band .pay { display: grid; grid-template-columns: auto auto auto; column-gap: 16px; row-gap: 2px; align-items: baseline; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.band .pay .num { font-size: 14px; }
+.band .pay small { font-size: 12px; color: var(--text-3); }
+.strike { text-decoration: line-through; text-decoration-color: var(--text-3); }
+.tabs { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 16px; background: var(--sunken); border: 1px solid var(--border-subtle); border-radius: 12px; }
+.tabs span { height: 40px; padding: 0 20px; display: flex; align-items: center; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; color: var(--text-2); border-radius: 8px; }
+.tabs span.on { background: var(--selected); color: var(--text); }
+.disc { display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 4px; margin-bottom: 8px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.disc .grow { flex: 1; }
+.share { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+.share .trk { width: 120px; }
+.share .trk i { background: var(--text-2); }
+
+.owe { --cols: minmax(0, 1.6fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 0.9fr) 48px; }
+.stm { --cols: minmax(0, 0.7fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1fr); }
+.sup { --cols: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 0.8fr) 48px; }
+.dlv { --cols: 32px minmax(0, 0.7fr) minmax(0, 0.9fr) minmax(0, 1.8fr) minmax(0, 0.6fr) minmax(0, 0.9fr) minmax(0, 1fr); }
+.bat { --cols: minmax(0, 0.6fr) minmax(0, 2fr) minmax(0, 0.6fr) minmax(0, 1fr) minmax(0, 1fr); }
+.exp { --cols: minmax(0, 0.8fr) minmax(0, 2.6fr) minmax(0, 1fr) 48px; }
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<symbol id="more" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></symbol>
+<symbol id="right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></symbol>
+<symbol id="left" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></symbol>
+<symbol id="down" viewBox="0 0 24 24"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></symbol>
+<symbol id="up" viewBox="0 0 24 24"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></symbol>
+<symbol id="drop" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></symbol>
+<symbol id="tri-up" viewBox="0 0 24 24"><path d="M7 14l5-5 5 5z"/></symbol>
+<symbol id="tri-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></symbol>
+<symbol id="filter" viewBox="0 0 24 24"><path d="M7 6h10l-5.01 6.3L7 6zm-2.75-.39C6.27 8.2 10 13 10 13v6c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-6s3.72-4.8 5.74-7.39c.51-.66.04-1.61-.79-1.61H5.04c-.83 0-1.3.95-.79 1.61z"/></symbol>
+<symbol id="cal" viewBox="0 0 24 24"><path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V10h16v11zm0-13H4V5h16v3z"/></symbol>
+<symbol id="ok" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></symbol>
+<symbol id="ok-o" viewBox="0 0 24 24"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></symbol>
+<symbol id="err" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></symbol>
+<symbol id="warn" viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></symbol>
+<symbol id="info" viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></symbol>
+<symbol id="block" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM4 12c0-4.42 3.58-8 8-8 1.85 0 3.55.63 4.9 1.69L5.69 16.9C4.63 15.55 4 13.85 4 12zm8 8c-1.85 0-3.55-.63-4.9-1.69L18.31 7.1C19.37 8.45 20 10.15 20 12c0 4.42-3.58 8-8 8z"/></symbol>
+<symbol id="upload" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95C8.08 7.14 9.94 6 12 6c2.62 0 4.88 1.86 5.39 4.43l.3 1.5 1.53.11c1.56.1 2.78 1.41 2.78 2.96 0 1.65-1.35 3-3 3zM8 13h2.55v3h2.9v-3H16l-4-4z"/></symbol>
+<symbol id="back" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></symbol>
+<symbol id="add" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></symbol>
+<symbol id="person-add" viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></symbol>
+<symbol id="truck" viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></symbol>
+<symbol id="dl" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></symbol>
+<symbol id="refresh" viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></symbol>
+<symbol id="print" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></symbol>
+<symbol id="receipt" viewBox="0 0 24 24"><path d="M19.5 3.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2v14H3v3c0 1.66 1.34 3 3 3h12c1.66 0 3-1.34 3-3V2l-1.5 1.5zM19 19c0 .55-.45 1-1 1s-1-.45-1-1v-3H8V5h11v14z"/><path d="M9 7h6v2H9zm7 0h2v2h-2zm-7 3h6v2H9zm7 0h2v2h-2z"/></symbol>
+<symbol id="close" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
+<symbol id="help" viewBox="0 0 24 24"><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></symbol>
+<symbol id="inbox" viewBox="0 0 24 24"><path d="M19 3H4.99C3.88 3 3.01 3.89 3.01 5L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z"/></symbol>
+<symbol id="cloud-off" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4c-1.48 0-2.85.43-4.01 1.17l1.46 1.46C10.21 6.23 11.08 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3 0 1.13-.64 2.11-1.56 2.62l1.45 1.45C23.16 18.16 24 16.68 24 15c0-2.64-2.05-4.78-4.65-4.96zM3 5.27l2.75 2.74C2.56 8.15 0 10.77 0 14c0 3.31 2.69 6 6 6h11.73l2 2L21 20.73 4.27 4 3 5.27zM7.73 10l8 8H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h1.73z"/></symbol>
+<symbol id="report" viewBox="0 0 24 24"><path d="M15 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.89 2 1.99 2H19c1.1 0 2-.9 2-2V9l-6-6zM5 19V5h9v5h5v9H5zM9 8c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1zm0 4c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1zm0 4c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1z"/></symbol>
+</svg>
+<nav class="page-nav"><a href="index.html">&larr; Tables</a></nav>
+<header class="page-head"><h1>Customers, suppliers, production and expenses</h1><p>The sheet on the directories and the record pages under them. Customers and suppliers use the harness&#8217;s names, with a few more customers so <em>Who owes</em> has rows.</p></header>
+<main class="stage">
+<section class="section"><h2>Customers: who owes</h2><p class="lede">The customer list itself is on <a href="tables-system.html" style="color:var(--mint);">The sheet</a>. This is its other view: everyone who owes, biggest first, in one page. That makes it the one directory with an honest total, because every row it sums is here.</p><p class="frame-label">Customers &#183; Who owes &#183; 1440 &#183; manager</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Customers</div><div class="ts">Who buys from you.</div></div></div><div class="page" style="width:1200px;"><div class="sheet owe"><div class="bar"><div class="fld search" style="width:280px;"><svg class="i"><use href="#search"/></svg>Name</div><div class="fld" style="width:220px;"><svg class="i"><use href="#filter"/></svg><span class="v">Who owes</span><svg class="i dd"><use href="#drop"/></svg></div><span class="sp"></span><span class="btn sec icon"><svg class="i"><use href="#person-add"/></svg>Add customer</span></div><div class="th"><span>Customer</span><span>Owing since</span><span>Last bought</span><span class="r">Owes <span class="u">KES</span></span><span>Standing</span><span></span></div><div class="tr "><div class="id"><b>Wanjiku Mwangi</b><small>wanjiku.m@mail.example</small></div><span class="txt">1 Oct</span><span class="txt">9 Oct</span><span class="num">2,350.50</span><span></span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div><div class="tr "><div class="id"><b>Achieng Atieno</b><small>+254 &#8226;&#8226;&#8226; 412</small></div><span class="txt">28 Sep</span><span class="txt">10 Oct</span><span class="num">1,850<span class="pad">.00</span></span><span></span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div><div class="tr "><div class="id"><b>Kamau Njoroge</b><small>+254 &#8226;&#8226;&#8226; 230</small></div><span class="txt">22 Sep</span><span class="txt">7 Oct</span><span class="num">1,200<span class="pad">.00</span></span><span></span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div><div class="tr "><div class="id"><b>Mary Wambui</b><small>+254 &#8226;&#8226;&#8226; 584</small></div><span class="txt">5 Oct</span><span class="txt">11 Oct</span><span class="num">1,100<span class="pad">.00</span></span><span></span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div><div class="tr "><div class="id"><b>Otieno Ouma</b><small>+254 &#8226;&#8226;&#8226; 917</small></div><span class="txt">3 Oct</span><span class="txt">3 Oct</span><span class="num">450<span class="pad">.00</span></span><span class="bdg neu"><svg class="i14"><use href="#block"/></svg>No credit</span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div><div class="tsum"><span>5 customers</span><span></span><span></span><span class="num">6,950.50</span><span></span><span></span></div><div class="foot"><span class="cnt">Biggest first. Everyone who owes is on this one page.</span></div></div></div></div><dl class="was"><dt>Today</dt><dd>The same cards as the main list, with an info callout above: &#8220;5 customers owe KES 6950.50 in all. Biggest first.&#8221;</dd><dt>Now</dt><dd>The callout&#8217;s sentence becomes the total row and the foot. <em>Record a payment</em> stays in the menu: every row on this view owes, so promoting it would put the same button on every row, and a promoted action is only for the rows that differ.</dd><dt>Unchanged</dt><dd>Biggest first; one unpaged list; the menu; the search matching names only on this view; no credit limit shown anywhere.</dd></dl></section>
+<section class="section"><h2>A customer: statement</h2><p class="lede">The record page&#8217;s header cards stay. Its statement is a ledger in all but name, and now it is drawn as one: the change and the balance after it, side by side.</p><p class="frame-label">Kamau Njoroge &#183; statement &#183; 1440</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Kamau Njoroge</div><div class="ts">Customer</div></div></div><div class="page" style="width:1200px;"><div class="tabs"><span class="on">Statement</span><span>Purchases</span></div><div class="sheet stm"><div class="th"><span>Date</span><span>What happened</span><span>Receipt</span><span>Paid by</span><span class="r">Change <span class="u">KES</span></span><span class="r">Then owed <span class="u">KES</span></span></div><div class="tr "><span class="txt">12 Oct</span><div class="id"><b>Paid back</b></div><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="txt">M-Pesa</span><span class="num">&#8722;500</span><span class="num">1,200</span></div><div class="tr "><span class="txt">7 Oct</span><div class="id"><b>Bought on credit</b></div><span class="code">CT-8F8-20261007-0045</span><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="num">+280</span><span class="num">1,700</span></div><div class="tr "><span class="txt">3 Oct</span><div class="id"><b>Returned goods</b></div><span class="code">CT-8F8-20260930-0027</span><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="num">&#8722;130</span><span class="num">1,420</span></div><div class="tr "><span class="txt">30 Sep</span><div class="id"><b>Bought on credit</b></div><span class="code">CT-8F8-20260930-0027</span><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="num">+600</span><span class="num">1,550</span></div><div class="tr "><span class="txt">22 Sep</span><div class="id"><b>Bought on credit</b></div><span class="code">CT-8F8-20260922-0012</span><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="num">+950</span><span class="num">950</span></div><div class="foot"><span class="cnt">Newest first. Plus means they owe more.</span><span style="margin-left:auto;"><span class="btn ter">Show older entries</span></span></div></div></div></div><dl class="was"><dt>Today</dt><dd>One block per entry, with &#8220;+ KES 280&#8221; and &#8220;Then owed KES 1700&#8221; on separate lines.</dd><dt>Now</dt><dd>Two figure columns that read down: what changed, and what was owed after. The <em>Purchases</em> tab is the Sales Report&#8217;s receipt sheet, without its menu.</dd><dt>Unchanged</dt><dd>20 entries per load and <em>Show older entries</em>; no actor, because an entry holds none.</dd></dl></section>
+<section class="section"><h2>Suppliers</h2><p class="lede">A short list in most shops. The directory summary card&#8217;s figures move into the foot, and both of the page&#8217;s actions sit in the bar.</p><p class="frame-label">Suppliers &#183; 1440 &#183; manager</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Suppliers</div><div class="ts">Who stock is bought from.</div></div><span class="grow"></span><span class="ib"><svg class="i24"><use href="#report"/></svg></span></div><div class="page" style="width:1200px;"><div class="sheet sup"><div class="bar"><div class="fld search" style="width:280px;"><svg class="i"><use href="#search"/></svg>Search</div><div class="fld" style="width:200px;"><svg class="i"><use href="#filter"/></svg><span class="v">Active</span><svg class="i dd"><use href="#drop"/></svg></div><span class="sp"></span><span class="btn sec icon"><svg class="i"><use href="#truck"/></svg>Receive delivery</span><span class="btn sec icon"><svg class="i"><use href="#add"/></svg>Add supplier</span></div><div class="th"><span>Supplier</span><span>Phone</span><span>Email</span><span>Last delivery</span><span></span></div><div class="tr "><div class="id"><b>ABC Distributors</b><small>Industrial Area, Enterprise Road</small></div><span class="txt">0712 345 678</span><span class="txt">orders@abc.example</span><span class="txt">10 Oct</span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div><div class="tr hover"><div class="id"><b>Fresh Farms Dairy</b></div><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="txt">sales@freshfarms.example</span><span class="txt">None yet</span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div><div class="tr "><div class="id"><b>Mama Njeri Flour</b></div><span class="txt">0722 100 200</span><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="txt">6 Oct</span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div><div class="foot"><span class="cnt">A to Z. 3 active suppliers, 1 inactive.</span></div></div></div></div><dl class="was"><dt>Today</dt><dd>A summary card, two full-width buttons, and a card per supplier showing one contact.</dd><dt>Now</dt><dd>Phone and email in their own columns, since the record holds both. The row opens the supplier.</dd><dt>Unchanged</dt><dd>The menu (View, Receive delivery, Edit, Mark inactive or Reactivate); A to Z; 20 per page; the 500 cap and its callout.</dd></dl></section>
+<section class="section"><h2>A supplier: deliveries</h2><p class="lede">Each delivery is a row whose lines fold under it, aligned so the line totals sit in the <em>Value</em> column. A line without a cost says so in its own place.</p><p class="frame-label">ABC Distributors &#183; deliveries &#183; 1440</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">ABC Distributors</div><div class="ts">Supplier</div></div></div><div class="page" style="width:1200px;"><div class="sheet dlv"><div class="th"><span></span><span>Delivered</span><span>Reference</span><span>What arrived</span><span class="r">Units</span><span>Received by</span><span class="r">Value <span class="u">KES</span></span></div><div class="tr open"><span class="dis"><svg class="i"><use href="#up"/></svg></span><span class="txt">10 Oct</span><span class="code">INV-48392</span><div class="id"><b>White bread loaf, Bar soap - blue</b><small>1 line without a cost, not in the value</small></div><span class="num">60</span><span class="txt">Amina Hassan</span><span class="num">1,152</span></div><div class="tx"><span></span><span></span><span></span><span class="li lt">White bread loaf &#183; 400g</span><span></span><span class="li q" style="justify-content:flex-end;">24 &#215; 48</span><span class="li num" style="justify-content:flex-end;font-size:14px;color:var(--text-2);">1,152</span><span></span><span></span><span></span><span class="li lt">Bar soap - blue &#183; 150g</span><span></span><span class="li q" style="justify-content:flex-end;">36 &#215; no cost</span><span class="li num dim" style="justify-content:flex-end;font-size:14px;color:var(--text-3);">&#8212;</span></div><div class="tr "><span class="dis"><svg class="i"><use href="#down"/></svg></span><span class="txt">3 Oct</span><span class="code">INV-47811</span><div class="id"><b>White bread loaf</b><small>1 product</small></div><span class="num">30</span><span class="txt">Grace Wanjiru</span><span class="num">1,395</span></div><div class="foot"><span class="cnt">Newest first.</span><span style="margin-left:auto;"><span class="btn ter">Show older deliveries</span></span></div></div></div></div><dl class="was"><dt>Today</dt><dd>A card per delivery with every line always open.</dd><dt>Now</dt><dd>A row per delivery and the lines on demand. <b>New:</b> <em>Received by</em>. The delivery holds who received it and no screen shows it today. It is drawn here for you to decide.</dd><dt>Unchanged</dt><dd>10 per load and <em>Show older deliveries</em>; the value counting only costed lines, and saying so.</dd></dl></section>
+<section class="section"><h2>Production</h2><p class="lede">Opened to see what a batch cost. The batch number is the identity&#8217;s second line, because it is how a batch is referred to.</p><p class="frame-label">Production &#183; 1440 &#183; manager</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Production</div><div class="ts">What was made, and what it cost.</div></div><span class="grow"></span><span class="ib"><svg class="i24"><use href="#report"/></svg></span></div><div class="page" style="width:1200px;"><div class="sheet bat"><div class="bar"><span class="sp"></span><span class="btn sec icon"><svg class="i"><use href="#add"/></svg>Record production</span></div><div class="th"><span>Made</span><span>Product and batch</span><span class="r">Units</span><span class="r">Cost per unit <span class="u">KES</span></span><span class="r">Total cost <span class="u">KES</span></span></div><div class="tr hover"><span class="txt">11 Oct</span><div class="id"><b>White bread loaf &#183; 400g</b><small class="code">PB-20261011-7F3A2C</small></div><span class="num">100</span><span class="num">48<span class="pad">.00</span></span><span class="num">4,800</span></div><div class="tr "><span class="txt">10 Oct</span><div class="id"><b>Mandazi</b><small class="code">PB-20261010-C41D90</small></div><span class="num">200</span><span class="num">12.40</span><span class="num">2,480</span></div><div class="tr "><span class="txt">8 Oct</span><div class="id"><b>White bread loaf &#183; 400g</b><small class="code">PB-20261008-1B9E04</small></div><span class="num">120</span><span class="num">43.17</span><span class="num">5,180</span></div><div class="foot"><span class="cnt">Newest first. A row opens the cost of that batch.</span><span style="margin-left:auto;"><span class="btn ter">Show older batches</span></span></div></div></div></div><dl class="was"><dt>Today</dt><dd>A card per batch with two figure boxes and a small <em>View costs</em> button.</dd><dt>Now</dt><dd>The row opens the cost screen, which is all the button did. The figures line up, so a batch that cost more than the one before is visible down the column.</dd><dt>Unchanged</dt><dd>20 per load and <em>Show older batches</em>; no edit and no void, because a batch is a record.</dd></dl></section>
+<section class="section"><h2>Expenses: one type</h2><p class="lede">The main Expenses page is a ring chart of categories and stays a chart. A category&#8217;s own view lists its records, and they become a small sheet under its total and day chart.</p><p class="frame-label">Transport &#183; this month &#183; 1440 &#183; owner</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Transport</div><div class="ts">Spending under one type, this month.</div></div></div><div class="page" style="width:1200px;"><div class="sheet exp"><div class="th"><span>Date</span><span>Description</span><span class="r">Amount <span class="u">KES</span></span><span></span></div><div class="tr muted"><span class="txt">11 Oct</span><div class="id"><b>Delivery run to the depot</b><small>Voided &#183; Recorded twice by mistake</small></div><span class="num dim"><span class="strike">1,450</span></span><span></span></div><div class="tr "><span class="txt">9 Oct</span><div class="id"><b>Delivery run to the depot</b></div><span class="num">1,450</span><span class="kb"><svg class="i"><use href="#block"/></svg></span></div><div class="tr "><span class="txt">2 Oct</span><div class="id"><b>Boda boda to the wholesaler</b></div><span class="num">300</span><span class="kb"><svg class="i"><use href="#block"/></svg></span></div><div class="tsum"><span>2 records</span><span></span><span class="num">1,750</span><span></span></div><div class="foot"><span class="cnt">Newest first. A voided expense stays listed and counts towards nothing.</span></div></div></div></div><dl class="was"><dt>Today</dt><dd>Ledger rows with a wallet glyph each, the date as a second line, and a void icon at the end.</dd><dt>Now</dt><dd>Date, description and amount in columns. A voided record stays listed, muted, with the amount struck through and its reason as the second line. The total row is the figure the view already shows above its chart.</dd><dt>Unchanged</dt><dd>Void and its sheet; no edit; owner and administrator only; at most 250 records a period.</dd></dl></section>
+</main>
+</body>
+</html>

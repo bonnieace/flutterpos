@@ -52,6 +52,14 @@ String customerOwingLabel(TenantCustomer customer) {
   return '$owes · since ${reportShortDate(checkoutBusinessDate(since.toUtc()))}';
 }
 
+/// `since 22 Sep`: how long a customer has owed, or null where they owe
+/// nothing or the date was not recorded. The table's caption under the amount.
+String? customerOwingSinceLabel(TenantCustomer customer) {
+  final since = customer.owingSince;
+  if (customer.owedMinor <= 0 || since == null) return null;
+  return 'since ${reportShortDate(checkoutBusinessDate(since.toUtc()))}';
+}
+
 /// `1 point`, `40 points`.
 String customerPointsLabel(int points) =>
     points == 1 ? '1 point' : '$points points';

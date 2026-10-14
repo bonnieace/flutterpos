@@ -374,7 +374,7 @@ void main() {
 
     expect(
       _text(tester, 'reconciliation-anomalies-empty'),
-      'The server has recorded no unresolved differences for this business.',
+      'No unresolved differences.',
     );
   });
 
@@ -809,7 +809,7 @@ void main() {
     });
     expect(
       _text(tester, 'shift-amendments-empty'),
-      'This shift\'s summary has never been corrected.',
+      'No corrections for this shift.',
     );
   });
 
@@ -1024,6 +1024,78 @@ void main() {
     );
     expect(find.textContaining('inconsistent_anomaly'), findsNothing);
   });
+
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: one row per difference from 1024.
+  group('on a screen 1024 and wider', () {
+    testWidgets('the differences are one table, the kind filter on its edge', (
+      tester,
+    ) async {
+      final reader = _Reader()
+        ..respond(<TenantQueryDocumentSnapshot>[
+          _snapshot('sale_a', _saleAnomaly()),
+          _snapshot('shift_b', _shiftAnomaly()),
+          _snapshot('stock_c', _stockAnomaly()),
+        ]);
+
+      await _pump(tester, _controller(), reader, width: 1280);
+
+      final sheet = find.byKey(
+        const ValueKey('reconciliation-anomalies-sheet'),
+      );
+      expect(sheet, findsOne);
+      expect(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const ValueKey('reconciliation-anomaly-kind')),
+        ),
+        findsOne,
+      );
+      for (final id in <String>['sale_a', 'shift_b', 'stock_c']) {
+        expect(
+          find.byKey(ValueKey('reconciliation-anomaly-$id')),
+          findsOne,
+          reason: id,
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a correction is offered from the row menu, on a shift row', (
+      tester,
+    ) async {
+      final reader = _Reader()
+        ..respond(<TenantQueryDocumentSnapshot>[
+          _snapshot('shift_b', _shiftAnomaly()),
+          _snapshot('stock_c', _stockAnomaly()),
+        ]);
+
+      await _pump(
+        tester,
+        _controller(role: TenantRole.owner),
+        reader,
+        callable: _Callable(_response()),
+        width: 1280,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('reconciliation-anomaly-menu-shift_b')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('reconciliation-anomaly-amend-shift_b')),
+        findsOne,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('reconciliation-anomaly-amend-shift_b')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('reconciliation-amend-reason')),
+        findsOne,
+      );
+    });
+  });
 }
 
 String _text(WidgetTester tester, String key) =>
@@ -1069,8 +1141,13 @@ Future<void> _pump(
   int pageSize = 20,
   bool settle = true,
   _Callable? callable,
+  // **800, the cards, unless a case asks for more.** Every case here was
+  // written against a difference's card - its sentence, its figures and its
+  // buttons in view - and that is still what draws below 1024. From 1024 the
+  // list is a table (2026-10-13), which the group at the end reads at 1280.
+  double width = 800,
 }) async {
-  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

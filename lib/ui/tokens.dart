@@ -1462,6 +1462,74 @@ final class AppAccentRoles {
       );
 }
 
+/// Materials and pigments for artwork, independent of interface surfaces.
+enum AppIllustrationPaint {
+  hair,
+  onAccent,
+  ink,
+  inkSoft,
+  inkLight,
+  paper,
+  paperShade,
+  paperDeep,
+  skinDeep,
+  skinWarm,
+  skinLight,
+  jade,
+  teal,
+  sky,
+  violet,
+  coral,
+  amber,
+  foliage,
+}
+
+/// A coordinated editorial palette for illustrations on the app's dark ground.
+/// Skin stays warm, paper stays light, and dark pigments remain visible against
+/// both the page and dialog backgrounds.
+@immutable
+final class AppIllustrationRoles {
+  const AppIllustrationRoles({required this.paints});
+
+  final Map<AppIllustrationPaint, Color> paints;
+
+  Color operator [](AppIllustrationPaint paint) => paints[paint]!;
+
+  static const artistic = AppIllustrationRoles(
+    paints: {
+      AppIllustrationPaint.hair: Color(0xFF947566),
+      AppIllustrationPaint.onAccent: Color(0xFF18362F),
+      AppIllustrationPaint.ink: Color(0xFF737991),
+      AppIllustrationPaint.inkSoft: Color(0xFF8B92AE),
+      AppIllustrationPaint.inkLight: Color(0xFFA5AFC6),
+      AppIllustrationPaint.paper: Color(0xFFF5F0E8),
+      AppIllustrationPaint.paperShade: Color(0xFFD4E0E9),
+      AppIllustrationPaint.paperDeep: Color(0xFFB0C4D7),
+      AppIllustrationPaint.skinDeep: Color(0xFFC58D70),
+      AppIllustrationPaint.skinWarm: Color(0xFFE6AD8E),
+      AppIllustrationPaint.skinLight: Color(0xFFF4C9AD),
+      AppIllustrationPaint.jade: Color(0xFF7DE0BC),
+      AppIllustrationPaint.teal: Color(0xFF3C9587),
+      AppIllustrationPaint.sky: Color(0xFF8BC9ED),
+      AppIllustrationPaint.violet: Color(0xFFB3A4EF),
+      AppIllustrationPaint.coral: Color(0xFFF0A08D),
+      AppIllustrationPaint.amber: Color(0xFFECC77F),
+      AppIllustrationPaint.foliage: Color(0xFF91BBA2),
+    },
+  );
+
+  static AppIllustrationRoles lerp(
+    AppIllustrationRoles a,
+    AppIllustrationRoles b,
+    double t,
+  ) => AppIllustrationRoles(
+    paints: {
+      for (final paint in AppIllustrationPaint.values)
+        paint: Color.lerp(a[paint], b[paint], t)!,
+    },
+  );
+}
+
 /// Every colour role in one place. `design.md` §2.1.
 @immutable
 final class AppColorRoles {
@@ -1473,6 +1541,7 @@ final class AppColorRoles {
     required this.chart,
     required this.accent,
     required this.report,
+    this.illustration = AppIllustrationRoles.artistic,
   });
 
   final AppSurfaceRoles surface;
@@ -1485,6 +1554,8 @@ final class AppColorRoles {
   /// The paper a generated document is drawn on. See [AppReportRoles] for why
   /// it is not [chart].
   final AppReportRoles report;
+
+  final AppIllustrationRoles illustration;
 
   /// The only palette `design.md` defines.
   ///
@@ -1560,6 +1631,11 @@ final class AppColorRoles {
         chart: AppChartRoles.lerp(a.chart, b.chart, t),
         accent: AppAccentRoles.lerp(a.accent, b.accent, t),
         report: AppReportRoles.lerp(a.report, b.report, t),
+        illustration: AppIllustrationRoles.lerp(
+          a.illustration,
+          b.illustration,
+          t,
+        ),
       );
 }
 
@@ -2224,9 +2300,17 @@ final class AppIconography {
   /// old hub's 24 glyph inside 10 of padding, measured 44 on its own screen.
   double get cardWell => 44;
 
+  /// The well an inner screen's top bar draws its module's [row] glyph in,
+  /// from 768 up (`docs/design/topbar-inner/`): [cardWell]'s well, sized to
+  /// sit beside a 22 title in a 64 bar.
+  double get barWell => 32;
+
   /// The signed-in person's circle in the home's top bar: the old hub's, 14 in
   /// radius.
   double get hubAvatar => 28;
+
+  /// The same person at the head of the account menu, beside two lines.
+  double get accountAvatar => 40;
 
   /// The phone launcher's glyph.
   double get launcher => 28;
@@ -2757,19 +2841,26 @@ final class AppLayout {
   /// §4.2's maximum for record lists and tables.
   double get records => 1200;
 
-  /// The home's top bar on a tablet or a desktop: the old hub's, measured at
-  /// 70 on its own screen - 12 above and below a 46 user pill. Restored on
-  /// 2026-10-10 at the developer's direction; a phone keeps the toolbar.
-  double get hubBarHeight => 70;
-
-  /// The same bar on a phone, which the developer asked for as an exception
-  /// to the old hub's look being for wider screens only (2026-10-10).
+  /// The top bar from [mediumFloor] up - the home's and every other route's -
+  /// since 2026-10-13 (`docs/design/topbar/`).
   ///
-  /// **56, not the old phone bar's 52.** That bar fitted because its controls
-  /// were 20-pixel icons with their padding stripped - under §9's 48. A 48
-  /// control with 4 above and below is 56, which is also the toolbar it
-  /// replaces, so nothing under it moves.
-  double get hubBarHeightCompact => 56;
+  /// **One height whether or not the route names a subtitle.** From this width
+  /// up the subtitle sits on the title's line, so the bar does not grow a row
+  /// for it. 64 is Material 3's small top app bar. It replaced the old hub's
+  /// 70, which was 12 above and below a 46 user pill the bar no longer draws.
+  double get topBarHeight => 64;
+
+  /// The top bar below [mediumFloor].
+  ///
+  /// **A 48 control with 4 above and below**, which is also Material's own
+  /// toolbar, so a route that draws `AppBar` and the home's bar are the same
+  /// height on a phone. A two-line title still takes
+  /// `AppScaffold.toolbarHeightWithSubtitle`.
+  double get topBarHeightCompact => 56;
+
+  /// How wide the account menu is that the home's top bar opens: the person,
+  /// this device, and the way out (`docs/design/topbar/`).
+  double get accountMenuWidth => 288;
 
   /// The widest a home module card is drawn on a tablet or a desktop before
   /// the grid adds a column - for every role, since 2026-10-10.
@@ -2793,6 +2884,16 @@ final class AppLayout {
   /// screens included. A card is its content with this between, so it is 191
   /// tall wherever it is drawn; the old desktop card was 198.
   double get moduleCardGlyphGap => 36;
+
+  /// The width of a dialog that explains one thing and offers two answers, from
+  /// [mediumFloor] up - the Sales report's *Still trading* explanation, first.
+  ///
+  /// **Narrower than [reading], which is a form's.** 720 stretches one sentence
+  /// and a pair of buttons across half a desktop window. 520 is the narrowest
+  /// width that keeps its foot on one line: a 48 checkbox row with its label
+  /// (about 160) on the left, two 48 buttons (about 290) on the right
+  /// (`docs/design/still-trading/`, 2026-10-12).
+  double get explanationDialog => 520;
 
   /// The width of a credential column — sign-in, and the tenant-entry screens
   /// that are one card and nothing else.
@@ -2856,6 +2957,31 @@ final class AppLayout {
   /// 128 is still large enough to tell a right photo from a wrong one, and the
   /// photo sheet draws it at full width for a closer look.
   double get productImageThumb => 128;
+
+  /// The least height of one row of a `RecordSheet`.
+  ///
+  /// **A 48 control with 4 above and below**, which is
+  /// [topBarHeightCompact]'s arithmetic for the same reason: a row carries a
+  /// 48 menu or disclosure, and two lines of text (20 and 16) fit inside it
+  /// with room to breathe (`docs/design/tables/`, 2026-10-12).
+  double get tableRow => 56;
+
+  /// The height of a `RecordSheet`'s column header.
+  ///
+  /// `space.40` by value, named here so the header has one height wherever a
+  /// table is drawn.
+  double get tableHeader => 40;
+
+  /// The widest a filter in a `RecordSheet`'s bar is drawn.
+  ///
+  /// A select reading *All staff* or a cashier's name, with its glyph and its
+  /// drop arrow, at its natural size - where the phone layout splits the row
+  /// between the filters, which at 1200 drew a select 570 wide.
+  double get tableFilter => 240;
+
+  /// The width of a search field in a `RecordSheet`'s bar: room for a
+  /// placeholder such as *Name or number* and a few words typed after it.
+  double get tableSearch => 320;
 
   /// Which band [width] falls in.
   ///

@@ -790,6 +790,163 @@ void main() {
     expect(find.textContaining('7.50'), findsOne);
     expect(find.textContaining('1250.50'), findsNothing);
   });
+
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: one row per day from 1024, the cards below it.
+  group('on a screen 1024 and wider', () {
+    Map<String, Map<String, Object?>> week() => <String, Map<String, Object?>>{
+      'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
+        businessDate: '2026-07-30',
+      ),
+      'tenants/tenant-a/reconciliation_dirty_days/2026-07-30': _intake(
+        businessDate: '2026-07-30',
+      ),
+      'tenants/tenant-a/configuration/checkout': <String, Object?>{
+        'currency': 'KES',
+      },
+    };
+
+    String text(WidgetTester tester, String key) =>
+        tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+    testWidgets('the days are one table, their figures in columns', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _Reader(week()),
+        width: 1280,
+      );
+
+      expect(find.byKey(const ValueKey('daily-summary-sheet')), findsOne);
+      expect(find.byType(Card), findsNothing);
+      // The code is the column's, once, and the cell is the figure.
+      expect(find.text('SALES KES', findRichText: true), findsOne);
+      expect(text(tester, 'daily-summary-sales-2026-07-30'), '1,250.50');
+      expect(text(tester, 'daily-summary-transactions-2026-07-30'), '12');
+      expect(text(tester, 'daily-summary-shifts-2026-07-30'), '2');
+      // Today has no figures: dashes, never zeros.
+      expect(text(tester, 'daily-summary-sales-2026-07-31'), '—');
+      // A reconciled day is the settled state: a word, not a badge.
+      final reconciled = find.byKey(
+        const ValueKey('daily-summary-reconciled-2026-07-30'),
+      );
+      expect(tester.widget(reconciled), isNot(isA<StatusBadge>()));
+      expect(
+        tester
+            .widget<StatusBadge>(
+              find.byKey(const ValueKey('daily-summary-pending-2026-07-31')),
+            )
+            .label,
+        'Not reconciled yet',
+      );
+      // Profit is the owner's and administrator's, as on the card.
+      expect(find.text('PROFIT KES', findRichText: true), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('below 1024 the cards are unchanged', (tester) async {
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _Reader(week()),
+        width: 1023,
+      );
+
+      expect(find.byType(Card), findsWidgets);
+      expect(find.byKey(const ValueKey('daily-summary-sheet')), findsNothing);
+    });
+
+    testWidgets('an owner reads profit and margin, and a ceiling says so', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _controller(TenantRole.owner),
+        _Reader(<String, Map<String, Object?>>{
+          ...week(),
+          'tenants/tenant-a/daily_metrics/2026-07-31': _metrics(
+            overrides: <String, Object?>{'incompleteCostLineCount': 4},
+          ),
+        }),
+        width: 1280,
+      );
+
+      expect(text(tester, 'daily-summary-2026-07-30-profit'), '430.25');
+      expect(text(tester, 'daily-summary-2026-07-30-margin'), '34.4%');
+      // **No ceiling is drawn as a plain figure**: the cell carries the short
+      // form of the qualification, and the margin is withheld as on the card.
+      expect(find.text('At most: some lines carry no cost'), findsOne);
+      expect(text(tester, 'daily-summary-2026-07-31-margin'), '—');
+
+      // The whole sentence about the cost data is the row's fold.
+      final note = find.byKey(const ValueKey('daily-summary-note-2026-07-31'));
+      expect(note, findsNothing);
+      await tester.tap(
+        find.byKey(const ValueKey('daily-summary-fold-2026-07-31')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<Text>(note).data,
+        contains('Profit is at most this figure: 4 sale lines'),
+      );
+    });
+
+    testWidgets('a day opens why it is in its state, and the bar opens the '
+        'totals', (tester) async {
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _Reader(week()),
+        width: 1280,
+        reconciliationRoute: (businessDate) =>
+            Scaffold(body: Text('why $businessDate')),
+        reconciliationRoles: const <TenantRole>[TenantRole.manager],
+        salesTotalsRoute: () => const Scaffold(body: Text('period totals')),
+        salesTotalsRoles: const <TenantRole>[TenantRole.manager],
+      );
+
+      // The totals button is the sheet's own, on its top edge.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('daily-summary-sheet')),
+          matching: find.byKey(const ValueKey('daily-summary-sales-totals')),
+        ),
+        findsOne,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('daily-summary-reconciliation-2026-07-30')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('why 2026-07-30'), findsOne);
+
+      Navigator.of(tester.element(find.text('why 2026-07-30'))).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('daily-summary-sales-totals')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('period totals'), findsOne);
+    });
+
+    testWidgets('a role not offered the explanation gets rows that open '
+        'nothing', (tester) async {
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _Reader(week()),
+        width: 1280,
+        reconciliationRoute: (businessDate) =>
+            Scaffold(body: Text('why $businessDate')),
+      );
+
+      expect(
+        find.byKey(const ValueKey('daily-summary-reconciliation-2026-07-30')),
+        findsNothing,
+      );
+    });
+  });
 }
 
 /// Completes every read a sequential day-by-day load issues under [prefix].

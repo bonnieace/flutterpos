@@ -15,7 +15,9 @@ void main() {
     final reader = _Reader(staffNames: <String, String>{'cashier-a': 'Amina'})
       ..respond(<TenantQueryDocumentSnapshot>[_staffEvent(), _platformEvent()]);
 
-    await _pump(tester, _controller(), reader);
+    // **The rail, at 800**: its sentences are what this case reads. From 1024
+    // the same facts are a table's cells; the group below asserts those.
+    await _pump(tester, _controller(), reader, width: 800);
 
     // **The two paragraphs above the trail went on 2026-09-04.** What is left
     // is one footnote, and the fact it carries - a page ordered by record
@@ -70,7 +72,7 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(find.byKey(const ValueKey('audit-log-empty')), findsOne);
-    expect(find.text('Nothing has been recorded yet'), findsOne);
+    expect(find.text('No events yet'), findsOne);
   });
 
   testWidgets('an unmodelled event is shown as itself', (tester) async {
@@ -120,9 +122,11 @@ void main() {
     // The narrowing is visible in the control that caused it rather than in a
     // paragraph restating it.
     expect(
-      tester.widget<AppSelect<TenantAuditEventType?>>(
-        find.byKey(const ValueKey('audit-log-filter')),
-      ).value,
+      tester
+          .widget<AppSelect<TenantAuditEventType?>>(
+            find.byKey(const ValueKey('audit-log-filter')),
+          )
+          .value,
       TenantAuditEventType.staffStatusSet,
     );
     expect(find.byKey(const ValueKey('audit-log-entry-aud_003')), findsOne);
@@ -266,6 +270,81 @@ void main() {
     expect(find.byKey(const ValueKey('audit-log-entry-aud_009')), findsOne);
   });
 
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: one row per event from 1024, the rail below it.
+  group('on a screen 1024 and wider', () {
+    String text(WidgetTester tester, String key) =>
+        tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+    testWidgets('the trail is one table, a fact per column', (tester) async {
+      final reader = _Reader(staffNames: <String, String>{'cashier-a': 'Amina'})
+        ..respond(<TenantQueryDocumentSnapshot>[
+          _staffEvent(),
+          _platformEvent(),
+        ]);
+
+      await _pump(tester, _controller(), reader, width: 1280);
+
+      final sheet = find.byKey(const ValueKey('audit-log-sheet'));
+      expect(sheet, findsOne);
+      for (final key in <String>['audit-log-filter', 'audit-log-day-filter']) {
+        expect(
+          find.descendant(of: sheet, matching: find.byKey(ValueKey(key))),
+          findsOne,
+          reason: key,
+        );
+      }
+      expect(
+        text(tester, 'audit-log-event-aud_001'),
+        TenantAuditEventType.staffInvited.label,
+      );
+      // The colleague by name, with the UID they are recorded under beneath.
+      expect(text(tester, 'audit-log-target-aud_001'), 'Amina');
+      expect(find.text('cashier-a'), findsOne);
+      // The instant in its column, its zone stated once in the header.
+      expect(find.text('RECORDED UTC', findRichText: true), findsOne);
+      expect(text(tester, 'audit-log-recorded-aud_001'), '2026-08-01 09:00');
+      expect(text(tester, 'audit-log-actor-aud_001'), 'You');
+      expect(
+        text(tester, 'audit-log-actor-aud_002'),
+        'the platform_admin operator',
+      );
+      expect(text(tester, 'audit-log-status-aud_002'), 'pending to active');
+      // Nothing critical on the page, so no column says so.
+      expect(find.text('STANDING', findRichText: true), findsNothing);
+      // Still ordered by record, and still says so.
+      expect(find.byKey(const ValueKey('audit-log-scope')), findsOne);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('below 1024 the rail is unchanged', (tester) async {
+      final reader = _Reader()
+        ..respond(<TenantQueryDocumentSnapshot>[_staffEvent()]);
+
+      await _pump(tester, _controller(), reader, width: 1023);
+
+      expect(find.byKey(const ValueKey('audit-log-sheet')), findsNothing);
+      expect(
+        textAt(tester, 'audit-log-recorded-aud_001'),
+        'Recorded 2026-08-01 09:00 UTC by You',
+      );
+    });
+
+    testWidgets('an empty trail says so inside the table', (tester) async {
+      final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+      await _pump(tester, _controller(), reader, width: 1280);
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('audit-log-sheet')),
+          matching: find.byKey(const ValueKey('audit-log-empty')),
+        ),
+        findsOne,
+      );
+    });
+  });
+
   group('safe landing entry point', () {
     testWidgets('an owner opens the activity log from the safe landing route', (
       tester,
@@ -373,8 +452,9 @@ Future<void> _pump(
   int pageSize = 20,
   TenantAuditEventType? eventType,
   bool settle = true,
+  double width = 1400,
 }) async {
-  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

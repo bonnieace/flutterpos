@@ -50,6 +50,7 @@ import '../ui/snackbar.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import 'tenant_branding_logo_store.dart';
 import 'tenant_branding_writer.dart';
 import 'tenant_repository.dart';
@@ -402,8 +403,8 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
       denied: const Center(
         child: EmptyState(
           key: ValueKey('branding-denied'),
-          title: 'Receipt branding is not shown for this role',
-          hint: 'An owner or an administrator can change them.',
+          title: 'Branding unavailable for your role',
+          hint: 'Owners and administrators can change branding.',
           illustration: 'access-denied.svg',
         ),
       ),
@@ -442,91 +443,106 @@ class _TenantBrandingPanelState extends State<TenantBrandingPanel> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            // **The picture first, as the catalog form draws it.** A logo is
-            // the one detail on this screen a shopkeeper recognises without
-            // reading, and the inventory forms put the well at the top of the
-            // column for that reason.
-            if (widget.logoStore != null) ...<Widget>[
-              _BrandingLogoWell(
-                logo: _logo,
-                publishedLogo: _standingLogo(published),
-                logoRemoved: _logoRemoved,
-                remover: widget.backgroundRemover,
-                session: session,
-                enabled: canPublish && !_saving,
-                onLogoChanged: (logo) => setState(() {
-                  _logo = logo;
-                  _logoRemoved = false;
-                }),
-                onRemoveLogo: _logo == null && _standingLogo(published) == null
-                    ? null
-                    : () => setState(() {
-                        _logo = null;
-                        _logoRemoved = true;
+            AppWorkspace(
+              leading: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  // **The picture first, as the catalog form draws it.** A logo is
+                  // the one detail on this screen a shopkeeper recognises without
+                  // reading, and the inventory forms put the well at the top of the
+                  // column for that reason.
+                  if (widget.logoStore != null) ...<Widget>[
+                    _BrandingLogoWell(
+                      logo: _logo,
+                      publishedLogo: _standingLogo(published),
+                      logoRemoved: _logoRemoved,
+                      remover: widget.backgroundRemover,
+                      session: session,
+                      enabled: canPublish && !_saving,
+                      onLogoChanged: (logo) => setState(() {
+                        _logo = logo;
+                        _logoRemoved = false;
                       }),
+                      onRemoveLogo:
+                          _logo == null && _standingLogo(published) == null
+                          ? null
+                          : () => setState(() {
+                              _logo = null;
+                              _logoRemoved = true;
+                            }),
+                    ),
+                    SizedBox(height: tokens.spacing.s24),
+                  ],
+                ],
               ),
-              SizedBox(height: tokens.spacing.s24),
-            ],
-            // **Nothing published is not a problem.** The name below is the
-            // one this business registered under, which the home, receipts
-            // and reports already carry; only a document that is there and
-            // cannot be read is worth saying anything about.
-            if (published.isMalformed)
-              Padding(
-                padding: EdgeInsets.only(bottom: tokens.spacing.s16),
-                child: const Callout(
-                  key: ValueKey('branding-malformed'),
-                  status: AppStatus.attention,
-                  message:
-                      'The saved details cannot be read, so receipts carry '
-                      'the registered name only. Saving here replaces them.',
-                ),
+              trailing: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  // **Nothing published is not a problem.** The name below is the
+                  // one this business registered under, which the home, receipts
+                  // and reports already carry; only a document that is there and
+                  // cannot be read is worth saying anything about.
+                  if (published.isMalformed)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: tokens.spacing.s16),
+                      child: const Callout(
+                        key: ValueKey('branding-malformed'),
+                        status: AppStatus.attention,
+                        message:
+                            'The saved details cannot be read, so receipts carry '
+                            'the registered name only. Saving here replaces them.',
+                      ),
+                    ),
+                  // **The brand, not the business.** Seeded from the registered
+                  // name and editable, because what a receipt is headed with is the
+                  // shop's choice; the name it registered under is not changed.
+                  AppTextField(
+                    key: const ValueKey('branding-company-name'),
+                    label: 'Brand name',
+                    controller: _companyName,
+                    maxLength: TenantBrandingPublisher.maximumCompanyNameLength,
+                    textCapitalization: TextCapitalization.words,
+                    enabled: canPublish && !_saving,
+                  ),
+                  SizedBox(height: tokens.spacing.s16),
+                  AppTextField(
+                    key: const ValueKey('branding-slogan'),
+                    label: 'Slogan',
+                    controller: _slogan,
+                    placeholder: 'Optional',
+                    maxLength: TenantBrandingPublisher.maximumSloganLength,
+                    enabled: canPublish && !_saving,
+                  ),
+                  SizedBox(height: tokens.spacing.s24),
+                  AppButton(
+                    key: const ValueKey('branding-save'),
+                    label: 'Save branding',
+                    // The full measure of the form, because it is the one thing
+                    // this screen is for and there is nothing beside it.
+                    expand: true,
+                    loading: _saving,
+                    onPressed: canPublish
+                        ? () => _publish(session, published)
+                        : null,
+                  ),
+                  // **Here since 2026-09-28, at the developer's direction**, moved
+                  // from the foot of the home. Play asks that deleting an account be
+                  // reachable inside the app. It opens the request page and deletes
+                  // nothing itself, so it does not wait on a save.
+                  if (widget.onRequestAccountDeletion
+                      case final requestDeletion?) ...<Widget>[
+                    SizedBox(height: tokens.spacing.s32),
+                    AppButton(
+                      key: const ValueKey('request-account-deletion'),
+                      label: 'Delete account',
+                      tier: AppButtonTier.destructive,
+                      expand: true,
+                      onPressed: requestDeletion,
+                    ),
+                  ],
+                ],
               ),
-            // **The brand, not the business.** Seeded from the registered
-            // name and editable, because what a receipt is headed with is the
-            // shop's choice; the name it registered under is not changed.
-            AppTextField(
-              key: const ValueKey('branding-company-name'),
-              label: 'Brand name',
-              controller: _companyName,
-              maxLength: TenantBrandingPublisher.maximumCompanyNameLength,
-              textCapitalization: TextCapitalization.words,
-              enabled: canPublish && !_saving,
             ),
-            SizedBox(height: tokens.spacing.s16),
-            AppTextField(
-              key: const ValueKey('branding-slogan'),
-              label: 'Slogan',
-              controller: _slogan,
-              placeholder: 'Optional',
-              maxLength: TenantBrandingPublisher.maximumSloganLength,
-              enabled: canPublish && !_saving,
-            ),
-            SizedBox(height: tokens.spacing.s24),
-            AppButton(
-              key: const ValueKey('branding-save'),
-              label: 'Save branding',
-              // The full measure of the form, because it is the one thing
-              // this screen is for and there is nothing beside it.
-              expand: true,
-              loading: _saving,
-              onPressed: canPublish ? () => _publish(session, published) : null,
-            ),
-            // **Here since 2026-09-28, at the developer's direction**, moved
-            // from the foot of the home. Play asks that deleting an account be
-            // reachable inside the app. It opens the request page and deletes
-            // nothing itself, so it does not wait on a save.
-            if (widget.onRequestAccountDeletion
-                case final requestDeletion?) ...<Widget>[
-              SizedBox(height: tokens.spacing.s32),
-              AppButton(
-                key: const ValueKey('request-account-deletion'),
-                label: 'Delete account',
-                tier: AppButtonTier.destructive,
-                expand: true,
-                onPressed: requestDeletion,
-              ),
-            ],
           ],
         );
       },

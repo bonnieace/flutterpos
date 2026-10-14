@@ -200,12 +200,10 @@ void main() {
       // No till: an expired shift may be closed and nothing else.
       expect(find.byKey(const ValueKey('shift-gate-expired')), findsOneWidget);
       expect(find.byKey(_till), findsNothing);
-      // Worded by the product owner on 2026-09-29: what happened, and what to
-      // do about it, and nothing else.
-      expect(
-        find.text('This shift has been open for more than 24 hours.'),
-        findsOneWidget,
-      );
+      // What happened, and what to do about it, and nothing else - the
+      // product owner's shape of 2026-09-29, reworded 2026-10-12 when most
+      // shifts began to end at their trading day's cutoff instead.
+      expect(find.text("This shift's trading day is over."), findsOneWidget);
       expect(find.text('Close it and open a new one.'), findsOneWidget);
 
       // The expired screen opens the sheet directly, with the count already
@@ -539,12 +537,23 @@ void main() {
     // night reconciles against the drawer that served it. The gate used to
     // replace the register with a *New business day* dead end here, which made
     // trading past midnight impossible. What still ends a shift left running
-    // is the 24-hour cap, which has its own surface.
+    // is its trading day's 06:00 cutoff, or the 24-hour cap, which have their
+    // own surface.
     server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
-    // The suite's clock is 2026-07-31; this shift belongs to the day before.
-    await state.save(shiftRecord(businessDate: '2026-07-30'));
+    // Opened at 19:00 on the 30th in Nairobi, and still selling at 02:00.
+    await state.save(
+      shiftRecord(
+        businessDate: '2026-07-30',
+        openedAt: DateTime.utc(2026, 7, 30, 16),
+      ),
+    );
 
-    await _pumpHome(tester, state, server);
+    await _pumpHome(
+      tester,
+      state,
+      server,
+      clock: () => DateTime.utc(2026, 7, 30, 23),
+    );
     await _enterTill(tester);
 
     expect(find.byKey(_till), findsOneWidget);
@@ -677,6 +686,7 @@ Future<TenantSessionController> _pumpHome(
   HiveTenantShiftState state,
   ShiftServer server, {
   TenantShiftOnlineCheck? isOnline,
+  TenantShiftClock? clock,
 }) async {
   final sessions = TenantSessionController()
     ..open(uid: 'user-a', membership: shiftMembership('tenant-a'));
@@ -685,6 +695,7 @@ Future<TenantSessionController> _pumpHome(
     state,
     server,
     isOnline: isOnline,
+    clock: clock,
   );
   await tester.pumpWidget(
     MaterialApp(

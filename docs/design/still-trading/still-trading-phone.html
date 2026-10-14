@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Still trading — phone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+:root {
+  --base: #0D1F16; --raised: #132A1F; --sunken: #08140E; --field: #1E3A2B;
+  --overlay: #1C3328; --border-subtle: #1E3A2B; --card-edge: #283831;
+  --border-strong: #2C5340; --selected: #3D4A3D;
+  --text: #FFFFFF; --text-2: #B8D6C5; --text-3: #849E8F; --text-disabled: #5D7468;
+  --money: #45F28D; --primary: #45F28D; --primary-hover: #3DD47C; --on-primary: #0A0F0C;
+  --secondary: #1C3328; --secondary-border: #2C5340;
+  --ok: #4BE277; --ok-bg: rgba(75, 226, 119, 0.10); --ok-border: rgba(75, 226, 119, 0.30);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --focus: #45F28D;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #050C08; color: var(--text); font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; letter-spacing: 0.25px; }
+.page-nav a { color: var(--text-3); text-decoration: none; }
+.page-nav a:hover { color: var(--primary); text-decoration: underline; }
+.page-head { padding: 12px 24px 0; max-width: 1100px; margin: 0 auto; }
+.page-head h1 { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.page-head p { margin: 4px 0 0; max-width: 900px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.stage { display: flex; flex-wrap: wrap; justify-content: center; gap: 48px; padding: 24px 24px 56px; }
+.col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.frame-label { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.frame { position: relative; overflow: hidden; width: 390px; height: 844px; background: var(--base); border-radius: 4px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; flex: none; }
+
+/* --- the report behind (TenantSalesReportScreen, unchanged) --- */
+.tb { height: 64px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+.tb-icon { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; color: var(--text); }
+.tb-title { font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.report { padding: 8px 16px 0; display: flex; flex-direction: column; gap: 12px; }
+.field { height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--field); border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text-3); font-size: 16px; letter-spacing: 0.25px; }
+.row2 { display: flex; gap: 12px; }
+.btn-sec { flex: 1; height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--secondary); border: 1px solid var(--secondary-border); border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; color: var(--text); }
+.select { flex: 1; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: var(--field); border-radius: 8px; color: var(--text-2); font-size: 16px; }
+.select .grow { flex: 1; }
+.band { background: var(--raised); border: 1px solid var(--card-edge); border-radius: 8px; padding: 16px; display: flex; align-items: baseline; justify-content: space-between; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; letter-spacing: -0.14px; }
+.big { font-size: 28px; line-height: 33.6px; color: var(--money); }
+.cap { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.sale { background: var(--raised); border: 1px solid var(--card-edge); border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+.sale-top { display: flex; justify-content: space-between; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; }
+.sale-top .mono { font-size: 14px; color: var(--money); }
+.scrim { position: absolute; inset: 0; background: var(--scrim); }
+
+/* --- the sheet (AppSheet: surface.overlay, radius.lg top, the 32 x 4 handle) --- */
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--overlay); border-radius: 12px 12px 0 0; padding: 12px 24px 0; display: flex; flex-direction: column; }
+.handle { width: 32px; height: 4px; border-radius: 999px; background: var(--border-strong); align-self: center; }
+.eyebrow { margin-top: 20px; font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); }
+.title { margin: 8px 0 0; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; color: var(--text); }
+.body { margin: 8px 0 0; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+
+/* --- the night: AppMeter's track, with the midnight notch and the now mark --- */
+.night { position: relative; margin-top: 24px; padding-top: 24px; }
+.now-label { position: absolute; top: 0; transform: translateX(-50%); font-size: 12px; line-height: 16px; font-weight: 400; letter-spacing: 0.25px; color: var(--ok); white-space: nowrap; }
+.now-label.end { transform: translateX(-100%); }
+.track { position: relative; height: 8px; border-radius: 999px; background: var(--border-strong); }
+.fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--ok); }
+.notch { position: absolute; top: -4px; width: 2px; height: 16px; margin-left: -1px; background: var(--overlay); }
+.notch::after { content: ''; position: absolute; left: 0; right: 0; top: 4px; height: 8px; background: transparent; }
+.mark { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 999px; background: var(--ok); border: 4px solid var(--overlay); }
+.ticks { position: relative; height: 16px; margin-top: 8px; }
+.tick { position: absolute; top: 0; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; }
+.tick b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; letter-spacing: -0.12px; color: var(--text-2); }
+.tick.mid { transform: translateX(-50%); }
+.tick.right { right: 0; }
+
+/* --- answers --- */
+.actions { margin-top: 32px; display: flex; flex-direction: column; gap: 8px; }
+.btn { height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; }
+.btn.primary { background: var(--primary); color: var(--on-primary); }
+.btn.secondary { background: var(--secondary); border: 1px solid var(--secondary-border); color: var(--text); }
+.check { height: 48px; margin-top: 8px; display: flex; align-items: center; gap: 12px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.box { width: 18px; height: 18px; margin-left: 3px; border: 1px solid var(--border-strong); background: var(--field); border-radius: 2px; flex: none; }
+.home-bar { height: 34px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; }
+.home-bar span { width: 134px; height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.5); }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; Still trading</a></nav>
+<header class="page-head">
+  <h1>Still trading — phone</h1>
+  <p>The Sales report opened from the home at 01:30 on Monday, with Achieng's shift from Sunday still selling. The report is already on Sun 11 Oct behind the sheet; the sheet says why in one line and draws the night it is part of. A manager on the left, the cashier whose shift it is on the right.</p>
+</header>
+
+<div class="stage">
+
+  <div class="col">
+    <div class="frame-label">390 · manager · 01:30 Mon</div>
+    <div class="frame">
+      <div class="tb">
+        <span class="tb-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></span>
+        <span class="tb-title">Sales Report</span>
+      </div>
+      <div class="report">
+        <div class="field"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5 18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5zM19 19.09H5V4.91h14v14.18zM6 15h12v2H6zm0-4h12v2H6zm0-4h12v2H6z"/></svg>Receipt, e.g. ACHIENG-CT-…</div>
+        <div class="row2">
+          <div class="btn-sec"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V8h16v13z"/></svg>2026-10-11</div>
+          <div class="select"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4C9.79 4 8 5.79 8 8s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 9c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4z"/></svg><span class="grow">All staff</span><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></div>
+        </div>
+        <div class="band"><span class="mono big">KES 18,450</span><span class="cap">23 sales</span></div>
+        <div class="sale"><div class="sale-top"><span>Beard Oil · 30ml × 2</span><span class="mono">KES 2,000</span></div><span class="cap">ACHIENG-CT-FB9-031 · 01:12</span></div>
+        <div class="sale"><div class="sale-top"><span>Tallow · 60ml</span><span class="mono">KES 2,000</span></div><span class="cap">ACHIENG-CT-FB9-030 · 00:47</span></div>
+        <div class="sale"><div class="sale-top"><span>tallow · 30ml × 3</span><span class="mono">KES 3,000</span></div><span class="cap">ACHIENG-CT-FB9-029 · 23:58</span></div>
+      </div>
+      <div class="scrim"></div>
+
+      <div class="sheet" role="dialog" aria-labelledby="t1">
+        <div class="handle"></div>
+        <div class="eyebrow">Sun 11 Oct · business day</div>
+        <h2 class="title" id="t1">Still trading on Sunday</h2>
+        <p class="body">Sales made since midnight count toward Sunday until the shift is closed, or 06:00 at the latest.</p>
+
+        <div class="night" role="img" aria-label="Shift opened 18:02 on Sunday. It is now 01:30. It stops selling at 06:00.">
+          <span class="now-label" style="left: 62.4%;">Now 01:30</span>
+          <div class="track">
+            <div class="fill" style="width: 62.4%;"></div>
+            <div class="notch" style="left: 49.9%;"></div>
+            <div class="mark" style="left: 62.4%;"></div>
+          </div>
+          <div class="ticks">
+            <span class="tick"><b>18:02</b> opened</span>
+            <span class="tick mid" style="left: 49.9%;"><b>00:00</b></span>
+            <span class="tick right"><b>06:00</b> stops</span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <div class="btn primary">Show Sunday</div>
+          <div class="btn secondary">Show today</div>
+        </div>
+        <div class="check"><span class="box"></span>Don’t show again</div>
+        <div class="home-bar"><span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="frame-label">390 · cashier, her own shift · 01:30 Mon</div>
+    <div class="frame">
+      <div class="tb">
+        <span class="tb-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></span>
+        <span class="tb-title">Sales Report</span>
+      </div>
+      <div class="report">
+        <div class="field"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5 18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5zM19 19.09H5V4.91h14v14.18zM6 15h12v2H6zm0-4h12v2H6zm0-4h12v2H6z"/></svg>Receipt, e.g. ACHIENG-CT-…</div>
+        <div class="row2">
+          <div class="btn-sec"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V8h16v13z"/></svg>2026-10-11</div>
+        </div>
+        <div class="band"><span class="mono big">KES 11,200</span><span class="cap">14 sales</span></div>
+        <div class="sale"><div class="sale-top"><span>Beard Oil · 30ml × 2</span><span class="mono">KES 2,000</span></div><span class="cap">ACHIENG-CT-FB9-031 · 01:12</span></div>
+        <div class="sale"><div class="sale-top"><span>Tallow · 60ml</span><span class="mono">KES 2,000</span></div><span class="cap">ACHIENG-CT-FB9-030 · 00:47</span></div>
+        <div class="sale"><div class="sale-top"><span>tallow · 30ml × 3</span><span class="mono">KES 3,000</span></div><span class="cap">ACHIENG-CT-FB9-029 · 23:58</span></div>
+      </div>
+      <div class="scrim"></div>
+
+      <div class="sheet" role="dialog" aria-labelledby="t2">
+        <div class="handle"></div>
+        <div class="eyebrow">Sun 11 Oct · business day</div>
+        <h2 class="title" id="t2">Still trading on Sunday</h2>
+        <p class="body">Your shift from Sunday is still open, so your sales since midnight count toward Sunday until you close it, or 06:00 at the latest.</p>
+
+        <div class="night" role="img" aria-label="Your shift opened 18:02 on Sunday. It is now 01:30. It stops selling at 06:00.">
+          <span class="now-label" style="left: 62.4%;">Now 01:30</span>
+          <div class="track">
+            <div class="fill" style="width: 62.4%;"></div>
+            <div class="notch" style="left: 49.9%;"></div>
+            <div class="mark" style="left: 62.4%;"></div>
+          </div>
+          <div class="ticks">
+            <span class="tick"><b>18:02</b> opened</span>
+            <span class="tick mid" style="left: 49.9%;"><b>00:00</b></span>
+            <span class="tick right"><b>06:00</b> stops</span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <div class="btn primary">Show Sunday</div>
+          <div class="btn secondary">Show today</div>
+        </div>
+        <div class="check"><span class="box"></span>Don’t show again</div>
+        <div class="home-bar"><span></span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

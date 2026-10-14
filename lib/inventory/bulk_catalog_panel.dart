@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
@@ -15,6 +16,7 @@ import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/record_sheet.dart';
 import 'bulk_catalog.dart';
 import 'bulk_catalog_attempt_store.dart';
 import 'product_sheet.dart';
@@ -1082,149 +1084,186 @@ final class _BulkCatalogContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      padding: EdgeInsets.all(tokens.spacing.s20),
-      children: [
-        SectionHeading('Many products at once'),
-        SizedBox(height: tokens.spacing.s4),
-        // A helper rather than a notice, and the call is worth stating because
-        // it could have gone the other way. §5.2 names this route's prose by
-        // name as `Disclosure` material, and this paragraph is true of every
-        // change either callable will ever make - it is read once. The
-        // reconciliation day page's request scope is a `Callout` instead
-        // because it corrects a misunderstanding about *what the button covers*;
-        // this one promises that the button is safe, which is a different job.
-        const Disclosure(
-          key: ValueKey('bulk-catalog-scope-disclosure'),
-          summary: 'How a bulk change is applied',
-          child: Text(
-            key: ValueKey('bulk-catalog-scope'),
-            'Nothing here happens until it has been shown to you first. Every '
-            'change is previewed row by row, writes nothing while it is being '
-            'previewed, and is then applied exactly as it was shown. Rows are '
-            'sent $maximumBulkCatalogRows at a time, so a large change is '
-            'several requests and the report says which of them landed.',
-          ),
+    final controls = <Widget>[
+      SectionHeading('Many products at once'),
+      SizedBox(height: tokens.spacing.s4),
+      // A helper rather than a notice, and the call is worth stating because
+      // it could have gone the other way. §5.2 names this route's prose by
+      // name as `Disclosure` material, and this paragraph is true of every
+      // change either callable will ever make - it is read once. The
+      // reconciliation day page's request scope is a `Callout` instead
+      // because it corrects a misunderstanding about *what the button covers*;
+      // this one promises that the button is safe, which is a different job.
+      const Disclosure(
+        key: ValueKey('bulk-catalog-scope-disclosure'),
+        summary: 'How a bulk change is applied',
+        child: Text(
+          key: ValueKey('bulk-catalog-scope'),
+          'Nothing here happens until it has been shown to you first. Every '
+          'change is previewed row by row, writes nothing while it is being '
+          'previewed, and is then applied exactly as it was shown. Rows are '
+          'sent $maximumBulkCatalogRows at a time, so a large change is '
+          'several requests and the report says which of them landed.',
         ),
-        if (offerCorrections) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          FilterChipBar<_BulkTask>(
-            semanticLabel: 'Which bulk change this is',
-            selected: task,
-            onSelected: (value) => value == null ? null : onTaskChanged(value),
-            options: <FilterChipOption<_BulkTask>>[
-              for (final option in _BulkTask.values)
-                FilterChipOption<_BulkTask>(
-                  key: ValueKey(
-                    'bulk-catalog-task-'
-                    '${option == _BulkTask.correct ? 'correct' : 'import'}',
-                  ),
-                  value: option,
-                  label: option.label,
-                  enabled: !busy,
+      ),
+      if (offerCorrections) ...<Widget>[
+        SizedBox(height: tokens.spacing.s16),
+        FilterChipBar<_BulkTask>(
+          semanticLabel: 'Which bulk change this is',
+          selected: task,
+          onSelected: (value) => value == null ? null : onTaskChanged(value),
+          options: <FilterChipOption<_BulkTask>>[
+            for (final option in _BulkTask.values)
+              FilterChipOption<_BulkTask>(
+                key: ValueKey(
+                  'bulk-catalog-task-'
+                  '${option == _BulkTask.correct ? 'correct' : 'import'}',
                 ),
-            ],
-          ),
-        ],
-        if (_unfinished case final unfinished?) ...[
-          SizedBox(height: tokens.spacing.s16),
-          // **`attention`, not `problem`.** Nothing has gone wrong that cannot
-          // be put right from here, and every product the pages that landed
-          // created is in the catalog and correct. What is outstanding is a
-          // decision - finish it or forget it - and §2.1 puts work awaiting
-          // somebody on the attention row.
-          Callout(
-            key: const ValueKey('bulk-catalog-unfinished'),
-            status: AppStatus.attention,
-            message:
-                'An import of ${unfinished.rowCount} products stopped after '
-                '${unfinished.pagesAnswered} of ${unfinished.pages.length} '
-                'requests. Finish it here rather than importing the sheet '
-                'again: finishing sends the same requests, so a page the '
-                'server already recorded creates nothing, while a fresh '
-                'import would create those products a second time.',
-          ),
-          SizedBox(height: tokens.spacing.s12),
-          AppActionRow(
-            actions: <Widget>[
-              AppButton(
-                key: const ValueKey('bulk-catalog-resume'),
-                label:
-                    'Finish it (${unfinished.remainingRowCount} products left)',
-                icon: Icons.restart_alt,
-                tier: AppButtonTier.primary,
-                onPressed: busy ? null : onResumeImport,
-              ),
-              AppButton(
-                key: const ValueKey('bulk-catalog-forget-attempt'),
-                label: 'Forget it',
-                tier: AppButtonTier.tertiary,
-                onPressed: busy ? null : onDiscardAttempt,
-              ),
-            ],
-          ),
-        ],
-        if (!_offered) ...[
-          SizedBox(height: tokens.spacing.s12),
-          // A notice about this build, so it does not fold. `info` is §2.1's
-          // own row for it: the half that is missing was never injected, which
-          // is not a failure and hides nothing.
-          Callout(
-            key: const ValueKey('bulk-catalog-unavailable'),
-            status: AppStatus.info,
-            message: task == _BulkTask.correct
-                ? 'This build cannot correct products in bulk.'
-                : 'This build cannot import products.',
-          ),
-        ],
-        // **Every value of this one is a refusal, and the type now says so.**
-        // It is set from exactly one place — a `TenantBulkCatalogException`
-        // raised before anything was sent — so unlike the other six notices in
-        // the family it has no success branch to distinguish. Carrying an
-        // `AppNotice` rather than a `String?` is what makes that an invariant
-        // a reader can see instead of one they have to trace the assignments
-        // to establish.
-        SizedBox(height: tokens.spacing.s24),
-        if (task == _BulkTask.correct)
-          ..._correctionForm(context)
-        else
-          ..._importForm(context),
-        SizedBox(height: tokens.spacing.s20),
-        // Keep the two decisions in one horizontal action row at every width.
-        // a `Row`, and the first test to drive it at §4.1's `compact` band
-        // overflowed by 73 pixels on a single button: "Preview, writing
-        // nothing" carries a leading icon and §5.2's `space.16` padding, and
-        // the discard beside it is another 48dp of control. The row is
-        // identical wherever there is room and is the shape the difference list
-        // and every paginated surface in this app already uses for a row of
-        // controls.
-        // Right-aligned since 2026-08-26, with every other action row in the
-        // app: the control under a right-handed thumb is the one it presses.
-        AppActionRow(
-          actions: <Widget>[
-            // Preview is the primary here and commit is the primary further
-            // down: they are different screen regions, and §2.1 permits one
-            // each. Nothing is written by either until the other has been.
-            AppButton(
-              key: const ValueKey('bulk-catalog-preview'),
-              label: _pageCount > 1
-                  ? 'Preview ($_pageCount requests)'
-                  : 'Preview, writing nothing',
-              icon: Icons.fact_check_outlined,
-              tier: AppButtonTier.primary,
-              onPressed: _canPreview ? onPreview : null,
-            ),
-            if (report != null)
-              AppButton(
-                key: const ValueKey('bulk-catalog-discard'),
-                label: 'Discard this report',
-                tier: AppButtonTier.tertiary,
-                onPressed: busy ? null : onDiscard,
+                value: option,
+                label: option.label,
+                enabled: !busy,
               ),
           ],
         ),
-        if (report case final report?) ..._reportSection(context, report),
       ],
+      if (_unfinished case final unfinished?) ...[
+        SizedBox(height: tokens.spacing.s16),
+        // **`attention`, not `problem`.** Nothing has gone wrong that cannot
+        // be put right from here, and every product the pages that landed
+        // created is in the catalog and correct. What is outstanding is a
+        // decision - finish it or forget it - and §2.1 puts work awaiting
+        // somebody on the attention row.
+        Callout(
+          key: const ValueKey('bulk-catalog-unfinished'),
+          status: AppStatus.attention,
+          message:
+              'An import of ${unfinished.rowCount} products stopped after '
+              '${unfinished.pagesAnswered} of ${unfinished.pages.length} '
+              'requests. Finish it here rather than importing the sheet '
+              'again: finishing sends the same requests, so a page the '
+              'server already recorded creates nothing, while a fresh '
+              'import would create those products a second time.',
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        AppActionRow(
+          actions: <Widget>[
+            AppButton(
+              key: const ValueKey('bulk-catalog-resume'),
+              label:
+                  'Finish it (${unfinished.remainingRowCount} products left)',
+              icon: Icons.restart_alt,
+              tier: AppButtonTier.primary,
+              onPressed: busy ? null : onResumeImport,
+            ),
+            AppButton(
+              key: const ValueKey('bulk-catalog-forget-attempt'),
+              label: 'Forget it',
+              tier: AppButtonTier.tertiary,
+              onPressed: busy ? null : onDiscardAttempt,
+            ),
+          ],
+        ),
+      ],
+      if (!_offered) ...[
+        SizedBox(height: tokens.spacing.s12),
+        // A notice about this build, so it does not fold. `info` is §2.1's
+        // own row for it: the half that is missing was never injected, which
+        // is not a failure and hides nothing.
+        Callout(
+          key: const ValueKey('bulk-catalog-unavailable'),
+          status: AppStatus.info,
+          message: task == _BulkTask.correct
+              ? 'This build cannot correct products in bulk.'
+              : 'This build cannot import products.',
+        ),
+      ],
+      // **Every value of this one is a refusal, and the type now says so.**
+      // It is set from exactly one place — a `TenantBulkCatalogException`
+      // raised before anything was sent — so unlike the other six notices in
+      // the family it has no success branch to distinguish. Carrying an
+      // `AppNotice` rather than a `String?` is what makes that an invariant
+      // a reader can see instead of one they have to trace the assignments
+      // to establish.
+      SizedBox(height: tokens.spacing.s24),
+      if (task == _BulkTask.correct)
+        ..._correctionForm(context)
+      else
+        ..._importForm(context),
+      SizedBox(height: tokens.spacing.s20),
+      // Keep the two decisions in one horizontal action row at every width.
+      // a `Row`, and the first test to drive it at §4.1's `compact` band
+      // overflowed by 73 pixels on a single button: "Preview, writing
+      // nothing" carries a leading icon and §5.2's `space.16` padding, and
+      // the discard beside it is another 48dp of control. The row is
+      // identical wherever there is room and is the shape the difference list
+      // and every paginated surface in this app already uses for a row of
+      // controls.
+      // Right-aligned since 2026-08-26, with every other action row in the
+      // app: the control under a right-handed thumb is the one it presses.
+      AppActionRow(
+        actions: <Widget>[
+          // Preview is the primary here and commit is the primary further
+          // down: they are different screen regions, and §2.1 permits one
+          // each. Nothing is written by either until the other has been.
+          AppButton(
+            key: const ValueKey('bulk-catalog-preview'),
+            label: _pageCount > 1
+                ? 'Preview ($_pageCount requests)'
+                : 'Preview changes',
+            icon: Icons.fact_check_outlined,
+            tier: AppButtonTier.primary,
+            onPressed: _canPreview ? onPreview : null,
+          ),
+          if (report != null)
+            AppButton(
+              key: const ValueKey('bulk-catalog-discard'),
+              label: 'Discard report',
+              tier: AppButtonTier.tertiary,
+              onPressed: busy ? null : onDiscard,
+            ),
+        ],
+      ),
+    ];
+    final details = report == null
+        ? <Widget>[
+            const EmptyState(
+              title: 'Preview your changes',
+              hint: 'Choose products or import a sheet to begin.',
+              illustration: 'inventory.svg',
+            ),
+          ]
+        : _reportSection(context, report!);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= tokens.layout.expandedFloor) {
+          return Padding(
+            padding: EdgeInsets.all(tokens.spacing.s20),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ListView(
+                    key: const ValueKey('bulk-controls-scroll'),
+                    children: controls,
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s24),
+                Expanded(
+                  flex: 2,
+                  child: ListView(
+                    key: const ValueKey('bulk-report-scroll'),
+                    children: details,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        return ListView(
+          padding: EdgeInsets.all(tokens.spacing.s20),
+          children: [...controls, if (report != null) ...details],
+        );
+      },
     );
   }
 
@@ -1277,10 +1316,10 @@ final class _BulkCatalogContents extends StatelessWidget {
       SizedBox(height: tokens.spacing.s12),
       if (field == TenantProductField.categoryId) ...[
         if (view.categories.items.isEmpty)
-          const Text(
-            key: ValueKey('bulk-catalog-no-categories'),
-            'This business has no categories yet, so there is nothing to file '
-            'these products under.',
+          const IllustratedMessage(
+            illustration: 'categories.svg',
+            textKey: ValueKey('bulk-catalog-no-categories'),
+            message: 'No categories yet. Create one to group products.',
           )
         else
           FilterChipBar<String>(
@@ -1355,9 +1394,10 @@ final class _BulkCatalogContents extends StatelessWidget {
         ],
       ),
       if (view.products.items.isEmpty)
-        const Text(
-          key: ValueKey('bulk-catalog-no-products'),
-          'No products on this page.',
+        const IllustratedMessage(
+          illustration: 'inventory.svg',
+          textKey: ValueKey('bulk-catalog-no-products'),
+          message: 'No products on this page.',
         )
       else
         for (final product in view.products.items)
@@ -1525,45 +1565,79 @@ final class _BulkCatalogContents extends StatelessWidget {
       // still a card: screen 20 is not one of the twelve screens step 6 names,
       // and migrating it to `RecordList` would be step 6 work outside step 6's
       // list, exactly as it would be on the differences list.
-      for (final row in report.rows)
-        Card(
-          key: ValueKey('bulk-catalog-row-${row.position}'),
-          child: Padding(
-            padding: EdgeInsets.all(tokens.spacing.s12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // §5.2's "leading position", read as first in the record - the
-                // reading `RecordList` settled and the shape both catalog
-                // screens already draw.
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: StatusBadge(
-                    key: ValueKey('bulk-catalog-row-status-${row.position}'),
+      if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width))
+        RecordSheet(
+          columns: const [
+            SheetColumn(label: 'Product', kind: SheetColumnKind.identity),
+            SheetColumn(label: 'Result', kind: SheetColumnKind.status),
+          ],
+          rows: [
+            for (final row in report.rows)
+              SheetRow(
+                id: '${row.position}',
+                key: ValueKey('bulk-catalog-row-${row.position}'),
+                fold: SheetFold(
+                  alwaysOpen: true,
+                  note:
+                      '${task == _BulkTask.correct ? 'Product' : 'Line'} ${row.position} \u2022 ${row.detail}',
+                  noteKey: ValueKey('bulk-catalog-row-detail-${row.position}'),
+                ),
+                cells: [
+                  SheetText(
+                    row.subject,
+                    caption:
+                        '${task == _BulkTask.correct ? 'Product' : 'Line'} ${row.position}',
+                    key: ValueKey('bulk-catalog-row-subject-${row.position}'),
+                  ),
+                  SheetStatus(
                     status: _rowStatus(row.status, report.mode),
                     label: _rowLabel(row.status, report.mode),
-                    semanticLabel:
-                        '${row.subject}: '
-                        '${_rowLabel(row.status, report.mode).toLowerCase()}',
+                    key: ValueKey('bulk-catalog-row-status-${row.position}'),
                   ),
-                ),
-                SizedBox(height: tokens.spacing.s8),
-                Text(
-                  key: ValueKey('bulk-catalog-row-subject-${row.position}'),
-                  row.subject,
-                  style: tokens.typography.titleMedium.copyWith(
-                    color: tokens.colors.text.primary,
+                ],
+              ),
+          ],
+        )
+      else
+        for (final row in report.rows)
+          Card(
+            key: ValueKey('bulk-catalog-row-${row.position}'),
+            child: Padding(
+              padding: EdgeInsets.all(tokens.spacing.s12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // §5.2's "leading position", read as first in the record - the
+                  // reading `RecordList` settled and the shape both catalog
+                  // screens already draw.
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: StatusBadge(
+                      key: ValueKey('bulk-catalog-row-status-${row.position}'),
+                      status: _rowStatus(row.status, report.mode),
+                      label: _rowLabel(row.status, report.mode),
+                      semanticLabel:
+                          '${row.subject}: '
+                          '${_rowLabel(row.status, report.mode).toLowerCase()}',
+                    ),
                   ),
-                ),
-                Text(
-                  key: ValueKey('bulk-catalog-row-detail-${row.position}'),
-                  '${task == _BulkTask.correct ? 'Product' : 'Line'} '
-                  '${row.position} • ${row.detail}',
-                ),
-              ],
+                  SizedBox(height: tokens.spacing.s8),
+                  Text(
+                    key: ValueKey('bulk-catalog-row-subject-${row.position}'),
+                    row.subject,
+                    style: tokens.typography.titleMedium.copyWith(
+                      color: tokens.colors.text.primary,
+                    ),
+                  ),
+                  Text(
+                    key: ValueKey('bulk-catalog-row-detail-${row.position}'),
+                    '${task == _BulkTask.correct ? 'Product' : 'Line'} '
+                    '${row.position} • ${row.detail}',
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
       SizedBox(height: tokens.spacing.s16),
       if (report.mode == TenantBulkCatalogMode.preview)
         AppButton(

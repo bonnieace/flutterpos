@@ -22,7 +22,7 @@ final class TenantConfigurationPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: title,
-    contentWidth: AppContentWidth.reading,
+    contentWidth: AppContentWidth.records,
     body: ownsScroll
         ? Builder(builder: builder)
         : SingleChildScrollView(

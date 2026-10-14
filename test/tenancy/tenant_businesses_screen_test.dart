@@ -10,27 +10,32 @@ const Size _phone = Size(411, 891);
 DateTime _morning() => DateTime.utc(2026, 10, 8, 6);
 
 void main() {
-  testWidgets('the open business is its full receipt, stamped open now', (
+  testWidgets('the open business is its full card, marked open now', (
     tester,
   ) async {
     await _pump(tester, reader: _Reader());
 
-    final open = find.byKey(const ValueKey('receipt-tenant-a'));
+    final open = find.byKey(const ValueKey('business-tenant-a'));
     expect(open, findsOneWidget);
     expect(
-      find.descendant(of: open, matching: find.text('OPEN NOW')),
+      find.descendant(of: open, matching: find.textContaining('Open now')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: open, matching: find.text('DEV CORNER SHOP')),
+      find.descendant(of: open, matching: find.text('Dev Corner Shop')),
       findsOneWidget,
     );
     expect(
       find.descendant(of: open, matching: find.text('Fresh every morning')),
       findsOneWidget,
     );
+    // The currency is set small beside the figure, as on Books.
     expect(
-      find.descendant(of: open, matching: find.text('KES 910')),
+      find.descendant(of: open, matching: find.text('KES')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: open, matching: find.text('910')),
       findsOneWidget,
     );
     expect(
@@ -38,7 +43,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: open, matching: find.text('EDIT DETAILS ›')),
+      find.descendant(of: open, matching: find.text('Edit details')),
       findsOneWidget,
     );
   });
@@ -81,7 +86,7 @@ void main() {
     expect(find.text('Closed'), findsOneWidget);
   });
 
-  testWidgets('another business prints its last counted day, dated', (
+  testWidgets('another business shows its last counted day, dated', (
     tester,
   ) async {
     await _pump(
@@ -90,17 +95,17 @@ void main() {
       others: [_membership('tenant-b', 'Westlands Mart', TenantRole.manager)],
     );
 
-    final other = find.byKey(const ValueKey('receipt-tenant-b'));
+    final other = find.byKey(const ValueKey('business-tenant-b'));
     expect(
-      find.descendant(of: other, matching: find.text('WESTLANDS MART')),
+      find.descendant(of: other, matching: find.text('Westlands Mart')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: other, matching: find.text('7 OCT')),
+      find.descendant(of: other, matching: find.text('LAST COUNTED · 7 OCT')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: other, matching: find.text('KES 12400')),
+      find.descendant(of: other, matching: find.text('12400')),
       findsOneWidget,
     );
     expect(
@@ -108,7 +113,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: other, matching: find.text('SWITCH TO THIS SHOP ›')),
+      find.descendant(of: other, matching: find.text('Switch to this shop')),
       findsOneWidget,
     );
   });
@@ -123,9 +128,9 @@ void main() {
       others: [_membership('tenant-b', 'Westlands Mart', TenantRole.cashier)],
     );
 
-    final other = find.byKey(const ValueKey('receipt-tenant-b'));
+    final other = find.byKey(const ValueKey('business-tenant-b'));
     expect(
-      find.descendant(of: other, matching: find.text('KES 12400')),
+      find.descendant(of: other, matching: find.text('12400')),
       findsNothing,
     );
     // The rules refuse a cashier `daily_metrics`, so it is never asked for.
@@ -151,13 +156,13 @@ void main() {
       ],
     );
 
-    final other = find.byKey(const ValueKey('receipt-tenant-c'));
+    final other = find.byKey(const ValueKey('business-tenant-c'));
     expect(
-      find.descendant(of: other, matching: find.text('Suspended')),
+      find.descendant(of: other, matching: find.textContaining('Suspended')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: other, matching: find.textContaining('SWITCH')),
+      find.descendant(of: other, matching: find.textContaining('Switch')),
       findsNothing,
     );
   });
@@ -174,8 +179,11 @@ void main() {
       },
     );
 
-    await tester.tap(find.byKey(const ValueKey('receipt-tenant-b')));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('business-tenant-b')));
+    // Not settled: this page is the first route here, so nothing pops it and
+    // the card keeps its *Switching…* spinner turning.
+    await tester.pump();
+    await tester.pump();
 
     expect(switched, ['tenant-b']);
   });
@@ -192,7 +200,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('receipt-tenant-b')));
+    await tester.tap(find.byKey(const ValueKey('business-tenant-b')));
     await tester.pumpAndSettle();
 
     expect(
@@ -213,10 +221,10 @@ void main() {
     final header = tester.getTopLeft(
       find.byKey(const ValueKey('add-business')),
     );
-    final receipt = tester.getTopLeft(
-      find.byKey(const ValueKey('receipt-tenant-a')),
+    final card = tester.getTopLeft(
+      find.byKey(const ValueKey('business-tenant-a')),
     );
-    expect(header.dy, lessThan(receipt.dy));
+    expect(header.dy, lessThan(card.dy));
   });
 
   testWidgets('an unverified account is told why it cannot add one', (
@@ -228,7 +236,7 @@ void main() {
     expect(find.text('Verify your email to add a business.'), findsOneWidget);
   });
 
-  testWidgets('the add sheet prints the receipt as the name is typed, '
+  testWidgets('the add sheet previews the card as the name is typed, '
       'in the open business’s currency', (tester) async {
     final callable = _RecordingCallable();
     await _pump(tester, reader: _Reader(), callable: callable);
@@ -239,7 +247,7 @@ void main() {
     final preview = find.byKey(const ValueKey('add-business-preview'));
     expect(preview, findsOneWidget);
     expect(
-      find.descendant(of: preview, matching: find.text('KES 0')),
+      find.descendant(of: preview, matching: find.text('KES')),
       findsOneWidget,
     );
 
@@ -252,7 +260,7 @@ void main() {
     );
     await tester.pump();
     expect(
-      find.descendant(of: preview, matching: find.text('MAMA MBOGA KILIMANI')),
+      find.descendant(of: preview, matching: find.text('Mama Mboga Kilimani')),
       findsOneWidget,
     );
 
@@ -263,7 +271,7 @@ void main() {
     expect(callable.payloads.single['name'], 'Mama Mboga Kilimani');
     // Back on the list, the new business is there while the shell catches up.
     expect(find.text('2 businesses'), findsOneWidget);
-    expect(find.text('MAMA MBOGA KILIMANI'), findsOneWidget);
+    expect(find.byKey(const ValueKey('business-tenant-new')), findsOneWidget);
   });
 }
 

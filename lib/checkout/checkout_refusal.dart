@@ -84,8 +84,8 @@ final class CheckoutRefusal {
     // network, which is what makes refusing here safe to do.
     'shift_expired' => const CheckoutRefusal._(
       'shift_expired',
-      'Your shift has been open more than a day, so no new sale can be '
-          'recorded on it. Count the cash and close it, then open a new one.',
+      "Your shift's trading day is over, so no new sale can be recorded on "
+          'it. Count the cash and close it, then open a new one.',
       cashierCanFix: true,
     ),
     'invalid_shift_id' => const CheckoutRefusal._(

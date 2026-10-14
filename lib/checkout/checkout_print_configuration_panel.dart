@@ -45,6 +45,7 @@ import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tabs.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import 'checkout_bluetooth_printer_panel.dart';
 import 'checkout_configuration_writer.dart';
 import 'checkout_print_configuration.dart';
@@ -118,7 +119,7 @@ final class TenantPrinterConfigurationScreen extends StatelessWidget {
   Widget build(BuildContext context) => AppScaffold(
     title: 'Printer',
     // §4.2's "reading and forms" row. This is a form.
-    contentWidth: AppContentWidth.reading,
+    contentWidth: AppContentWidth.records,
     // The panel scrolls and insets itself: its tabs are a `TabBarView`, which
     // needs the page's height rather than a scroll view's unbounded one.
     body: TenantPrinterConfigurationPanel(
@@ -973,136 +974,173 @@ class _PrinterContentsState extends State<_PrinterContents> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        if (widget.printHelper case final helper?) ...<Widget>[
-          PrintHelperCard(setup: helper),
-          SizedBox(height: tokens.spacing.s16),
-        ],
-        // **This screen opens on the fold since 2026-08-26.** It used to begin
-        // with `SectionHeading('Where receipts print')` under an app bar and a
-        // page header both already reading *Printer* - §7's "title appears
-        // once", stated three times - and then a loose grey paragraph before
-        // anything a person could act on.
-        //
-        // §7's *Long copy*: policy rather than current state, so it folds.
-        const Disclosure(
-          key: ValueKey('printer-configuration-scope'),
-          summary: 'How printing works',
-          child: Text(
-            key: ValueKey('printer-configuration-scope-body'),
-            'A sale is recorded before its receipt is sent, so a printer that '
-            'is off or jammed never stops a sale. Each receipt waits its turn '
-            'and is sent once; if it fails it is kept, with the reason, until '
-            'somebody sends it again.',
+        AppWorkspace(
+          leading: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (widget.printHelper case final helper?) ...<Widget>[
+                PrintHelperCard(setup: helper),
+                SizedBox(height: tokens.spacing.s16),
+              ],
+              // **This screen opens on the fold since 2026-08-26.** It used to begin
+              // with `SectionHeading('Where receipts print')` under an app bar and a
+              // page header both already reading *Printer* - §7's "title appears
+              // once", stated three times - and then a loose grey paragraph before
+              // anything a person could act on.
+              //
+              // §7's *Long copy*: policy rather than current state, so it folds.
+              const Disclosure(
+                key: ValueKey('printer-configuration-scope'),
+                summary: 'How printing works',
+                child: Text(
+                  key: ValueKey('printer-configuration-scope-body'),
+                  'A sale is recorded before its receipt is sent, so a printer that '
+                  'is off or jammed never stops a sale. Each receipt waits its turn '
+                  'and is sent once; if it fails it is kept, with the reason, until '
+                  'somebody sends it again.',
+                ),
+              ),
+              // **The paragraph that was the subtitle, as the status it always
+              // was.** Whether receipts are going anywhere at all is not prose about
+              // the screen, it is the screen's standing - and §2.1 wants a container,
+              // a glyph and a word for that, which a grey sentence is not. §9's rule
+              // that a status is never carried by text alone is the same point.
+              //
+              // `problem` for settings that cannot be read is §2.1's own
+              // *"unreadable"*; `attention` for none set up is its *"awaiting"*,
+              // because that is a setup step nobody has taken yet.
+              //
+              // **No word about this device printing elsewhere any more.** Since
+              // 2026-10-11 this form shows only while the network printer is the
+              // kind switched on, so it always describes this device's receipts.
+              if (!configured.canPrint) ...<Widget>[
+                SizedBox(height: tokens.spacing.s12),
+                Callout(
+                  key: const ValueKey('printer-configuration-current'),
+                  status:
+                      configured.state == TenantPrinterConfigurationState.absent
+                      ? AppStatus.attention
+                      : AppStatus.problem,
+                  message:
+                      configured.state == TenantPrinterConfigurationState.absent
+                      ? 'No printer is set up, so receipts are not sent anywhere. '
+                            'Sales are recorded as normal.'
+                      : 'The saved printer settings cannot be read, so receipts are '
+                            'not sent anywhere. Saving a printer here replaces them.',
+                ),
+              ],
+            ],
+          ),
+          trailing: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (!widget.canPublish) ...<Widget>[
+                SizedBox(height: tokens.spacing.s12),
+                const Callout(
+                  key: ValueKey('printer-configuration-read-only'),
+                  status: AppStatus.info,
+                  message: 'This build cannot change the printer from here.',
+                ),
+              ] else ...<Widget>[
+                SizedBox(height: tokens.spacing.s16),
+                AppTextField(
+                  key: const ValueKey('printer-configuration-host'),
+                  controller: _host,
+                  enabled: !widget.busy,
+                  onChanged: (_) => setState(() {}),
+                  label: 'Printer address',
+                  leading: Icons.print_outlined,
+                ),
+                SizedBox(height: tokens.spacing.s8),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final port = AppTextField(
+                      key: const ValueKey('printer-configuration-port'),
+                      controller: _port,
+                      enabled: !widget.busy,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setState(() {}),
+                      label: 'Port',
+                    );
+                    final paper = AppSelect<PrinterPaperWidth>(
+                      key: const ValueKey('printer-configuration-paper'),
+                      value: _paperWidth,
+                      enabled: !widget.busy,
+                      label: 'Paper width',
+                      items: <AppSelectItem<PrinterPaperWidth>>[
+                        for (final width in PrinterPaperWidth.values)
+                          AppSelectItem<PrinterPaperWidth>(
+                            value: width,
+                            label: width.label,
+                          ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _paperWidth = value ?? _paperWidth),
+                    );
+                    if (constraints.maxWidth >= tokens.layout.reading) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: port),
+                          SizedBox(width: tokens.spacing.s16),
+                          Expanded(child: paper),
+                        ],
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        port,
+                        SizedBox(height: tokens.spacing.s12),
+                        paper,
+                      ],
+                    );
+                  },
+                ),
+                SizedBox(height: tokens.spacing.s8),
+                CheckboxListTile(
+                  key: const ValueKey('printer-configuration-cutter'),
+                  value: _hasCutter,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('This printer cuts the paper'),
+                  onChanged: widget.busy
+                      ? null
+                      : (value) => setState(() => _hasCutter = value ?? false),
+                ),
+                SizedBox(height: tokens.spacing.s12),
+                // Right-aligned since 2026-08-26, with the two sheets and for the
+                // same reason: the control a right-handed thumb reaches should be
+                // the one it presses. `AppActionRow` defaults to `end`, so this
+                // stopped needing to say anything.
+                AppActionRow(
+                  actions: <Widget>[
+                    AppButton(
+                      key: const ValueKey('printer-configuration-submit'),
+                      label: configured.canPrint
+                          ? 'Change printer'
+                          : 'Save printer',
+                      tier: AppButtonTier.primary,
+                      onPressed: _hasSomethingToSubmit
+                          ? () => widget.onPublish(_values)
+                          : null,
+                    ),
+                    // Offered only where a transport exists to probe with. It checks
+                    // what is typed, so an address can be tested before it is saved.
+                    if (widget.canTest)
+                      AppButton(
+                        key: const ValueKey('printer-configuration-test'),
+                        label: 'Test this printer',
+                        icon: Icons.wifi_tethering,
+                        onPressed: _hasSomethingToSubmit
+                            ? () => widget.onTest(_values)
+                            : null,
+                      ),
+                  ],
+                ),
+              ],
+            ],
           ),
         ),
-        // **The paragraph that was the subtitle, as the status it always
-        // was.** Whether receipts are going anywhere at all is not prose about
-        // the screen, it is the screen's standing - and §2.1 wants a container,
-        // a glyph and a word for that, which a grey sentence is not. §9's rule
-        // that a status is never carried by text alone is the same point.
-        //
-        // `problem` for settings that cannot be read is §2.1's own
-        // *"unreadable"*; `attention` for none set up is its *"awaiting"*,
-        // because that is a setup step nobody has taken yet.
-        //
-        // **No word about this device printing elsewhere any more.** Since
-        // 2026-10-11 this form shows only while the network printer is the
-        // kind switched on, so it always describes this device's receipts.
-        if (!configured.canPrint) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('printer-configuration-current'),
-            status: configured.state == TenantPrinterConfigurationState.absent
-                ? AppStatus.attention
-                : AppStatus.problem,
-            message: configured.state == TenantPrinterConfigurationState.absent
-                ? 'No printer is set up, so receipts are not sent anywhere. '
-                      'Sales are recorded as normal.'
-                : 'The saved printer settings cannot be read, so receipts are '
-                      'not sent anywhere. Saving a printer here replaces them.',
-          ),
-        ],
-        if (!widget.canPublish) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          const Callout(
-            key: ValueKey('printer-configuration-read-only'),
-            status: AppStatus.info,
-            message: 'This build cannot change the printer from here.',
-          ),
-        ] else ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          AppTextField(
-            key: const ValueKey('printer-configuration-host'),
-            controller: _host,
-            enabled: !widget.busy,
-            onChanged: (_) => setState(() {}),
-            label: 'Printer address',
-            leading: Icons.print_outlined,
-          ),
-          SizedBox(height: tokens.spacing.s8),
-          AppTextField(
-            key: const ValueKey('printer-configuration-port'),
-            controller: _port,
-            enabled: !widget.busy,
-            keyboardType: TextInputType.number,
-            onChanged: (_) => setState(() {}),
-            label: 'Port',
-          ),
-          SizedBox(height: tokens.spacing.s12),
-          AppSelect<PrinterPaperWidth>(
-            key: const ValueKey('printer-configuration-paper'),
-            value: _paperWidth,
-            enabled: !widget.busy,
-            label: 'Paper width',
-            items: <AppSelectItem<PrinterPaperWidth>>[
-              for (final width in PrinterPaperWidth.values)
-                AppSelectItem<PrinterPaperWidth>(
-                  value: width,
-                  label: width.label,
-                ),
-            ],
-            onChanged: (value) =>
-                setState(() => _paperWidth = value ?? _paperWidth),
-          ),
-          SizedBox(height: tokens.spacing.s8),
-          CheckboxListTile(
-            key: const ValueKey('printer-configuration-cutter'),
-            value: _hasCutter,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('This printer cuts the paper'),
-            onChanged: widget.busy
-                ? null
-                : (value) => setState(() => _hasCutter = value ?? false),
-          ),
-          SizedBox(height: tokens.spacing.s12),
-          // Right-aligned since 2026-08-26, with the two sheets and for the
-          // same reason: the control a right-handed thumb reaches should be
-          // the one it presses. `AppActionRow` defaults to `end`, so this
-          // stopped needing to say anything.
-          AppActionRow(
-            actions: <Widget>[
-              AppButton(
-                key: const ValueKey('printer-configuration-submit'),
-                label: configured.canPrint ? 'Change printer' : 'Save printer',
-                tier: AppButtonTier.primary,
-                onPressed: _hasSomethingToSubmit
-                    ? () => widget.onPublish(_values)
-                    : null,
-              ),
-              // Offered only where a transport exists to probe with. It checks
-              // what is typed, so an address can be tested before it is saved.
-              if (widget.canTest)
-                AppButton(
-                  key: const ValueKey('printer-configuration-test'),
-                  label: 'Test this printer',
-                  icon: Icons.wifi_tethering,
-                  onPressed: _hasSomethingToSubmit
-                      ? () => widget.onTest(_values)
-                      : null,
-                ),
-            ],
-          ),
-        ],
       ],
     );
   }

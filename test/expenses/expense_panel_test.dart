@@ -425,7 +425,9 @@ void main() {
         _record(token: 'aaa', amountMinor: 30000),
       ],
     );
-    await _pump(tester, reader: reader, writer: writer);
+    // **The rows at 800**, where Void is a button on the row; from 1024 it is
+    // the row's menu, which the table case below goes through.
+    await _pump(tester, reader: reader, writer: writer, width: 800);
     final readsBefore = reader.reads;
 
     await tester.tap(find.byKey(const ValueKey('expense-open-rent')));
@@ -456,6 +458,47 @@ void main() {
     // the list behind it has re-read by the time a person lands back on it.
     expect(find.byKey(const ValueKey('expense-category')), findsNothing);
     expect(find.byKey(const ValueKey('expenses')), findsOne);
+  });
+
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: a type's records are a table from 1024.
+  testWidgets('on a screen 1024 and wider a type\'s records are a table, and '
+      'Void is the row menu', (tester) async {
+    final writer = _Writer();
+    await _pump(
+      tester,
+      reader: _Reader(
+        records: <Map<String, Object?>>[
+          _record(token: 'aaa', amountMinor: 30000),
+        ],
+      ),
+      writer: writer,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('expense-open-rent')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('expense-category-sheet')), findsOne);
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('expense-amount-2026-08-27-aaa')),
+          )
+          .data,
+      '300',
+    );
+    await tester.tap(find.byKey(const ValueKey('expense-menu-2026-08-27-aaa')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('expense-void-2026-08-27-aaa')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('expense-void-reason')),
+      'Recorded twice',
+    );
+    await tester.tap(find.byKey(const ValueKey('expense-void-submit')));
+    await tester.pumpAndSettle();
+
+    expect(writer.voided.single.expenseId, '2026-08-27-aaa');
   });
 
   testWidgets('an already voided record offers no second void', (tester) async {
@@ -554,8 +597,9 @@ Future<void> _pump(
   TenantExpenseWriter? writer = const _NoWriter(),
   TenantRole role = TenantRole.owner,
   bool settle = true,
+  double width = 1200,
 }) async {
-  tester.view.physicalSize = const Size(1200, 2400);
+  tester.view.physicalSize = Size(width, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

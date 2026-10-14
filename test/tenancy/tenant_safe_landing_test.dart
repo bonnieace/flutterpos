@@ -225,11 +225,12 @@ void main() {
 
       expect(title.left, greaterThanOrEqualTo(bar.left), reason: name);
       expect(title.right, lessThanOrEqualTo(bar.right), reason: name);
-      // The way out is a glyph at the trailing edge and stays inside the bar
-      // whatever the business is called.
-      final signOut = tester.getRect(find.byKey(const ValueKey('sign-out')));
-      expect(signOut.right, lessThanOrEqualTo(bar.right), reason: name);
-      expect(signOut.left, greaterThan(title.left), reason: name);
+      // The person - the way to settings and out since 2026-10-13 - is at the
+      // trailing edge and stays inside the bar whatever the business is
+      // called.
+      final account = tester.getRect(find.byKey(const ValueKey('hub-account')));
+      expect(account.right, lessThanOrEqualTo(bar.right), reason: name);
+      expect(account.left, greaterThan(title.left), reason: name);
     }
   });
 

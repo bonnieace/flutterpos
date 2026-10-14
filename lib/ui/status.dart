@@ -29,6 +29,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'illustration.dart';
+
 import 'measure.dart';
 import 'press.dart';
 import 'spring.dart';
@@ -298,6 +300,7 @@ final class Callout extends StatelessWidget {
     this.title,
     this.icon,
     this.action,
+    this.illustration,
   });
 
   final AppStatus status;
@@ -314,6 +317,9 @@ final class Callout extends StatelessWidget {
   /// One control under the message - "Retry", "Open settings". Left to the
   /// caller so this component decides nothing about what an action does.
   final Widget? action;
+
+  /// Optional centered workflow art; the status glyph and message stay visible.
+  final String? illustration;
 
   /// The leading glyph, at §5.2's only named leading-icon size.
   ///
@@ -338,42 +344,90 @@ final class Callout extends StatelessWidget {
         ),
         child: Padding(
           padding: EdgeInsets.all(tokens.spacing.s16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Icon(
-                icon ?? status.defaultIcon,
-                size: Callout.glyphSize,
-                color: role.fg,
-              ),
-              SizedBox(width: tokens.spacing.s12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: illustration != null
+              ? Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    if (title case final heading?) ...<Widget>[
-                      Text(
-                        heading,
-                        style: tokens.typography.titleMedium.copyWith(
-                          color: tokens.colors.text.primary,
-                        ),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: AppIllustration(
+                        asset: illustration!,
+                        size: AppIllustration.sceneSize,
                       ),
-                      SizedBox(height: tokens.spacing.s4),
-                    ],
+                    ),
+                    SizedBox(height: tokens.spacing.s16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          icon ?? status.defaultIcon,
+                          size: Callout.glyphSize,
+                          color: role.fg,
+                        ),
+                        if (title case final heading?) ...[
+                          SizedBox(width: tokens.spacing.s12),
+                          Flexible(
+                            child: Text(
+                              heading,
+                              textAlign: TextAlign.center,
+                              style: tokens.typography.titleMedium.copyWith(
+                                color: tokens.colors.text.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    SizedBox(height: tokens.spacing.s8),
                     Text(
                       message,
+                      textAlign: TextAlign.center,
                       style: body.copyWith(color: tokens.colors.text.secondary),
                     ),
-                    if (action case final control?) ...<Widget>[
+                    if (action case final control?) ...[
                       SizedBox(height: tokens.spacing.s12),
-                      control,
+                      Center(child: control),
                     ],
                   ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(
+                      icon ?? status.defaultIcon,
+                      size: Callout.glyphSize,
+                      color: role.fg,
+                    ),
+                    SizedBox(width: tokens.spacing.s12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          if (title case final heading?) ...<Widget>[
+                            Text(
+                              heading,
+                              style: tokens.typography.titleMedium.copyWith(
+                                color: tokens.colors.text.primary,
+                              ),
+                            ),
+                            SizedBox(height: tokens.spacing.s4),
+                          ],
+                          Text(
+                            message,
+                            style: body.copyWith(
+                              color: tokens.colors.text.secondary,
+                            ),
+                          ),
+                          if (action case final control?) ...<Widget>[
+                            SizedBox(height: tokens.spacing.s12),
+                            control,
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );

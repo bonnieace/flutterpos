@@ -67,6 +67,35 @@ Widget _sales({required TenantRole role, required String uid}) {
   );
 }
 
+/// The report opened from the home at 01:30 the next morning, while the seeded
+/// evening shift is still selling: it opens on that shift's day and says why.
+Widget _salesAfterMidnight() {
+  final reader = _businessWithLongContent();
+  final day = DateTime.parse(seedBusinessDate());
+  return inSession(
+    TenantSalesReportScreen(
+      reader: reader,
+      reportReader: reader,
+      totalsCallable: FakeCallable(seedSalesTotalsResponse()),
+      returnActions: fakeReturnActions(),
+      followTradingDay: true,
+      tradingDayNotice: _NeverSilenced(),
+      // 22:30 UTC is 01:30 the next morning in Nairobi.
+      clock: () => DateTime.utc(day.year, day.month, day.day, 22, 30),
+    ),
+    controller: seedSession(role: TenantRole.manager, uid: managerUid),
+  );
+}
+
+/// A device that has not chosen *Don't show again*, so the modal offers it.
+final class _NeverSilenced implements SalesTradingDayNotice {
+  @override
+  bool isSilenced(String tenantId) => false;
+
+  @override
+  Future<void> silence(String tenantId) async {}
+}
+
 /// The Sales Report as its screen composes it, paged two sales at a time so
 /// the day runs past one page and the pager has something to say.
 Widget _pagedSales() {
@@ -74,7 +103,6 @@ Widget _pagedSales() {
   return inSession(
     AppScaffold(
       title: 'Sales Report',
-      subtitle: 'Review transactions, receipts, and returns.',
       contentWidth: AppContentWidth.records,
       body: TenantSalesReportPanel(
         reader: reader,
@@ -132,6 +160,15 @@ void main() {
   screenshotCase(
     'sales-report-cashier',
     build: () => _sales(role: TenantRole.cashier, uid: cashierUid),
+    viewports: responsiveViewports,
+  );
+
+  // The modal the report opens with after midnight, over the report already
+  // on the day the till is trading in.
+  screenshotCase(
+    'sales-report-trading-day',
+    build: _salesAfterMidnight,
+    fullPage: false,
     viewports: responsiveViewports,
   );
 

@@ -157,6 +157,15 @@ TenantSale _sale(String saleId) => TenantSale.fromDocument(
   data: seedSales()[saleId]!,
 );
 
+/// The developer's own window, 2026-10-12: 1232 by 635, where sign-in drew
+/// its phone layout. Shift history is captured at it because its table is the
+/// first `RecordSheet`, and this is the width the table was drawn to suit.
+const ScreenshotViewport _windowViewport = ScreenshotViewport(
+  name: 'window-1232',
+  size: Size(1232, 635),
+  devicePixelRatio: 1,
+);
+
 void main() {
   setUpAll(
     () async => _screenshotProductImage = await screenshotProductImage(),
@@ -1068,6 +1077,7 @@ void main() {
         TenantBulkCatalogScreen(
           reader: FakeTenantReader.business(),
           batchCallable: FakeBulkCatalogCallable(),
+          offerCorrections: true,
           importCallable: FakeCallable(),
           requestIdFactory: () => 'pb-dev-0001',
         ),
@@ -1259,7 +1269,7 @@ void main() {
         ),
       );
     },
-    viewports: responsiveViewports,
+    viewports: <ScreenshotViewport>[...responsiveViewports, _windowViewport],
   );
 
   screenshotCase(
@@ -1417,7 +1427,40 @@ void main() {
       _shiftHistory(),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
-    viewports: responsiveViewports,
+    viewports: <ScreenshotViewport>[...responsiveViewports, _windowViewport],
+  );
+
+  // **The first `RecordSheet`**, 2026-10-12: a day with every standing a
+  // shift can be in, so the table is judged full rather than on the seed's one
+  // closed shift. Large screens only - below 1024 the cards are unchanged.
+  screenshotCase(
+    '32c-shift-history-full-day',
+    build: () => inSession(
+      _shiftHistory(fullDay: true),
+      controller: seedSession(role: TenantRole.manager, uid: managerUid),
+    ),
+    viewports: <ScreenshotViewport>[
+      webViewport,
+      _windowViewport,
+      desktopNarrowViewport,
+    ],
+  );
+
+  // One row's fold open: the float, the credit and the refund that explain a
+  // drawer short of its sales, under the counted column they belong to.
+  screenshotCase(
+    '32d-shift-history-fold-open',
+    build: () => inSession(
+      _shiftHistory(fullDay: true),
+      controller: seedSession(role: TenantRole.manager, uid: managerUid),
+    ),
+    afterPump: (tester) async {
+      await tester.tap(
+        find.byKey(const ValueKey('shift-history-fold-shift-short')),
+      );
+      await tester.pumpAndSettle();
+    },
+    viewports: <ScreenshotViewport>[webViewport],
   );
 
   // **Where a card goes since 2026-09-22**: the Sales report, on the shift's
@@ -2143,8 +2186,11 @@ Future<void> _agreePriceOnTheTill(
 /// Shift history over the seeded business, with its cards opening the Sales
 /// report the way `lib/main.dart` wires them: on the shift's day, narrowed to
 /// whoever ran it, against the same reader.
-Widget _shiftHistory() {
+Widget _shiftHistory({bool fullDay = false}) {
   final reader = FakeTenantReader.business();
+  if (fullDay) {
+    reader.collections['tenants/$seedTenantId/shifts']!.addAll(_fullShiftDay());
+  }
   return TenantShiftHistoryScreen(
     reader: reader,
     returnActions: fakeReturnActions(),
@@ -2158,6 +2204,115 @@ Widget _shiftHistory() {
           initialStaffId: staffId,
         ),
   );
+}
+
+/// Four more closed shifts on today's business day, beside the seed's
+/// morning one: unaccounted, settled, over and corrected, and short with a
+/// float, credit and a refund - every standing the table has to draw.
+///
+/// **The IDs sort in opening order**, as real ones do: a generated shift ID
+/// embeds its opening millisecond, and the day is read in ID order. So the
+/// three early shifts sort before `shift-morning` and the late one after it.
+///
+/// The declared totals are worked back from the variance rule in
+/// `shift_history.dart`: declared, less the float, less sales net of credit,
+/// repayments and refunds.
+Map<String, Map<String, Object?>> _fullShiftDay() {
+  Map<String, Object?> shift(
+    String id, {
+    required String staffId,
+    required int startHour,
+    required int startMinute,
+    required int endHour,
+    required int endMinute,
+    required int salesMinor,
+    required int count,
+    required int closingCashMinor,
+    Map<String, Object?> extra = const <String, Object?>{},
+  }) => <String, Object?>{
+    'shiftId': id,
+    'tenantId': seedTenantId,
+    'staffId': staffId,
+    'deviceId': seedDeviceId,
+    'businessDate': seedBusinessDate(),
+    'status': 'closed',
+    'startTime': seedTimestamp(hour: startHour, minute: startMinute),
+    'endTime': seedTimestamp(hour: endHour, minute: endMinute),
+    'closingCashMinor': closingCashMinor,
+    'closingCash': closingCashMinor / 100,
+    'totalSalesMinor': salesMinor,
+    'totalSales': salesMinor / 100,
+    'transactionCount': count,
+    ...extra,
+  };
+  Map<String, Object?> declared(int cashMinor) => <String, Object?>{
+    'declaredCashMinor': cashMinor,
+    'declaredMpesaMinor': 0,
+    'declaredCardMinor': 0,
+  };
+  return <String, Map<String, Object?>>{
+    'shift-a-early': shift(
+      'shift-a-early',
+      staffId: adminUid,
+      startHour: 3,
+      startMinute: 40,
+      endHour: 8,
+      endMinute: 55,
+      salesMinor: 38000,
+      count: 3,
+      closingCashMinor: 38000,
+      extra: <String, Object?>{'closedWithoutEvidence': true},
+    ),
+    'shift-b-settled': shift(
+      'shift-b-settled',
+      staffId: cashierUid,
+      startHour: 3,
+      startMinute: 58,
+      endHour: 10,
+      endMinute: 2,
+      salesMinor: 184000,
+      count: 14,
+      closingCashMinor: 184000,
+      extra: declared(184000),
+    ),
+    'shift-c-over': shift(
+      'shift-c-over',
+      staffId: managerUid,
+      startHour: 4,
+      startMinute: 30,
+      endHour: 12,
+      endMinute: 10,
+      salesMinor: 98250,
+      count: 9,
+      closingCashMinor: 125000,
+      extra: <String, Object?>{
+        ...declared(125000),
+        'summaryAmendmentId': 'sm_full_day',
+        'summaryAmendedGeneration': 'generation-one',
+        'summaryAmendmentCount': 1,
+        'summaryAmendedAt': seedTimestamp(hour: 13),
+      },
+    ),
+    // Short by 120: 2,455 declared, less a 500 float, less the 2,075 the
+    // sales left in the drawer (2,315 sold, 175 on credit, 65 handed back).
+    'shift-short': shift(
+      'shift-short',
+      staffId: cashierUid,
+      startHour: 10,
+      startMinute: 5,
+      endHour: 17,
+      endMinute: 40,
+      salesMinor: 231500,
+      count: 21,
+      closingCashMinor: 245500,
+      extra: <String, Object?>{
+        ...declared(245500),
+        'openingFloatMinor': 50000,
+        'creditOwedMinor': 17500,
+        'refundedMinor': 6500,
+      },
+    ),
+  };
 }
 
 /// The settings the composition root offers, for the index captures.

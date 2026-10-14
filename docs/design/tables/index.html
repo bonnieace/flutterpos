@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tables &#8212; design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #050C08; font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #FFFFFF; }
+a { color: #45F28D; } a:hover { color: #3DD47C; }
+:focus-visible { outline: 2px solid #45F28D; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+h1 { margin: 0; font-size: 28px; line-height: 33.6px; font-weight: 700; }
+.lede { margin: 8px 0 32px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; max-width: 700px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; margin-bottom: 12px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #FFFFFF; flex-shrink: 0; width: 200px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; }
+.size { font-size: 12px; color: #849E8F; flex-shrink: 0; margin-left: auto; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) { .board { flex-direction: column; gap: 6px; } .board h2 { width: auto; } .size { margin-left: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Tables</h1>
+  <p class="lede">One table component, <em>the sheet</em>, for every screen that today stretches phone cards across a large window. It is quiet: monochrome rows, figures in a right-aligned column, and status drawn only where something wants attention. It is fitted to a till: mono figures with a unit stated once, day breaks, folded receipt lines, and a mint total. It is drawn on the screens the audit named, except the platform console. Read <a href="README.md">README.md</a> for the reasoning, the departures, what is not a pure restyle, and the open questions.</p>
+
+  <a class="board" href="tables-system.html">
+    <h2>The sheet</h2>
+    <p>The component&#8217;s anatomy on Customers, numbered, and the six rules that let one table fit every one of those screens.</p>
+    <span class="size">1440</span>
+  </a>
+  <a class="board" href="tables-cells.html">
+    <h2>Cells and rows</h2>
+    <p>Fifteen kinds of cell, each with its face, colour and alignment; then the group row, the expanded row, the total row and the promoted action.</p>
+    <span class="size">1440</span>
+  </a>
+  <a class="board" href="tables-states.html">
+    <h2>States</h2>
+    <p>A row enabled, hovered, focused, pressed, inactive, not sent yet and with its menu open; a sheet loading, empty, unmatched, failing, read-only, cut short and on its last page.</p>
+    <span class="size">1440</span>
+  </a>
+  <a class="board" href="tables-responsive.html">
+    <h2>Widths</h2>
+    <p>One day of Shift history at 1440 &#215; 900, at the 1232 &#215; 635 window from the audit, at 1024, condensed at 834, and as an optional list at 390.</p>
+    <span class="size">390&#8211;1440</span>
+  </a>
+  <a class="board" href="tables-sales.html">
+    <h2>Sales</h2>
+    <p>The Sales Report&#8217;s receipts with their lines folded, Shift history and Returns. Also why Notifications stays a list.</p>
+    <span class="size">1440</span>
+  </a>
+  <a class="board" href="tables-reports.html">
+    <h2>Reports</h2>
+    <p>Daily summary with a week total, Sales totals&#8217; payment breakdown, reconciliation runs, unresolved differences, Logs and Stock counts.</p>
+    <span class="size">720&#8211;1440</span>
+  </a>
+  <a class="board" href="tables-records.html">
+    <h2>Records</h2>
+    <p>Customers who owe, a customer&#8217;s statement, Suppliers, a supplier&#8217;s deliveries, Production and an expense type&#8217;s records.</p>
+    <span class="size">1440</span>
+  </a>
+</div>
+</body>
+</html>

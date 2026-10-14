@@ -113,7 +113,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('stock-adjustments-empty')))
           .data,
-      'No manual adjustment has been recorded in this business.',
+      'No stock adjustments yet.',
     );
   });
 

@@ -218,7 +218,10 @@ void main() {
       expect(find.text('Edit payment method'), findsNothing);
     });
 
-    testWidgets('management receives item-led cards at desktop width', (
+    // **A table from 1024 since 2026-10-13**, at the developer's direction:
+    // this list drew cards at every width until then. The items are still
+    // all on screen, under each sale's row.
+    testWidgets('management receives a table at desktop width, items and all', (
       tester,
     ) async {
       final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
@@ -227,8 +230,8 @@ void main() {
       ]);
       await _pump(tester, reader, width: 1024, role: TenantRole.manager);
 
-      expect(find.byKey(const ValueKey('sales-report-cards')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sales-report-table')), findsNothing);
+      expect(find.byKey(const ValueKey('sales-report-sheet')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sales-report-cards')), findsNothing);
       expect(find.byKey(const ValueKey('sales-item-co-1-0')), findsOneWidget);
       expect(find.byKey(const ValueKey('sales-staff-filter')), findsOneWidget);
       expect(reader.salesQueries.single.soldById, isNull);
@@ -850,6 +853,9 @@ void main() {
       expect(find.byKey(const ValueKey('sales-report-returned')), findsNothing);
     });
 
+    // These two read the card's figures - `KES 4.50` - so they run on the
+    // cards, at 1023. The table states the same netting from 1024; see the
+    // group 'the day's sales on a screen 1024 and wider'.
     testWidgets('a part return badges the sale and takes only its share', (
       tester,
     ) async {
@@ -864,7 +870,7 @@ void main() {
       await _pump(
         tester,
         reader,
-        width: 1024,
+        width: 1023,
         role: TenantRole.manager,
         totalsCallable: const _TotalsCallable(
           netSales: 95.50,
@@ -903,7 +909,7 @@ void main() {
         ],
       );
 
-      await _pump(tester, reader, width: 1024, role: TenantRole.manager);
+      await _pump(tester, reader, width: 1023, role: TenantRole.manager);
 
       // The day's list has dropped it.
       expect(find.byKey(const ValueKey('sales-record-co-1')), findsNothing);
@@ -1323,6 +1329,312 @@ void main() {
     });
   });
 
+  group('the day the till is trading in', () {
+    // 01:30 on the 24th in Nairobi: past midnight, before the 06:00 cutoff.
+    DateTime night() => DateTime.utc(2026, 8, 23, 22, 30);
+
+    // Opened at 18:00 on the 23rd in Nairobi and still selling, so everything
+    // it has sold since midnight is filed under the 23rd.
+    TenantQueryDocumentSnapshot overnightShift({String staffId = 'user-a'}) =>
+        TenantQueryDocumentSnapshot(
+          path: 'tenants/tenant-a/shifts/shift-night',
+          data: <String, Object?>{
+            'shiftId': 'shift-night',
+            'tenantId': 'tenant-a',
+            'staffId': staffId,
+            'deviceId': _deviceId,
+            'businessDate': '2026-08-23',
+            'status': 'open',
+            'startTime': Timestamp.fromDate(DateTime.utc(2026, 8, 23, 15)),
+          },
+        );
+
+    Iterable<TenantCollectionQuery> shiftQueries(_SalesReader reader) => reader
+        .collectionQueries
+        .where((query) => query.collectionPath == 'tenants/tenant-a/shifts');
+
+    _SalesReader nightReader() => _SalesReader(
+      <TenantQueryDocumentSnapshot>[
+        _sale('co-night', sequence: 1, businessDate: '2026-08-23'),
+      ],
+      shifts: <TenantQueryDocumentSnapshot>[overnightShift()],
+    );
+
+    testWidgets('after midnight it opens on that day, and says why', (
+      tester,
+    ) async {
+      final reader = nightReader();
+
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.manager,
+        clock: night,
+        followTradingDay: true,
+        tradingDayNotice: _TradingDayNotice(),
+      );
+
+      // Said once, as a modal, over the report already on that day.
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day')),
+        findsOneWidget,
+      );
+      // 23 Aug 2026 is a Sunday, and the night is drawn under the sentence.
+      expect(find.text('Still trading on Sunday'), findsOneWidget);
+      expect(find.byType(TradingNightTrack), findsOneWidget);
+      // A phone gets a sheet under the thumb, not a dialog.
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.byType(Dialog), findsNothing);
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day-silence')),
+        findsOneWidget,
+      );
+      // Held rather than moved: today was never read, so it never drew *no
+      // sales* for the moment before the report found the day that has them.
+      expect(
+        reader.salesQueries.map((query) => query.startBusinessDate).toSet(),
+        <String>{'2026-08-23'},
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('sales-report-trading-day-stay')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('sales-record-co-night')),
+        findsOneWidget,
+      );
+      expect(reader.salesQueries.last.startBusinessDate, '2026-08-23');
+    });
+
+    testWidgets('Show today moves the report to today', (tester) async {
+      final reader = nightReader();
+
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.manager,
+        clock: night,
+        followTradingDay: true,
+      );
+      await tester.tap(find.byKey(const ValueKey('sales-report-show-today')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day')),
+        findsNothing,
+      );
+      expect(reader.salesQueries.last.startBusinessDate, '2026-08-24');
+      expect(find.byKey(const ValueKey('sales-record-co-night')), findsNothing);
+    });
+
+    testWidgets("Don't show again rides on the answer, and only hides this", (
+      tester,
+    ) async {
+      final notice = _TradingDayNotice();
+      await _pump(
+        tester,
+        nightReader(),
+        width: 411,
+        role: TenantRole.manager,
+        clock: night,
+        followTradingDay: true,
+        tradingDayNotice: notice,
+      );
+
+      // Ticking it answers nothing: the sheet stays until a day is chosen.
+      await tester.tap(
+        find.byKey(const ValueKey('sales-report-trading-day-silence')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day')),
+        findsOneWidget,
+      );
+      expect(notice.silenced, isEmpty);
+
+      await tester.tap(
+        find.byKey(const ValueKey('sales-report-trading-day-stay')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(notice.silenced, <String>{'tenant-a'});
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day')),
+        findsNothing,
+      );
+
+      // Opened again: no modal, and still on the day the till is trading in.
+      // The first report is taken away first, so this is a new one rather
+      // than the same state handed a new reader.
+      await tester.pumpWidget(const SizedBox.shrink());
+      final again = nightReader();
+      await _pump(
+        tester,
+        again,
+        width: 411,
+        role: TenantRole.manager,
+        clock: night,
+        followTradingDay: true,
+        tradingDayNotice: notice,
+      );
+
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day')),
+        findsNothing,
+      );
+      expect(again.salesQueries.single.startBusinessDate, '2026-08-23');
+    });
+
+    testWidgets('from 768 up it is a dialog with its answers on one line', (
+      tester,
+    ) async {
+      final reader = nightReader();
+      final notice = _TradingDayNotice();
+      await _pump(
+        tester,
+        reader,
+        width: 1024,
+        role: TenantRole.manager,
+        clock: night,
+        followTradingDay: true,
+        tradingDayNotice: notice,
+      );
+
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.byType(BottomSheet), findsNothing);
+      final silence = tester.getCenter(
+        find.byKey(const ValueKey('sales-report-trading-day-silence')),
+      );
+      final today = tester.getCenter(
+        find.byKey(const ValueKey('sales-report-show-today')),
+      );
+      final stay = tester.getCenter(
+        find.byKey(const ValueKey('sales-report-trading-day-stay')),
+      );
+      // The checkbox on the left, then today, then the day still trading.
+      expect(silence.dy, closeTo(today.dy, 1));
+      expect(today.dy, closeTo(stay.dy, 1));
+      expect(silence.dx, lessThan(today.dx));
+      expect(today.dx, lessThan(stay.dx));
+
+      // Ticked and then sent to today: both are honoured by the one press.
+      await tester.tap(
+        find.byKey(const ValueKey('sales-report-trading-day-silence')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('sales-report-show-today')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsNothing);
+      expect(notice.silenced, <String>{'tenant-a'});
+      expect(reader.salesQueries.last.startBusinessDate, '2026-08-24');
+    });
+
+    testWidgets('without a store there is nothing to silence', (tester) async {
+      await _pump(
+        tester,
+        nightReader(),
+        width: 411,
+        role: TenantRole.manager,
+        clock: night,
+        followTradingDay: true,
+      );
+
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day-silence')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('past the cutoff it opens on today without asking', (
+      tester,
+    ) async {
+      final reader = _SalesReader(
+        const <TenantQueryDocumentSnapshot>[],
+        shifts: <TenantQueryDocumentSnapshot>[overnightShift()],
+      );
+
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.manager,
+        // 06:00 on the 24th in Nairobi.
+        clock: () => DateTime.utc(2026, 8, 24, 3),
+        followTradingDay: true,
+      );
+
+      expect(shiftQueries(reader), isEmpty);
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day')),
+        findsNothing,
+      );
+      expect(reader.salesQueries.single.startBusinessDate, '2026-08-24');
+    });
+
+    testWidgets('a cashier follows only their own shift', (tester) async {
+      final reader = _SalesReader(
+        const <TenantQueryDocumentSnapshot>[],
+        shifts: <TenantQueryDocumentSnapshot>[
+          overnightShift(staffId: 'user-b'),
+        ],
+      );
+
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.cashier,
+        clock: night,
+        followTradingDay: true,
+      );
+
+      expect(shiftQueries(reader).single.equalityFilters, <String, Object?>{
+        'staffId': 'user-a',
+        'status': 'open',
+      });
+      expect(
+        find.byKey(const ValueKey('sales-report-trading-day')),
+        findsNothing,
+      );
+      expect(reader.salesQueries.single.startBusinessDate, '2026-08-24');
+    });
+
+    testWidgets('a report opened about a day stays on that day', (
+      tester,
+    ) async {
+      final reader = _SalesReader(
+        const <TenantQueryDocumentSnapshot>[],
+        shifts: <TenantQueryDocumentSnapshot>[overnightShift()],
+      );
+
+      await _pump(
+        tester,
+        reader,
+        width: 411,
+        role: TenantRole.manager,
+        clock: night,
+        followTradingDay: true,
+        initialBusinessDate: _before,
+      );
+
+      expect(shiftQueries(reader), isEmpty);
+      expect(reader.salesQueries.single.startBusinessDate, _before);
+    });
+  });
+
   testWidgets('the server netting wins over this screen doing its own', (
     tester,
   ) async {
@@ -1358,6 +1670,43 @@ void main() {
           .data,
       isNot(contains('100')),
     );
+  });
+
+  // **The large-screen version, and only it**, at the developer's direction on
+  // 2026-10-12 and 13: the day's sales are a table from 1024.
+  group('the day\'s sales on a screen 1024 and wider', () {
+    testWidgets('a sale is a row: its time, receipt, people and net total', (
+      tester,
+    ) async {
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale('co-1', tender: 'cash'),
+      ]);
+      await _pump(tester, reader, width: 1280, role: TenantRole.manager);
+
+      expect(find.byKey(const ValueKey('sales-report-sheet')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sales-record-co-1')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('sales-receipt-till-co-1')),
+        findsOneWidget,
+      );
+      // The figure with no code: the column's header states it once.
+      expect(_text(tester, 'sales-total-co-1'), isNot(contains('KES')));
+      // The menu is the card's: a return can be started from the row.
+      await tester.tap(find.byKey(const ValueKey('sales-actions-co-1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('sales-returns-co-1')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('below 1024 the cards are unchanged', (tester) async {
+      final reader = _SalesReader(<TenantQueryDocumentSnapshot>[
+        _sale('co-1', tender: 'cash'),
+      ]);
+      await _pump(tester, reader, width: 1023, role: TenantRole.manager);
+
+      expect(find.byKey(const ValueKey('sales-report-cards')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sales-report-sheet')), findsNothing);
+    });
   });
 }
 
@@ -1408,6 +1757,9 @@ Future<void> _pump(
   String? initialBusinessDate,
   String? initialStaffId,
   TenantEmailReceiptWriter? emailReceiptWriter,
+  DateTime Function()? clock,
+  bool followTradingDay = false,
+  SalesTradingDayNotice? tradingDayNotice,
 }) async {
   tester.view.physicalSize = Size(width, 2400);
   tester.view.devicePixelRatio = 1;
@@ -1426,10 +1778,12 @@ Future<void> _pump(
             totalsCallable: totalsCallable,
             reprinter: reprinter,
             tenderCallable: tenderCallable,
-            clock: () => DateTime.utc(2026, 8, 24, 12),
+            clock: clock ?? () => DateTime.utc(2026, 8, 24, 12),
             pageSize: pageSize,
             initialBusinessDate: initialBusinessDate,
             initialStaffId: initialStaffId,
+            followTradingDay: followTradingDay,
+            tradingDayNotice: tradingDayNotice,
             emailReceiptWriter: emailReceiptWriter,
           ),
         ),
@@ -1437,6 +1791,16 @@ Future<void> _pump(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+final class _TradingDayNotice implements SalesTradingDayNotice {
+  final Set<String> silenced = <String>{};
+
+  @override
+  bool isSilenced(String tenantId) => silenced.contains(tenantId);
+
+  @override
+  Future<void> silence(String tenantId) async => silenced.add(tenantId);
 }
 
 final class _EmailReceiptWriter implements TenantEmailReceiptWriter {
@@ -1711,10 +2075,15 @@ final class _SalesReader
   _SalesReader(
     this.sales, {
     this.returns = const <TenantQueryDocumentSnapshot>[],
+    this.shifts = const <TenantQueryDocumentSnapshot>[],
     this.emailReceipts,
   });
 
   final List<TenantQueryDocumentSnapshot> sales;
+
+  /// The business's shifts, which the report asks after midnight to find the
+  /// day the till is still trading in.
+  final List<TenantQueryDocumentSnapshot> shifts;
 
   /// The business's `configuration/email_receipts`, or null for none.
   final Map<String, Object?>? emailReceipts;
@@ -1801,6 +2170,16 @@ final class _SalesReader
               .toList()
             ..sort((left, right) => right.path.compareTo(left.path));
       return matches.take(query.limit).toList();
+    }
+    if (query.collectionPath == 'tenants/tenant-a/shifts') {
+      return shifts
+          .where(
+            (snapshot) => query.equalityFilters.entries.every(
+              (filter) => snapshot.data[filter.key] == filter.value,
+            ),
+          )
+          .take(query.limit)
+          .toList();
     }
     if (query.collectionPath == 'tenants/tenant-a/sales') {
       final matches =

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:uzapay_pos/ui/record_sheet.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:uzapay_pos/checkout/checkout_configuration_writer.dart';
@@ -9,6 +10,7 @@ import 'package:uzapay_pos/customers/customers.dart';
 import 'package:uzapay_pos/email_receipts/email_receipts.dart';
 import 'package:uzapay_pos/tenancy/tenancy.dart';
 import 'package:uzapay_pos/ui/choice.dart';
+import 'package:uzapay_pos/ui/illustration.dart';
 import 'package:uzapay_pos/ui/status.dart';
 import 'package:uzapay_pos/whatsapp/whatsapp.dart';
 
@@ -18,6 +20,20 @@ import '../support/notices.dart';
 /// cashier's request to send one, a customer's consent, and the screen an
 /// owner sets it up on.
 void main() {
+  testWidgets('desktop receipt history aligns recipient, receipt and status', (
+    tester,
+  ) async {
+    await _pump(tester, const _Reader(withDeliveries: true));
+    await tester.tap(find.text('Sent receipts'));
+    await tester.pumpAndSettle();
+    expect(find.byType(RecordSheet), findsOneWidget);
+    expect(find.text('JOHN-CT-7F2-001'), findsOneWidget);
+    expect(find.text('Jane'), findsOneWidget);
+    expect(find.text('Delivered'), findsOneWidget);
+    expect(find.text('Automatically'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   group('settings', () {
     test('a business that chose nothing sends nothing', () {
       expect(TenantEmailReceiptSettings.off.emailEnabled, isFalse);
@@ -315,7 +331,7 @@ void main() {
     testWidgets('lists recent receipts with what became of each, in words', (
       tester,
     ) async {
-      await _pump(tester, const _Reader(withDeliveries: true));
+      await _pump(tester, const _Reader(withDeliveries: true), width: 411);
       expect(find.textContaining('Delivered'), findsNothing);
       await tester.tap(find.text('Sent receipts'));
       await tester.pumpAndSettle();
@@ -345,6 +361,7 @@ void main() {
         tester,
         const _Reader(withDeliveries: true),
         clock: () => now,
+        width: 411,
       );
       await tester.tap(find.text('Sent receipts'));
       await tester.pumpAndSettle();
@@ -380,7 +397,10 @@ void main() {
       );
       // Two receipts are every receipt there is, so no limit is claimed: the
       // footer is for a full page, where the list stops short of the rest.
-      expect(find.byKey(const ValueKey('email-receipts-deliveries-end')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('email-receipts-deliveries-end')),
+        findsNothing,
+      );
     });
 
     testWidgets('the preview is the inbox, the PDF a chip beside the words', (
@@ -449,13 +469,17 @@ void main() {
         findsNothing,
       );
 
-      // The server saying none is the truth, drawn under the mail glyph.
+      // The server saying none is drawn with the email receipt scene.
       server.complete(const <TenantQueryDocumentSnapshot>[]);
       await tester.pumpAndSettle();
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('email-receipts-deliveries-empty')),
-          matching: find.byIcon(Icons.mail_outline),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is AppIllustration &&
+                widget.asset == 'receipt-email.svg',
+          ),
         ),
         findsOneWidget,
       );
@@ -583,8 +607,9 @@ Future<void> _pump(
   TenantRole role = TenantRole.owner,
   DateTime Function()? clock,
   bool settle = true,
+  double width = 1200,
 }) async {
-  tester.view.physicalSize = const Size(1200, 3000);
+  tester.view.physicalSize = Size(width, 3000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

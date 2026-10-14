@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Books &#8212; design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #050C08; font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #FFFFFF; }
+a { color: #45F28D; } a:hover { color: #3DD47C; }
+:focus-visible { outline: 2px solid #45F28D; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.back { font-size: 14px; color: #849E8F; text-decoration: none; }
+h1 { margin: 12px 0 0; font-size: 28px; line-height: 33.6px; font-weight: 700; }
+.lede { margin: 8px 0 32px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; max-width: 700px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; margin-bottom: 12px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #FFFFFF; flex-shrink: 0; width: 200px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; }
+.size { font-size: 12px; color: #849E8F; flex-shrink: 0; margin-left: auto; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) { .board { flex-direction: column; gap: 6px; } .board h2 { width: auto; } .size { margin-left: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../accounting/index.html">&#8592; Accounting and documents</a>
+  <h1>Books</h1>
+  <p class="lede">Phase I, double entry, from <code>BOOKKEEPING_DISCOVERY.md</code>. Every record the app keeps posts by itself. The gaps are filled from M-Pesa and bank statements and a few owner forms, and the accountant has their own login. Owners read plain words; debit and credit appear only on the trial balance and the general ledger. Sample: Dev Corner Shop, books started 1 March 2027, on Wednesday 14 April. Read <a href="README.md">README.md</a> for the reasoning and what is still open.</p>
+  <a class="board" href="books-home.html">
+    <h2>Home</h2>
+    <p>Money now by account and how it was last checked, the one thing to act on, the month so far, and the new home icon.</p>
+    <span class="size">390, 1440, 1232</span>
+  </a>
+  <a class="board" href="books-setup.html">
+    <h2>Setup and opening balances</h2>
+    <p>Start date and the returns cut-over, money accounts, what the shop had on day one, the stake that balances it, and approving.</p>
+    <span class="size">390, 1440</span>
+  </a>
+  <a class="board" href="books-money.html">
+    <h2>Money and statements</h2>
+    <p>An account&#8217;s entries, importing a statement, matching, sorting a line with a rule, the statement table, a balance that doesn&#8217;t match.</p>
+    <span class="size">390, 1440</span>
+  </a>
+  <a class="board" href="books-entries.html">
+    <h2>Owner forms</h2>
+    <p>Move money, owner money, equipment, a loan repayment, and <em>Paid from</em> on the expense form.</p>
+    <span class="size">390</span>
+  </a>
+  <a class="board" href="books-statements.html">
+    <h2>Statements</h2>
+    <p>What the shop made, owns and owes, and where the money went, with a figure opened to its entries.</p>
+    <span class="size">390, 1440</span>
+  </a>
+  <a class="board" href="books-accountant.html">
+    <h2>The accountant&#8217;s pages</h2>
+    <p>Trial balance and general ledger with debit and credit, a journal, inviting the accountant, export.</p>
+    <span class="size">390, 1440</span>
+  </a>
+  <a class="board" href="books-close.html">
+    <h2>Closing a month</h2>
+    <p>Needs attention, the close checklist with a warning and a reason, and a correction that arrives after March closed.</p>
+    <span class="size">390, 1440</span>
+  </a>
+</div>
+</body>
+</html>

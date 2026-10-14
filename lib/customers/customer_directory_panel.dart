@@ -18,6 +18,8 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
+import '../ui/record_list.dart' show RecordAction;
+import '../ui/record_sheet.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
@@ -136,25 +138,27 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
         // **Every debtor, sorted here**, so it is one list rather than pages:
         // see `loadOwing`. A search narrows it by name as the cashier types.
         final term = tenantCustomerSearchTerm(query);
-        final owing = (await TenantCustomerCreditRepository(
-          session: session,
-          reader: reader,
-        ).loadOwing()).where(
-          (customer) => term.isEmpty ||
-              customer.name.toLowerCase().contains(term),
-        ).toList();
+        final owing =
+            (await TenantCustomerCreditRepository(
+                  session: session,
+                  reader: reader,
+                ).loadOwing())
+                .where(
+                  (customer) =>
+                      term.isEmpty ||
+                      customer.name.toLowerCase().contains(term),
+                )
+                .toList();
         owedTotal = owing.fold<int>(0, (sum, c) => sum + c.owedMinor);
         page = TenantCustomerPage(customers: owing, nextCursor: null);
       } else {
-        page = await TenantCustomerRepository(
-          session: session,
-          reader: reader,
-        ).search(
-          search: query,
-          standing: standing,
-          pageSize: TenantCustomersScreen.pageSize,
-          cursor: cursor,
-        );
+        page = await TenantCustomerRepository(session: session, reader: reader)
+            .search(
+              search: query,
+              standing: standing,
+              pageSize: TenantCustomersScreen.pageSize,
+              cursor: cursor,
+            );
       }
       String? currency;
       try {
@@ -353,8 +357,7 @@ final class _TenantCustomersScreenState extends State<TenantCustomersScreen> {
         session.canAccess(allowedRoles: TenantLoyaltyPublisher.allowedRoles);
     return AppScaffold(
       title: 'Customers',
-      subtitle: 'Who buys from you.',
-      contentWidth: AppContentWidth.records,
+      contentWidth: RecordSheet.contentWidth(context),
       body: tabbed
           ? _CustomersTabs(directory: directory, loyalty: loyalty)
           : directory,
@@ -397,7 +400,17 @@ final class _CustomersTabs extends StatelessWidget {
                   child: SingleChildScrollView(
                     key: const ValueKey('customers-loyalty-tab'),
                     padding: EdgeInsets.all(inset),
-                    child: Builder(builder: loyalty),
+                    // A form's reading width, centred: the list beside it
+                    // takes the table's width, a form does not.
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: tokens.layout.reading,
+                        ),
+                        child: Builder(builder: loyalty),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -555,6 +568,7 @@ final class _CustomersContents extends StatelessWidget {
     final inset = _customersInset(context, tokens);
     final shown = view.page.customers;
     final lastPage = !view.page.hasMore;
+    final table = RecordSheet.drawnAt(MediaQuery.sizeOf(context).width);
 
     final searchField = AppTextField(
       key: const ValueKey('customers-search'),
@@ -586,7 +600,11 @@ final class _CustomersContents extends StatelessWidget {
 
     return PagedListView(
       listKey: const ValueKey('customers'),
-      padding: EdgeInsets.all(inset),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(inset),
+        belowScaffold: DefaultTabController.maybeOf(context) == null,
+      ),
       pagination: Pagination(
         pageNumber: pageIndex + 1,
         previousKey: const ValueKey('customers-previous-page'),
@@ -597,7 +615,8 @@ final class _CustomersContents extends StatelessWidget {
         endOfList: lastPage,
       ),
       children: <Widget>[
-        if (onAdd case final add?) ...<Widget>[
+        // On the table's top edge from 1024 instead; see [_sheet].
+        if (onAdd case final add? when !table) ...<Widget>[
           AppButton(
             key: const ValueKey('customers-add'),
             label: 'Add customer',
@@ -618,49 +637,33 @@ final class _CustomersContents extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.s12),
         ],
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(child: searchField),
-            SizedBox(
-              width: compact ? tokens.spacing.s8 : tokens.spacing.s12,
-            ),
-            Expanded(child: standingFilter),
-          ],
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        if (view.owedTotalMinor case final owed? when shown.isNotEmpty)
-          ...<Widget>[
-            Callout(
-              key: const ValueKey('customers-owed-total'),
-              status: AppStatus.info,
-              message:
-                  '${shown.length == 1 ? '1 customer owes' : '${shown.length} customers owe'} '
-                  '${view.currency == null ? '' : '${view.currency} '}'
-                  '${moneyTextOfMinor(owed)} in all. Biggest first.',
-            ),
-            SizedBox(height: tokens.spacing.s16),
-          ],
-        if (shown.isEmpty && standing == TenantCustomerStanding.owing)
-          const EmptyState(
-            key: ValueKey('customers-nobody-owes'),
-            title: 'Nobody owes you anything',
-            hint:
-                'Customers who buy on credit are listed here, biggest debt '
-                'first, until they have paid it back.',
-            illustration: 'file-search.svg',
-          )
-        else if (shown.isEmpty)
-          EmptyState(
-            key: ValueKey(hasQuery ? 'customers-no-matches' : 'customers-empty'),
-            title: hasQuery ? 'No matching customers' : 'No customers yet',
-            hint: hasQuery
-                ? 'Try another name or number, or show every customer.'
-                : 'Add the people who buy from you, here or at the till, so a '
-                      'sale can say who it was for and send them their '
-                      'receipt.',
-            illustration: hasQuery ? 'file-search.svg' : 'logistics.svg',
-          )
+        if (!table) ...<Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(child: searchField),
+              SizedBox(width: compact ? tokens.spacing.s8 : tokens.spacing.s12),
+              Expanded(child: standingFilter),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s16),
+        ],
+        if (view.owedTotalMinor case final owed?
+            when shown.isNotEmpty) ...<Widget>[
+          Callout(
+            key: const ValueKey('customers-owed-total'),
+            status: AppStatus.info,
+            message:
+                '${shown.length == 1 ? '1 customer owes' : '${shown.length} customers owe'} '
+                '${view.currency == null ? '' : '${view.currency} '}'
+                '${moneyTextOfMinor(owed)} in all. Biggest first.',
+          ),
+          SizedBox(height: tokens.spacing.s16),
+        ],
+        if (table)
+          _sheet(tokens, searchField, standingFilter)
+        else if (_empty() case final state?)
+          state
         else
           for (final (index, customer) in shown.indexed) ...<Widget>[
             if (index > 0) SizedBox(height: tokens.spacing.s12),
@@ -672,6 +675,157 @@ final class _CustomersContents extends StatelessWidget {
             ),
           ],
       ],
+    );
+  }
+
+  /// What stands in for the list when the page holds nobody, or null where it
+  /// holds somebody.
+  Widget? _empty() {
+    if (view.page.customers.isNotEmpty) return null;
+    if (standing == TenantCustomerStanding.owing) {
+      return const EmptyState(
+        key: ValueKey('customers-nobody-owes'),
+        title: 'No unpaid balances',
+        hint: 'Unpaid customer balances appear here, largest first.',
+        illustration: 'customer-account.svg',
+      );
+    }
+    return EmptyState(
+      key: ValueKey(hasQuery ? 'customers-no-matches' : 'customers-empty'),
+      title: hasQuery ? 'No matching customers' : 'No customers yet',
+      hint: hasQuery
+          ? 'Try another name or number, or clear the search.'
+          : 'Add customers here or at the register.',
+      illustration: hasQuery ? 'customer-search.svg' : 'customers.svg',
+    );
+  }
+
+  /// The large-screen list: one table, its search, filter and *Add customer*
+  /// on its top edge.
+  ///
+  /// **The same page, searched and filtered the same way, drawn as rows** -
+  /// `docs/design/tables/`, at the developer's direction on 2026-10-13. A row
+  /// opens the customer, as the card did, and its menu is the card's menu
+  /// under the same conditions. Below 1024 the cards are unchanged.
+  Widget _sheet(AppTokens tokens, Widget search, Widget standingFilter) {
+    final shown = view.page.customers;
+    final cents = shown.any((customer) => customer.owedMinor % 100 != 0);
+    // **A column only where a customer on the page has something in it**: a
+    // column of nothing says nothing, and on most pages nobody owes and
+    // everyone is active.
+    final owing = shown.any((customer) => customer.owedMinor > 0);
+    final standing = shown.any(
+      (customer) => !customer.active || customer.creditBlocked,
+    );
+    return RecordSheet(
+      key: const ValueKey('customers-sheet'),
+      columns: <SheetColumn>[
+        const SheetColumn(label: 'Customer', kind: SheetColumnKind.identity),
+        const SheetColumn(label: 'Last bought', kind: SheetColumnKind.text),
+        const SheetColumn(label: 'Points', kind: SheetColumnKind.figure),
+        if (owing)
+          SheetColumn(
+            label: 'Owes',
+            kind: SheetColumnKind.figure,
+            unit: view.currency,
+          ),
+        if (standing)
+          const SheetColumn(label: 'Standing', kind: SheetColumnKind.status),
+      ],
+      bar: Row(
+        children: <Widget>[
+          SizedBox(width: tokens.layout.tableSearch, child: search),
+          SizedBox(width: tokens.spacing.s12),
+          SizedBox(width: tokens.layout.tableFilter, child: standingFilter),
+          const Spacer(),
+          if (onAdd case final add?)
+            AppButton(
+              key: const ValueKey('customers-add'),
+              label: 'Add customer',
+              icon: Icons.person_add_alt_outlined,
+              tier: AppButtonTier.secondary,
+              onPressed: add,
+            ),
+        ],
+      ),
+      body: _empty(),
+      rows: <SheetRow>[
+        for (final customer in shown)
+          _row(customer, cents: cents, owing: owing, standing: standing),
+      ],
+    );
+  }
+
+  SheetRow _row(
+    TenantCustomer customer, {
+    required bool cents,
+    required bool owing,
+    required bool standing,
+  }) {
+    final id = customer.id;
+    final owes = customer.owedMinor;
+    return SheetRow(
+      id: id,
+      key: ValueKey('customer-row-$id'),
+      pressKey: ValueKey('customer-view-$id'),
+      onPressed: () => onView(customer),
+      semanticLabel: customer.name,
+      semanticHint: 'Opens this customer.',
+      cells: <SheetCell?>[
+        SheetText(
+          customer.name,
+          key: ValueKey('customer-name-$id'),
+          // How they are reached and where their receipts go, in words - the
+          // card's own second line.
+          caption: customerContactLine(customer),
+          captionKey: ValueKey('customer-contact-$id'),
+        ),
+        SheetText(
+          customerLastBoughtLabel(customer),
+          key: ValueKey('customer-last-bought-$id'),
+        ),
+        SheetFigure('${customer.points}', key: ValueKey('customer-points-$id')),
+        // **Empty where nothing is owed**, as the card says nothing: owing is
+        // the exception this column is for, and a column of zeros would bury
+        // the rows that have one.
+        if (owing)
+          owes > 0
+              ? SheetFigure(
+                  moneyTextGroupedOfMinor(owes),
+                  reserve: cents && owes % 100 == 0 ? '.00' : null,
+                  key: ValueKey('customer-owes-$id'),
+                  caption: customerOwingSinceLabel(customer),
+                )
+              : null,
+        // **Neither standing is a problem**, which is why both are neutral, as
+        // on the card; an active customer whose credit is open says nothing.
+        if (standing)
+          switch (customer) {
+            TenantCustomer(active: false) => SheetStatus(
+              key: ValueKey('customer-inactive-badge-$id'),
+              status: AppStatus.neutral,
+              label: 'Inactive',
+            ),
+            TenantCustomer(creditBlocked: true) => SheetStatus(
+              key: ValueKey('customer-credit-blocked-$id'),
+              status: AppStatus.neutral,
+              label: 'No credit',
+            ),
+            _ => null,
+          },
+      ],
+      actions: <RecordAction>[
+        for (final action in _actions(customer))
+          RecordAction(
+            label: action.label,
+            icon: action.icon,
+            onPressed: action.onSelected,
+            destructive: action.destructive,
+            actionKey: action.itemKey,
+          ),
+      ],
+      actionsKey: ValueKey('customer-actions-$id'),
+      actionsTooltip: 'More for ${customer.name}',
     );
   }
 }

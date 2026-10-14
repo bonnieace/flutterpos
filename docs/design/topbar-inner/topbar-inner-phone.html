@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inner top bar &#8212; phone</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&amp;display=block">
+<style>
+/* AppTokens.uzapay, quoted from lib/ui/tokens.dart */
+:root {
+  --base: #0D1F16;        /* surface.base      green900 */
+  --raised: #132A1F;      /* surface.raised    green850 */
+  --sunken: #08140E;      /* surface.sunken    green950 */
+  --field: #1E3A2B;       /* surface.field     green700 */
+  --overlay: #1C3328;     /* surface.overlay   green800 */
+  --border-subtle: #1E3A2B;
+  --card-edge: #283831;
+  --border-strong: #2C5340;
+  --t1: #FFFFFF;          /* text.primary   */
+  --t2: #B8D6C5;          /* text.secondary sage050 */
+  --t3: #849E8F;          /* text.tertiary  sage200 */
+  --mint: #45F28D;        /* action.primary, focus ring */
+  --on-mint: #003915;     /* onPrimary */
+  --ink: #0A0F0C;
+  --ok: #4BE277;
+  --amber: #F2C14E;       /* amber400 */
+  --amber-bg: rgba(242, 193, 78, 0.10);   /* amberTint10 */
+  --amber-edge: rgba(242, 193, 78, 0.30); /* amberTint30 */
+  --red: #FF5C6C;
+  --wash-hover: rgba(255, 255, 255, 0.08);
+  --wash-press: rgba(255, 255, 255, 0.12);
+  --well: rgba(0, 0, 0, 0.40);            /* cardWellWashOpacity */
+  /* accent.identity, the home cards' glyph colours */
+  --id-blue: #42A5F5; --id-teal: #26A69A; --id-orange: #FFA726;
+  --id-purple: #AB47BC; --id-pink: #EC407A; --id-green: #66BB6A;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--sunken); color: var(--t1); font-family: Roboto, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+a { color: var(--mint); }
+.ms { font-family: 'Material Symbols Rounded'; font-weight: normal; font-style: normal; font-size: 24px; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; direction: ltr; -webkit-font-feature-settings: 'liga'; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+.ms.fill { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+.ms.s18 { font-size: 18px; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+.ms.s18.fill { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+.ms.s16 { font-size: 16px; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20; }
+
+/* ---- board chrome ---- */
+.nav { padding: 20px 32px 0; font-size: 14px; }
+.nav a { color: var(--t3); text-decoration: none; }
+.nav a:hover { color: var(--mint); text-decoration: underline; }
+.board-head { padding: 16px 32px 8px; max-width: 1100px; }
+.board-head h1 { margin: 0 0 8px; font-size: 28px; line-height: 34px; font-weight: 700; }
+.board-head p { margin: 0; font-size: 15px; line-height: 22px; color: var(--t2); }
+.row { display: flex; flex-wrap: wrap; gap: 40px; padding: 24px 32px; align-items: flex-start; }
+.col { display: flex; flex-direction: column; }
+.cap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-width: 390px; min-height: 78px; }
+.cap.wide { max-width: 760px; min-height: 0; }
+.cap b { font-size: 13px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--mint); }
+.cap b.was { color: var(--t3); }
+.cap span { font-size: 13px; line-height: 19px; color: var(--t2); }
+.col > .shot { align-self: flex-start; }
+.shot { border-radius: 4px; overflow: hidden; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55); outline: 1px solid #1b2a22; position: relative; }
+
+/* ---- frames ---- */
+.screen { background: var(--base); position: relative; overflow: hidden; display: flex; flex-direction: column; }
+.sysbar { height: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 12px; font-weight: 500; color: var(--t1); background: inherit; }
+.sysbar .ms { font-size: 14px; }
+.top { background: var(--base); flex-shrink: 0; }
+.top.scrolled { background: var(--raised); }
+.webtop { height: 36px; flex-shrink: 0; background: #202124; display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+.webtop i { width: 10px; height: 10px; border-radius: 50%; background: #5f6368; display: block; }
+.webtop .url { margin-left: 16px; height: 24px; flex: 0 1 420px; border-radius: 12px; background: #303134; color: #9aa0a6; font-size: 12px; display: flex; align-items: center; padding: 0 12px; }
+
+/* ---- the inner bar ---- */
+.bar { position: relative; z-index: 2; flex-shrink: 0; display: flex; align-items: center; background: var(--base); }
+.bar.scrolled { background: var(--raised); box-shadow: inset 0 -1px 0 var(--border-subtle); }
+.bar.phone { height: 56px; padding: 0 4px; }
+.bar.phone.two { height: 68px; }
+.bar.wide { height: 64px; padding: 0 20px 0 8px; }
+.bar.wide > .ghost:last-child { margin-right: -8px; }
+.bar .grow { flex: 1 1 auto; min-width: 8px; }
+.ib { width: 48px; height: 48px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; border-radius: 999px; color: var(--t2); position: relative; cursor: pointer; padding: 0; }
+.ib:hover, .ib.hover { background: var(--wash-hover); color: var(--t1); }
+.ib:active, .ib.press, .ib.open { background: var(--wash-press); color: var(--t1); }
+.ib.back { color: var(--t1); }
+.ib:not(.back):not(:disabled) { color: var(--mint); }
+.ib:disabled { color: #4E6358; cursor: default; background: transparent; }
+.focus { outline: 2px solid var(--mint); outline-offset: 2px; }
+.ib.focus { outline-offset: -2px; }
+.well { width: 32px; height: 32px; flex-shrink: 0; border-radius: 8px; background: var(--well); display: inline-flex; align-items: center; justify-content: center; margin: 0 12px 0 4px; }
+.titles { display: flex; min-width: 0; }
+.titles.inline { align-items: baseline; gap: 12px; }
+.titles.stack { flex-direction: column; justify-content: center; }
+.tt { font-size: 22px; line-height: 28px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; max-width: 100%; }
+.titles.stack .tt { flex-shrink: 1; }
+.scope { font-size: 14px; line-height: 20px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.titles.stack .scope { color: var(--t2); }
+.tagline { font-size: 14px; line-height: 20px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .titles { padding-left: 4px; flex: 1 1 auto; }
+.chip-off { height: 24px; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px 0 6px; border-radius: 8px; background: var(--amber-bg); box-shadow: inset 0 0 0 1px var(--amber-edge); color: var(--amber); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.chip-off .q { color: var(--amber); font-weight: 600; }
+.wide .chip-off { margin-right: 12px; }
+.phone .chip-off { margin: 0 4px; }
+.ghost { height: 48px; display: inline-flex; align-items: center; flex-shrink: 0; border: 0; background: transparent; padding: 0; cursor: pointer; }
+.ghost > span.b { position: relative; height: 40px; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; border-radius: 8px; background: var(--overlay); color: var(--t1); font-size: 14px; font-weight: 600; letter-spacing: 0.1px; box-shadow: inset 0 0 0 1px var(--border-strong); }
+.ghost:hover > span.b, .ghost.hover > span.b { background: #263D31; color: var(--t1); }
+.ghost.press > span.b { background: #2C4437; color: var(--t1); }
+.ghost.focus { outline: 0; }
+.ghost.focus > span.b { outline: 2px solid var(--mint); outline-offset: 2px; }
+.ghost.disabled > span.b { background: var(--field); color: #4E6358; box-shadow: inset 0 0 0 1px #24392E; cursor: default; }
+.ghost + .ghost, .ghost + .prim, .ib + .prim { margin-left: 8px; }
+.prim { height: 48px; display: inline-flex; align-items: center; flex-shrink: 0; border: 0; background: transparent; padding: 0; cursor: pointer; }
+.prim > span.b { height: 40px; display: inline-flex; align-items: center; gap: 8px; padding: 0 20px 0 16px; border-radius: 8px; background: var(--mint); color: var(--on-mint); font-size: 14px; font-weight: 600; letter-spacing: 0.1px; }
+.prim.hover > span.b { background: #6BFF8F; }
+.prim.press > span.b { background: #22C55E; }
+.prim.focus { outline: 0; }
+.prim.focus > span.b { outline: 2px solid var(--mint); outline-offset: 3px; }
+.prim.disabled > span.b { background: var(--field); color: #4E6358; }
+.prim.icon > span.b { width: 40px; padding: 0; justify-content: center; }
+.spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(184,214,197,0.25); border-top-color: var(--t2); display: inline-block; }
+.sep { width: 1px; height: 24px; background: var(--border-subtle); margin: 0 12px; flex-shrink: 0; }
+.tip { position: absolute; z-index: 5; background: var(--overlay); color: var(--t1); font-size: 12px; line-height: 16px; padding: 6px 8px; border-radius: 4px; box-shadow: 0 0 0 1px var(--border-strong); white-space: nowrap; }
+.menu { position: absolute; z-index: 6; width: 232px; background: var(--overlay); border-radius: 8px; box-shadow: 0 0 0 1px var(--border-strong), 0 16px 40px rgba(0,0,0,0.5); padding: 8px 0; }
+.menu .mi { height: 48px; display: flex; align-items: center; gap: 16px; padding: 0 16px; font-size: 16px; color: var(--t1); }
+.menu .mi .ms { color: var(--t2); }
+.menu .mi.hl { background: var(--wash-hover); }
+
+/* ---- page content mocks ---- */
+.body { flex: 1 1 auto; overflow: hidden; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.wide-body { padding: 8px 20px 20px; }
+.card { background: var(--raised); border-radius: 12px; box-shadow: inset 0 0 0 1px var(--card-edge); }
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.kpis.four { grid-template-columns: repeat(4, 1fr); }
+.kpi { padding: 14px 16px; }
+.kpi .l { font-size: 12px; line-height: 16px; color: var(--t3); font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; }
+.kpi .v { font-family: 'JetBrains Mono', monospace; font-size: 20px; line-height: 28px; font-weight: 700; color: var(--t1); margin-top: 6px; }
+.kpi .v.money { color: var(--mint); }
+.kpi .n { font-size: 12px; line-height: 16px; color: var(--t3); margin-top: 2px; }
+.list .li { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border-subtle); min-height: 64px; }
+.list .li:first-child { border-top: 0; }
+.li .nm { font-size: 16px; line-height: 22px; color: var(--t1); }
+.li .sub { font-size: 13px; line-height: 18px; color: var(--t3); }
+.li .fig { margin-left: auto; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--t1); }
+.li .fig small { display: block; font-family: Roboto, sans-serif; font-size: 12px; color: var(--t3); }
+.li .ph { width: 40px; height: 40px; border-radius: 8px; background: var(--field); flex-shrink: 0; }
+table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.t th { text-align: left; font-size: 12px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--t3); padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+table.t td { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); color: var(--t1); }
+table.t td.n, table.t th.n { text-align: right; font-family: 'JetBrains Mono', monospace; }
+table.t th.n { font-family: Roboto, sans-serif; }
+table.t tr:last-child td { border-bottom: 0; }
+.cart .li { min-height: 72px; }
+.charge { margin-top: auto; height: 56px; border-radius: 8px; background: var(--mint); color: var(--on-mint); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-weight: 700; font-size: 16px; }
+.charge .v { font-family: 'JetBrains Mono', monospace; }
+.callout { padding: 12px 16px; border-radius: 8px; font-size: 14px; line-height: 20px; color: var(--t2); background: var(--raised); box-shadow: inset 0 0 0 1px var(--card-edge); }
+
+/* ---- anatomy ---- */
+.measure { position: absolute; z-index: 7; font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 14px; color: #FFB4C0; white-space: nowrap; }
+.mline { position: absolute; z-index: 7; background: #FF7A90; }
+.callnum { position: absolute; z-index: 8; width: 20px; height: 20px; border-radius: 50%; background: #FF7A90; color: #1a0a0d; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.legend { padding: 0 32px 24px; max-width: 1180px; }
+.legend table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.legend th { text-align: left; color: var(--t3); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 1px solid var(--border-strong); }
+.legend td { padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); color: var(--t2); vertical-align: top; line-height: 20px; }
+.legend td:first-child { color: var(--t1); white-space: nowrap; }
+.legend code { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--t1); }
+.legend .num { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: #FF7A90; color: #1a0a0d; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; margin-right: 8px; }
+.stategrid { display: grid; grid-template-columns: 180px repeat(6, max-content); gap: 16px 24px; align-items: center; padding: 8px 32px 24px; }
+.stategrid .h { font-size: 12px; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+.stategrid .rl { font-size: 14px; color: var(--t1); }
+.stategrid .rl small { display: block; color: var(--t3); font-size: 12px; margin-top: 2px; }
+.cell { background: var(--base); border-radius: 8px; padding: 8px; display: inline-flex; align-items: center; justify-content: center; min-width: 64px; min-height: 64px; box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.note { font-size: 13px; color: var(--t3); padding: 0 32px 40px; max-width: 1000px; line-height: 20px; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="index.html">&#8592; All inner top bar boards</a></div>
+<div class="board-head"><h1>Inner top bar &#8212; phone</h1><p>390 wide (one frame at 360). 56 tall, 68 only when the page names its slice. Back, title, and on the right: device state when something is wrong, then the page&#8217;s actions. No module glyph on a phone: the 44 it would cost belongs to the title.</p></div>
+<div class="row"><div class="col"><div class="cap "><b class="was">Today &#8212; Staff</b><span>Two lines for a sentence the owner read the first time and never again. On a 390 phone it costs 12 of height on every visit, and the sentence ellipsises on a 360.</span></div><div class="shot"><div class="screen" style="width:390px;height:640px"><div class="top"><div class="sysbar"><span>9:41</span><span><span class="ms " aria-hidden="true">signal_cellular_alt</span> <span class="ms " aria-hidden="true">wifi</span> <span class="ms " aria-hidden="true">battery_full</span></span></div><div class="bar phone two"><button class="ib back " aria-label="Back"><span class="ms " aria-hidden="true">arrow_back</span></button><div class="titles stack"><span class="tt">Staff</span><span class="tagline">Manage your team, their roles and access.</span></div><button class="ib " aria-label="Report"><span class="ms " aria-hidden="true">summarize</span></button></div></div><div class="body"><div class="callout">This week, Monday 12 to Sunday 18 October.</div><div class="card list"><div class="li"><div><div class="nm">Amina Wanjiru</div><div class="sub">Manager</div></div><div class="fig">KES 18,420<small>42 sales</small></div></div><div class="li"><div><div class="nm">Peter Otieno</div><div class="sub">Administrator</div></div><div class="fig">KES 9,310<small>21 sales</small></div></div><div class="li"><div><div class="nm">Brian Kimani</div><div class="sub">Cashier</div></div><div class="fig">KES 12,880<small>37 sales</small></div></div><div class="li"><div><div class="nm">Grace Njeri</div><div class="sub">Cashier</div></div><div class="fig">KES 7,150<small>19 sales</small></div></div><div class="li"><div><div class="nm">Joseph Mwangi</div><div class="sub">Cashier</div></div><div class="fig">&#8212;<small>Not in this week</small></div></div></div></div></div></div></div><div class="col"><div class="cap "><b class="">Proposed &#8212; Staff</b><span>One line, 56. The page says what it is with its content: the week and who sold what. The tagline is gone from the bar (copy ruling, see the README).</span></div><div class="shot"><div class="screen" style="width:390px;height:640px"><div class="top"><div class="sysbar"><span>9:41</span><span><span class="ms " aria-hidden="true">signal_cellular_alt</span> <span class="ms " aria-hidden="true">wifi</span> <span class="ms " aria-hidden="true">battery_full</span></span></div><div class="bar phone"><button class="ib back " aria-label="Back"><span class="ms " aria-hidden="true">arrow_back</span></button><div class="titles stack"><span class="tt">Staff</span></div><button class="ib " aria-label="Report"><span class="ms " aria-hidden="true">summarize</span></button></div></div><div class="body"><div class="callout">This week, Monday 12 to Sunday 18 October.</div><div class="card list"><div class="li"><div><div class="nm">Amina Wanjiru</div><div class="sub">Manager</div></div><div class="fig">KES 18,420<small>42 sales</small></div></div><div class="li"><div><div class="nm">Peter Otieno</div><div class="sub">Administrator</div></div><div class="fig">KES 9,310<small>21 sales</small></div></div><div class="li"><div><div class="nm">Brian Kimani</div><div class="sub">Cashier</div></div><div class="fig">KES 12,880<small>37 sales</small></div></div><div class="li"><div><div class="nm">Grace Njeri</div><div class="sub">Cashier</div></div><div class="fig">KES 7,150<small>19 sales</small></div></div><div class="li"><div><div class="nm">Joseph Mwangi</div><div class="sub">Cashier</div></div><div class="fig">&#8212;<small>Not in this week</small></div></div></div></div></div></div></div><div class="col"><div class="cap "><b class="">A screen scoped to something</b><span>When the page is one slice of something, the second line stays and says which: the day and the till. That line is a fact a person needs before reading a row, so it earns the 68.</span></div><div class="shot"><div class="screen" style="width:390px;height:640px"><div class="top"><div class="sysbar"><span>9:41</span><span><span class="ms " aria-hidden="true">signal_cellular_alt</span> <span class="ms " aria-hidden="true">wifi</span> <span class="ms " aria-hidden="true">battery_full</span></span></div><div class="bar phone two"><button class="ib back " aria-label="Back"><span class="ms " aria-hidden="true">arrow_back</span></button><div class="titles stack"><span class="tt">Sales report</span><span class="scope">Thursday 14 October · Main till</span></div><button class="ib " aria-label="Report"><span class="ms " aria-hidden="true">summarize</span></button></div></div><div class="body"><div class="kpis"><div class="card kpi"><div class="l">Takings</div><div class="v money">KES 14,560</div><div class="n">58 receipts</div></div><div class="card kpi"><div class="l">Profit</div><div class="v">KES 2,410</div><div class="n">16.6% of takings</div></div><div class="card kpi"><div class="l">Discounts</div><div class="v">KES 1,120</div><div class="n">6 receipts</div></div><div class="card kpi"><div class="l">Returns</div><div class="v">KES 600</div><div class="n">1 receipt</div></div></div><div class="card list"><div class="li"><div><div class="nm" style="font-family:'JetBrains Mono',monospace;font-size:14px">#CT-7F2-0412</div><div class="sub">10:42 &#183; Brian K.</div></div><div class="fig">KES 1,240</div></div><div class="li"><div><div class="nm" style="font-family:'JetBrains Mono',monospace;font-size:14px">#CT-7F2-0411</div><div class="sub">10:31 &#183; Brian K.</div></div><div class="fig">KES 380</div></div><div class="li"><div><div class="nm" style="font-family:'JetBrains Mono',monospace;font-size:14px">#CT-7F2-0410</div><div class="sub">10:05 &#183; Amina W.</div></div><div class="fig">KES 2,900</div></div><div class="li"><div><div class="nm" style="font-family:'JetBrains Mono',monospace;font-size:14px">#CT-7F2-0409</div><div class="sub">09:47 &#183; Brian K.</div></div><div class="fig">KES 150</div></div></div></div></div></div></div></div><div class="row"><div class="col"><div class="cap "><b class="">The register, offline</b><span>Leaving the home no longer hides the device&#8217;s state. Offline puts the amber chip, glyph and word, in the till&#8217;s own bar, where a cashier is when the network drops. Online says nothing, as on the home.</span></div><div class="shot"><div class="screen" style="width:390px;height:640px"><div class="top"><div class="sysbar"><span>9:41</span><span><span class="ms " aria-hidden="true">signal_cellular_alt</span> <span class="ms " aria-hidden="true">wifi</span> <span class="ms " aria-hidden="true">battery_full</span></span></div><div class="bar phone"><button class="ib back " aria-label="Back"><span class="ms " aria-hidden="true">arrow_back</span></button><div class="titles stack"><span class="tt">Register</span></div><span class="chip-off" role="status"><span class="ms s16" aria-hidden="true">cloud_off</span>Offline</span></div></div><div class="body"><div class="card list cart"><div class="li"><span class="ph"></span><div><div class="nm">Ugali flour 2kg</div><div class="sub">2 &#215; KES 210</div></div><div class="fig">KES 420</div></div><div class="li"><span class="ph"></span><div><div class="nm">Cooking oil 1L</div><div class="sub">1 &#215; KES 370</div></div><div class="fig">KES 370</div></div><div class="li"><span class="ph"></span><div><div class="nm">Sugar 1kg</div><div class="sub">2 &#215; KES 150</div></div><div class="fig">KES 300</div></div><div class="li"><span class="ph"></span><div><div class="nm">Bread 400g</div><div class="sub">1 &#215; KES 65</div></div><div class="fig">KES 65</div></div><div class="li"><span class="ph"></span><div><div class="nm">Milk 500ml</div><div class="sub">1 &#215; KES 85</div></div><div class="fig">KES 85</div></div></div><div class="charge"><span>Charge</span><span class="v">KES 1,240</span></div></div></div></div></div><div class="col"><div class="cap "><b class="">Suppliers &#8212; scrolled</b><span>The list is under the bar, so the bar has lifted to raised with its hairline. Below 1024 the report is the mint glyph it is today.</span></div><div class="shot"><div class="screen" style="width:390px;height:640px"><div class="top scrolled"><div class="sysbar"><span>9:41</span><span><span class="ms " aria-hidden="true">signal_cellular_alt</span> <span class="ms " aria-hidden="true">wifi</span> <span class="ms " aria-hidden="true">battery_full</span></span></div><div class="bar phone scrolled"><button class="ib back " aria-label="Back"><span class="ms " aria-hidden="true">arrow_back</span></button><div class="titles stack"><span class="tt">Suppliers</span></div><button class="ib " aria-label="Report"><span class="ms " aria-hidden="true">summarize</span></button></div></div><div class="body"><div class="callout">5 suppliers · KES 34,780 owed</div><div class="card list"><div class="li"><div><div class="nm">Bidco Africa</div><div class="sub">Oils, soap</div></div><div class="fig">KES 12,600<small>owed</small></div></div><div class="li"><div><div class="nm">Unga Ltd</div><div class="sub">Flour</div></div><div class="fig">&#8212;<small>last 9 Oct</small></div></div><div class="li"><div><div class="nm">Brookside Dairy</div><div class="sub">Milk, yoghurt</div></div><div class="fig">KES 4,180<small>owed</small></div></div><div class="li"><div><div class="nm">Mumias Sugar</div><div class="sub">Sugar</div></div><div class="fig">KES 18,000<small>owed</small></div></div><div class="li"><div><div class="nm">Kenblest Bakers</div><div class="sub">Bread</div></div><div class="fig">&#8212;<small>last 13 Oct</small></div></div></div></div></div></div></div><div class="col"><div class="cap "><b class="">360, offline, a long title, report running</b><span>The title gives way first and ellipsises; the chip and the action keep their size. While the report is being made its glyph is a spinner and the target stays 48.</span></div><div class="shot"><div class="screen" style="width:360px;height:640px"><div class="top"><div class="sysbar"><span>9:41</span><span><span class="ms " aria-hidden="true">signal_cellular_alt</span> <span class="ms " aria-hidden="true">wifi</span> <span class="ms " aria-hidden="true">battery_full</span></span></div><div class="bar phone"><button class="ib back " aria-label="Back"><span class="ms " aria-hidden="true">arrow_back</span></button><div class="titles stack"><span class="tt">Unresolved differences</span></div><span class="chip-off" role="status"><span class="ms s16" aria-hidden="true">cloud_off</span>Offline</span><button class="ib" aria-busy="true" aria-label="Making report"><span class="spin"></span></button></div></div><div class="body"><div class="card list"><div class="li"><div><div class="nm">Monday count</div><div class="sub">Brian K. &#183; 13 Oct, 07:40</div></div><div class="fig">KES &#8722;640<small>&#8722;3 items</small></div></div><div class="li"><div><div class="nm">Weekly count</div><div class="sub">Amina W. &#183; 6 Oct, 18:10</div></div><div class="fig">KES 0<small>0 items</small></div></div><div class="li"><div><div class="nm">Monday count</div><div class="sub">Grace N. &#183; 6 Oct, 07:35</div></div><div class="fig">KES &#8722;85<small>&#8722;1 item</small></div></div><div class="li"><div><div class="nm">Weekly count</div><div class="sub">Amina W. &#183; 29 Sep, 18:20</div></div><div class="fig">KES +300<small>+2 items</small></div></div></div></div></div></div></div></div>
+</body>
+</html>

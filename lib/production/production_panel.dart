@@ -4,10 +4,12 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../checkout/checkout_draft.dart';
 import '../inventory/product_image_cache.dart';
 import '../reporting/reporting_currency.dart';
 import '../reports/analysis/production_analysis.dart';
 import '../reports/analysis/production_report.dart';
+import '../reports/analysis/report_prose.dart';
 import '../reports/report_document.dart';
 import '../reports/report_file.dart';
 import '../reports/report_identity_source.dart';
@@ -18,6 +20,8 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_session.dart';
+import '../ui/money_text.dart';
+import '../ui/record_sheet.dart';
 import '../ui/buttons.dart';
 import '../ui/scaffold.dart';
 import '../ui/snackbar.dart';
@@ -290,8 +294,7 @@ final class _ProductionFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Production',
-    subtitle: 'What was made, and what it cost.',
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     actions: <Widget>[if (reportAction != null) reportAction!],
     body: child,
   );
@@ -327,11 +330,16 @@ final class _ProductionContents extends StatelessWidget {
         : width < AppLayout.contract.expandedFloor
         ? tokens.spacing.s20
         : tokens.spacing.s24;
+    final table = RecordSheet.drawnAt(width);
     return ListView(
       key: const ValueKey('production'),
-      padding: EdgeInsets.all(inset),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(inset),
+      ),
       children: <Widget>[
-        if (onRecord case final record?) ...<Widget>[
+        // On the table's top edge from 1024 instead; see [_sheet].
+        if (onRecord case final record? when !table) ...<Widget>[
           AppButton(
             key: const ValueKey('production-record'),
             label: 'Record production',
@@ -342,15 +350,10 @@ final class _ProductionContents extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.s16),
         ],
-        if (batches.isEmpty)
-          const EmptyState(
-            key: ValueKey('production-empty'),
-            title: 'No batches yet',
-            hint:
-                'Record what was made and what it cost, and its stock and its '
-                'cost follow.',
-            illustration: 'approve.svg',
-          )
+        if (table)
+          _sheet(context, tokens)
+        else if (batches.isEmpty)
+          _empty
         else
           for (final (index, batch) in batches.indexed) ...<Widget>[
             if (index > 0) SizedBox(height: tokens.spacing.s12),
@@ -377,6 +380,112 @@ final class _ProductionContents extends StatelessWidget {
             onPressed: readingOlder ? null : onOlder,
           ),
         ],
+      ],
+    );
+  }
+
+  static const Widget _empty = EmptyState(
+    key: ValueKey('production-empty'),
+    title: 'No batches yet',
+    hint: 'Record a batch to update stock and costs.',
+    illustration: 'production.svg',
+  );
+
+  void _openCosts(BuildContext context, TenantProductionBatch batch) =>
+      openProductionCostScreen(
+        context,
+        batch: batch,
+        money: _money,
+        size: sizes[batch.productId],
+      );
+
+  /// The large-screen list: one row per batch, *Record production* on its top
+  /// edge.
+  ///
+  /// **The same batches, read the same way, drawn as rows** -
+  /// `docs/design/tables/`, at the developer's direction on 2026-10-13. A row
+  /// opens the cost of that batch, which is all the card's *View costs* did,
+  /// and the costs line up down their columns so a batch that cost more than
+  /// the one before is visible at a glance. Below 1024 the cards are unchanged.
+  Widget _sheet(BuildContext context, AppTokens tokens) {
+    final cents = batches.any(
+      (batch) =>
+          batch.unitCostMinor % 100 != 0 || batch.totalCostMinor % 100 != 0,
+    );
+    String? reserve(int minor) => cents && minor % 100 == 0 ? '.00' : null;
+    return RecordSheet(
+      key: const ValueKey('production-sheet'),
+      columns: <SheetColumn>[
+        const SheetColumn(label: 'Made', kind: SheetColumnKind.text),
+        const SheetColumn(
+          label: 'Product and batch',
+          kind: SheetColumnKind.identity,
+        ),
+        const SheetColumn(label: 'Units', kind: SheetColumnKind.figure),
+        SheetColumn(
+          label: 'Cost per unit',
+          kind: SheetColumnKind.figure,
+          unit: currency.code,
+        ),
+        SheetColumn(
+          label: 'Total cost',
+          kind: SheetColumnKind.figure,
+          unit: currency.code,
+        ),
+      ],
+      bar: onRecord == null
+          ? null
+          : Row(
+              children: <Widget>[
+                const Spacer(),
+                AppButton(
+                  key: const ValueKey('production-record'),
+                  label: 'Record production',
+                  icon: Icons.add_circle_outline,
+                  tier: AppButtonTier.secondary,
+                  onPressed: onRecord,
+                ),
+              ],
+            ),
+      body: batches.isEmpty ? _empty : null,
+      rows: <SheetRow>[
+        for (final batch in batches)
+          SheetRow(
+            id: batch.id,
+            key: ValueKey('production-row-${batch.id}'),
+            // The card's *View costs*, which a row is now in full.
+            pressKey: ValueKey('production-costs-${batch.id}'),
+            onPressed: () => _openCosts(context, batch),
+            semanticLabel: tenantProductLabel(
+              batch.productName,
+              sizes[batch.productId],
+            ),
+            semanticHint: 'Opens what this batch cost.',
+            cells: <SheetCell?>[
+              SheetText(
+                batch.occurredAt == null
+                    ? 'Date not recorded'
+                    : reportShortDate(checkoutBusinessDate(batch.occurredAt!)),
+                key: ValueKey('production-made-${batch.id}'),
+              ),
+              SheetText(
+                tenantProductLabel(batch.productName, sizes[batch.productId]),
+                caption: batch.batchNumber,
+                captionKey: ValueKey('production-number-${batch.id}'),
+              ),
+              SheetFigure('${batch.quantity}'),
+              SheetFigure(
+                moneyTextGroupedOfMinor(batch.unitCostMinor),
+                reserve: reserve(batch.unitCostMinor),
+                key: ValueKey('production-unit-${batch.id}'),
+              ),
+              SheetFigure(
+                moneyTextGroupedOfMinor(batch.totalCostMinor),
+                reserve: reserve(batch.totalCostMinor),
+                key: ValueKey('production-total-${batch.id}'),
+              ),
+            ],
+          ),
       ],
     );
   }

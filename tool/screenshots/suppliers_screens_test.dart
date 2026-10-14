@@ -235,8 +235,10 @@ void main() {
     'supplier-record-deliveries-open',
     build: () => _record('sp_abc'),
     afterPump: (tester) async {
-      final lines = find.byKey(const ValueKey('delivery-lines-sd_2'));
-      await tester.ensureVisible(lines);
+      // The delivery's row, which the cards and - from 1024 - the table both
+      // carry; its lines are drawn under it either way.
+      final delivery = find.byKey(const ValueKey('delivery-row-sd_2'));
+      await tester.ensureVisible(delivery);
       await tester.pumpAndSettle();
     },
     viewports: responsiveViewports,

@@ -1381,16 +1381,50 @@ void main() {
       await state.save(
         _record(
           businessDate: '2026-07-30',
-          openedAt: DateTime.utc(2026, 7, 31, 2),
+          // 19:00 on the 30th in Nairobi.
+          openedAt: DateTime.utc(2026, 7, 30, 16),
         ),
       );
       server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
-      final controller = _controller(sessions, state, server);
+      final controller = _controller(
+        sessions,
+        state,
+        server,
+        // 02:00 on the 31st in Nairobi: past midnight, before the cutoff.
+        clock: () => DateTime.utc(2026, 7, 30, 23),
+      );
 
       final restored = await controller.restore(sessions.requireSession());
 
       expect(restored.phase, TenantShiftPhase.open);
       expect(restored.shiftExpired, isFalse);
+    });
+
+    test("yesterday's shift stops selling at the trading day's cutoff", () async {
+      // **The rule added 2026-10-12.** Twenty hours is inside the cap, but a
+      // shift dated the 30th selling at 06:00 on the 31st would file the 31st's
+      // morning under the 30th, and the 31st's report would read empty.
+      await state.save(
+        _record(
+          businessDate: '2026-07-30',
+          openedAt: DateTime.utc(2026, 7, 30, 7),
+        ),
+      );
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      final controller = _controller(
+        sessions,
+        state,
+        server,
+        // 06:00 on the 31st in Nairobi.
+        clock: () => DateTime.utc(2026, 7, 31, 3),
+      );
+
+      final restored = await controller.restore(sessions.requireSession());
+
+      expect(restored.phase, TenantShiftPhase.expired);
+      expect(restored.shiftExpired, isTrue);
+      // Still this device's to finish, exactly as a shift past the cap is.
+      expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNotNull);
     });
 
     test('a shift within the cap is untouched', () async {
@@ -1608,6 +1642,7 @@ TenantShiftController _controller(
   ShiftQueuedRepayments? queuedRepayments,
   ShiftQueuedRefunds? queuedRefunds,
   TenantDataReader? reader,
+  DateTime Function()? clock,
 }) {
   var nextShift = 0;
   return TenantShiftController(
@@ -1629,7 +1664,7 @@ TenantShiftController _controller(
     deviceId: _deviceA,
     isOnline: () async => online,
     shiftIdFactory: () => 'shift-${++nextShift}',
-    clock: () => DateTime.utc(2026, 7, 31, 9),
+    clock: clock ?? () => DateTime.utc(2026, 7, 31, 9),
   );
 }
 

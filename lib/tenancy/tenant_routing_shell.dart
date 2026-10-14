@@ -28,6 +28,7 @@ import '../ui/routes.dart';
 export '../ui/routes.dart' show tenantRouteObserver;
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
+import '../ui/illustration.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -42,6 +43,7 @@ import 'platform_tenant_console.dart';
 import 'platform_global_user_status.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
+import 'tenant_business_card.dart';
 import 'tenant_businesses_screen.dart';
 import 'tenant_catalog.dart';
 import 'tenant_default_tenant.dart';
@@ -1940,19 +1942,22 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
           ),
         ),
     ];
+    final inset = AppScaffold.horizontalInset(tokens.spacing);
+    final mayRequest = widget.requestIdentity?.canRequestTenant == true;
+    final addBusiness = AppButton(
+      key: const ValueKey('show-tenant-request'),
+      label: 'Add business',
+      icon: Icons.add_business_outlined,
+      tier: AppButtonTier.secondary,
+      onPressed: () => setState(() => _requestingTenant = !_requestingTenant),
+    );
     return AppScaffold(
       title: 'Choose a business',
       contentWidth: AppContentWidth.records,
       actions: <Widget>[
-        if (widget.requestIdentity?.canRequestTenant == true)
-          AppButton(
-            key: const ValueKey('show-tenant-request'),
-            label: 'Request business',
-            icon: Icons.add_business_outlined,
-            tier: AppButtonTier.tertiary,
-            onPressed: () =>
-                setState(() => _requestingTenant = !_requestingTenant),
-          ),
+        // **In the list's header when there is a list**, as on My businesses;
+        // here only for the empty list, which has no header to carry it.
+        if (mayRequest && widget.memberships.isEmpty) addBusiness,
         AppButton(
           label: 'Sign out',
           tier: AppButtonTier.tertiary,
@@ -1991,84 +1996,158 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
           Expanded(
             child: widget.memberships.isEmpty
                 ? _EmptyBusinessList(onRetry: widget.onRetry)
-                : ListView.separated(
-                    padding: EdgeInsets.all(tokens.spacing.s20),
-                    itemCount: widget.memberships.length,
-                    separatorBuilder: (_, _) =>
-                        SizedBox(height: tokens.spacing.s12),
-                    itemBuilder: (context, index) {
-                      final membership = widget.memberships[index];
-                      final status = tenantMembershipDisplayStatus(membership);
-                      final identity = widget.identity;
-                      final canAccept =
-                          identity != null &&
-                          TenantVisibleInvitationAcceptanceGateway.canAccept(
-                            identity: identity,
-                            membership: membership,
-                          );
-                      return Card(
-                        child: Column(
-                          children: [
-                            ListTile(
-                              title: Text(membership.tenantName),
-                              subtitle: Text(
-                                '${tenantRoleLabel(membership.role)} - ${status.label}',
-                              ),
-                              trailing: membership.canAccess()
-                                  ? const Icon(Icons.chevron_right)
-                                  : canAccept
-                                  ? IconButton(
-                                      key: ValueKey(
-                                        'accept-visible-invitation-${membership.tenantId}',
-                                      ),
-                                      tooltip:
-                                          'Accept invitation to ${membership.tenantName}',
-                                      onPressed: () =>
-                                          _toggleAcceptance(membership),
-                                      icon: const Icon(
-                                        Icons.mark_email_read_outlined,
-                                      ),
-                                    )
-                                  : const Icon(Icons.lock_outline),
-                              enabled: membership.canAccess() || canAccept,
-                              onTap: membership.canAccess()
-                                  ? () => widget.onOpen(membership)
-                                  : canAccept
-                                  ? () => _toggleAcceptance(membership)
-                                  : null,
-                            ),
-                            if (_acceptingTenantId == membership.tenantId &&
-                                identity != null)
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  0,
-                                  16,
-                                  16,
-                                ),
-                                child: TenantVisibleInvitationAcceptanceForm(
-                                  identity: identity,
-                                  membership: membership,
-                                  callable:
-                                      widget.acceptVisibleInvitationCallable ??
-                                      FirebaseAcceptVisibleTenantInvitationCallable(),
-                                  requestIdFactory:
-                                      widget.visibleInvitationRequestIdFactory,
-                                  tickets: widget.staffRequestTickets,
-                                  isCurrent: widget.isCurrent,
-                                  onSuccess: _accepted,
-                                  onCancel: () =>
-                                      setState(() => _acceptingTenantId = null),
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    },
+                : ListView(
+                    key: const ValueKey('choose-business-list'),
+                    padding: EdgeInsets.fromLTRB(
+                      inset,
+                      tokens.spacing.s16,
+                      inset,
+                      tokens.spacing.s24,
+                    ),
+                    children: <Widget>[
+                      _ChooserHeader(
+                        count: widget.memberships.length,
+                        add: mayRequest ? addBusiness : null,
+                      ),
+                      SizedBox(height: tokens.spacing.s16),
+                      BusinessCardGrid(
+                        children: <Widget>[
+                          for (final membership in widget.memberships)
+                            _chooserCard(membership),
+                        ],
+                      ),
+                    ],
                   ),
           ),
         ],
       ),
+    );
+  }
+
+  /// One membership, drawn as the card *My businesses* draws a business.
+  ///
+  /// **Only what the selector already knows**: the name, the role and the
+  /// standing. No business is open yet, so the brand and the figures *My
+  /// businesses* reads are not read here.
+  Widget _chooserCard(TenantMembership membership) {
+    final identity = widget.identity;
+    final canAccept =
+        identity != null &&
+        TenantVisibleInvitationAcceptanceGateway.canAccept(
+          identity: identity,
+          membership: membership,
+        );
+    final you = BusinessCardFact('You', tenantRoleLabel(membership.role));
+    final name = membership.tenantName;
+    if (membership.canAccess()) {
+      return BusinessCard(
+        key: ValueKey('choose-business-${membership.tenantId}'),
+        name: name,
+        facts: <BusinessCardFact>[you],
+        action: const BusinessCardAction(
+          icon: Icons.login,
+          label: 'Open this business',
+        ),
+        onPressed: () => widget.onOpen(membership),
+        semanticLabel:
+            '$name. ${tenantRoleLabel(membership.role)} there. Open it.',
+      );
+    }
+    final standing = businessCardStanding(membership);
+    if (!canAccept) {
+      return BusinessCard(
+        key: ValueKey('choose-business-${membership.tenantId}'),
+        name: name,
+        still: true,
+        status: standing,
+        facts: <BusinessCardFact>[you],
+        semanticLabel: '$name, ${standing.word}. Cannot be opened.',
+      );
+    }
+    final accepting = _acceptingTenantId == membership.tenantId;
+    return BusinessCard(
+      key: ValueKey('accept-visible-invitation-${membership.tenantId}'),
+      name: name,
+      status: BusinessCardStatus(
+        status: standing.status,
+        icon: standing.icon,
+        word: standing.word,
+      ),
+      facts: <BusinessCardFact>[you],
+      action: const BusinessCardAction(
+        icon: Icons.mark_email_read_outlined,
+        label: 'Accept invitation',
+      ),
+      onPressed: () => _toggleAcceptance(membership),
+      semanticLabel: 'Accept invitation to $name',
+      below: accepting
+          ? _AcceptancePanel(
+              child: TenantVisibleInvitationAcceptanceForm(
+                identity: identity,
+                membership: membership,
+                callable:
+                    widget.acceptVisibleInvitationCallable ??
+                    FirebaseAcceptVisibleTenantInvitationCallable(),
+                requestIdFactory: widget.visibleInvitationRequestIdFactory,
+                tickets: widget.staffRequestTickets,
+                isCurrent: widget.isCurrent,
+                onSuccess: _accepted,
+                onCancel: () => setState(() => _acceptingTenantId = null),
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+/// The count of businesses, with *Add business* beside it: the header
+/// *My businesses* draws, without the account line this screen has no
+/// address for.
+final class _ChooserHeader extends StatelessWidget {
+  const _ChooserHeader({required this.count, required this.add});
+
+  final int count;
+  final Widget? add;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(left: tokens.spacing.s4),
+            child: Text(
+              count == 1 ? '1 business' : '$count businesses',
+              style: tokens.typography.titleMedium.copyWith(
+                color: tokens.colors.text.primary,
+              ),
+            ),
+          ),
+        ),
+        ?add,
+      ],
+    );
+  }
+}
+
+/// The invitation's acceptance form, under its card on the card's surface.
+final class _AcceptancePanel extends StatelessWidget {
+  const _AcceptancePanel({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface.raised,
+        border: Border.all(color: colors.surface.cardEdge),
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+      ),
+      child: Padding(padding: EdgeInsets.all(tokens.spacing.s16), child: child),
     );
   }
 }
@@ -2088,9 +2167,15 @@ final class _EmptyBusinessList extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.storefront_outlined, size: 48),
+              const AppIllustration(
+                asset: 'businesses.svg',
+                size: EmptyState.illustrationSize,
+              ),
               SizedBox(height: tokens.spacing.s16),
-              const Text('No business memberships are available.'),
+              const Text(
+                'No business memberships.',
+                textAlign: TextAlign.center,
+              ),
               SizedBox(height: tokens.spacing.s16),
               AppButton(
                 label: 'Retry',
@@ -3549,16 +3634,16 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           onPressed: () => unawaited(onSignOut()),
         ),
       ],
-      // **The old hub's bar, since 2026-10-10**, at the developer's direction:
-      // its mark and - where it said *Main Hub* - this business's name, still
-      // the control above; this device's real terminal and whether it is
-      // online; who is signed in; then the bell, settings and the way out, in
-      // the old bar's white. **On a phone too**, as the one exception the
-      // developer made to the old look being for wider screens: the old
-      // phone row, with the person as a circle and no status pill. The
-      // toolbar above is what a test that builds no bar falls back to.
+      // **The home's bar, since 2026-10-13** (`docs/design/topbar/`): the
+      // business's name, still the control above; this device's real
+      // terminal and whether it is online; the send queue; and the person,
+      // whose account menu holds settings and the way out. **On a phone
+      // too.** The toolbar above is what a test that builds no bar falls
+      // back to.
       topBar: HubTopBar(
         compact: !wide,
+        // The bar's first glyph on the cards' own margin.
+        horizontalInset: wide ? sideInset : null,
         title: branding?.companyName ?? membership.tenantName,
         onTitlePressed: _canOpenBusinesses
             ? () => _openBusinesses(context, overview)
@@ -3575,22 +3660,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         memberRole: tenantRoleLabel(membership.role),
         actions: <Widget>[
           if (pendingCheckoutPanel != null) pendingCheckoutPanel!,
-          // **The old bar's gear, and now it opens something.** The old
-          // one's handler was commented out; this opens the settings
-          // a member may change, to the same people the *Configs* card
-          // is offered to, and is not drawn for anyone else.
-          if (settingsRoute != null && membership.role.canAccess(settingsRoles))
-            AppIconButton(
-              key: const ValueKey('hub-settings'),
-              icon: Icons.settings_outlined,
-              semanticLabel: 'Settings',
-              tier: AppButtonTier.tertiary,
-              bordered: false,
-              // The old bar's 24, and its phone row's 20, which is
-              // nearest `row`.
-              iconSize: wide ? tokens.icons.card : tokens.icons.row,
-              glyphColor: tokens.colors.text.primary,
-              onPressed: () {
+        ],
+        // **The old bar's gear, now a row of the account menu**, offered to
+        // the same people the *Configs* card is and to nobody else.
+        onSettings:
+            settingsRoute != null && membership.role.canAccess(settingsRoles)
+            ? () {
                 final controller = TenantSessionScope.of(context);
                 Navigator.of(context).push(
                   AppPageRoute<void>(
@@ -3600,19 +3675,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                     ),
                   ),
                 );
-              },
-            ),
-          AppIconButton(
-            key: const ValueKey('sign-out'),
-            icon: Icons.logout,
-            semanticLabel: 'Sign out',
-            tier: AppButtonTier.tertiary,
-            bordered: false,
-            iconSize: wide ? tokens.icons.card : tokens.icons.row,
-            glyphColor: tokens.colors.text.primary,
-            onPressed: () => unawaited(onSignOut()),
-          ),
-        ],
+              }
+            : null,
+        onSignOut: () => unawaited(onSignOut()),
       ),
       // **No subtitle, since 2026-08-23.** It said `Dev Owner - Owner` under
       // a title that already named the business, and between them they cost

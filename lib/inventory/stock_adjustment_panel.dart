@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/states.dart';
 import 'package:uzapay_pos/observability/app_telemetry.dart';
 
 import '../reporting/reconciliation_anomalies.dart';
@@ -899,9 +900,10 @@ final class _ProductStockContents extends StatelessWidget {
                 selfUid: selfUid,
               ),
           ],
-          empty: const Text(
-            key: ValueKey('product-stock-empty'),
-            'No stock movements have been recorded for this product.',
+          empty: const IllustratedMessage(
+            illustration: 'product-ledger.svg',
+            textKey: ValueKey('product-stock-empty'),
+            message: 'No stock movements for this product yet.',
           ),
         ),
         // **No "Manual adjustments" button below the ledger**, removed at the

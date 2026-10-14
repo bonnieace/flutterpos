@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/record_sheet.dart';
 import '../ui/fields.dart';
 import '../ui/pagination.dart';
 import '../ui/states.dart';
@@ -51,7 +52,7 @@ final class TenantAuditLogScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Logs',
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     actions: <Widget>[
       TenantSessionReportAction(
         clock: clock ?? DateTime.now,
@@ -112,9 +113,13 @@ final class TenantAuditLogScreen extends StatelessWidget {
             session: session,
             reader: reader,
             uids: <String>[
-              for (final actor in analysis.actors.take(TenantLogsAnalysis.listed))
+              for (final actor in analysis.actors.take(
+                TenantLogsAnalysis.listed,
+              ))
                 if (!actor.isPlatform) actor.actor,
-              for (final record in analysis.critical.take(TenantLogsAnalysis.listed))
+              for (final record in analysis.critical.take(
+                TenantLogsAnalysis.listed,
+              ))
                 if (record.actorType == null && record.actorUid != null)
                   record.actorUid!,
             ],
@@ -399,9 +404,13 @@ final class _AuditLogContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final table = RecordSheet.drawnAt(MediaQuery.sizeOf(context).width);
     return PagedListView(
       listKey: const ValueKey('audit-log'),
-      padding: EdgeInsets.all(tokens.spacing.s20),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(tokens.spacing.s20),
+      ),
       pagination: Pagination(
         pageNumber: pageIndex + 1,
         previousKey: const ValueKey('audit-log-previous'),
@@ -418,126 +427,43 @@ final class _AuditLogContents extends StatelessWidget {
         // between the title and the thing they came to read. What survives of
         // them is the one fact that changes what a row means: which events are
         // on the page, and that is the control below rather than prose.
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              child: AppSelect<TenantAuditEventType?>(
-                key: const ValueKey('audit-log-filter'),
-                value: page.eventType,
-                label: 'Show',
-                dense: true,
-                leading: Icons.filter_list,
-                items: <AppSelectItem<TenantAuditEventType?>>[
-                  const AppSelectItem<TenantAuditEventType?>(
-                    value: null,
-                    label: 'All events',
-                  ),
-                  for (final type in TenantAuditEventType.values)
-                    AppSelectItem<TenantAuditEventType?>(
-                      value: type,
-                      label: type.label,
-                    ),
-                ],
-                onChanged: onSelectEvent,
+        if (table)
+          _sheet(tokens)
+        else ...<Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(child: _eventFilter()),
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(child: _dayFilter()),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s24),
+          if (page.items.isEmpty)
+            _emptyPage()
+          else if (_shown.isEmpty)
+            _emptyDay()
+          else
+            // **One rail, no day headings.** Grouping by day was the obvious
+            // thing to reach for and it was wrong here: the query pages by
+            // record ID, so a page arrives with 09-02 above 08-31 above 09-03,
+            // and a screen that drew a heading per run would show four headings
+            // for four events and imply an order the data does not carry. Each
+            // row states its own instant instead, which is the honest unit.
+            for (final record in _shown)
+              _Event(
+                record: record,
+                actor: _actorLabel(record),
+                target: record.targetUid == null
+                    ? null
+                    : tenantStaffLabel(
+                        record.targetUid!,
+                        names: view.names,
+                        selfUid: selfUid,
+                      ),
+                last: identical(record, _shown.last),
               ),
-            ),
-            SizedBox(width: tokens.spacing.s12),
-            Expanded(
-              child: AppSelect<String>(
-                key: const ValueKey('audit-log-day-filter'),
-                value: _dayValue,
-                label: 'Day',
-                dense: true,
-                leading: Icons.calendar_today_outlined,
-                items: <AppSelectItem<String>>[
-                  const AppSelectItem<String>(
-                    key: ValueKey('audit-log-day-any'),
-                    value: _anyDay,
-                    label: 'Any day',
-                  ),
-                  const AppSelectItem<String>(
-                    key: ValueKey('audit-log-day-today'),
-                    value: _todayValue,
-                    label: 'Today',
-                  ),
-                  const AppSelectItem<String>(
-                    key: ValueKey('audit-log-day-yesterday'),
-                    value: _yesterdayValue,
-                    label: 'Yesterday',
-                  ),
-                  // The day already chosen from the calendar, so the control
-                  // holds what it is showing - a select cannot sit on a value
-                  // its own list does not carry.
-                  if (_dayValue == _exactDay)
-                    AppSelectItem<String>(
-                      key: const ValueKey('audit-log-day-exact'),
-                      value: _exactDay,
-                      label: _dayLabel(day!),
-                    ),
-                  const AppSelectItem<String>(
-                    key: ValueKey('audit-log-day-pick'),
-                    value: _pickDay,
-                    label: 'Another day...',
-                  ),
-                ],
-                onChanged: (value) => switch (value) {
-                  _anyDay => onSelectDay(null),
-                  _todayValue => onSelectDay(today),
-                  _yesterdayValue => onSelectDay(_yesterday),
-                  _pickDay => onPickDay(),
-                  // The day already chosen, chosen again.
-                  _ => null,
-                },
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: tokens.spacing.s24),
-        if (page.items.isEmpty)
-          EmptyState(
-            key: const ValueKey('audit-log-empty'),
-            title: page.isEventScoped
-                ? 'No "${page.eventType!.label}" event yet'
-                : 'Nothing has been recorded yet',
-            hint:
-                'An event appears here when somebody changes the business, '
-                'its staff, or its stock.',
-            illustration: 'file-search.svg',
-          )
-        else if (_shown.isEmpty)
-          // **Said as a fact about this page, not about the day.** The trail
-          // is paged by record ID rather than by time, so the events of the
-          // chosen day may be sitting on any page; claiming the business did
-          // nothing that day would be a claim this screen cannot make.
-          EmptyState(
-            key: const ValueKey('audit-log-day-empty'),
-            title: 'Nothing from ${_dayLabel(day!)} on this page',
-            hint:
-                'The trail is ordered by record, not by time, so that day may '
-                'be further on. Turn the page, or choose any day.',
-            illustration: 'file-search.svg',
-          )
-        else
-          // **One rail, no day headings.** Grouping by day was the obvious
-          // thing to reach for and it was wrong here: the query pages by
-          // record ID, so a page arrives with 09-02 above 08-31 above 09-03,
-          // and a screen that drew a heading per run would show four headings
-          // for four events and imply an order the data does not carry. Each
-          // row states its own instant instead, which is the honest unit.
-          for (final record in _shown)
-            _Event(
-              record: record,
-              actor: _actorLabel(record),
-              target: record.targetUid == null
-                  ? null
-                  : tenantStaffLabel(
-                      record.targetUid!,
-                      names: view.names,
-                      selfUid: selfUid,
-                    ),
-              last: identical(record, _shown.last),
-            ),
+        ],
         SizedBox(height: tokens.spacing.s16),
         // The one sentence of the two paragraphs worth keeping, at the foot
         // where a footnote goes: a page ordered by record ID is not a page
@@ -549,6 +475,191 @@ final class _AuditLogContents extends StatelessWidget {
             color: tokens.colors.text.tertiary,
           ),
         ),
+      ],
+    );
+  }
+
+  /// Which events the page is narrowed to.
+  Widget _eventFilter() => AppSelect<TenantAuditEventType?>(
+    key: const ValueKey('audit-log-filter'),
+    value: page.eventType,
+    label: 'Show',
+    dense: true,
+    leading: Icons.filter_list,
+    items: <AppSelectItem<TenantAuditEventType?>>[
+      const AppSelectItem<TenantAuditEventType?>(
+        value: null,
+        label: 'All events',
+      ),
+      for (final type in TenantAuditEventType.values)
+        AppSelectItem<TenantAuditEventType?>(value: type, label: type.label),
+    ],
+    onChanged: onSelectEvent,
+  );
+
+  /// Which day of the loaded page is shown.
+  Widget _dayFilter() => AppSelect<String>(
+    key: const ValueKey('audit-log-day-filter'),
+    value: _dayValue,
+    label: 'Day',
+    dense: true,
+    leading: Icons.calendar_today_outlined,
+    items: <AppSelectItem<String>>[
+      const AppSelectItem<String>(
+        key: ValueKey('audit-log-day-any'),
+        value: _anyDay,
+        label: 'Any day',
+      ),
+      const AppSelectItem<String>(
+        key: ValueKey('audit-log-day-today'),
+        value: _todayValue,
+        label: 'Today',
+      ),
+      const AppSelectItem<String>(
+        key: ValueKey('audit-log-day-yesterday'),
+        value: _yesterdayValue,
+        label: 'Yesterday',
+      ),
+      // The day already chosen from the calendar, so the control
+      // holds what it is showing - a select cannot sit on a value
+      // its own list does not carry.
+      if (_dayValue == _exactDay)
+        AppSelectItem<String>(
+          key: const ValueKey('audit-log-day-exact'),
+          value: _exactDay,
+          label: _dayLabel(day!),
+        ),
+      const AppSelectItem<String>(
+        key: ValueKey('audit-log-day-pick'),
+        value: _pickDay,
+        label: 'Another day...',
+      ),
+    ],
+    onChanged: (value) => switch (value) {
+      _anyDay => onSelectDay(null),
+      _todayValue => onSelectDay(today),
+      _yesterdayValue => onSelectDay(_yesterday),
+      _pickDay => onPickDay(),
+      // The day already chosen, chosen again.
+      _ => null,
+    },
+  );
+
+  Widget _emptyPage() => EmptyState(
+    key: const ValueKey('audit-log-empty'),
+    title: page.isEventScoped
+        ? 'No "${page.eventType!.label}" event yet'
+        : 'No events yet',
+    hint: 'Business, staff and stock changes appear here.',
+    illustration: 'audit-history.svg',
+  );
+
+  /// **Said as a fact about this page, not about the day.** The trail is paged
+  /// by record ID rather than by time, so the events of the chosen day may be
+  /// sitting on any page; claiming the business did nothing that day would be a
+  /// claim this screen cannot make.
+  Widget _emptyDay() => EmptyState(
+    key: const ValueKey('audit-log-day-empty'),
+    title: 'Nothing from ${_dayLabel(day!)} on this page',
+    hint: 'Try another page or day. Events follow record order.',
+    illustration: 'audit-history.svg',
+  );
+
+  /// The large-screen form: one row per event, its filters on its top edge.
+  ///
+  /// **The same page, filtered the same way, drawn as rows** -
+  /// `docs/design/tables/`, at the developer's direction on 2026-10-13. Still
+  /// no day headings, for the rail's reason above; each row states its own
+  /// instant in a column, so the order the data does carry is the order read.
+  /// Below 1024 the rail is unchanged.
+  Widget _sheet(AppTokens tokens) {
+    final critical = _shown.any((record) => record.isCritical);
+    return RecordSheet(
+      key: const ValueKey('audit-log-sheet'),
+      columns: <SheetColumn>[
+        const SheetColumn(label: 'Event', kind: SheetColumnKind.identity),
+        const SheetColumn(label: 'Concerns', kind: SheetColumnKind.text),
+        const SheetColumn(label: 'By', kind: SheetColumnKind.text),
+        const SheetColumn(
+          label: 'Recorded',
+          kind: SheetColumnKind.time,
+          unit: 'UTC',
+        ),
+        // **Only where a critical event is on the page**, the rail's rule: an
+        // event being recorded is not a status, so a column of nothing would
+        // be a column that says nothing.
+        if (critical)
+          const SheetColumn(label: 'Standing', kind: SheetColumnKind.status),
+      ],
+      bar: Row(
+        children: <Widget>[
+          SizedBox(width: tokens.layout.tableFilter, child: _eventFilter()),
+          SizedBox(width: tokens.spacing.s12),
+          SizedBox(width: tokens.layout.tableFilter, child: _dayFilter()),
+        ],
+      ),
+      body: page.items.isEmpty
+          ? _emptyPage()
+          : _shown.isEmpty
+          ? _emptyDay()
+          : null,
+      rows: <SheetRow>[
+        for (final record in _shown) _row(record, critical: critical),
+      ],
+    );
+  }
+
+  SheetRow _row(TenantAuditRecord record, {required bool critical}) {
+    final id = record.id;
+    final change = record.fromStatus == null && record.toStatus == null
+        ? null
+        : '${record.fromStatus ?? 'unknown'} to ${record.toStatus ?? 'unknown'}';
+    final targetUid = record.targetUid;
+    final target = targetUid == null
+        ? null
+        : tenantStaffLabelParts(targetUid, names: view.names, selfUid: selfUid);
+    final actorUid = record.actorUid;
+    final actor = actorUid == null
+        ? (name: 'the ${record.actorType!} operator', under: null)
+        : tenantStaffLabelParts(actorUid, names: view.names, selfUid: selfUid);
+    final recordedAt = record.recordedAt;
+    return SheetRow(
+      id: id,
+      key: ValueKey('audit-log-entry-$id'),
+      semanticLabel: _eventLabel(record),
+      cells: <SheetCell?>[
+        SheetText(
+          _eventLabel(record),
+          caption: change,
+          key: ValueKey('audit-log-event-$id'),
+          captionKey: ValueKey('audit-log-status-$id'),
+        ),
+        switch (target) {
+          final about? => SheetText(
+            about.name,
+            caption: about.under,
+            key: ValueKey('audit-log-target-$id'),
+          ),
+          null => const SheetText('—'),
+        },
+        SheetText(
+          actor.name,
+          caption: actor.under,
+          key: ValueKey('audit-log-actor-$id'),
+        ),
+        SheetText(
+          recordedAt == null ? 'Unavailable' : _stamp(recordedAt),
+          key: ValueKey('audit-log-recorded-$id'),
+        ),
+        if (critical)
+          record.isCritical
+              ? const SheetStatus(
+                  status: AppStatus.problem,
+                  label: 'Critical',
+                  icon: Icons.warning_amber_outlined,
+                  semanticLabel: 'Critical event',
+                )
+              : null,
       ],
     );
   }
@@ -591,11 +702,14 @@ String _recordedLabel(TenantAuditRecord record, String actorLabel) {
   return '$when by $actorLabel';
 }
 
-String _instant(DateTime value) {
+String _instant(DateTime value) => '${_stamp(value)} UTC';
+
+/// An instant in UTC without its zone, for a column whose header states it.
+String _stamp(DateTime value) {
   final utc = value.toUtc();
   String pad(int part) => part.toString().padLeft(2, '0');
   return '${utc.year}-${pad(utc.month)}-${pad(utc.day)} '
-      '${pad(utc.hour)}:${pad(utc.minute)} UTC';
+      '${pad(utc.hour)}:${pad(utc.minute)}';
 }
 
 /// One event, on the rail.

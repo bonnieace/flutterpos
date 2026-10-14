@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../ui/record_sheet.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -59,7 +61,7 @@ final class TenantReconciliationRunScreen extends StatelessWidget {
   Widget build(BuildContext context) => AppScaffold(
     title: 'Reconciliation run',
     subtitle: jobId,
-    contentWidth: AppContentWidth.reading,
+    contentWidth: AppContentWidth.records,
     body: TenantReconciliationRunPanel(reader: reader, jobId: jobId),
   );
 }
@@ -197,73 +199,83 @@ final class _RunContents extends StatelessWidget {
       key: const ValueKey('reconciliation-run'),
       padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
-        // §7's "Title appears once". This named *which* run rather than
-        // repeating the title, so the job ID moved to `PageHeader.subtitle`.
-        // The word `Run` went with it: the header already says
-        // `Reconciliation run`, and repeating the noun above its own value is
-        // the same duplication one line smaller.
-        // §5.1's own description of what `Disclosure` replaces: a permanent
-        // helper paragraph. Both sentences are page-invariant - they are true of
-        // every run this route will ever show - and the second used to be
-        // repeated *under the record* as though it were a fact about that run.
-        // The day page next door has said the same kind of thing behind the same
-        // component since step 4; this is that decision reaching the other three
-        // surfaces in the family.
-        Disclosure(
-          key: const ValueKey('reconciliation-run-scope-disclosure'),
-          summary: 'What this page cannot do',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+        AppWorkspace(
+          leading: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              const Text(
-                key: ValueKey('reconciliation-run-scope'),
-                'The server does the work; this is its own record of one piece '
-                'of it. Nothing on this page can start, stop, or repeat a run.',
+              // §7's "Title appears once". This named *which* run rather than
+              // repeating the title, so the job ID moved to `PageHeader.subtitle`.
+              // The word `Run` went with it: the header already says
+              // `Reconciliation run`, and repeating the noun above its own value is
+              // the same duplication one line smaller.
+              // §5.1's own description of what `Disclosure` replaces: a permanent
+              // helper paragraph. Both sentences are page-invariant - they are true of
+              // every run this route will ever show - and the second used to be
+              // repeated *under the record* as though it were a fact about that run.
+              // The day page next door has said the same kind of thing behind the same
+              // component since step 4; this is that decision reaching the other three
+              // surfaces in the family.
+              Disclosure(
+                key: const ValueKey('reconciliation-run-scope-disclosure'),
+                summary: 'What this page cannot do',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const Text(
+                      key: ValueKey('reconciliation-run-scope'),
+                      'The server does the work; this is its own record of one piece '
+                      'of it. Nothing on this page can start, stop, or repeat a run.',
+                    ),
+                    SizedBox(height: tokens.spacing.s8),
+                    const Text(
+                      key: ValueKey('reconciliation-run-outlives'),
+                      'A difference a run found is about a product or a shift rather '
+                      'than a day, so it stays listed until it is resolved even '
+                      'after the run itself is finished.',
+                    ),
+                  ],
+                ),
               ),
-              SizedBox(height: tokens.spacing.s8),
-              const Text(
-                key: ValueKey('reconciliation-run-outlives'),
-                'A difference a run found is about a product or a shift rather '
-                'than a day, so it stays listed until it is resolved even '
-                'after the run itself is finished.',
-              ),
+              SizedBox(height: tokens.spacing.s16),
+            ],
+          ),
+          trailing: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (view.run case final run?) ...[
+                TenantReconciliationRunCard(
+                  run: run,
+                  names: view.names,
+                  selfUid: selfUid,
+                ),
+                SizedBox(height: tokens.spacing.s8),
+                // What is left of that paragraph once the page-invariant half of it
+                // moved: a fact about this run, which the card does not state because
+                // the day page mounts the same card under a heading that already
+                // names the date.
+                Text(
+                  key: const ValueKey('reconciliation-run-day'),
+                  'This run covered ${run.businessDate}.',
+                  style: tokens.typography.caption.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                ),
+              ] else
+                // A notice about the state of this page rather than a helper
+                // paragraph, so `Callout` rather than `Disclosure` - and `info`
+                // rather than `problem` because the sentence's own point is that
+                // this is an ordinary answer.
+                const Callout(
+                  key: ValueKey('reconciliation-run-missing'),
+                  illustration: 'reconciliation.svg',
+                  status: AppStatus.info,
+                  message:
+                      'Run not found. Its recorded differences remain available.',
+                ),
             ],
           ),
         ),
-        SizedBox(height: tokens.spacing.s16),
-        if (view.run case final run?) ...[
-          TenantReconciliationRunCard(
-            run: run,
-            names: view.names,
-            selfUid: selfUid,
-          ),
-          SizedBox(height: tokens.spacing.s8),
-          // What is left of that paragraph once the page-invariant half of it
-          // moved: a fact about this run, which the card does not state because
-          // the day page mounts the same card under a heading that already
-          // names the date.
-          Text(
-            key: const ValueKey('reconciliation-run-day'),
-            'This run covered ${run.businessDate}.',
-            style: tokens.typography.caption.copyWith(
-              color: tokens.colors.text.tertiary,
-            ),
-          ),
-        ] else
-          // A notice about the state of this page rather than a helper
-          // paragraph, so `Callout` rather than `Disclosure` - and `info`
-          // rather than `problem` because the sentence's own point is that
-          // this is an ordinary answer.
-          const Callout(
-            key: ValueKey('reconciliation-run-missing'),
-            status: AppStatus.info,
-            message:
-                'No run is recorded at this ID any more. A difference outlives '
-                'the run that found it, so this is an ordinary answer rather '
-                'than a fault - what the difference itself records still '
-                'stands.',
-          ),
       ],
     );
   }
@@ -432,6 +444,102 @@ final class TenantReconciliationRunCard extends StatelessWidget {
     if (actorUid == null) return 'the server (${run.requestedBy})';
     return tenantStaffLabel(actorUid, names: names, selfUid: selfUid);
   }
+}
+
+/// The columns a day's runs are drawn in from 1024: see
+/// [reconciliationRunSheetRow].
+const List<SheetColumn> reconciliationRunSheetColumns = <SheetColumn>[
+  SheetColumn(label: 'Status', kind: SheetColumnKind.status),
+  SheetColumn(label: 'Run', kind: SheetColumnKind.identity),
+  SheetColumn(label: 'Attempts', kind: SheetColumnKind.figure),
+  SheetColumn(label: 'Differences found', kind: SheetColumnKind.text),
+  SheetColumn(label: 'Requested by', kind: SheetColumnKind.text),
+  SheetColumn(label: 'Completed', kind: SheetColumnKind.time, unit: 'UTC'),
+];
+
+/// One run as a row of [reconciliationRunSheetColumns]: the large-screen
+/// form of [TenantReconciliationRunCard], which the one-run page keeps.
+///
+/// **The status first**, as on the card, because a page of runs mixes
+/// completed, queued and failed and that is what it is scanned for - so a
+/// completed run is the quiet word and every other state keeps its badge
+/// (`docs/design/tables/`, 2026-10-13). What the card says only of some runs -
+/// a retry, the failures in a row, a server code, a rerun, the other instants -
+/// folds under the row. A run has no action, so the row has none either.
+SheetRow reconciliationRunSheetRow(
+  TenantReconciliationRun run, {
+  required Map<String, String> names,
+  required String selfUid,
+}) {
+  final status = reconciliationRunStatus(run);
+  final word = reconciliationRunStatusWord(run);
+  final actorUid = run.actorUid;
+  final who = actorUid == null
+      ? (name: 'The server', under: run.requestedBy)
+      : tenantStaffLabelParts(actorUid, names: names, selfUid: selfUid);
+  final notes = <String>[
+    if (reconciliationRunStatusDetail(run) case final detail?) detail,
+    if (run.consecutiveFailureCount > 0)
+      'Failed ${run.consecutiveFailureCount} '
+          '${run.consecutiveFailureCount == 1 ? 'time' : 'times'} in a row.',
+    if (run.lastErrorCode case final code?) 'Server code: $code.',
+    if (run.rerunRequested)
+      'A change arrived while this run was working, so it will run again.',
+    if (run.lastFailedAt case final at?)
+      'Last failed ${reconciliationInstant(at)}.',
+    if (run.updatedAt case final at?)
+      'Last updated ${reconciliationInstant(at)}.',
+  ];
+  return SheetRow(
+    id: run.id,
+    key: ValueKey('reconciliation-status-run-${run.id}'),
+    semanticLabel: 'Run ${run.id}',
+    cells: <SheetCell?>[
+      SheetStatus(
+        key: ValueKey('reconciliation-status-run-badge-${run.id}'),
+        status: status,
+        label: word,
+        semanticLabel: 'Run ${run.id}: $word',
+        quiet: status == AppStatus.ok,
+      ),
+      SheetText(
+        _sourceLabel(run),
+        key: ValueKey('reconciliation-status-run-state-${run.id}'),
+        caption: _work(run),
+        captionKey: ValueKey('reconciliation-status-run-progress-${run.id}'),
+      ),
+      SheetFigure(
+        '${run.attemptCount}',
+        key: ValueKey('reconciliation-status-run-attempts-${run.id}'),
+      ),
+      // Both or neither, and only when the run found something - the card's
+      // rule: which of the two is zero is itself the answer.
+      SheetText(
+        run.hasVariances
+            ? '${run.stockVarianceCount} stock, '
+                  '${run.shiftVarianceCount} shift'
+            : '—',
+      ),
+      SheetText(
+        who.name,
+        caption: who.under,
+        key: ValueKey('reconciliation-status-run-requested-${run.id}'),
+      ),
+      SheetText(switch (run.completedAt) {
+        final at? => reconciliationInstant(at).replaceAll(' UTC', ''),
+        null => '—',
+      }, key: ValueKey('reconciliation-status-run-instants-${run.id}')),
+    ],
+    fold: notes.isEmpty
+        ? null
+        : SheetFold(
+            note: notes.join(' '),
+            noteKey: ValueKey('reconciliation-status-run-notes-${run.id}'),
+            toggleKey: ValueKey('reconciliation-status-run-fold-${run.id}'),
+            showLabel: 'Show more about run ${run.id}',
+            hideLabel: 'Show less about run ${run.id}',
+          ),
+  );
 }
 
 /// An unmodelled value is shown as itself: hiding a real run, or renaming its

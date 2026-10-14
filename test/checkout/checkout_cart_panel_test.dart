@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import 'package:uzapay_pos/checkout/checkout.dart';
 import 'package:uzapay_pos/customers/customer.dart';
 import 'package:uzapay_pos/email_receipts/email_receipt_delivery.dart';
@@ -40,6 +41,37 @@ void main() {
   });
 
   tearDown(() => sessions.dispose());
+
+  testWidgets('the empty cart centers the legacy animation above its message', (
+    tester,
+  ) async {
+    await _pumpAt(
+      tester,
+      sessions,
+      catalog,
+      drafts,
+      const Size(1400, 900),
+      reducedMotion: false,
+    );
+    final animation = find.byKey(
+      const ValueKey('checkout-empty-cart-animation'),
+    );
+    final message = find.byKey(const ValueKey('checkout-cart-empty'));
+    final pane = tester.getRect(
+      find.byKey(const ValueKey('checkout-cart-pane')),
+    );
+    final artwork = tester.getRect(animation);
+    final copy = tester.getRect(message);
+    expect(artwork.center.dx, closeTo(pane.center.dx, 0.5));
+    expect(copy.center.dx, closeTo(pane.center.dx, 0.5));
+    expect(copy.top, greaterThan(artwork.bottom));
+    expect(artwork.width, greaterThan(96));
+    final lottie = tester.widget<LottieBuilder>(animation);
+    expect((lottie.lottie as AssetLottie).assetName, 'images/empty.json');
+    expect(lottie.repeat, isTrue);
+    expect(lottie.animate, isTrue);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('adds catalog products and totals the cart', (tester) async {
     await _pump(tester, sessions, catalog, drafts);
@@ -551,10 +583,8 @@ void main() {
   testWidgets('preselects no tender and records the silence', (tester) async {
     await _pump(tester, sessions, catalog, drafts);
 
-    expect(
-      _text(tester, 'checkout-save-blocked'),
-      'Add at least one item to save this sale.',
-    );
+    expect(find.byKey(const ValueKey('checkout-save-blocked')), findsNothing);
+    expect(_save(tester).onPressed, isNull);
 
     await _tap(tester, 'checkout-product-product-b');
 
@@ -567,14 +597,16 @@ void main() {
     // unanswered question records as.
     expect(find.byKey(const ValueKey('checkout-save-blocked')), findsNothing);
     expect(_save(tester).onPressed, isNotNull);
-    expect(find.byKey(const ValueKey('checkout-tender-unset')), findsOneWidget);
+    expect(find.byKey(const ValueKey('checkout-tender-unset')), findsNothing);
 
     await _tap(tester, 'checkout-save');
 
     expect(drafts.requests.single.tender, isNull);
   });
 
-  testWidgets('the unset notice goes once a method is chosen', (tester) async {
+  testWidgets('a payment method can be chosen without an unset notice', (
+    tester,
+  ) async {
     await _pump(tester, sessions, catalog, drafts);
     await _tap(tester, 'checkout-product-product-b');
     await _tap(tester, 'checkout-tender-mpesa');
@@ -624,10 +656,8 @@ void main() {
     // The cart resets so the next customer cannot inherit these lines, and the
     // tender resets with it so it is never carried over unobserved.
     expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
-    expect(
-      _text(tester, 'checkout-save-blocked'),
-      'Add at least one item to save this sale.',
-    );
+    expect(find.byKey(const ValueKey('checkout-save-blocked')), findsNothing);
+    expect(_save(tester).onPressed, isNull);
   });
 
   testWidgets('the till holds a Play update only while it holds a sale', (
@@ -825,11 +855,42 @@ void main() {
     await _pump(tester, sessions, catalog, drafts);
 
     expect(find.byKey(const ValueKey('checkout-catalog-empty')), findsOne);
-    expect(
-      _text(tester, 'checkout-save-blocked'),
-      'Add at least one item to save this sale.',
+    final lottie = tester.widget<LottieBuilder>(
+      find.byKey(const ValueKey('checkout-empty-cart-animation')),
     );
+    expect(lottie.animate, isFalse);
+    expect(lottie.controller!.value, 0.5);
+    expect(find.byKey(const ValueKey('checkout-save-blocked')), findsNothing);
+    expect(_save(tester).onPressed, isNull);
   });
+
+  for (final size in [const Size(1400, 900), const Size(411, 891)]) {
+    testWidgets('empty catalog artwork is centered below search at $size', (
+      tester,
+    ) async {
+      catalog.put(uid: 'user-a', tenantId: 'tenant-a', products: const []);
+      await _pumpAt(tester, sessions, catalog, drafts, size);
+      final pane = tester.getRect(
+        find.byKey(const ValueKey('checkout-products-pane')),
+      );
+      final search = tester.getRect(
+        find.byKey(const ValueKey('checkout-search')),
+      );
+      final artwork = tester.getRect(
+        find.byKey(const ValueKey('checkout-catalog-illustration')),
+      );
+      final copy = tester.getRect(
+        find.byKey(const ValueKey('checkout-catalog-empty')),
+      );
+      expect(artwork.width, 168);
+      expect(artwork.center.dx, closeTo(pane.center.dx, 0.5));
+      expect(copy.center.dx, closeTo(pane.center.dx, 0.5));
+      expect(copy.top, greaterThan(artwork.bottom));
+      expect(artwork.top, greaterThan(search.bottom + 24));
+      expect(copy.bottom, lessThan(pane.bottom));
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   group('finding a product', () {
     setUp(() {
@@ -1531,11 +1592,7 @@ void main() {
         findsNothing,
       );
       expect(find.byKey(const ValueKey('checkout-commit-row')), findsNothing);
-      expect(
-        _text(tester, 'checkout-tender-unset'),
-        'No payment method yet. The sale records that it was not said, and '
-        'you can set it later from the sale.',
-      );
+      expect(find.byKey(const ValueKey('checkout-tender-unset')), findsNothing);
 
       await _tapScrolled(tester, 'checkout-tender-cash');
       await _tapScrolled(tester, 'checkout-save');
@@ -2739,6 +2796,7 @@ Future<void> _pumpAt(
   _Catalog catalog,
   CheckoutDraftSink? drafts,
   Size size, {
+  bool reducedMotion = true,
   CheckoutPrinterSetupReminder? printerSetupReminder,
   void Function(BuildContext context)? onSetUpPrinter,
   CheckoutCartActivity? cartActivity,
@@ -2751,6 +2809,10 @@ Future<void> _pumpAt(
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: reducedMotion),
+        child: child!,
+      ),
       home: TenantSessionScope(
         controller: controller,
         child: TenantCheckoutScreen(

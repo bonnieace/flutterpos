@@ -245,19 +245,36 @@ final class _ProductFramingScreenState extends State<ProductFramingScreen> {
       subtitle: 'Whatever is inside the square is what every screen will show.',
       // A form's row rather than a table's: this is one picture and four
       // controls, and §4.2 gives that the reading width.
-      contentWidth: AppContentWidth.reading,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          // **The picture takes every pixel that is left over.** A framing
-          // control is only as precise as the surface it is drawn on: the
-          // first version gave it 350 and the rest of the screen to padding,
-          // and placing a subject inside a third of a phone is guesswork.
-          Expanded(child: _stage(tokens)),
-          _controls(tokens, ready: ready),
-          _footer(tokens, ready: ready),
-        ],
-      ),
+      contentWidth: AppContentWidth.records,
+      body: MediaQuery.sizeOf(context).width >= tokens.layout.expandedFloor
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: _stage(tokens)),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _controls(tokens, ready: ready),
+                        _footer(tokens, ready: ready),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                // **The picture takes every pixel that is left over.** A framing
+                // control is only as precise as the surface it is drawn on: the
+                // first version gave it 350 and the rest of the screen to padding,
+                // and placing a subject inside a third of a phone is guesswork.
+                Expanded(child: _stage(tokens)),
+                _controls(tokens, ready: ready),
+                _footer(tokens, ready: ready),
+              ],
+            ),
     );
   }
 

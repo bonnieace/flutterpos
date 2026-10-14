@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tables — reports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+/* ===== tokens: AppTokens.uzapay, quoted from lib/ui/tokens.dart ===== */
+:root {
+  --stage: #050C08;
+  --base: #0D1F16; --raised: #132A1F; --sunken: #08140E; --field: #1E3A2B;
+  --overlay: #1C3328; --border-subtle: #1E3A2B; --card-edge: #283831;
+  --border-strong: #2C5340; --selected: #3D4A3D;
+  --text: #FFFFFF; --text-2: #B8D6C5; --text-3: #849E8F; --text-disabled: #5D7468;
+  --mint: #45F28D; --mint-hover: #3DD47C; --on-mint: #0A0F0C;
+  --secondary: #1C3328; --secondary-border: #2C5340;
+  --ok: #4BE277; --ok-bg: rgba(75, 226, 119, 0.10); --ok-edge: rgba(75, 226, 119, 0.30);
+  --att: #F2C14E; --att-bg: rgba(242, 193, 78, 0.10); --att-edge: rgba(242, 193, 78, 0.30);
+  --prob: #FF5C6C; --prob-bg: rgba(147, 0, 10, 0.20); --prob-edge: rgba(239, 68, 68, 0.30);
+  --info: #B0CDBD; --info-bg: rgba(176, 205, 189, 0.10); --info-edge: rgba(176, 205, 189, 0.30);
+  --neu: #BCCBB9; --neu-bg: #283831; --neu-edge: #3D4A3D;
+  --focus: #45F28D;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--stage); color: var(--text); font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+svg.i { width: 20px; height: 20px; fill: currentColor; flex: none; }
+svg.i16 { width: 16px; height: 16px; fill: currentColor; flex: none; }
+svg.i14 { width: 14px; height: 14px; fill: currentColor; flex: none; }
+svg.i24 { width: 24px; height: 24px; fill: currentColor; flex: none; }
+
+/* ===== board chrome (not app UI) ===== */
+.page-nav { padding: 20px 24px 0; font-size: 14px; letter-spacing: 0.25px; }
+.page-nav a { color: var(--text-3); text-decoration: none; }
+.page-nav a:hover { color: var(--mint); text-decoration: underline; }
+.page-head { padding: 12px 24px 0; max-width: 1488px; margin: 0 auto; }
+.page-head h1 { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.page-head p { margin: 4px 0 0; max-width: 940px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.stage { max-width: 1488px; margin: 0 auto; padding: 24px 24px 72px; display: flex; flex-direction: column; gap: 48px; }
+.section > h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; }
+.section > .lede { margin: 4px 0 16px; max-width: 940px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.section > .lede b, .note b { color: var(--text); font-weight: 600; }
+.frame-label { margin: 0 0 8px; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.frame { position: relative; overflow: hidden; background: var(--base); border-radius: 4px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6); flex: none; }
+.notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.notes.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.note { background: var(--sunken); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.note .n { display: inline-flex; width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; background: #F2C14E; color: #0A0F0C; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; vertical-align: 1px; }
+.note code, .lede code, td code { font-family: var(--mono); font-size: 12px; color: var(--mint); }
+.mk { position: absolute; z-index: 5; width: 22px; height: 22px; border-radius: 50%; background: #F2C14E; color: #0A0F0C; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px rgba(5, 12, 8, 0.85); }
+.was { margin-top: 12px; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 16px; max-width: 1200px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.was dt { color: var(--text-3); font-size: 12px; line-height: 21px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
+.was dd { margin: 0; }
+
+/* ===== app frame pieces ===== */
+.tb { height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px 0 8px; }
+.tb .ib { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; color: var(--text); border-radius: 8px; flex: none; }
+.tb .tt { font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; white-space: nowrap; }
+.tb .ts { font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); white-space: nowrap; }
+.tb .grow { flex: 1; }
+.page { width: 1200px; margin: 8px auto 0; }
+
+/* ===== the sheet ===== */
+.sheet { background: var(--raised); border: 1px solid var(--card-edge); border-radius: 8px; overflow: hidden; }
+.bar { display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border-subtle); }
+.bar .sp { flex: 1; }
+.bar .lead { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.bar .lead b { font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; color: var(--text); white-space: nowrap; }
+.bar .lead small { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; }
+.fld { height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--field); border: 1px solid var(--border-strong); border-radius: 8px; font-size: 16px; line-height: 24px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; flex: none; }
+.fld.search { width: 320px; }
+.fld .v { color: var(--text); }
+.fld .dd { margin-left: auto; color: var(--text-2); }
+.fld svg { color: var(--text-3); }
+.btn { height: 48px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; white-space: nowrap; flex: none; border: 1px solid transparent; }
+.btn.icon { padding: 0 16px; }
+.btn.pri { background: var(--mint); color: var(--on-mint); }
+.btn.sec { background: var(--secondary); border-color: var(--secondary-border); color: var(--text); }
+.btn.ter { color: var(--mint); }
+.btn.off { background: var(--field); border-color: var(--field); color: var(--text-disabled); }
+
+.th, .tr, .tg, .tsum, .tx { display: grid; grid-template-columns: var(--cols); column-gap: 16px; padding: 0 24px; align-items: center; }
+.th { height: 40px; border-bottom: 1px solid var(--border-strong); font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+.th .u { color: var(--text-disabled); }
+.tr { min-height: 56px; border-top: 1px solid var(--border-subtle); font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); position: relative; }
+.th + .tr, .tg + .tr, .th + .tg { border-top: 0; }
+.tr.hover { background: var(--overlay); }
+.tr.press { background: var(--field); }
+.tr.focus { box-shadow: inset 0 0 0 2px var(--focus); }
+.tr.open { background: var(--overlay); }
+.tr.muted .id b, .tr.muted .txt, .tr.muted .num, .tr.muted .time { color: var(--text-3); }
+.tg { height: 40px; background: var(--sunken); border-top: 1px solid var(--border-subtle); font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+.tg .num { font-size: 12px; line-height: 16px; color: var(--text-2); text-transform: none; letter-spacing: 0; }
+.tg .cap { text-transform: none; font-weight: 400; letter-spacing: 0.25px; }
+.tsum { min-height: 56px; background: var(--sunken); border-top: 1px solid var(--border-strong); font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); }
+.tsum .num { color: var(--mint); }
+.tsum .cap { text-transform: none; font-weight: 400; letter-spacing: 0.25px; }
+.tx { background: var(--sunken); border-top: 1px solid var(--border-subtle); padding-top: 8px; padding-bottom: 8px; }
+.tx .line { display: contents; }
+.tx .li { min-height: 32px; display: flex; align-items: center; }
+.span-all { grid-column: 1 / -1; }
+
+/* cells */
+.id { min-width: 0; display: flex; flex-direction: column; }
+.id b { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.id small { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.id small.code, .code { font-family: var(--mono); font-weight: 500; letter-spacing: 0; }
+.code { font-size: 12px; line-height: 16px; color: var(--text-2); white-space: nowrap; }
+.txt { min-width: 0; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.txt.two { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.txt .you { color: var(--text-3); }
+.num { font-family: var(--mono); font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: 0; color: var(--text); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.num .pad { visibility: hidden; }
+.num.dim { color: var(--text-3); }
+.num.neg { color: var(--text); }
+.time { font-family: var(--mono); font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: 0; color: var(--text-2); white-space: nowrap; }
+.r { text-align: right; justify-self: end; }
+.c { justify-self: center; }
+.dl { font-family: var(--mono); font-weight: 500; font-size: 14px; line-height: 20px; color: var(--text-2); white-space: nowrap; display: inline-flex; align-items: center; gap: 2px; justify-self: end; }
+.dl svg { width: 20px; height: 20px; fill: currentColor; flex: none; margin: -2px -2px -2px -4px; color: var(--text-3); }
+.st { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); white-space: nowrap; }
+.st.ok svg { color: var(--ok); } .st.att svg { color: var(--att); } .st.prob svg { color: var(--prob); } .st.neu svg { color: var(--text-3); } .st.info svg { color: var(--info); }
+.bdg { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 8px; border: 1px solid; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; white-space: nowrap; justify-self: start; }
+.bdg.ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-edge); }
+.bdg.att { color: var(--att); background: var(--att-bg); border-color: var(--att-edge); }
+.bdg.prob { color: var(--prob); background: var(--prob-bg); border-color: var(--prob-edge); }
+.bdg.info { color: var(--info); background: var(--info-bg); border-color: var(--info-edge); }
+.bdg.neu { color: var(--neu); background: var(--neu-bg); border-color: var(--neu-edge); }
+.kb { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; color: var(--text-2); border-radius: 8px; justify-self: end; }
+.kb.hover { background: rgba(255, 255, 255, 0.08); }
+.dis { width: 48px; height: 48px; margin: 0 -8px; display: flex; align-items: center; justify-content: center; color: var(--text-2); border-radius: 8px; }
+.acts { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.prog { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.trk { width: 64px; height: 4px; border-radius: 999px; background: var(--border-strong); overflow: hidden; flex: none; }
+.trk i { display: block; height: 100%; background: var(--ok); border-radius: 999px; }
+.trk.att i { background: var(--att); }
+.wait { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--att); }
+
+/* foot */
+.foot { min-height: 64px; display: flex; align-items: center; gap: 16px; padding: 8px 24px; border-top: 1px solid var(--border-subtle); }
+.foot .cnt { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.foot .cnt b { color: var(--text-2); font-weight: 500; }
+.pg { margin-left: auto; display: flex; align-items: stretch; height: 48px; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; flex: none; }
+.pg span { display: flex; align-items: center; gap: 4px; padding: 0 16px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; color: var(--text); white-space: nowrap; }
+.pg span + span { border-left: 1px solid var(--border-strong); }
+.pg .off { color: var(--text-disabled); }
+.pg .mid { background: var(--overlay); }
+
+/* skeleton, notices */
+.sk { display: block; height: 12px; border-radius: 6px; background: var(--border-subtle); }
+.sk.hi { background: var(--border-strong); }
+.callout { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: 8px; border: 1px solid; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; }
+.callout.info { color: var(--text-2); background: var(--info-bg); border-color: var(--info-edge); }
+.callout.info svg { color: var(--info); }
+.callout.prob { color: var(--text); background: var(--prob-bg); border-color: var(--prob-edge); }
+.callout.prob svg { color: var(--prob); }
+.callout.att { color: var(--text); background: var(--att-bg); border-color: var(--att-edge); }
+.callout.att svg { color: var(--att); }
+.callout b { font-weight: 600; color: var(--text); }
+.empty { padding: 56px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+.empty b { font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; color: var(--text); }
+.empty p { margin: 0 0 8px; max-width: 460px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.empty .glyph { width: 48px; height: 48px; border-radius: 12px; background: var(--field); color: var(--text-2); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+
+/* ===== this board ===== */
+.tx .q { font-family: var(--mono); font-size: 12px; line-height: 16px; color: var(--text-3); text-align: right; }
+.tx .lt { font-size: 14px; line-height: 20px; letter-spacing: 0.25px; color: var(--text-2); }
+.band { display: flex; align-items: stretch; gap: 0; margin-bottom: 16px; background: var(--raised); border: 1px solid var(--card-edge); border-radius: 8px; }
+.band > div { padding: 16px 24px; display: flex; flex-direction: column; gap: 6px; }
+.band > div + div { border-left: 1px solid var(--border-subtle); }
+.band .e { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); }
+.band .big { font-family: var(--mono); font-weight: 500; font-size: 22px; line-height: 30.8px; color: var(--mint); }
+.band .mid { font-family: var(--mono); font-weight: 500; font-size: 22px; line-height: 30.8px; color: var(--text); }
+.band .pay { display: grid; grid-template-columns: auto auto auto; column-gap: 16px; row-gap: 2px; align-items: baseline; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.band .pay .num { font-size: 14px; }
+.band .pay small { font-size: 12px; color: var(--text-3); }
+.strike { text-decoration: line-through; text-decoration-color: var(--text-3); }
+.tabs { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 16px; background: var(--sunken); border: 1px solid var(--border-subtle); border-radius: 12px; }
+.tabs span { height: 40px; padding: 0 20px; display: flex; align-items: center; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.25px; color: var(--text-2); border-radius: 8px; }
+.tabs span.on { background: var(--selected); color: var(--text); }
+.disc { display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 4px; margin-bottom: 8px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.disc .grow { flex: 1; }
+.share { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+.share .trk { width: 120px; }
+.share .trk i { background: var(--text-2); }
+
+.day { --cols: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 0.9fr) minmax(0, 0.6fr) minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 1.2fr); }
+.pay { --cols: minmax(0, 1.2fr) minmax(0, 0.6fr) minmax(0, 1.4fr) minmax(0, 1fr); }
+.run { --cols: minmax(0, 0.9fr) minmax(0, 1.7fr) minmax(0, 0.6fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 0.9fr); }
+.dif { --cols: 32px minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 0.7fr) minmax(0, 0.8fr) 200px; }
+.log { --cols: 24px minmax(0, 1.6fr) minmax(0, 1.3fr) minmax(0, 1.3fr) minmax(0, 0.8fr); }
+.log .fam { color: var(--text-3); display: flex; }
+.stk { --cols: minmax(0, 1.4fr) minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1.1fr); }
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<symbol id="more" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></symbol>
+<symbol id="right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></symbol>
+<symbol id="left" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></symbol>
+<symbol id="down" viewBox="0 0 24 24"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></symbol>
+<symbol id="up" viewBox="0 0 24 24"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></symbol>
+<symbol id="drop" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></symbol>
+<symbol id="tri-up" viewBox="0 0 24 24"><path d="M7 14l5-5 5 5z"/></symbol>
+<symbol id="tri-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></symbol>
+<symbol id="filter" viewBox="0 0 24 24"><path d="M7 6h10l-5.01 6.3L7 6zm-2.75-.39C6.27 8.2 10 13 10 13v6c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-6s3.72-4.8 5.74-7.39c.51-.66.04-1.61-.79-1.61H5.04c-.83 0-1.3.95-.79 1.61z"/></symbol>
+<symbol id="cal" viewBox="0 0 24 24"><path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V10h16v11zm0-13H4V5h16v3z"/></symbol>
+<symbol id="ok" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></symbol>
+<symbol id="ok-o" viewBox="0 0 24 24"><path d="M16.59 7.58L10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></symbol>
+<symbol id="err" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></symbol>
+<symbol id="warn" viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></symbol>
+<symbol id="info" viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></symbol>
+<symbol id="block" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM4 12c0-4.42 3.58-8 8-8 1.85 0 3.55.63 4.9 1.69L5.69 16.9C4.63 15.55 4 13.85 4 12zm8 8c-1.85 0-3.55-.63-4.9-1.69L18.31 7.1C19.37 8.45 20 10.15 20 12c0 4.42-3.58 8-8 8z"/></symbol>
+<symbol id="upload" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95C8.08 7.14 9.94 6 12 6c2.62 0 4.88 1.86 5.39 4.43l.3 1.5 1.53.11c1.56.1 2.78 1.41 2.78 2.96 0 1.65-1.35 3-3 3zM8 13h2.55v3h2.9v-3H16l-4-4z"/></symbol>
+<symbol id="back" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></symbol>
+<symbol id="add" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></symbol>
+<symbol id="person-add" viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></symbol>
+<symbol id="truck" viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></symbol>
+<symbol id="dl" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></symbol>
+<symbol id="refresh" viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></symbol>
+<symbol id="print" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></symbol>
+<symbol id="receipt" viewBox="0 0 24 24"><path d="M19.5 3.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2v14H3v3c0 1.66 1.34 3 3 3h12c1.66 0 3-1.34 3-3V2l-1.5 1.5zM19 19c0 .55-.45 1-1 1s-1-.45-1-1v-3H8V5h11v14z"/><path d="M9 7h6v2H9zm7 0h2v2h-2zm-7 3h6v2H9zm7 0h2v2h-2z"/></symbol>
+<symbol id="close" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
+<symbol id="help" viewBox="0 0 24 24"><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></symbol>
+<symbol id="inbox" viewBox="0 0 24 24"><path d="M19 3H4.99C3.88 3 3.01 3.89 3.01 5L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z"/></symbol>
+<symbol id="cloud-off" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4c-1.48 0-2.85.43-4.01 1.17l1.46 1.46C10.21 6.23 11.08 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3 0 1.13-.64 2.11-1.56 2.62l1.45 1.45C23.16 18.16 24 16.68 24 15c0-2.64-2.05-4.78-4.65-4.96zM3 5.27l2.75 2.74C2.56 8.15 0 10.77 0 14c0 3.31 2.69 6 6 6h11.73l2 2L21 20.73 4.27 4 3 5.27zM7.73 10l8 8H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h1.73z"/></symbol>
+<symbol id="report" viewBox="0 0 24 24"><path d="M15 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.89 2 1.99 2H19c1.1 0 2-.9 2-2V9l-6-6zM5 19V5h9v5h5v9H5zM9 8c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1zm0 4c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1zm0 4c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1z"/></symbol>
+</svg>
+<nav class="page-nav"><a href="index.html">&larr; Tables</a></nav>
+<header class="page-head"><h1>Reports, logs and stock counts</h1><p>The sheet on the reporting screens. The daily summary uses the harness&#8217;s seven seeded days; the rest extend its fixtures where one row would not show the table.</p></header>
+<main class="stage">
+<section class="section"><h2>Daily summary</h2><p class="lede">Opened to see how the week is going. Seven days are one comparison, so they become seven rows of one table that can be read down a column. Today they are seven separate cards.</p><p class="frame-label">Daily summary &#183; 1440 &#183; owner</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Daily summary</div></div></div><div class="page" style="width:1200px;"><div class="disc"><svg class="i"><use href="#info"/></svg><span>Where these figures come from</span><span class="grow"></span><svg class="i"><use href="#right"/></svg></div><div class="sheet day"><div class="bar"><div class="lead"><b>Seven business days</b><small>Mon 12 Oct back to Tue 6 Oct</small></div><span class="sp"></span><span class="btn sec">Total sales over a period</span></div><div class="th"><span>Day</span><span class="r">Sales <span class="u">KES</span></span><span class="r">On the day before</span><span class="r">Transactions</span><span class="r">Shifts</span><span class="r">Profit <span class="u">KES</span></span><span class="r">Margin</span><span>Standing</span></div><div class="tr "><div class="id"><b>Mon 12 Oct</b></div><span class="num">910</span><span class="dl"><svg><use href="#tri-down"/></svg>315</span><span class="num">3</span><span class="num">2</span><span class="num">274</span><span class="num">30.1%</span><span class="st ok"><svg class="i16"><use href="#ok"/></svg>Reconciled</span></div><div class="tr hover"><div class="id"><b>Sun 11 Oct</b></div><span class="num">1,225</span><span class="dl"><svg><use href="#tri-down"/></svg>45</span><span class="num">10</span><span class="num">2</span><span class="num">343</span><span class="num">28.0%</span><span class="st ok"><svg class="i16"><use href="#ok"/></svg>Reconciled</span></div><div class="tr "><div class="id"><b>Sat 10 Oct</b></div><span class="num">1,270</span><span class="dl"><svg><use href="#tri-down"/></svg>45</span><span class="num">11</span><span class="num">2</span><span class="num">355</span><span class="num">28.0%</span><span class="st ok"><svg class="i16"><use href="#ok"/></svg>Reconciled</span></div><div class="tr "><div class="id"><b>Fri 9 Oct</b></div><span class="num">1,315</span><span class="dl"><svg><use href="#tri-down"/></svg>45</span><span class="num">12</span><span class="num">2</span><span class="num">367</span><span class="num">27.9%</span><span class="st ok"><svg class="i16"><use href="#ok"/></svg>Reconciled</span></div><div class="tr "><div class="id"><b>Thu 8 Oct</b></div><span class="num">1,360</span><span class="dl"><svg><use href="#tri-down"/></svg>45</span><span class="num">13</span><span class="num">2</span><span class="num">&#8804; 379</span><span class="num dim">&#8212;</span><span class="st ok"><svg class="i16"><use href="#ok"/></svg>Reconciled</span></div><div class="tr "><div class="id"><b>Wed 7 Oct</b></div><span class="num">1,405</span><span class="dl"><svg><use href="#tri-down"/></svg>45</span><span class="num">14</span><span class="num">2</span><span class="num">&#8804; 391</span><span class="num dim">&#8212;</span><span class="st ok"><svg class="i16"><use href="#ok"/></svg>Reconciled</span></div><div class="tr "><div class="id"><b>Tue 6 Oct</b></div><span class="num">1,450</span><span class="num dim">&#8212;</span><span class="num">15</span><span class="num">2</span><span class="num">&#8804; 403</span><span class="num dim">&#8212;</span><span class="st ok"><svg class="i16"><use href="#ok"/></svg>Reconciled</span></div><div class="tsum"><span>7 days</span><span class="num">8,935</span><span></span><span class="num">78</span><span class="num">14</span><span class="num">&#8804; 2,512</span><span></span><span></span></div><div class="foot"><span class="cnt"><b>&#8804;</b> Profit is at most this figure: some sale lines on that day have no cost recorded. A row opens that day&#8217;s reconciliation status.</span></div></div></div></div><dl class="was"><dt>Today</dt><dd>Seven cards of label-and-figure lines, a paragraph of profit caveats on each, and a <em>Why is it in this state?</em> button on each.</dd><dt>Now</dt><dd>Seven rows, the caveat as one footnote symbol, and the row itself opens reconciliation status, which is where that button went. The change on the day before keeps its neutral reading, with a triangle and no colour, as today.</dd><dt>Unchanged</dt><dd>Profit and margin only for an owner or administrator (a manager sees neither column); the role gate on the row; the device-figures rows for unpublished days. <b>New:</b> the <em>7 days</em> total row. All seven days are on the page, but the sum is a figure the screen does not print today.</dd></dl></section>
+<section class="section"><h2>Sales totals keeps its report, and gains one small table</h2><p class="lede">Sales totals is a report rather than a list, and stays one. Its <em>How it was paid</em> breakdown is a table already in all but name, so it takes the sheet at the report&#8217;s 720 reading width. The share bar uses the neutral ink, because cash is not better than M-Pesa.</p><p class="frame-label">Sales totals &#183; the payment breakdown &#183; 720</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Sales totals</div></div></div><div class="page" style="width:720px;"><div class="sheet pay"><div class="th"><span>How it was paid</span><span class="r">Sales</span><span class="r">Share</span><span class="r">Amount <span class="u">KES</span></span></div><div class="tr "><div class="id"><b>Cash</b></div><span class="num">29</span><div class="share"><span class="trk"><i style="width:59.3%"></i></span><span class="num" style="min-width:52px;">59.3%</span></div><span class="num">3,810.25</span></div><div class="tr "><div class="id"><b>M-Pesa</b></div><span class="num">13</span><div class="share"><span class="trk"><i style="width:30.8%"></i></span><span class="num" style="min-width:52px;">30.8%</span></div><span class="num">1,980<span class="pad">.00</span></span></div><div class="tr "><div class="id"><b>Card</b></div><span class="num">5</span><div class="share"><span class="trk"><i style="width:8.4%"></i></span><span class="num" style="min-width:52px;">8.4%</span></div><span class="num">540.25</span></div><div class="tr "><div class="id"><b>Not recorded</b></div><span class="num">1</span><div class="share"><span class="trk"><i style="width:1.4%"></i></span><span class="num" style="min-width:52px;">1.4%</span></div><span class="num">90<span class="pad">.00</span></span></div><div class="tsum"><span>Revenue</span><span class="num">48</span><span></span><span class="num">6,420.50</span></div><div class="foot"><span class="cnt">Recorded by the cashier at the register; the payment itself is not verified.</span></div></div></div></div><dl class="was"><dt>Today</dt><dd>Rows with a coloured bar per tender and a separate caption.</dd><dt>Now</dt><dd>Four rows, counts and amounts right-aligned, and the share as a figure beside a neutral bar. Revenue is the total row, which is the figure the card already shows.</dd><dt>Unchanged</dt><dd>Everything above and below it: the takings card, the period stepper, the member and category filters, and the day&#8217;s shifts.</dd></dl></section>
+<section class="section"><h2>Reconciliation status: the runs</h2><p class="lede">The header card stays. Its runs become rows: the status first, because that is what someone opens the list for.</p><p class="frame-label">Reconciliation status &#183; runs &#183; 1440 &#183; owner</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Reconciliation status</div><div class="ts">2026-10-12</div></div></div><div class="page" style="width:1200px;"><div class="sheet run"><div class="th"><span>Status</span><span>Run</span><span class="r">Attempts</span><span>Differences found</span><span>Requested by</span><span>Completed UTC</span></div><div class="tr "><span class="st ok"><svg class="i16"><use href="#ok"/></svg>Completed</span><div class="id"><b>Triggered by a sale</b><small>Incremental &#183; reached Finishing</small></div><span class="num">1</span><span class="txt">1 stock, 1 shift</span><span class="txt">The server</span><span class="time">02:31</span></div><div class="tr "><span class="st ok"><svg class="i16"><use href="#ok"/></svg>Completed</span><div class="id"><b>Shift closed</b><small>Incremental &#183; reached Finishing</small></div><span class="num">1</span><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="txt">The server</span><span class="time">13:52</span></div><div class="tr "><span class="bdg prob"><svg class="i14"><use href="#err"/></svg>Failed</span><div class="id"><b>Requested by a person</b><small>Full check &#183; reached Stock checkpoints &#183; failed, retry scheduled</small></div><span class="num">2</span><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="txt">Peter Otieno</span><span class="time">&#8212;</span></div><div class="tr "><span class="bdg att"><svg class="i14"><use href="#clock"/></svg>Queued</span><div class="id"><b>Nightly sweep</b><small>Incremental</small></div><span class="num">0</span><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="txt">The server</span><span class="time">&#8212;</span></div><div class="foot"><span class="cnt">Listed by record, not by time. Every run here covered 2026-10-12.</span></div></div></div></div><dl class="was"><dt>Today</dt><dd>One card per run, with five to eight label lines each.</dd><dt>Now</dt><dd>Status, source and mode, attempts, what it found, who asked, and when it finished. The last error code and the rerun sentence move into the row&#8217;s fold.</dd><dt>Unchanged</dt><dd>No action on a run; 20 per page; ordered by record.</dd></dl></section>
+<section class="section"><h2>Unresolved differences</h2><p class="lede">Opened to work through what reconciliation could not settle. Every row is a problem by definition, so there is no status column. The difference is the identity and its headline figure is a column; the full set of figures folds under the row.</p><p class="frame-label">Unresolved differences &#183; 1440 &#183; owner</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Unresolved differences</div></div></div><div class="page" style="width:1200px;"><div class="sheet dif"><div class="bar"><div class="fld" style="width:260px;"><svg class="i"><use href="#filter"/></svg><span class="v">Every kind</span><svg class="i dd"><use href="#drop"/></svg></div><span class="sp"></span></div><div class="th"><span></span><span>Difference</span><span>Measure</span><span class="r">Figure</span><span>First seen UTC</span><span>Run</span><span></span></div><div class="tr "><span class="dis"><svg class="i"><use href="#down"/></svg></span><div class="id"><b>Stock checkpoint chain is broken</b><small>Product pd-milk-500</small></div><span class="txt">Expected by the ledger</span><span class="num">10</span><span class="time">02:30</span><span class="code">rj_000001</span><div class="acts"><span class="kb"><svg class="i"><use href="#more"/></svg></span></div></div><div class="tr "><span class="dis"><svg class="i"><use href="#down"/></svg></span><div class="id"><b>Sale lines could not be read</b><small>Sale co-1</small></div><span class="txt">Unreadable sale lines</span><span class="num">2</span><span class="time">02:30</span><span class="txt" style="color:var(--text-3);">&#8212;</span><span></span></div><div class="tr open"><span class="dis"><svg class="i"><use href="#up"/></svg></span><div class="id"><b>Shift totals do not match its sales</b><small>Shift shift-yesterday</small></div><span class="txt">Sales total</span><div class="id" style="align-items:flex-end;"><span class="num">&#8722;12.50</span><small>short</small></div><span class="time">02:30</span><span class="code">rj_000001</span><div class="acts"><span class="btn sec">Correct totals</span><span class="kb"><svg class="i"><use href="#more"/></svg></span></div></div><div class="tx"><span></span><span class="li lt span2" style="grid-column: 2 / 3;">Its closing totals disagree with the sales recorded during it.</span><span class="li lt">Transactions</span><span class="li num" style="justify-content:flex-end;font-size:14px;color:var(--text-2);">+2</span><span></span><span></span><span></span></div><div class="tr "><span class="dis"><svg class="i"><use href="#down"/></svg></span><div class="id"><b>Stock left without a record</b><small>Product pd-milk-500</small></div><span class="txt">Difference</span><div class="id" style="align-items:flex-end;"><span class="num">&#8722;3</span><small>fewer than the ledger</small></div><span class="time">02:30</span><span class="code">rj_000001</span><div class="acts"><span class="kb"><svg class="i"><use href="#more"/></svg></span></div></div><div class="foot"><span class="cnt">Listed by record, not by time. Every row is still open.</span></div></div></div></div><dl class="was"><dt>Today</dt><dd>A card per difference with every figure line, an explanation, provenance, and up to three buttons.</dd><dt>Now</dt><dd>One row and one headline figure, with the rest folded. <em>Correct totals</em> is promoted on a shift row, for an owner or administrator, because it is the action that resolves it. <em>View this shift&#8217;s corrections</em> and <em>About this run</em> move to the menu.</dd><dt>Unchanged</dt><dd>The kind filter; ids shown as ids (they are not resolved to names today, and this does not start doing it); 20 per page.</dd></dl></section>
+<section class="section"><h2>Logs</h2><p class="lede">Opened by an owner or administrator to see who did what. The family glyph stays as a quiet column, so a stock event and a people event look different at a glance. The rows are not grouped by day: the code explicitly rejected that, and this does not reopen it.</p><p class="frame-label">Logs &#183; 1440 &#183; administrator</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Logs</div></div><span class="grow"></span><span class="ib"><svg class="i24"><use href="#report"/></svg></span></div><div class="page" style="width:1200px;"><div class="sheet log"><div class="bar"><div class="fld" style="width:240px;"><svg class="i"><use href="#filter"/></svg><span class="v">All events</span><svg class="i dd"><use href="#drop"/></svg></div><div class="fld" style="width:200px;"><svg class="i"><use href="#cal"/></svg><span class="v">Any day</span><svg class="i dd"><use href="#drop"/></svg></div><span class="sp"></span></div><div class="th"><span></span><span>Event</span><span>Concerns</span><span>By</span><span>Recorded UTC</span></div><div class="tr "><span class="fam"><svg class="i"><use href="#person-add"/></svg></span><div class="id"><b>Staff invited</b></div><span class="txt">Faith Njeri</span><span class="txt">You</span><span class="time">11 Oct 11:30</span></div><div class="tr "><span class="fam"><svg class="i"><use href="#receipt"/></svg></span><div class="id"><b>Business status changed</b><small>pending to active</small></div><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="txt">the platform_admin operator</span><span class="time">9 Oct 14:30</span></div><div class="tr "><span class="fam"><svg class="i"><use href="#person-add"/></svg></span><div class="id"><b>Staff member updated</b></div><span class="txt">Amina Hassan</span><span class="txt">Grace Wanjiru</span><span class="time">12 Oct 09:30</span></div><div class="tr "><span class="fam"><svg class="i"><use href="#inbox"/></svg></span><div class="id"><b>Stock corrected</b></div><span class="txt" style="color:var(--text-3);">&#8212;</span><span class="txt">Amina Hassan</span><span class="time">10 Oct 09:30</span></div><div class="foot"><span class="cnt">Permanent, and listed by record rather than by time.</span><div class="pg"><span class="off"><svg class="i16"><use href="#left"/></svg>Previous</span><span class="mid">Page 1</span><span>Next<svg class="i16"><use href="#right"/></svg></span></div></div></div></div></div><dl class="was"><dt>Today</dt><dd>A timeline with a connecting line, one event per node, and its provenance in a sentence.</dd><dt>Now</dt><dd>One row per event with the time and date in a column. With <em>Any day</em> chosen the date is shown; with a single day chosen it is only the time. A critical event keeps its <code>Critical</code> badge, after the event name.</dd><dt>Unchanged</dt><dd>Both filters, with <em>Today</em> as the default; 20 per page; record order.</dd></dl></section>
+<section class="section"><h2>Stock counts</h2><p class="lede">Opened to find the count that needs reviewing. Coverage, differences and the standing line up, so <em>Needs review</em> is the row that stands out.</p><p class="frame-label">Stock counts &#183; 1440 &#183; owner</p><div class="frame" style="width:1440px;padding-bottom:40px;"><div class="tb"><span class="ib"><svg class="i24"><use href="#back"/></svg></span><div><div class="tt">Stock counts</div><div class="ts">What was counted, and how it differed from the books.</div></div><span class="grow"></span><span class="ib"><svg class="i24"><use href="#report"/></svg></span></div><div class="page" style="width:1200px;"><div class="tabs"><span class="on">Counts</span><span>Settings</span></div><div class="sheet stk"><div class="bar"><div class="fld" style="width:200px;"><svg class="i"><use href="#filter"/></svg>Standing<svg class="i dd"><use href="#drop"/></svg></div><div class="fld" style="width:200px;"><svg class="i"><use href="#filter"/></svg>Staff<svg class="i dd"><use href="#drop"/></svg></div><span class="sp"></span><span class="btn sec icon"><svg class="i"><use href="#add"/></svg>Count stock</span></div><div class="th"><span>Count</span><span>Counted by</span><span class="r">Counted</span><span class="r">Products differ</span><span class="r">Units apart</span><span>Standing</span></div><div class="tr "><div class="id"><b>One category</b><small>Mon 12 Oct</small></div><span class="txt">Brian Kimani</span><div class="prog"><span class="num">31/64</span><span class="trk att"><i style="width:48%"></i></span></div><span class="num dim">&#8212;</span><span class="num dim">&#8212;</span><span class="bdg att"><svg class="i14"><use href="#clock"/></svg>Still arriving</span></div><div class="tr hover"><div class="id"><b>Whole catalog</b><small>Sat 19 Sep &#183; 1 unknown product</small></div><span class="txt">You</span><div class="prog"><span class="num">240/240</span><span class="trk"><i style="width:100%"></i></span></div><span class="num">2</span><span class="num">10</span><span class="bdg info"><svg class="i14"><use href="#info"/></svg>Needs review</span></div><div class="tr "><div class="id"><b>Whole catalog</b><small>Sat 12 Sep</small></div><span class="txt">Amina Hassan</span><div class="prog"><span class="num">240/240</span><span class="trk"><i style="width:100%"></i></span></div><span class="num">3</span><span class="num">5</span><span class="st ok"><svg class="i16"><use href="#ok"/></svg>Accepted</span></div><div class="tr "><div class="id"><b>Whole catalog</b><small>Sat 5 Sep</small></div><span class="txt">Brian Kimani</span><div class="prog"><span class="num">240/240</span><span class="trk"><i style="width:100%"></i></span></div><span class="num">0</span><span class="num">0</span><span class="st ok"><svg class="i16"><use href="#ok"/></svg>All agreed</span></div><div class="foot"><span class="cnt">The newest 20 counts. A row opens the count.</span></div></div></div></div><dl class="was"><dt>Today</dt><dd>Full-width cards with two large figure boxes each, empty when nothing differed, and a coverage bar the width of the page.</dd><dt>Now</dt><dd>A row per count. The fraction carries the coverage and a 64 track gives its shape. <em>Count stock</em> moves to the bar at its natural width.</dd><dt>Unchanged</dt><dd>The row opens the review; the Counts and Settings tabs; both filters, which narrow the loaded page only; the newest 20 and no paging.</dd></dl></section>
+</main>
+</body>
+</html>

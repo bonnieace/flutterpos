@@ -1,5 +1,9 @@
-/// *My businesses*: every business on the account, each drawn as the receipt
-/// it prints, with *Add business* at the head of the list.
+/// *My businesses*: every business on the account, each drawn as a
+/// [BusinessCard], with *Add business* at the head of the list.
+///
+/// **Redrawn 2026-10-13** in the house style: the white receipt stood out on
+/// every surface around it. The data, the order and the actions are the
+/// receipt's; from [AppLayoutTokens.mediumFloor] the cards sit in columns.
 ///
 /// **Built 2026-10-08 from `docs/design/businesses/`.** Before it, an owner
 /// with one business had no way to add a second from inside the app: the form
@@ -7,32 +11,30 @@
 /// selector never shows when a business opens by itself. The home's *My
 /// businesses* tile and the business name in its top bar both open this.
 ///
-/// **A business is drawn as its receipt** because the receipt is the one thing
-/// that is uniquely that business here: its logo, name and slogan over its own
-/// figures. The rulings the design records - the open business's live day, any
+/// **A business is shown through its own brand** - the logo, name and slogan
+/// its receipt prints - over its own figures. The rulings the design records -
+/// the open business's live day, any
 /// other business's last counted day, the till named, the add sheet opening on
 /// the open business's currency - are the developer's, made on 2026-10-08.
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../checkout/checkout_draft.dart';
-import '../inventory/product_image_provider.dart';
 import '../observability/app_telemetry.dart';
 import '../reporting/daily_metrics.dart';
 import '../reporting/reporting_currency.dart';
 import '../shift/abandoned_shift.dart';
 import '../shift/tenant_shift.dart';
 import '../ui/buttons.dart';
-import '../ui/press.dart';
 import '../ui/scaffold.dart';
 import '../ui/sheet.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_branding.dart';
+import 'tenant_business_card.dart';
 import 'tenant_membership.dart';
 import 'tenant_membership_labels.dart';
 import 'tenant_paths.dart';
@@ -323,7 +325,7 @@ final class _TenantBusinessesScreenState extends State<TenantBusinessesScreen> {
 
     return AppScaffold(
       title: 'My businesses',
-      contentWidth: AppContentWidth.reading,
+      contentWidth: AppContentWidth.records,
       body: ListView(
         key: const ValueKey('my-businesses-list'),
         padding: EdgeInsets.fromLTRB(
@@ -340,7 +342,7 @@ final class _TenantBusinessesScreenState extends State<TenantBusinessesScreen> {
             showAdd: identity != null,
             refusal: addRefusal,
           ),
-          SizedBox(height: tokens.spacing.s8),
+          SizedBox(height: tokens.spacing.s16),
           if (_blocker case final blocker?) ...<Widget>[
             Callout(
               key: const ValueKey('my-businesses-switch-blocker'),
@@ -349,52 +351,78 @@ final class _TenantBusinessesScreenState extends State<TenantBusinessesScreen> {
             ),
             SizedBox(height: tokens.spacing.s16),
           ],
-          BusinessReceipt(
-            key: ValueKey('receipt-${widget.membership.tenantId}'),
-            name: widget.openReceipt.name,
-            slogan: widget.openReceipt.slogan,
-            logoUrl: widget.openReceipt.logoUrl,
-            stamp: 'OPEN NOW',
-            figures: <BusinessReceiptLine>[
-              if (widget.openReceipt.today case final today?)
-                BusinessReceiptLine.total('Today', today),
-              if (widget.openReceipt.sales case final sales?)
-                BusinessReceiptLine('Sales', sales),
+          BusinessCardGrid(
+            children: <Widget>[
+              BusinessCard(
+                key: ValueKey('business-${widget.membership.tenantId}'),
+                name: widget.openReceipt.name,
+                slogan: widget.openReceipt.slogan,
+                logoUrl: widget.openReceipt.logoUrl,
+                here: true,
+                status: const BusinessCardStatus(
+                  status: AppStatus.ok,
+                  icon: Icons.check_circle,
+                  word: 'Open now',
+                  detail: 'you’re in it',
+                ),
+                figure: switch (widget.openReceipt.today) {
+                  final today? => BusinessCardFigure(
+                    label: 'Today',
+                    value: today,
+                    hero: true,
+                  ),
+                  null => null,
+                },
+                facts: <BusinessCardFact>[
+                  if (widget.openReceipt.sales case final sales?)
+                    BusinessCardFact('Sales', sales, numeric: true),
+                  if (_till case final till?)
+                    BusinessCardFact.later('Till', till),
+                  BusinessCardFact(
+                    'You',
+                    tenantRoleLabel(widget.membership.role),
+                  ),
+                ],
+                action: widget.onEditDetails == null
+                    ? null
+                    : const BusinessCardAction(
+                        icon: Icons.receipt_long_outlined,
+                        label: 'Edit details',
+                        detail: 'Name, slogan and logo on its receipt',
+                      ),
+                onPressed: widget.onEditDetails,
+                semanticLabel:
+                    '${widget.openReceipt.name}, open now. Edit its details.',
+              ),
+              for (final result in _added)
+                BusinessCard(
+                  key: ValueKey('business-${result.tenantId}'),
+                  name: result.name,
+                  status: const BusinessCardStatus(
+                    status: AppStatus.info,
+                    icon: Icons.hourglass_top,
+                    word: 'Setting up',
+                  ),
+                  facts: <BusinessCardFact>[
+                    BusinessCardFact('You', tenantRoleLabel(TenantRole.owner)),
+                  ],
+                  semanticLabel: '${result.name}, being set up.',
+                ),
+              for (final other in others)
+                _OtherBusinessCard(
+                  key: ValueKey('business-${other.tenantId}'),
+                  membership: other,
+                  read: other.canAccess() ? _readOther(other) : null,
+                  switching: _switchingTenantId == other.tenantId,
+                  onSwitch:
+                      other.canAccess() &&
+                          widget.onSwitchTenant != null &&
+                          _switchingTenantId == null
+                      ? () => _switchTo(other)
+                      : null,
+                ),
             ],
-            tillLine: _till,
-            role: widget.membership.role,
-            action: widget.onEditDetails == null ? null : 'Edit details',
-            actionDetail: 'Name, slogan and logo on this receipt',
-            onPressed: widget.onEditDetails,
-            semanticLabel:
-                '${widget.openReceipt.name}, open now. Edit its details.',
           ),
-          for (final result in _added) ...<Widget>[
-            SizedBox(height: tokens.spacing.s16),
-            BusinessReceipt(
-              key: ValueKey('receipt-${result.tenantId}'),
-              name: result.name,
-              figures: const <BusinessReceiptLine>[],
-              role: TenantRole.owner,
-              action: 'Setting up',
-              semanticLabel: '${result.name}, being set up.',
-            ),
-          ],
-          for (final other in others) ...<Widget>[
-            SizedBox(height: tokens.spacing.s16),
-            _OtherBusinessReceipt(
-              key: ValueKey('receipt-${other.tenantId}'),
-              membership: other,
-              read: other.canAccess() ? _readOther(other) : null,
-              switching: _switchingTenantId == other.tenantId,
-              onSwitch:
-                  other.canAccess() &&
-                      widget.onSwitchTenant != null &&
-                      _switchingTenantId == null
-                  ? () => _switchTo(other)
-                  : null,
-            ),
-          ],
         ],
       ),
     );
@@ -535,8 +563,8 @@ final class _OtherReceipt {
 
 /// A business that is not open: its receipt once read, its name and your role
 /// while it is being read or where it cannot be.
-final class _OtherBusinessReceipt extends StatelessWidget {
-  const _OtherBusinessReceipt({
+final class _OtherBusinessCard extends StatelessWidget {
+  const _OtherBusinessCard({
     super.key,
     required this.membership,
     required this.read,
@@ -547,22 +575,24 @@ final class _OtherBusinessReceipt extends StatelessWidget {
   final TenantMembership membership;
 
   /// Null for a business this member cannot open - suspended, archived, an
-  /// invitation not yet accepted - which prints its standing instead.
+  /// invitation not yet accepted - which shows its standing instead.
   final Future<_OtherReceipt>? read;
   final bool switching;
   final VoidCallback? onSwitch;
 
   @override
   Widget build(BuildContext context) {
+    final you = BusinessCardFact('You', tenantRoleLabel(membership.role));
     final pending = read;
     if (pending == null) {
-      final standing = _standing(membership);
-      return BusinessReceipt(
+      final standing = businessCardStanding(membership);
+      return BusinessCard(
         name: membership.tenantName,
-        figures: <BusinessReceiptLine>[BusinessReceiptLine('Status', standing)],
-        role: membership.role,
-        action: null,
-        semanticLabel: '${membership.tenantName}, $standing. Cannot be opened.',
+        still: true,
+        status: standing,
+        facts: <BusinessCardFact>[you],
+        semanticLabel:
+            '${membership.tenantName}, ${standing.word}. Cannot be opened.',
       );
     }
     return FutureBuilder<_OtherReceipt>(
@@ -573,27 +603,35 @@ final class _OtherBusinessReceipt extends StatelessWidget {
         final date = data?.businessDate;
         final metrics = data?.metrics;
         final currency = data?.currency ?? TenantReportingCurrency.unknown;
-        return BusinessReceipt(
+        return BusinessCard(
           name: branding?.companyName ?? membership.tenantName,
           slogan: branding?.slogan,
           logoUrl: branding?.logoUrl,
-          figures: <BusinessReceiptLine>[
-            // **The date is printed, never "yesterday".** This is the last
-            // day reconciliation counted, and a receipt says which day it is
-            // for. An em dash where nothing was published, as the home does.
+          // **The date is named, never "yesterday".** This is the last day
+          // reconciliation counted, and the card says which day it is for.
+          // An em dash where nothing was published, as the home does.
+          figure: date == null
+              ? null
+              : BusinessCardFigure(
+                  label: 'Last counted · ${_cardDate(date)}',
+                  value: metrics == null
+                      ? '—'
+                      : currency.format(metrics.netSales),
+                ),
+          facts: <BusinessCardFact>[
             if (date != null)
-              BusinessReceiptLine.total(
-                _receiptDate(date),
-                metrics == null ? '—' : currency.format(metrics.netSales),
-              ),
-            if (date != null)
-              BusinessReceiptLine(
+              BusinessCardFact(
                 'Sales',
                 metrics == null ? '—' : '${metrics.netTransactions}',
+                numeric: true,
               ),
+            you,
           ],
-          role: membership.role,
-          action: switching ? 'Switching…' : 'Switch to this shop',
+          action: BusinessCardAction(
+            icon: Icons.swap_horiz,
+            label: switching ? 'Switching…' : 'Switch to this shop',
+            busy: switching,
+          ),
           onPressed: onSwitch,
           semanticLabel:
               '${membership.tenantName}. ${tenantRoleLabel(membership.role)} '
@@ -602,394 +640,37 @@ final class _OtherBusinessReceipt extends StatelessWidget {
       },
     );
   }
-
-  static String _standing(TenantMembership membership) =>
-      switch (membership.tenantStatus) {
-        TenantStatus.suspended => 'Suspended',
-        TenantStatus.archived => 'Archived',
-        TenantStatus.active => switch (membership.membershipStatus) {
-          MembershipStatus.pending => 'Invited',
-          MembershipStatus.inactive => 'Deactivated',
-          MembershipStatus.active => 'Unavailable',
-        },
-      };
 }
 
-/// `2026-10-07` as a receipt prints it: `7 OCT`.
-String _receiptDate(String businessDate) {
+/// `2026-10-07` as the card names it: `7 Oct`.
+String _cardDate(String businessDate) {
   final parsed = DateTime.tryParse(businessDate);
   if (parsed == null) return businessDate;
   const months = <String>[
-    'JAN',
-    'FEB',
-    'MAR',
-    'APR',
-    'MAY',
-    'JUN',
-    'JUL',
-    'AUG',
-    'SEP',
-    'OCT',
-    'NOV',
-    'DEC',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   return '${parsed.day} ${months[parsed.month - 1]}';
 }
 
-/// One line under a receipt's rule.
-final class BusinessReceiptLine {
-  const BusinessReceiptLine(this.label, this.value) : isTotal = false;
-
-  /// The headline line: its value set at [AppTypeRoles.numericCompact].
-  const BusinessReceiptLine.total(this.label, this.value) : isTotal = true;
-
-  final String label;
-  final String value;
-  final bool isTotal;
-}
-
-/// A business, drawn as the receipt it prints.
-///
-/// **Paper, in the report roles.** `AppTokens.colors.report` is the ground a
-/// generated document sits on, which is what a receipt is; the screen's own
-/// surfaces would make it a card wearing a receipt's clothes.
-///
-/// **The torn edge is the spacing scale:** teeth [AppSpacing.s8] deep and
-/// [AppSpacing.s16] apart.
-final class BusinessReceipt extends StatelessWidget {
-  const BusinessReceipt({
-    super.key,
-    required this.name,
-    required this.figures,
-    required this.role,
-    required this.semanticLabel,
-    this.slogan,
-    this.logoUrl,
-    this.stamp,
-    this.tillLine,
-    this.action,
-    this.actionDetail,
-    this.onPressed,
-    this.masthead = false,
-  });
-
-  final String name;
-  final String? slogan;
-  final Uri? logoUrl;
-
-  /// A word stamped across the top corner, as a receipt is stamped *PAID*.
-  final String? stamp;
-  final List<BusinessReceiptLine> figures;
-
-  /// Who has the till, resolved after the receipt is drawn. Null leaves the
-  /// line off; a future that resolves to null does too.
-  final Future<String?>? tillLine;
-  final TenantRole? role;
-
-  /// What tapping the receipt does, printed as its footer. Null prints none.
-  final String? action;
-  final String? actionDetail;
-  final VoidCallback? onPressed;
-  final String semanticLabel;
-
-  /// Drawn edge to edge as a sheet's masthead: square top corners, a larger
-  /// name, and room above for the sheet's handle and close control.
-  final bool masthead;
-
-  /// The stamp's tilt, which is what makes it read as stamped rather than
-  /// printed. Named here rather than tokenised for the reason
-  /// `AppSheetMasthead.handleScrimOpacity` gives: `design.md` states no angle.
-  static const double stampTilt = 8 * math.pi / 180;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    final paper = tokens.colors.report;
-    final type = tokens.typography;
-    final caption = type.monoCaption.copyWith(color: paper.mutedInk);
-    final strong = type.monoCaption.copyWith(color: paper.ink);
-    final rule = Text(
-      // **A printed rule, typed.** A thermal receipt draws its rules in dashes
-      // of the same face as everything else on it.
-      '-' * 96,
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.clip,
-      style: type.monoCaption.copyWith(color: paper.rule),
-    );
-    Widget line(String label, String value) => Padding(
-      padding: EdgeInsets.only(top: tokens.spacing.s4),
-      child: Row(
-        children: <Widget>[
-          Text(label, style: caption),
-          SizedBox(width: tokens.spacing.s12),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: strong,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    final body = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        if (logoUrl case final url?) ...<Widget>[
-          Center(
-            child: SizedBox.square(
-              dimension: tokens.spacing.s40,
-              child: Image(
-                image: TenantCachedNetworkImage(
-                  url,
-                  cache: TenantImageCacheScope.of(context),
-                ),
-                fit: BoxFit.contain,
-                excludeFromSemantics: true,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-            ),
-          ),
-          SizedBox(height: tokens.spacing.s4),
-        ],
-        // Clear of the stamp where there is no logo to push the name down.
-        if (stamp != null && logoUrl == null)
-          SizedBox(height: tokens.spacing.s24),
-        Text(
-          name.toUpperCase(),
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: (masthead ? type.numericCompact : type.numericBody).copyWith(
-            color: paper.ink,
-          ),
-        ),
-        if (slogan case final words? when words.trim().isNotEmpty)
-          Text(words, textAlign: TextAlign.center, style: caption),
-        SizedBox(height: tokens.spacing.s8),
-        rule,
-        SizedBox(height: tokens.spacing.s8),
-        for (final figure in figures)
-          if (figure.isTotal)
-            Padding(
-              padding: EdgeInsets.only(bottom: tokens.spacing.s4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: <Widget>[
-                  Text(figure.label.toUpperCase(), style: caption),
-                  SizedBox(width: tokens.spacing.s12),
-                  Expanded(
-                    child: Text(
-                      figure.value,
-                      textAlign: TextAlign.end,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: type.numericCompact.copyWith(color: paper.ink),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            line(figure.label, figure.value),
-        if (tillLine case final till?)
-          FutureBuilder<String?>(
-            future: till,
-            builder: (context, snapshot) {
-              final value = snapshot.data;
-              if (value == null) return const SizedBox.shrink();
-              return line('Till', value);
-            },
-          ),
-        if (role case final member?) line('You', tenantRoleLabel(member)),
-        if (action case final words?) ...<Widget>[
-          SizedBox(height: tokens.spacing.s8),
-          rule,
-          SizedBox(height: tokens.spacing.s8),
-          Text(
-            onPressed == null
-                ? words.toUpperCase()
-                : '${words.toUpperCase()} ›',
-            textAlign: TextAlign.center,
-            style: strong,
-          ),
-          if (actionDetail case final detail?)
-            Text(detail, textAlign: TextAlign.center, style: caption),
-        ],
-      ],
-    );
-
-    final sheet = ClipPath(
-      clipper: _TornEdge(
-        depth: tokens.spacing.s8,
-        pitch: tokens.spacing.s16,
-        radius: masthead ? 0 : tokens.radius.md,
-      ),
-      child: ColoredBox(
-        color: paper.paper,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            tokens.spacing.s20,
-            masthead
-                ? tokens.spacing.s48 + tokens.spacing.s8
-                : tokens.spacing.s20,
-            tokens.spacing.s20,
-            tokens.spacing.s24 + tokens.spacing.s8,
-          ),
-          // **As a masthead the paper is the sheet's whole top**, torn at its
-          // bottom edge, and what it prints shrinks to fit rather than being
-          // cut off on a short screen.
-          //
-          // **The sheet's width, not the screen's.** A sheet is narrower than
-          // the screen on a tablet, and a body laid out at the screen's width
-          // would be scaled down to fit it - small print for no reason.
-          child: masthead
-              ? LayoutBuilder(
-                  builder: (context, constraints) => SizedBox.expand(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.topCenter,
-                      child: SizedBox(width: constraints.maxWidth, child: body),
-                    ),
-                  ),
-                )
-              : body,
-        ),
-      ),
-    );
-
-    final stamped = stamp == null
-        ? sheet
-        : Stack(
-            children: <Widget>[
-              sheet,
-              Positioned(
-                top: tokens.spacing.s16,
-                right: tokens.spacing.s16,
-                child: _Stamp(stamp!),
-              ),
-            ],
-          );
-
-    // **What a screen reader hears is the receipt, not only its name.** The
-    // figures are excluded from the tree below so the receipt is one stop, so
-    // they are read here instead; the till line resolves later and is left
-    // to the page.
-    final spoken = <String>[
-      semanticLabel,
-      for (final figure in figures) '${figure.label} ${figure.value}.',
-      if (role case final member?) 'You are ${tenantRoleLabel(member)}.',
-    ].join(' ');
-    final press = onPressed;
-    if (press == null) {
-      return Semantics(
-        container: true,
-        label: spoken,
-        excludeSemantics: true,
-        child: stamped,
-      );
-    }
-    return PressSurface(
-      onPressed: press,
-      borderRadius: BorderRadius.circular(tokens.radius.md),
-      semanticLabel: spoken,
-      excludeSemantics: true,
-      fillWidth: true,
-      child: stamped,
-    );
-  }
-}
-
-/// The *OPEN NOW* stamp: a word, a tick and a ruled box, tilted.
-///
-/// **The word is in ink, not the stamp's green.** Paper green is 3.1:1 on
-/// white, which clears §9 for the box and the tick - graphics - and not for
-/// twelve-point text. The status is the word; the green is the stamp.
-final class _Stamp extends StatelessWidget {
-  const _Stamp(this.word);
-
-  final String word;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.componentOf(context);
-    final paper = tokens.colors.report;
-    final style = tokens.typography.monoCaption.copyWith(color: paper.ink);
-    return Transform.rotate(
-      angle: BusinessReceipt.stampTilt,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border.all(color: paper.barEmphasis),
-          borderRadius: BorderRadius.circular(tokens.radius.sm),
-        ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(Icons.check, size: style.fontSize, color: paper.barEmphasis),
-              SizedBox(width: tokens.spacing.s4),
-              Text(word, style: style),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A rectangle whose top corners are rounded and whose bottom edge is torn.
-final class _TornEdge extends CustomClipper<Path> {
-  const _TornEdge({
-    required this.depth,
-    required this.pitch,
-    required this.radius,
-  });
-
-  final double depth;
-  final double pitch;
-  final double radius;
-
-  @override
-  Path getClip(Size size) {
-    final bottom = size.height - depth;
-    final path = Path()
-      ..moveTo(0, radius)
-      ..quadraticBezierTo(0, 0, radius, 0)
-      ..lineTo(size.width - radius, 0)
-      ..quadraticBezierTo(size.width, 0, size.width, radius)
-      ..lineTo(size.width, bottom);
-    // Teeth from right to left, centred so both ends meet the edge evenly.
-    final teeth = math.max(1, (size.width / pitch).round());
-    final step = size.width / teeth;
-    for (var index = teeth; index > 0; index--) {
-      final right = step * index;
-      path
-        ..lineTo(right - step / 2, size.height)
-        ..lineTo(right - step, bottom);
-    }
-    return path..close();
-  }
-
-  @override
-  bool shouldReclip(_TornEdge oldClipper) =>
-      oldClipper.depth != depth ||
-      oldClipper.pitch != pitch ||
-      oldClipper.radius != radius;
-}
-
 /// Opens the *Add business* sheet and returns what was added, or null.
 ///
-/// **The receipt is the sheet's masthead**, as the photo is on the product
-/// photo sheet, at the developer's direction on 2026-10-08: edge to edge under
-/// the rounded corners, the handle and close laid over it, no heading. It
-/// prints the name as it is typed.
+/// **The new business's card is the sheet's masthead**, as the photo is on
+/// the product photo sheet: edge to edge under the rounded corners, the handle
+/// and close laid over it, no heading. It was a printed receipt until
+/// 2026-10-13; it is now the card the business will get on *My businesses*,
+/// on the sunken surface so it reads as a preview, with the name as it is
+/// typed.
 Future<TenantRequestResult?> showAddBusinessSheet(
   BuildContext context, {
   required TenantRequestIdentity identity,
@@ -1011,22 +692,25 @@ Future<TenantRequestResult?> showAddBusinessSheet(
             valueListenable: draft,
             builder: (context, value, _) {
               final name = value.name.trim();
-              return BusinessReceipt(
-                key: const ValueKey('add-business-preview'),
-                masthead: true,
-                name: name.isEmpty ? 'Your business' : name,
-                figures: <BusinessReceiptLine>[
-                  BusinessReceiptLine.total(
-                    'Today',
-                    '${value.currency.trim().toUpperCase()} 0',
+              return _AddBusinessMasthead(
+                card: BusinessCard(
+                  key: const ValueKey('add-business-preview'),
+                  name: name.isEmpty ? 'Your business' : name,
+                  namePlaceholder: name.isEmpty,
+                  figure: BusinessCardFigure(
+                    label: 'Today',
+                    value: '${value.currency.trim().toUpperCase()} 0',
+                    hero: true,
                   ),
-                  const BusinessReceiptLine('Sales', '0'),
-                  const BusinessReceiptLine('Till', 'Closed'),
-                ],
-                role: TenantRole.owner,
-                semanticLabel: name.isEmpty
-                    ? 'The receipt this business will print.'
-                    : 'The receipt $name will print.',
+                  facts: <BusinessCardFact>[
+                    const BusinessCardFact('Sales', '0', numeric: true),
+                    const BusinessCardFact('Till', 'Closed'),
+                    BusinessCardFact('You', tenantRoleLabel(TenantRole.owner)),
+                  ],
+                  semanticLabel: name.isEmpty
+                      ? 'How this business will show on My businesses.'
+                      : 'How $name will show on My businesses.',
+                ),
               );
             },
           ),
@@ -1064,5 +748,63 @@ Future<TenantRequestResult?> showAddBusinessSheet(
     // After the route's exit, so the masthead is not listening to a disposed
     // notifier while the sheet slides away.
     WidgetsBinding.instance.addPostFrameCallback((_) => draft.dispose());
+  }
+}
+
+/// The add sheet's masthead: the preview card on the sunken surface, with
+/// room above for the sheet's handle and close control and a caption saying
+/// what the card is.
+///
+/// **It shrinks to fit rather than clipping** on a short screen, at the
+/// sheet's own width - a sheet is narrower than the screen on a tablet.
+final class _AddBusinessMasthead extends StatelessWidget {
+  const _AddBusinessMasthead({required this.card});
+
+  final Widget card;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    final space = tokens.spacing;
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        card,
+        Padding(
+          padding: EdgeInsets.fromLTRB(space.s4, space.s12, space.s4, 0),
+          child: Text(
+            'How it will show on this page.',
+            style: tokens.typography.caption.copyWith(
+              color: colors.text.tertiary,
+            ),
+          ),
+        ),
+      ],
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface.sunken,
+        border: Border(bottom: BorderSide(color: colors.surface.borderSubtle)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          space.s16,
+          space.s48,
+          space.s16,
+          space.s20,
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) => SizedBox.expand(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.topCenter,
+              child: SizedBox(width: constraints.maxWidth, child: body),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

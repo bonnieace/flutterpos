@@ -1,24 +1,4 @@
-/// A sourced illustration drawn in the theme's colours rather than its own.
-///
-/// **The problem this solves is the one that killed the last sourced asset.**
-/// `states.dart` records it: the candidate for §6.4's asset 6 "came back as
-/// seven beiges and oranges on a near-black green page", was 252 colours, "so
-/// it cannot be tinted at all", and the call on 2026-08-16 was to draw the mark
-/// natively instead. `pubspec.yaml` states the same bar for the Lottie set -
-/// "a multi-coloured file is refused, which is the whole of what makes an
-/// authored asset survive a palette change."
-///
-/// **unDraw files are multi-colour and still pass that bar, because they are
-/// not drawn in the colours they ship with.** [_UndrawPalette] replaces every
-/// colour at render time through `flutter_svg`'s `ColorMapper` - the accent
-/// with the theme's accent, and everything else with a theme tone chosen by
-/// luminance. Nothing in `assets/` decides what anything looks like, so a
-/// palette change still reaches the artwork and the same file is correct in
-/// both themes.
-///
-/// **The value order inverts.** unDraw draws for a white page: its darks are
-/// line work and its lights are the body of an object. On `surface.base` that
-/// has to turn over or the artwork reads as a hole punched in the page.
+/// Vector scenes painted with material colors and authored accent details.
 library;
 
 import 'package:flutter/material.dart';
@@ -26,8 +6,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import 'tokens.dart';
 
-/// An illustration from `assets/illustrations/`, tinted from the theme.
+/// An illustration from `assets/illustrations/`, painted from theme tokens.
 final class AppIllustration extends StatelessWidget {
+  /// Shared scene size: large enough for artwork detail on a narrow screen.
+  static const double sceneSize = 168;
+
   const AppIllustration({
     super.key,
     required this.asset,
@@ -39,65 +22,47 @@ final class AppIllustration extends StatelessWidget {
   final String asset;
 
   /// The square the drawing fits inside, in logical pixels.
-  ///
-  /// Passed rather than defaulted: an illustration is sized by the state that
-  /// hosts it, and this widget decides nothing about layout.
   final double size;
 
-  /// Null where the surrounding copy already says what the picture says, which
-  /// on an empty state it always does - the title is the statement and the
-  /// drawing is decoration. Hard rule 4: never let a picture be the only
-  /// carrier of a fact.
+  /// Omit for decoration when surrounding copy already explains the scene.
   final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return SvgPicture.asset(
-      'assets/illustrations/$asset',
-      width: size,
-      height: size,
-      fit: BoxFit.contain,
-      semanticsLabel: semanticLabel,
-      excludeFromSemantics: semanticLabel == null,
-      colorMapper: _UndrawPalette(tokens.colors),
+    return SizedBox.square(
+      dimension: size,
+      child: SvgPicture.asset(
+        'assets/illustrations/$asset',
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        semanticsLabel: semanticLabel,
+        excludeFromSemantics: semanticLabel == null,
+        colorMapper: _IllustrationPalette(tokens.colors.illustration, asset),
+      ),
     );
   }
 }
 
-/// unDraw's palette, remapped onto the theme's own value ramp.
-///
-/// **The first version of this matched five known hexes and was wrong.** An
-/// audit of the thirteen files in `assets/illustrations/` found only one built
-/// from unDraw's documented accent-plus-four-neutrals; the other twelve carry
-/// skin tones, hair, clothing and extra greys - thirty-one distinct colours
-/// across the set. A switch over known hexes would have dropped every one of
-/// them onto a single fallback and flattened the drawings.
-///
-/// **So nothing is matched by hex except the accent.** Every other colour is
-/// placed by its relative luminance onto [_ramp], which is the theme's own
-/// tones ordered lightest to darkest. unDraw draws for a white page, so the
-/// mapping inverts: near-black line work becomes the lightest tone and white
-/// becomes the deepest. The drawing keeps its internal contrast order and
-/// arrives monochrome in the page's own colours.
-///
-/// **The ramp sorts itself.** Its stops are token roles, and a role's value is
-/// whatever the active theme says it is - so the order is computed rather than
-/// assumed, and the same mapper is correct on a light theme, where the
-/// inversion simply stops inverting.
+/// Source materials retain their character instead of falling into a surface
+/// ramp. Authored `--paint-*` SVG IDs distinguish details with the same source
+/// color: a plant, a sleeve and a document can receive different pigments.
 @immutable
-final class _UndrawPalette extends ColorMapper {
-  const _UndrawPalette(this.colors);
+final class _IllustrationPalette extends ColorMapper {
+  const _IllustrationPalette(this.palette, this.asset);
 
-  final AppColorRoles colors;
+  final AppIllustrationRoles palette;
+  final String asset;
 
-  /// unDraw's accent - the one colour the site's picker sets, and the only one
-  /// that carries intent rather than form. It becomes the app's accent.
-  ///
-  /// Matched exactly. Widening this to "any saturated colour" was considered
-  /// and rejected: unDraw's skin tones are saturated pinks, and they would have
-  /// come through mint.
-  static const int _accent = 0xFF6C63FF;
+  AppIllustrationPaint get _accent => switch (asset) {
+    'calendar.svg' ||
+    'schedule.svg' ||
+    'file-search.svg' => AppIllustrationPaint.sky,
+    'my-files.svg' => AppIllustrationPaint.violet,
+    'empty-cart.svg' => AppIllustrationPaint.amber,
+    _ => AppIllustrationPaint.jade,
+  };
 
   @override
   Color substitute(
@@ -107,39 +72,55 @@ final class _UndrawPalette extends ColorMapper {
     Color color,
   ) {
     if (color.a == 0) return color;
-    if (color.toARGB32() == _accent) return colors.action.primary.container;
-    final ramp = _ramp;
-    // Inverted: luminance 0 takes the lightest stop. `clamp` guards the
-    // luminance == 1 edge, which would otherwise index past the end.
-    final index = (color.computeLuminance() * ramp.length).floor().clamp(
-      0,
-      ramp.length - 1,
-    );
-    return ramp[index].withValues(alpha: color.a);
-  }
+    final marker = id?.split('--paint-');
+    if (marker != null && marker.length > 1) {
+      final name = marker.last;
+      for (final paint in AppIllustrationPaint.values) {
+        if (paint.name == name) {
+          return palette[paint].withValues(alpha: color.a);
+        }
+      }
+    }
 
-  /// The theme's tones, lightest first.
-  ///
-  /// Sorted at use rather than written in order, because these are roles and a
-  /// role's value belongs to the theme. Seven stops: enough that a drawing's
-  /// planes stay apart, few enough that each step is visible.
-  List<Color> get _ramp {
-    final stops = <Color>[
-      colors.text.primary,
-      colors.text.secondary,
-      colors.text.tertiary,
-      colors.surface.borderStrong,
-      colors.surface.overlay,
-      colors.surface.raised,
-      colors.surface.sunken,
-    ]..sort((a, b) => b.computeLuminance().compareTo(a.computeLuminance()));
-    return stops;
+    final paint = switch (color.withValues(alpha: 1).toARGB32()) {
+      0xFF6C63FF => _accent,
+      0xFF010102 || 0xFF090814 || 0xFF2F2E41 => AppIllustrationPaint.ink,
+      0xFF33323D || 0xFF3F3D56 => AppIllustrationPaint.inkSoft,
+      0xFF464353 ||
+      0xFF504F60 ||
+      0xFF514E7F ||
+      0xFF65617D => AppIllustrationPaint.inkLight,
+      0xFF9D616A ||
+      0xFF9E616A ||
+      0xFF9F616A ||
+      0xFFA0616A => AppIllustrationPaint.skinDeep,
+      0xFFED9DA0 || 0xFFEE8E9E => AppIllustrationPaint.skinWarm,
+      0xFFFFB6B6 || 0xFFFFB8B8 => AppIllustrationPaint.skinLight,
+      0xFFFFFFFF || 0xFFF0F0F0 || 0xFFF2F2F2 => AppIllustrationPaint.paper,
+      0xFFE3E8F4 ||
+      0xFFE5E5E5 ||
+      0xFFE6E6E6 ||
+      0xFFE6E8EC => AppIllustrationPaint.paperShade,
+      0xFFCACACA || 0xFFCCCCCC || 0xFFD6D6E3 => AppIllustrationPaint.paperDeep,
+      _ => null,
+    };
+    if (paint != null) return palette[paint].withValues(alpha: color.a);
+
+    // New source colors retain hue and shading instead of silently becoming
+    // green. The lightness floor keeps future artwork off the dark ground.
+    final source = HSLColor.fromColor(color);
+    return source
+        .withLightness(source.lightness.clamp(0.52, 0.94))
+        .toColor()
+        .withValues(alpha: color.a);
   }
 
   @override
   bool operator ==(Object other) =>
-      other is _UndrawPalette && other.colors == colors;
+      other is _IllustrationPalette &&
+      other.palette == palette &&
+      other.asset == asset;
 
   @override
-  int get hashCode => colors.hashCode;
+  int get hashCode => Object.hash(palette, asset);
 }

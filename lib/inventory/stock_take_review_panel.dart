@@ -29,6 +29,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import 'product_image_cache.dart';
+import '../ui/record_sheet.dart';
 import '../ui/buttons.dart';
 import '../ui/card.dart';
 import '../ui/dialogs.dart';
@@ -113,8 +114,7 @@ final class TenantStockTakeReviewScreen extends StatelessWidget {
         );
     return AppScaffold(
       title: 'Stock counts',
-      subtitle: 'What was counted, and how it differed from the books.',
-      contentWidth: AppContentWidth.records,
+      contentWidth: RecordSheet.contentWidth(context),
       // **One toolbar action since 2026-09-24**, and only one. *Count stock*
       // stays a button the width of the page at the head of the body, with the
       // two filters under it - the shape expenses and staff open in, and the
@@ -207,7 +207,9 @@ final class _StockCountsTabs extends StatelessWidget {
     // is showing.
     final tokens = AppTokens.componentOf(context);
     final ring = tokens.colors.action.focusRing;
-    final inset = tokens.spacing.s16;
+    final inset = RecordSheet.drawnAt(MediaQuery.sizeOf(context).width)
+        ? tokens.spacing.s24
+        : tokens.spacing.s16;
     return DefaultTabController(
       length: 2,
       child: Column(
@@ -228,7 +230,18 @@ final class _StockCountsTabs extends StatelessWidget {
                   child: SingleChildScrollView(
                     key: const ValueKey('stock-take-settings-tab'),
                     padding: EdgeInsets.all(inset),
-                    child: Builder(builder: settings),
+                    // The reading width the rota has on its own screen,
+                    // centred: the counts beside it take the table's width,
+                    // a form does not.
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: tokens.layout.reading,
+                        ),
+                        child: Builder(builder: settings),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -312,7 +325,8 @@ class _TenantStockTakeReviewPanelState extends State<TenantStockTakeReviewPanel>
     // is the same pattern and the reason it exists.
     _composeLoaders('$_generation');
     final tokens = AppTokens.componentOf(context);
-    final count = _countButton(context);
+    final table = RecordSheet.drawnAt(MediaQuery.sizeOf(context).width);
+    final count = _countButton(context, expand: !table);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -322,13 +336,18 @@ class _TenantStockTakeReviewPanelState extends State<TenantStockTakeReviewPanel>
         // the control had in the top bar, moved down into the page.
         if (count != null)
           Padding(
-            padding: EdgeInsets.fromLTRB(
-              tokens.spacing.s16,
-              tokens.spacing.s16,
-              tokens.spacing.s16,
-              0,
-            ),
-            child: count,
+            padding: RecordSheet.pagePadding(
+              context,
+              fallback: EdgeInsets.all(tokens.spacing.s16),
+              belowScaffold: DefaultTabController.maybeOf(context) == null,
+            ).resolve(Directionality.of(context)).copyWith(bottom: 0),
+            // **At its own width on the trailing edge from 1024**, over the
+            // table, rather than inside the table's bar: it stays out here
+            // because a session the read refuses - a cashier, who may count but
+            // not read counts - must still be offered it.
+            child: table
+                ? Align(alignment: AlignmentDirectional.centerEnd, child: count)
+                : count,
           ),
         Expanded(
           child: TenantRouteGuard<TenantNamedPage<List<TenantStockTakeRecord>>>(
@@ -350,8 +369,8 @@ class _TenantStockTakeReviewPanelState extends State<TenantStockTakeReviewPanel>
     );
   }
 
-  /// *Count stock*, the width of the page.
-  Widget? _countButton(BuildContext context) {
+  /// *Count stock*: the width of the page below 1024, its own width above.
+  Widget? _countButton(BuildContext context, {required bool expand}) {
     final route = widget.countRoute;
     if (route == null) return null;
     return AppButton(
@@ -359,7 +378,7 @@ class _TenantStockTakeReviewPanelState extends State<TenantStockTakeReviewPanel>
       label: 'Count stock',
       icon: Icons.checklist_outlined,
       tier: AppButtonTier.secondary,
-      expand: true,
+      expand: expand,
       onPressed: () {
         final controller = TenantSessionScope.of(context);
         Navigator.of(context).push(
@@ -419,10 +438,9 @@ class _TenantStockTakeReviewPanelState extends State<TenantStockTakeReviewPanel>
     if (takes.isEmpty) {
       return const EmptyState(
         key: ValueKey('stock-take-review-empty'),
+        illustration: 'stock-review.svg',
         title: 'No counts yet',
-        hint:
-            'A count appears here when somebody hands one in. Set the days and '
-            'who counts what in Settings.',
+        hint: 'Submitted counts appear here. Manage the schedule in Settings.',
       );
     }
     final shown = takes
@@ -433,6 +451,9 @@ class _TenantStockTakeReviewPanelState extends State<TenantStockTakeReviewPanel>
               (_counterUid == null || take.counterUid == _counterUid),
         )
         .toList(growable: false);
+    if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width)) {
+      return _sheet(context, session, named, shown);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -457,8 +478,9 @@ class _TenantStockTakeReviewPanelState extends State<TenantStockTakeReviewPanel>
               // them rather than to hand another one in.
               ? const EmptyState(
                   key: ValueKey('stock-take-review-no-matches'),
+                  illustration: 'stock-search.svg',
                   title: 'No counts match',
-                  hint: 'Try another standing, or another person.',
+                  hint: 'Try another status or person.',
                 )
               : ListView.separated(
                   key: const ValueKey('stock-take-review-list'),
@@ -501,74 +523,223 @@ class _TenantStockTakeReviewPanelState extends State<TenantStockTakeReviewPanel>
     TenantNamedPage<List<TenantStockTakeRecord>> named,
   ) {
     final tokens = AppTokens.componentOf(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(child: _standingFilter()),
+        SizedBox(width: tokens.spacing.s12),
+        Expanded(child: _counterFilter(session, named)),
+      ],
+    );
+  }
+
+  /// Which standing the loaded page is narrowed to.
+  Widget _standingFilter() => AppSelect<String?>(
+    key: const ValueKey('stock-take-review-status-filter'),
+    label: 'Standing',
+    dense: true,
+    leading: Icons.filter_alt_outlined,
+    value: _standing,
+    items: const <AppSelectItem<String?>>[
+      AppSelectItem<String?>(
+        key: ValueKey('stock-take-review-status-all'),
+        value: null,
+        label: 'Standing',
+      ),
+      AppSelectItem<String?>(
+        key: ValueKey('stock-take-review-status-needs-review'),
+        value: 'Needs review',
+        label: 'Needs review',
+      ),
+      AppSelectItem<String?>(
+        key: ValueKey('stock-take-review-status-accepted'),
+        value: 'Accepted',
+        label: 'Accepted',
+      ),
+      AppSelectItem<String?>(
+        key: ValueKey('stock-take-review-status-all-agreed'),
+        value: 'All agreed',
+        label: 'All agreed',
+      ),
+    ],
+    onChanged: (standing) => setState(() => _standing = standing),
+  );
+
+  /// Whose counts the loaded page is narrowed to.
+  Widget _counterFilter(
+    TenantSession session,
+    TenantNamedPage<List<TenantStockTakeRecord>> named,
+  ) {
     final counters = <String>{
       for (final take in named.page) take.counterUid,
       if (_counterUid != null) _counterUid!,
     }.toList(growable: false)..sort();
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Expanded(
-          child: AppSelect<String?>(
-            key: const ValueKey('stock-take-review-status-filter'),
-            label: 'Standing',
-            dense: true,
-            leading: Icons.filter_alt_outlined,
-            value: _standing,
-            items: const <AppSelectItem<String?>>[
-              AppSelectItem<String?>(
-                key: ValueKey('stock-take-review-status-all'),
-                value: null,
-                label: 'Standing',
-              ),
-              AppSelectItem<String?>(
-                key: ValueKey('stock-take-review-status-needs-review'),
-                value: 'Needs review',
-                label: 'Needs review',
-              ),
-              AppSelectItem<String?>(
-                key: ValueKey('stock-take-review-status-accepted'),
-                value: 'Accepted',
-                label: 'Accepted',
-              ),
-              AppSelectItem<String?>(
-                key: ValueKey('stock-take-review-status-all-agreed'),
-                value: 'All agreed',
-                label: 'All agreed',
-              ),
-            ],
-            onChanged: (standing) => setState(() => _standing = standing),
-          ),
+    return AppSelect<String?>(
+      key: const ValueKey('stock-take-review-counter-filter'),
+      label: 'Counted by',
+      dense: true,
+      leading: Icons.person_outline,
+      value: _counterUid,
+      items: <AppSelectItem<String?>>[
+        const AppSelectItem<String?>(
+          key: ValueKey('stock-take-review-counter-all'),
+          value: null,
+          label: 'Staff',
         ),
-        SizedBox(width: tokens.spacing.s12),
-        Expanded(
-          child: AppSelect<String?>(
-            key: const ValueKey('stock-take-review-counter-filter'),
-            label: 'Counted by',
-            dense: true,
-            leading: Icons.person_outline,
-            value: _counterUid,
-            items: <AppSelectItem<String?>>[
-              const AppSelectItem<String?>(
-                key: ValueKey('stock-take-review-counter-all'),
-                value: null,
-                label: 'Staff',
-              ),
-              for (final uid in counters)
-                AppSelectItem<String?>(
-                  key: ValueKey<String>('stock-take-review-counter-$uid'),
-                  value: uid,
-                  label: tenantStaffLabel(
-                    uid,
-                    names: named.names,
-                    selfUid: session.uid,
-                  ),
-                ),
-            ],
-            onChanged: (uid) => setState(() => _counterUid = uid),
+        for (final uid in counters)
+          AppSelectItem<String?>(
+            key: ValueKey<String>('stock-take-review-counter-$uid'),
+            value: uid,
+            label: tenantStaffLabel(
+              uid,
+              names: named.names,
+              selfUid: session.uid,
+            ),
           ),
+      ],
+      onChanged: (uid) => setState(() => _counterUid = uid),
+    );
+  }
+
+  /// The large-screen list: one table, its two filters on its top edge.
+  ///
+  /// **The same loaded page, narrowed the same way, drawn as rows** -
+  /// `docs/design/tables/`, at the developer's direction on 2026-10-13. A
+  /// count's coverage and its differences line up down columns, so *Needs
+  /// review* is the row that stands out rather than one card among several
+  /// with two large boxes each. Below 1024 the cards are unchanged.
+  Widget _sheet(
+    BuildContext context,
+    TenantSession session,
+    TenantNamedPage<List<TenantStockTakeRecord>> named,
+    List<TenantStockTakeRecord> shown,
+  ) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('stock-take-review-list'),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(tokens.spacing.s16),
+        belowScaffold:
+            widget.countRoute == null &&
+            DefaultTabController.maybeOf(context) == null,
+      ),
+      children: <Widget>[
+        RecordSheet(
+          key: const ValueKey('stock-take-review-sheet'),
+          columns: const <SheetColumn>[
+            SheetColumn(label: 'Count', kind: SheetColumnKind.identity),
+            SheetColumn(label: 'Counted by', kind: SheetColumnKind.text),
+            SheetColumn(label: 'Counted', kind: SheetColumnKind.figure),
+            SheetColumn(label: 'Products differ', kind: SheetColumnKind.figure),
+            SheetColumn(label: 'Units apart', kind: SheetColumnKind.figure),
+            SheetColumn(label: 'Standing', kind: SheetColumnKind.status),
+          ],
+          bar: Row(
+            children: <Widget>[
+              SizedBox(
+                width: tokens.layout.tableFilter,
+                child: _standingFilter(),
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              SizedBox(
+                width: tokens.layout.tableFilter,
+                child: _counterFilter(session, named),
+              ),
+            ],
+          ),
+          // **Not "No counts yet"**, for the cards' reason: the page holds
+          // counts, and these two filters are why none is on screen.
+          body: shown.isEmpty
+              ? const EmptyState(
+                  key: ValueKey('stock-take-review-no-matches'),
+                  illustration: 'stock-search.svg',
+                  title: 'No counts match',
+                  hint: 'Try another status or person.',
+                )
+              : null,
+          rows: <SheetRow>[
+            for (final take in shown) _row(session, named, take),
+          ],
         ),
       ],
+    );
+  }
+
+  SheetRow _row(
+    TenantSession session,
+    TenantNamedPage<List<TenantStockTakeRecord>> named,
+    TenantStockTakeRecord take,
+  ) {
+    final id = take.id;
+    final counterLabel = tenantStaffLabel(
+      take.counterUid,
+      names: named.names,
+      selfUid: session.uid,
+    );
+    final who = tenantStaffLabelParts(
+      take.counterUid,
+      names: named.names,
+      selfUid: session.uid,
+    );
+    final standing = TenantStockTakeStanding.of(take);
+    final arriving = take.status == TenantStockTakeStatus.submitting;
+    final scope = take.categoryId == null ? 'Whole catalog' : 'One category';
+    final uncounted = take.uncountedLineCount;
+    final notes = <String>[
+      if (arriving) stockTakeArrivingNote,
+      if (take.unmatchedLineCount > 0)
+        stockTakeUnmatchedNote(take.unmatchedLineCount),
+    ];
+    return SheetRow(
+      id: id,
+      // The key the card carries, so a test addresses the same count in
+      // either form.
+      key: ValueKey<String>('stock-take-$id'),
+      pressKey: ValueKey<String>('stock-take-open-$id'),
+      onPressed: () => _open(take, counterLabel),
+      semanticLabel: '$scope, ${take.businessDate}',
+      semanticHint: 'Opens this count.',
+      cells: <SheetCell?>[
+        SheetText(scope, caption: take.businessDate),
+        SheetText(who.name, caption: who.under),
+        SheetFigure(
+          '${take.countedLineCount} of ${take.productsInScope}',
+          key: ValueKey<String>('stock-take-coverage-$id'),
+          // What the card's coverage line says beside its bar.
+          caption: uncounted > 0
+              ? '$uncounted not counted'
+              : arriving
+              ? 'so far'
+              : null,
+          captionKey: ValueKey<String>('stock-take-uncounted-$id'),
+        ),
+        SheetFigure(
+          '${take.varianceLineCount}',
+          key: ValueKey<String>('stock-take-variance-$id'),
+        ),
+        SheetFigure(
+          '${take.absoluteVarianceUnits}',
+          key: ValueKey<String>('stock-take-units-$id'),
+        ),
+        SheetStatus(
+          key: ValueKey<String>('stock-take-standing-$id'),
+          status: standing.status,
+          label: standing.label,
+          // Accepted and agreed are settled; a count still arriving or
+          // needing review is what a manager opens this list to find.
+          quiet: standing.status == AppStatus.ok,
+        ),
+      ],
+      fold: notes.isEmpty
+          ? null
+          : SheetFold(
+              note: notes.join(' '),
+              noteKey: ValueKey<String>('stock-take-note-$id'),
+              toggleKey: ValueKey<String>('stock-take-fold-$id'),
+              showLabel: 'Show more about this count',
+              hideLabel: 'Show less about this count',
+            ),
     );
   }
 
@@ -795,14 +966,85 @@ class _TenantStockTakeDetailScreenState
                   ],
                 ),
                 SizedBox(height: tokens.spacing.s12),
-                for (final (index, line) in sorted.indexed) ...<Widget>[
-                  if (index > 0) SizedBox(height: tokens.spacing.s12),
-                  _TenantStockTakeLineCard(
-                    key: ValueKey('stock-take-line-${line.productId}'),
-                    line: line,
-                    name: loaded.names[line.productId],
-                  ),
-                ],
+                if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width))
+                  RecordSheet(
+                    columns: const [
+                      SheetColumn(
+                        label: 'Product',
+                        kind: SheetColumnKind.identity,
+                      ),
+                      SheetColumn(
+                        label: 'Counted',
+                        kind: SheetColumnKind.figure,
+                      ),
+                      SheetColumn(
+                        label: 'Recorded',
+                        kind: SheetColumnKind.figure,
+                      ),
+                      SheetColumn(
+                        label: 'Difference',
+                        kind: SheetColumnKind.figure,
+                      ),
+                      SheetColumn(label: 'Status', kind: SheetColumnKind.text),
+                    ],
+                    rows: [
+                      for (final line in sorted)
+                        SheetRow(
+                          id: line.productId,
+                          key: ValueKey('stock-take-line-${line.productId}'),
+                          cells: [
+                            SheetText(
+                              loaded.names[line.productId] ?? line.productId,
+                              caption: !line.matched
+                                  ? 'No matching product on the server'
+                                  : null,
+                            ),
+                            SheetFigure(
+                              '${line.counted}',
+                              key: ValueKey(
+                                'stock-take-line-counted-${line.productId}',
+                              ),
+                            ),
+                            SheetFigure(
+                              line.matched ? '${line.expected}' : '\u2014',
+                              key: ValueKey(
+                                'stock-take-line-expected-${line.productId}',
+                              ),
+                            ),
+                            SheetFigure(
+                              line.variance?.toString() ?? '\u2014',
+                              key: ValueKey(
+                                'stock-take-line-variance-${line.productId}',
+                              ),
+                            ),
+                            SheetText(
+                              line.isApplied
+                                  ? 'Corrected'
+                                  : 'Awaiting correction',
+                            ),
+                          ],
+                          fold: line.movedWhileCounting
+                              ? SheetFold(
+                                  note:
+                                      'The phone held ${line.seenQuantity} when the number was typed, so the books moved while counting.',
+                                  noteKey: ValueKey(
+                                    'stock-take-line-seen-${line.productId}',
+                                  ),
+                                  alwaysOpen: true,
+                                )
+                              : null,
+                        ),
+                    ],
+                  )
+                else
+                  for (final (index, line) in sorted.indexed) ...<Widget>[
+                    if (index > 0) SizedBox(height: tokens.spacing.s12),
+                    _TenantStockTakeLineCard(
+                      key: ValueKey('stock-take-line-${line.productId}'),
+                      line: line,
+                      name: loaded.names[line.productId],
+                    ),
+                  ],
               ],
             ],
           ),
@@ -828,7 +1070,9 @@ class _TenantStockTakeDetailScreenState
                     key: const ValueKey('stock-take-accept'),
                     label: 'Accept and correct the stock',
                     tier: AppButtonTier.primary,
-                    expand: true,
+                    expand: !RecordSheet.drawnAt(
+                      MediaQuery.sizeOf(context).width,
+                    ),
                     loading: _applying,
                     onPressed: widget.applyCallable == null || _applying
                         ? null

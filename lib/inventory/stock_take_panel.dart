@@ -49,6 +49,7 @@ import '../ui/snackbar.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import 'stock_take.dart';
 import 'stock_take_draft_store.dart';
 
@@ -86,7 +87,7 @@ final class TenantStockTakeScreen extends StatelessWidget {
     subtitle: 'Write down what is on the shelf.',
     // `reading`: a row here is a name and a box, and at `records` width the
     // box drifts a monitor's width away from the name it belongs to.
-    contentWidth: AppContentWidth.reading,
+    contentWidth: AppContentWidth.records,
     body: TenantStockTakePanel(
       catalog: catalog,
       drafts: drafts,
@@ -181,10 +182,9 @@ class _TenantStockTakePanelState extends State<TenantStockTakePanel> {
       // against. Saying so is more use than an empty list.
       return const EmptyState(
         key: ValueKey('stock-take-no-catalog'),
-        title: 'No catalog on this device yet',
-        hint:
-            'Open the register once while you have a connection. The product '
-            'list is saved here and the count then works with no signal.',
+        illustration: 'catalog-sync.svg',
+        title: 'Products not synced yet',
+        hint: 'Open the register online to sync products, then count offline.',
       );
     }
 
@@ -192,8 +192,9 @@ class _TenantStockTakePanelState extends State<TenantStockTakePanel> {
     if (products.isEmpty) {
       return const EmptyState(
         key: ValueKey('stock-take-empty'),
+        illustration: 'stock-count.svg',
         title: 'Nothing to count',
-        hint: 'There are no products here to count.',
+        hint: 'No products in this count.',
       );
     }
 
@@ -209,16 +210,26 @@ class _TenantStockTakePanelState extends State<TenantStockTakePanel> {
           child: ListView(
             padding: EdgeInsets.all(inset),
             children: <Widget>[
-              _progress(draft, products.length),
-              // `space.16` under the summary and `space.12` between rows: the
-              // summary is a different kind of thing from the rows under it,
-              // and the rows are one list.
-              for (final (index, product) in products.indexed) ...<Widget>[
-                SizedBox(
-                  height: index == 0 ? tokens.spacing.s16 : tokens.spacing.s12,
+              AppWorkspace(
+                leading: _progress(draft, products.length),
+                trailing: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    // `space.16` under the summary and `space.12` between rows: the
+                    // summary is a different kind of thing from the rows under it,
+                    // and the rows are one list.
+                    for (final (index, product)
+                        in products.indexed) ...<Widget>[
+                      SizedBox(
+                        height: index == 0
+                            ? tokens.spacing.s16
+                            : tokens.spacing.s12,
+                      ),
+                      _line(context, product, draft, session),
+                    ],
+                  ],
                 ),
-                _line(context, product, draft, session),
-              ],
+              ),
             ],
           ),
         ),
@@ -245,7 +256,9 @@ class _TenantStockTakePanelState extends State<TenantStockTakePanel> {
               key: const ValueKey('stock-take-submit'),
               label: 'Hand in this count',
               tier: AppButtonTier.primary,
-              expand: true,
+              expand:
+                  MediaQuery.sizeOf(context).width <
+                  tokens.layout.expandedFloor,
               loading: _submitting,
               onPressed: draft.isEmpty || _submitting
                   ? null

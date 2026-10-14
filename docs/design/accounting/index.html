@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accounting and documents &#8212; design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #050C08; font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #FFFFFF; }
+a { color: #45F28D; } a:hover { color: #3DD47C; }
+:focus-visible { outline: 2px solid #45F28D; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.back { font-size: 14px; color: #849E8F; text-decoration: none; }
+h1 { margin: 12px 0 0; font-size: 28px; line-height: 33.6px; font-weight: 700; }
+.lede { margin: 8px 0 32px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; max-width: 700px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; margin-bottom: 12px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #FFFFFF; flex-shrink: 0; width: 200px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; }
+.size { font-size: 12px; color: #849E8F; flex-shrink: 0; margin-left: auto; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) { .board { flex-direction: column; gap: 6px; } .board h2 { width: auto; } .size { margin-left: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Accounting and documents</h1>
+  <p class="lede">Every screen and document in <code>ACCOUNTING_WORKFLOW_DISCOVERY.md</code> that has one, drawn on one shop and one week: Dev Corner Shop, Thursday 12 November 2026, invoicing since Monday 2 November. Bookkeeping (Phase I) has its own discovery, <code>BOOKKEEPING_DISCOVERY.md</code>, and its own folder, <em>Books</em>, drawn on March and April 2027. Read <a href="README.md">README.md</a> for the map from the spec to the boards, the sample week, and every open question in one list.</p>
+  <a class="board" href="../customer-account/index.html">
+    <h2>Customer account</h2>
+    <p>Owes and held for them, never netted; invoices in the order payments settle them; the two-balance statement; payment, refund-or-credit, void, write-off, reminder.</p>
+    <span class="size">5 boards</span>
+  </a>
+  <a class="board" href="../quotes/index.html">
+    <h2>Quotes</h2>
+    <p>The list, the editor with the till&#8217;s search, a quote and how it is accepted, and its states.</p>
+    <span class="size">4 boards</span>
+  </a>
+  <a class="board" href="../orders/index.html">
+    <h2>Orders</h2>
+    <p>The list with a delivery meter, an order&#8217;s count and money, deposits, delivery, changes and over-delivery.</p>
+    <span class="size">3 boards</span>
+  </a>
+  <a class="board" href="../invoices/index.html">
+    <h2>Invoices</h2>
+    <p>The list with its summary band, an invoice as its A4 page, and corrections.</p>
+    <span class="size">3 boards</span>
+  </a>
+  <a class="board" href="../till-accounting/index.html">
+    <h2>Register</h2>
+    <p>Selling a quote, delivering an order with its deposit, money on account, not-stocked lines, save as quote, split payment.</p>
+    <span class="size">3 boards</span>
+  </a>
+  <a class="board" href="../documents/index.html">
+    <h2>Documents</h2>
+    <p>Quote, invoice, order and payment receipt at A4, a draft, the email, and the till slips.</p>
+    <span class="size">3 boards</span>
+  </a>
+  <a class="board" href="../accounting-reports/index.html">
+    <h2>Reports</h2>
+    <p>Money collected, owed now with ageing, money held, written off.</p>
+    <span class="size">2 boards</span>
+  </a>
+  <a class="board" href="../returns-accounting/index.html">
+    <h2>Returns</h2>
+    <p>Condition per line, replace or not for order goods, and rejecting a return.</p>
+    <span class="size">1 board</span>
+  </a>
+  <a class="board" href="../accounting-settings/index.html">
+    <h2>Settings</h2>
+    <p>Configs&#8217; invoicing tab and letterhead, not-stocked products, home icons, a customer&#8217;s terms.</p>
+    <span class="size">3 boards</span>
+  </a>
+  <a class="board" href="../supplier-debt/index.html">
+    <h2>Supplier debt and cost</h2>
+    <p>What the shop owes a supplier, and moving-average cost with its history.</p>
+    <span class="size">2 boards</span>
+  </a>
+  <a class="board" href="../books/index.html">
+    <h2>Books (Phase I)</h2>
+    <p>Double entry in plain words: money accounts and statement import, owner forms, the three statements, the accountant&#8217;s pages, closing a month.</p>
+    <span class="size">7 boards</span>
+  </a>
+</div>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Still trading &#8212; design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #050C08; font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #FFFFFF; }
+a { color: #45F28D; } a:hover { color: #3DD47C; }
+:focus-visible { outline: 2px solid #45F28D; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+h1 { margin: 0; font-size: 28px; line-height: 33.6px; font-weight: 700; }
+.lede { margin: 8px 0 32px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; max-width: 680px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; margin-bottom: 12px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #FFFFFF; flex-shrink: 0; width: 200px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; }
+.size { font-size: 12px; color: #849E8F; flex-shrink: 0; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) { .board { flex-direction: column; gap: 6px; } .board h2 { width: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Still trading</h1>
+  <p class="lede">The explanation the Sales report gives when it opens after midnight on the business day a shift is still trading in. It replaced an info box inside a stock dialog, and was built on 2026-10-12 as <code>lib/sales/trading_day_explanation.dart</code>: the same answer drawn as the night it describes &#8212; when the shift opened, where midnight fell, where we are now, and when it stops. Read <a href="README.md">README.md</a> for what changed, where the build departs from the boards, and what is still open.</p>
+
+  <a class="board" href="still-trading-phone.html">
+    <h2>Phone</h2>
+    <p>A bottom sheet over the report, already on Sunday. A manager, and the cashier whose shift it is.</p>
+    <span class="size">390</span>
+  </a>
+
+  <a class="board" href="still-trading-web.html">
+    <h2>Web</h2>
+    <p>A 520 dialog at 768 and up, the answers on one line with <em>Don&#8217;t show again</em> on the left.</p>
+    <span class="size">1440</span>
+  </a>
+
+  <a class="board" href="still-trading-states.html">
+    <h2>States</h2>
+    <p>The night just past midnight, near 06:00, when the 24 hours run out first, with two shifts open, and for a cashier; the checkbox and both answers in every state; and the report after the sheet is silenced.</p>
+    <span class="size">1280</span>
+  </a>
+</div>
+</body>
+</html>

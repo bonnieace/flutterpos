@@ -23,10 +23,18 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:uzapay_pos/reports/report_document.dart';
+import 'package:uzapay_pos/reports/report_file.dart';
+import 'package:uzapay_pos/reports/report_period.dart';
+import 'package:uzapay_pos/reports/report_run.dart';
+import 'package:uzapay_pos/reports/ui/report_action.dart';
 import 'package:uzapay_pos/ui/buttons.dart';
+import 'package:uzapay_pos/ui/routes.dart';
 import 'package:uzapay_pos/ui/scaffold.dart';
 import 'package:uzapay_pos/ui/status.dart';
 import 'package:uzapay_pos/ui/tokens.dart';
+import 'package:uzapay_pos/ui/top_bar.dart';
 
 import 'harness.dart';
 
@@ -236,4 +244,87 @@ void main() {
       subtitle: 'Fresh whole milk 500ml',
     ),
   );
+
+  // `docs/design/topbar-inner/`: a screen Inventory opened, with its report.
+  // The well from 768 up, *Report* named from 1024 up.
+  screenshotCase(
+    '94-page-frame-inner-bar',
+    build: () => const _InnerBar(online: true),
+    viewports: responsiveViewports,
+  );
+
+  // The same screen offline: the badge before the report, and from 1024 what
+  // offline means for a sale.
+  screenshotCase(
+    '94-page-frame-inner-bar-offline',
+    build: () => const _InnerBar(online: false),
+    viewports: responsiveViewports,
+  );
+}
+
+/// A screen opened from the home's *Inventory* card, as a destination's press
+/// opens it: pushed inside [AppPageRoute.openingModule], over a home.
+class _InnerBar extends StatefulWidget {
+  const _InnerBar({required this.online});
+
+  final bool online;
+
+  @override
+  State<_InnerBar> createState() => _InnerBarState();
+}
+
+class _InnerBarState extends State<_InnerBar> {
+  static const _inventory = TopBarModule(
+    icon: Symbols.warehouse_rounded,
+    label: 'Inventory',
+    accent: AppIdentityAccent.purple,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppPageRoute.openingModule(
+        _inventory,
+        () => Navigator.of(context).push(
+          AppPageRoute<void>(
+            builder: (_) => DeviceOnlineScope(
+              onlineCheck: () async => widget.online,
+              child: AppScaffold(
+                title: 'Stock counts',
+                subtitle: 'Week of 12 October',
+                contentWidth: AppContentWidth.records,
+                actions: <Widget>[
+                  TenantReportAction(
+                    clock: () => DateTime(2026, 10, 13),
+                    run: TenantReportRun(
+                      kind: TenantReportKind.stockCounts,
+                      support: TenantReportPeriodSupport.range,
+                      saver: const _NoSaver(),
+                      build: (_) => throw UnimplementedError(),
+                    ),
+                  ),
+                ],
+                body: const _Body(),
+              ),
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(body: SizedBox());
+}
+
+/// A report is never saved in a picture.
+class _NoSaver implements TenantReportSaver {
+  const _NoSaver();
+
+  @override
+  Future<TenantReportSaveOutcome> save(
+    TenantReportFile file, {
+    required TenantReportDestination destination,
+  }) => throw UnimplementedError();
 }

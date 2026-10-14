@@ -26,6 +26,8 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
+import '../ui/record_list.dart' show RecordAction;
+import '../ui/record_sheet.dart';
 import '../ui/buttons.dart';
 import '../ui/card.dart';
 import '../ui/dialogs.dart';
@@ -310,7 +312,11 @@ final class _TenantSuppliersScreenState extends State<TenantSuppliersScreen> {
                   label: 'Receive delivery',
                   icon: Icons.local_shipping_outlined,
                   tier: AppButtonTier.secondary,
-                  expand: true,
+                  // Its own width on a table's top edge from 1024, the page's
+                  // width above the cards below it.
+                  expand: !RecordSheet.drawnAt(
+                    MediaQuery.sizeOf(context).width,
+                  ),
                   onPressed: () => _receive(),
                 ),
           onSearchChanged: () => setState(() => _pageIndex = 0),
@@ -406,8 +412,7 @@ final class _SuppliersFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Suppliers',
-    subtitle: 'Who stock is bought from.',
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     actions: <Widget>[if (reportAction != null) reportAction!],
     body: child,
   );
@@ -527,6 +532,7 @@ final class _SuppliersContents extends StatelessWidget {
         .take(_TenantSuppliersScreenState.pageSize)
         .toList(growable: false);
     final lastPage = page >= pageCount - 1;
+    final table = RecordSheet.drawnAt(width);
 
     final searchField = AppTextField(
       key: const ValueKey('suppliers-search'),
@@ -559,7 +565,10 @@ final class _SuppliersContents extends StatelessWidget {
 
     return PagedListView(
       listKey: const ValueKey('suppliers'),
-      padding: EdgeInsets.all(inset),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(inset),
+      ),
       pagination: Pagination(
         pageNumber: page + 1,
         previousKey: const ValueKey('suppliers-previous-page'),
@@ -570,11 +579,13 @@ final class _SuppliersContents extends StatelessWidget {
         endOfList: lastPage,
       ),
       children: <Widget>[
-        if (primaryAction case final action?) ...<Widget>[
+        // Both of the page's actions are on the table's top edge from 1024
+        // instead; see [_sheet].
+        if (primaryAction case final action? when !table) ...<Widget>[
           action,
           SizedBox(height: tokens.spacing.s12),
         ],
-        if (onAdd case final add?) ...<Widget>[
+        if (onAdd case final add? when !table) ...<Widget>[
           AppButton(
             key: const ValueKey('suppliers-add'),
             label: 'Add supplier',
@@ -606,7 +617,9 @@ final class _SuppliersContents extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.s12),
         ],
-        if (compact)
+        if (table)
+          const SizedBox.shrink()
+        else if (compact)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -624,7 +637,7 @@ final class _SuppliersContents extends StatelessWidget {
               Expanded(child: standingFilter),
             ],
           ),
-        SizedBox(height: tokens.spacing.s16),
+        if (!table) SizedBox(height: tokens.spacing.s16),
         if (directory.suppliers.isNotEmpty) ...<Widget>[
           // Inset by the focus ring's gutter, which every button and card on
           // this page reserves around itself, so the four edges line up.
@@ -637,23 +650,120 @@ final class _SuppliersContents extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.s16),
         ],
-        if (shown.isEmpty)
-          EmptyState(
-            key: ValueKey(
-              _hasQuery ? 'suppliers-no-matches' : 'suppliers-empty',
-            ),
-            title: _hasQuery ? 'No matching suppliers' : 'No suppliers yet',
-            hint: _hasQuery
-                ? 'Try another name, or show every supplier.'
-                : 'Add the businesses you buy stock from, so each delivery can '
-                      'say where it came from.',
-            illustration: _hasQuery ? 'file-search.svg' : 'logistics.svg',
-          )
+        if (table)
+          _sheet(tokens, shown, searchField, standingFilter)
+        else if (shown.isEmpty)
+          _empty()
         else
           for (final (index, supplier) in shown.indexed) ...<Widget>[
             if (index > 0) SizedBox(height: tokens.spacing.s12),
             _card(supplier),
           ],
+      ],
+    );
+  }
+
+  Widget _empty() => EmptyState(
+    key: ValueKey(_hasQuery ? 'suppliers-no-matches' : 'suppliers-empty'),
+    title: _hasQuery ? 'No matching suppliers' : 'No suppliers yet',
+    hint: _hasQuery
+        ? 'Try another name or clear the search.'
+        : 'Add suppliers to track stock deliveries.',
+    illustration: _hasQuery ? 'supplier-search.svg' : 'suppliers.svg',
+  );
+
+  /// The large-screen list: one table, its search, filter and both of the
+  /// page's actions on its top edge.
+  ///
+  /// **The same page, searched and filtered the same way, drawn as rows** -
+  /// `docs/design/tables/`, at the developer's direction on 2026-10-13. Phone
+  /// and email each get a column, where the card had room for one of them; the
+  /// directory's summary above it is unchanged. A row opens the supplier and
+  /// its menu is the card's. Below 1024 the cards are unchanged.
+  Widget _sheet(
+    AppTokens tokens,
+    List<TenantSupplier> shown,
+    Widget search,
+    Widget standingFilter,
+  ) {
+    // **The standing column only where a supplier on the page is inactive**:
+    // on the *Active* view it could never say anything.
+    final standing = shown.any((supplier) => !supplier.active);
+    return RecordSheet(
+      key: const ValueKey('suppliers-sheet'),
+      columns: <SheetColumn>[
+        const SheetColumn(label: 'Supplier', kind: SheetColumnKind.identity),
+        const SheetColumn(label: 'Phone', kind: SheetColumnKind.text),
+        const SheetColumn(label: 'Email', kind: SheetColumnKind.text),
+        const SheetColumn(label: 'Last delivery', kind: SheetColumnKind.text),
+        if (standing)
+          const SheetColumn(label: 'Standing', kind: SheetColumnKind.status),
+      ],
+      bar: Row(
+        children: <Widget>[
+          SizedBox(width: tokens.layout.tableSearch, child: search),
+          SizedBox(width: tokens.spacing.s12),
+          SizedBox(width: tokens.layout.tableFilter, child: standingFilter),
+          const Spacer(),
+          if (primaryAction case final action?) action,
+          if (onAdd case final add?) ...<Widget>[
+            SizedBox(width: tokens.spacing.s12),
+            AppButton(
+              key: const ValueKey('suppliers-add'),
+              label: 'Add supplier',
+              icon: Icons.add_business_outlined,
+              tier: AppButtonTier.secondary,
+              onPressed: add,
+            ),
+          ],
+        ],
+      ),
+      body: shown.isEmpty ? _empty() : null,
+      rows: <SheetRow>[
+        for (final supplier in shown)
+          SheetRow(
+            id: supplier.id,
+            key: ValueKey('supplier-row-${supplier.id}'),
+            pressKey: ValueKey('supplier-view-${supplier.id}'),
+            onPressed: () => onView(supplier),
+            semanticLabel: supplier.name,
+            semanticHint: 'Opens this supplier.',
+            cells: <SheetCell?>[
+              SheetText(
+                supplier.name,
+                key: ValueKey('supplier-name-${supplier.id}'),
+                caption: supplier.address,
+              ),
+              SheetText(supplier.phone ?? '—'),
+              SheetText(supplier.email ?? '—'),
+              SheetText(
+                supplierLastDeliveryLabel(supplier),
+                key: ValueKey('supplier-last-delivery-${supplier.id}'),
+              ),
+              // Neutral, as on the card: an inactive supplier is a standing,
+              // not a problem, and an active one says nothing.
+              if (standing)
+                supplier.active
+                    ? null
+                    : SheetStatus(
+                        key: ValueKey('supplier-inactive-badge-${supplier.id}'),
+                        status: AppStatus.neutral,
+                        label: 'Inactive',
+                      ),
+            ],
+            actions: <RecordAction>[
+              for (final action in _actions(supplier))
+                RecordAction(
+                  label: action.label,
+                  icon: action.icon,
+                  onPressed: action.onSelected,
+                  destructive: action.destructive,
+                  actionKey: action.itemKey,
+                ),
+            ],
+            actionsKey: ValueKey('supplier-actions-${supplier.id}'),
+            actionsTooltip: 'More for ${supplier.name}',
+          ),
       ],
     );
   }

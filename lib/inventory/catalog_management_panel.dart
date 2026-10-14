@@ -170,7 +170,6 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Inventory Manager',
-    subtitle: 'Manage products, categories, and stock.',
     contentWidth: AppContentWidth.records,
     actions: <Widget>[
       TenantSessionReportAction(
@@ -1945,19 +1944,14 @@ final class _UnifiedInventoryContents extends StatelessWidget {
     final categoryNames = tenantCategoryNames(
       data?.categories.items ?? const <TenantCategory>[],
     );
-    final empty = Text(
+    final empty = EmptyState(
       key: ValueKey(
         _hasActiveQuery
             ? 'inventory-no-matching-products'
             : 'inventory-empty-catalog',
       ),
-      _hasActiveQuery
-          ? 'No products match this search and filter combination.'
-          : 'This catalog has no products yet.',
-      textAlign: TextAlign.center,
-      style: tokens.typography.bodyMedium.copyWith(
-        color: tokens.colors.text.secondary,
-      ),
+      illustration: _hasActiveQuery ? 'product-search.svg' : 'inventory.svg',
+      title: _hasActiveQuery ? 'No matching products' : 'No products yet',
     );
     return PagedListView(
       padding: EdgeInsets.fromLTRB(
@@ -3314,8 +3308,10 @@ final class _CatalogProductFormScreen extends StatelessWidget {
       key: screenKey,
       title: title,
       subtitle: subtitle,
-      // §4.2's row for a form rather than the `records` row the catalog behind
-      // it takes: a price and a name do not want 1200 pixels of line length.
+      // §4.2's reading row, as every other form: a price and a name do not
+      // want 1200 pixels of line length. On a wide window the form is the
+      // phone's one column, centred (the developer's call, 2026-10-14) - the
+      // fields spread across rows read out of order.
       contentWidth: AppContentWidth.reading,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3354,7 +3350,12 @@ final class _CatalogProductFormScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  AppActionRow(expandActions: true, actions: actions),
+                  AppActionRow(
+                    expandActions:
+                        MediaQuery.sizeOf(context).width <
+                        tokens.layout.expandedFloor,
+                    actions: actions,
+                  ),
                   if (note case final line?)
                     Padding(
                       padding: EdgeInsets.fromLTRB(
@@ -3495,7 +3496,6 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final choose = widget.onChooseImage;
-    final wide = _ProductFormLayout.wide(context);
     final name = AppTextField(
       key: const ValueKey('catalog-management-product-name'),
       controller: widget.name,
@@ -3602,25 +3602,17 @@ final class _AddProductScreenState extends State<_AddProductScreen> {
                 onImageChanged: _acceptImage,
                 onRemoveImage: _image == null ? null : _removeImage,
               ),
-        fields: wide
-            ? <Widget>[
-                _FormRow(children: <Widget>[name, category]),
-                widget.moreCategories ? afterHelper : afterField,
-                _FormRow(children: <Widget?>[price, cost, size]),
-                afterHelper,
-                _FormRow(children: <Widget?>[stock, null]),
-              ]
-            : <Widget>[
-                name,
-                afterField,
-                category,
-                widget.moreCategories ? afterHelper : afterField,
-                if (cost == null) price else _FormRow(children: [price, cost]),
-                afterField,
-                size,
-                afterHelper,
-                stock,
-              ],
+        fields: <Widget>[
+          name,
+          afterField,
+          category,
+          widget.moreCategories ? afterHelper : afterField,
+          if (cost == null) price else _FormRow(children: [price, cost]),
+          afterField,
+          size,
+          afterHelper,
+          stock,
+        ],
       ),
       // Says what the disabled button is waiting for, rather than leaving a
       // grey button to be puzzled over. The same four fields `_canSubmit`
@@ -3809,7 +3801,6 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
     return AppScaffold(
       key: const ValueKey('inventory-categories-screen'),
       title: 'Categories',
-      subtitle: 'How the register groups what you sell.',
       // A column of short names takes reading width, not a table's. §4.2.
       contentWidth: AppContentWidth.reading,
       body: FutureBuilder<TenantCatalogPage<TenantCategory>>(
@@ -3845,11 +3836,11 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
               if (reading)
                 const LoadingState(message: 'Reading your categories')
               else if (snapshot.hasError)
-                const EmptyState(
+                const ErrorState(
                   key: ValueKey('inventory-categories-unreadable'),
-                  title: 'Categories could not be read',
-                  hint: 'Check the connection, then open this again.',
-                  illustration: 'no-data.svg',
+                  badgeLabel: 'Not read',
+                  statement: 'Categories could not be read',
+                  detail: 'Check the connection, then open this again.',
                 )
               else if (page == null || page.items.isEmpty)
                 EmptyState(
@@ -3858,10 +3849,9 @@ final class _CategoriesScreenState extends State<_CategoriesScreen> {
                       ? 'No categories yet'
                       : 'Nothing on this page',
                   hint: _page == 0
-                      ? 'A category groups products in the catalog and filters '
-                            'them at the register.'
+                      ? 'Group products with categories for easier browsing.'
                       : null,
-                  illustration: 'my-files.svg',
+                  illustration: 'categories.svg',
                 )
               else
                 // Inset by the focus ring's gutter, which the button above
@@ -4262,7 +4252,6 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final colors = tokens.colors;
-    final wide = _ProductFormLayout.wide(context);
     final afterField = SizedBox(height: tokens.spacing.s12);
     final afterHelper = SizedBox(height: tokens.spacing.s16);
     final name = AppTextField(
@@ -4393,21 +4382,14 @@ final class _EditProductScreenState extends State<_EditProductScreen> {
             )
           : null,
       fields: <Widget>[
-        if (wide) ...<Widget>[
-          _FormRow(children: <Widget>[name, category]),
-          afterCategory,
-          _FormRow(children: <Widget>[prices, size]),
-          afterHelper,
-        ] else ...<Widget>[
-          name,
-          afterField,
-          category,
-          afterCategory,
-          prices,
-          afterPrices,
-          size,
-          afterHelper,
-        ],
+        name,
+        afterField,
+        category,
+        afterCategory,
+        prices,
+        afterPrices,
+        size,
+        afterHelper,
         scope,
       ],
     );
@@ -5269,11 +5251,7 @@ final class _PendingLine extends StatelessWidget {
   }
 }
 
-/// The product form's layout: the photo row on top, then the fields.
-///
-/// **One column at every width since 2026-10-08.** A wider screen lets fields
-/// share a line - see [_FormRow] - rather than giving the photo a column of its
-/// own, which is what made it the largest thing on the form.
+/// Product media and fields form separate desktop regions.
 final class _ProductFormLayout extends StatelessWidget {
   const _ProductFormLayout({required this.well, required this.fields});
 
@@ -5283,25 +5261,17 @@ final class _ProductFormLayout extends StatelessWidget {
 
   final List<Widget> fields;
 
-  /// Whether fields share a line. `MediaQuery` rather than a `LayoutBuilder`,
-  /// for the reason `Pagination` records: a `LayoutBuilder` refuses an
-  /// intrinsic query.
-  static bool wide(BuildContext context) => AppLayout.contract.isAtLeast(
-    MediaQuery.sizeOf(context).width,
-    AppBreakpoint.medium,
-  );
-
+  /// **One column at every width**: the photo, then the fields in the order
+  /// the phone asks for them. The form sits in the reading width, so a wide
+  /// window centres the same form rather than spreading it.
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final photo = well;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
-      // No space of its own above the photo: the route's list and the
-      // scaffold above it already put the tile `s16` under the toolbar.
       children: <Widget>[
-        if (photo != null) ...<Widget>[
+        if (well case final photo?) ...<Widget>[
           photo,
           SizedBox(height: tokens.spacing.s24),
         ],

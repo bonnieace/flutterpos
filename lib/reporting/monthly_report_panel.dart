@@ -340,9 +340,9 @@ final class _MonthlyReportContents extends StatelessWidget {
       return Center(
         child: EmptyState(
           key: const ValueKey('monthly-report-empty'),
-          title: 'Nothing was recorded in ${report.month.label}',
-          hint: 'No sale carries a business date in this month.',
-          illustration: 'no-data.svg',
+          title: 'No sales in ${report.month.label}',
+          hint: 'Try another month.',
+          illustration: 'report-chart.svg',
         ),
       );
     }

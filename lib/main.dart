@@ -44,6 +44,7 @@ import 'customers/customers.dart';
 import 'whatsapp/whatsapp.dart';
 import 'email_receipts/email_receipts.dart';
 import 'ui/routes.dart';
+import 'ui/top_bar.dart';
 
 Future<void> main() async {
   AppTelemetry.install(GlitchTipTelemetry());
@@ -276,6 +277,21 @@ Future<void> main() async {
               return null;
             },
           );
+      // Which businesses chose *Don't show again* on the Sales report's
+      // still-trading explanation. A failure to open it is a report that keeps
+      // explaining, never one that will not open.
+      final tradingDayNotice = await HiveSalesTradingDayNotice.open()
+          .then<SalesTradingDayNotice?>(
+            (notice) => notice,
+            onError: (Object error, StackTrace stackTrace) {
+              AppTelemetry.captureHandled(
+                error,
+                stackTrace,
+                boundary: 'sales.trading_day_notice_open',
+              );
+              return null;
+            },
+          );
       // Which Bluetooth printer this device prints on, per business. A failure
       // to open it never stops the app starting: a device that never chose
       // one is on the network printer, and one whose choice cannot be read
@@ -471,6 +487,7 @@ Future<void> main() async {
               staffRequestTickets: staffRequestTickets,
               tenantImageCache: tenantImageCache,
               printerSetupReminder: printerSetupReminder,
+              tradingDayNotice: tradingDayNotice,
               checkoutCatalogCache: checkoutCatalogCache,
               checkoutReceiptCounters: checkoutReceiptCounters,
               checkoutPrintJobs: checkoutPrintJobs,
@@ -600,6 +617,7 @@ class SpiritPOSApp extends StatelessWidget {
     required this.staffRequestTickets,
     required this.tenantImageCache,
     required this.printerSetupReminder,
+    this.tradingDayNotice,
     required this.checkoutCatalogCache,
     required this.checkoutReceiptCounters,
     required this.checkoutPrintJobs,
@@ -644,6 +662,10 @@ class SpiritPOSApp extends StatelessWidget {
   /// Null where its box would not open, which leaves the till's no-printer
   /// notice without *Don't show again*.
   final CheckoutPrinterSetupReminder? printerSetupReminder;
+
+  /// Null where its box would not open, which leaves the Sales report's
+  /// still-trading explanation without *Don't show again*.
+  final SalesTradingDayNotice? tradingDayNotice;
   final HiveCheckoutCatalogCache checkoutCatalogCache;
   final HiveCheckoutReceiptCounters checkoutReceiptCounters;
 
@@ -1173,6 +1195,10 @@ class SpiritPOSApp extends StatelessWidget {
       catalog: checkoutCatalogCache,
       initialBusinessDate: businessDate,
       initialStaffId: staffId,
+      // Only where no day was named, which is the home's *Sales*: after
+      // midnight it opens on the day the till is still trading in.
+      followTradingDay: true,
+      tradingDayNotice: tradingDayNotice,
       receiptWriter: whatsappReceiptWriter,
       emailReceiptWriter: emailReceiptWriter,
       reportSaver: const SharedFileTenantReportSaver(),
@@ -1382,6 +1408,14 @@ class SpiritPOSApp extends StatelessWidget {
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: spiritTheme,
+          // **Whether this device has a network, for every screen's top bar**
+          // (`docs/design/topbar-inner/`). Above the navigator, because each
+          // screen is its own root push.
+          builder: (context, child) => DeviceOnlineScope(
+            onlineCheck: isOnline,
+            onlineChanges: onlineChanges,
+            child: child ?? const SizedBox.shrink(),
+          ),
           // **What tells the home it is back on top.** Every module is pushed
           // over the landing route, so returning from one is a pop rather than
           // a rebuild - and without this the figures stay as they were read on

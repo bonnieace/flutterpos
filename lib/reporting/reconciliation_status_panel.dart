@@ -5,6 +5,7 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import '../ui/record_sheet.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/pagination.dart';
@@ -44,7 +45,7 @@ final class TenantReconciliationStatusScreen extends StatelessWidget {
   Widget build(BuildContext context) => AppScaffold(
     title: 'Reconciliation status',
     subtitle: businessDate,
-    contentWidth: AppContentWidth.records,
+    contentWidth: RecordSheet.contentWidth(context),
     body: TenantReconciliationStatusPanel(
       reader: reader,
       businessDate: businessDate,
@@ -384,7 +385,10 @@ final class _ReconciliationContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return PagedListView(
       listKey: const ValueKey('reconciliation-status'),
-      padding: EdgeInsets.all(tokens.spacing.s20),
+      padding: RecordSheet.pagePadding(
+        context,
+        fallback: EdgeInsets.all(tokens.spacing.s20),
+      ),
       pagination: Pagination(
         pageNumber: pageIndex + 1,
         previousKey: const ValueKey('reconciliation-status-previous'),
@@ -575,9 +579,25 @@ final class _ReconciliationContents extends StatelessWidget {
         ),
         SizedBox(height: tokens.spacing.s12),
         if (day.runs.items.isEmpty)
-          const Text(
-            key: ValueKey('reconciliation-status-runs-empty'),
-            'No reconciliation run has been queued for this day.',
+          const IllustratedMessage(
+            illustration: 'reconciliation.svg',
+            textKey: ValueKey('reconciliation-status-runs-empty'),
+            message: 'No runs queued for this day.',
+          )
+        // **A table from 1024**, at the developer's direction on 2026-10-13
+        // (`docs/design/tables/`); below it the cards are unchanged.
+        else if (RecordSheet.drawnAt(MediaQuery.sizeOf(context).width))
+          RecordSheet(
+            key: const ValueKey('reconciliation-status-runs-sheet'),
+            columns: reconciliationRunSheetColumns,
+            rows: <SheetRow>[
+              for (final run in day.runs.items)
+                reconciliationRunSheetRow(
+                  run,
+                  names: view.names,
+                  selfUid: selfUid,
+                ),
+            ],
           )
         else
           for (final run in day.runs.items) _run(context, run),

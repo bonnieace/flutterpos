@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documents &#8212; design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body { margin: 0; background: #050C08; font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #FFFFFF; }
+a { color: #45F28D; } a:hover { color: #3DD47C; }
+:focus-visible { outline: 2px solid #45F28D; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 64px; }
+.back { font-size: 14px; color: #849E8F; text-decoration: none; }
+h1 { margin: 12px 0 0; font-size: 28px; line-height: 33.6px; font-weight: 700; }
+.lede { margin: 8px 0 32px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; max-width: 700px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; margin-bottom: 12px; background: #0D1F16; border: 1px solid #283831; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #3D4A3D; }
+.board h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 500; color: #FFFFFF; flex-shrink: 0; width: 200px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: #B8D6C5; }
+.size { font-size: 12px; color: #849E8F; flex-shrink: 0; margin-left: auto; }
+code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #45F28D; }
+@media (max-width: 640px) { .board { flex-direction: column; gap: 6px; } .board h2 { width: auto; } .size { margin-left: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../accounting/index.html">&#8592; Accounting and documents</a>
+  <h1>Documents</h1>
+  <p class="lede">Phase C: one A4 renderer for quotes, orders, invoices and payment receipts, at the PDF reports&#8217; own geometry and palette, and the till slip with the lines the spec adds. The same file is the screen preview, the download, and the WhatsApp or email attachment. Read <a href="README.md">README.md</a>.</p>
+  <a class="board" href="documents-a4.html">
+    <h2>Quote and invoice</h2>
+    <p>QT-0019 and INV-0014 at A4, and an order delivery the deposit paid in full, stamped Paid.</p>
+    <span class="size">A4</span>
+  </a>
+  <a class="board" href="documents-more.html">
+    <h2>Order, receipt, draft, email</h2>
+    <p>An order confirmation, the A4 payment receipt with its allocation, a draft quote shared before it has a number, and the email that carries any document.</p>
+    <span class="size">A4</span>
+  </a>
+  <a class="board" href="documents-thermal.html">
+    <h2>Till slips</h2>
+    <p>A delivery with its deposit, a sale that spent credit, a quote sold in full; deposit received and refund paid.</p>
+    <span class="size">58 mm</span>
+  </a>
+</div>
+</body>
+</html>

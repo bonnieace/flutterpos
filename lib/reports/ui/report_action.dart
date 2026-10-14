@@ -19,6 +19,7 @@ import '../../tenancy/tenant_session.dart';
 import '../../tenancy/tenant_session_controller.dart';
 import '../../ui/buttons.dart';
 import '../../ui/snackbar.dart';
+import '../../ui/tokens.dart';
 import '../report_file.dart';
 import '../report_run.dart';
 import 'report_sheet.dart';
@@ -158,6 +159,24 @@ final class _TenantReportActionState extends State<TenantReportAction> {
   @override
   Widget build(BuildContext context) {
     if (widget.run == null) return const SizedBox.shrink();
+
+    // **It says its name from 1024 up** (`docs/design/topbar-inner/`): an
+    // unlabelled glyph a desktop's width away from the title is a guess.
+    // The same press, the same busy state; a secondary 40 in its 48 target.
+    final tokens = AppTokens.componentOf(context);
+    if (MediaQuery.sizeOf(context).width >= tokens.layout.expandedFloor) {
+      return Center(
+        child: AppButton(
+          key: ValueKey('report-action-${widget.run!.kind.slug}'),
+          label: 'Report',
+          icon: Icons.summarize_outlined,
+          tier: AppButtonTier.secondary,
+          size: AppButtonSize.md,
+          loading: _working,
+          onPressed: _working ? null : _start,
+        ),
+      );
+    }
 
     return AppIconButton(
       key: ValueKey('report-action-${widget.run!.kind.slug}'),

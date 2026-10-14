@@ -358,7 +358,7 @@ final class _Pager extends StatelessWidget {
         words: words,
         fill: fill,
       );
-      return fill ? Expanded(child: segment) : segment;
+      return fill ? Expanded(child: segment) : Flexible(child: segment);
     }
 
     // **The container paints under the segments and its edge over them**, so

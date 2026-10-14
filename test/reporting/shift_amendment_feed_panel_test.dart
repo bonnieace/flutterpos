@@ -32,10 +32,7 @@ void main() {
     );
     // Two figures, two columns. One assembled sentence used to name whichever
     // of them moved, which is a heading that changes per record.
-    expect(
-      _text(tester, 'shift-amendment-sales-amend_abc'),
-      '115 to 345',
-    );
+    expect(_text(tester, 'shift-amendment-sales-amend_abc'), '115 to 345');
     expect(_text(tester, 'shift-amendment-transactions-amend_abc'), '1 to 3');
     // The direction is the server's own: observed minus expected, so a negative
     // variance is a shift that recorded less than its sales prove. The cleared
@@ -218,7 +215,7 @@ void main() {
 
     expect(
       _text(tester, 'shift-amendments-empty'),
-      'No shift summary has been corrected in this business.',
+      'No shift corrections yet.',
     );
   });
 
@@ -311,7 +308,7 @@ void main() {
 
     expect(
       _text(tester, 'shift-amendments-empty'),
-      'This shift\'s summary has never been corrected.',
+      'No corrections for this shift.',
     );
   });
 

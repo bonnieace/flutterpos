@@ -104,6 +104,19 @@ Future<T?> showAppSheet<T>(
   bool dismissible = true,
 }) {
   final tokens = AppTokens.componentOf(context);
+  if (MediaQuery.sizeOf(context).width >= tokens.layout.expandedFloor) {
+    return showDialog<T>(
+      context: context,
+      barrierDismissible: dismissible,
+      barrierColor: tokens.colors.surface.scrim,
+      builder: (context) => _DesktopSheet(
+        builder: builder,
+        masthead: masthead,
+        mastheadFraction: mastheadFraction,
+        mastheadSquare: mastheadSquare,
+      ),
+    );
+  }
   return showModalBottomSheet<T>(
     context: context,
     // The sheet sizes itself, so the route must not cap it at half the screen -
@@ -152,6 +165,67 @@ Future<T?> showAppSheet<T>(
           mastheadFraction: mastheadFraction,
           mastheadSquare: mastheadSquare,
           child: builder(context, controller),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Opens [builder] in a sheet exactly as tall as what it holds.
+///
+/// **For a short explanation that ends in its own answers, not for a form.**
+/// [showAppSheet]'s detents are fractions of the screen, so a paragraph and two
+/// buttons opened there sit at the top of a sheet 70% of the screen tall with
+/// the rest of it empty. This one is the same surface - `surface.overlay`,
+/// `radius.lg` on its top corners, the handle, `surface.scrim` behind it -
+/// fitted to its content, and scrolling only where a small phone cannot hold
+/// it.
+///
+/// **Two things differ from [showAppSheet], both because nothing here can be
+/// lost.** The developer ruled on 2026-09-23 that no drag dismisses a sheet,
+/// because a drag threw away half-filled forms; and on 2026-10-05 that every
+/// sheet carries a close control, because a form's only way out was whatever
+/// button it ended on. This holds no form and ends in its answers, so a drag
+/// down closes it - which is what its handle says it does - and it has no
+/// close control. A tap on the scrim, the system back and the drag all answer
+/// null.
+///
+/// First used by the Sales report's *Still trading* explanation, 2026-10-12.
+Future<T?> showAppFittedSheet<T>(
+  BuildContext context, {
+  required WidgetBuilder builder,
+}) {
+  final tokens = AppTokens.componentOf(context);
+  return showModalBottomSheet<T>(
+    context: context,
+    // Up to the whole screen, so a tall explanation on a small phone scrolls
+    // rather than clips; the column below sizes the sheet to its content.
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: tokens.colors.surface.scrim,
+    showDragHandle: false,
+    builder: (context) => _AboveTheKeyboard(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: tokens.colors.surface.overlay,
+          borderRadius: _Surface.radiusOf(tokens),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Padding(
+                padding: EdgeInsets.only(top: tokens.spacing.s12),
+                child: _Surface.handle(tokens, label: 'Drag down to close'),
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: _Surface._inkable(builder(context)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ),
@@ -272,6 +346,59 @@ abstract final class AppSheetMasthead {
 }
 
 /// The sheet's own chrome: the surface, the corners and the handle.
+final class _DesktopSheet extends StatefulWidget {
+  const _DesktopSheet({
+    required this.builder,
+    required this.masthead,
+    required this.mastheadFraction,
+    required this.mastheadSquare,
+  });
+
+  final Widget Function(BuildContext, ScrollController) builder;
+  final WidgetBuilder? masthead;
+  final double mastheadFraction;
+  final bool mastheadSquare;
+
+  @override
+  State<_DesktopSheet> createState() => _DesktopSheetState();
+}
+
+final class _DesktopSheetState extends State<_DesktopSheet> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Dialog(
+      insetPadding: EdgeInsets.all(tokens.spacing.s32),
+      backgroundColor: tokens.colors.surface.overlay,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(tokens.radius.lg),
+      ),
+      child: SizedBox(
+        width: tokens.layout.reading,
+        height:
+            MediaQuery.sizeOf(context).height * AppSheetDetent.full.fraction,
+        child: _Surface(
+          controller: _controller,
+          desktop: true,
+          masthead: widget.masthead,
+          mastheadFraction: widget.mastheadFraction,
+          mastheadSquare: widget.mastheadSquare,
+          child: widget.builder(context, _controller),
+        ),
+      ),
+    );
+  }
+}
+
 final class _Surface extends StatelessWidget {
   const _Surface({
     required this.controller,
@@ -279,9 +406,11 @@ final class _Surface extends StatelessWidget {
     this.masthead,
     this.mastheadFraction = AppSheetMasthead.fraction,
     this.mastheadSquare = false,
+    this.desktop = false,
   });
 
   final ScrollController controller;
+  final bool desktop;
   final Widget child;
 
   /// See [AppSheetMasthead]. Null draws the ordinary handle-above-content
@@ -344,20 +473,23 @@ final class _Surface extends StatelessWidget {
     onPressed: () => Navigator.of(context).maybePop(),
   );
 
-  /// The bar itself, without the strip it normally sits in.
-  Widget _handle(AppTokens tokens) => Semantics(
-    label: 'Drag to resize',
-    child: SizedBox(
-      width: handleSize.width,
-      height: handleSize.height,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: tokens.colors.surface.borderStrong,
-          borderRadius: BorderRadius.circular(tokens.radius.pill),
+  /// The bar itself, without the strip it normally sits in. Shared with
+  /// [showAppFittedSheet], whose drag closes rather than resizes - which is
+  /// what [label] says.
+  static Widget handle(AppTokens tokens, {String label = 'Drag to resize'}) =>
+      Semantics(
+        label: label,
+        child: SizedBox(
+          width: handleSize.width,
+          height: handleSize.height,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: tokens.colors.surface.borderStrong,
+              borderRadius: BorderRadius.circular(tokens.radius.pill),
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -383,10 +515,11 @@ final class _Surface extends StatelessWidget {
             Stack(
               alignment: Alignment.topCenter,
               children: <Widget>[
-                Padding(
-                  padding: EdgeInsets.only(top: tokens.spacing.s12),
-                  child: _handle(tokens),
-                ),
+                if (!desktop)
+                  Padding(
+                    padding: EdgeInsets.only(top: tokens.spacing.s12),
+                    child: handle(tokens),
+                  ),
                 Align(
                   alignment: Alignment.topRight,
                   child: Padding(
@@ -449,7 +582,9 @@ final class _Surface extends StatelessWidget {
                           ),
                           child: Padding(
                             padding: EdgeInsets.all(tokens.spacing.s4),
-                            child: _handle(tokens),
+                            child: desktop
+                                ? const SizedBox.shrink()
+                                : handle(tokens),
                           ),
                         ),
                       ),

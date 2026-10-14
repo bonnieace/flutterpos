@@ -18,6 +18,7 @@ import '../ui/fields.dart';
 import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import 'checkout_print_configuration.dart';
 import 'checkout_print_failures.dart';
 import 'checkout_print_transport_base.dart';
@@ -176,56 +177,68 @@ class _SystemPrinterTabState extends State<SystemPrinterTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (_unreadable)
-          const Callout(
-            key: ValueKey('printer-system-unreadable'),
-            status: AppStatus.problem,
-            message:
-                'This device’s print dialog setting could not be read. Choose '
-                'the paper width again.',
-          )
-        else
-          const Callout(
-            key: ValueKey('printer-system-in-use'),
-            status: AppStatus.info,
-            icon: Icons.print_outlined,
-            message:
-                'Each receipt opens this device’s print window, and the '
-                'printer is chosen there.',
+        AppWorkspace(
+          leading: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (_unreadable)
+                const Callout(
+                  key: ValueKey('printer-system-unreadable'),
+                  status: AppStatus.problem,
+                  message:
+                      'This device’s print dialog setting could not be read. Choose '
+                      'the paper width again.',
+                )
+              else
+                const Callout(
+                  key: ValueKey('printer-system-in-use'),
+                  status: AppStatus.info,
+                  icon: Icons.print_outlined,
+                  message:
+                      'Each receipt opens this device’s print window, and the '
+                      'printer is chosen there.',
+                ),
+              SizedBox(height: tokens.spacing.s16),
+            ],
           ),
-        SizedBox(height: tokens.spacing.s16),
-        AppSelect<PrinterPaperWidth>(
-          key: const ValueKey('printer-system-paper'),
-          value: _paperWidth,
-          enabled: !_testing,
-          label: 'Paper width',
-          items: _paperItems,
-          onChanged: (value) => _update(value ?? _paperWidth),
-        ),
-        if (widget.testPrint != null) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
-          AppButton(
-            key: const ValueKey('printer-system-test'),
-            label: 'Test print',
-            icon: Icons.print_outlined,
-            loading: _testing,
-            expand: true,
-            onPressed: _testing ? null : _test,
+          trailing: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              AppSelect<PrinterPaperWidth>(
+                key: const ValueKey('printer-system-paper'),
+                value: _paperWidth,
+                enabled: !_testing,
+                label: 'Paper width',
+                items: _paperItems,
+                onChanged: (value) => _update(value ?? _paperWidth),
+              ),
+              if (widget.testPrint != null) ...<Widget>[
+                SizedBox(height: tokens.spacing.s16),
+                AppButton(
+                  key: const ValueKey('printer-system-test'),
+                  label: 'Test print',
+                  icon: Icons.print_outlined,
+                  loading: _testing,
+                  expand: true,
+                  onPressed: _testing ? null : _test,
+                ),
+              ],
+              if (answer != null) ...<Widget>[
+                SizedBox(height: tokens.spacing.s12),
+                Callout(
+                  key: const ValueKey('printer-system-answer'),
+                  status: answer.status,
+                  message: answer.message,
+                ),
+              ],
+              SizedBox(height: tokens.spacing.s16),
+              const Disclosure(
+                key: ValueKey('printer-system-help'),
+                summary: 'Which printers work this way',
+                child: _Help(),
+              ),
+            ],
           ),
-        ],
-        if (answer != null) ...<Widget>[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('printer-system-answer'),
-            status: answer.status,
-            message: answer.message,
-          ),
-        ],
-        SizedBox(height: tokens.spacing.s16),
-        const Disclosure(
-          key: ValueKey('printer-system-help'),
-          summary: 'Which printers work this way',
-          child: _Help(),
         ),
       ],
     );

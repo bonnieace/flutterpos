@@ -287,9 +287,9 @@ class _TenantPriceAgreementSettingsPanelState
           tokens,
           const EmptyState(
             key: ValueKey('price-agreement-settings-no-staff'),
-            title: 'Nobody to choose yet',
-            hint: 'Invite the people who work here, then choose who can agree '
-                'a price.',
+            illustration: 'price-agreement.svg',
+            title: 'No staff yet',
+            hint: 'Invite staff, then choose who can agree prices.',
           ),
         ),
       ];
@@ -506,11 +506,7 @@ class _TenantPriceAgreementSettingsPanelState
       intent = TenantPriceAgreementPublisher(
         session: session,
         reader: widget.reader,
-      ).buildIntent(
-        blocked: _blocked,
-        members: _members,
-        published: published,
-      );
+      ).buildIntent(blocked: _blocked, members: _members, published: published);
     } on TenantPriceAgreementException catch (error) {
       showAppSnackBar(context, _refusal(error.code));
       return;

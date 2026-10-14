@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Still trading — states</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+:root {
+  --base: #0D1F16; --raised: #132A1F; --sunken: #08140E; --field: #1E3A2B;
+  --overlay: #1C3328; --border-subtle: #1E3A2B; --card-edge: #283831;
+  --border-strong: #2C5340; --selected: #3D4A3D;
+  --text: #FFFFFF; --text-2: #B8D6C5; --text-3: #849E8F; --text-disabled: #5D7468;
+  --money: #45F28D; --primary: #45F28D; --primary-hover: #3DD47C; --primary-pressed: #34B86B; --on-primary: #0A0F0C;
+  --secondary: #1C3328; --secondary-border: #2C5340;
+  --ok: #4BE277;
+  --focus: #45F28D;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #050C08; color: var(--text); font-family: 'Roboto', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.page-nav { padding: 20px 24px 0; font-size: 14px; letter-spacing: 0.25px; }
+.page-nav a { color: var(--text-3); text-decoration: none; }
+.page-nav a:hover { color: var(--primary); text-decoration: underline; }
+.page-head { padding: 12px 24px 0; max-width: 1280px; margin: 0 auto; }
+.page-head h1 { margin: 0; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.page-head p { margin: 4px 0 0; max-width: 900px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+section { max-width: 1280px; margin: 32px auto 0; padding: 0 24px; }
+section h2 { margin: 0 0 4px; font-size: 18px; line-height: 28px; font-weight: 500; letter-spacing: 0.25px; }
+section > p { margin: 0 0 16px; max-width: 900px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, 390px); gap: 24px; }
+.cell { display: flex; flex-direction: column; gap: 8px; }
+.cell-label { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.surface { background: var(--overlay); border-radius: 12px; padding: 24px; }
+
+.eyebrow { font-size: 12px; line-height: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-3); }
+.title { margin: 8px 0 0; font-size: 22px; line-height: 30.8px; font-weight: 600; letter-spacing: 0.25px; }
+.body { margin: 8px 0 0; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+
+.night { position: relative; margin-top: 24px; padding-top: 24px; }
+.now-label { position: absolute; top: 0; transform: translateX(-50%); font-size: 12px; line-height: 16px; font-weight: 400; letter-spacing: 0.25px; color: var(--ok); white-space: nowrap; }
+.now-label.end { transform: translateX(-100%); }
+.track { position: relative; height: 8px; border-radius: 999px; background: var(--border-strong); }
+.fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--ok); }
+.notch { position: absolute; top: -4px; width: 2px; height: 16px; margin-left: -1px; background: var(--overlay); }
+.mark { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 999px; background: var(--ok); border: 4px solid var(--overlay); }
+.ticks { position: relative; height: 16px; margin-top: 8px; }
+.tick { position: absolute; top: 0; font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); white-space: nowrap; }
+.tick b { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; letter-spacing: -0.12px; color: var(--text-2); }
+.tick.mid { transform: translateX(-50%); }
+.tick.right { right: 0; }
+
+.check { height: 48px; display: flex; align-items: center; gap: 12px; font-size: 14px; line-height: 21px; letter-spacing: 0.25px; color: var(--text-2); }
+.hit { position: relative; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex: none; }
+.hit::before { content: ''; position: absolute; width: 40px; height: 40px; border-radius: 999px; background: transparent; }
+.hit.hover::before { background: rgba(255, 255, 255, 0.08); }
+.hit.pressed::before { background: rgba(255, 255, 255, 0.12); }
+.box { position: relative; width: 18px; height: 18px; border: 1px solid var(--border-strong); background: var(--field); border-radius: 2px; display: flex; align-items: center; justify-content: center; }
+.box.on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.box.focus { outline: 2px solid var(--focus); outline-offset: 3px; }
+.box.disabled { border-color: var(--text-disabled); }
+.check.disabled { color: var(--text-disabled); }
+
+.btns { display: flex; flex-direction: column; gap: 8px; }
+.btn { position: relative; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; overflow: visible; }
+.btn.primary { background: var(--primary); color: var(--on-primary); }
+.btn.primary.hover { background: var(--primary-hover); }
+.btn.primary.pressed { background: var(--primary-pressed); transform: scale(0.98); }
+.btn.secondary { background: var(--secondary); border: 1px solid var(--secondary-border); color: var(--text); }
+.btn.secondary.hover { box-shadow: inset 0 0 0 999px rgba(255, 255, 255, 0.08); }
+.btn.secondary.pressed { box-shadow: inset 0 0 0 999px rgba(255, 255, 255, 0.12); transform: scale(0.98); }
+.btn.focus { outline: 2px solid var(--focus); outline-offset: 2px; }
+.btn.loading::after { content: ''; width: 20px; height: 20px; border-radius: 999px; border: 2px solid currentColor; border-right-color: transparent; }
+.btn.loading span { display: none; }
+.note { font-size: 12px; line-height: 16px; letter-spacing: 0.25px; color: var(--text-3); }
+.date-btn { height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--secondary); border: 1px solid var(--secondary-border); border-radius: 8px; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.7px; }
+.cal { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+<nav class="page-nav"><a href="index.html">&#8592; Still trading</a></nav>
+<header class="page-head">
+  <h1>Still trading — states</h1>
+  <p>Every case the night has to draw, and every state the three controls can be in. Drawn at the phone sheet's width — 342 inside — because it is the narrowest place the labels have to fit.</p>
+</header>
+
+<section>
+  <h2>The night, case by case</h2>
+  <p>The track runs from the first open shift's start to the moment it stops selling: 06:00, or 24 hours after it opened if that comes first. The fill is what has gone by. The notch is midnight, the line between the two calendar days. Its <span style="font-family: 'JetBrains Mono', monospace;">00:00</span> label is dropped when it would sit within 20% of either end, and the notch stays.</p>
+  <div class="grid">
+
+    <div class="cell">
+      <span class="cell-label">Just past midnight · 00:05</span>
+      <div class="surface">
+        <div class="eyebrow">Sun 11 Oct · business day</div>
+        <div class="title">Still trading on Sunday</div>
+        <p class="body">Sales made since midnight count toward Sunday until the shift is closed, or 06:00 at the latest.</p>
+        <div class="night">
+          <span class="now-label" style="left: 50.6%;">Now 00:05</span>
+          <div class="track"><div class="fill" style="width: 50.6%;"></div><div class="notch" style="left: 49.9%;"></div><div class="mark" style="left: 50.6%;"></div></div>
+          <div class="ticks"><span class="tick"><b>18:02</b> opened</span><span class="tick mid" style="left: 49.9%;"><b>00:00</b></span><span class="tick right"><b>06:00</b> stops</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <span class="cell-label">Twenty minutes left · 05:40 — the label turns to end at the mark</span>
+      <div class="surface">
+        <div class="eyebrow">Sun 11 Oct · business day</div>
+        <div class="title">Still trading on Sunday</div>
+        <p class="body">Sales made since midnight count toward Sunday until the shift is closed, or 06:00 at the latest.</p>
+        <div class="night">
+          <span class="now-label end" style="left: 97.2%;">Now 05:40</span>
+          <div class="track"><div class="fill" style="width: 97.2%;"></div><div class="notch" style="left: 49.9%;"></div><div class="mark" style="left: 97.2%;"></div></div>
+          <div class="ticks"><span class="tick"><b>18:02</b> opened</span><span class="tick mid" style="left: 49.9%;"><b>00:00</b></span><span class="tick right"><b>06:00</b> stops</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <span class="cell-label">The 24 hours run out first · opened 02:10 Sunday</span>
+      <div class="surface">
+        <div class="eyebrow">Sun 11 Oct · business day</div>
+        <div class="title">Still trading on Sunday</div>
+        <p class="body">Sales made since midnight count toward Sunday until the shift is closed, or 02:10, when it reaches 24 hours.</p>
+        <div class="night">
+          <span class="now-label end" style="left: 97.2%;">Now 01:30</span>
+          <div class="track"><div class="fill" style="width: 97.2%;"></div><div class="notch" style="left: 91.0%;"></div><div class="mark" style="left: 97.2%;"></div></div>
+          <div class="ticks"><span class="tick"><b>02:10</b> opened</span><span class="tick right"><b>02:10</b> 24 h</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <span class="cell-label">Two shifts still open · manager · from the first to open</span>
+      <div class="surface">
+        <div class="eyebrow">Sun 11 Oct · business day</div>
+        <div class="title">Still trading on Sunday</div>
+        <p class="body">Two shifts from Sunday are still open, so sales made since midnight count toward Sunday until they are closed, or 06:00 at the latest.</p>
+        <div class="night">
+          <span class="now-label" style="left: 63.4%;">Now 01:30</span>
+          <div class="track"><div class="fill" style="width: 63.4%;"></div><div class="notch" style="left: 51.3%;"></div><div class="mark" style="left: 63.4%;"></div></div>
+          <div class="ticks"><span class="tick"><b>17:40</b> first opened</span><span class="tick mid" style="left: 51.3%;"><b>00:00</b></span><span class="tick right"><b>06:00</b> stops</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <span class="cell-label">Cashier · her own shift</span>
+      <div class="surface">
+        <div class="eyebrow">Sun 11 Oct · business day</div>
+        <div class="title">Still trading on Sunday</div>
+        <p class="body">Your shift from Sunday is still open, so your sales since midnight count toward Sunday until you close it, or 06:00 at the latest.</p>
+        <div class="night">
+          <span class="now-label" style="left: 62.4%;">Now 01:30</span>
+          <div class="track"><div class="fill" style="width: 62.4%;"></div><div class="notch" style="left: 49.9%;"></div><div class="mark" style="left: 62.4%;"></div></div>
+          <div class="ticks"><span class="tick"><b>18:02</b> opened</span><span class="tick mid" style="left: 49.9%;"><b>00:00</b></span><span class="tick right"><b>06:00</b> stops</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <h2>Don’t show again</h2>
+  <p>A checkbox rather than a third button, so either answer can carry it. The 48 row is the target; the 40 halo is the box's hover and press, as Material draws it. Ticked, it is remembered for this business on this device when the sheet is answered — by <em>Show Sunday</em>, <em>Show today</em>, or a swipe down. Disabled only where the device cannot remember it, which today hides the control instead; drawn here in case the build keeps it on screen.</p>
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, 240px);">
+    <div class="cell"><span class="cell-label">Enabled</span><div class="surface" style="padding: 12px 24px;"><div class="check"><span class="hit"><span class="box"></span></span>Don’t show again</div></div></div>
+    <div class="cell"><span class="cell-label">Hover</span><div class="surface" style="padding: 12px 24px;"><div class="check"><span class="hit hover"><span class="box"></span></span>Don’t show again</div></div></div>
+    <div class="cell"><span class="cell-label">Focus-visible</span><div class="surface" style="padding: 12px 24px;"><div class="check"><span class="hit"><span class="box focus"></span></span>Don’t show again</div></div></div>
+    <div class="cell"><span class="cell-label">Pressed</span><div class="surface" style="padding: 12px 24px;"><div class="check"><span class="hit pressed"><span class="box"></span></span>Don’t show again</div></div></div>
+    <div class="cell"><span class="cell-label">Ticked</span><div class="surface" style="padding: 12px 24px;"><div class="check"><span class="hit"><span class="box on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span></span>Don’t show again</div></div></div>
+    <div class="cell"><span class="cell-label">Ticked · focus-visible</span><div class="surface" style="padding: 12px 24px;"><div class="check"><span class="hit"><span class="box on focus"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span></span>Don’t show again</div></div></div>
+    <div class="cell"><span class="cell-label">Disabled</span><div class="surface" style="padding: 12px 24px;"><div class="check disabled"><span class="hit"><span class="box disabled"></span></span>Don’t show again</div></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>The two answers</h2>
+  <p><code>AppButton</code> as it is: <em>Show Sunday</em> primary, <em>Show today</em> secondary. Neither writes anything, so neither has a loading state; the press dismisses the sheet and the report is already, or immediately, on that day.</p>
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, 240px);">
+    <div class="cell"><span class="cell-label">Enabled</span><div class="surface" style="padding: 16px;"><div class="btns"><div class="btn primary"><span>Show Sunday</span></div><div class="btn secondary"><span>Show today</span></div></div></div></div>
+    <div class="cell"><span class="cell-label">Hover</span><div class="surface" style="padding: 16px;"><div class="btns"><div class="btn primary hover"><span>Show Sunday</span></div><div class="btn secondary hover"><span>Show today</span></div></div></div></div>
+    <div class="cell"><span class="cell-label">Focus-visible</span><div class="surface" style="padding: 16px;"><div class="btns"><div class="btn primary focus"><span>Show Sunday</span></div><div class="btn secondary focus"><span>Show today</span></div></div></div></div>
+    <div class="cell"><span class="cell-label">Pressed</span><div class="surface" style="padding: 16px;"><div class="btns"><div class="btn primary pressed"><span>Show Sunday</span></div><div class="btn secondary pressed"><span>Show today</span></div></div></div></div>
+  </div>
+</section>
+
+<section style="margin-bottom: 56px;">
+  <h2>After <em>Don’t show again</em></h2>
+  <p>No sheet. The report still opens on Sunday after midnight, so the date button is all that says it — unchanged from today's build. If that is too quiet, the open question in the README proposes one caption under the button rather than bringing the sheet back.</p>
+  <div class="grid" style="grid-template-columns: 390px;">
+    <div class="cell"><span class="cell-label">390 · the report's date row, nothing over it</span>
+      <div class="surface" style="background: var(--base); border: 1px solid var(--card-edge); padding: 16px;">
+        <div class="date-btn"><svg class="cal" viewBox="0 0 24 24" fill="currentColor"><path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V8h16v13z"/></svg>2026-10-11</div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

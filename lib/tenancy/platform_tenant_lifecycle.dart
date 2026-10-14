@@ -854,7 +854,7 @@ final class _PlatformLifecycleTenantScreenState
     if (_items.isEmpty) {
       return const EmptyState(
         title: 'No active or suspended businesses',
-        illustration: 'approve.svg',
+        illustration: 'businesses.svg',
       );
     }
     return RefreshIndicator(

@@ -6,6 +6,7 @@ import '../ui/scaffold.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
+import '../ui/workspace.dart';
 import '../checkout/checkout_tender.dart';
 import '../checkout/checkout_outbox.dart';
 import '../tenancy/tenant_repository.dart';
@@ -491,295 +492,316 @@ final class _SalesTotalsContents extends StatelessWidget {
         ),
         SizedBox(height: tokens.spacing.s20),
         if (totals case final answer?) ...[
-          // **Takings.** The figure this screen is opened for, and the
-          // standing of that figure in the same block - which is why the range
-          // and the basis sit on this card rather than above the page.
-          _TotalsCard(
-            cardKey: const ValueKey('sales-totals-takings'),
-            title: _range(answer.query),
-            titleKey: const ValueKey('sales-totals-range'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // **Scaled down, never ellipsised.** A truncated amount is a
-                // wrong amount - the rule `StatTile` already enforces for the
-                // tiles below, restated here because the headline is no longer
-                // one of them. `KES 1,234,567.00` at `numericHero` is wider
-                // than a 390 phone.
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    _currency.format(answer.netOrGrossSales),
-                    key: const ValueKey('sales-totals-amount'),
-                    maxLines: 1,
-                    style: tokens.typography.numericHero.copyWith(
-                      color: tokens.colors.text.primary,
+          AppWorkspace(
+            leadingFlex: 1,
+            trailingFlex: 1,
+            leading: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                // **Takings.** The figure this screen is opened for, and the
+                // standing of that figure in the same block - which is why the range
+                // and the basis sit on this card rather than above the page.
+                _TotalsCard(
+                  cardKey: const ValueKey('sales-totals-takings'),
+                  title: _range(answer.query),
+                  titleKey: const ValueKey('sales-totals-range'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // **Scaled down, never ellipsised.** A truncated amount is a
+                      // wrong amount - the rule `StatTile` already enforces for the
+                      // tiles below, restated here because the headline is no longer
+                      // one of them. `KES 1,234,567.00` at `numericHero` is wider
+                      // than a 390 phone.
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _currency.format(answer.netOrGrossSales),
+                          key: const ValueKey('sales-totals-amount'),
+                          maxLines: 1,
+                          style: tokens.typography.numericHero.copyWith(
+                            color: tokens.colors.text.primary,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: tokens.spacing.s4),
+                      Text(
+                        _salesDetail(answer),
+                        style: tokens.typography.bodyMedium.copyWith(
+                          color: tokens.colors.text.tertiary,
+                        ),
+                      ),
+                      // **The one fact the removed fold was carrying.** It said what
+                      // these figures are counted from, and for a device answer that
+                      // is not a footnote - it is the difference between the whole
+                      // business and this till. A badge states it where the figure
+                      // is, which is the shape the artboards used.
+                      //
+                      // **Once the server has failed, not while it is being asked.**
+                      // The device read runs beside the server's and nearly always
+                      // lands first, so this badge went up on every open and came
+                      // down a moment later - the weekly report's mistake, fixed
+                      // there the same way (`serverCouldNotBeReached`).
+                      if (answer.basis == TenantSalesTotalsBasis.device &&
+                          (TenantReadFreshness.maybeOf(context)?.stale ??
+                              true)) ...[
+                        SizedBox(height: tokens.spacing.s8),
+                        StatusBadge(
+                          key: const ValueKey('sales-totals-device-basis'),
+                          status: AppStatus.attention,
+                          icon: Icons.phone_android_outlined,
+                          label: 'Counted on this device',
+                        ),
+                      ],
+                      SizedBox(height: tokens.spacing.s12),
+                      StatRow(
+                        tiles: [
+                          // **`Transactions`, which is the daily summary's word for
+                          // the same count.** The two money surfaces use one
+                          // vocabulary; that was settled before this layout and is
+                          // unchanged by it.
+                          StatTile(
+                            label: 'Transactions',
+                            value: '${answer.netOrGrossTransactions}',
+                            icon: Icons.receipt_long_outlined,
+                            detail: 'counted in this total',
+                            valueKey: const ValueKey(
+                              'sales-totals-transactions',
+                            ),
+                          ),
+                          if (_averageSale(answer) case final average?)
+                            StatTile(
+                              label: 'Average sale',
+                              money: true,
+                              value: _currency.format(average),
+                              icon: Icons.payments_outlined,
+                              valueKey: const ValueKey('sales-totals-average'),
+                            ),
+                        ],
+                      ),
+                      // **Said out loud, because the headline figure changed
+                      // meaning.** Takings net of returns and takings gross of them
+                      // are different numbers, and a reader comparing this against a
+                      // till roll needs to know which one this is.
+                      if (answer.net case final net?
+                          when net.returnsScanned > 0)
+                        Padding(
+                          padding: EdgeInsets.only(top: tokens.spacing.s12),
+                          child: Text(
+                            key: const ValueKey('sales-totals-returns'),
+                            '${net.returnsScanned} '
+                            '${net.returnsScanned == 1 ? 'return has' : 'returns have'} '
+                            'been taken back out of these figures.',
+                            style: tokens.typography.bodyMedium.copyWith(
+                              color: tokens.colors.text.tertiary,
+                            ),
+                          ),
+                        ),
+                      // A category total is a different figure, not a smaller one of
+                      // the same kind: the server sums the matching lines and leaves
+                      // the rest of each sale out. Showing it under the same label as
+                      // a whole-business total would be lying by omission - which is
+                      // a notice about *this* read, so it is a `Callout` and does not
+                      // fold.
+                      if (answer.query.isCategoryFiltered) ...[
+                        SizedBox(height: tokens.spacing.s12),
+                        Callout(
+                          key: const ValueKey('sales-totals-category-basis'),
+                          status: AppStatus.info,
+                          message:
+                              'This adds up only the lines in this category, not '
+                              'the whole of each sale. '
+                              '${answer.scannedTransactions - answer.transactions} '
+                              'of the ${answer.scannedTransactions} '
+                              '${answer.scannedTransactions == 1 ? 'sale' : 'sales'} '
+                              'read held nothing in it.',
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // **How it was paid**, on its own card because it answers its own
+                // question. The bars take the *categorical* palette rather than one
+                // bar colour repeated: these are three ways of paying, not three
+                // positions on an axis, and a single colour left the eye nothing to
+                // tell them apart by. The figures are still printed beside every
+                // label, which is what §2.2 requires and what hard rule 4 requires.
+              ],
+            ),
+            trailing: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                if (answer.net?.tenderBreakdown ?? answer.tenderBreakdown
+                    case final breakdown?) ...[
+                  SizedBox(height: tokens.spacing.s12),
+                  _TotalsCard(
+                    cardKey: const ValueKey('sales-totals-tender'),
+                    title: 'How it was paid',
+                    child: _TenderBreakdown(
+                      breakdown: breakdown,
+                      currency: _currency,
                     ),
-                  ),
-                ),
-                SizedBox(height: tokens.spacing.s4),
-                Text(
-                  _salesDetail(answer),
-                  style: tokens.typography.bodyMedium.copyWith(
-                    color: tokens.colors.text.tertiary,
-                  ),
-                ),
-                // **The one fact the removed fold was carrying.** It said what
-                // these figures are counted from, and for a device answer that
-                // is not a footnote - it is the difference between the whole
-                // business and this till. A badge states it where the figure
-                // is, which is the shape the artboards used.
-                //
-                // **Once the server has failed, not while it is being asked.**
-                // The device read runs beside the server's and nearly always
-                // lands first, so this badge went up on every open and came
-                // down a moment later - the weekly report's mistake, fixed
-                // there the same way (`serverCouldNotBeReached`).
-                if (answer.basis == TenantSalesTotalsBasis.device &&
-                    (TenantReadFreshness.maybeOf(context)?.stale ?? true)) ...[
-                  SizedBox(height: tokens.spacing.s8),
-                  StatusBadge(
-                    key: const ValueKey('sales-totals-device-basis'),
-                    status: AppStatus.attention,
-                    icon: Icons.phone_android_outlined,
-                    label: 'Counted on this device',
                   ),
                 ],
-                SizedBox(height: tokens.spacing.s12),
-                StatRow(
-                  tiles: [
-                    // **`Transactions`, which is the daily summary's word for
-                    // the same count.** The two money surfaces use one
-                    // vocabulary; that was settled before this layout and is
-                    // unchanged by it.
-                    StatTile(
-                      label: 'Transactions',
-                      value: '${answer.netOrGrossTransactions}',
-                      icon: Icons.receipt_long_outlined,
-                      detail: 'counted in this total',
-                      valueKey: const ValueKey('sales-totals-transactions'),
-                    ),
-                    if (_averageSale(answer) case final average?)
-                      StatTile(
-                        label: 'Average sale',
-                        money: true,
-                        value: _currency.format(average),
-                        icon: Icons.payments_outlined,
-                        valueKey: const ValueKey('sales-totals-average'),
-                      ),
-                  ],
-                ),
-                // **Said out loud, because the headline figure changed
-                // meaning.** Takings net of returns and takings gross of them
-                // are different numbers, and a reader comparing this against a
-                // till roll needs to know which one this is.
-                if (answer.net case final net? when net.returnsScanned > 0)
-                  Padding(
-                    padding: EdgeInsets.only(top: tokens.spacing.s12),
-                    child: Text(
-                      key: const ValueKey('sales-totals-returns'),
-                      '${net.returnsScanned} '
-                      '${net.returnsScanned == 1 ? 'return has' : 'returns have'} '
-                      'been taken back out of these figures.',
-                      style: tokens.typography.bodyMedium.copyWith(
-                        color: tokens.colors.text.tertiary,
-                      ),
+                // **The per-cashier comparison, and only for a single day.** Empty
+                // for every longer period by construction - see
+                // `SalesTotalsView.shifts` - so this card is absent rather than
+                // showing a comparison that would put one cashier in several columns.
+                if (shifts.isNotEmpty) ...[
+                  SizedBox(height: tokens.spacing.s12),
+                  _TotalsCard(
+                    cardKey: const ValueKey('sales-totals-shifts'),
+                    title: 'Across the day',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ShiftComparisonChart(
+                          shifts: comparedShifts(shifts),
+                          currency: _currency,
+                          nameFor: (shift) => tenantStaffLabel(
+                            shift.staffId,
+                            names: sessionContext.staff.names,
+                            selfUid: selfUid,
+                          ),
+                        ),
+                        if (shifts.length > maximumComparedShifts) ...[
+                          SizedBox(height: tokens.spacing.s12),
+                          Text(
+                            key: const ValueKey('sales-totals-shifts-capped'),
+                            '${shifts.length - maximumComparedShifts} more '
+                            '${shifts.length - maximumComparedShifts == 1 ? 'shift is' : 'shifts are'} '
+                            'not on the chart. Shift history lists every one.',
+                            style: tokens.typography.bodyMedium.copyWith(
+                              color: tokens.colors.text.tertiary,
+                            ),
+                          ),
+                        ],
+                        if (shifts.any((shift) => shift.isOpen)) ...[
+                          SizedBox(height: tokens.spacing.s12),
+                          Text(
+                            key: const ValueKey('sales-totals-shifts-open'),
+                            // Not "in the chart": below two comparable shifts
+                            // there is no chart, and the sentence has to be true of
+                            // both presentations. What it is really saying is that
+                            // the close writes the figure.
+                            'A shift is still running. Its takings are written when '
+                            'it is closed, so they are not shown here yet.',
+                            style: tokens.typography.bodyMedium.copyWith(
+                              color: tokens.colors.text.tertiary,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                // A category total is a different figure, not a smaller one of
-                // the same kind: the server sums the matching lines and leaves
-                // the rest of each sale out. Showing it under the same label as
-                // a whole-business total would be lying by omission - which is
-                // a notice about *this* read, so it is a `Callout` and does not
-                // fold.
-                if (answer.query.isCategoryFiltered) ...[
+                ],
+                // **Profit, as a figure with its basis on it.** What this replaced
+                // was `TenantProfitStatement`'s five stacked rows - the block every
+                // other reporting surface uses and the one the product owner called
+                // overloaded here. The *wording* is unchanged and still comes from
+                // `tenantProfitCeilingNote` and `tenantProfitNote`, which is what
+                // keeps one rule: a second wording would be a second rule. Only the
+                // arrangement is this screen's.
+                if (showProfit && answer.netOrGrossProfitReport.isDrawable) ...[
                   SizedBox(height: tokens.spacing.s12),
-                  Callout(
-                    key: const ValueKey('sales-totals-category-basis'),
-                    status: AppStatus.info,
-                    message:
-                        'This adds up only the lines in this category, not '
-                        'the whole of each sale. '
-                        '${answer.scannedTransactions - answer.transactions} '
-                        'of the ${answer.scannedTransactions} '
-                        '${answer.scannedTransactions == 1 ? 'sale' : 'sales'} '
-                        'read held nothing in it.',
+                  _TotalsCard(
+                    cardKey: const ValueKey('sales-totals-profit-card'),
+                    title: net == null ? 'Profit' : 'Gross profit',
+                    child: _ProfitFigure(
+                      report: answer.netOrGrossProfitReport,
+                      currency: _currency,
+                      figureKey: const ValueKey('sales-totals-profit'),
+                      marginKey: const ValueKey('sales-totals-margin'),
+                      marginLabel: net == null ? 'Margin' : 'Gross margin',
+                    ),
+                  ),
+                ],
+                // **Net profit on its own card, because it is its own question.**
+                // Gross profit answers *what did the goods make*; this answers *what
+                // was left*, and they were two lines of one block.
+                if (net case final spending?
+                    when showProfit && spending.isDrawable) ...[
+                  SizedBox(height: tokens.spacing.s12),
+                  _TotalsCard(
+                    cardKey: const ValueKey('sales-totals-net-card'),
+                    title: 'Net profit',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _currency.format(spending.netProfit),
+                          key: const ValueKey('sales-totals-net-profit'),
+                          style: tokens.typography.numericHero.copyWith(
+                            fontSize: 26,
+                            color: tokens.colors.text.primary,
+                          ),
+                        ),
+                        if (!spending.isShowable) ...[
+                          SizedBox(height: tokens.spacing.s8),
+                          StatusBadge(
+                            status: AppStatus.attention,
+                            icon: Icons.pending_outlined,
+                            label:
+                                spending.basis ==
+                                    TenantNetProfitBasis.expensesUnread
+                                ? 'At most: some spending is not counted'
+                                : tenantProfitCeilingNote(spending.gross),
+                          ),
+                        ],
+                        SizedBox(height: tokens.spacing.s12),
+                        StatRow(
+                          tiles: [
+                            StatTile(
+                              label: 'Expenses',
+                              money: true,
+                              value: _currency.format(spending.expenses),
+                              icon: Icons.account_balance_wallet_outlined,
+                              detail: 'Rent, wages and the rest',
+                              valueKey: const ValueKey('sales-totals-expenses'),
+                            ),
+                            if (spending.netMarginPercent case final margin?)
+                              StatTile(
+                                label: 'Net margin',
+                                value: '${margin.toStringAsFixed(1)}%',
+                                icon: Icons.percent_outlined,
+                                valueKey: const ValueKey(
+                                  'sales-totals-net-margin',
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                // **The rule this whole block exists to satisfy**, on its own line
+                // under the figures it qualifies: no profit figure is ever shown
+                // without, nearby, what is known about the cost data behind it.
+                if (showProfit) ...[
+                  SizedBox(height: tokens.spacing.s12),
+                  Text(
+                    key: const ValueKey('sales-totals-profit-note'),
+                    tenantProfitNote(answer.netOrGrossProfitReport),
+                    style: tokens.typography.bodyMedium.copyWith(
+                      color: tokens.colors.text.tertiary,
+                    ),
+                  ),
+                ] else if (!answer.hasCompleteCostData) ...[
+                  SizedBox(height: tokens.spacing.s12),
+                  Text(
+                    key: const ValueKey('sales-totals-cost'),
+                    '${answer.incompleteCostLineCount} sale '
+                    '${answer.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
+                    'no cost recorded.',
+                    style: tokens.typography.bodyMedium.copyWith(
+                      color: tokens.colors.text.tertiary,
+                    ),
                   ),
                 ],
               ],
             ),
           ),
-          // **How it was paid**, on its own card because it answers its own
-          // question. The bars take the *categorical* palette rather than one
-          // bar colour repeated: these are three ways of paying, not three
-          // positions on an axis, and a single colour left the eye nothing to
-          // tell them apart by. The figures are still printed beside every
-          // label, which is what §2.2 requires and what hard rule 4 requires.
-          if (answer.net?.tenderBreakdown ?? answer.tenderBreakdown
-              case final breakdown?) ...[
-            SizedBox(height: tokens.spacing.s12),
-            _TotalsCard(
-              cardKey: const ValueKey('sales-totals-tender'),
-              title: 'How it was paid',
-              child: _TenderBreakdown(
-                breakdown: breakdown,
-                currency: _currency,
-              ),
-            ),
-          ],
-          // **The per-cashier comparison, and only for a single day.** Empty
-          // for every longer period by construction - see
-          // `SalesTotalsView.shifts` - so this card is absent rather than
-          // showing a comparison that would put one cashier in several columns.
-          if (shifts.isNotEmpty) ...[
-            SizedBox(height: tokens.spacing.s12),
-            _TotalsCard(
-              cardKey: const ValueKey('sales-totals-shifts'),
-              title: 'Across the day',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ShiftComparisonChart(
-                    shifts: comparedShifts(shifts),
-                    currency: _currency,
-                    nameFor: (shift) => tenantStaffLabel(
-                      shift.staffId,
-                      names: sessionContext.staff.names,
-                      selfUid: selfUid,
-                    ),
-                  ),
-                  if (shifts.length > maximumComparedShifts) ...[
-                    SizedBox(height: tokens.spacing.s12),
-                    Text(
-                      key: const ValueKey('sales-totals-shifts-capped'),
-                      '${shifts.length - maximumComparedShifts} more '
-                      '${shifts.length - maximumComparedShifts == 1 ? 'shift is' : 'shifts are'} '
-                      'not on the chart. Shift history lists every one.',
-                      style: tokens.typography.bodyMedium.copyWith(
-                        color: tokens.colors.text.tertiary,
-                      ),
-                    ),
-                  ],
-                  if (shifts.any((shift) => shift.isOpen)) ...[
-                    SizedBox(height: tokens.spacing.s12),
-                    Text(
-                      key: const ValueKey('sales-totals-shifts-open'),
-                      // Not "in the chart": below two comparable shifts
-                      // there is no chart, and the sentence has to be true of
-                      // both presentations. What it is really saying is that
-                      // the close writes the figure.
-                      'A shift is still running. Its takings are written when '
-                      'it is closed, so they are not shown here yet.',
-                      style: tokens.typography.bodyMedium.copyWith(
-                        color: tokens.colors.text.tertiary,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-          // **Profit, as a figure with its basis on it.** What this replaced
-          // was `TenantProfitStatement`'s five stacked rows - the block every
-          // other reporting surface uses and the one the product owner called
-          // overloaded here. The *wording* is unchanged and still comes from
-          // `tenantProfitCeilingNote` and `tenantProfitNote`, which is what
-          // keeps one rule: a second wording would be a second rule. Only the
-          // arrangement is this screen's.
-          if (showProfit && answer.netOrGrossProfitReport.isDrawable) ...[
-            SizedBox(height: tokens.spacing.s12),
-            _TotalsCard(
-              cardKey: const ValueKey('sales-totals-profit-card'),
-              title: net == null ? 'Profit' : 'Gross profit',
-              child: _ProfitFigure(
-                report: answer.netOrGrossProfitReport,
-                currency: _currency,
-                figureKey: const ValueKey('sales-totals-profit'),
-                marginKey: const ValueKey('sales-totals-margin'),
-                marginLabel: net == null ? 'Margin' : 'Gross margin',
-              ),
-            ),
-          ],
-          // **Net profit on its own card, because it is its own question.**
-          // Gross profit answers *what did the goods make*; this answers *what
-          // was left*, and they were two lines of one block.
-          if (net case final spending?
-              when showProfit && spending.isDrawable) ...[
-            SizedBox(height: tokens.spacing.s12),
-            _TotalsCard(
-              cardKey: const ValueKey('sales-totals-net-card'),
-              title: 'Net profit',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _currency.format(spending.netProfit),
-                    key: const ValueKey('sales-totals-net-profit'),
-                    style: tokens.typography.numericHero.copyWith(
-                      fontSize: 26,
-                      color: tokens.colors.text.primary,
-                    ),
-                  ),
-                  if (!spending.isShowable) ...[
-                    SizedBox(height: tokens.spacing.s8),
-                    StatusBadge(
-                      status: AppStatus.attention,
-                      icon: Icons.pending_outlined,
-                      label:
-                          spending.basis == TenantNetProfitBasis.expensesUnread
-                          ? 'At most: some spending is not counted'
-                          : tenantProfitCeilingNote(spending.gross),
-                    ),
-                  ],
-                  SizedBox(height: tokens.spacing.s12),
-                  StatRow(
-                    tiles: [
-                      StatTile(
-                        label: 'Expenses',
-                        money: true,
-                        value: _currency.format(spending.expenses),
-                        icon: Icons.account_balance_wallet_outlined,
-                        detail: 'Rent, wages and the rest',
-                        valueKey: const ValueKey('sales-totals-expenses'),
-                      ),
-                      if (spending.netMarginPercent case final margin?)
-                        StatTile(
-                          label: 'Net margin',
-                          value: '${margin.toStringAsFixed(1)}%',
-                          icon: Icons.percent_outlined,
-                          valueKey: const ValueKey('sales-totals-net-margin'),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-          // **The rule this whole block exists to satisfy**, on its own line
-          // under the figures it qualifies: no profit figure is ever shown
-          // without, nearby, what is known about the cost data behind it.
-          if (showProfit) ...[
-            SizedBox(height: tokens.spacing.s12),
-            Text(
-              key: const ValueKey('sales-totals-profit-note'),
-              tenantProfitNote(answer.netOrGrossProfitReport),
-              style: tokens.typography.bodyMedium.copyWith(
-                color: tokens.colors.text.tertiary,
-              ),
-            ),
-          ] else if (!answer.hasCompleteCostData) ...[
-            SizedBox(height: tokens.spacing.s12),
-            Text(
-              key: const ValueKey('sales-totals-cost'),
-              '${answer.incompleteCostLineCount} sale '
-              '${answer.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
-              'no cost recorded.',
-              style: tokens.typography.bodyMedium.copyWith(
-                color: tokens.colors.text.tertiary,
-              ),
-            ),
-          ],
         ],
         if (failureMessage case final message?) ...[
           Callout(
