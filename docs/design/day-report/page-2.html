@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day report — page 2</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&amp;display=swap">
+<style>
+:root {
+  --ink: #232323; --ink-2: #4F4F4F; --muted: #6C757D; --hairline: #E0E0E0; --band: #F6F6F6;
+  --brand: #4B68FF; --brand-tint: #B0C7FF; --margin: 40pt; --column: 245.5pt; --column-gap: 24pt;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #DADCE0; font-family: 'Noto Sans', sans-serif; color: var(--ink);
+  -webkit-font-smoothing: antialiased; padding: 32px 16px; }
+.page { width: 595pt; height: 842pt; margin: 0 auto; background: #fff; position: relative;
+  padding: var(--margin); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.10); }
+.micro { font-size: 6.5pt; line-height: 8pt; letter-spacing: .6pt; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.small { font-size: 7.5pt; line-height: 10pt; color: var(--muted); }
+.body { font-size: 8.5pt; line-height: 11pt; }
+.bold { font-weight: 700; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Running head: the masthead, one line high */
+.runhead { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 8pt;
+  border-bottom: .75pt solid var(--ink); }
+.wordmark { font-size: 8.5pt; line-height: 11pt; font-weight: 700; letter-spacing: 1.3pt; }
+
+.section-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 16pt;
+  padding-bottom: 5pt; border-bottom: .5pt solid var(--hairline); }
+.section-title { font-size: 9.5pt; line-height: 12pt; font-weight: 700; letter-spacing: .8pt; text-transform: uppercase; }
+
+.columns { display: grid; grid-template-columns: var(--column) var(--column); column-gap: var(--column-gap); margin-top: 10pt; align-items: start; }
+.colhead { display: flex; height: 12pt; align-items: flex-end; padding: 0 6pt 3pt; }
+
+/* One category: a band, then its items */
+.cat { margin-bottom: 12pt; }
+.cat-band { display: flex; align-items: center; height: 20pt; padding: 0 6pt; background: var(--band); border-radius: 3pt; }
+.cat-band .name { font-size: 8.5pt; font-weight: 700; letter-spacing: .5pt; }
+.item { display: flex; align-items: center; height: 15pt; padding: 0 6pt; border-bottom: .5pt solid var(--hairline); }
+.item:last-child { border-bottom: 0; }
+.item .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.size { color: var(--muted); }
+.price { width: 44pt; text-align: right; }
+.qty { width: 30pt; text-align: right; }
+.kes { width: 52pt; text-align: right; }
+.share { display: block; height: 2pt; background: var(--brand-tint); border-radius: 1pt; margin-top: 1pt; }
+
+.footer { position: absolute; left: var(--margin); right: var(--margin); bottom: 24pt; display: flex;
+  justify-content: space-between; border-top: .5pt solid var(--hairline); padding-top: 5pt; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="runhead">
+    <span class="wordmark">CHILLTENT LOUNGE</span>
+    <span class="body bold">Tuesday 13 October 2026</span>
+  </header>
+
+  <div class="section-head">
+    <span class="section-title">Items by category</span>
+    <span class="small">Sizes after the name · price is per item</span>
+  </div>
+
+  <div class="columns">
+    <div class="colhead"><span style="flex: 1"></span><span class="micro price">Price</span><span class="micro qty">Qty</span><span class="micro kes">KES</span></div>
+    <div class="colhead"><span style="flex: 1"></span><span class="micro price">Price</span><span class="micro qty">Qty</span><span class="micro kes">KES</span></div>
+    <div id="left"></div>
+    <div id="right"></div>
+  </div>
+
+  <footer class="footer">
+    <span class="small">Chilltent Lounge · Daily trading report · Tue 13 Oct 2026 · sent Wed 14 Oct 08:00</span>
+    <span class="small num">Page 2 of 2</span>
+  </footer>
+</div>
+
+<script>
+// [name, size, qty, unit price]
+const cats = {
+  BEERS: [['Balozi','',18,250],['Guinness','',17,280],['White Cap Lager','',16,270],['Pilsner','',9,250],
+    ['Tusker Lite','',7,250],['Heineken 0.0%','',6,330],['Savannah Dry','',5,350],['Smirnoff Raspberry','',2,270],
+    ['Black Ice','',1,270],['Heineken','',1,330],['Tusker Cider','',1,300]],
+  CANS: [['White Cap','',10,300],['Tusker Lite','',5,350],['Black Ice','',4,300],['Guarana','',4,300],['Manyatta','',1,350]],
+  'SOFT DRINKS': [['Safari Water','1L',15,100],['Coke','',7,100],['Fanta Orange','',3,100],['Krest','',3,100],
+    ['Stoney','',3,100],['Delmonte Mango','',2,350],['Delmonte Tropical','',2,350],['Monster','',2,350],
+    ['Predator','',2,100],['Safari Water','500ml',2,50],['Dasani','',1,60],['Delmonte Apple','',1,350],
+    ['Fanta Blackcurrant','',1,100],['Fanta Passion','',1,100],['Keringet','',1,200]],
+  BRANDY: [['Viceroy','375ml',3,950],['Viceroy','250ml',3,700]],
+  GIN: [['Gilbeys Gin','250ml',3,650],['Gilbeys Gin','350ml',2,950]],
+  SPIRITS: [['Kenya Cane Smooth','',3,450],['Soju Grapefruit','',1,500]],
+  OTHERS: [['Pool token','',20,50]],
+  TOTS: [['Gilbeys','tot',8,100]],
+};
+const fmt = n => n.toLocaleString('en-US');
+// Columns fill left first, then right, in the same order as page 1's "What sold".
+const columns = {left: ['BEERS','CANS','BRANDY','GIN','SPIRITS'], right: ['SOFT DRINKS','OTHERS','TOTS']};
+for (const [id, names] of Object.entries(columns)) {
+  const el = document.getElementById(id);
+  for (const name of names) {
+    const items = cats[name];
+    const qty = items.reduce((s, i) => s + i[2], 0), kes = items.reduce((s, i) => s + i[2] * i[3], 0);
+    el.insertAdjacentHTML('beforeend', `<div class="cat">
+      <div class="cat-band"><span class="name" style="flex:1">${name}</span><span class="body num qty">${qty}</span><span class="body bold num kes">${fmt(kes)}</span></div>
+      ${items.map(([n, size, q, p]) => `<div class="item">
+        <span class="body name">${n}${size ? ` <span class="size">${size}</span>` : ''}</span>
+        <span class="small num price">${fmt(p)}</span>
+        <span class="body num qty">${q}</span>
+        <span class="body num kes">${fmt(q * p)}</span></div>`).join('')}
+    </div>`);
+  }
+}
+</script>
+</body>
+</html>

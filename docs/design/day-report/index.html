@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily trading report &#8212; design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&amp;display=swap">
+<style>
+body { margin: 0; background: #F6F6F6; font-family: 'Noto Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #232323; }
+a { color: #3450E0; } a:hover { color: #1F3BCC; }
+:focus-visible { outline: 2px solid #4B68FF; outline-offset: 2px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 48px 16px 64px; }
+.board { display: flex; align-items: baseline; gap: 16px; padding: 20px; background: #fff; border: 1px solid #E0E0E0; border-radius: 12px; text-decoration: none; }
+.board:hover { border-color: #B0C7FF; }
+.board h2 { margin: 0; font-size: 17px; font-weight: 700; color: #232323; flex-shrink: 0; width: 200px; }
+.board p { margin: 0; font-size: 14px; line-height: 21px; color: #4F4F4F; }
+.size { font-size: 13px; color: #6C757D; flex-shrink: 0; margin-left: auto; }
+@media (max-width: 640px) { .board { flex-direction: column; gap: 6px; } .board h2 { width: auto; } .size { margin-left: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.5px;">Daily trading report</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 22px; color: #4F4F4F; max-width: 660px;">The PDF sent on WhatsApp at 08:00 with the previous business date. Drawn in pt on A4, in <code>main</code>&#8217;s own colours and the Noto Sans the functions embed, so it carries straight into <code>reportPdf.ts</code>. Read <a href="README.md">README.md</a> for the tokens, the rules the code must keep, and what&#8217;s new data rather than new drawing.</p>
+  </header>
+  <nav style="display: flex; flex-direction: column; gap: 12px;">
+    <a class="board" href="page-1.html"><h2>Page 1 &#8212; the day</h2><p>The total and its three figures, the open-shift warning, sales per hour with the shifts on the same axis, how it was paid, and what sold by category.</p><span class="size">A4</span></a>
+    <a class="board" href="page-2.html"><h2>Page 2 &#8212; the items</h2><p>Every item under its category in two columns, with size, price, quantity and amount. A real Thamani day fits on one page.</p><span class="size">A4</span></a>
+    <a class="board" href="quiet-day.html"><h2>A day with no sales</h2><p>Still sent, so silence never means the report broke; says plainly what an empty day can mean.</p><span class="size">A4</span></a>
+    <a class="board" href="whatsapp.html"><h2>As it arrives</h2><p>The WhatsApp message: page 1&#8217;s top as the thumbnail, the file row, and the template text with its figures.</p><span class="size">390</span></a>
+  </nav>
+</div>
+</body>
+</html>

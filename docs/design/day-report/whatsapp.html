@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day report — as it arrives</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&amp;display=swap">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #DADCE0; font-family: 'Noto Sans', sans-serif; color: #111B21;
+  -webkit-font-smoothing: antialiased; padding: 32px 16px; display: flex; gap: 40px; justify-content: center; flex-wrap: wrap; }
+.phone { width: 390px; height: 780px; border-radius: 36px; background: #111; padding: 10px; flex: none; }
+.screen { width: 100%; height: 100%; border-radius: 28px; overflow: hidden; background: #EFEAE2; display: flex; flex-direction: column; }
+.bar { background: #fff; display: flex; align-items: center; gap: 12px; padding: 44px 16px 10px; border-bottom: 1px solid #E9EDEF; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: #DFE5E7; }
+.name { font-size: 16px; font-weight: 700; }
+.sub { font-size: 12px; color: #667781; }
+.chat { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+.day { align-self: center; background: #fff; color: #54656F; font-size: 12px; padding: 4px 10px; border-radius: 8px; }
+.bubble { align-self: flex-start; width: 286px; background: #fff; border-radius: 0 8px 8px 8px; padding: 4px;
+  box-shadow: 0 1px .5px rgba(11,20,26,.13); }
+.thumb { width: 278px; height: 150px; border-radius: 6px 6px 0 0; overflow: hidden; position: relative; background: #fff; }
+.thumb iframe { position: absolute; left: 0; top: 0; width: 826px; height: 1200px; border: 0;
+  transform-origin: 0 0; transform: translate(-5.6px, -11.2px) scale(.3504); pointer-events: none; }
+.file { display: flex; align-items: center; gap: 10px; background: #F5F6F6; padding: 10px; border-radius: 0 0 6px 6px; }
+.pdf { width: 30px; height: 36px; border-radius: 3px; background: #E5463A; color: #fff; font-size: 9px; font-weight: 700;
+  display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; flex: none; }
+.fname { font-size: 13.5px; line-height: 18px; }
+.fmeta { font-size: 12px; color: #667781; }
+.text { font-size: 14.2px; line-height: 19px; padding: 6px 6px 2px; white-space: pre-line; }
+.time { text-align: right; font-size: 11px; color: #667781; padding: 0 6px 2px; }
+.caption { max-width: 420px; font-size: 14px; line-height: 21px; color: #3B4A54; align-self: center; }
+.caption h1 { font-size: 20px; line-height: 26px; margin: 0 0 8px; color: #111B21; }
+.caption p { margin: 0 0 10px; }
+</style>
+</head>
+<body>
+<div class="phone" role="img" aria-label="The report as a WhatsApp message">
+  <div class="screen">
+    <div class="bar">
+      <div class="avatar"></div>
+      <div><div class="name">Sender name</div><div class="sub">Business account</div></div>
+    </div>
+    <div class="chat">
+      <div class="day">Today</div>
+      <div class="bubble">
+        <div class="thumb"><iframe src="page-1.html" title="First page of the report" tabindex="-1"></iframe></div>
+        <div class="file">
+          <div class="pdf">PDF</div>
+          <div><div class="fname">Day-report-2026-10-13.pdf</div><div class="fmeta">2 pages · PDF · 140 kB</div></div>
+        </div>
+        <div class="text">Business day summary for Tue 13 Oct 2026.
+Shifts: 4 (Wanjiku Kamau, Brian Otieno, Kevin Mutua, Faith Achieng)
+Total sales: KES 49,010 from 123 sales.
+Payments: Cash 21,480 · M-Pesa 25,330 · Debt 2,200
+Shifts still open: Brian Otieno, Kevin Mutua
+The category and item breakdown is in the attached report.</div>
+        <div class="time">08:00</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="caption">
+  <h1>Why the top of page 1 carries the day</h1>
+  <p>WhatsApp shows the first page of a PDF as a thumbnail, cropped to its top. So the masthead, the date, the total and the open-shift warning all sit in the top third of page 1, and the total is set large enough to read at this size without opening the file.</p>
+  <p>The message text repeats the same figures, so the report is useful even before the PDF is downloaded.</p>
+  <p>“Sender name” is whatever display name the shared WhatsApp number carries; the report does not set it.</p>
+</div>
+</body>
+</html>
