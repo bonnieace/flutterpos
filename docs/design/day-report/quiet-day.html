@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day report — a day with no sales</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&amp;display=swap">
+<style>
+:root { --ink: #232323; --ink-2: #4F4F4F; --muted: #6C757D; --hairline: #E0E0E0; --brand-tint: #B0C7FF;
+  --brand-wash: #F3F5FF; --margin: 40pt; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #DADCE0; font-family: 'Noto Sans', sans-serif; color: var(--ink);
+  -webkit-font-smoothing: antialiased; padding: 32px 16px; }
+.page { width: 595pt; height: 842pt; margin: 0 auto; background: #fff; position: relative;
+  padding: var(--margin); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.10); }
+.micro { font-size: 6.5pt; line-height: 8pt; letter-spacing: .6pt; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.small { font-size: 7.5pt; line-height: 10pt; color: var(--muted); }
+.body { font-size: 8.5pt; line-height: 11pt; }
+.num { font-variant-numeric: tabular-nums; }
+.masthead { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 12pt; border-bottom: .75pt solid var(--ink); }
+.wordmark { font-size: 10pt; line-height: 12pt; font-weight: 700; letter-spacing: 1.5pt; }
+.date { font-size: 15pt; line-height: 18pt; font-weight: 700; text-align: right; }
+.hero { margin-top: 16pt; background: var(--brand-wash); border-radius: 6pt; padding: 16pt 20pt;
+  display: flex; align-items: flex-end; justify-content: space-between; }
+.total { font-size: 34pt; line-height: 38pt; font-weight: 700; letter-spacing: -.5pt; color: var(--ink-2); }
+.total small { font-size: 14pt; margin-right: 4pt; letter-spacing: 0; }
+.stats { display: flex; }
+.stat { padding: 0 0 2pt 16pt; margin-left: 16pt; border-left: .75pt solid var(--brand-tint); min-width: 64pt; }
+.stat .value { font-size: 14pt; line-height: 17pt; font-weight: 700; margin-top: 3pt; color: var(--ink-2); }
+.nothing { margin-top: 20pt; padding: 14pt 0; border-top: .5pt solid var(--hairline); border-bottom: .5pt solid var(--hairline); }
+.footer { position: absolute; left: var(--margin); right: var(--margin); bottom: 24pt; display: flex;
+  justify-content: space-between; border-top: .5pt solid var(--hairline); padding-top: 5pt; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div><div class="wordmark">CHILLTENT LOUNGE</div><div class="small" style="margin-top: 2pt;">Juja</div></div>
+    <div><div class="micro" style="text-align: right;">Daily trading report</div><div class="date" style="margin-top: 3pt;">Monday 12 October 2026</div></div>
+  </header>
+
+  <section class="hero">
+    <div><div class="micro">Total sales</div><div class="total num" style="margin-top: 4pt;"><small>KES</small>0</div></div>
+    <div class="stats">
+      <div class="stat"><div class="micro">Sales</div><div class="value num">0</div></div>
+      <div class="stat"><div class="micro">Average sale</div><div class="value num">–</div></div>
+      <div class="stat"><div class="micro">Items sold</div><div class="value num">0</div></div>
+    </div>
+  </section>
+
+  <section class="nothing">
+    <div class="body" style="font-weight: 700;">Nothing was sold on this business date</div>
+    <div class="small" style="color: var(--ink-2); margin-top: 2pt; max-width: 360pt;">No shift was opened and no sale was recorded for Mon 12 Oct. If the bar was open, a till phone may have been offline: its sales appear in the app once it reconnects, but not in this report, which has already been sent.</div>
+  </section>
+
+  <footer class="footer">
+    <span class="small">Chilltent Lounge · Daily trading report · Mon 12 Oct 2026 · sent Tue 13 Oct 08:00</span>
+    <span class="small num">Page 1 of 1</span>
+  </footer>
+</div>
+</body>
+</html>

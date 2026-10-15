@@ -440,3 +440,5 @@ function getInitials(name: string): string {
   }
   return parts[0][0].toUpperCase() + parts[1][0].toUpperCase();
 }
+
+export {sendDailyWhatsappReport} from "./dayReport/functions";

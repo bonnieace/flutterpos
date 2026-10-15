@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day report — page 1</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&amp;display=swap">
+<style>
+/* Tokens. Every value is in pt, the unit pdf-lib draws in, and every colour is
+   main's TColors (lib/constants/colors.dart). See README.md for the mapping. */
+:root {
+  --ink: #232323;        /* TColors.black */
+  --ink-2: #4F4F4F;      /* TColors.darkerGrey */
+  --muted: #6C757D;      /* TColors.textSecondary - 4.7:1 on white */
+  --hairline: #E0E0E0;   /* TColors.grey */
+  --band: #F6F6F6;       /* TColors.light */
+  --brand: #4B68FF;      /* TColors.primary - fills only, never small text */
+  --brand-tint: #B0C7FF; /* TColors.accent */
+  --brand-wash: #F3F5FF; /* TColors.primaryBackground */
+  --mpesa: #388E3C;      /* TColors.success */
+  --debt: #F57C00;       /* TColors.warning - fills and strokes only */
+  --other: #939393;      /* TColors.darkGrey */
+  --margin: 40pt;
+  --gutter: 96pt;        /* names and axis labels */
+  --plot: 315pt;         /* the shared time axis */
+  --figures: 104pt;      /* counts and amounts */
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #DADCE0; font-family: 'Noto Sans', sans-serif; color: var(--ink);
+  -webkit-font-smoothing: antialiased; padding: 32px 16px; }
+.page { width: 595pt; height: 842pt; margin: 0 auto; background: #fff; position: relative;
+  padding: var(--margin); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.10); }
+
+/* Type: display 34, title 15, value 14, section 9.5, body 8.5, small 7.5, micro 6.5 */
+.micro { font-size: 6.5pt; line-height: 8pt; letter-spacing: .6pt; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.small { font-size: 7.5pt; line-height: 10pt; color: var(--muted); }
+.body { font-size: 8.5pt; line-height: 11pt; }
+.bold { font-weight: 700; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Masthead */
+.masthead { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 12pt;
+  border-bottom: .75pt solid var(--ink); }
+.wordmark { font-size: 10pt; line-height: 12pt; font-weight: 700; letter-spacing: 1.5pt; }
+.date { font-size: 15pt; line-height: 18pt; font-weight: 700; text-align: right; }
+
+/* Hero */
+.hero { margin-top: 16pt; background: var(--brand-wash); border-radius: 6pt; padding: 16pt 20pt;
+  display: flex; align-items: flex-end; justify-content: space-between; }
+.total { font-size: 34pt; line-height: 38pt; font-weight: 700; letter-spacing: -.5pt; }
+.total small { font-size: 14pt; color: var(--ink-2); letter-spacing: 0; margin-right: 4pt; }
+.stats { display: flex; }
+.stat { padding: 0 0 2pt 16pt; margin-left: 16pt; border-left: .75pt solid var(--brand-tint); min-width: 64pt; }
+.stat .value { font-size: 14pt; line-height: 17pt; font-weight: 700; margin-top: 3pt; }
+
+/* Attention */
+.attention { margin-top: 12pt; border: .75pt solid var(--debt); border-left-width: 3pt; border-radius: 4pt;
+  padding: 8pt 12pt; display: flex; gap: 10pt; align-items: flex-start; }
+.attention svg { flex: none; margin-top: 1pt; }
+
+/* Sections */
+.section { margin-top: 20pt; }
+.section-head { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 5pt;
+  border-bottom: .5pt solid var(--hairline); margin-bottom: 8pt; }
+.section-title { font-size: 9.5pt; line-height: 12pt; font-weight: 700; letter-spacing: .8pt; text-transform: uppercase; }
+.grid { display: grid; grid-template-columns: var(--gutter) var(--plot) var(--figures); }
+
+/* Chart */
+.chart { position: relative; height: 96pt; }
+.gridline { position: absolute; left: 0; right: 0; border-top: .5pt solid var(--hairline); }
+.gridline.zero { border-top: .75pt solid var(--ink-2); }
+.ylabel { position: absolute; right: 8pt; transform: translateY(-50%); }
+.bar { position: absolute; bottom: 0; width: 13pt; background: var(--brand-tint); border-radius: 1.5pt 1.5pt 0 0; }
+.bar.peak { background: var(--brand); }
+.peak-label { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.xaxis { position: relative; height: 12pt; }
+.xlabel { position: absolute; top: 3pt; transform: translateX(-50%); }
+
+/* Shift lanes, on the chart's own axis */
+.lane { height: 20pt; display: contents; }
+.lane > div { height: 20pt; display: flex; align-items: center; }
+.track { position: relative; }
+.track::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: .5pt dashed var(--hairline); }
+.span { position: absolute; height: 10pt; top: 5pt; background: var(--brand-tint); border-radius: 2pt;
+  border-left: 2pt solid var(--brand); }
+.span.open { background: repeating-linear-gradient(135deg, var(--brand-tint) 0 3pt, #D3DFFF 3pt 6pt);
+  border-radius: 2pt 0 0 2pt; }
+.span .note { position: absolute; right: 4pt; top: 0; font-size: 6.5pt; line-height: 10pt; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.figs { justify-content: flex-end; gap: 0; }
+.figs span { text-align: right; }
+.c1 { width: 36pt; } .c2 { width: 68pt; }
+
+/* Payments */
+.stack { display: flex; height: 12pt; border-radius: 6pt; overflow: hidden; gap: 1.5pt; background: #fff; }
+.legend { display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 24pt; margin-top: 8pt; }
+.legend-row { display: flex; align-items: center; gap: 6pt; padding: 4pt 0; border-bottom: .5pt solid var(--hairline); }
+.swatch { width: 8pt; height: 8pt; border-radius: 2pt; flex: none; }
+.legend-row .amount { margin-left: auto; }
+
+/* What sold */
+.share { position: relative; height: 18pt; display: flex; align-items: center; }
+.share i { display: block; height: 8pt; background: var(--brand-tint); border-radius: 0 2pt 2pt 0; }
+.share b { font-weight: 400; margin-left: 6pt; }
+.row-name { height: 18pt; display: flex; align-items: center; overflow: hidden; white-space: nowrap; }
+
+/* Footer */
+.footer { position: absolute; left: var(--margin); right: var(--margin); bottom: 24pt; display: flex;
+  justify-content: space-between; border-top: .5pt solid var(--hairline); padding-top: 5pt; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <div>
+      <div class="wordmark">CHILLTENT LOUNGE</div>
+      <div class="small" style="margin-top: 2pt;">Juja</div>
+    </div>
+    <div>
+      <div class="micro" style="text-align: right;">Daily trading report</div>
+      <div class="date" style="margin-top: 3pt;">Tuesday 13 October 2026</div>
+    </div>
+  </header>
+
+  <section class="hero" aria-label="Day total">
+    <div>
+      <div class="micro">Total sales</div>
+      <div class="total num" style="margin-top: 4pt;"><small>KES</small>49,010</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="micro">Sales</div><div class="value num">123</div></div>
+      <div class="stat"><div class="micro">Average sale</div><div class="value num">398</div></div>
+      <div class="stat"><div class="micro">Items sold</div><div class="value num">196</div></div>
+    </div>
+  </section>
+
+  <section class="attention" role="note">
+    <svg width="12pt" height="11pt" viewBox="0 0 24 22" aria-hidden="true">
+      <path d="M12 1 L23 21 H1 Z" fill="none" stroke="#F57C00" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M12 8 V14" stroke="#232323" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="12" cy="17.6" r="1.3" fill="#232323"/>
+    </svg>
+    <div>
+      <div class="body bold">2 shifts were still open at 08:00</div>
+      <div class="small" style="color: var(--ink-2); margin-top: 1pt;">Brian Otieno since 13:14 and Kevin Mutua since 15:56. Their sales so far are counted; anything they sell from now on is not.</div>
+    </div>
+  </section>
+
+  <section class="section" aria-label="Trading day">
+    <div class="section-head">
+      <span class="section-title">Trading day</span>
+      <span class="small">Sales per hour, and who was on shift</span>
+    </div>
+
+    <div class="grid">
+      <div class="chart" id="yaxis"></div>
+      <div class="chart" id="plot"></div>
+      <div style="padding-left: 16pt; display: flex; flex-direction: column; justify-content: flex-start;">
+        <div class="micro">Busiest hour</div>
+        <div class="body bold num" style="margin-top: 2pt;">19:00 – 20:00</div>
+        <div class="small num">KES 7,450 · 16 sales</div>
+        <div class="micro" style="margin-top: 10pt;">First · last sale</div>
+        <div class="body num" style="margin-top: 2pt;">11:05 · 02:41</div>
+      </div>
+
+      <div></div>
+      <div class="xaxis" id="xaxis"></div>
+      <div></div>
+
+      <div style="height: 14pt;"></div>
+      <div></div>
+      <div class="figs" style="display: flex; align-items: flex-end; height: 14pt;">
+        <span class="micro c1">Sales</span><span class="micro c2">KES</span>
+      </div>
+    </div>
+    <div class="grid" id="lanes"></div>
+  </section>
+
+  <section class="section" aria-label="How it was paid">
+    <div class="section-head">
+      <span class="section-title">How it was paid</span>
+      <span class="small">Share of the day's sales</span>
+    </div>
+    <div class="stack" aria-hidden="true">
+      <div style="flex: 21480; background: var(--brand);"></div>
+      <div style="flex: 25330; background: var(--mpesa);"></div>
+      <div style="flex: 2200; background: var(--debt);"></div>
+    </div>
+    <div class="legend">
+      <div class="legend-row"><span class="swatch" style="background: var(--brand);"></span><span class="body bold">Cash</span><span class="small num">44%</span><span class="body num amount">21,480</span></div>
+      <div class="legend-row"><span class="swatch" style="background: var(--mpesa);"></span><span class="body bold">M-Pesa</span><span class="small num">52%</span><span class="body num amount">25,330</span></div>
+      <div class="legend-row"><span class="swatch" style="background: var(--debt);"></span><span class="body bold">Debt</span><span class="small num">4%</span><span class="body num amount">2,200</span></div>
+    </div>
+  </section>
+
+  <section class="section" aria-label="What sold">
+    <div class="section-head">
+      <span class="section-title">What sold</span>
+      <span class="small">By category · items on page 2</span>
+    </div>
+    <div class="grid">
+      <div></div><div></div>
+      <div class="figs" style="display: flex; height: 10pt; align-items: flex-end;">
+        <span class="micro c1">Items</span><span class="micro c2">KES</span>
+      </div>
+    </div>
+    <div class="grid" id="categories"></div>
+  </section>
+
+  <footer class="footer">
+    <span class="small">Chilltent Lounge · Daily trading report · Tue 13 Oct 2026 · sent Wed 14 Oct 08:00</span>
+    <span class="small num">Page 1 of 2</span>
+  </footer>
+</div>
+
+<script>
+// Sample day. KES per hour from 11:00 to 02:00; four overlapping shifts.
+const PT = 'pt';
+const hours = [11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
+const sales = [1600,2450,3100,2050,2700,3550,5200,4800,7450,3900,4700,2850,2400,900,1000,360];
+const scaleMax = 7500, plotW = 315, plotH = 96, slot = plotW / hours.length, barW = 13;
+const peak = sales.indexOf(Math.max(...sales));
+const plot = document.getElementById('plot'), yaxis = document.getElementById('yaxis');
+[0, 2500, 5000, 7500].forEach(v => {
+  const y = plotH - v / scaleMax * plotH;
+  plot.insertAdjacentHTML('beforeend', `<div class="gridline${v ? '' : ' zero'}" style="top:${y}${PT}"></div>`);
+  yaxis.insertAdjacentHTML('beforeend', `<span class="small num ylabel" style="top:${y}${PT}">${v ? v.toLocaleString('en-US') : '0'}</span>`);
+});
+sales.forEach((v, i) => {
+  const h = v / scaleMax * plotH, x = i * slot + (slot - barW) / 2;
+  plot.insertAdjacentHTML('beforeend', `<div class="bar${i === peak ? ' peak' : ''}" style="left:${x}${PT};height:${h}${PT}"></div>`);
+  if (i === peak) plot.insertAdjacentHTML('beforeend',
+    `<span class="small bold num peak-label" style="color:var(--ink);left:${x + barW / 2}${PT};bottom:${h + 2}${PT}">7,450</span>`);
+});
+const xaxis = document.getElementById('xaxis');
+hours.forEach((h, i) => { if (i % 2 === 0) xaxis.insertAdjacentHTML('beforeend',
+  `<span class="small num xlabel" style="left:${i * slot}${PT}">${String(h).padStart(2, '0')}:00</span>`); });
+xaxis.insertAdjacentHTML('beforeend', `<span class="small num xlabel" style="left:${plotW}${PT}">03:00</span>`);
+
+// Hours after 11:00; null end = still open; an end past 03:00 is clipped and labelled.
+const shifts = [
+  {name: 'Wanjiku Kamau', from: 0.43, to: 26.95, note: 'closed Wed 13:57', sales: 38, kes: '13,050'},
+  {name: 'Brian Otieno', from: 2.23, to: null, sales: 29, kes: '12,330'},
+  {name: 'Kevin Mutua', from: 4.93, to: null, sales: 22, kes: '8,740'},
+  {name: 'Faith Achieng', from: 5.03, to: 15.73, sales: 34, kes: '14,890'},
+];
+const lanes = document.getElementById('lanes');
+shifts.forEach(s => {
+  const x = s.from / 16 * plotW;
+  const end = s.to === null || s.to > 16 ? plotW : s.to / 16 * plotW;
+  const note = s.to === null ? 'still open' : s.note || '';
+  lanes.insertAdjacentHTML('beforeend', `
+    <div class="body bold" style="height:20pt;display:flex;align-items:center;white-space:nowrap;overflow:hidden">${s.name}</div>
+    <div class="track" style="height:20pt"><div class="span${s.to === null ? ' open' : ''}" style="left:${x}${PT};width:${end - x}${PT}">${note ? `<span class="note">${note}${s.to !== null && s.to > 16 ? ' →' : ''}</span>` : ''}</div></div>
+    <div class="figs" style="height:20pt;display:flex;align-items:center"><span class="body num c1">${s.sales}</span><span class="body bold num c2">${s.kes}</span></div>`);
+});
+
+const categories = [
+  ['BEERS', 83, 22750], ['CANS', 24, 7500], ['SOFT DRINKS', 46, 6310], ['BRANDY', 6, 4950],
+  ['GIN', 5, 3850], ['SPIRITS', 4, 1850], ['OTHERS', 20, 1000], ['TOTS', 8, 800],
+];
+const cat = document.getElementById('categories');
+categories.forEach(([name, items, kes]) => {
+  const w = kes / 22750 * (plotW - 34);
+  cat.insertAdjacentHTML('beforeend', `
+    <div class="row-name body bold" style="letter-spacing:.4pt">${name}</div>
+    <div class="share"><i style="width:${w}${PT}"></i><b class="small num">${Math.round(kes / 49010 * 100)}%</b></div>
+    <div class="figs" style="height:18pt;display:flex;align-items:center"><span class="body num c1">${items}</span><span class="body bold num c2">${kes.toLocaleString('en-US')}</span></div>`);
+});
+</script>
+</body>
+</html>
